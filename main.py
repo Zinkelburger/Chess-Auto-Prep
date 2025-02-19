@@ -3,7 +3,7 @@ import argparse
 
 from fen_map_builder import FenMapBuilder
 from game_downloader import download_games_for_last_two_months
-
+from fen_database_map import FenDatabaseMap
 
 def main():
     parser = argparse.ArgumentParser(description="Build FEN stats from PGNs.")
@@ -18,6 +18,8 @@ def main():
                        help="Filter PGNs: Only process games where the user is Black")
     parser.add_argument("--output", type=str, default="output.txt",
                         help="Output file for FEN stats.")
+    parser.add_argument("--lichess-output", type=str, default="lichess_output.txt",
+                        help="Output file for Lichess aggregated stats.")
     args = parser.parse_args()
 
     # Determine if user color is constrained
@@ -61,6 +63,14 @@ def main():
     fen_builder.output_stats(filename=args.output, min_occurrences=4)
     print(f"FEN stats written to {args.output}.")
 
+    # 4) Collect all unique FEN keys to query Lichess Explorer.
+    all_fens = list(fen_builder.fen_map.keys())
+    print(f"Collected {len(all_fens)} unique FENs to query Lichess Explorer.")
+
+    # 5) Query Lichess and output aggregated stats to a second file.
+    fen_db_map = FenDatabaseMap()
+    fen_db_map.query_lichess_for_fens(all_fens, args.lichess_output)
+    print(f"Lichess stats written to {args.lichess_output}.")
 
 if __name__ == "__main__":
     main()
