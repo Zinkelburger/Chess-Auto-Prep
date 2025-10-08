@@ -123,7 +123,10 @@ class SimpleChessBoard(QWidget):
                             painter.fillRect(x + 5, y + 5, square_size - 10, square_size - 10, QColor(100, 100, 100))
 
 from fen_map_builder import FenMapBuilder
-from game_downloader import download_games_for_last_two_months
+from game_downloader import download_games_for_last_two_months, _get_cache_dir
+from move_database import MoveDatabase
+from game_navigator import GameNavigator
+import json
 
 
 class GameAnalysisThread(QThread):
@@ -157,15 +160,43 @@ class GameAnalysisThread(QThread):
         self.finished.emit(fen_builder)
 
 
+class PositionLoadThread(QThread):
+    """Background thread for loading position data from games"""
+    finished = Signal(str, object)  # (fen, PositionData)
+    error = Signal(str)
+
+    def __init__(self, move_db: MoveDatabase, fen: str):
+        super().__init__()
+        self.move_db = move_db
+        self.fen = fen
+
+    def run(self):
+        try:
+            position_data = self.move_db.load_position(self.fen)
+            self.finished.emit(self.fen, position_data)
+        except Exception as e:
+            self.error.emit(f"Error loading position: {str(e)}")
+
+
 class ChessPrepGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Chess Auto Prep - Opening Explorer")
         self.setGeometry(100, 100, 1400, 800)
 
+        # Core data structures
         self.fen_builder = None
-        self.current_games = []  # Store games for current position
-        self.current_game_index = 0
+        self.move_db = MoveDatabase()
+        self.game_navigator = GameNavigator()
+
+        # State
+        self.current_fen = None  # Currently displayed position
+        self.position_load_thread = None
+        self.analysis_thread = None
+        self.active_threads = []  # Keep track of all active threads
+
+        # Setup callbacks
+        self.game_navigator.set_on_position_changed(self._on_position_changed)
 
         self.setup_ui()
         self.setup_menu()
@@ -183,6 +214,10 @@ class ChessPrepGUI(QMainWindow):
         download_action = QAction("Download from Chess.com", self)
         download_action.triggered.connect(self.download_games)
         file_menu.addAction(download_action)
+
+        load_cache_action = QAction("Load from Cache", self)
+        load_cache_action.triggered.connect(self.load_from_cache)
+        file_menu.addAction(load_cache_action)
 
     def setup_ui(self):
         central_widget = QWidget()
@@ -243,6 +278,33 @@ class ChessPrepGUI(QMainWindow):
 
         middle_layout.addLayout(nav_layout)
 
+        # Move navigation within a game
+        move_nav_layout = QHBoxLayout()
+        self.start_button = QPushButton("|◀ Start")
+        self.start_button.clicked.connect(self.goto_start)
+        self.start_button.setEnabled(False)
+        move_nav_layout.addWidget(self.start_button)
+
+        self.back_button = QPushButton("◀ Back")
+        self.back_button.clicked.connect(self.move_back)
+        self.back_button.setEnabled(False)
+        move_nav_layout.addWidget(self.back_button)
+
+        self.move_label = QLabel("Move 0")
+        move_nav_layout.addWidget(self.move_label)
+
+        self.forward_button = QPushButton("Forward ▶")
+        self.forward_button.clicked.connect(self.move_forward)
+        self.forward_button.setEnabled(False)
+        move_nav_layout.addWidget(self.forward_button)
+
+        self.end_button = QPushButton("End ▶|")
+        self.end_button.clicked.connect(self.goto_end)
+        self.end_button.setEnabled(False)
+        move_nav_layout.addWidget(self.end_button)
+
+        middle_layout.addLayout(move_nav_layout)
+
         splitter.addWidget(middle_panel)
 
         # Right panel - Game details and moves
@@ -251,6 +313,20 @@ class ChessPrepGUI(QMainWindow):
 
         # Tabs for different views
         self.tab_widget = QTabWidget()
+
+        # Move tree tab - shows all moves from current position with stats
+        move_tree_widget = QWidget()
+        move_tree_layout = QVBoxLayout(move_tree_widget)
+
+        move_tree_label = QLabel("Moves from this position:")
+        move_tree_label.setFont(QFont("Arial", 10, QFont.Bold))
+        move_tree_layout.addWidget(move_tree_label)
+
+        self.move_tree = QListWidget()
+        self.move_tree.itemClicked.connect(self.move_tree_item_clicked)
+        move_tree_layout.addWidget(self.move_tree)
+
+        self.tab_widget.addTab(move_tree_widget, "Move Explorer")
 
         # Game info tab
         game_info_widget = QWidget()
@@ -340,15 +416,90 @@ class ChessPrepGUI(QMainWindow):
             QMessageBox.critical(self, "Error", f"Failed to download games: {str(e)}")
             self.progress_bar.setVisible(False)
 
+    def load_from_cache(self):
+        """Load games from cache directory"""
+        cache_dir = _get_cache_dir()
+        cache_files = [f for f in os.listdir(cache_dir) if f.endswith('.json')]
+
+        if not cache_files:
+            QMessageBox.information(self, "No Cache", "No cached games found.")
+            return
+
+        # Create a list of cache files with metadata
+        cache_info = []
+        for cache_file in sorted(cache_files):
+            try:
+                with open(os.path.join(cache_dir, cache_file), "r") as f:
+                    cache_data = json.load(f)
+                timestamp = cache_data.get("timestamp", "Unknown")
+                game_count = len(cache_data.get("games", []))
+                cache_info.append((cache_file, game_count, timestamp))
+            except:
+                continue
+
+        # Let user select which cache to load
+        if not cache_info:
+            QMessageBox.information(self, "No Cache", "No valid cached games found.")
+            return
+
+        items = [f"{name} ({count} games, {timestamp})" for name, count, timestamp in cache_info]
+        item, ok = QInputDialog.getItem(self, "Select Cache", "Choose cached games to load:", items, 0, False)
+
+        if not ok:
+            return
+
+        # Parse the selected item
+        selected_index = items.index(item)
+        cache_file, game_count, timestamp = cache_info[selected_index]
+
+        # Extract username and color from filename (format: username_color.json)
+        filename_parts = cache_file.replace('.json', '').split('_')
+        if len(filename_parts) >= 2:
+            username = '_'.join(filename_parts[:-1])
+            color = filename_parts[-1]
+        else:
+            QMessageBox.critical(self, "Error", "Invalid cache file format.")
+            return
+
+        # Ask for color confirmation
+        items = ["White", "Black"]
+        default_color = 0 if color == "white" else 1
+        color_choice, ok = QInputDialog.getItem(self, "Color", "Analyze games as:", items, default_color, False)
+        if not ok:
+            return
+
+        user_is_white = (color_choice == "White")
+
+        try:
+            # Load games from cache
+            with open(os.path.join(cache_dir, cache_file), "r") as f:
+                cache_data = json.load(f)
+            pgns = cache_data.get("games", [])
+
+            if not pgns:
+                QMessageBox.information(self, "No Games", "Cache file contains no games.")
+                return
+
+            self.analyze_games(pgns, username, user_is_white)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load cache: {str(e)}")
+
     def analyze_games(self, pgns: List[str], username: str = None, user_is_white: bool = True):
         if not username:
             username, ok = QInputDialog.getText(self, "Username", "Enter your username:")
             if not ok or not username:
                 return
 
+        # Setup move database with games
+        self.move_db.set_games(pgns, username, user_is_white)
+
+        # Run analysis thread for FEN stats
         self.analysis_thread = GameAnalysisThread(pgns, username, user_is_white)
         self.analysis_thread.progress.connect(self.progress_bar.setValue)
         self.analysis_thread.finished.connect(self.analysis_finished)
+        self.analysis_thread.finished.connect(lambda: self._thread_finished(self.analysis_thread))
+        self.active_threads.append(self.analysis_thread)
 
         self.progress_bar.setVisible(True)
         self.analysis_thread.start()
@@ -390,8 +541,9 @@ class ChessPrepGUI(QMainWindow):
 
     def position_selected(self, item):
         fen, stats = item.data(Qt.UserRole)
+        self.current_fen = fen
 
-        # Update board
+        # Update board immediately
         try:
             board = chess.Board(fen)
             self.board.set_board(board)
@@ -406,86 +558,228 @@ Record: {stats.wins}-{stats.losses}-{stats.draws} in {stats.games} games
 
 FEN: {fen}
 
-Games with this position: {len(stats.game_urls)}"""
+Loading games..."""
 
         self.position_stats.setText(stats_text)
 
-        # Load games for this position (we'll need to implement this)
-        self.load_games_for_position(fen)
+        # Clear move tree and show loading
+        self.move_tree.clear()
+        self.move_tree.addItem("Loading position data...")
 
-    def load_games_for_position(self, fen: str):
-        if not self.fen_builder:
-            return
+        # Load games in background
+        self.load_position_async(fen, stats)
 
-        # Find games that contain this position
-        self.current_games = []
-        stats = self.fen_builder.fen_map[fen]
+    def load_position_async(self, fen: str, stats):
+        """Load position data in background thread"""
+        # Cancel any existing thread
+        if self.position_load_thread and self.position_load_thread.isRunning():
+            self.position_load_thread.wait()
 
-        # We need to search through our original PGNs to find games with this position
-        # For now, we'll create placeholder games based on the game URLs
-        for i, url in enumerate(stats.game_urls):
-            # Create a mock game object with the URL for display
-            game_info = {
-                'url': url,
-                'index': i,
-                'fen': fen
-            }
-            self.current_games.append(game_info)
+        # Start new thread
+        self.position_load_thread = PositionLoadThread(self.move_db, fen)
+        self.position_load_thread.finished.connect(lambda f, pd: self.on_position_loaded(f, pd, stats))
+        self.position_load_thread.error.connect(self.on_position_load_error)
+        self.position_load_thread.finished.connect(lambda: self._thread_finished(self.position_load_thread))
+        self.active_threads.append(self.position_load_thread)
+        self.position_load_thread.start()
 
-        self.current_game_index = 0
+    def on_position_loaded(self, fen: str, position_data, stats):
+        """Called when position data is loaded"""
+        # Update position stats with game count
+        win_rate = (stats.wins + 0.5 * stats.draws) / stats.games
+        stats_text = f"""Position Performance:
+Win Rate: {win_rate:.1%}
+Record: {stats.wins}-{stats.losses}-{stats.draws} in {stats.games} games
+
+FEN: {fen}
+
+Games with this position: {len(position_data.games)}"""
+
+        self.position_stats.setText(stats_text)
+
+        # Load games into navigator
+        self.game_navigator.load_games(position_data.games)
+
+        # Update navigation UI
         self.update_game_navigation()
+        self.update_move_navigation()
 
-        if self.current_games:
+        # Load current game if any
+        if position_data.games:
             self.load_current_game()
 
+        # Build and display move tree
+        self.build_move_tree_from_data(position_data)
+
+    def on_position_load_error(self, error_msg: str):
+        """Called when position loading fails"""
+        QMessageBox.warning(self, "Load Error", error_msg)
+        self.move_tree.clear()
+
+    def build_move_tree_from_data(self, position_data):
+        """Build move tree from loaded position data"""
+        self.move_tree.clear()
+
+        if not position_data.move_stats:
+            self.move_tree.addItem("No moves from this position")
+            return
+
+        # Get sorted moves from position data
+        sorted_moves = sorted(
+            position_data.move_stats.values(),
+            key=lambda m: m.win_rate,
+            reverse=True
+        )
+
+        # Display in the move tree
+        for move_stat in sorted_moves:
+            item_text = f"{move_stat.move_san}: {move_stat.win_rate:.1%} ({move_stat.wins}-{move_stat.losses}-{move_stat.draws} in {move_stat.games})"
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.UserRole, move_stat.move)
+            self.move_tree.addItem(item)
+
     def update_game_navigation(self):
-        total_games = len(self.current_games)
-        if total_games == 0:
+        if not self.game_navigator.has_games():
             self.game_label.setText("No games found")
             self.prev_button.setEnabled(False)
             self.next_button.setEnabled(False)
         else:
-            self.game_label.setText(f"Game {self.current_game_index + 1} of {total_games}")
-            self.prev_button.setEnabled(self.current_game_index > 0)
-            self.next_button.setEnabled(self.current_game_index < total_games - 1)
+            total_games = len(self.game_navigator.games)
+            self.game_label.setText(f"Game {self.game_navigator.current_game_index + 1} of {total_games}")
+            self.prev_button.setEnabled(self.game_navigator.can_previous_game())
+            self.next_button.setEnabled(self.game_navigator.can_next_game())
 
     def previous_game(self):
-        if self.current_game_index > 0:
-            self.current_game_index -= 1
+        if self.game_navigator.previous_game():
             self.load_current_game()
             self.update_game_navigation()
 
     def next_game(self):
-        if self.current_game_index < len(self.current_games) - 1:
-            self.current_game_index += 1
+        if self.game_navigator.next_game():
             self.load_current_game()
             self.update_game_navigation()
 
     def load_current_game(self):
-        if not self.current_games or self.current_game_index >= len(self.current_games):
+        game_info = self.game_navigator.get_current_game_info()
+        if not game_info:
             return
 
-        game_info = self.current_games[self.current_game_index]
-
         # Display game information
-        info_text = f"""Game URL: {game_info['url']}
+        info_text = f"""White: {game_info['white']}
+Black: {game_info['black']}
+Result: {game_info['result']}
 
-Position FEN: {game_info['fen']}
+Game URL: {game_info['url']}
 
-Click the URL above to view the game on Chess.com"""
+Position reached at move {game_info['move_index'] // 2 + 1}"""
 
         self.game_info.setPlainText(info_text)
 
-        # For moves, we'd need to load the actual PGN
-        # For now, show a placeholder
-        self.moves_text.setPlainText("PGN moves would be displayed here.\nTo implement: store PGNs and search for games containing this position.")
+        # Display the moves
+        move_text = self.game_navigator.format_game_moves()
+        self.moves_text.setPlainText(move_text)
 
-        # Update the board to show the position
-        try:
-            board = chess.Board(game_info['fen'])
-            self.board.set_board(board)
-        except:
-            pass
+        # Update navigation
+        self.update_move_navigation()
+
+        # Board is already updated by navigator callback
+
+    def update_move_navigation(self):
+        """Update move navigation button states"""
+        if not self.game_navigator.has_games():
+            self.move_label.setText("Move 0")
+            self.start_button.setEnabled(False)
+            self.back_button.setEnabled(False)
+            self.forward_button.setEnabled(False)
+            self.end_button.setEnabled(False)
+        else:
+            move_num = self.game_navigator.get_move_number()
+            self.move_label.setText(f"Move {move_num}")
+
+            self.start_button.setEnabled(self.game_navigator.can_go_back())
+            self.back_button.setEnabled(self.game_navigator.can_go_back())
+            self.forward_button.setEnabled(self.game_navigator.can_go_forward())
+            self.end_button.setEnabled(self.game_navigator.can_go_forward())
+
+    def _on_position_changed(self, board: chess.Board):
+        """Called by GameNavigator when position changes"""
+        self.board.set_board(board)
+        # Update move tree for new position
+        fen = self.game_navigator.get_current_fen()
+        # Only update move tree if we have position data cached
+        if fen in self.move_db._position_cache and self.move_db._position_cache[fen].loaded:
+            self.build_move_tree_from_data(self.move_db._position_cache[fen])
+
+    def goto_start(self):
+        """Go to the start of the game"""
+        if self.game_navigator.goto_start():
+            self.update_move_navigation()
+
+    def move_back(self):
+        """Go back one move"""
+        if self.game_navigator.move_back():
+            self.update_move_navigation()
+
+    def move_forward(self):
+        """Go forward one move"""
+        if self.game_navigator.move_forward():
+            self.update_move_navigation()
+
+    def goto_end(self):
+        """Go to the end of the game"""
+        if self.game_navigator.goto_end():
+            self.update_move_navigation()
+
+    def move_tree_item_clicked(self, item):
+        """Handle clicking on a move in the move tree"""
+        move = item.data(Qt.UserRole)
+
+        # Apply the move using navigator
+        if self.game_navigator.make_move(move):
+            # Load position data for new position if needed
+            new_fen = self.game_navigator.get_current_fen()
+            if new_fen not in self.move_db._position_cache or not self.move_db._position_cache[new_fen].loaded:
+                # Load in background
+                self.move_tree.clear()
+                self.move_tree.addItem("Loading...")
+                thread = PositionLoadThread(self.move_db, new_fen)
+                thread.finished.connect(lambda f, pd: self.build_move_tree_from_data(pd))
+                thread.finished.connect(lambda: self._thread_finished(thread))
+                self.active_threads.append(thread)
+                thread.start()
+
+    def _thread_finished(self, thread):
+        """Remove finished thread from active threads list"""
+        if thread in self.active_threads:
+            self.active_threads.remove(thread)
+
+    def closeEvent(self, event):
+        """Handle window close - wait for all threads to finish"""
+        # Wait for all active threads to finish
+        for thread in self.active_threads:
+            if thread and thread.isRunning():
+                thread.wait(1000)  # Wait up to 1 second per thread
+        event.accept()
+
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts"""
+        key = event.key()
+
+        # Arrow keys for move navigation
+        if key == Qt.Key_Left:
+            self.move_back()
+        elif key == Qt.Key_Right:
+            self.move_forward()
+        elif key == Qt.Key_Up:
+            self.previous_game()
+        elif key == Qt.Key_Down:
+            self.next_game()
+        elif key == Qt.Key_Home:
+            self.goto_start()
+        elif key == Qt.Key_End:
+            self.goto_end()
+        else:
+            super().keyPressEvent(event)
 
 
 def main():
