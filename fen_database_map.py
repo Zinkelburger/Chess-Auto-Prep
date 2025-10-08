@@ -48,22 +48,30 @@ class FenDatabaseMap:
 
         with open(output_filename, "w", encoding="utf-8") as out_file:
             # Write a header line
-            out_file.write("FEN,Lichess White,Lichess Draw,Lichess Black,TotalGames\n")
+            out_file.write("FEN,Lichess White,Lichess Draw,Lichess Black,TotalGames,White%,Draw%,Black%\n")
 
             for i, fen in enumerate(fen_list):
                 stats = self._query_lichess_explorer_for_position(fen, speeds_str, ratings_str)
-                
+
                 if stats is not None:
                     white_count, draw_count, black_count = stats
                     total_games = white_count + draw_count + black_count
                 else:
                     white_count, draw_count, black_count, total_games = (0, 0, 0, 0)
 
+                # Calculate percentages
+                if total_games > 0:
+                    white_pct = (white_count / total_games) * 100
+                    draw_pct = (draw_count / total_games) * 100
+                    black_pct = (black_count / total_games) * 100
+                else:
+                    white_pct = draw_pct = black_pct = 0
+
                 # Store in self.lichess_map
                 self.lichess_map[fen] = (white_count, draw_count, black_count, total_games)
 
-                # Write CSV line
-                out_file.write(f"\"{fen}\",{white_count},{draw_count},{black_count},{total_games}\n")
+                # Write CSV line with percentages
+                out_file.write(f"\"{fen}\",{white_count},{draw_count},{black_count},{total_games},{white_pct:.1f},{draw_pct:.1f},{black_pct:.1f}\n")
 
                 # Be respectful: small delay to avoid hammering the endpoint
                 time.sleep(delay)

@@ -1,1 +1,5 @@
 .env
+*.pgn
+game_cache/
+venv
+__pycache__

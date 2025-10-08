@@ -1,2 +1,4 @@
 chess
 python-dotenv
+requests
+PySide6

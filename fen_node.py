@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List
 
 @dataclass
 class FenNode:
@@ -6,3 +7,4 @@ class FenNode:
     wins: int = 0
     losses: int = 0
     draws: int = 0
+    game_urls: List[str] = field(default_factory=list)
