@@ -1,12 +1,19 @@
 import sys
 import io
+import os
 from typing import List, Dict, Tuple
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                               QHBoxLayout, QSplitter, QListWidget, QListWidgetItem,
                               QLabel, QPushButton, QTextEdit, QProgressBar, QMenuBar,
                               QFileDialog, QMessageBox, QInputDialog, QTabWidget)
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QFont, QAction, QPainter, QBrush, QColor, QPen
+from PySide6.QtGui import QFont, QAction, QPainter, QBrush, QColor, QPen, QPixmap
+try:
+    from PySide6.QtSvg import QSvgRenderer
+    SVG_AVAILABLE = True
+except ImportError:
+    SVG_AVAILABLE = False
+    print("SVG support not available")
 
 import chess
 import chess.pgn
@@ -17,6 +24,56 @@ class SimpleChessBoard(QWidget):
         super().__init__()
         self.board = chess.Board()
         self.setMinimumSize(400, 400)
+        self.piece_images = {}
+        self.use_unicode_pieces = False
+        self.load_piece_images()
+
+    def load_piece_images(self):
+        """Load piece images from SVG files"""
+        piece_files = {
+            (chess.WHITE, chess.PAWN): 'pieces/wP.svg',
+            (chess.WHITE, chess.ROOK): 'pieces/wR.svg',
+            (chess.WHITE, chess.KNIGHT): 'pieces/wN.svg',
+            (chess.WHITE, chess.BISHOP): 'pieces/wB.svg',
+            (chess.WHITE, chess.QUEEN): 'pieces/wQ.svg',
+            (chess.WHITE, chess.KING): 'pieces/wK.svg',
+            (chess.BLACK, chess.PAWN): 'pieces/bP.svg',
+            (chess.BLACK, chess.ROOK): 'pieces/bR.svg',
+            (chess.BLACK, chess.KNIGHT): 'pieces/bN.svg',
+            (chess.BLACK, chess.BISHOP): 'pieces/bB.svg',
+            (chess.BLACK, chess.QUEEN): 'pieces/bQ.svg',
+            (chess.BLACK, chess.KING): 'pieces/bK.svg',
+        }
+
+        print(f"SVG support available: {SVG_AVAILABLE}")
+        print(f"Current directory: {os.getcwd()}")
+
+        if not SVG_AVAILABLE:
+            print("Cannot load SVG files - SVG support not available")
+            return
+
+        for (color, piece_type), filename in piece_files.items():
+            print(f"Trying to load {filename}...")
+            if os.path.exists(filename):
+                try:
+                    # Load SVG and render to QPixmap
+                    renderer = QSvgRenderer(filename)
+                    if renderer.isValid():
+                        pixmap = QPixmap(80, 80)  # Fixed size for pieces
+                        pixmap.fill(Qt.transparent)
+                        painter = QPainter(pixmap)
+                        renderer.render(painter)
+                        painter.end()
+                        self.piece_images[(color, piece_type)] = pixmap
+                        print(f"Successfully loaded {filename}")
+                    else:
+                        print(f"Invalid SVG file: {filename}")
+                except Exception as e:
+                    print(f"Error loading {filename}: {e}")
+            else:
+                print(f"File not found: {filename}")
+
+        print(f"Loaded {len(self.piece_images)} piece images")
 
     def set_board(self, board):
         self.board = board
@@ -45,11 +102,25 @@ class SimpleChessBoard(QWidget):
                 square = chess.square(col, 7-row)
                 piece = self.board.piece_at(square)
                 if piece:
-                    # Simple text representation of pieces
-                    piece_char = piece.unicode_symbol()
-                    painter.setPen(QPen(QColor(0, 0, 0)))
-                    painter.setFont(QFont("Arial", square_size // 2))
-                    painter.drawText(x + square_size//4, y + 3*square_size//4, piece_char)
+                    piece_key = (piece.color, piece.piece_type)
+                    if piece_key in self.piece_images:
+                        # Use piece images
+                        piece_pixmap = self.piece_images[piece_key]
+                        scaled_pixmap = piece_pixmap.scaled(
+                            square_size - 4, square_size - 4,
+                            Qt.KeepAspectRatio, Qt.SmoothTransformation
+                        )
+                        piece_x = x + (square_size - scaled_pixmap.width()) // 2
+                        piece_y = y + (square_size - scaled_pixmap.height()) // 2
+                        painter.drawPixmap(piece_x, piece_y, scaled_pixmap)
+                    else:
+                        # Force the images to work - no text fallback!
+                        print(f"Missing piece image for {piece_key}")
+                        # Draw a colored rectangle as placeholder so we know pieces are there
+                        if piece.color == chess.WHITE:
+                            painter.fillRect(x + 5, y + 5, square_size - 10, square_size - 10, QColor(255, 255, 255))
+                        else:
+                            painter.fillRect(x + 5, y + 5, square_size - 10, square_size - 10, QColor(100, 100, 100))
 
 from fen_map_builder import FenMapBuilder
 from game_downloader import download_games_for_last_two_months
