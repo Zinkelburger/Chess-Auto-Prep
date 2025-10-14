@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from uci_engine import UCIEngine
 from maia2_wrapper import Maia2
 from tree_search import analyze_opening, print_tree_stats
+from stockfish_helper import get_or_install_stockfish
 from pgn_writer import PgnWriter
 
 # Load environment variables
@@ -46,8 +47,6 @@ def main():
     # Tree building parameters
     parser.add_argument("--depth", type=int, default=20,
                         help="Maximum depth in ply/half-moves (default: 20).")
-    parser.add_argument("--num-lines", type=int, default=5,
-                        help="Number of lines to return (default: 5).")
     parser.add_argument("--min-prob", type=float, default=0.1,
                         help="Minimum probability for moves (default: 0.1).")
     parser.add_argument("--top-my-moves", type=int, default=3,
@@ -55,9 +54,9 @@ def main():
     parser.add_argument("--top-opp-moves", type=int, default=5,
                         help="Number of opponent moves to explore (default: 5).")
     parser.add_argument("--prune-bad-moves", type=float, default=100.0,
-                        help="Max eval drop (cp) allowed for your moves (default: 100, 0 = disable).")
-    parser.add_argument("--prune-winning", type=float, default=200.0,
-                        help="Stop exploring if eval exceeds this (cp) (default: 200, 0 = disable).")
+                        help="Max eval drop (cp) from ROOT allowed for your moves (default: 100, 0 = disable).")
+    parser.add_argument("--prune-winning", type=float, default=100.0,
+                        help="Stop exploring if improved by this much (cp) from ROOT (default: 100, 0 = disable).")
 
     # ELO parameters
     parser.add_argument("--player-elo", type=int, default=1500,
@@ -80,10 +79,13 @@ def main():
 
     args = parser.parse_args()
 
-    # Get stockfish path
-    stockfish_path = args.stockfish or os.getenv("STOCKFISH_PATH")
+    # Get stockfish path (try to find or install it)
+    env_stockfish = args.stockfish or os.getenv("STOCKFISH_PATH")
+    stockfish_path = get_or_install_stockfish(env_stockfish)
+
     if not stockfish_path:
-        print("Error: Stockfish path not provided. Set STOCKFISH_PATH in .env or use --stockfish")
+        print("\nError: Could not find or install Stockfish.")
+        print("Please install manually or set STOCKFISH_PATH in .env")
         return
 
     # Initialize engines
@@ -147,7 +149,6 @@ def main():
             stockfish_engine=stockfish,
             my_color=my_color,
             max_depth=args.depth,
-            num_lines=args.num_lines,
             min_probability=args.min_prob,
             top_n_my_moves=args.top_my_moves,
             top_n_opponent_moves=args.top_opp_moves,
@@ -164,8 +165,9 @@ def main():
 
         # Display results
         print("\n" + "=" * 70)
-        print(f"BEST LINES (by {args.criterion})")
+        print(f"ALL LINES (sorted by {args.criterion})")
         print("=" * 70)
+        print(f"Total lines found: {len(best_lines)}\n")
 
         for i, (moves, eval_cp, expected_val, trickiness) in enumerate(best_lines, 1):
             print(f"\nLine {i}:")

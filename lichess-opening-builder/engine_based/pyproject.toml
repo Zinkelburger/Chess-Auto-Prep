@@ -22,6 +22,7 @@ dependencies = [
     "pandas>=2.2.3",
     "pyzstd>=0.15.9",
     "tqdm>=4.65.0",
+    "PyYAML>=6.0.0",
 ]
 
 [project.optional-dependencies]
