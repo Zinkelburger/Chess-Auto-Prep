@@ -23,12 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from dotenv import load_dotenv
 from uci_engine import UCIEngine
 from maia2_wrapper import Maia2
-from tree_search import (
-    build_tree_incremental,
-    calculate_expected_values,
-    find_best_lines,
-    print_tree_stats
-)
+from simple_search import search_for_tricks
 from stockfish_helper import get_or_install_stockfish
 from pgn_writer import PgnWriter
 
@@ -129,18 +124,12 @@ def main():
                         help="Maximum depth in ply/half-moves (default: 20).")
     parser.add_argument("--min-prob", type=float, default=0.10,
                         help="Minimum probability for your moves (default: 0.10 = 10%%).")
-    parser.add_argument("--top-my-moves", type=int, default=3,
-                        help="Number of your moves to explore (default: 3).")
-    parser.add_argument("--top-opp-moves", type=int, default=None,
-                        help="Number of opponent moves to explore (default: None, uses --min-prob-opponent).")
-    parser.add_argument("--min-prob-opponent", type=float, default=0.2,
-                        help="Minimum probability for opponent moves (default: 0.2 = 20%%).")
-    parser.add_argument("--prune-bad-moves", type=float, default=100.0,
-                        help="Max eval drop (cp) from ROOT allowed for your moves (default: 100, 0 = disable).")
-    parser.add_argument("--prune-winning", type=float, default=100.0,
-                        help="Stop exploring if improved by this much (cp) from ROOT (default: 100, 0 = disable).")
-    parser.add_argument("--prune-opponent-blunders", type=float, default=200.0,
-                        help="Stop exploring after opponent blunders by this much (cp) (default: 200, 0 = disable).")
+    parser.add_argument("--top-candidates", type=int, default=8,
+                        help="Top N moves by probability to evaluate for your moves (default: 8).")
+    parser.add_argument("--my-move-threshold", type=float, default=50.0,
+                        help="Explore your moves within this many cp of best move (default: 50).")
+    parser.add_argument("--opponent-min-prob", type=float, default=0.20,
+                        help="Minimum probability for opponent moves (default: 0.20 = 20%%).")
 
     # ELO parameters
     parser.add_argument("--player-elo", type=int, default=2000,
@@ -214,15 +203,8 @@ def main():
         print(f"Initial Moves: {' '.join(initial_moves)}")
     print(f"\nParameters:")
     print(f"  Max Depth: {args.depth} ply")
-    print(f"  Your moves to explore: {args.top_my_moves}")
-    if args.top_opp_moves is not None:
-        print(f"  Opponent moves to explore: top {args.top_opp_moves}")
-    else:
-        print(f"  Opponent moves to explore: all with >{args.min_prob_opponent:.0%} probability")
-    print(f"  Min probability: {args.min_prob}")
-    print(f"  Prune bad moves: {args.prune_bad_moves} cp" if args.prune_bad_moves > 0 else "  Prune bad moves: disabled")
-    print(f"  Prune winning: {args.prune_winning} cp" if args.prune_winning > 0 else "  Prune winning: disabled")
-    print(f"  Prune opponent blunders: {args.prune_opponent_blunders} cp" if args.prune_opponent_blunders > 0 else "  Prune opponent blunders: disabled")
+    print(f"  Your moves: evaluate top {args.top_candidates}, keep moves within {args.my_move_threshold:.0f} cp of best")
+    print(f"  Opponent moves: all with >{args.opponent_min_prob:.0%} probability")
     print(f"  Player ELO: {args.player_elo}")
     print(f"  Opponent ELO: {args.opponent_elo}")
     print(f"  Min expected value: {args.min_value:+.0f} cp")
@@ -242,85 +224,57 @@ def main():
         stockfish.quit()
         return
 
-    # Analyze opening (full tree search)
+    # Simple search for tricky positions
     try:
-        # Disable pruning if threshold is 0
-        prune_bad_moves = args.prune_bad_moves if args.prune_bad_moves > 0 else None
-        prune_winning = args.prune_winning if args.prune_winning > 0 else None
-        prune_opponent_blunders = args.prune_opponent_blunders if args.prune_opponent_blunders > 0 else None
+        print("\n[SEARCHING] Looking for tricky positions...")
+        print(f"  Min expected value: {args.min_value:+.0f} cp")
+        print(f"  Max depth: {args.depth} ply")
+        print(f"  Min probability threshold: {args.min_prob:.1%}")
 
-        # Build tree (consuming the generator to get the final root)
-        print("\n[PHASE 1] Building tree with Maia2 probabilities and Stockfish evaluations...")
-        tree_gen = build_tree_incremental(
-            start_board=board,
+        interesting_positions = search_for_tricks(
+            board=board,
             maia2_model=maia2,
             stockfish_engine=stockfish,
-            max_depth=args.depth,
             my_color=my_color,
-            min_probability=args.min_prob,
-            top_n_my_moves=args.top_my_moves,
-            top_n_opponent_moves=args.top_opp_moves,
-            min_probability_opponent=args.min_prob_opponent,
             player_elo=args.player_elo,
             opponent_elo=args.opponent_elo,
-            prune_bad_moves_cp=prune_bad_moves,
-            prune_winning_cp=prune_winning,
-            prune_opponent_blunders_cp=prune_opponent_blunders
+            max_depth=args.depth,
+            min_probability=args.min_prob,
+            min_ev_cp=args.min_value,
+            top_n_candidates=args.top_candidates,
+            my_move_threshold_cp=args.my_move_threshold,
+            opponent_min_prob=args.opponent_min_prob
         )
 
-        # Consume the generator - it yields leaves during build, then returns root
-        try:
-            while True:
-                next(tree_gen)
-        except StopIteration as e:
-            # The return value is in e.value
-            root = e.value
-
-        if root is None:
-            print("Error: Failed to build tree")
-            return
-
-        print("\n[PHASE 2] Calculating expected values...")
-        calculate_expected_values(root, my_color)
-
-        print("\n[PHASE 3] Finding best lines...")
-        best_lines = find_best_lines(root, my_color, min_value=args.min_value)
+        # Sort by expected value (best first)
+        interesting_positions.sort(key=lambda x: x.expected_value, reverse=True)
 
         # Limit to max_lines
-        best_lines = best_lines[:args.max_lines]
+        interesting_positions = interesting_positions[:args.max_lines]
 
-        print(f"\nFound {len(best_lines)} lines with expected value >= {args.min_value:+.0f} cp")
-
-        # Print final statistics
-        print("\n" + "=" * 70)
-        print_tree_stats(root)
-        print("=" * 70)
+        print(f"\n\nFound {len(interesting_positions)} interesting positions")
 
         # Save lines to PGN
-        if best_lines:
-            print("\n[PHASE 4] Saving lines to PGN...")
+        if interesting_positions:
+            print("\n[SAVING] Writing lines to PGN...")
             pgn_writer = PgnWriter(output_dir="pgns_engine", starting_board=board)
 
-            for i, (node, expected_value) in enumerate(best_lines, 1):
-                moves = node.get_line()
-                line_probability = node.get_line_probability()
-                stockfish_eval = node.eval_cp if node.eval_cp is not None else 0.0
-
-                print(f"\n  [Line {i}] Expected Value: {expected_value:+.1f} cp, Probability: {line_probability:.2%}")
-                print(f"    {' '.join(moves)}")
+            for i, pos in enumerate(interesting_positions, 1):
+                print(f"\n  [Line {i}] EV: {pos.expected_value:+.1f} cp, Prob: {pos.probability:.2%}")
+                print(f"    {' '.join(pos.line)}")
 
                 # Save to PGN
                 pgn_writer.save_line(
-                    moves,
-                    line_probability,
+                    pos.line,
+                    pos.probability,
                     my_color,
-                    stockfish_eval=stockfish_eval,
-                    expected_value=expected_value
+                    stockfish_eval=pos.expected_value,
+                    expected_value=pos.expected_value
                 )
 
             print(f"\nAll lines saved to: {pgn_writer.consolidated_file}")
         else:
-            print(f"\nNo lines found with expected value >= {args.min_value:+.0f} cp")
+            print(f"\nNo positions found with expected value >= {args.min_value:+.0f} cp")
 
         print("=" * 70)
 
