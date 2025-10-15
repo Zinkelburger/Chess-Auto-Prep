@@ -26,6 +26,7 @@ from maia2_wrapper import Maia2
 from simple_search import search_for_tricks
 from stockfish_helper import get_or_install_stockfish
 from pgn_writer import PgnWriter
+from hybrid_probability import HybridProbability
 
 # Load environment variables
 load_dotenv()
@@ -60,7 +61,7 @@ def evaluate_position_only(board, my_color, maia2, stockfish, player_elo, oppone
         board,
         player_elo=elo_to_move,
         opponent_elo=elo_opponent,
-        min_probability=0.10  # Show moves with >10% probability
+        min_probability=0.001  # Show ALL moves (>0.1% probability)
     )
 
     if not move_probs:
@@ -153,6 +154,18 @@ def main():
     parser.add_argument("--eval-only", action="store_true",
                         help="Just evaluate the position and show children with expected value (no tree search).")
 
+    # Lichess API parameters
+    parser.add_argument("--use-lichess", action="store_true",
+                        help="Use Lichess API for real game statistics (falls back to Maia2 if no data).")
+    parser.add_argument("--lichess-min-games", type=int, default=100,
+                        help="Minimum games required from Lichess API (default: 100).")
+    parser.add_argument("--lichess-rating-min", type=int, default=1800,
+                        help="Minimum rating for Lichess games (default: 1800).")
+    parser.add_argument("--lichess-rating-max", type=int, default=None,
+                        help="Maximum rating for Lichess games (default: None).")
+    parser.add_argument("--lichess-speeds", type=str, default="blitz,rapid,classical",
+                        help="Comma-separated game speeds for Lichess (default: 'blitz,rapid,classical').")
+
     args = parser.parse_args()
 
     # Get stockfish path (try to find or install it)
@@ -174,11 +187,42 @@ def main():
         stockfish = UCIEngine(stockfish_path, name="Stockfish")
 
         print(f"Loading Maia2 ({args.maia_type}, {args.device})...")
-        maia2 = Maia2(
+        maia2_model = Maia2(
             game_type=args.maia_type,
             device=args.device,
             default_elo=args.player_elo
         )
+
+        # Setup probability provider (Lichess + Maia2 or just Maia2)
+        if args.use_lichess:
+            print("Enabling Lichess API for real game statistics...")
+            lichess_rating_range = None
+            if args.lichess_rating_min or args.lichess_rating_max:
+                rating_min = args.lichess_rating_min if args.lichess_rating_min else 0
+                rating_max = args.lichess_rating_max if args.lichess_rating_max else 3000
+                lichess_rating_range = (rating_min, rating_max)
+                if args.lichess_rating_max:
+                    print(f"  Rating range: {args.lichess_rating_min}-{args.lichess_rating_max}")
+                else:
+                    print(f"  Rating: {args.lichess_rating_min}+")
+
+            lichess_speeds = None
+            if args.lichess_speeds:
+                lichess_speeds = args.lichess_speeds.split(',')
+                print(f"  Speeds: {', '.join(lichess_speeds)}")
+
+            print(f"  Min games: {args.lichess_min_games}")
+            print(f"  Fallback: Maia2 @ {args.player_elo} ELO")
+
+            probability_provider = HybridProbability(
+                maia2_model=maia2_model,
+                use_lichess=True,
+                lichess_min_games=args.lichess_min_games,
+                lichess_rating_range=lichess_rating_range,
+                lichess_speeds=lichess_speeds
+            )
+        else:
+            probability_provider = maia2_model
 
     except Exception as e:
         print(f"Error initializing engines: {e}")
@@ -216,7 +260,7 @@ def main():
         evaluate_position_only(
             board=board,
             my_color=my_color,
-            maia2=maia2,
+            maia2=probability_provider,
             stockfish=stockfish,
             player_elo=args.player_elo,
             opponent_elo=args.opponent_elo
@@ -233,7 +277,7 @@ def main():
 
         interesting_positions = search_for_tricks(
             board=board,
-            maia2_model=maia2,
+            maia2_model=probability_provider,
             stockfish_engine=stockfish,
             my_color=my_color,
             player_elo=args.player_elo,
