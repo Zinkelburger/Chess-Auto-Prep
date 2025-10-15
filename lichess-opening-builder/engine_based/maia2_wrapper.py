@@ -14,14 +14,14 @@ class Maia2:
     Wrapper for Maia2 to get human move probabilities at different skill levels.
     """
 
-    def __init__(self, game_type: str = "rapid", device: str = "cpu", default_elo: int = 1500):
+    def __init__(self, game_type: str = "rapid", device: str = "cpu", default_elo: int = 2000):
         """
         Initialize Maia2 model.
 
         Args:
             game_type: Either "rapid" or "blitz"
             device: Either "cpu" or "gpu"
-            default_elo: Default ELO rating for both players
+            default_elo: Default ELO rating for both players (default: 2000)
         """
         self.game_type = game_type
         self.device = device
@@ -58,7 +58,8 @@ class Maia2:
 
         fen = board.fen()
 
-        # Get move probabilities from Maia2
+        # Get move probabilities and win probability from Maia2
+        # win_prob is the probability that the player to move will win
         move_probs, win_prob = inference.inference_each(
             self.model,
             self.prepared,
@@ -82,6 +83,41 @@ class Maia2:
                 continue
 
         return san_probs
+
+    def get_win_probability(
+        self,
+        board: chess.Board,
+        player_elo: int = None,
+        opponent_elo: int = None
+    ) -> float:
+        """
+        Get the win probability for the player to move.
+
+        Args:
+            board: Chess board position
+            player_elo: ELO of the player to move (default: self.default_elo)
+            opponent_elo: ELO of the opponent (default: self.default_elo)
+
+        Returns:
+            Win probability (0.0 to 1.0) for the player to move
+        """
+        if player_elo is None:
+            player_elo = self.default_elo
+        if opponent_elo is None:
+            opponent_elo = self.default_elo
+
+        fen = board.fen()
+
+        # Get win probability from Maia2
+        _, win_prob = inference.inference_each(
+            self.model,
+            self.prepared,
+            fen,
+            player_elo,
+            opponent_elo
+        )
+
+        return win_prob
 
     def get_top_moves(
         self,

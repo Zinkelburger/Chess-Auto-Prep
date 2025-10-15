@@ -55,7 +55,11 @@ class UCIEngine:
     def evaluate(self, board: chess.Board, depth: int = 20, time_ms: int = 1000) -> Optional[float]:
         """
         Evaluate a position and return the score in centipawns from white's perspective.
-        Returns None if mate is found or evaluation fails.
+
+        Note: UCI engines return scores relative to the side to move (positive = side to move is better).
+        This method converts the score to be absolute (from white's perspective):
+        - Positive score = white is better
+        - Negative score = black is better
         """
         self.set_position(board)
         self._send_command(f"go depth {depth}")
@@ -77,6 +81,10 @@ class UCIEngine:
                     mate_in = int(match.group(1))
                     # Convert mate to a very high/low score
                     score = 10000 if mate_in > 0 else -10000
+
+        # UCI scores are relative to side to move, convert to absolute (white's perspective)
+        if score is not None and board.turn == chess.BLACK:
+            score = -score
 
         return score
 

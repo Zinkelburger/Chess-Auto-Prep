@@ -7,26 +7,40 @@ from datetime import datetime
 class PgnWriter:
     """Handles saving repertoire lines to PGN files."""
 
-    def __init__(self, output_dir: str = "pgns"):
+    def __init__(self, output_dir: str = "pgns", starting_board: chess.Board = None):
         self.output_dir = output_dir
         self.consolidated_file = os.path.join(output_dir, "full_repertoire.pgn")
+        self.starting_board = starting_board.copy() if starting_board else chess.Board()
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         # Clear the consolidated file at the start of a run
         if os.path.exists(self.consolidated_file):
             os.remove(self.consolidated_file)
 
-    def save_line(self, moves: List[str], probability: float, my_color: chess.Color):
+    def save_line(self, moves: List[str], probability: float, my_color: chess.Color,
+                  trickiness: float = None, eval_cp: float = None):
         """Saves a single completed line to the consolidated file."""
-        board = chess.Board()
+        board = self.starting_board.copy()
         game = chess.pgn.Game()
+
+        # Set up FEN if not starting position
+        if board.fen() != chess.STARTING_FEN:
+            game.setup(board)
         game.headers["Event"] = "Repertoire Line"
         game.headers["Site"] = "Lichess Opening Builder"
         game.headers["Date"] = datetime.now().strftime("%Y.%m.%d")
         game.headers["White"] = "My Repertoire" if my_color == chess.WHITE else "Opponent"
         game.headers["Black"] = "My Repertoire" if my_color == chess.BLACK else "Opponent"
         game.headers["Result"] = "*"
-        game.comment = f"Line Probability: {probability:.2%}"
+
+        # Build comprehensive comment
+        comment_parts = []
+        comment_parts.append(f"Line Probability: {probability:.2%}")
+        if trickiness is not None:
+            comment_parts.append(f"Trickiness: {trickiness:+.1f}cp")
+        if eval_cp is not None:
+            comment_parts.append(f"Eval: {eval_cp:+.1f}cp")
+        game.comment = " | ".join(comment_parts)
 
         node = game
         for move_san in moves:
