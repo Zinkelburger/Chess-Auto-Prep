@@ -26,9 +26,9 @@ class TreeNode:
     # Probabilities (from Maia2)
     move_probability: float  # Probability of THIS move being played
 
-    # Evaluations (from Stockfish)
-    eval_cp: Optional[float] = None  # Centipawn evaluation (white's perspective)
-    expected_value: Optional[float] = None  # Expected value considering children
+    # Evaluations (from Stockfish) - always from the player's perspective
+    eval_cp: Optional[float] = None  # Centipawn evaluation (player's perspective)
+    expected_value: Optional[float] = None  # Expected value (player: max of children, opponent: probability-weighted)
 
     def __post_init__(self):
         self.children = []
@@ -74,9 +74,10 @@ def build_tree_incremental(
     stockfish_engine,
     max_depth: int,
     my_color: chess.Color,
-    min_probability: float = 0.1,
-    top_n_my_moves: int = 3,
-    top_n_opponent_moves: int = 5,
+    min_probability: float = 0.10,
+    top_n_my_moves: Optional[int] = 3,
+    top_n_opponent_moves: Optional[int] = 5,
+    min_probability_opponent: Optional[float] = None,
     player_elo: int = 1500,
     opponent_elo: int = 1500,
     prune_bad_moves_cp: Optional[float] = 100.0,
@@ -85,7 +86,7 @@ def build_tree_incremental(
 ) -> Generator[Tuple[TreeNode, Optional[TreeNode]], None, TreeNode]:
     """
     Build a tree of moves using Maia2 probabilities with pruning.
-    Yields (root, leaf) tuples as each leaf is discovered (for incremental processing).
+    Yields leaf nodes as they're discovered during DFS.
 
     All pruning is done RELATIVE to the root position's evaluation:
     - prune_bad_moves_cp: Prune your moves that worsen position by >N cp from root
@@ -99,8 +100,9 @@ def build_tree_incremental(
         max_depth: Maximum depth in ply (half-moves)
         my_color: Your color
         min_probability: Minimum probability to include a move
-        top_n_my_moves: Max moves to explore on your turn
-        top_n_opponent_moves: Max opponent moves to explore
+        top_n_my_moves: Max moves to explore on your turn (None = use min_probability only)
+        top_n_opponent_moves: Max opponent moves (None = use min_probability_opponent)
+        min_probability_opponent: Min probability for opponent moves (overrides min_probability if set)
         player_elo: Your ELO rating
         opponent_elo: Opponent's ELO rating
         prune_bad_moves_cp: Max eval drop from ROOT allowed for your moves (None = no pruning)
@@ -108,7 +110,7 @@ def build_tree_incremental(
         prune_opponent_blunders_cp: Stop exploring after opponent loses >N cp (None = no pruning)
 
     Yields:
-        (root, leaf_node) tuples as leaves are discovered during DFS
+        Leaf nodes as they're discovered during DFS
 
     Returns:
         Root node of the completed tree
@@ -122,11 +124,11 @@ def build_tree_incremental(
         move_probability=1.0
     )
 
-    # Evaluate root position once for relative pruning
-    root_eval = stockfish_engine.evaluate(start_board, depth=20)
+    # Evaluate root position once for relative pruning (from player's POV)
+    root_eval = stockfish_engine.evaluate(start_board, depth=20, pov_color=my_color)
     if root_eval is None:
         root_eval = 0.0
-    print(f"  Root position eval: {root_eval:+.1f} cp")
+    print(f"  Root position eval: {root_eval:+.1f} cp (from your perspective)")
 
     # Progress tracking
     nodes_explored = [0]
@@ -141,8 +143,8 @@ def build_tree_incremental(
             last_print[0] = nodes_explored[0]
 
         if node.depth >= max_depth:
-            # Hit max depth - this is a leaf, evaluate it immediately
-            eval_cp = stockfish_engine.evaluate(node.board, depth=20)
+            # Hit max depth - this is a leaf, evaluate it immediately (from player's POV)
+            eval_cp = stockfish_engine.evaluate(node.board, depth=20, pov_color=my_color)
             if eval_cp is None:
                 eval_cp = 0.0
             node.eval_cp = eval_cp
@@ -152,13 +154,10 @@ def build_tree_incremental(
 
         # Prune if position is already winning enough relative to ROOT
         if prune_winning_cp is not None:
-            current_eval = stockfish_engine.evaluate(node.board, depth=20)
+            current_eval = stockfish_engine.evaluate(node.board, depth=20, pov_color=my_color)
             if current_eval is not None:
-                # Check if we've improved enough from root position
-                if my_color == chess.WHITE:
-                    improvement = current_eval - root_eval
-                else:
-                    improvement = root_eval - current_eval
+                # Check if we've improved enough from root position (from player's POV)
+                improvement = current_eval - root_eval
 
                 if improvement >= prune_winning_cp:
                     print(f"    [PRUNED] Improved by {improvement:+.0f} cp from root at depth {node.depth}")
@@ -176,21 +175,24 @@ def build_tree_incremental(
             current_elo = player_elo
             opposing_elo = opponent_elo
             top_n = top_n_my_moves
+            prob_threshold = min_probability
         else:
             current_elo = opponent_elo
             opposing_elo = player_elo
             top_n = top_n_opponent_moves
+            # Use separate threshold for opponent if specified
+            prob_threshold = min_probability_opponent if min_probability_opponent is not None else min_probability
 
         move_probs = maia2_model.get_move_probabilities(
             node.board,
             player_elo=current_elo,
             opponent_elo=opposing_elo,
-            min_probability=min_probability
+            min_probability=prob_threshold
         )
 
         if not move_probs:
             # No legal moves above threshold - this becomes a leaf
-            eval_cp = stockfish_engine.evaluate(node.board, depth=20)
+            eval_cp = stockfish_engine.evaluate(node.board, depth=20, pov_color=my_color)
             if eval_cp is None:
                 eval_cp = 0.0
             node.eval_cp = eval_cp
@@ -198,9 +200,14 @@ def build_tree_incremental(
             yield node
             return
 
-        # Sort by probability and take top N
+        # Sort by probability
         sorted_moves = sorted(move_probs.items(), key=lambda x: x[1], reverse=True)
-        top_moves = sorted_moves[:top_n]
+
+        # Apply top-N limit if specified, otherwise use all moves above threshold
+        if top_n is not None:
+            top_moves = sorted_moves[:top_n]
+        else:
+            top_moves = sorted_moves
 
         # Prune objectively bad moves (only for MY moves)
         if is_my_turn and prune_bad_moves_cp is not None:
@@ -209,18 +216,15 @@ def build_tree_incremental(
             for move_san, prob in top_moves:
                 child_board = node.board.copy()
                 child_board.push_san(move_san)
-                child_eval = stockfish_engine.evaluate(child_board, depth=20)
+                child_eval = stockfish_engine.evaluate(child_board, depth=20, pov_color=my_color)
 
                 if child_eval is None:
                     # Can't evaluate, keep it to be safe
                     filtered_moves.append((move_san, prob))
                     continue
 
-                # Calculate eval change from ROOT position, from my perspective
-                if my_color == chess.WHITE:
-                    eval_delta = child_eval - root_eval
-                else:
-                    eval_delta = root_eval - child_eval
+                # Calculate eval change from ROOT position (from player's POV)
+                eval_delta = child_eval - root_eval
 
                 # If move drops eval by more than threshold relative to ROOT, prune it
                 if eval_delta >= -prune_bad_moves_cp:
@@ -254,16 +258,13 @@ def build_tree_incremental(
 
             # Check if opponent just blundered (only for opponent moves)
             if not is_my_turn and prune_opponent_blunders_cp is not None:
-                child_eval = stockfish_engine.evaluate(child_board, depth=20)
+                child_eval = stockfish_engine.evaluate(child_board, depth=20, pov_color=my_color)
                 if child_eval is not None:
                     # Calculate how much the opponent's move changed the eval (from my perspective)
-                    parent_eval = stockfish_engine.evaluate(node.board, depth=20)
+                    parent_eval = stockfish_engine.evaluate(node.board, depth=20, pov_color=my_color)
                     if parent_eval is not None:
-                        # Improvement from my perspective
-                        if my_color == chess.WHITE:
-                            eval_swing = child_eval - parent_eval
-                        else:
-                            eval_swing = parent_eval - child_eval
+                        # Improvement from my perspective (positive = good for me)
+                        eval_swing = child_eval - parent_eval
 
                         # If opponent lost more than threshold, mark as done (don't expand further)
                         if eval_swing >= prune_opponent_blunders_cp:
@@ -286,6 +287,78 @@ def build_tree_incremental(
     return root
 
 
+
+
+def calculate_expected_values(root: TreeNode, my_color: chess.Color) -> None:
+    """
+    Calculate expected values for all nodes via post-order traversal.
+
+    Expected value = Σ(probability × child_value) for ALL nodes.
+
+    This models human play according to Maia2 probabilities, not optimal play.
+
+    Args:
+        root: Root node of the tree
+        my_color: Player's color (unused, kept for compatibility)
+    """
+    def _propagate(node: TreeNode) -> float:
+        """Calculate expected value recursively."""
+
+        if node.is_leaf():
+            if node.expected_value is None:
+                node.expected_value = node.eval_cp if node.eval_cp is not None else 0.0
+            return node.expected_value
+
+        # Recursively compute children's expected values
+        child_values = []
+        for child in node.children:
+            child_ev = _propagate(child)
+            child_values.append((child, child_ev))
+
+        # Always use probability-weighted average (models Maia2 human play)
+        total_prob = sum(child.move_probability for child in node.children)
+        if total_prob > 0:
+            node.expected_value = sum(
+                (child.move_probability / total_prob) * ev
+                for child, ev in child_values
+            )
+        else:
+            # Fallback if probabilities don't sum properly
+            node.expected_value = sum(ev for _, ev in child_values) / len(child_values)
+
+        return node.expected_value
+
+    _propagate(root)
+
+
+def find_best_lines(root: TreeNode, my_color: chess.Color, min_value: float = 0.0) -> List[Tuple[TreeNode, float]]:
+    """
+    Find all opponent nodes with good expected value, sorted by expected value.
+
+    Args:
+        root: Root of the tree
+        my_color: Player's color
+        min_value: Minimum expected value threshold (from your perspective)
+
+    Returns:
+        List of (node, expected_value) sorted by expected value descending
+    """
+    good_lines = []
+
+    def _traverse(node: TreeNode):
+        # Collect opponent nodes with sufficient expected value
+        if not node.is_my_turn(my_color) and node.expected_value is not None:
+            if node.expected_value >= min_value:
+                good_lines.append((node, node.expected_value))
+
+        for child in node.children:
+            _traverse(child)
+
+    _traverse(root)
+
+    # Sort by expected value (descending = better for you)
+    good_lines.sort(key=lambda x: x[1], reverse=True)
+    return good_lines
 
 
 def print_tree_stats(root: TreeNode):

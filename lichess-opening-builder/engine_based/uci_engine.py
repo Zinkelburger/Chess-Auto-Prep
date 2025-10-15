@@ -52,14 +52,20 @@ class UCIEngine:
         fen = board.fen()
         self._send_command(f"position fen {fen}")
 
-    def evaluate(self, board: chess.Board, depth: int = 20, time_ms: int = 1000) -> Optional[float]:
+    def evaluate(self, board: chess.Board, depth: int = 20, time_ms: int = 1000, pov_color: chess.Color = chess.WHITE) -> Optional[float]:
         """
-        Evaluate a position and return the score in centipawns from white's perspective.
+        Evaluate a position and return the score in centipawns from the specified color's perspective.
 
         Note: UCI engines return scores relative to the side to move (positive = side to move is better).
-        This method converts the score to be absolute (from white's perspective):
-        - Positive score = white is better
-        - Negative score = black is better
+        This method converts the score to be from the specified POV color's perspective:
+        - Positive score = pov_color is better
+        - Negative score = opponent is better
+
+        Args:
+            board: Position to evaluate
+            depth: Search depth
+            time_ms: Time limit (currently unused, depth-based search only)
+            pov_color: Color to evaluate from (chess.WHITE or chess.BLACK)
         """
         self.set_position(board)
         self._send_command(f"go depth {depth}")
@@ -82,8 +88,14 @@ class UCIEngine:
                     # Convert mate to a very high/low score
                     score = 10000 if mate_in > 0 else -10000
 
-        # UCI scores are relative to side to move, convert to absolute (white's perspective)
-        if score is not None and board.turn == chess.BLACK:
+        if score is None:
+            return None
+
+        # UCI scores are relative to side to move
+        # Convert to POV of the specified color:
+        # 1. If the side to move is the POV color, keep the score as-is
+        # 2. If the side to move is the opponent, negate it
+        if board.turn != pov_color:
             score = -score
 
         return score
