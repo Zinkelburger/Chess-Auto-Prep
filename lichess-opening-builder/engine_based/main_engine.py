@@ -304,6 +304,7 @@ def main():
             for i, (node, expected_value) in enumerate(best_lines, 1):
                 moves = node.get_line()
                 line_probability = node.get_line_probability()
+                stockfish_eval = node.eval_cp if node.eval_cp is not None else 0.0
 
                 print(f"\n  [Line {i}] Expected Value: {expected_value:+.1f} cp, Probability: {line_probability:.2%}")
                 print(f"    {' '.join(moves)}")
@@ -313,7 +314,8 @@ def main():
                     moves,
                     line_probability,
                     my_color,
-                    eval_cp=expected_value
+                    stockfish_eval=stockfish_eval,
+                    expected_value=expected_value
                 )
 
             print(f"\nAll lines saved to: {pgn_writer.consolidated_file}")

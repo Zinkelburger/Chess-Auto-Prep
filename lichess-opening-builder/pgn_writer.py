@@ -18,7 +18,7 @@ class PgnWriter:
             os.remove(self.consolidated_file)
 
     def save_line(self, moves: List[str], probability: float, my_color: chess.Color,
-                  trickiness: float = None, eval_cp: float = None):
+                  eval_cp: float = None, expected_value: float = None, stockfish_eval: float = None):
         """Saves a single completed line to the consolidated file."""
         board = self.starting_board.copy()
         game = chess.pgn.Game()
@@ -36,10 +36,8 @@ class PgnWriter:
         # Build comprehensive comment
         comment_parts = []
         comment_parts.append(f"Line Probability: {probability:.2%}")
-        if trickiness is not None:
-            comment_parts.append(f"Trickiness: {trickiness:+.1f}cp")
-        if eval_cp is not None:
-            comment_parts.append(f"Eval: {eval_cp:+.1f}cp")
+        if expected_value is not None:
+            comment_parts.append(f"Expected Value: {expected_value:+.1f}cp")
         game.comment = " | ".join(comment_parts)
 
         node = game

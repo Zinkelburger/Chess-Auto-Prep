@@ -293,13 +293,14 @@ def calculate_expected_values(root: TreeNode, my_color: chess.Color) -> None:
     """
     Calculate expected values for all nodes via post-order traversal.
 
-    Expected value = Σ(probability × child_value) for ALL nodes.
+    - Player nodes: expected_value = max(children) [you play best move]
+    - Opponent nodes: expected_value = Σ(prob × child) [they play probabilistically]
 
-    This models human play according to Maia2 probabilities, not optimal play.
+    This finds positions where the opponent is likely to make mistakes.
 
     Args:
         root: Root node of the tree
-        my_color: Player's color (unused, kept for compatibility)
+        my_color: Player's color
     """
     def _propagate(node: TreeNode) -> float:
         """Calculate expected value recursively."""
@@ -315,16 +316,20 @@ def calculate_expected_values(root: TreeNode, my_color: chess.Color) -> None:
             child_ev = _propagate(child)
             child_values.append((child, child_ev))
 
-        # Always use probability-weighted average (models Maia2 human play)
-        total_prob = sum(child.move_probability for child in node.children)
-        if total_prob > 0:
-            node.expected_value = sum(
-                (child.move_probability / total_prob) * ev
-                for child, ev in child_values
-            )
+        if node.is_my_turn(my_color):
+            # Your turn: play the best move
+            node.expected_value = max(ev for _, ev in child_values)
         else:
-            # Fallback if probabilities don't sum properly
-            node.expected_value = sum(ev for _, ev in child_values) / len(child_values)
+            # Opponent's turn: probability-weighted average
+            total_prob = sum(child.move_probability for child in node.children)
+            if total_prob > 0:
+                node.expected_value = sum(
+                    (child.move_probability / total_prob) * ev
+                    for child, ev in child_values
+                )
+            else:
+                # Fallback if probabilities don't sum properly
+                node.expected_value = sum(ev for _, ev in child_values) / len(child_values)
 
         return node.expected_value
 
