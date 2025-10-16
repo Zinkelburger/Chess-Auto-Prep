@@ -3,9 +3,9 @@ Simple opening search - find positions where opponent is likely to blunder.
 
 No complicated tree structures. Just:
 1. Start from a position
-2. Get Maia2 move probabilities
+2. Get move probabilities (from Lichess or Maia2)
 3. Evaluate each child position
-4. If we find a good expected value swing, save it
+4. If we find a good expected value, save it
 5. Recursively explore promising positions
 """
 
@@ -25,7 +25,7 @@ class InterestingPosition:
 
 def search_for_tricks(
     board: chess.Board,
-    maia2_model,
+    probability_provider,
     stockfish_engine,
     my_color: chess.Color,
     player_elo: int = 1500,
@@ -46,7 +46,7 @@ def search_for_tricks(
 
     Args:
         board: Current position
-        maia2_model: Maia2 model for move probabilities
+        probability_provider: Provider for move probabilities (Maia2 or HybridProbability)
         stockfish_engine: Stockfish for evaluation
         my_color: Your color
         player_elo: Your ELO
@@ -101,7 +101,7 @@ def search_for_tricks(
         current_elo = opponent_elo
         opposing_elo = player_elo
 
-    move_probs = maia2_model.get_move_probabilities(
+    move_probs = probability_provider.get_move_probabilities(
         board,
         player_elo=current_elo,
         opponent_elo=opposing_elo,
@@ -190,7 +190,7 @@ def search_for_tricks(
         new_line = current_line + [move_san]
         child_positions = search_for_tricks(
             board=child_board,
-            maia2_model=maia2_model,
+            probability_provider=probability_provider,
             stockfish_engine=stockfish_engine,
             my_color=my_color,
             player_elo=player_elo,

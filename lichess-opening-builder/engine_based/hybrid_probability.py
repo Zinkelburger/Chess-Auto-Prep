@@ -62,13 +62,13 @@ class HybridProbability:
         Initialize hybrid probability provider.
 
         Args:
-            maia2_model: Maia2 model instance (fallback)
+            maia2_model: Maia2 model instance (used as fallback)
             use_lichess: Whether to try Lichess API first
             lichess_min_games: Minimum games required from Lichess
-            lichess_rating_range: Not used (parent API uses hardcoded ratings)
-            lichess_speeds: Not used (parent API uses hardcoded speeds)
+            lichess_rating_range: Not currently used (API uses hardcoded ratings)
+            lichess_speeds: Not currently used (API uses hardcoded speeds)
         """
-        self.maia2 = maia2_model
+        self.maia_model = maia2_model
         self.use_lichess = use_lichess
         self.lichess_min_games = lichess_min_games
 
@@ -124,7 +124,7 @@ class HybridProbability:
 
         # Fallback to Maia2
         print(f"    [Fallback] Using Maia2 @ {player_elo} ELO")
-        return self.maia2.get_move_probabilities(
+        return self.maia_model.get_move_probabilities(
             board=board,
             player_elo=player_elo,
             opponent_elo=opponent_elo,

@@ -2,14 +2,15 @@
 """
 Engine-Based Opening Builder - Find Tricky Opening Lines
 
-Uses Stockfish for evaluation and Maia2 for human move probabilities
-to find opening lines where opponents are likely to make mistakes.
+Uses Stockfish for evaluation and probability providers (Lichess API or Maia2)
+for human move probabilities to find opening lines where opponents are likely
+to make mistakes.
 
 Architecture:
-1. Build tree with Maia2 move probabilities
+1. Build tree with move probabilities (from Lichess or Maia2)
 2. Evaluate leaf nodes with Stockfish
 3. Propagate expected values back up
-4. Find lines with highest "trickiness"
+4. Find lines with highest expected value
 """
 
 import argparse
@@ -32,7 +33,7 @@ from hybrid_probability import HybridProbability
 load_dotenv()
 
 
-def evaluate_position_only(board, my_color, maia2, stockfish, player_elo, opponent_elo):
+def evaluate_position_only(board, my_color, probability_provider, stockfish, player_elo, opponent_elo):
     """
     Evaluate a single position and show all children with probabilities and evals.
     """
@@ -57,7 +58,7 @@ def evaluate_position_only(board, my_color, maia2, stockfish, player_elo, oppone
         elo_to_move = opponent_elo
         elo_opponent = player_elo
 
-    move_probs = maia2.get_move_probabilities(
+    move_probs = probability_provider.get_move_probabilities(
         board,
         player_elo=elo_to_move,
         opponent_elo=elo_opponent,
@@ -71,7 +72,7 @@ def evaluate_position_only(board, my_color, maia2, stockfish, player_elo, oppone
     # Sort by probability
     sorted_moves = sorted(move_probs.items(), key=lambda x: x[1], reverse=True)
 
-    print(f"\n{'Your' if is_my_turn else 'Opponent'} moves (Maia2 @ {elo_to_move} ELO):")
+    print(f"\n{'Your' if is_my_turn else 'Opponent'} moves (predicted @ {elo_to_move} ELO):")
     print("-" * 70)
 
     # Evaluate each child
@@ -186,14 +187,14 @@ def main():
         print(f"Loading Stockfish from: {stockfish_path}")
         stockfish = UCIEngine(stockfish_path, name="Stockfish")
 
-        print(f"Loading Maia2 ({args.maia_type}, {args.device})...")
-        maia2_model = Maia2(
+        print(f"Loading Maia2 model ({args.maia_type}, {args.device})...")
+        maia_model = Maia2(
             game_type=args.maia_type,
             device=args.device,
             default_elo=args.player_elo
         )
 
-        # Setup probability provider (Lichess + Maia2 or just Maia2)
+        # Setup probability provider (Lichess API + Maia2 fallback, or just Maia2)
         if args.use_lichess:
             print("Enabling Lichess API for real game statistics...")
             lichess_rating_range = None
@@ -215,14 +216,14 @@ def main():
             print(f"  Fallback: Maia2 @ {args.player_elo} ELO")
 
             probability_provider = HybridProbability(
-                maia2_model=maia2_model,
+                maia2_model=maia_model,
                 use_lichess=True,
                 lichess_min_games=args.lichess_min_games,
                 lichess_rating_range=lichess_rating_range,
                 lichess_speeds=lichess_speeds
             )
         else:
-            probability_provider = maia2_model
+            probability_provider = maia_model
 
     except Exception as e:
         print(f"Error initializing engines: {e}")
@@ -260,7 +261,7 @@ def main():
         evaluate_position_only(
             board=board,
             my_color=my_color,
-            maia2=probability_provider,
+            probability_provider=probability_provider,
             stockfish=stockfish,
             player_elo=args.player_elo,
             opponent_elo=args.opponent_elo
@@ -277,7 +278,7 @@ def main():
 
         interesting_positions = search_for_tricks(
             board=board,
-            maia2_model=probability_provider,
+            probability_provider=probability_provider,
             stockfish_engine=stockfish,
             my_color=my_color,
             player_elo=args.player_elo,
