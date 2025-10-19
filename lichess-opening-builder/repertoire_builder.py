@@ -66,12 +66,12 @@ class RepertoireBuilder:
         # --- API Query ---
         data = query_lichess_api(fen)
         if not data or not data.get("moves"):
-            self._save_line_if_valid(current_line_san, path_probability, "End of API data")
+            self._save_line_if_valid(current_line_san, path_probability, threshold, "End of API data")
             return
 
         total_games = data['white'] + data['black'] + data['draws']
         if total_games == 0:
-            self._save_line_if_valid(current_line_san, path_probability, "No games played from here")
+            self._save_line_if_valid(current_line_san, path_probability, threshold, "No games played from here")
             return
 
         print(f"\nAnalyzing: {' '.join(current_line_san) or 'Start'}")
@@ -82,7 +82,7 @@ class RepertoireBuilder:
             # My Turn: Use the selected algorithm to pick ONE move.
             my_move = self.my_move_selector.select_move(data['moves'], board, self.my_color)
             if not my_move:
-                self._save_line_if_valid(current_line_san, path_probability, "No valid move found for me")
+                self._save_line_if_valid(current_line_san, path_probability, threshold, "No valid move found for me")
                 return
 
             print(f"  -> My Move ({type(self.my_move_selector).__name__}): {my_move['san']}")
@@ -109,11 +109,14 @@ class RepertoireBuilder:
                 board_after_move.push_san(move['san'])
                 self._dfs(board_after_move.fen(), new_absolute_prob, threshold, current_line_san + [move['san']])
 
-    def _save_line_if_valid(self, moves: List[str], probability: float, reason: str):
-        """Helper to save a completed line if it's not too short."""
-        if len(moves) > 3:  # Only save lines of a reasonable length
+    def _save_line_if_valid(self, moves: List[str], probability: float, threshold: float, reason: str):
+        """Helper to save a completed line if it meets probability threshold and length requirements."""
+        if len(moves) > 3 and probability >= threshold:  # Only save lines that meet both criteria
             self.completed_lines_count += 1
             self.pgn_writer.save_line(moves, probability, self.my_color)
-            print(f"    [SAVED] Line #{self.completed_lines_count}: {' '.join(moves)} (Reason: {reason})")
+            print(f"    [SAVED] Line #{self.completed_lines_count}: {' '.join(moves)} (Prob: {probability:.2%}, Reason: {reason})")
         else:
-            print(f"    [END] Short line not saved: {' '.join(moves)}")
+            if len(moves) <= 3:
+                print(f"    [END] Short line not saved: {' '.join(moves)}")
+            else:
+                print(f"    [END] Line below threshold not saved: {' '.join(moves)} (Prob: {probability:.2%})")

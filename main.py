@@ -1,20 +1,9 @@
 """
-Chess Auto Prep - Opening Explorer
-Main application entry point.
+Chess Auto Prep - Main application entry point.
+
+Clean, idiomatic Python chess application with modern architecture.
 """
-import sys
-from PySide6.QtWidgets import QApplication
-
-from main_window import ChessPrepMainWindow
-
-
-def main():
-    """Main application entry point."""
-    app = QApplication(sys.argv)
-    window = ChessPrepMainWindow()
-    window.show()
-    sys.exit(app.exec())
-
+from windows.main_window import main
 
 if __name__ == "__main__":
     main()
