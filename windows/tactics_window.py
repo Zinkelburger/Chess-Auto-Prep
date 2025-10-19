@@ -69,14 +69,16 @@ class TacticsWindow(QWidget):
         right_panel = self._create_control_panel()
         splitter.addWidget(right_panel)
 
-        # Set 50/50 sizing - both panels get equal space
-        splitter.setSizes([500, 500])
-        splitter.setStretchFactor(0, 1)  # Chess board
-        splitter.setStretchFactor(1, 1)  # Control panel - equal weight
+        # Chess board gets priority - expands to fill space
+        splitter.setSizes([700, 300])  # Start with board larger
+        splitter.setStretchFactor(0, 3)  # Chess board gets 3x priority
+        splitter.setStretchFactor(1, 1)  # Control panel gets minimal space
 
     def _create_control_panel(self) -> QWidget:
         """Create the control panel."""
         panel = QWidget()
+        panel.setMinimumWidth(280)  # Minimum width to prevent crushing
+        panel.setMaximumWidth(400)  # Maximum width to force board expansion
         layout = QVBoxLayout(panel)
 
         # Position info

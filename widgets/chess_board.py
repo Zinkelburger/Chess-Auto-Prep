@@ -185,6 +185,11 @@ class ChessBoardWidget(QWidget):
         self.square_clicked.emit(square)
         piece = self.board.piece_at(square)
 
+        # Check if clicking on already selected piece to deselect
+        if square == self.selected_square:
+            self.clear_selection()
+            return
+
         # Check if we can start a drag from this square
         if piece and piece.color == self.board.turn:
             legal_moves = [move for move in self.board.legal_moves if move.from_square == square]
@@ -248,11 +253,11 @@ class ChessBoardWidget(QWidget):
                 if move and move in self.board.legal_moves:
                     self.move_made.emit(move.uci())
 
-            # Reset drag state
+            # Reset drag state after drag
             self._reset_drag_state()
         else:
-            # Reset drag state for click operations
-            self._reset_drag_state()
+            # Simple click - reset drag state but keep selection
+            self._reset_drag_state_keep_selection()
 
     def _reset_drag_state(self):
         """Reset all drag and drop state."""
@@ -262,6 +267,15 @@ class ChessBoardWidget(QWidget):
         self.current_drag_pos = None
         self.dragged_piece = None
         self.clear_selection()
+
+    def _reset_drag_state_keep_selection(self):
+        """Reset drag state but keep current selection for click-to-click moves."""
+        self.drag_start_square = None
+        self.dragging = False
+        self.drag_start_pos = None
+        self.current_drag_pos = None
+        self.dragged_piece = None
+        # Keep self.selected_square and highlighted_squares intact
 
     def _create_move(self, from_square: int, to_square: int) -> Optional[chess.Move]:
         """Create a move with automatic promotion handling."""
