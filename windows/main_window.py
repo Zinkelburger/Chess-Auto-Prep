@@ -3,6 +3,7 @@ Main application window - focused tactics trainer with PGN functionality.
 """
 import sys
 import os
+import argparse
 from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QApplication, QFileDialog,
@@ -284,6 +285,16 @@ class MainWindow(QMainWindow):
 
 def main():
     """Main application entry point."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Chess Auto Prep - Tactics Trainer")
+    parser.add_argument("--gui-debug", action="store_true",
+                       help="Enable visual debugging for GUI layout")
+    args = parser.parse_args()
+
+    # Store debug flag globally
+    import config
+    config.GUI_DEBUG = args.gui_debug
+
     app = QApplication(sys.argv)
 
     # Set application properties

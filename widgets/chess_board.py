@@ -6,8 +6,8 @@ from typing import Optional, Set
 from pathlib import Path
 
 import chess
-from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QWidget, QSizePolicy
+from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QPainter, QColor, QPen, QFont, QMouseEvent
 
 try:
@@ -38,6 +38,11 @@ class ChessBoardWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(400, 400)
+        # Remove any maximum size constraints that might limit expansion
+        self.setMaximumSize(16777215, 16777215)  # Qt's maximum size
+
+        # Set size policy to expand and use all available space
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         # Board state
         self.board = chess.Board()
@@ -69,6 +74,25 @@ class ChessBoardWidget(QWidget):
         }
 
         self._load_piece_images()
+
+    def sizeHint(self) -> QSize:
+        """Provide a size hint that doesn't constrain expansion."""
+        # Return a flexible size hint that doesn't limit horizontal expansion
+        return QSize(400, 400)  # Smaller hint to encourage expansion
+
+    def resizeEvent(self, event):
+        """Handle resize events."""
+        super().resizeEvent(event)
+
+        from config import GUI_DEBUG
+        if GUI_DEBUG:
+            print(f"ChessBoard resizeEvent: widget size = {self.width()}x{self.height()}")
+            print(f"  size policy = {self.sizePolicy().horizontalPolicy()}, {self.sizePolicy().verticalPolicy()}")
+            print(f"  size hint = {self.sizeHint()}")
+            print(f"  minimum size = {self.minimumSize()}")
+            print(f"  maximum size = {self.maximumSize()}")
+
+        # Don't force resize - let the layout handle it and just paint appropriately
 
     def _load_piece_images(self):
         """Load piece SVG images if available."""
@@ -295,9 +319,18 @@ class ChessBoardWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Calculate square size
+        from config import GUI_DEBUG
+        if GUI_DEBUG:
+            # Draw a bright border around the entire widget for debugging
+            painter.setPen(QPen(QColor(255, 0, 0), 3))  # Red border, 3px thick
+            painter.drawRect(0, 0, self.width()-1, self.height()-1)
+
+        # Calculate square size based on widget size
         size = min(self.width(), self.height())
         square_size = size // 8
+
+        if GUI_DEBUG:
+            print(f"ChessBoard paintEvent: widget size = {self.width()}x{self.height()}, board size = {size}, square size = {square_size}")
 
         # Draw board squares
         for row in range(8):

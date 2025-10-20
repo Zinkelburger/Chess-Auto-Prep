@@ -4,6 +4,9 @@ Application configuration.
 import os
 from pathlib import Path
 
+# Debug flags (set by command line arguments)
+GUI_DEBUG = False
+
 # Load .env file
 try:
     from dotenv import load_dotenv
