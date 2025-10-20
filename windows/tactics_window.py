@@ -194,28 +194,28 @@ class TacticsWindow(QWidget):
         solution_layout = QVBoxLayout(self.solution_widget)
         solution_layout.setContentsMargins(2, 2, 2, 2)
 
-        # Solution text
+        # Solution text with Copy FEN button on the same line
+        solution_text_layout = QHBoxLayout()
+
         self.solution_text = QLabel()
-        self.solution_text.setFont(QFont("Courier", 8))
+        self.solution_text.setFont(QFont("Courier", 10))  # Increased from 8 to 10
         self.solution_text.setWordWrap(True)
         self.solution_text.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        solution_layout.addWidget(self.solution_text)
+        solution_text_layout.addWidget(self.solution_text)
 
-        # FEN line with copy button
-        fen_layout = QHBoxLayout()
-        self.fen_label = QLabel()
-        self.fen_label.setFont(QFont("Courier", 8))
-        self.fen_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        fen_layout.addWidget(self.fen_label)
+        # Add stretch to give some space, but not fully right-align
+        solution_text_layout.addStretch()
 
-        self.copy_fen_btn = QPushButton("Copy")
-        self.copy_fen_btn.setMaximumSize(40, 20)
+        self.copy_fen_btn = QPushButton("Copy FEN")
+        self.copy_fen_btn.setMaximumWidth(85)  # Slightly wider than before
         self.copy_fen_btn.setToolTip("Copy FEN to clipboard")
         self.copy_fen_btn.clicked.connect(self._copy_fen)
-        fen_layout.addWidget(self.copy_fen_btn)
-        fen_layout.addStretch()
+        solution_text_layout.addWidget(self.copy_fen_btn)
 
-        solution_layout.addLayout(fen_layout)
+        # Add a small fixed spacer to give some breathing room from the right edge
+        solution_text_layout.addSpacing(8)
+
+        solution_layout.addLayout(solution_text_layout)
         layout.addWidget(self.solution_widget)
 
         # Action buttons
@@ -457,11 +457,9 @@ You played: {original_move_san}"""
             return
 
         solution = self.engine.get_solution(self.current_position)
-        fen = self.current_position.fen
 
-        # Display solution and FEN
+        # Display solution (FEN available via copy button)
         self.solution_text.setText(f"Solution: {solution}")
-        self.fen_label.setText(f"FEN: {fen}")
         self.solution_widget.setVisible(True)
         self.solution_btn.setEnabled(False)
 
