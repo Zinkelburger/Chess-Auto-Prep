@@ -130,8 +130,8 @@ def main():
                         help="Top N moves by probability to evaluate for your moves (default: 8).")
     parser.add_argument("--my-move-threshold", type=float, default=50.0,
                         help="Explore your moves within this many cp of best move (default: 50).")
-    parser.add_argument("--opponent-min-prob", type=float, default=0.20,
-                        help="Minimum probability for opponent moves (default: 0.20 = 20%%).")
+    parser.add_argument("--opponent-min-prob", type=float, default=0.10,
+                        help="Minimum probability for opponent moves (default: 0.10 = 10%%).")
 
     # ELO parameters
     parser.add_argument("--player-elo", type=int, default=2000,
