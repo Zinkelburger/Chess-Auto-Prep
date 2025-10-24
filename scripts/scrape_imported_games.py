@@ -39,17 +39,20 @@ def scrape_imported_game_ids(username, max_games=None):
                 print(f"No more games found on page {page}")
                 break
 
+            page_game_ids = []
             for link in game_links:
                 href = link.get('href')
                 if href:
                     # Extract game ID from href like "/Aq9fm8DR" or "/H9rG4JaC/black"
                     game_id = href.split('/')[1].split('/')[0]  # Get first part after /
                     game_ids.append(game_id)
+                    page_game_ids.append(game_id)
 
                     if max_games and len(game_ids) >= max_games:
                         break
 
             print(f"Found {len(game_links)} games on page {page}, total: {len(game_ids)}")
+            print(f"Game IDs from page {page}: {page_game_ids}")
             page += 1
 
             # Be polite to the server
@@ -68,9 +71,11 @@ def download_games_with_evals(game_ids, token, output_file, progress_callback=No
 
     Args:
         game_ids: List of game IDs to download
-        token: Lichess API token
+        token: Lichess API token (kept for backwards compatibility, not used by this endpoint)
         output_file: Output file path
         progress_callback: Optional callback function for progress updates
+
+    Note: The /api/games/export/_ids endpoint does not require authentication.
     """
     if not game_ids:
         if progress_callback:
@@ -80,8 +85,11 @@ def download_games_with_evals(game_ids, token, output_file, progress_callback=No
     if progress_callback:
         progress_callback(f"Preparing to download {len(game_ids)} games with evaluations...")
 
-    api_url = "https://lichess.org/games/export/_ids"
-    headers = {"Authorization": f"Bearer {token}"}
+    api_url = "https://lichess.org/api/games/export/_ids"
+    headers = {
+        "Content-Type": "text/plain",
+        "Accept": "application/x-chess-pgn"
+    }
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
@@ -103,6 +111,12 @@ def download_games_with_evals(game_ids, token, output_file, progress_callback=No
         # API expects comma-separated string of IDs
         post_data = ",".join(batch_ids)
 
+        print(f"\nDEBUG - Batch {batch_num}:")
+        print(f"  Game IDs in batch: {batch_ids}")
+        print(f"  POST data: {post_data[:200]}..." if len(post_data) > 200 else f"  POST data: {post_data}")
+        print(f"  API URL: {api_url}")
+        print(f"  Headers: {headers}")
+
         params = {
             "evals": "true",
             "clocks": "true",
@@ -111,6 +125,8 @@ def download_games_with_evals(game_ids, token, output_file, progress_callback=No
 
         try:
             response = requests.post(api_url, headers=headers, params=params, data=post_data)
+            print(f"  Response status: {response.status_code}")
+            print(f"  Response headers: {dict(response.headers)}")
             response.raise_for_status()
 
             # Append to output file

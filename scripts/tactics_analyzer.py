@@ -9,6 +9,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 import logging
+from config import DATA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class TacticsAnalyzer:
 
     def __init__(self, username: str = "BigManArkhangelsk"):
         self.username = username.lower()
-        self.tactics_file = "tactics_positions.csv"
+        self.tactics_file = DATA_DIR / "tactics_positions.csv"
         self.positions = []
 
     def analyze_pgn_file(self, pgn_path: str, progress_callback=None) -> int:
@@ -163,21 +164,29 @@ class TacticsAnalyzer:
         """Extract the correct line from the comment."""
         correct_line = []
 
-        # Look for patterns like "Best move was Nf3" or parenthetical variations
-        best_move_match = re.search(r"(?:Best move was|was best\.)\s*\}\s*\(([^)]+)\)", comment)
+        # Lichess format: "Blunder. Nf3 was best." followed by "(move_num... Nf3 Ng5 ...)"
+        # First try to find the best move from "X was best" pattern
+        best_move_match = re.search(r"([a-h]?[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?)\s+was best", comment)
         if best_move_match:
-            moves_text = best_move_match.group(1)
-            # Parse the moves and take first 2
-            moves = re.findall(r"[a-h1-8][a-h1-8](?:[qrbn])?", moves_text)
-            correct_line = moves[:2]  # Limit to 2 moves
-        else:
-            # Try to find moves in parentheses
-            paren_match = re.search(r"\(([^)]+)\)", comment)
+            best_move = best_move_match.group(1)
+
+            # Now try to get the continuation from parentheses
+            paren_match = re.search(r"\((?:\d+\.+\s+)?([^)]+)\)", comment)
             if paren_match:
                 moves_text = paren_match.group(1)
-                # Extract actual moves (not move numbers)
-                moves = re.findall(r"[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?", moves_text)
-                correct_line = moves[:2]
+                # Extract SAN moves from the variation
+                moves = re.findall(r"(?<!\d)[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?(?![.])", moves_text)
+                # Take first 3 moves to give context
+                correct_line = moves[:3] if moves else [best_move]
+            else:
+                correct_line = [best_move]
+        else:
+            # Fallback: Try to find moves in parentheses
+            paren_match = re.search(r"\((?:\d+\.+\s+)?([^)]+)\)", comment)
+            if paren_match:
+                moves_text = paren_match.group(1)
+                moves = re.findall(r"(?<!\d)[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?(?![.])", moves_text)
+                correct_line = moves[:3]
 
         return correct_line
 

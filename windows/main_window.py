@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QApplication, QFileDialog,
-    QMessageBox, QProgressDialog, QInputDialog
+    QMessageBox, QProgressDialog, QInputDialog, QDialog
 )
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QAction
@@ -15,6 +15,11 @@ import signal
 
 from windows.tactics_window import TacticsWidget
 from windows.chess_view import ThreePanelWidget
+from windows.input_dialogs import (
+    AnalyzeWeakPositionsDialog,
+    ImportFromLichessDialog,
+    AnalyzePGNsDialog
+)
 from core.modes import TacticsMode, PositionAnalysisMode
 from config import APP_NAME, APP_VERSION, LICHESS_API_TOKEN, LICHESS_USERNAME
 
@@ -34,7 +39,7 @@ class PGNAnalysisWorker(QThread):
         try:
             from scripts.tactics_analyzer import analyze_tactics_from_directory
             positions = analyze_tactics_from_directory(
-                directory=str(Path(self.pgn_path).parent),
+                directory=self.pgn_path,
                 username=self.username,
                 progress_callback=self.progress.emit
             )
@@ -260,17 +265,15 @@ class MainWindow(QMainWindow):
 
     def _import_from_lichess(self):
         """Import games from Lichess."""
-        username, ok = QInputDialog.getText(
-            self, "Import from Lichess", "Enter Lichess username:",
-            text=LICHESS_USERNAME or ""
-        )
-        if not ok or not username:
+        dialog = ImportFromLichessDialog(self, LICHESS_USERNAME or "")
+        if dialog.exec() != QDialog.Accepted:
             return
 
-        max_games, ok = QInputDialog.getInt(
-            self, "Import from Lichess", "Max games to import:", 100, 1, 1000
-        )
-        if not ok:
+        values = dialog.get_values()
+        username = values["username"]
+        max_games = values["max_games"]
+
+        if not username:
             return
 
         # Check for API token
@@ -294,11 +297,14 @@ class MainWindow(QMainWindow):
 
     def _analyze_pgns(self):
         """Analyze PGN files for tactical positions."""
-        username, ok = QInputDialog.getText(
-            self, "Analyze PGNs", "Enter your username (to identify your games):",
-            text=LICHESS_USERNAME or ""
-        )
-        if not ok or not username:
+        dialog = AnalyzePGNsDialog(self, LICHESS_USERNAME or "")
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        values = dialog.get_values()
+        username = values["username"]
+
+        if not username:
             return
 
         progress = QProgressDialog("Analyzing PGN files for tactical positions...", "Cancel", 0, 100, self)
@@ -358,53 +364,18 @@ class MainWindow(QMainWindow):
 
     def _analyze_weak_positions(self):
         """Analyze games to find positions where user loses frequently."""
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSpinBox
-
-        # Create dialog to get parameters
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Analyze Weak Positions")
-        dialog.setModal(True)
-        layout = QVBoxLayout(dialog)
-
-        # Username input
-        username_layout = QHBoxLayout()
-        username_layout.addWidget(QLabel("Username:"))
-        username_input = QInputDialog()
-        username, ok = QInputDialog.getText(
-            self, "Analyze Weak Positions", "Enter your username:",
-            text=LICHESS_USERNAME or ""
-        )
-        if not ok or not username:
+        dialog = AnalyzeWeakPositionsDialog(self, LICHESS_USERNAME or "")
+        if dialog.exec() != QDialog.Accepted:
             return
 
-        # Color selection
-        color, ok = QInputDialog.getItem(
-            self, "Select Color",
-            "Analyze positions as:",
-            ["both", "white", "black"],
-            0, False
-        )
-        if not ok:
-            return
+        values = dialog.get_values()
+        username = values["username"]
+        color = values["color"]
+        source = values["source"]
+        max_games = values["max_games"]
 
-        # Source selection
-        source, ok = QInputDialog.getItem(
-            self, "Select Source",
-            "Download games from:",
-            ["lichess", "chesscom"],
-            0, False
-        )
-        if not ok:
+        if not username:
             return
-
-        # Max games (only for lichess)
-        max_games = 100
-        if source == "lichess":
-            max_games, ok = QInputDialog.getInt(
-                self, "Max Games", "Max games to analyze:", 100, 10, 500
-            )
-            if not ok:
-                return
 
         # Check for required credentials
         if source == "lichess" and not LICHESS_API_TOKEN:
