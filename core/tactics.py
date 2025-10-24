@@ -44,6 +44,7 @@ class TacticsPosition:
     user_move: str
     correct_line: List[str]
     mistake_type: MistakeType
+    mistake_analysis: str = ""  # Full mistake description from Lichess (e.g., "(−0.31 → 0.83) Mistake. e6 was best.")
     difficulty: int = 1  # 1-5 scale
 
     # Review tracking
@@ -154,6 +155,7 @@ class TacticsDatabase:
                 user_move=row['user_move'],
                 correct_line=correct_line,
                 mistake_type=mistake_type,
+                mistake_analysis=row.get('mistake_analysis', ''),
                 difficulty=int(row.get('difficulty', 1)),
                 review_count=int(row.get('review_count', 0)),
                 success_count=int(row.get('success_count', 0)),
@@ -169,7 +171,7 @@ class TacticsDatabase:
         """Save positions back to CSV file."""
         fieldnames = [
             'fen', 'game_white', 'game_black', 'game_result', 'game_date', 'game_id', 'game_url',
-            'position_context', 'user_move', 'correct_line', 'mistake_type', 'difficulty',
+            'position_context', 'user_move', 'correct_line', 'mistake_type', 'mistake_analysis', 'difficulty',
             'review_count', 'success_count', 'last_reviewed', 'time_to_solve', 'hints_used'
         ]
 
@@ -191,6 +193,7 @@ class TacticsDatabase:
                         'user_move': pos.user_move,
                         'correct_line': '|'.join(pos.correct_line),
                         'mistake_type': pos.mistake_type.value,
+                        'mistake_analysis': pos.mistake_analysis,
                         'difficulty': pos.difficulty,
                         'review_count': pos.review_count,
                         'success_count': pos.success_count,

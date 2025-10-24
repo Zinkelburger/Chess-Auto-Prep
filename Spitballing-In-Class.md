@@ -33,6 +33,13 @@ trickiness = Sum of (Opponent Move Probability * Engine Eval) (consider the eval
 
 forcing = few opportunities to branch (of all engine moves, only the top few are any good. Instead of the opponent having many good options)
 
+- Have an App, pay for cloud sync, goal is to be able to train your repertoire on your phone
+- Pre-compute "trickiness" scores for like the entire lichess database, basically make a copy, speed up search, not relying on lichess api
+"They are paying for your design and the convenience of not having to be a programmer."
+
+Cloud Sync: Sync all your repertoires across Web, iOS, and Android.
+Instant Analysis: Instant access to the "tricky," "sharp," and "easy-to-learn" pre-computed database.
+
 ---
 # Aimchess improvements
 - Import tactics from lichess

@@ -17,11 +17,13 @@ class TacticsPosition:
     """Represents a tactical position to review."""
 
     def __init__(self, fen: str, user_move: str, correct_line: List[str],
-                 mistake_type: str, game_info: Dict, position_context: str = ""):
+                 mistake_type: str, game_info: Dict, position_context: str = "",
+                 mistake_analysis: str = ""):
         self.fen = fen
         self.user_move = user_move  # The move the user played (mistake)
         self.correct_line = correct_line  # Best continuation (2 moves max)
         self.mistake_type = mistake_type  # "?" or "??"
+        self.mistake_analysis = mistake_analysis  # Full mistake description from Lichess
         self.game_info = game_info  # Game metadata
         self.position_context = position_context  # Brief description
 
@@ -104,9 +106,10 @@ class TacticsAnalyzer:
 
         # Walk through the game moves
         board = game.board()
-        node = game
+        node = game  # 'node' is the parent, representing the position *before* a move
 
         while node.variations:
+            # 'next_node' is the mainline move (node.variations[0])
             next_node = node.variations[0]
             move = next_node.move
 
@@ -116,12 +119,28 @@ class TacticsAnalyzer:
                 mistake_type = self._extract_mistake_type(comment)
 
                 if mistake_type:
-                    # Get the position before the mistake
+                    # We found a mistake ('next_node' is the mistake)
                     fen_before = board.fen()
                     user_move = move.uci()
 
-                    # Extract the correct line from the comment
-                    correct_line = self._extract_correct_line(comment)
+                    # Get the correct line from the PGN structure (node.variations[1])
+                    # This is more robust than parsing comments with regex
+                    correct_line = []
+                    if len(node.variations) > 1:
+                        # Get the start of the correct variation
+                        correct_variation_node = node.variations[1]
+
+                        # Traverse this variation to get up to 3 moves
+                        current_node_in_var = correct_variation_node
+                        while current_node_in_var and len(correct_line) < 3:
+                            # Use .san() to get Standard Algebraic Notation
+                            correct_line.append(current_node_in_var.san())
+
+                            # .next() follows the mainline of that variation
+                            current_node_in_var = current_node_in_var.next()
+
+                    # Extract the full mistake analysis from comment
+                    mistake_analysis = self._extract_mistake_analysis(comment)
 
                     # Create position context
                     move_number = board.fullmove_number
@@ -133,6 +152,7 @@ class TacticsAnalyzer:
                         user_move=user_move,
                         correct_line=correct_line,
                         mistake_type=mistake_type,
+                        mistake_analysis=mistake_analysis,
                         game_info=game_info,
                         position_context=context
                     )
@@ -160,35 +180,23 @@ class TacticsAnalyzer:
 
         return None
 
-    def _extract_correct_line(self, comment: str) -> List[str]:
-        """Extract the correct line from the comment."""
-        correct_line = []
+    def _extract_mistake_analysis(self, comment: str) -> str:
+        """Extract the full mistake analysis text from comment."""
+        if not comment:
+            return ""
 
-        # Lichess format: "Blunder. Nf3 was best." followed by "(move_num... Nf3 Ng5 ...)"
-        # First try to find the best move from "X was best" pattern
-        best_move_match = re.search(r"([a-h]?[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?)\s+was best", comment)
-        if best_move_match:
-            best_move = best_move_match.group(1)
+        # Lichess format: "{ (−0.31 → 0.83) Mistake. e6 was best. } { [%eval 0.83] ... }"
+        # Extract the text between the first { } braces
+        analysis_match = re.search(r"\{\s*([^}]+?)\s*\}\s*\{", comment)
+        if analysis_match:
+            return analysis_match.group(1).strip()
 
-            # Now try to get the continuation from parentheses
-            paren_match = re.search(r"\((?:\d+\.+\s+)?([^)]+)\)", comment)
-            if paren_match:
-                moves_text = paren_match.group(1)
-                # Extract SAN moves from the variation
-                moves = re.findall(r"(?<!\d)[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?(?![.])", moves_text)
-                # Take first 3 moves to give context
-                correct_line = moves[:3] if moves else [best_move]
-            else:
-                correct_line = [best_move]
-        else:
-            # Fallback: Try to find moves in parentheses
-            paren_match = re.search(r"\((?:\d+\.+\s+)?([^)]+)\)", comment)
-            if paren_match:
-                moves_text = paren_match.group(1)
-                moves = re.findall(r"(?<!\d)[NBRQK]?[a-h]?[1-8]?x?[a-h][1-8](?:=[NBRQ])?[+#]?(?![.])", moves_text)
-                correct_line = moves[:3]
+        # Fallback: just extract first brace content
+        fallback_match = re.search(r"\{\s*([^}]+?)\s*\}", comment)
+        if fallback_match:
+            return fallback_match.group(1).strip()
 
-        return correct_line
+        return ""
 
     def save_to_csv(self) -> str:
         """Save extracted positions to CSV file."""
@@ -211,7 +219,7 @@ class TacticsAnalyzer:
         new_count = 0
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             fieldnames = [
-                'fen', 'user_move', 'correct_line', 'mistake_type',
+                'fen', 'user_move', 'correct_line', 'mistake_type', 'mistake_analysis',
                 'position_context', 'game_white', 'game_black', 'game_result',
                 'game_date', 'game_id', 'difficulty', 'last_reviewed',
                 'review_count', 'success_rate', 'created_date'
@@ -229,6 +237,7 @@ class TacticsAnalyzer:
                     'user_move': pos.user_move,
                     'correct_line': '|'.join(pos.correct_line),
                     'mistake_type': pos.mistake_type,
+                    'mistake_analysis': pos.mistake_analysis,
                     'position_context': pos.position_context,
                     'game_white': pos.game_info.get('white', ''),
                     'game_black': pos.game_info.get('black', ''),

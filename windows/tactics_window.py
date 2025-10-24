@@ -3,12 +3,16 @@ Tactics training controls panel - no board, just the control interface.
 The board is shared from the main chess view.
 """
 from datetime import datetime
+import re
+import logging
+import io
 
 import chess
+import chess.pgn
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTextEdit, QProgressBar, QFrame, QMessageBox, QSplitter, QCheckBox,
-    QSizePolicy
+    QSizePolicy, QTabWidget
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont
@@ -29,6 +33,9 @@ class TacticsWidget(QWidget):
     session_finished = Signal()
     board_position_changed = Signal(object)  # chess.Board
 
+    # Logger
+    logger = logging.getLogger(__name__)
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
@@ -41,9 +48,15 @@ class TacticsWidget(QWidget):
         self.position_solved = False
         self.start_time = None
         self.auto_advance = True  # Auto-advance setting
+        self.position_history = []  # Track position history for Previous button
+        self.history_index = -1  # Current position in history
 
         # External board reference (set via set_board_widget)
         self.chess_board = None
+
+        # Tab widgets
+        self.tab_widget = None
+        self.pgn_viewer = None
 
         # UI setup
         self._setup_ui()
@@ -62,13 +75,50 @@ class TacticsWidget(QWidget):
         self._connect_signals()
 
     def _setup_ui(self):
-        """Setup just the control panel (no board)."""
+        """Setup the tabbed interface."""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
 
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
+
+        # Create Tactic tab
+        tactic_tab = self._create_tactic_tab()
+        self.tab_widget.addTab(tactic_tab, "Tactic")
+
+        # Create Analysis tab
+        analysis_tab = self._create_analysis_tab()
+        self.tab_widget.addTab(analysis_tab, "Analysis")
+
+    def _create_tactic_tab(self) -> QWidget:
+        """Create the Tactic tab with the control panel."""
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+
         # Add control panel
         control_panel = self._create_control_panel()
-        layout.addWidget(control_panel)
+        tab_layout.addWidget(control_panel)
+
+        return tab
+
+    def _create_analysis_tab(self) -> QWidget:
+        """Create the Analysis tab with PGN viewer."""
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Import and create PGN viewer
+        from widgets.pgn_viewer import PGNViewerWidget
+        self.pgn_viewer = PGNViewerWidget()
+
+        # Connect PGN viewer to board
+        self.pgn_viewer.position_changed.connect(self._on_analysis_position_changed)
+
+        tab_layout.addWidget(self.pgn_viewer)
+
+        return tab
 
     def _create_control_panel(self) -> QWidget:
         """Create the control panel."""
@@ -138,16 +188,31 @@ class TacticsWidget(QWidget):
 
     def _create_action_buttons(self, layout):
         """Create action buttons."""
-        self.action_layout = QHBoxLayout()
+        self.action_layout = QVBoxLayout()
 
+        # Top row: Solution, Analyze
+        top_row = QHBoxLayout()
         self.solution_btn = QPushButton("Show Solution")
         self.solution_btn.clicked.connect(self._show_solution)
-        self.action_layout.addWidget(self.solution_btn)
+        top_row.addWidget(self.solution_btn)
 
-        self.next_btn = QPushButton("Next Position")
+        self.analyze_btn = QPushButton("Analyze")
+        self.analyze_btn.clicked.connect(self._show_analysis)
+        top_row.addWidget(self.analyze_btn)
+        self.action_layout.addLayout(top_row)
+
+        # Bottom row: Previous, Skip
+        bottom_row = QHBoxLayout()
+        self.prev_btn = QPushButton("Previous Position")
+        self.prev_btn.clicked.connect(self._prev_position)
+        self.prev_btn.setEnabled(False)
+        bottom_row.addWidget(self.prev_btn)
+
+        self.next_btn = QPushButton("Skip Position")
         self.next_btn.clicked.connect(self._next_position)
         self.next_btn.setEnabled(False)
-        self.action_layout.addWidget(self.next_btn)
+        bottom_row.addWidget(self.next_btn)
+        self.action_layout.addLayout(bottom_row)
 
         # Create a widget to contain the action buttons so we can hide it
         self.action_widget = QWidget()
@@ -206,6 +271,9 @@ class TacticsWidget(QWidget):
     def _start_new_session(self):
         """Start a new tactics session."""
         self.database.start_session()
+        # Reset history
+        self.position_history = []
+        self.history_index = -1
         # Hide the start button during session
         self.new_session_btn.setVisible(False)
         self._load_next_position()
@@ -224,6 +292,20 @@ class TacticsWidget(QWidget):
         self.current_position = positions[0]
         self.position_solved = False
         self.start_time = datetime.now()
+
+        # Add to history (only if we're not navigating backwards)
+        if self.history_index == len(self.position_history) - 1:
+            self.position_history.append(self.current_position)
+            self.history_index = len(self.position_history) - 1
+        else:
+            # We went back and then forward, update from this point
+            self.history_index += 1
+            if self.history_index >= len(self.position_history):
+                self.position_history.append(self.current_position)
+                self.history_index = len(self.position_history) - 1
+
+        # Update Previous button state
+        self.prev_btn.setEnabled(self.history_index > 0)
 
         # Set up board
         board = chess.Board(self.current_position.fen)
@@ -252,13 +334,22 @@ class TacticsWidget(QWidget):
         except (ValueError, chess.InvalidMoveError):
             original_move_san = pos.user_move
 
-        info_text = f"""<b>{pos.context}</b><br>
-Mistake: {pos.mistake_type.value}<br>
-Game: {pos.game_info.white} vs {pos.game_info.black}<br>
+        # Build info text with mistake analysis if available
+        info_text = f"<b>{pos.context}</b><br>"
+
+        if pos.mistake_analysis:
+            info_text += f"<b>{pos.mistake_analysis}</b><br><br>"
+        else:
+            info_text += f"Mistake: {pos.mistake_type.value}<br><br>"
+
+        info_text += f"""Game: {pos.game_info.white} vs {pos.game_info.black}<br>
 Difficulty: {pos.difficulty}/5<br>
 Success rate: {pos.success_rate:.1%}<br>
 Reviews: {pos.review_count}<br>
 You played: {original_move_san}"""
+
+        # Don't show the correct line - that would spoil the puzzle!
+        # The correct_line is still used internally to check moves
 
         self.position_info.setText(info_text)
 
@@ -378,8 +469,143 @@ You played: {original_move_san}"""
         clipboard.setText(self.current_position.fen)
 
     def _next_position(self):
-        """Move to the next position."""
+        """Move to the next position (skip current)."""
         self._load_next_position()
+
+    def _prev_position(self):
+        """Go back to previous position."""
+        if self.history_index > 0:
+            self.history_index -= 1
+            self.current_position = self.position_history[self.history_index]
+            self.position_solved = False
+            self.start_time = datetime.now()
+
+            # Update Previous button state
+            self.prev_btn.setEnabled(self.history_index > 0)
+
+            # Set up board
+            board = chess.Board(self.current_position.fen)
+            if self.chess_board:
+                self.chess_board.set_board(board)
+                self.chess_board.set_orientation(board.turn == chess.WHITE)
+                self.chess_board.set_interactive(True)
+
+            # Update UI
+            self._update_position_info()
+            self._reset_ui_for_new_position()
+
+    def _show_analysis(self):
+        """
+        Show analysis view with PGN, pruned to only the mistake and the
+        correct tactic, and jump to the tactic's position.
+        """
+        if not self.current_position:
+            QMessageBox.warning(self, "No Position", "No position loaded to analyze.")
+            return
+
+        # --- 1. Get Game PGN ---
+        pgn_text = self._get_game_pgn()
+        if not pgn_text:
+            QMessageBox.warning(
+                self, "PGN Not Available",
+                "PGN data is not available for this position.\n\n"
+                "The game PGN might not be stored in the database."
+            )
+            return
+
+        # Extract tactic info for jumping to the right move
+        move_number_to_jump = None
+        is_white_to_play = True
+
+        context = self.current_position.context
+        match = re.search(r"Move (\d+)", context)
+        if match:
+            move_number_to_jump = int(match.group(1))
+
+        is_white_to_play = "White" in context
+
+        # Load raw PGN into viewer (no parsing/export overhead)
+        if self.pgn_viewer:
+            self.pgn_viewer.load_pgn(pgn_text)
+
+            # --- 8. Jump to Move ---
+            if move_number_to_jump:
+                try:
+                    # Calculate ply (half-move) number
+                    ply_number = (move_number_to_jump - 1) * 2
+                    if not is_white_to_play:
+                        ply_number += 1
+
+                    # Tell PGN viewer to jump
+                    self.pgn_viewer.goto_ply(ply_number)
+                except Exception as e:
+                    self.logger.warning(f"Error jumping to move: {e}")
+
+        # Switch to Analysis tab
+        self.tab_widget.setCurrentIndex(1)  # Index 1 is Analysis tab
+
+        # Set board to interactive mode for free exploration
+        if self.chess_board:
+            self.chess_board.set_interactive(True)
+
+    def _get_game_pgn(self) -> str:
+        """Get the PGN text for the current game."""
+        if not self.current_position or not self.current_position.game_info:
+            return ""
+
+        # Try to reconstruct or fetch the PGN
+        # For now, we need the game_id to fetch from Lichess or local storage
+        game_id = self.current_position.game_info.game_id
+
+        if not game_id:
+            return ""
+
+        # Check if we have the PGN stored locally
+        # Look in imported_games directory
+        from pathlib import Path
+
+        pgn_dir = Path("imported_games")
+        if not pgn_dir.exists():
+            return ""
+
+        # Search for the game in PGN files by text matching
+        for pgn_file in pgn_dir.glob("*.pgn"):
+            try:
+                with open(pgn_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                    # Split into games (games are separated by blank lines and start with [Event)
+                    games = []
+                    current_game = []
+
+                    for line in content.split('\n'):
+                        # Start of a new game
+                        if line.startswith('[Event ') and current_game:
+                            games.append('\n'.join(current_game))
+                            current_game = [line]
+                        else:
+                            current_game.append(line)
+
+                    # Don't forget the last game
+                    if current_game:
+                        games.append('\n'.join(current_game))
+
+                    # Search for the game with matching GameId
+                    for game_text in games:
+                        if f'[GameId "{game_id}"]' in game_text:
+                            return game_text
+
+            except Exception:
+                continue
+
+        return ""
+
+    def _on_analysis_position_changed(self, board: chess.Board):
+        """Handle position changes in the Analysis tab."""
+        if self.chess_board:
+            self.chess_board.set_board(board)
+            # Keep interactive mode enabled for free exploration
+            self.chess_board.set_interactive(True)
 
     def _session_complete(self):
         """Handle session completion."""

@@ -31,11 +31,6 @@ class PGNViewerWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
 
-        # Header
-        self.header_label = QLabel("<b>PGN Viewer</b>")
-        self.header_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.header_label)
-
         # Game info
         self.info_label = QLabel("")
         self.info_label.setWordWrap(True)
@@ -87,10 +82,10 @@ class PGNViewerWidget(QWidget):
             return
 
         html = "<style>"
-        html += "a { text-decoration: none; color: blue; }"
+        html += "a { text-decoration: none; color: #5eb8ff; }"
         html += "a:hover { background-color: #e0e0e0; }"
         html += ".current { background-color: #ffff00; font-weight: bold; }"
-        html += ".variation { color: #666; margin-left: 20px; }"
+        html += ".variation { color: #999; margin-left: 20px; }"
         html += "</style>"
 
         html += "<div style='font-family: monospace; font-size: 12pt;'>"
@@ -98,6 +93,22 @@ class PGNViewerWidget(QWidget):
         html += "</div>"
 
         self.pgn_browser.setHtml(html)
+
+    def _format_nags(self, nags) -> str:
+        """Convert NAG numbers to symbols like ?, ??, !, etc."""
+        nag_symbols = {
+            1: "!",    # good move
+            2: "?",    # mistake
+            3: "!!",   # brilliant move
+            4: "??",   # blunder
+            5: "!?",   # interesting move
+            6: "?!",   # dubious move
+        }
+        result = ""
+        for nag in nags:
+            if nag in nag_symbols:
+                result += nag_symbols[nag]
+        return result
 
     def _format_node(self, node, move_number: int = 1, is_variation: bool = False) -> str:
         """Recursively format a game node with variations."""
@@ -107,6 +118,9 @@ class PGNViewerWidget(QWidget):
         for child in node.variations:
             move = child.move
             san = board.san(move)
+
+            # Add NAG symbols (?, ??, !, etc.)
+            san += self._format_nags(child.nags)
 
             # Show move number for white's moves
             if board.turn == chess.WHITE:
@@ -128,7 +142,7 @@ class PGNViewerWidget(QWidget):
             if len(child.variations) > 1:
                 main_line = child.variations[0]
                 html += self._format_node(
-                    chess.pgn.ChildNode(),
+                    main_line,
                     move_number=move_number + 1 if board.turn == chess.BLACK else move_number,
                     is_variation=False
                 )
@@ -137,7 +151,7 @@ class PGNViewerWidget(QWidget):
                 for variation in child.variations[1:]:
                     html += '<span class="variation">( '
                     html += self._format_node(
-                        chess.pgn.ChildNode(),
+                        variation,
                         move_number=move_number,
                         is_variation=True
                     )
@@ -233,3 +247,32 @@ class PGNViewerWidget(QWidget):
             self._display_pgn()
             self._update_nav_buttons()
             self.position_changed.emit(self.board.copy())
+
+    def goto_ply(self, ply_number: int):
+        """
+        Navigate to a specific ply (half-move) in the game.
+        Ply 0 = starting position
+        Ply 1 = after White's first move
+        Ply 2 = after Black's first move
+        etc.
+        """
+        if not self.game:
+            return
+
+        # Start at the beginning
+        self.current_node = self.game
+        self.board = self.game.board()
+
+        # Navigate forward ply_number times along the main line
+        for i in range(ply_number):
+            if self.current_node.variations:
+                self.current_node = self.current_node.variations[0]
+                self.board = self.current_node.board()
+            else:
+                # Reached end of game before target ply
+                break
+
+        # Update display
+        self._display_pgn()
+        self._update_nav_buttons()
+        self.position_changed.emit(self.board.copy())
