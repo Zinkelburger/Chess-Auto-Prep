@@ -13,8 +13,8 @@ from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QAction
 import signal
 
-from windows.tactics_window import TacticsWindow
-from windows.unified_window import UnifiedChessWidget
+from windows.tactics_window import TacticsWidget
+from windows.chess_view import ThreePanelWidget
 from core.modes import TacticsMode, PositionAnalysisMode
 from config import APP_NAME, APP_VERSION, LICHESS_API_TOKEN, LICHESS_USERNAME
 
@@ -174,17 +174,17 @@ class MainWindow(QMainWindow):
         self._setup_signal_handling()
 
     def _setup_ui(self):
-        """Setup the main user interface with unified chess UI."""
-        # Create unified chess interface
-        self.unified_widget = UnifiedChessWidget(self)
-        self.setCentralWidget(self.unified_widget)
+        """Setup the main user interface with three-panel layout."""
+        # Create three-panel widget
+        self.chess_view = ThreePanelWidget(self)
+        self.setCentralWidget(self.chess_view)
 
-        # Create tactics trainer (will be used by tactics mode)
-        self.tactics_trainer = TacticsWindow()
+        # Create tactics widget (will be used by tactics mode)
+        self.tactics_widget = TacticsWidget()
 
         # Start in tactics mode
-        self.tactics_mode = TacticsMode(self.tactics_trainer, self)
-        self.unified_widget.set_mode(self.tactics_mode)
+        self.tactics_mode = TacticsMode(self.tactics_widget, self)
+        self.chess_view.set_mode(self.tactics_mode)
 
     def _setup_menu(self):
         """Setup the menu bar."""
@@ -341,15 +341,15 @@ class MainWindow(QMainWindow):
         progress.close()
 
         # Switch back to tactics mode
-        self.unified_widget.set_mode(self.tactics_mode)
+        self.chess_view.set_mode(self.tactics_mode)
 
         QMessageBox.information(
             self, "Analysis Complete",
             f"Analysis complete!\n\nFound {count} tactical positions.\n\n"
-            "Click 'Load Positions' in the tactics trainer to start practicing!"
+            "Click 'Load Positions' in the tactics widget to start practicing!"
         )
-        # Refresh the tactics trainer
-        self.tactics_trainer._load_positions()
+        # Refresh the tactics widget
+        self.tactics_widget._load_positions()
 
     def _on_analysis_error(self, error: str, progress: QProgressDialog):
         """Handle analysis error."""
@@ -450,7 +450,7 @@ class MainWindow(QMainWindow):
 
         # Switch to position analysis mode
         position_mode = PositionAnalysisMode(analysis, self)
-        self.unified_widget.set_mode(position_mode)
+        self.chess_view.set_mode(position_mode)
 
         QMessageBox.information(
             self, "Analysis Complete",

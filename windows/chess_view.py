@@ -1,8 +1,8 @@
 """
-Unified chess UI with three-panel layout.
+Chess view with three-panel layout.
 
-Left panel: Mode-specific content (FEN list, tactics info, etc.)
-Center: Chess board
+Left panel: Mode-specific content (FEN list, position info, etc.)
+Center: Shared chess board (used by all modes)
 Right panel: Tabs (PGN viewer, games list, tactics controls, etc.)
 """
 from PySide6.QtWidgets import (
@@ -15,11 +15,12 @@ from widgets.chess_board import ChessBoardWidget
 from core.modes import Mode
 
 
-class UnifiedChessWidget(QWidget):
+class ThreePanelWidget(QWidget):
     """
-    Unified chess interface with mode-based three-panel layout.
+    Three-panel layout widget for chess application.
 
     Modes control what appears in left and right panels.
+    All modes share the center chess board.
     """
 
     def __init__(self, parent=None):
@@ -87,8 +88,16 @@ class UnifiedChessWidget(QWidget):
         # Update right tabs
         self._update_right_tabs()
 
+        # All modes now use the shared center board
+        self.left_panel_container.setVisible(True)
+        self.board_container.setVisible(True)
+
         # Connect signals
         mode.board_position_changed.connect(self._on_board_position_changed)
+
+        # Provide shared board to mode if it needs it
+        if hasattr(mode, 'set_board_widget'):
+            mode.set_board_widget(self.chess_board)
 
         # Activate mode
         mode.activate()

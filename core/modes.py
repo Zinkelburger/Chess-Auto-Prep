@@ -64,40 +64,49 @@ class TacticsMode(Mode):
     """
     Tactics training mode.
 
-    For now, we embed the full tactics trainer as-is.
-    Future: Extract components to use three-panel layout.
+    Uses the shared center board for displaying positions.
+    Control panel appears in the right tabs.
     """
 
-    def __init__(self, tactics_trainer, parent=None):
+    def __init__(self, tactics_widget, parent=None):
         super().__init__(parent)
-        self.tactics_trainer = tactics_trainer
-        self._wrapper = None
+        self.tactics_widget = tactics_widget
+        self._info_panel = None
+        self._board_widget = None
 
     def get_left_panel(self) -> QWidget:
-        """Return empty widget - tactics uses full window."""
-        from PySide6.QtWidgets import QLabel
-        label = QLabel()
-        label.setVisible(False)
-        return label
+        """Return simple info panel for tactics mode."""
+        if self._info_panel is None:
+            from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+            self._info_panel = QWidget()
+            layout = QVBoxLayout(self._info_panel)
+            label = QLabel("Tactics Training Mode")
+            label.setWordWrap(True)
+            layout.addWidget(label)
+            layout.addStretch()
+        return self._info_panel
 
     def get_right_tabs(self) -> List[tuple]:
-        """Return full tactics trainer embedded."""
-        if self._wrapper is None:
-            from PySide6.QtWidgets import QWidget, QVBoxLayout
-            self._wrapper = QWidget()
-            layout = QVBoxLayout(self._wrapper)
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.addWidget(self.tactics_trainer)
-        return [("Tactics", self._wrapper)]
+        """Return tactics controls in right panel."""
+        return [("Tactics", self.tactics_widget)]
 
     def activate(self):
-        """Activate tactics mode."""
-        # The tactics trainer is shown in the right panel
+        """Activate tactics mode - connect to shared board."""
+        # This will be called after the mode is set, so we can get the board from parent
         pass
 
     def deactivate(self):
         """Deactivate tactics mode."""
         pass
+
+    def set_board_widget(self, board_widget):
+        """Called by ThreePanelWidget to provide the shared board."""
+        self._board_widget = board_widget
+        self.tactics_widget.set_board_widget(board_widget)
+        # Connect tactics signals to board
+        self.tactics_widget.board_position_changed.connect(
+            lambda board: self.board_position_changed.emit(board)
+        )
 
 
 class PositionAnalysisMode(Mode):

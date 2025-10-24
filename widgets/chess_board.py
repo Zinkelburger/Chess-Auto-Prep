@@ -39,7 +39,7 @@ class ChessBoardWidget(QWidget):
         super().__init__(parent)
         self.setMinimumSize(400, 400)
         # Remove any maximum size constraints that might limit expansion
-        self.setMaximumSize(16777215, 16777215)  # Qt's maximum size
+        self.setMaximumSize(2000, 2000)  # Qt's maximum size
 
         # Set size policy to expand and use all available space
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
