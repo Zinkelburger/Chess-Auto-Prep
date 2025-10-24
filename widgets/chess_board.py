@@ -60,8 +60,8 @@ class ChessBoardWidget(QWidget):
         self.current_drag_pos = None  # Current mouse position during drag
         self.dragged_piece = None  # The piece being dragged
 
-        # Piece rendering
-        self.piece_images = {}
+        # Piece rendering - store SVG renderers for dynamic sizing
+        self.piece_renderers = {}  # Store SVG renderers
         self.piece_symbols = {
             chess.WHITE: {
                 chess.PAWN: '♙', chess.ROOK: '♖', chess.KNIGHT: '♘',
@@ -95,7 +95,7 @@ class ChessBoardWidget(QWidget):
         # Don't force resize - let the layout handle it and just paint appropriately
 
     def _load_piece_images(self):
-        """Load piece SVG images if available."""
+        """Load piece SVG renderers for dynamic high-quality rendering at any size."""
         if not SVG_AVAILABLE or not PIECES_DIR.exists():
             return
 
@@ -120,12 +120,8 @@ class ChessBoardWidget(QWidget):
                 try:
                     renderer = QSvgRenderer(str(filepath))
                     if renderer.isValid():
-                        pixmap = QPixmap(80, 80)
-                        pixmap.fill(Qt.transparent)
-                        painter = QPainter(pixmap)
-                        renderer.render(painter)
-                        painter.end()
-                        self.piece_images[(color, piece_type)] = pixmap
+                        # Store the renderer for dynamic rendering at exact size
+                        self.piece_renderers[(color, piece_type)] = renderer
                 except Exception:
                     continue
 
@@ -378,16 +374,23 @@ class ChessBoardWidget(QWidget):
 
         piece_key = (piece.color, piece.piece_type)
 
-        # Try SVG images first
-        if piece_key in self.piece_images:
-            piece_pixmap = self.piece_images[piece_key]
-            scaled_pixmap = piece_pixmap.scaled(
-                square_size - 4, square_size - 4,
-                Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            piece_x = x + (square_size - scaled_pixmap.width()) // 2
-            piece_y = y + (square_size - scaled_pixmap.height()) // 2
-            painter.drawPixmap(piece_x, piece_y, scaled_pixmap)
+        # Try SVG renderers first - render at exact size for perfect quality
+        if piece_key in self.piece_renderers:
+            renderer = self.piece_renderers[piece_key]
+            piece_size = square_size - 4
+            piece_x = x + 2
+            piece_y = y + 2
+
+            # Render SVG directly at target size for perfect sharpness
+            pixmap = QPixmap(piece_size, piece_size)
+            pixmap.fill(Qt.transparent)
+            piece_painter = QPainter(pixmap)
+            piece_painter.setRenderHint(QPainter.Antialiasing)
+            piece_painter.setRenderHint(QPainter.SmoothPixmapTransform)
+            renderer.render(piece_painter)
+            piece_painter.end()
+
+            painter.drawPixmap(piece_x, piece_y, pixmap)
         else:
             # Fallback to Unicode symbols
             symbol = self.piece_symbols[piece.color][piece.piece_type]
@@ -410,14 +413,20 @@ class ChessBoardWidget(QWidget):
         x = self.current_drag_pos.x() - piece_size // 2
         y = self.current_drag_pos.y() - piece_size // 2
 
-        # Try SVG images first
-        if piece_key in self.piece_images:
-            piece_pixmap = self.piece_images[piece_key]
-            scaled_pixmap = piece_pixmap.scaled(
-                piece_size, piece_size,
-                Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            painter.drawPixmap(x, y, scaled_pixmap)
+        # Try SVG renderers first - render at exact size for perfect quality
+        if piece_key in self.piece_renderers:
+            renderer = self.piece_renderers[piece_key]
+
+            # Render SVG directly at target size for perfect sharpness
+            pixmap = QPixmap(piece_size, piece_size)
+            pixmap.fill(Qt.transparent)
+            piece_painter = QPainter(pixmap)
+            piece_painter.setRenderHint(QPainter.Antialiasing)
+            piece_painter.setRenderHint(QPainter.SmoothPixmapTransform)
+            renderer.render(piece_painter)
+            piece_painter.end()
+
+            painter.drawPixmap(x, y, pixmap)
         else:
             # Fallback to Unicode symbols
             symbol = self.piece_symbols[piece.color][piece.piece_type]

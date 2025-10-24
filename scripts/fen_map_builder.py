@@ -5,7 +5,7 @@ import re
 from collections import defaultdict
 from typing import Optional, List, Set, Tuple
 
-from fen_node import FenNode
+from scripts.fen_node import FenNode
 
 
 class FenMapBuilder:

@@ -14,6 +14,8 @@ from PySide6.QtGui import QAction
 import signal
 
 from windows.tactics_window import TacticsWindow
+from windows.unified_window import UnifiedChessWidget
+from core.modes import TacticsMode, PositionAnalysisMode
 from config import APP_NAME, APP_VERSION, LICHESS_API_TOKEN, LICHESS_USERNAME
 
 
@@ -39,6 +41,88 @@ class PGNAnalysisWorker(QThread):
             self.finished.emit(len(positions) if positions else 0)
         except Exception as e:
             self.error.emit(str(e))
+
+
+class WeakPositionsWorker(QThread):
+    """Worker thread for analyzing games to find positions where user loses frequently."""
+    progress = Signal(str)
+    finished = Signal(object)  # Returns dictionary with results
+    error = Signal(str)
+
+    def __init__(self, username, user_color, source='lichess', max_games=100):
+        super().__init__()
+        self.username = username
+        self.user_color = user_color
+        self.source = source
+        self.max_games = max_games
+
+    def run(self):
+        try:
+            from scripts.fen_map_builder import FenMapBuilder
+
+            # Download or load games
+            self.progress.emit("Downloading games...")
+
+            if self.source == 'chesscom':
+                from scripts.game_downloader import download_games_for_last_two_months
+                pgn_list = download_games_for_last_two_months(
+                    self.username,
+                    self.user_color,
+                    use_cache=True
+                )
+            else:  # lichess
+                from scripts.scrape_imported_games import import_lichess_games_with_evals
+                from config import LICHESS_API_TOKEN
+                import io
+                import chess.pgn
+
+                if not LICHESS_API_TOKEN:
+                    self.error.emit("LICHESS_API_TOKEN not found in .env file")
+                    return
+
+                # Import games to a temp file
+                filename = import_lichess_games_with_evals(
+                    username=self.username,
+                    token=LICHESS_API_TOKEN,
+                    max_games=self.max_games
+                )
+
+                # Read the PGN file and split into individual games
+                pgn_path = Path("imported_games") / filename
+                with open(pgn_path, 'r') as f:
+                    content = f.read()
+
+                # Split into individual games
+                pgn_list = []
+                games = content.split('\n\n[Event ')
+                if games:
+                    pgn_list.append(games[0])
+                    for game in games[1:]:
+                        pgn_list.append('[Event ' + game)
+
+            self.progress.emit(f"Analyzing {len(pgn_list)} games...")
+
+            # Analyze positions for both colors or specific color
+            fen_builder = FenMapBuilder()
+
+            if self.user_color == 'both':
+                # Process as white
+                fen_builder.process_pgns(pgn_list, self.username, user_is_white=True)
+                # Process as black
+                fen_builder.process_pgns(pgn_list, self.username, user_is_white=False)
+            else:
+                user_is_white = (self.user_color == 'white')
+                fen_builder.process_pgns(pgn_list, self.username, user_is_white=user_is_white)
+
+            # Create PositionAnalysis from FenMapBuilder
+            from core.models import PositionAnalysis
+            analysis = PositionAnalysis.from_fen_map_builder(fen_builder, pgn_list)
+
+            self.finished.emit(analysis)
+
+        except Exception as e:
+            import traceback
+            self.error.emit(f"{str(e)}\n\n{traceback.format_exc()}")
 
 
 class LichessImportWorker(QThread):
@@ -82,6 +166,7 @@ class MainWindow(QMainWindow):
         # Worker threads
         self.analysis_worker = None
         self.import_worker = None
+        self.weak_positions_worker = None
 
         # Setup
         self._setup_ui()
@@ -89,10 +174,17 @@ class MainWindow(QMainWindow):
         self._setup_signal_handling()
 
     def _setup_ui(self):
-        """Setup the main user interface - embed tactics trainer directly."""
-        # Just embed the tactics trainer directly
-        self.tactics_trainer = TacticsWindow(self)
-        self.setCentralWidget(self.tactics_trainer)
+        """Setup the main user interface with unified chess UI."""
+        # Create unified chess interface
+        self.unified_widget = UnifiedChessWidget(self)
+        self.setCentralWidget(self.unified_widget)
+
+        # Create tactics trainer (will be used by tactics mode)
+        self.tactics_trainer = TacticsWindow()
+
+        # Start in tactics mode
+        self.tactics_mode = TacticsMode(self.tactics_trainer, self)
+        self.unified_widget.set_mode(self.tactics_mode)
 
     def _setup_menu(self):
         """Setup the menu bar."""
@@ -126,6 +218,12 @@ class MainWindow(QMainWindow):
         analyze_action = QAction("Analyze PGNs for Tactics", self)
         analyze_action.triggered.connect(self._analyze_pgns)
         analysis_menu.addAction(analyze_action)
+
+        analysis_menu.addSeparator()
+
+        weak_positions_action = QAction("Find Weak Positions...", self)
+        weak_positions_action.triggered.connect(self._analyze_weak_positions)
+        analysis_menu.addAction(weak_positions_action)
 
         # Help menu
         help_menu = menubar.addMenu("Help")
@@ -241,6 +339,10 @@ class MainWindow(QMainWindow):
     def _on_analysis_finished(self, count: int, progress: QProgressDialog):
         """Handle successful analysis."""
         progress.close()
+
+        # Switch back to tactics mode
+        self.unified_widget.set_mode(self.tactics_mode)
+
         QMessageBox.information(
             self, "Analysis Complete",
             f"Analysis complete!\n\nFound {count} tactical positions.\n\n"
@@ -253,6 +355,116 @@ class MainWindow(QMainWindow):
         """Handle analysis error."""
         progress.close()
         QMessageBox.critical(self, "Analysis Error", f"Failed to analyze PGNs:\n{error}")
+
+    def _analyze_weak_positions(self):
+        """Analyze games to find positions where user loses frequently."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QSpinBox
+
+        # Create dialog to get parameters
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Analyze Weak Positions")
+        dialog.setModal(True)
+        layout = QVBoxLayout(dialog)
+
+        # Username input
+        username_layout = QHBoxLayout()
+        username_layout.addWidget(QLabel("Username:"))
+        username_input = QInputDialog()
+        username, ok = QInputDialog.getText(
+            self, "Analyze Weak Positions", "Enter your username:",
+            text=LICHESS_USERNAME or ""
+        )
+        if not ok or not username:
+            return
+
+        # Color selection
+        color, ok = QInputDialog.getItem(
+            self, "Select Color",
+            "Analyze positions as:",
+            ["both", "white", "black"],
+            0, False
+        )
+        if not ok:
+            return
+
+        # Source selection
+        source, ok = QInputDialog.getItem(
+            self, "Select Source",
+            "Download games from:",
+            ["lichess", "chesscom"],
+            0, False
+        )
+        if not ok:
+            return
+
+        # Max games (only for lichess)
+        max_games = 100
+        if source == "lichess":
+            max_games, ok = QInputDialog.getInt(
+                self, "Max Games", "Max games to analyze:", 100, 10, 500
+            )
+            if not ok:
+                return
+
+        # Check for required credentials
+        if source == "lichess" and not LICHESS_API_TOKEN:
+            QMessageBox.warning(
+                self, "API Token Missing",
+                "Please set LICHESS_API_TOKEN in the .env file.\n\n"
+                "See token_help.md for instructions."
+            )
+            return
+
+        # Start analysis
+        progress = QProgressDialog("Analyzing games for weak positions...", "Cancel", 0, 0, self)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+
+        self.weak_positions_worker = WeakPositionsWorker(
+            username=username,
+            user_color=color,
+            source=source,
+            max_games=max_games
+        )
+        self.weak_positions_worker.progress.connect(progress.setLabelText)
+        self.weak_positions_worker.finished.connect(
+            lambda result: self._on_weak_positions_finished(result, progress)
+        )
+        self.weak_positions_worker.error.connect(
+            lambda error: self._on_weak_positions_error(error, progress)
+        )
+        self.weak_positions_worker.start()
+
+    def _on_weak_positions_finished(self, analysis, progress: QProgressDialog):
+        """Handle successful weak positions analysis."""
+        progress.close()
+
+        # Check if we have data
+        if not analysis.position_stats:
+            QMessageBox.information(
+                self, "No Weak Positions Found",
+                f"Analyzed {len(analysis.games)} games but found no positions with sufficient data.\n\n"
+                "Try analyzing more games or lowering the minimum occurrence threshold."
+            )
+            return
+
+        # Switch to position analysis mode
+        position_mode = PositionAnalysisMode(analysis, self)
+        self.unified_widget.set_mode(position_mode)
+
+        QMessageBox.information(
+            self, "Analysis Complete",
+            f"Found {len(analysis.position_stats)} positions from {len(analysis.games)} games.\n\n"
+            "Click on positions in the left panel to explore them!"
+        )
+
+    def _on_weak_positions_error(self, error: str, progress: QProgressDialog):
+        """Handle weak positions analysis error."""
+        progress.close()
+        QMessageBox.critical(
+            self, "Analysis Error",
+            f"Failed to analyze weak positions:\n\n{error}"
+        )
 
     def _show_about(self):
         """Show about dialog."""
@@ -279,6 +491,10 @@ class MainWindow(QMainWindow):
         if self.import_worker and self.import_worker.isRunning():
             self.import_worker.terminate()
             self.import_worker.wait(1000)
+
+        if self.weak_positions_worker and self.weak_positions_worker.isRunning():
+            self.weak_positions_worker.terminate()
+            self.weak_positions_worker.wait(1000)
 
         event.accept()
 
