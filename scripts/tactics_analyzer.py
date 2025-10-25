@@ -166,17 +166,16 @@ class TacticsAnalyzer:
         return positions
 
     def _extract_mistake_type(self, comment: str) -> Optional[str]:
-        """Extract mistake type from move comment."""
+        """Extract mistake type from move comment. Only includes mistakes and blunders, not inaccuracies."""
         if not comment:
             return None
 
-        # Look for mistake annotations in the comment
+        # Look for mistake annotations in the comment (exclude inaccuracies)
         if "Blunder" in comment:
             return "??"
         elif "Mistake" in comment:
             return "?"
-        elif "Inaccuracy" in comment:
-            return "?!"
+        # Removed inaccuracy detection - we don't want to train on these
 
         return None
 

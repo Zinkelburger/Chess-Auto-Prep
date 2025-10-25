@@ -8,8 +8,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QTextBrowser, QHBoxLayout,
     QPushButton, QLabel
 )
-from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QTextCursor, QTextCharFormat, QColor, QFont
+from PySide6.QtCore import Signal
 
 
 class PGNViewerWidget(QWidget):
@@ -110,12 +109,47 @@ class PGNViewerWidget(QWidget):
                 result += nag_symbols[nag]
         return result
 
+    def _filter_comment(self, comment: str) -> str:
+        """Filter out eval and clock comments, keeping only meaningful text."""
+        if not comment:
+            return ""
+
+        import re
+
+        # Remove eval comments like [%eval 0.17] or [%eval -1.25]
+        comment = re.sub(r'\[%eval [^\]]+\]', '', comment)
+
+        # Remove clock comments like [%clk 0:03:00]
+        comment = re.sub(r'\[%clk [^\]]+\]', '', comment)
+
+        # Remove engine evaluation text like "(0.62 → 0.01)"
+        comment = re.sub(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)', '', comment)
+
+        # Remove phrases for inaccuracies, mistakes and blunders (keep only meaningful content)
+        comment = re.sub(r'(Inaccuracy|Mistake|Blunder|Good move|Excellent move|Best move)\.[^.]*\.', '', comment)
+
+        # Remove "was best" phrases
+        comment = re.sub(r'[A-Za-z0-9+#-]+\s+was best\.?', '', comment)
+
+        # Clean up extra whitespace
+        comment = re.sub(r'\s+', ' ', comment).strip()
+
+        # Return None if comment is now empty or just punctuation
+        if not comment or comment in '.,;!?':
+            return ""
+
+        return comment
+
     def _format_node(self, node, move_number: int = 1, is_variation: bool = False) -> str:
         """Recursively format a game node with variations."""
         html = ""
         board = node.board()
+        current_node = node
+        current_move_number = move_number
 
-        for child in node.variations:
+        # Traverse the main line without breaking
+        while current_node.variations:
+            child = current_node.variations[0]  # Main line
             move = child.move
             san = board.san(move)
 
@@ -124,7 +158,7 @@ class PGNViewerWidget(QWidget):
 
             # Show move number for white's moves
             if board.turn == chess.WHITE:
-                html += f"{move_number}. "
+                html += f"{current_move_number}. "
 
             # Create clickable link
             move_id = id(child)
@@ -134,35 +168,29 @@ class PGNViewerWidget(QWidget):
 
             html += f'<a href="#{move_id}" class="{css_class}">{san}</a> '
 
-            # Add comment if exists
+            # Add comment if exists (but filter out eval/clock comments)
             if child.comment:
-                html += f'<span style="color: green;">({child.comment})</span> '
+                filtered_comment = self._filter_comment(child.comment)
+                if filtered_comment:
+                    html += f'<span style="color: green;">({filtered_comment})</span> '
 
-            # Handle variations
-            if len(child.variations) > 1:
-                main_line = child.variations[0]
-                html += self._format_node(
-                    main_line,
-                    move_number=move_number + 1 if board.turn == chess.BLACK else move_number,
-                    is_variation=False
-                )
-
-                # Show side variations
-                for variation in child.variations[1:]:
+            # Handle side variations (alternatives to this move)
+            if len(current_node.variations) > 1:
+                for variation in current_node.variations[1:]:
                     html += '<span class="variation">( '
                     html += self._format_node(
                         variation,
-                        move_number=move_number,
+                        move_number=current_move_number,
                         is_variation=True
                     )
                     html += ') </span>'
-            else:
-                # Continue main line
-                if child.variations:
-                    next_move_number = move_number + 1 if board.turn == chess.BLACK else move_number
-                    html += self._format_node(child, next_move_number, is_variation)
 
-            break  # Only process first variation in this call
+            # Update for next iteration
+            if board.turn == chess.BLACK:
+                current_move_number += 1
+
+            board.push(move)
+            current_node = child
 
         return html
 
@@ -264,7 +292,7 @@ class PGNViewerWidget(QWidget):
         self.board = self.game.board()
 
         # Navigate forward ply_number times along the main line
-        for i in range(ply_number):
+        for _ in range(ply_number):
             if self.current_node.variations:
                 self.current_node = self.current_node.variations[0]
                 self.board = self.current_node.board()

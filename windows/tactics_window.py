@@ -411,27 +411,28 @@ You played: {original_move_san}"""
             self.next_btn.setEnabled(True)
 
     def _show_continuation_if_any(self):
-        """Show the continuation of the correct line if it exists."""
-        if not self.chess_board or not self.current_position.correct_line or len(self.current_position.correct_line) <= 1:
-            return
+        pass
+        # """Show the continuation of the correct line if it exists."""
+        # if not self.chess_board or not self.current_position.correct_line or len(self.current_position.correct_line) <= 1:
+        #     return
 
-        try:
-            # Get the current board state (after user's move)
-            current_board = self.chess_board.board.copy()
+        # try:
+        #     # Get the current board state (after user's move)
+        #     current_board = self.chess_board.board.copy()
 
-            # Play the next move in the correct line (opponent's response)
-            if len(self.current_position.correct_line) > 1:
-                next_move_san = self.current_position.correct_line[1]
+        #     # Play the next move in the correct line (opponent's response)
+        #     if len(self.current_position.correct_line) > 1:
+        #         next_move_san = self.current_position.correct_line[1]
 
-                # Convert SAN to move and play it
-                next_move = current_board.parse_san(next_move_san)
-                current_board.push(next_move)
+        #         # Convert SAN to move and play it
+        #         next_move = current_board.parse_san(next_move_san)
+        #         current_board.push(next_move)
 
-                # Update the visual board
-                self.chess_board.set_board(current_board)
+        #         # Update the visual board
+        #         self.chess_board.set_board(current_board)
 
-        except (ValueError, chess.InvalidMoveError):
-            pass  # If we can't parse/play the continuation, just skip it
+        # except (ValueError, chess.InvalidMoveError):
+        #     pass  # If we can't parse/play the continuation, just skip it
 
     def _handle_partial_move(self):
         """Handle a partially correct move."""
