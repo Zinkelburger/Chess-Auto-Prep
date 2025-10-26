@@ -1,0 +1,5 @@
+chess
+python-dotenv
+requests
+PySide6
+PySide6-Addons

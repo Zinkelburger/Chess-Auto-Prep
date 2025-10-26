@@ -1,0 +1,55 @@
+# Coverage Configuration for Chess Auto-Prep
+
+[run]
+# Source code directories to measure
+source = core, widgets, windows, scripts, services
+
+# Files to omit from coverage
+omit =
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */venv/*
+    */lichess-opening-builder/venv/*
+    setup.py
+    */migrations/*
+    debug_*.py
+    test_*.py
+
+# Branch coverage (more thorough)
+branch = True
+
+# Parallel processing
+parallel = True
+
+[report]
+# Coverage reporting options
+precision = 2
+show_missing = True
+skip_covered = False
+sort = Cover
+
+# Fail if coverage is below threshold
+fail_under = 80
+
+# Exclude lines from coverage
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if settings.DEBUG
+    raise AssertionError
+    raise NotImplementedError
+    if 0:
+    if __name__ == .__main__.:
+    class .*\bProtocol\):
+    @(abc\.)?abstractmethod
+
+[html]
+# HTML report configuration
+directory = htmlcov
+title = Chess Auto-Prep Coverage Report
+
+[xml]
+# XML report for CI/CD
+output = coverage.xml
