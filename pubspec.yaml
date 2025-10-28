@@ -1,0 +1,47 @@
+name: chess_auto_prep
+description: Chess tactics trainer and PGN analyzer
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Chess functionality
+  chess: ^0.7.0
+  dartchess: ^0.11.1
+
+  # UI and state management
+  cupertino_icons: ^1.0.6
+  provider: ^6.1.1
+
+  # File handling and HTTP
+  file_picker: ^6.1.1
+  http: ^1.1.2
+  path_provider: ^2.1.1
+  path_provider_linux: ^2.2.1
+  flutter_svg: ^2.0.9
+
+  # Chess board widget
+  flutter_chess_board: ^1.0.1
+  flutter_bloc: ^9.1.1
+  shared_preferences: ^2.5.3
+  html: ^0.15.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/pieces/

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.chessautoprep.app</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Chess Auto Prep</name>
+  <summary>Chess tactics trainer and PGN analyzer</summary>
+  <description>
+    <p>
+      Chess Auto Prep is a comprehensive chess training application that helps you improve your tactical skills
+      and analyze your games. Import games from Lichess, practice tactics, and analyze positions.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Import games from Lichess with evaluations</li>
+      <li>Tactics trainer for improving your tactical vision</li>
+      <li>PGN file viewer and analyzer</li>
+      <li>Position analysis tools</li>
+      <li>Cross-platform storage support</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">org.chessautoprep.app.desktop</launchable>
+  <categories>
+    <category>Game</category>
+    <category>BoardGame</category>
+    <category>Education</category>
+  </categories>
+  <keywords>
+    <keyword>chess</keyword>
+    <keyword>tactics</keyword>
+    <keyword>pgn</keyword>
+    <keyword>training</keyword>
+    <keyword>analysis</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/yourusername/chess-auto-prep</url>
+  <developer_name>Chess Auto Prep Team</developer_name>
+  <releases>
+    <release version="1.0.0" date="2025-10-26">
+      <description>
+        <p>Initial release with tactics training and PGN analysis features.</p>
+      </description>
+    </release>
+  </releases>
+</component>

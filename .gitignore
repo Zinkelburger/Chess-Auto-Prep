@@ -47,6 +47,15 @@ coverage.xml
 ehthumbs.db
 Thumbs.db
 
+# Flutter/Dart
+build/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+*.lock
+pubspec.lock
+
 # Project specific
 maia2_models/
 lichess_output.txt

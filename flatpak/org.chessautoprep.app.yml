@@ -1,0 +1,31 @@
+app-id: org.chessautoprep.app
+runtime: org.freedesktop.Platform
+runtime-version: '23.08'
+sdk: org.freedesktop.Sdk
+command: chess_auto_prep
+
+finish-args:
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=xdg-data/chess_auto_prep:create
+  - --filesystem=xdg-documents
+
+modules:
+  - name: flutter
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/bin
+      - cp -r . /app/
+      - ln -s /app/chess_auto_prep /app/bin/chess_auto_prep
+    sources:
+      - type: dir
+        path: ../build/linux/x64/release/bundle
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - '*.a'
+  - '*.la'

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Chess Auto Prep
+Comment=Chess tactics trainer and PGN analyzer
+Exec=chess_auto_prep
+Icon=org.chessautoprep.app
+Type=Application
+Categories=Game;BoardGame;Education;
+Keywords=chess;tactics;pgn;training;analysis;
+StartupNotify=true
+StartupWMClass=chess_auto_prep
