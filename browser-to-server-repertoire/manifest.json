@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Lichess Repertoire Sync",
+  "version": "1.0.0",
+  "description": "Add analysis board lines to your repertoire with a single click",
+  "permissions": [
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://lichess.org/*",
+    "http://localhost:9812/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://lichess.org/*"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ]
+}
