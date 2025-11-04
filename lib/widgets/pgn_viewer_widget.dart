@@ -204,6 +204,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
     }
   }
 
+  void _goToEnd() {
+    _goToMove(_moveHistory.length);
+  }
+
   void _onMoveClicked(int moveIndex) {
     _goToMove(moveIndex + 1); // +1 because we want position AFTER the move
   }
@@ -302,6 +306,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
                 onPressed: _currentMoveIndex < _moveHistory.length ? _goForward : null,
                 icon: const Icon(Icons.chevron_right),
                 tooltip: 'Forward',
+              ),
+              IconButton(
+                onPressed: _currentMoveIndex < _moveHistory.length ? _goToEnd : null,
+                icon: const Icon(Icons.skip_next),
+                tooltip: 'End',
               ),
             ],
           ),

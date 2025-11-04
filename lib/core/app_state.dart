@@ -149,6 +149,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setBoardFlipped(bool flipped) {
+    _initialBoardFlipped = flipped;
+    notifyListeners();
+  }
+
   void enterAnalysisMode() {
     if (!_isAnalysisMode) {
       // Capture current board orientation before entering analysis
