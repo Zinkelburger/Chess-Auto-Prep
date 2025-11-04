@@ -130,7 +130,6 @@ class TacticsService {
                 final tacticsPosition = TacticsPosition(
                   fen: fenBeforeMistake,
                   userMove: san,
-                  bestMove: correctLine.isNotEmpty ? correctLine[0] : '', // First move of correct line
                   correctLine: correctLine,
                   mistakeType: mistakeType,
                   mistakeAnalysis: comment,

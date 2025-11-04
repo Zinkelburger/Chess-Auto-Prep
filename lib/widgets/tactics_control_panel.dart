@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:chess/chess.dart' as chess;
-import 'package:dartchess/dartchess.dart';
 
 import '../core/app_state.dart';
 import '../models/tactics_position.dart';

@@ -1,4 +1,3 @@
-import 'package:dartchess/dartchess.dart';
 import '../models/tactics_position.dart';
 import 'tactics_database.dart';
 
@@ -8,59 +7,49 @@ class TacticsEngine {
   /// Returns TacticsResult.correct, .partial, or .incorrect
   TacticsResult checkMove(TacticsPosition position, String moveUci) {
     try {
-      final chess = Chess.fromSetup(Setup.parseFen(position.fen));
-
-      // Parse the UCI move
-      final move = Move.fromUci(moveUci);
-      if (move == null) {
+      // Parse target square from UCI notation (e.g., "c7" from "d8c7")
+      if (moveUci.length < 4) {
         return TacticsResult.incorrect;
       }
 
-      // Check if the move is legal
-      if (!chess.isLegal(move)) {
-        return TacticsResult.incorrect;
-      }
+      final targetSquare = moveUci.substring(2, 4);
 
-      // Convert the move to SAN for comparison
-      final moveSan = chess.toSan(move);
-
-      // Check if move matches the correct line
       if (position.correctLine.isEmpty) {
         return TacticsResult.incorrect;
       }
 
-      // Match against first move in correct line (the expected move)
-      final expectedMove = position.correctLine[0];
-      if (_movesMatch(moveSan, expectedMove)) {
+      // Check against the first move (the best move)
+      final bestMove = position.correctLine[0];
+      if (_moveMatchesTarget(bestMove, targetSquare)) {
         return TacticsResult.correct;
       }
 
-      // Check if it's in the correct line but not the best move (partial credit)
-      for (final correctMove in position.correctLine) {
-        if (_movesMatch(moveSan, correctMove)) {
+      // Check if it matches any other move in the correct line (partial credit)
+      for (int i = 1; i < position.correctLine.length; i++) {
+        final correctMove = position.correctLine[i];
+        if (_moveMatchesTarget(correctMove, targetSquare)) {
           return TacticsResult.partial;
         }
       }
 
       return TacticsResult.incorrect;
     } catch (e) {
-      print('Error checking move: $e');
       return TacticsResult.incorrect;
     }
   }
 
-  /// Compare two moves in SAN notation, ignoring annotations (+, #, !, ?)
-  bool _movesMatch(String move1, String move2) {
-    // Remove annotations
-    final clean1 = _cleanSanMove(move1);
-    final clean2 = _cleanSanMove(move2);
+  /// Check if a SAN move matches the target square
+  bool _moveMatchesTarget(String sanMove, String targetSquare) {
+    // Remove annotations (+, #, !, ?)
+    final cleanMove = sanMove.replaceAll(RegExp(r'[+#!?]+'), '');
 
-    return clean1.toLowerCase() == clean2.toLowerCase();
-  }
+    // Extract target square (last 2 characters)
+    if (cleanMove.length >= 2) {
+      final expectedTarget = cleanMove.substring(cleanMove.length - 2);
+      return targetSquare.toLowerCase() == expectedTarget.toLowerCase();
+    }
 
-  /// Clean SAN move by removing annotations
-  String _cleanSanMove(String san) {
-    return san.replaceAll(RegExp(r'[+#!?]+'), '');
+    return false;
   }
 
   /// Get a hint for the position
