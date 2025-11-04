@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 
 import '../core/app_state.dart';
 import '../models/tactics_position.dart';
+import '../services/tactics_database.dart';
+import '../services/tactics_engine.dart';
 import '../services/tactics_service.dart';
 import 'pgn_viewer_widget.dart';
 
+/// Tactics training control panel - Flutter port of Python's TacticsWidget
+/// Matches all features: position history, auto-advance, full stats, etc.
 class TacticsControlPanel extends StatefulWidget {
   const TacticsControlPanel({super.key});
 
@@ -19,18 +23,30 @@ class TacticsControlPanel extends StatefulWidget {
 class _TacticsControlPanelState extends State<TacticsControlPanel>
     with TickerProviderStateMixin {
 
+  // Core components
+  late TacticsDatabase _database;
+  late TacticsEngine _engine;
+
+  // Tab controller
   late TabController _tabController;
+
+  // State
   TacticsPosition? _currentPosition;
   bool _positionSolved = false;
   DateTime? _startTime;
   String _feedback = '';
   bool _showSolution = false;
-  int _sessionCorrect = 0;
-  int _sessionAttempted = 0;
+  bool _autoAdvance = true;  // Auto-advance setting (matches Python default)
+
+  // Position history (for Previous button)
+  final List<TacticsPosition> _positionHistory = [];
+  int _historyIndex = -1;
 
   @override
   void initState() {
     super.initState();
+    _database = TacticsDatabase();
+    _engine = TacticsEngine();
     _tabController = TabController(length: 2, vsync: this);
 
     // Listen for tab changes to enter/exit analysis mode
@@ -38,14 +54,15 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       if (mounted) {
         final appState = context.read<AppState>();
         if (_tabController.index == 1) {
-          // Analysis tab
           appState.enterAnalysisMode();
         } else {
-          // Tactic tab
           appState.exitAnalysisMode();
         }
       }
     });
+
+    // Auto-load positions on startup
+    _loadPositions();
 
     // Register move validation callback
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -59,6 +76,15 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPositions() async {
+    final count = await _database.loadPositions();
+    if (count == 0 && mounted) {
+      setState(() {});
+    } else if (count > 0 && mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -89,52 +115,42 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   Widget _buildTacticTab() {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Position info
+          // Position info (like Python's position_info label)
           if (_currentPosition != null) ...[
-            Text(
-              _currentPosition!.positionContext,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            Text('Game: ${_currentPosition!.gameWhite} vs ${_currentPosition!.gameBlack}'),
+            _buildPositionInfo(),
             const SizedBox(height: 16),
           ],
 
-          // Show the move that was actually played in the game
-          if (_currentPosition != null && _currentPosition!.userMove.isNotEmpty) ...[
-            Text(
-              'You played: ${_currentPosition!.userMove}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-
-          // Feedback
+          // Feedback label (like Python)
           if (_feedback.isNotEmpty) ...[
-            Text(
-              _feedback,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: _feedback == 'Correct!' ? Colors.green : Colors.red,
-                fontSize: 16,
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _getFeedbackColor().withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: _getFeedbackColor()),
+              ),
+              child: Text(
+                _feedback,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: _getFeedbackColor(),
+                  fontSize: 16,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
           ],
 
-          // Solution display
+          // Solution display (like Python's solution_widget)
           if (_showSolution && _currentPosition != null) ...[
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 border: Border.all(color: Colors.grey),
                 borderRadius: BorderRadius.circular(4),
@@ -142,14 +158,19 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Solution: ${_currentPosition!.correctLine.join(', ')}',
-                    style: const TextStyle(fontFamily: 'monospace'),
-                  ),
-                  const SizedBox(height: 8),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: Container()),
+                      Expanded(
+                        child: Text(
+                          'Solution: ${_engine.getSolution(_currentPosition!)}',
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       ElevatedButton(
                         onPressed: _copyFen,
                         child: const Text('Copy FEN'),
@@ -162,63 +183,167 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             const SizedBox(height: 16),
           ],
 
-          // Action buttons
+          // Action buttons (like Python's action buttons)
           if (_currentPosition != null) ...[
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            // Top row: Solution, Analyze
+            Row(
               children: [
-                ElevatedButton(
-                  onPressed: _showSolution ? null : _onShowSolution,
-                  child: const Text('Show Solution'),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _showSolution ? null : _onShowSolution,
+                    child: const Text('Show Solution'),
+                  ),
                 ),
-                ElevatedButton(
-                  onPressed: _onAnalyze,
-                  child: const Text('Analyze'),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _onAnalyze,
+                    child: const Text('Analyze'),
+                  ),
                 ),
-                ElevatedButton(
-                  onPressed: _onSkipPosition,
-                  child: const Text('Skip Position'),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Bottom row: Previous, Skip
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _historyIndex > 0 ? _onPreviousPosition : null,
+                    child: const Text('Previous Position'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: !_autoAdvance || _positionSolved ? _onSkipPosition : null,
+                    child: const Text('Skip Position'),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
           ],
 
-          // Session controls (only show when no active session)
-          if (_currentPosition == null) ...[
-            ElevatedButton(
-              onPressed: _onStartSession,
-              child: const Text('Start Practice Session'),
+          // Settings (like Python's auto-advance checkbox)
+          if (_currentPosition != null) ...[
+            CheckboxListTile(
+              value: _autoAdvance,
+              onChanged: (value) {
+                setState(() {
+                  _autoAdvance = value ?? true;
+                });
+              },
+              title: const Text('Auto-advance to next position'),
+              contentPadding: EdgeInsets.zero,
             ),
             const SizedBox(height: 16),
-            // Load tactics button
-            ElevatedButton.icon(
-              onPressed: _onLoadTactics,
-              icon: const Icon(Icons.psychology),
-              label: const Text('Load Tactics'),
-            ),
           ],
 
-          // Stats (show during session)
-          if (_sessionAttempted > 0) ...[
+          // Session controls (like Python)
+          if (_currentPosition == null) ...[
+            if (_database.positions.isEmpty) ...[
+              Text(
+                'No tactics positions found.\n\nUse the button below to load tactics from Lichess.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _onLoadTactics,
+                icon: const Icon(Icons.psychology),
+                label: const Text('Load Tactics from Lichess'),
+              ),
+            ] else ...[
+              Text(
+                '${_database.positions.length} tactics positions available.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _onStartSession,
+                child: const Text('Start Practice Session'),
+              ),
+            ],
+          ],
+
+          // Session stats (like Python)
+          if (_database.currentSession.positionsAttempted > 0) ...[
+            const SizedBox(height: 16),
             Text(
-              'Session: $_sessionCorrect/$_sessionAttempted (${(_sessionCorrect / _sessionAttempted * 100).toStringAsFixed(1)}%)',
-              style: const TextStyle(fontSize: 12),
+              'Session: ${_database.currentSession.positionsCorrect}/${_database.currentSession.positionsAttempted} '
+              '(${(_database.currentSession.accuracy * 100).toStringAsFixed(1)}%)',
+              style: const TextStyle(fontSize: 14),
             ),
           ],
-
-          const Spacer(),
         ],
       ),
     );
   }
 
+  /// Build position info display - matches Python's _update_position_info
+  Widget _buildPositionInfo() {
+    if (_currentPosition == null) return const SizedBox();
+
+    final pos = _currentPosition!;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Context (Move X, Color to play)
+        Text(
+          pos.positionContext,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Mistake analysis (if available)
+        if (pos.mistakeAnalysis.isNotEmpty) ...[
+          Text(
+            pos.mistakeAnalysis,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ] else ...[
+          Text(
+            'Mistake: ${pos.mistakeType}',
+            style: const TextStyle(fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        // Game info
+        Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}', style: const TextStyle(fontSize: 14)),
+        Text('Difficulty: ${pos.difficulty}/5', style: const TextStyle(fontSize: 14)),
+        Text('Success rate: ${(pos.successRate * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 14)),
+        Text('Reviews: ${pos.reviewCount}', style: const TextStyle(fontSize: 14)),
+
+        // Show the move that was played
+        if (pos.userMove.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            'You played: ${pos.userMove}',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildAnalysisTab() {
     if (_currentPosition == null) {
-      return const Padding(
-        padding: EdgeInsets.all(8.0),
-        child: Center(
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
           child: Text('Load a tactics position to analyze'),
         ),
       );
@@ -244,7 +369,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         try {
           if (mounted) {
             final appState = context.read<AppState>();
-            // Convert Position to chess.Chess for the app state
             final chessGame = chess.Chess.fromFEN(position.fen);
             appState.setCurrentGame(chessGame);
           }
@@ -255,7 +379,15 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
   }
 
-  void _onLoadTactics() async {
+  Color _getFeedbackColor() {
+    if (_feedback.contains('Correct')) return Colors.green;
+    if (_feedback.contains('partial') || _feedback.contains('good')) {
+      return Colors.orange;
+    }
+    return Colors.red;
+  }
+
+  Future<void> _onLoadTactics() async {
     final appState = context.read<AppState>();
     final tacticsService = TacticsService();
 
@@ -264,58 +396,79 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return;
     }
 
-    appState.setLoading(true);
+    setState(() => appState.setLoading(true));
+
     try {
       final positions = await tacticsService.generateTacticsFromLichess(
         appState.chesscomUsername!,
       );
-      appState.setTacticsPositions(positions);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Loaded ${positions.length} tactics positions')),
-      );
+      // Save to CSV database
+      await _database.importAndSave(positions);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Loaded ${positions.length} tactics positions')),
+        );
+        setState(() {});
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load tactics: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load tactics: $e')),
+        );
+      }
     } finally {
-      appState.setLoading(false);
+      setState(() => appState.setLoading(false));
     }
   }
 
   void _onStartSession() {
-    final appState = context.read<AppState>();
-    if (appState.tacticsPositions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No tactics positions loaded. Click "Load Tactics" first.')),
-      );
-      return;
-    }
-
-    _sessionCorrect = 0;
-    _sessionAttempted = 0;
+    _database.startSession();
+    _positionHistory.clear();
+    _historyIndex = -1;
     _loadNextPosition();
   }
 
   void _loadNextPosition() {
-    final appState = context.read<AppState>();
-    if (appState.tacticsPositions.isEmpty || appState.currentPosition == null) {
+    final positions = _database.getPositionsForReview(1);
+    if (positions.isEmpty) {
       _sessionComplete();
       return;
     }
 
+    final position = positions[0];
+
+    // Add to history (only if we're not navigating backwards)
+    if (_historyIndex == _positionHistory.length - 1) {
+      _positionHistory.add(position);
+      _historyIndex = _positionHistory.length - 1;
+    } else {
+      // We went back and then forward, update from this point
+      _historyIndex++;
+      if (_historyIndex >= _positionHistory.length) {
+        _positionHistory.add(position);
+        _historyIndex = _positionHistory.length - 1;
+      }
+    }
+
     setState(() {
-      _currentPosition = appState.currentPosition;
+      _currentPosition = position;
       _positionSolved = false;
       _startTime = DateTime.now();
       _feedback = '';
       _showSolution = false;
     });
 
-    // Set up the chess board with the position
+    // Set up the chess board
     try {
-      final game = chess.Chess.fromFEN(_currentPosition!.fen);
+      final appState = context.read<AppState>();
+      final game = chess.Chess.fromFEN(position.fen);
       appState.setCurrentGame(game);
+
+      // Set board orientation based on side to move
+      final isWhiteToMove = position.positionContext.contains('White');
+      appState.setBoardFlipped(!isWhiteToMove);
     } catch (e) {
       setState(() {
         _feedback = 'Error loading position: $e';
@@ -323,29 +476,37 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
-  void _sessionComplete() {
+  void _onPreviousPosition() {
+    if (_historyIndex <= 0) return;
+
+    _historyIndex--;
+    final position = _positionHistory[_historyIndex];
+
     setState(() {
-      _currentPosition = null;
+      _currentPosition = position;
+      _positionSolved = false;
+      _startTime = DateTime.now();
+      _feedback = '';
+      _showSolution = false;
     });
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Session Complete'),
-        content: Text(
-          'Great work!\n\n'
-          'Positions attempted: $_sessionAttempted\n'
-          'Correct: $_sessionCorrect\n'
-          'Accuracy: ${_sessionAttempted > 0 ? (_sessionCorrect / _sessionAttempted * 100).toStringAsFixed(1) : 0}%'
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+    // Set up the chess board
+    try {
+      final appState = context.read<AppState>();
+      final game = chess.Chess.fromFEN(position.fen);
+      appState.setCurrentGame(game);
+
+      final isWhiteToMove = position.positionContext.contains('White');
+      appState.setBoardFlipped(!isWhiteToMove);
+    } catch (e) {
+      setState(() {
+        _feedback = 'Error loading position: $e';
+      });
+    }
+  }
+
+  void _onSkipPosition() {
+    _loadNextPosition();
   }
 
   void _onShowSolution() {
@@ -358,19 +519,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _tabController.animateTo(1);
   }
 
-  void _onSkipPosition() {
-    _sessionAttempted++;
-    final appState = context.read<AppState>();
-    appState.removeCurrentTacticsPosition();
-    _loadNextPosition();
-  }
-
-  void _copyFen() async {
+  Future<void> _copyFen() async {
     if (_currentPosition != null) {
       try {
-        // Copy FEN to clipboard
         await Clipboard.setData(ClipboardData(text: _currentPosition!.fen));
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('FEN copied to clipboard')),
@@ -379,7 +531,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to copy FEN to clipboard')),
+            const SnackBar(content: Text('Failed to copy FEN')),
           );
         }
       }
@@ -389,83 +541,96 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   void _onMoveAttempted(String moveUci) {
     if (_currentPosition == null || _positionSolved) return;
 
-    // Check if the move matches any of the correct moves
-    bool isCorrect = _validateMove(moveUci);
+    // Use TacticsEngine for proper move validation
+    final result = _engine.checkMove(_currentPosition!, moveUci);
+    final timeTaken = _startTime != null
+        ? DateTime.now().difference(_startTime!).inMilliseconds / 1000.0
+        : 0.0;
 
+    if (result == TacticsResult.correct) {
+      _handleCorrectMove(timeTaken);
+    } else if (result == TacticsResult.partial) {
+      _handlePartialMove();
+    } else {
+      _handleIncorrectMove(timeTaken);
+    }
+  }
+
+  void _handleCorrectMove(double timeTaken) {
     setState(() {
-      if (isCorrect) {
-        _feedback = 'Correct!';
-        _positionSolved = true;
-        _sessionCorrect++;
-        _sessionAttempted++;
+      _positionSolved = true;
+      _feedback = 'Correct!';
+    });
 
-        // Auto-advance after a delay
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) {
-            final appState = context.read<AppState>();
-            appState.removeCurrentTacticsPosition();
-            _loadNextPosition();
-          }
-        });
-      } else {
-        _feedback = 'Incorrect. Try again!';
+    // Record the attempt
+    _database.recordAttempt(
+      _currentPosition!,
+      TacticsResult.correct,
+      timeTaken,
+    );
 
-        // Reset the board to the original position
-        try {
-          final game = chess.Chess.fromFEN(_currentPosition!.fen);
-          context.read<AppState>().setCurrentGame(game);
-        } catch (e) {
-          // Handle error
+    // Auto-advance or enable skip button
+    if (_autoAdvance) {
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted && _positionSolved) {
+          _loadNextPosition();
         }
-      }
+      });
+    }
+
+    // Update session stats display
+    setState(() {});
+  }
+
+  void _handlePartialMove() {
+    setState(() {
+      _feedback = 'Good move, but not the best. Try again!';
     });
   }
 
-  bool _validateMove(String moveUci) {
-    if (_currentPosition == null) return false;
+  void _handleIncorrectMove(double timeTaken) {
+    setState(() {
+      _feedback = 'Incorrect';
+    });
 
-    print('=== TACTICS CONTROL PANEL MOVE VALIDATION ===');
-    print('UCI move: "$moveUci"');
-    print('Expected correct line: ${_currentPosition!.correctLine}');
-    print('Expected best move: "${_currentPosition!.bestMove}"');
-
-    // SIMPLE CHECK: Just check if the target square matches like Python does
-    if (moveUci.length >= 4) {
-      final targetSquare = moveUci.substring(2, 4); // e.g., "c7" from "d8c7"
-      print('Target square: "$targetSquare"');
-
-      for (final correctMove in _currentPosition!.correctLine) {
-        // Extract target square from SAN move, accounting for +, #, etc.
-        final cleanMove = correctMove.replaceAll(RegExp(r'[+#!?]'), ''); // Remove annotations
-
-        // Extract the target square (last 2 chars after cleaning)
-        if (cleanMove.length >= 2) {
-          final expectedTarget = cleanMove.substring(cleanMove.length - 2);
-          print('Checking "$targetSquare" == "$expectedTarget" from "$correctMove" (cleaned: "$cleanMove")');
-
-          if (targetSquare.toLowerCase() == expectedTarget.toLowerCase()) {
-            print('✓ MATCH: Target squares match');
-            return true;
-          }
-        }
+    // Reset the board to original position
+    if (_currentPosition != null) {
+      try {
+        final appState = context.read<AppState>();
+        final game = chess.Chess.fromFEN(_currentPosition!.fen);
+        appState.setCurrentGame(game);
+      } catch (e) {
+        // Handle error
       }
     }
-
-    print('✗ NO MATCH');
-    print('===============================');
-    return false;
   }
 
-  bool _movesMatch(String moveSan, String correctMove) {
-    // Remove annotations and compare
-    final cleanMoveSan = moveSan.replaceAll(RegExp(r'[+#!?]+'), '');
-    final cleanCorrectMove = correctMove.replaceAll(RegExp(r'[+#!?]+'), '');
+  void _sessionComplete() {
+    setState(() {
+      _currentPosition = null;
+    });
 
-    print('  _movesMatch: "$moveSan" -> "$cleanMoveSan" vs "$correctMove" -> "$cleanCorrectMove"');
-    final result = cleanMoveSan.toLowerCase() == cleanCorrectMove.toLowerCase();
-    print('  _movesMatch result: $result');
+    final session = _database.currentSession;
 
-    return result;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Session Complete'),
+        content: Text(
+          'Great work!\n\n'
+          'Positions attempted: ${session.positionsAttempted}\n'
+          'Correct: ${session.positionsCorrect}\n'
+          'Incorrect: ${session.positionsIncorrect}\n'
+          'Accuracy: ${(session.accuracy * 100).toStringAsFixed(1)}%'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showUsernameRequired() {
