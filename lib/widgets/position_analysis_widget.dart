@@ -185,7 +185,14 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
     setState(() {
       _currentFen = fen;
       try {
-        _currentBoard = chess.Chess.fromFEN(fen);
+        // FEN might be shortened (without move counters), add them if missing
+        String fullFen = fen;
+        final parts = fen.split(' ');
+        if (parts.length == 4) {
+          // Add default halfmove and fullmove counters
+          fullFen = '$fen 0 1';
+        }
+        _currentBoard = chess.Chess.fromFEN(fullFen);
       } catch (e) {
         _currentBoard = null;
       }
