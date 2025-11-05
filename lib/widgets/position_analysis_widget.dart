@@ -1,264 +1,207 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:flutter_chess_board/flutter_chess_board.dart';
+/// Position analysis widget - Flutter port of Python's PositionAnalysisMode
+/// Three-panel layout: FEN list (left), chess board (center), tabs (right)
 
-import '../core/app_state.dart';
+import 'package:flutter/material.dart';
+import 'package:chess/chess.dart' as chess;
+
+import '../models/position_analysis.dart';
+import '../widgets/fen_list_widget.dart';
+import '../widgets/games_list_widget.dart';
+import 'chess_board_widget.dart';
+import 'pgn_viewer_widget.dart';
 
 class PositionAnalysisWidget extends StatefulWidget {
-  const PositionAnalysisWidget({super.key});
+  final PositionAnalysis? analysis;
+  final Function()? onAnalyze;
+
+  const PositionAnalysisWidget({
+    super.key,
+    this.analysis,
+    this.onAnalyze,
+  });
 
   @override
   State<PositionAnalysisWidget> createState() => _PositionAnalysisWidgetState();
 }
 
-class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget> {
-  late ChessBoardController _boardController;
+class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
+    with SingleTickerProviderStateMixin {
+  chess.Chess? _currentBoard;
+  String? _currentFen;
+  GameInfo? _selectedGame;
+  late TabController _tabController;
+  final GlobalKey<_GamesListWidgetState> _gamesListKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _boardController = ChessBoardController();
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
-    _boardController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppState>(
-      builder: (context, appState, child) {
-        if (appState.isLoading) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Analyzing weak positions...'),
-              ],
-            ),
-          );
-        }
-
-        final position = appState.currentPosition;
-        if (position == null) {
-          return const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.analytics, size: 64, color: Colors.grey),
-                SizedBox(height: 16),
-                Text(
-                  'No positions to analyze',
-                  style: TextStyle(fontSize: 18, color: Colors.grey),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Use the analytics button to analyze weak positions',
-                  style: TextStyle(color: Colors.grey),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          );
-        }
-
-        return Column(
+    if (widget.analysis == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text(
-                    'Position Analysis',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    position.description,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                    textAlign: TextAlign.center,
-                  ),
-                  if (position.gameSource != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        'From: ${position.gameSource}',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                ],
-              ),
+            const Icon(Icons.analytics, size: 64, color: Colors.grey),
+            const SizedBox(height: 16),
+            const Text(
+              'No positions analyzed',
+              style: TextStyle(fontSize: 18, color: Colors.grey),
             ),
-
-            Expanded(
-              child: Row(
-                children: [
-                  // Chess board
-                  Expanded(
-                    flex: 2,
-                    child: Center(
-                      child: AspectRatio(
-                        aspectRatio: 1.0,
-                        child: ChessBoard(
-                          controller: _boardController,
-                          enableUserMoves: false,
-                          boardColor: BoardColor.brown,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Analysis panel
-                  Expanded(
-                    flex: 1,
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Analysis',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Best move
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Best Move',
-                                    style: Theme.of(context).textTheme.titleMedium,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    position.bestMove,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Evaluation
-                          if (position.evaluation != null)
-                            Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Evaluation',
-                                      style: Theme.of(context).textTheme.titleMedium,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      position.evaluation! > 0
-                                          ? '+${position.evaluation!.toStringAsFixed(2)}'
-                                          : position.evaluation!.toStringAsFixed(2),
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: position.evaluation! > 0
-                                            ? Colors.green
-                                            : Colors.red,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                          const SizedBox(height: 16),
-
-                          // Alternative moves
-                          if (position.alternativeMoves.isNotEmpty)
-                            Card(
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Alternative Moves',
-                                      style: Theme.of(context).textTheme.titleMedium,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    ...position.alternativeMoves.map(
-                                      (move) => Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 2),
-                                        child: Text(move),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                          const Spacer(),
-
-                          // Navigation
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              IconButton(
-                                onPressed: appState.tacticsPositions.length > 1
-                                    ? () {
-                                        appState.previousTacticsPosition();
-                                        _updatePosition();
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.skip_previous),
-                                tooltip: 'Previous position',
-                              ),
-                              Text(
-                                '${appState.tacticsPositions.indexOf(position) + 1} / ${appState.tacticsPositions.length}',
-                                style: Theme.of(context).textTheme.bodyLarge,
-                              ),
-                              IconButton(
-                                onPressed: appState.tacticsPositions.length > 1
-                                    ? () {
-                                        appState.nextTacticsPosition();
-                                        _updatePosition();
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.skip_next),
-                                tooltip: 'Next position',
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: 8),
+            const Text(
+              'Click "Analyze Weak Positions" to begin',
+              style: TextStyle(color: Colors.grey),
+              textAlign: TextAlign.center,
             ),
+            if (widget.onAnalyze != null) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: widget.onAnalyze,
+                icon: const Icon(Icons.analytics),
+                label: const Text('Analyze Weak Positions'),
+              ),
+            ],
           ],
-        );
-      },
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        // Left panel - FEN list
+        SizedBox(
+          width: 300,
+          child: FenListWidget(
+            analysis: widget.analysis!,
+            onFenSelected: _onFenSelected,
+          ),
+        ),
+
+        // Divider
+        Container(
+          width: 1,
+          color: Colors.grey[700],
+        ),
+
+        // Center panel - Chess board
+        Expanded(
+          flex: 3,
+          child: Center(
+            child: _currentBoard != null
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: AspectRatio(
+                      aspectRatio: 1.0,
+                      child: ChessBoardWidget(
+                        game: _currentBoard!,
+                        flipped: _currentBoard!.turn == chess.Color.BLACK,
+                        onMove: null, // No moves allowed in analysis view
+                      ),
+                    ),
+                  )
+                : const Text(
+                    'Select a position to view',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+          ),
+        ),
+
+        // Divider
+        Container(
+          width: 1,
+          color: Colors.grey[700],
+        ),
+
+        // Right panel - Tabs (PGN viewer and Games list)
+        SizedBox(
+          width: 350,
+          child: Column(
+            children: [
+              TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'Games'),
+                  Tab(text: 'PGN'),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    // Games tab
+                    GamesListWidget(
+                      key: _gamesListKey,
+                      onGameSelected: _onGameSelected,
+                    ),
+
+                    // PGN tab
+                    _selectedGame != null && _selectedGame!.pgnText != null
+                        ? PgnViewerWidget(
+                            pgnText: _selectedGame!.pgnText!,
+                            onPositionChanged: (position) {
+                              // Update chess board when clicking moves
+                              try {
+                                setState(() {
+                                  _currentBoard = chess.Chess.fromFEN(position.fen);
+                                });
+                              } catch (e) {
+                                // Handle error
+                              }
+                            },
+                          )
+                        : const Center(
+                            child: Text(
+                              'Select a game to view PGN',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  void _updatePosition() {
-    final position = context.read<AppState>().currentPosition;
-    if (position != null) {
-      _boardController.loadFen(position.fen);
+  void _onFenSelected(String fen) {
+    setState(() {
+      _currentFen = fen;
+      try {
+        _currentBoard = chess.Chess.fromFEN(fen);
+      } catch (e) {
+        _currentBoard = null;
+      }
+      _selectedGame = null;
+    });
+
+    // Update games list
+    if (widget.analysis != null) {
+      final games = widget.analysis!.getGamesForFen(fen);
+      _gamesListKey.currentState?.setGames(games, fen);
     }
+
+    // Switch to games tab when new position selected
+    _tabController.animateTo(0);
+  }
+
+  void _onGameSelected(GameInfo game) {
+    setState(() {
+      _selectedGame = game;
+    });
+
+    // Switch to PGN tab when game selected
+    _tabController.animateTo(1);
   }
 }

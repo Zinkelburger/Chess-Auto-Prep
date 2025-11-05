@@ -2,13 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:chess/chess.dart' as chess;
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 import '../core/app_state.dart';
 import '../models/tactics_position.dart';
+import '../models/position_analysis.dart';
 import '../services/tactics_database.dart';
 import '../services/tactics_engine.dart';
 import '../services/tactics_service.dart';
+import '../services/fen_map_builder.dart';
 import 'pgn_viewer_widget.dart';
+import 'position_analysis_widget.dart';
 
 /// Tactics training control panel - Flutter port of Python's TacticsWidget
 /// Matches all features: position history, auto-advance, full stats, etc.
@@ -41,12 +46,16 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   final List<TacticsPosition> _positionHistory = [];
   int _historyIndex = -1;
 
+  // Position analysis state
+  PositionAnalysis? _positionAnalysis;
+  bool _isAnalyzing = false;
+
   @override
   void initState() {
     super.initState();
     _database = TacticsDatabase();
     _engine = TacticsEngine();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
 
     // Listen for tab changes to enter/exit analysis mode
     _tabController.addListener(() {
@@ -96,6 +105,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           tabs: const [
             Tab(text: 'Tactic'),
             Tab(text: 'Analysis'),
+            Tab(text: 'Weak Positions'),
           ],
         ),
 
@@ -106,6 +116,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             children: [
               _buildTacticTab(),
               _buildAnalysisTab(),
+              _buildPositionAnalysisTab(),
             ],
           ),
         ),
@@ -646,5 +657,165 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         ],
       ),
     );
+  }
+
+  /// Build Position Analysis tab - matches Python's PositionAnalysisMode
+  Widget _buildPositionAnalysisTab() {
+    if (_isAnalyzing) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Analyzing weak positions...'),
+          ],
+        ),
+      );
+    }
+
+    return PositionAnalysisWidget(
+      analysis: _positionAnalysis,
+      onAnalyze: _analyzeWeakPositions,
+    );
+  }
+
+  /// Analyze weak positions from imported games - matches Python's game_analysis.py
+  Future<void> _analyzeWeakPositions() async {
+    final appState = context.read<AppState>();
+
+    if (appState.chesscomUsername == null) {
+      _showUsernameRequired();
+      return;
+    }
+
+    setState(() => _isAnalyzing = true);
+
+    try {
+      // Load imported games from file
+      final directory = await getApplicationDocumentsDirectory();
+      final pgnFile = File('${directory.path}/imported_games.pgn');
+
+      if (!await pgnFile.exists()) {
+        if (mounted) {
+          _showError('No imported games found. Please import games first.');
+        }
+        return;
+      }
+
+      final content = await pgnFile.readAsString();
+      final pgnList = _splitPgnIntoGames(content);
+
+      if (pgnList.isEmpty) {
+        if (mounted) {
+          _showError('No games found in imported_games.pgn');
+        }
+        return;
+      }
+
+      // Show color selection dialog
+      final userIsWhite = await _showColorSelectionDialog();
+      if (userIsWhite == null) return; // User cancelled
+
+      // Build FEN map
+      final fenBuilder = FenMapBuilder();
+      await fenBuilder.processPgns(
+        pgnList,
+        appState.chesscomUsername!,
+        userIsWhite,
+      );
+
+      // Create position analysis
+      final analysis = await FenMapBuilder.fromFenMapBuilder(
+        fenBuilder,
+        pgnList,
+      );
+
+      if (mounted) {
+        setState(() {
+          _positionAnalysis = analysis;
+          _isAnalyzing = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Found ${analysis.positionStats.length} positions to analyze',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Failed to analyze positions: $e');
+        setState(() => _isAnalyzing = false);
+      }
+    }
+  }
+
+  Future<bool?> _showColorSelectionDialog() async {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Color'),
+        content: const Text('Which color do you want to analyze?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('White'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Black'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<String> _splitPgnIntoGames(String content) {
+    final games = <String>[];
+    final lines = content.split('\n');
+
+    String currentGame = '';
+    bool inGame = false;
+
+    for (final line in lines) {
+      if (line.startsWith('[Event')) {
+        if (inGame && currentGame.isNotEmpty) {
+          games.add(currentGame);
+        }
+        currentGame = '$line\n';
+        inGame = true;
+      } else if (inGame) {
+        currentGame += '$line\n';
+      }
+    }
+
+    if (inGame && currentGame.isNotEmpty) {
+      games.add(currentGame);
+    }
+
+    return games;
   }
 }
