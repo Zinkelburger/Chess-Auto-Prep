@@ -95,7 +95,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           controller: _tabController,
           tabs: const [
             Tab(text: 'Tactic'),
-            Tab(text: 'Analysis'),
+            Tab(text: 'PGN'),
           ],
         ),
 

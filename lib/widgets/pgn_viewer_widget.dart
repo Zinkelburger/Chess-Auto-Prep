@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 
 class PgnViewerWidget extends StatefulWidget {
   final String? gameId;
+  final String? pgnText;
   final int? moveNumber;
   final bool? isWhiteToPlay;
   final Function(Position)? onPositionChanged;
@@ -13,6 +14,7 @@ class PgnViewerWidget extends StatefulWidget {
   const PgnViewerWidget({
     super.key,
     this.gameId,
+    this.pgnText,
     this.moveNumber,
     this.isWhiteToPlay,
     this.onPositionChanged,
@@ -40,15 +42,16 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
   @override
   void didUpdateWidget(PgnViewerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.gameId != oldWidget.gameId) {
+    if (widget.gameId != oldWidget.gameId || widget.pgnText != oldWidget.pgnText) {
       _loadGame();
     }
   }
 
   Future<void> _loadGame() async {
-    if (widget.gameId == null) {
+    // Check if we have pgnText or need to load from gameId
+    if (widget.pgnText == null && widget.gameId == null) {
       setState(() {
-        _error = 'No game ID provided';
+        _error = 'No game ID or PGN text provided';
         _isLoading = false;
       });
       return;
@@ -60,13 +63,21 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
     });
 
     try {
-      final pgnText = await _findGamePgn(widget.gameId!);
-      if (pgnText.isEmpty) {
-        setState(() {
-          _error = 'Game not found in PGN files';
-          _isLoading = false;
-        });
-        return;
+      String pgnText;
+
+      // If pgnText is provided directly, use it
+      if (widget.pgnText != null) {
+        pgnText = widget.pgnText!;
+      } else {
+        // Otherwise, load from file using gameId
+        pgnText = await _findGamePgn(widget.gameId!);
+        if (pgnText.isEmpty) {
+          setState(() {
+            _error = 'Game not found in PGN files';
+            _isLoading = false;
+          });
+          return;
+        }
       }
 
       final game = PgnGame.parsePgn(pgnText);

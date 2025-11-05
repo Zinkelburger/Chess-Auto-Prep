@@ -8,6 +8,7 @@ import '../core/app_state.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/tactics_control_panel.dart';
 import '../services/imported_games_service.dart';
+import 'analysis_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -29,63 +30,118 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chess Auto Prep'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.download),
-            onPressed: () => _importGames(context),
-            tooltip: 'Import Games',
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => _showSettings(context),
-          ),
-        ],
-      ),
-      body: Row(
-        children: [
-          // Left panel - Chess board (60% of width)
-          Expanded(
-            flex: 6,
-            child: Container(
-              padding: const EdgeInsets.all(16.0),
-              child: Consumer<AppState>(
-                builder: (context, appState, child) {
-                  return ChessBoardWidget(
-                    game: appState.currentGame,
-                    flipped: appState.boardFlipped, // Use the smart board flipping logic
-                    onPieceSelected: (square) {
-                      // Handle piece selection
-                    },
-                    onMove: (move) {
-                      // Convert move to UCI and send to validation
-                      final moveUci = '${move.fromAlgebraic}${move.toAlgebraic}';
-                      appState.onMoveAttempted(moveUci);
-                    },
-                  );
+    return Consumer<AppState>(
+      builder: (context, appState, child) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Chess Auto Prep'),
+            actions: [
+              // Mode selector
+              PopupMenuButton<AppMode>(
+                icon: const Icon(Icons.view_module),
+                tooltip: 'Select Mode',
+                onSelected: (mode) {
+                  appState.setMode(mode);
                 },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: AppMode.tactics,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.psychology),
+                        const SizedBox(width: 12),
+                        const Text('Tactics'),
+                        if (appState.currentMode == AppMode.tactics)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 12),
+                            child: Icon(Icons.check, size: 16, color: Colors.green),
+                          ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: AppMode.positionAnalysis,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.analytics),
+                        const SizedBox(width: 12),
+                        const Text('Analysis'),
+                        if (appState.currentMode == AppMode.positionAnalysis)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 12),
+                            child: Icon(Icons.check, size: 16, color: Colors.green),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
+              IconButton(
+                icon: const Icon(Icons.download),
+                onPressed: () => _importGames(context),
+                tooltip: 'Import Games',
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings),
+                onPressed: () => _showSettings(context),
+              ),
+            ],
+          ),
+          body: _buildBodyForMode(appState),
+        );
+      },
+    );
+  }
+
+  Widget _buildBodyForMode(AppState appState) {
+    switch (appState.currentMode) {
+      case AppMode.tactics:
+        return _buildTacticsLayout(appState);
+      case AppMode.positionAnalysis:
+        return const AnalysisScreen();
+      default:
+        return _buildTacticsLayout(appState);
+    }
+  }
+
+  Widget _buildTacticsLayout(AppState appState) {
+    return Row(
+      children: [
+        // Left panel - Chess board (60% of width)
+        Expanded(
+          flex: 6,
+          child: Container(
+            padding: const EdgeInsets.all(16.0),
+            child: ChessBoardWidget(
+              game: appState.currentGame,
+              flipped: appState.boardFlipped,
+              onPieceSelected: (square) {
+                // Handle piece selection
+              },
+              onMove: (move) {
+                // Convert move to UCI and send to validation
+                final moveUci = '${move.fromAlgebraic}${move.toAlgebraic}';
+                appState.onMoveAttempted(moveUci);
+              },
             ),
           ),
+        ),
 
-          // Divider
-          Container(
-            width: 1,
-            color: Colors.grey[300],
-          ),
+        // Divider
+        Container(
+          width: 1,
+          color: Colors.grey[300],
+        ),
 
-          // Right panel - Tabbed control panel (40% of width)
-          Expanded(
-            flex: 4,
-            child: Container(
-              padding: const EdgeInsets.all(8.0),
-              child: const TacticsControlPanel(),
-            ),
+        // Right panel - Tabbed control panel (40% of width)
+        Expanded(
+          flex: 4,
+          child: Container(
+            padding: const EdgeInsets.all(8.0),
+            child: const TacticsControlPanel(),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
