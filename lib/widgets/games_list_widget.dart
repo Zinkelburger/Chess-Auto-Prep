@@ -5,10 +5,14 @@ import 'package:flutter/material.dart';
 import '../models/position_analysis.dart';
 
 class GamesListWidget extends StatefulWidget {
+  final List<GameInfo> games;
+  final String? currentFen;
   final Function(GameInfo)? onGameSelected;
 
   const GamesListWidget({
     super.key,
+    required this.games,
+    this.currentFen,
     this.onGameSelected,
   });
 
@@ -17,22 +21,20 @@ class GamesListWidget extends StatefulWidget {
 }
 
 class _GamesListWidgetState extends State<GamesListWidget> {
-  List<GameInfo> _games = [];
-  String? _currentFen;
   int? _selectedIndex;
 
-  /// Set games to display
-  void setGames(List<GameInfo> games, String fen) {
-    setState(() {
-      _games = games;
-      _currentFen = fen;
+  @override
+  void didUpdateWidget(GamesListWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reset selection when games change
+    if (widget.currentFen != oldWidget.currentFen) {
       _selectedIndex = null;
-    });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_games.isEmpty) {
+    if (widget.games.isEmpty) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(16),
@@ -59,7 +61,7 @@ class _GamesListWidgetState extends State<GamesListWidget> {
             ),
           ),
           child: Text(
-            '${_games.length} game${_games.length == 1 ? '' : 's'} with this position',
+            '${widget.games.length} game${widget.games.length == 1 ? '' : 's'} with this position',
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 14,
@@ -71,9 +73,9 @@ class _GamesListWidgetState extends State<GamesListWidget> {
         // Games list
         Expanded(
           child: ListView.builder(
-            itemCount: _games.length,
+            itemCount: widget.games.length,
             itemBuilder: (context, index) {
-              final game = _games[index];
+              final game = widget.games[index];
               final isSelected = _selectedIndex == index;
 
               return ListTile(

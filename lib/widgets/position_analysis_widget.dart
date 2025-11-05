@@ -30,7 +30,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   String? _currentFen;
   GameInfo? _selectedGame;
   late TabController _tabController;
-  final GlobalKey<_GamesListWidgetState> _gamesListKey = GlobalKey();
+  List<GameInfo> _currentGames = [];
 
   @override
   void initState() {
@@ -59,7 +59,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
             ),
             const SizedBox(height: 8),
             const Text(
-              'Click "Analyze Weak Positions" to begin',
+              'Click "Analyze Positions" to begin',
               style: TextStyle(color: Colors.grey),
               textAlign: TextAlign.center,
             ),
@@ -68,7 +68,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
               ElevatedButton.icon(
                 onPressed: widget.onAnalyze,
                 icon: const Icon(Icons.analytics),
-                label: const Text('Analyze Weak Positions'),
+                label: const Text('Analyze Positions'),
               ),
             ],
           ],
@@ -140,7 +140,8 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
                   children: [
                     // Games tab
                     GamesListWidget(
-                      key: _gamesListKey,
+                      games: _currentGames,
+                      currentFen: _currentFen,
                       onGameSelected: _onGameSelected,
                     ),
 
@@ -184,13 +185,12 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
         _currentBoard = null;
       }
       _selectedGame = null;
-    });
 
-    // Update games list
-    if (widget.analysis != null) {
-      final games = widget.analysis!.getGamesForFen(fen);
-      _gamesListKey.currentState?.setGames(games, fen);
-    }
+      // Update games list
+      if (widget.analysis != null) {
+        _currentGames = widget.analysis!.getGamesForFen(fen);
+      }
+    });
 
     // Switch to games tab when new position selected
     _tabController.animateTo(0);
