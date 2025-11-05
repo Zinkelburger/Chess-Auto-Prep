@@ -55,6 +55,13 @@ static void my_application_activate(GApplication* application) {
 
   gtk_window_set_default_size(window, 1280, 720);
 
+  // Set window icon
+  g_autoptr(GError) icon_error = nullptr;
+  gtk_window_set_icon_from_file(window, "assets/images/knook.png", &icon_error);
+  if (icon_error != nullptr) {
+    g_warning("Failed to load window icon: %s", icon_error->message);
+  }
+
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(project, self->dart_entrypoint_arguments);
 
