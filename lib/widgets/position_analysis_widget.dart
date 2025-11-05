@@ -12,11 +12,13 @@ import 'pgn_viewer_widget.dart';
 
 class PositionAnalysisWidget extends StatefulWidget {
   final PositionAnalysis? analysis;
+  final bool? playerIsWhite; // Player's color for consistent board orientation
   final Function()? onAnalyze;
 
   const PositionAnalysisWidget({
     super.key,
     this.analysis,
+    this.playerIsWhite,
     this.onAnalyze,
   });
 
@@ -104,7 +106,10 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
                       aspectRatio: 1.0,
                       child: ChessBoardWidget(
                         game: _currentBoard!,
-                        flipped: _currentBoard!.turn == chess.Color.BLACK,
+                        // Keep board oriented from player's perspective
+                        flipped: widget.playerIsWhite != null
+                            ? !widget.playerIsWhite!
+                            : false,
                         onMove: null, // No moves allowed in analysis view
                       ),
                     ),

@@ -21,6 +21,7 @@ class AnalysisScreen extends StatefulWidget {
 class _AnalysisScreenState extends State<AnalysisScreen> {
   PositionAnalysis? _positionAnalysis;
   bool _isAnalyzing = false;
+  bool? _playerIsWhite; // Store player's color for consistent board orientation
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +40,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
     return PositionAnalysisWidget(
       analysis: _positionAnalysis,
+      playerIsWhite: _playerIsWhite,
       onAnalyze: _analyzeWeakPositions,
     );
   }
@@ -97,6 +99,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       if (mounted) {
         setState(() {
           _positionAnalysis = analysis;
+          _playerIsWhite = userIsWhite; // Store player color for board orientation
           _isAnalyzing = false;
         });
 
