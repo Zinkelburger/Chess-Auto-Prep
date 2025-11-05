@@ -236,7 +236,6 @@ class TacticsDatabase {
 enum TacticsResult {
   correct,
   incorrect,
-  partial,
   hint,
   timeout,
 }

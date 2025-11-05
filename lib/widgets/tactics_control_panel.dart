@@ -299,24 +299,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         ),
         const SizedBox(height: 12),
 
-        // Mistake analysis (if available)
-        if (pos.mistakeAnalysis.isNotEmpty) ...[
-          Text(
-            pos.mistakeAnalysis,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 12),
-        ] else ...[
-          Text(
-            'Mistake: ${pos.mistakeType}',
-            style: const TextStyle(fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-        ],
-
         // Game info
         Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}', style: const TextStyle(fontSize: 14)),
         Text('Difficulty: ${pos.difficulty}/5', style: const TextStyle(fontSize: 14)),
@@ -380,9 +362,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   Color _getFeedbackColor() {
     if (_feedback.contains('Correct')) return Colors.green;
-    if (_feedback.contains('partial') || _feedback.contains('good')) {
-      return Colors.orange;
-    }
     return Colors.red;
   }
 
@@ -548,8 +527,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
     if (result == TacticsResult.correct) {
       _handleCorrectMove(timeTaken);
-    } else if (result == TacticsResult.partial) {
-      _handlePartialMove();
     } else {
       _handleIncorrectMove(timeTaken);
     }
@@ -579,12 +556,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
     // Update session stats display
     setState(() {});
-  }
-
-  void _handlePartialMove() {
-    setState(() {
-      _feedback = 'Good move, but not the best. Try again!';
-    });
   }
 
   void _handleIncorrectMove(double timeTaken) {

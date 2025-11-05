@@ -4,7 +4,7 @@ import 'tactics_database.dart';
 /// Engine for checking tactical solutions - Flutter port of Python's TacticsEngine
 class TacticsEngine {
   /// Check if a move (in UCI format) is correct for the given position
-  /// Returns TacticsResult.correct, .partial, or .incorrect
+  /// Returns TacticsResult.correct or .incorrect
   TacticsResult checkMove(TacticsPosition position, String moveUci) {
     try {
       // Parse target square from UCI notation (e.g., "c7" from "d8c7")
@@ -22,14 +22,6 @@ class TacticsEngine {
       final bestMove = position.correctLine[0];
       if (_moveMatchesTarget(bestMove, targetSquare)) {
         return TacticsResult.correct;
-      }
-
-      // Check if it matches any other move in the correct line (partial credit)
-      for (int i = 1; i < position.correctLine.length; i++) {
-        final correctMove = position.correctLine[i];
-        if (_moveMatchesTarget(correctMove, targetSquare)) {
-          return TacticsResult.partial;
-        }
       }
 
       return TacticsResult.incorrect;
