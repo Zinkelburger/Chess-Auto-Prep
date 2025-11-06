@@ -44,6 +44,30 @@ class PositionStats {
       gameUrls: gameUrls ?? this.gameUrls,
     );
   }
+
+  /// Serialize to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'fen': fen,
+      'games': games,
+      'wins': wins,
+      'losses': losses,
+      'draws': draws,
+      'gameUrls': gameUrls,
+    };
+  }
+
+  /// Deserialize from JSON
+  factory PositionStats.fromJson(Map<String, dynamic> json) {
+    return PositionStats(
+      fen: json['fen'] as String,
+      games: json['games'] as int? ?? 0,
+      wins: json['wins'] as int? ?? 0,
+      losses: json['losses'] as int? ?? 0,
+      draws: json['draws'] as int? ?? 0,
+      gameUrls: (json['gameUrls'] as List<dynamic>?)?.cast<String>() ?? [],
+    );
+  }
 }
 
 class GameInfo {
@@ -131,6 +155,32 @@ class GameInfo {
     }
     return '';
   }
+
+  /// Serialize to JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'pgnText': pgnText,
+      'white': white,
+      'black': black,
+      'result': result,
+      'date': date,
+      'site': site,
+      'event': event,
+    };
+  }
+
+  /// Deserialize from JSON
+  factory GameInfo.fromJson(Map<String, dynamic> json) {
+    return GameInfo(
+      pgnText: json['pgnText'] as String?,
+      white: json['white'] as String? ?? '',
+      black: json['black'] as String? ?? '',
+      result: json['result'] as String? ?? '',
+      date: json['date'] as String? ?? '',
+      site: json['site'] as String? ?? '',
+      event: json['event'] as String? ?? '',
+    );
+  }
 }
 
 class PositionAnalysis {
@@ -195,5 +245,48 @@ class PositionAnalysis {
     }
 
     return filtered;
+  }
+
+  /// Serialize to JSON (only top 50 positions to save space)
+  Map<String, dynamic> toJson() {
+    // Get top 50 worst positions (lowest win rate)
+    final sortedPositions = getSortedPositions(minGames: 3, sortBy: 'win_rate').take(50).toList();
+
+    return {
+      'positionStats': sortedPositions.map((p) => p.toJson()).toList(),
+      'games': games.map((g) => g.toJson()).toList(),
+      'fenToGameIndices': fenToGameIndices.map(
+        (key, value) => MapEntry(key, value),
+      ),
+    };
+  }
+
+  /// Deserialize from JSON
+  factory PositionAnalysis.fromJson(Map<String, dynamic> json) {
+    final positionStatsList = (json['positionStats'] as List<dynamic>?)
+            ?.map((p) => PositionStats.fromJson(p as Map<String, dynamic>))
+            .toList() ??
+        [];
+
+    final positionStatsMap = <String, PositionStats>{};
+    for (final stats in positionStatsList) {
+      positionStatsMap[stats.fen] = stats;
+    }
+
+    final gamesList = (json['games'] as List<dynamic>?)
+            ?.map((g) => GameInfo.fromJson(g as Map<String, dynamic>))
+            .toList() ??
+        [];
+
+    final fenToGameIndicesMap = (json['fenToGameIndices'] as Map<String, dynamic>?)?.map(
+          (key, value) => MapEntry(key, (value as List<dynamic>).cast<int>()),
+        ) ??
+        {};
+
+    return PositionAnalysis(
+      positionStats: positionStatsMap,
+      games: gamesList,
+      fenToGameIndices: fenToGameIndicesMap,
+    );
   }
 }
