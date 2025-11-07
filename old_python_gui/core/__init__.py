@@ -1,3 +1,0 @@
-"""
-Core chess business logic.
-"""
