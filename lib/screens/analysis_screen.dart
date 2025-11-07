@@ -5,7 +5,9 @@
 import 'package:flutter/material.dart';
 
 import '../models/position_analysis.dart';
+import '../models/opening_tree.dart';
 import '../services/fen_map_builder.dart';
+import '../services/opening_tree_builder.dart';
 import '../services/analysis_games_service.dart';
 import '../widgets/position_analysis_widget.dart';
 import 'player_selection_screen.dart';
@@ -21,6 +23,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   final AnalysisGamesService _gamesService = AnalysisGamesService();
 
   PositionAnalysis? _positionAnalysis;
+  OpeningTree? _openingTree;
   bool _isAnalyzing = false;
   bool? _playerIsWhite; // Current POV - null means not analyzed yet
   Map<String, dynamic>? _currentPlayer; // Currently selected player
@@ -130,6 +133,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       ),
       body: PositionAnalysisWidget(
         analysis: _positionAnalysis,
+        openingTree: _openingTree,
         playerIsWhite: _playerIsWhite,
         onAnalyze: _analyzeWeakPositions,
       ),
@@ -166,6 +170,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       setState(() {
         _currentPlayer = result;
         _positionAnalysis = null; // Clear previous analysis
+        _openingTree = null; // Clear previous tree
         _playerIsWhite = true; // Default to White
       });
 
@@ -219,13 +224,24 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       );
 
       PositionAnalysis? analysis;
+      OpeningTree? openingTree;
+
       if (cachedData != null) {
         // Load from cache
         try {
           analysis = PositionAnalysis.fromJson(cachedData);
+
+          // Build opening tree (not cached, rebuild each time)
+          openingTree = await OpeningTreeBuilder.buildTree(
+            pgnList: pgnList,
+            username: username,
+            userIsWhite: userIsWhite,
+          );
+
           if (mounted) {
             setState(() {
               _positionAnalysis = analysis;
+              _openingTree = openingTree;
               _playerIsWhite = userIsWhite;
               _isAnalyzing = false;
             });
@@ -258,6 +274,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         pgnList,
       );
 
+      // Build opening tree
+      openingTree = await OpeningTreeBuilder.buildTree(
+        pgnList: pgnList,
+        username: username,
+        userIsWhite: userIsWhite,
+      );
+
       // Save to cache
       try {
         await _gamesService.saveCachedAnalysis(
@@ -273,6 +296,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       if (mounted) {
         setState(() {
           _positionAnalysis = analysis;
+          _openingTree = openingTree;
           _playerIsWhite = userIsWhite; // Store player color for board orientation
           _isAnalyzing = false;
         });

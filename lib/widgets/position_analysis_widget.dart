@@ -5,19 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:chess/chess.dart' as chess;
 
 import '../models/position_analysis.dart';
+import '../models/opening_tree.dart';
 import '../widgets/fen_list_widget.dart';
 import '../widgets/games_list_widget.dart';
+import '../widgets/opening_tree_widget.dart';
 import 'chess_board_widget.dart';
 import 'pgn_viewer_widget.dart';
 
 class PositionAnalysisWidget extends StatefulWidget {
   final PositionAnalysis? analysis;
+  final OpeningTree? openingTree;
   final bool? playerIsWhite; // Player's color for consistent board orientation
   final Function()? onAnalyze;
 
   const PositionAnalysisWidget({
     super.key,
     this.analysis,
+    this.openingTree,
     this.playerIsWhite,
     this.onAnalyze,
   });
@@ -37,7 +41,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -127,7 +131,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
           color: Colors.grey[700],
         ),
 
-        // Right panel - Tabs (PGN viewer and Games list)
+        // Right panel - Tabs (Move Tree, Games, and PGN)
         SizedBox(
           width: 350,
           child: Column(
@@ -135,6 +139,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
               TabBar(
                 controller: _tabController,
                 tabs: const [
+                  Tab(text: 'Move Tree'),
                   Tab(text: 'Games'),
                   Tab(text: 'PGN'),
                 ],
@@ -143,6 +148,19 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
                 child: TabBarView(
                   controller: _tabController,
                   children: [
+                    // Move Tree tab
+                    widget.openingTree != null
+                        ? OpeningTreeWidget(
+                            tree: widget.openingTree!,
+                            onPositionSelected: _onTreePositionSelected,
+                          )
+                        : const Center(
+                            child: Text(
+                              'Opening tree not available',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
+
                     // Games tab
                     GamesListWidget(
                       games: _currentGames,
@@ -204,8 +222,38 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       }
     });
 
-    // Switch to games tab when new position selected
-    _tabController.animateTo(0);
+    // Navigate the opening tree to this position
+    if (widget.openingTree != null) {
+      widget.openingTree!.navigateToFen(fen);
+    }
+
+    // Switch to games tab when new position selected from FEN list
+    _tabController.animateTo(1);
+  }
+
+  void _onTreePositionSelected(String fen) {
+    // Update board and games when clicking through the move tree
+    setState(() {
+      _currentFen = fen;
+      try {
+        // FEN might be shortened (without move counters), add them if missing
+        String fullFen = fen;
+        final parts = fen.split(' ');
+        if (parts.length == 4) {
+          // Add default halfmove and fullmove counters
+          fullFen = '$fen 0 1';
+        }
+        _currentBoard = chess.Chess.fromFEN(fullFen);
+      } catch (e) {
+        _currentBoard = null;
+      }
+      _selectedGame = null;
+
+      // Update games list
+      if (widget.analysis != null) {
+        _currentGames = widget.analysis!.getGamesForFen(fen);
+      }
+    });
   }
 
   void _onGameSelected(GameInfo game) {
@@ -214,6 +262,6 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
     });
 
     // Switch to PGN tab when game selected
-    _tabController.animateTo(1);
+    _tabController.animateTo(2);
   }
 }

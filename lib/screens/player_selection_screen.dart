@@ -189,6 +189,8 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                     _deletePlayer(player);
                   } else if (value == 'redownload') {
                     _redownloadPlayer(player);
+                  } else if (value == 'redownload_custom') {
+                    _redownloadPlayerCustom(player);
                   }
                 },
                 itemBuilder: (context) => [
@@ -199,6 +201,16 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                         Icon(Icons.refresh, size: 20),
                         SizedBox(width: 12),
                         Text('Re-download'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'redownload_custom',
+                    child: Row(
+                      children: [
+                        Icon(Icons.settings, size: 20),
+                        SizedBox(width: 12),
+                        Text('Re-download (custom)'),
                       ],
                     ),
                   ),
@@ -266,12 +278,33 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     final username = player['username'] as String;
     final monthsBack = player['monthsBack'] as int? ?? 3;
 
-    // Show download dialog pre-filled with existing player info
-    // For now, just pop back and let them use the download dialog
-    // In the future, could auto-trigger download
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Use "Download New" to re-download with different settings')),
+    // Re-download with same settings (no confirmation needed)
+    await _downloadGames(platform, username, monthsBack);
+  }
+
+  Future<void> _redownloadPlayerCustom(Map<String, dynamic> player) async {
+    final platform = player['platform'] as String;
+    final username = player['username'] as String;
+
+    // Show download dialog with pre-filled username
+    final appState = context.read<AppState>();
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AnalysisDownloadDialog(
+        chesscomUsername: platform == 'chesscom' ? username : appState.chesscomUsername,
+        lichessUsername: platform == 'lichess' ? username : appState.lichessUsername,
+      ),
     );
+
+    if (result != null && mounted) {
+      final newPlatform = result['platform'] as String;
+      final newUsername = result['username'] as String;
+      final newMonthsBack = result['monthsBack'] as int;
+
+      // Download with new settings
+      await _downloadGames(newPlatform, newUsername, newMonthsBack);
+    }
   }
 
   Future<void> _showDownloadDialog() async {
