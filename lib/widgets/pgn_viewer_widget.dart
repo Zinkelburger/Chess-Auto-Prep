@@ -345,7 +345,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
       if (isWhiteTurn) {
         moves.add(TextSpan(
           text: '$moveNumber. ',
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600]),
         ));
       }
 
@@ -355,7 +355,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
         TextSpan(
           text: san,
           style: TextStyle(
-            color: isCurrentMove ? Colors.black : Colors.blue,
+            color: isCurrentMove ? Colors.grey[100] : Colors.blue,
             fontWeight: isCurrentMove ? FontWeight.bold : FontWeight.normal,
             backgroundColor: isCurrentMove ? Colors.yellow : null,
           ),
@@ -386,10 +386,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
 
     return RichText(
       text: TextSpan(
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'monospace',
           fontSize: 14,
-          color: Colors.black,
+          color: Colors.grey[300],
         ),
         children: moves,
       ),
