@@ -106,7 +106,7 @@ void main() {
     });
 
     testWidgets('allows making legal moves', (WidgetTester tester) async {
-      chess.Move? lastMove;
+      CompletedMove? lastMove;
 
       await tester.pumpWidget(
         MaterialApp(

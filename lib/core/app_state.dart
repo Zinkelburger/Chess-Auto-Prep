@@ -8,6 +8,7 @@ import '../services/pgn_service.dart';
 enum AppMode {
   tactics,
   positionAnalysis,
+  repertoire,
   pgnViewer,
 }
 

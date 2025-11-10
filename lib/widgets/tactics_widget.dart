@@ -220,14 +220,14 @@ class _TacticsWidgetState extends State<TacticsWidget> {
     );
   }
 
-  void _onMove(Move move) {
+  void _onMove(CompletedMove move) {
     if (_chess == null) return;
 
     final position = context.read<AppState>().currentPosition;
     if (position == null) return;
 
     // Make the move and check if it matches the best move
-    final moveString = move.toString();
+    final moveString = move.uci;
     final isCorrect = _checkMoveCorrectness(move, position.bestMove);
 
     if (isCorrect) {
@@ -275,14 +275,14 @@ class _TacticsWidgetState extends State<TacticsWidget> {
     );
   }
 
-  bool _checkMoveCorrectness(Move move, String bestMove) {
+  bool _checkMoveCorrectness(CompletedMove move, String bestMove) {
     if (_chess == null) return false;
 
     print('=== TACTICS MOVE CHECKING ===');
     print('Expected best move: "$bestMove"');
 
     // SIMPLE CHECK: Just check if the target square matches like Python does
-    final targetSquare = move.toAlgebraic;
+    final targetSquare = move.to;
     print('Player target square: "$targetSquare"');
 
     if (bestMove.length >= 2) {

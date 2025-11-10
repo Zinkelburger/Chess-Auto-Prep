@@ -9,6 +9,7 @@ import '../widgets/chess_board_widget.dart';
 import '../widgets/tactics_control_panel.dart';
 import '../services/imported_games_service.dart';
 import 'analysis_screen.dart';
+import 'repertoire_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -74,6 +75,21 @@ class _MainScreenState extends State<MainScreen> {
                       ],
                     ),
                   ),
+                  PopupMenuItem(
+                    value: AppMode.repertoire,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.library_books),
+                        const SizedBox(width: 12),
+                        const Text('Repertoire'),
+                        if (appState.currentMode == AppMode.repertoire)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 12),
+                            child: Icon(Icons.check, size: 16, color: Colors.green),
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
               IconButton(
@@ -99,6 +115,8 @@ class _MainScreenState extends State<MainScreen> {
         return _buildTacticsLayout(appState);
       case AppMode.positionAnalysis:
         return const AnalysisScreen();
+      case AppMode.repertoire:
+        return const RepertoireScreen();
       default:
         return _buildTacticsLayout(appState);
     }
@@ -119,9 +137,8 @@ class _MainScreenState extends State<MainScreen> {
                 // Handle piece selection
               },
               onMove: (move) {
-                // Convert move to UCI and send to validation
-                final moveUci = '${move.fromAlgebraic}${move.toAlgebraic}';
-                appState.onMoveAttempted(moveUci);
+                // Use UCI from CompletedMove and send to validation
+                appState.onMoveAttempted(move.uci);
               },
             ),
           ),

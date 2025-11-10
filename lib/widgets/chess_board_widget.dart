@@ -2,11 +2,33 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:chess/chess.dart' as chess;
 
+/// Rich move object that contains complete information about a move
+class CompletedMove {
+  final String from;
+  final String to;
+  final String san;
+  final String fenBefore;
+  final String fenAfter;
+  final String uci;
+
+  CompletedMove({
+    required this.from,
+    required this.to,
+    required this.san,
+    required this.fenBefore,
+    required this.fenAfter,
+    required this.uci,
+  });
+
+  @override
+  String toString() => 'Move($uci -> $san, $fenBefore -> $fenAfter)';
+}
+
 /// A professional chess board widget that properly scales and handles interaction.
 /// Uses a simple, maintainable approach: CustomPainter for board + SVG widgets for pieces
 class ChessBoardWidget extends StatefulWidget {
   final chess.Chess game;
-  final Function(chess.Move)? onMove;
+  final Function(CompletedMove)? onMove;
   final bool enableUserMoves;
   final bool flipped;
   final Set<String> highlightedSquares;
@@ -304,22 +326,166 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     }
   }
 
+  /// Generate SAN notation for a move
+  String _generateSan(String from, String to, chess.Chess game) {
+    final piece = game.get(from);
+    if (piece == null) return '$from$to'; // Fallback to UCI
+
+    final pieceType = piece.type;
+    final isWhite = piece.color == chess.Color.WHITE;
+
+    // Get piece symbol (uppercase for white, lowercase for black)
+    String pieceSymbol = '';
+    switch (pieceType) {
+      case chess.PieceType.KING:
+        pieceSymbol = 'K';
+        break;
+      case chess.PieceType.QUEEN:
+        pieceSymbol = 'Q';
+        break;
+      case chess.PieceType.ROOK:
+        pieceSymbol = 'R';
+        break;
+      case chess.PieceType.BISHOP:
+        pieceSymbol = 'B';
+        break;
+      case chess.PieceType.KNIGHT:
+        pieceSymbol = 'N';
+        break;
+      case chess.PieceType.PAWN:
+        pieceSymbol = ''; // Pawns don't have a symbol
+        break;
+    }
+
+    // Check if it's a capture
+    final targetPiece = game.get(to);
+    final isCapture = targetPiece != null;
+
+    // For pawns, we need special handling
+    if (pieceType == chess.PieceType.PAWN) {
+      if (isCapture) {
+        // Pawn capture: exd4
+        return '${from[0]}x$to';
+      } else {
+        // Simple pawn move: d4
+        return to;
+      }
+    }
+
+    // For other pieces, check for ambiguity
+    String disambiguation = '';
+    final legalMoves = game.generate_moves();
+    final samePieceMoves = legalMoves.where((move) {
+      final movePiece = game.get(move.fromAlgebraic);
+      return movePiece?.type == pieceType &&
+             movePiece?.color == piece.color &&
+             move.toAlgebraic == to &&
+             move.fromAlgebraic != from;
+    }).toList();
+
+    if (samePieceMoves.isNotEmpty) {
+      // Need disambiguation
+      final sameFile = samePieceMoves.any((move) => move.fromAlgebraic[0] == from[0]);
+      final sameRank = samePieceMoves.any((move) => move.fromAlgebraic[1] == from[1]);
+
+      if (!sameFile) {
+        disambiguation = from[0]; // Use file
+      } else if (!sameRank) {
+        disambiguation = from[1]; // Use rank
+      } else {
+        disambiguation = from; // Use full square
+      }
+    }
+
+    // Build the SAN
+    String san = pieceSymbol + disambiguation;
+    if (isCapture) {
+      san += 'x';
+    }
+    san += to;
+
+    // Check for promotion (should already be handled in moveMap)
+    if (pieceType == chess.PieceType.PAWN) {
+      if ((isWhite && to[1] == '8') || (!isWhite && to[1] == '1')) {
+        san += '=Q'; // Auto-promote to Queen
+      }
+    }
+
+    return san;
+  }
+
   void _tryMakeMove(String from, String to) {
     try {
-      // The move function returns true on success, false on failure
-      final moveResult = widget.game.move({'from': from, 'to': to});
+      final uci = '$from$to';
+      final fenBefore = widget.game.fen;
 
-      if (moveResult) {
+      print('Board: Attempting move $uci on position $fenBefore');
+
+      // Validate the move is legal first
+      final legalMoves = widget.game.generate_moves();
+      final isLegal = legalMoves.any((move) =>
+          move.fromAlgebraic == from && move.toAlgebraic == to);
+
+      if (!isLegal) {
+        print('Board: Move $uci failed - not found in legal moves');
+        setState(() {
+          selectedSquare = null;
+          _internalHighlights.clear();
+        });
+        return;
+      }
+
+      // Generate SAN notation before making the move
+      final correctSan = _generateSan(from, to, widget.game);
+
+      // Create the move map for the chess.dart library
+      final moveMap = <String, String>{
+        'from': from,
+        'to': to,
+      };
+
+      // Check for promotion and auto-promote to Queen
+      final piece = widget.game.get(from);
+      if (piece?.type == chess.PieceType.PAWN) {
+        if ((piece!.color == chess.Color.WHITE && to[1] == '8') ||
+            (piece.color == chess.Color.BLACK && to[1] == '1')) {
+          moveMap['promotion'] = 'q'; // Auto-promote to Queen
+        }
+      }
+
+      // Now make the move on the actual game object
+      // In chess ^0.7.0, this returns a bool
+      final moveResult = widget.game.move(moveMap);
+
+      print('Board: Move result: $moveResult (${moveResult.runtimeType})');
+
+      // Check for success (true)
+      if (moveResult == true) {
+        final fenAfter = widget.game.fen;
+
+        print('Board: Move successful! $uci -> $correctSan');
+        print('Board: Position changed from $fenBefore to $fenAfter');
+
         setState(() {
           selectedSquare = null;
           _internalHighlights.clear();
         });
 
-        // Create a mock Move object and call the callback
-        final move = _MockMove(fromSquare: from, toSquare: to);
-        widget.onMove?.call(move);
+        // Create rich move object with all the info
+        final completedMove = CompletedMove(
+          from: from,
+          to: to,
+          san: correctSan,
+          fenBefore: fenBefore,
+          fenAfter: fenAfter,
+          uci: uci,
+        );
+
+        // Call the callback with rich move info
+        widget.onMove?.call(completedMove);
       } else {
         // Failed move (illegal)
+        print('Board: Move $uci failed - illegal');
         setState(() {
           selectedSquare = null;
           _internalHighlights.clear();
@@ -327,6 +493,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       }
     } catch (e) {
       // Exception (e.g., bad format)
+      print('Board: Move failed with exception: $e');
       setState(() {
         selectedSquare = null;
         _internalHighlights.clear();
@@ -335,48 +502,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   }
 }
 
-/// Mock Move class to satisfy the callback interface
-class _MockMove implements chess.Move {
-  final String fromSquare;
-  final String toSquare;
-
-  _MockMove({required this.fromSquare, required this.toSquare});
-
-  @override
-  String get fromAlgebraic => fromSquare;
-
-  @override
-  String get toAlgebraic => toSquare;
-
-  @override
-  int get from => _squareToIndex(fromSquare);
-
-  @override
-  int get to => _squareToIndex(toSquare);
-
-  @override
-  chess.PieceType? get captured => null;
-
-  @override
-  chess.Color get color => chess.Color.WHITE;
-
-  @override
-  int get flags => 0;
-
-  @override
-  chess.PieceType? get promotion => null;
-
-  String get san => '$fromSquare$toSquare';
-
-  int _squareToIndex(String square) {
-    final file = square.codeUnitAt(0) - 97; // 'a' = 0
-    final rank = int.parse(square[1]) - 1; // '1' = 0
-    return rank * 8 + file;
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
 
 /// Simple piece widget that renders SVG pieces
 class _PieceWidget extends StatelessWidget {
