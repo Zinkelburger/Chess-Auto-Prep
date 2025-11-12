@@ -523,8 +523,8 @@ class _PieceWidget extends StatelessWidget {
     return Center( // FIX: Center the piece within its square
       child: SvgPicture.asset(
         assetPath,
-        width: size * 0.85, // Slightly smaller than square for better appearance
-        height: size * 0.85,
+        width: size, // Full square size
+        height: size,
         fit: BoxFit.contain,
       ),
     );
