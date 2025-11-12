@@ -2,6 +2,7 @@
 /// Three-panel layout: FEN list (left), chess board (center), tabs (right)
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:chess/chess.dart' as chess;
 
 import '../models/position_analysis.dart';
@@ -37,6 +38,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   GameInfo? _selectedGame;
   late TabController _tabController;
   List<GameInfo> _currentGames = [];
+  final PgnViewerController _pgnController = PgnViewerController();
 
   @override
   void initState() {
@@ -82,7 +84,24 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       );
     }
 
-    return Row(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        // Only handle arrow keys when PGN tab is active (index 2)
+        if (_tabController.index == 2 && event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            // Go back in PGN
+            _pgnController.goBack();
+            return KeyEventResult.handled;
+          } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+            // Go forward in PGN
+            _pgnController.goForward();
+            return KeyEventResult.handled;
+          }
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Row(
       children: [
         // Left panel - FEN list
         SizedBox(
@@ -172,6 +191,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
                     _selectedGame != null && _selectedGame!.pgnText != null
                         ? PgnViewerWidget(
                             pgnText: _selectedGame!.pgnText!,
+                            controller: _pgnController,
                             onPositionChanged: (position) {
                               // Update chess board when clicking moves
                               try {
@@ -196,6 +216,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
           ),
         ),
       ],
+      ),
     );
   }
 

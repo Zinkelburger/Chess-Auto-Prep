@@ -4,12 +4,33 @@ import 'dart:io' as io;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/gestures.dart';
 
+class PgnViewerController {
+  _PgnViewerWidgetState? _state;
+
+  void _attach(_PgnViewerWidgetState state) {
+    _state = state;
+  }
+
+  void _detach() {
+    _state = null;
+  }
+
+  void goBack() {
+    _state?._goBack();
+  }
+
+  void goForward() {
+    _state?._goForward();
+  }
+}
+
 class PgnViewerWidget extends StatefulWidget {
   final String? gameId;
   final String? pgnText;
   final int? moveNumber;
   final bool? isWhiteToPlay;
   final Function(Position)? onPositionChanged;
+  final PgnViewerController? controller;
 
   const PgnViewerWidget({
     super.key,
@@ -18,6 +39,7 @@ class PgnViewerWidget extends StatefulWidget {
     this.moveNumber,
     this.isWhiteToPlay,
     this.onPositionChanged,
+    this.controller,
   });
 
   @override
@@ -36,7 +58,14 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
   @override
   void initState() {
     super.initState();
+    widget.controller?._attach(this);
     _loadGame();
+  }
+
+  @override
+  void dispose() {
+    widget.controller?._detach();
+    super.dispose();
   }
 
   @override

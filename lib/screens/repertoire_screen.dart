@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:chess/chess.dart' as chess;
 import 'dart:io';
 
@@ -393,7 +394,24 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           ),
         ],
       ),
-      body: Row(
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          // Only handle arrow keys when PGN tab is active (index 1)
+          if (_tabController.index == 1 && event is KeyDownEvent) {
+            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              // Go back in PGN
+              _pgnEditorController.goBack();
+              return KeyEventResult.handled;
+            } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              // Go forward in PGN
+              _pgnEditorController.goForward();
+              return KeyEventResult.handled;
+            }
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Row(
         children: [
           // Left panel - Chess board (60% of width)
           Expanded(
@@ -452,6 +470,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             ),
           ),
         ],
+        ),
       ),
     );
   }

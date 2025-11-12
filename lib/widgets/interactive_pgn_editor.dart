@@ -58,6 +58,14 @@ class PgnEditorController {
   void clearLine() {
     _state?._clearLine();
   }
+
+  void goBack() {
+    _state?._goBack();
+  }
+
+  void goForward() {
+    _state?._goForward();
+  }
 }
 
 class InteractivePgnEditor extends StatefulWidget {
@@ -304,6 +312,18 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         _commentController.text = '';
       }
     });
+  }
+
+  void _goBack() {
+    if (_currentMoveIndex > -1) {
+      _goToMove(_currentMoveIndex - 1);
+    }
+  }
+
+  void _goForward() {
+    if (_currentMoveIndex < _moves.length - 1) {
+      _goToMove(_currentMoveIndex + 1);
+    }
   }
 
   void _showContextMenu(int moveIndex, Offset globalPosition) {
