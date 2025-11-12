@@ -42,64 +42,19 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              // Simplified header without navigation buttons
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Back button
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, size: 20),
-                    onPressed: currentNode.parent != null
-                        ? () {
-                            setState(() {
-                              widget.tree.goBack();
-                            });
-                            // Notify parent about position change
-                            widget.onPositionSelected?.call(widget.tree.currentNode.fen);
-                          }
-                        : null,
-                    tooltip: 'Go back',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  const SizedBox(width: 8),
-                  // Reset button
-                  IconButton(
-                    icon: const Icon(Icons.home, size: 20),
-                    onPressed: currentNode.parent != null
-                        ? () {
-                            setState(() {
-                              widget.tree.reset();
-                            });
-                            // Notify parent about position change
-                            widget.onPositionSelected?.call(widget.tree.currentNode.fen);
-                          }
-                        : null,
-                    tooltip: 'Reset to start',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Move Tree',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          movePath,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey[400],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                  Text(
+                    movePath,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[300],
+                      fontWeight: FontWeight.w500,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

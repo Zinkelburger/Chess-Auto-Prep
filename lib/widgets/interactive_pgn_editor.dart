@@ -65,6 +65,7 @@ class InteractivePgnEditor extends StatefulWidget {
   final String? initialPgn;
   final Function(String)? onPgnChanged;
   final PgnEditorController? controller;
+  final String? currentRepertoireName;
 
   const InteractivePgnEditor({
     super.key,
@@ -72,6 +73,7 @@ class InteractivePgnEditor extends StatefulWidget {
     this.initialPgn,
     this.onPgnChanged,
     this.controller,
+    this.currentRepertoireName,
   });
 
   @override
@@ -385,13 +387,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       return;
     }
 
-    // Show dialog to get repertoire name or select existing
-    final result = await _showAddToRepertoireDialog();
-    if (result == null) return;
+    String? repertoireName = widget.currentRepertoireName;
+
+    // If no current repertoire, show dialog to get repertoire name
+    if (repertoireName == null || repertoireName.isEmpty) {
+      repertoireName = await _showAddToRepertoireDialog();
+      if (repertoireName == null) return;
+    }
 
     try {
       // Append to or create repertoire file
-      await _saveToRepertoireFile(result, _workingPgn);
+      await _saveToRepertoireFile(repertoireName, _workingPgn);
 
       setState(() {
         _hasUnsavedChanges = false;
@@ -399,7 +405,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added line to repertoire: $result')),
+          SnackBar(content: Text('Added line to repertoire: $repertoireName')),
         );
       }
     } catch (e) {

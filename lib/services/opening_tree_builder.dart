@@ -1,7 +1,7 @@
 /// Opening tree builder - Builds a move tree from PGN games
 /// Similar to how openingtree.com builds its database
 
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 import '../models/opening_tree.dart';
 
 class OpeningTreeBuilder {
@@ -86,8 +86,8 @@ class OpeningTreeBuilder {
     // Calculate result from user's perspective (1.0 = win, 0.5 = draw, 0.0 = loss)
     final userResult = _calculateUserResult(result, gameUserWhite);
 
-    // Traverse tree and add/update nodes
-    final board = chess.Chess();
+    // Traverse tree and add/update nodes using dartchess
+    Position position = Chess.initial;
     var currentNode = tree.root;
 
     // Update root node stats
@@ -99,12 +99,15 @@ class OpeningTreeBuilder {
         // The move string from PGN is already in SAN format
         final moveSan = moves[i];
 
-        // Make the move on the board
-        final success = board.move(moveSan);
-        if (!success) break;
+        // Try to parse the move using dartchess
+        final move = position.parseSan(moveSan);
+        if (move == null) break;
+
+        // Make the move
+        position = position.play(move);
 
         // Get FEN after the move
-        final fenAfterMove = _getFenKey(board);
+        final fenAfterMove = position.fen;
 
         // Get or create child node
         final childNode = currentNode.getOrCreateChild(moveSan, fenAfterMove);
@@ -196,8 +199,8 @@ class OpeningTreeBuilder {
   }
 
   /// Get shortened FEN key (without move counters)
-  static String _getFenKey(chess.Chess board) {
-    final fen = board.fen;
+  static String _getFenKey(Position position) {
+    final fen = position.fen;
     final parts = fen.split(' ');
     if (parts.length >= 4) {
       return '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';

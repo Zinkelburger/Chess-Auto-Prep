@@ -8,6 +8,9 @@ import 'dart:io';
 
 import '../widgets/chess_board_widget.dart';
 import '../widgets/interactive_pgn_editor.dart';
+import '../widgets/opening_tree_widget.dart';
+import '../models/opening_tree.dart';
+import '../services/opening_tree_builder.dart';
 import 'repertoire_selection_screen.dart';
 import 'repertoire_training_screen.dart';
 
@@ -22,6 +25,9 @@ class RepertoireController with ChangeNotifier {
 
   String? _repertoirePgn;
   String? get repertoirePgn => _repertoirePgn;
+
+  OpeningTree? _openingTree;
+  OpeningTree? get openingTree => _openingTree;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -55,16 +61,115 @@ class RepertoireController with ChangeNotifier {
       if (await file.exists()) {
         _repertoirePgn = await file.readAsString();
         _game = chess.Chess(); // Reset to starting position
+
+        // Build opening tree from the repertoire PGN
+        await _buildOpeningTree();
       } else {
         _repertoirePgn = null;
+        _openingTree = null;
         _game = chess.Chess();
       }
     } catch (e) {
       print('Failed to load repertoire: $e');
       _repertoirePgn = null;
+      _openingTree = null;
       _game = chess.Chess();
     } finally {
       _setLoading(false);
+    }
+  }
+
+  /// Builds an opening tree from the current repertoire PGN
+  Future<void> _buildOpeningTree() async {
+    if (_repertoirePgn == null || _repertoirePgn!.isEmpty) {
+      _openingTree = OpeningTree();
+      return;
+    }
+
+    try {
+      // Parse PGN content properly - each game starts with headers and ends with moves
+      final processedGames = <String>[];
+      final lines = _repertoirePgn!.split('\n');
+
+      String? currentEvent;
+      String? currentDate;
+      String? currentWhite;
+      String? currentBlack;
+      String? currentResult;
+      final moveLines = <String>[];
+
+      for (final line in lines) {
+        final trimmedLine = line.trim();
+
+        // Skip comment lines
+        if (trimmedLine.startsWith('//')) {
+          continue;
+        }
+
+        // Parse headers
+        if (trimmedLine.startsWith('[Event ')) {
+          // New game starting - save previous if it has moves
+          if (currentEvent != null && moveLines.isNotEmpty) {
+            final game = _buildGame(currentEvent, currentDate, currentWhite, currentBlack, currentResult, moveLines);
+            if (game != null) {
+              processedGames.add(game);
+            }
+          }
+
+          // Start new game
+          currentEvent = _extractHeaderValue(trimmedLine);
+          currentDate = null;
+          currentWhite = null;
+          currentBlack = null;
+          currentResult = null;
+          moveLines.clear();
+        } else if (trimmedLine.startsWith('[Date ')) {
+          currentDate = _extractHeaderValue(trimmedLine);
+        } else if (trimmedLine.startsWith('[White ')) {
+          currentWhite = _extractHeaderValue(trimmedLine);
+        } else if (trimmedLine.startsWith('[Black ')) {
+          currentBlack = _extractHeaderValue(trimmedLine);
+        } else if (trimmedLine.startsWith('[Result ')) {
+          currentResult = _extractHeaderValue(trimmedLine);
+        } else if (trimmedLine.isNotEmpty) {
+          // This is a move line
+          moveLines.add(trimmedLine);
+        }
+      }
+
+      // Don't forget the last game
+      if (currentEvent != null && moveLines.isNotEmpty) {
+        final game = _buildGame(currentEvent, currentDate, currentWhite, currentBlack, currentResult, moveLines);
+        if (game != null) {
+          processedGames.add(game);
+        }
+      }
+
+      // Debug: Track processing
+      if (processedGames.isEmpty) {
+        print('WARNING: No games processed for tree building');
+      } else {
+        print('Successfully processed ${processedGames.length} games for tree building');
+      }
+
+      if (processedGames.isEmpty) {
+        _openingTree = OpeningTree();
+        return;
+      }
+
+      // For repertoire, we'll treat all games as "Training" games
+      // and build the tree from the perspective of the player learning
+      _openingTree = await OpeningTreeBuilder.buildTree(
+        pgnList: processedGames,
+        username: 'Training', // Matches the White player in repertoire PGNs
+        userIsWhite: true,
+        maxDepth: 50, // Allow deeper analysis for repertoire study
+      );
+
+      print('✅ Built opening tree with ${_openingTree?.totalGames} total games');
+    } catch (e) {
+      print('❌ Failed to build opening tree: $e');
+      _openingTree = OpeningTree(); // Empty tree as fallback
     }
   }
 
@@ -79,13 +184,64 @@ class RepertoireController with ChangeNotifier {
 
     try {
       _game = chess.Chess.fromFEN(fen);
+
+      // Also sync the opening tree to this position
+      if (_openingTree != null) {
+        _openingTree!.navigateToFen(fen);
+      }
+
       notifyListeners();
     } catch (e) {
       print('Error syncing board position: $e');
     }
   }
 
+  /// Handles position changes from the opening tree
+  void onTreePositionChanged(String fen) {
+    try {
+      _game = chess.Chess.fromFEN(fen);
+
+      // Also update the PGN editor to show the moves that led to this position
+      if (_openingTree != null) {
+        final moves = _openingTree!.currentNode.getMovePath();
+        _currentTreeMoves = moves;
+      }
+
+      notifyListeners();
+    } catch (e) {
+      print('Error syncing tree position: $e');
+    }
+  }
+
+  List<String>? _currentTreeMoves;
+  List<String>? get currentTreeMoves => _currentTreeMoves;
+
   // --- Private Helpers ---
+
+  /// Extract header value from PGN header line like '[White "Player Name"]'
+  String? _extractHeaderValue(String line) {
+    final start = line.indexOf('"') + 1;
+    final end = line.lastIndexOf('"');
+    if (start > 0 && end > start) {
+      return line.substring(start, end);
+    }
+    return null;
+  }
+
+  /// Build a complete PGN game from parsed components
+  String? _buildGame(String? event, String? date, String? white, String? black, String? result, List<String> moveLines) {
+    if (moveLines.isEmpty) return null;
+
+    final headers = <String>[];
+    headers.add('[Event "${event ?? "Training Line"}"]');
+    headers.add('[Date "${date ?? DateTime.now().toIso8601String().split('T')[0]}"]');
+    headers.add('[White "${white ?? "Training"}"]');
+    headers.add('[Black "${black ?? "Me"}"]');
+    headers.add('[Result "${result ?? "1-0"}"]'); // Use original result or default to training win
+
+    final moves = moveLines.join(' ');
+    return [...headers, '', moves].join('\n');
+  }
 
   void _setLoading(bool loading) {
     _isLoading = loading;
@@ -260,8 +416,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   TabBar(
                     controller: _tabController,
                     tabs: const [
-                      Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
                       Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
+                      Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
                       Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
                     ],
                   ),
@@ -270,8 +426,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                     child: TabBarView(
                       controller: _tabController,
                       children: [
-                        _buildPgnTab(),
                         _buildOpeningTreeTab(),
+                        _buildPgnTab(),
                         _buildActionsTab(),
                       ],
                     ),
@@ -328,6 +484,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               controller: _pgnEditorController,
               // Read initial PGN from controller
               initialPgn: _controller.repertoirePgn,
+              // Pass current repertoire name
+              currentRepertoireName: _controller.currentRepertoire?['name'] as String?,
               onPositionChanged: (position) {
                 // Update board position when PGN editor changes position
                 // This IS called during build, so it MUST be deferred.
@@ -353,36 +511,36 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildOpeningTreeTab() {
+    if (_controller.openingTree == null) {
+      return Container(
+        padding: const EdgeInsets.all(8.0),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.account_tree, size: 64, color: Colors.grey),
+              SizedBox(height: 16),
+              Text(
+                'No repertoire data available',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(8.0),
-      child: Column(
-        children: [
-          Text(
-            'Opening Tree',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const Divider(),
-          const Expanded(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.account_tree, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text(
-                    'Opening Tree View',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Coming soon...',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
+      child: OpeningTreeWidget(
+        tree: _controller.openingTree!,
+        onPositionSelected: (fen) {
+          // Update board and PGN when tree position changes
+          _controller.onTreePositionChanged(fen);
+
+          // Also sync the PGN editor to the new position
+          _pgnEditorController.syncToPosition(fen);
+        },
       ),
     );
   }
