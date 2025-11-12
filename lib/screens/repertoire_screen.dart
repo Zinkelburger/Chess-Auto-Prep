@@ -5,13 +5,16 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:chess/chess.dart' as chess;
-import 'dart:io';
+import 'package:dartchess/dartchess.dart';
+import 'dart:io' as io;
 
 import '../widgets/chess_board_widget.dart';
 import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/opening_tree_widget.dart';
 import '../models/opening_tree.dart';
+import '../models/repertoire_line.dart';
 import '../services/opening_tree_builder.dart';
+import '../services/repertoire_service.dart';
 import 'repertoire_selection_screen.dart';
 import 'repertoire_training_screen.dart';
 
@@ -30,12 +33,24 @@ class RepertoireController with ChangeNotifier {
   OpeningTree? _openingTree;
   OpeningTree? get openingTree => _openingTree;
 
+  List<RepertoireLine> _repertoireLines = [];
+  List<RepertoireLine> get repertoireLines => _repertoireLines;
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
   chess.Chess _game = chess.Chess();
   chess.Chess get game => _game;
   String get fen => _game.fen;
+
+  /// Convert Chess to Position for dartchess compatibility
+  Position get position => Chess.fromSetup(Setup.parseFen(_game.fen));
+
+  /// Get current move sequence from opening tree
+  List<String> get currentMoveSequence {
+    if (_openingTree == null) return [];
+    return _openingTree!.currentNode.getMovePath();
+  }
 
   // Flag to prevent update loops between board and PGN editor
   bool _isInternalUpdate = false;
@@ -57,7 +72,7 @@ class RepertoireController with ChangeNotifier {
 
     try {
       final filePath = _currentRepertoire!['filePath'] as String;
-      final file = File(filePath);
+      final file = io.File(filePath);
 
       if (await file.exists()) {
         _repertoirePgn = await file.readAsString();
@@ -65,18 +80,40 @@ class RepertoireController with ChangeNotifier {
 
         // Build opening tree from the repertoire PGN
         await _buildOpeningTree();
+
+        // Parse repertoire lines for PGN browser
+        await _parseRepertoireLines();
       } else {
         _repertoirePgn = null;
         _openingTree = null;
+        _repertoireLines = [];
         _game = chess.Chess();
       }
     } catch (e) {
       print('Failed to load repertoire: $e');
       _repertoirePgn = null;
       _openingTree = null;
+      _repertoireLines = [];
       _game = chess.Chess();
     } finally {
       _setLoading(false);
+    }
+  }
+
+  /// Parses repertoire lines for PGN browser
+  Future<void> _parseRepertoireLines() async {
+    if (_repertoirePgn == null || _repertoirePgn!.isEmpty) {
+      _repertoireLines = [];
+      return;
+    }
+
+    try {
+      final service = RepertoireService();
+      _repertoireLines = service.parseRepertoirePgn(_repertoirePgn!);
+      print('✅ Parsed ${_repertoireLines.length} repertoire lines for PGN browser');
+    } catch (e) {
+      print('❌ Failed to parse repertoire lines: $e');
+      _repertoireLines = [];
     }
   }
 
@@ -231,6 +268,22 @@ class RepertoireController with ChangeNotifier {
 
   List<String>? _currentTreeMoves;
   List<String>? get currentTreeMoves => _currentTreeMoves;
+
+  /// Loads a specific PGN line for editing
+  void loadPgnLine(RepertoireLine line) {
+    // This will be called by the bottom sheet to load a line in the PGN editor
+    // We'll implement this by notifying listeners with a special flag
+    _selectedPgnLine = line;
+    notifyListeners();
+  }
+
+  RepertoireLine? _selectedPgnLine;
+  RepertoireLine? get selectedPgnLine => _selectedPgnLine;
+
+  void clearSelectedPgnLine() {
+    _selectedPgnLine = null;
+    notifyListeners();
+  }
 
   // --- Private Helpers ---
 
@@ -412,64 +465,64 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           return KeyEventResult.ignored;
         },
         child: Row(
-        children: [
-          // Left panel - Chess board (60% of width)
-          Expanded(
-            flex: 6,
-            child: Container(
-              padding: const EdgeInsets.all(16.0),
-              child: ChessBoardWidget(
-                // Force widget recreation when position changes to prevent race conditions
-                key: ValueKey(_controller.fen),
-                // Read game state from controller
-                game: _controller.game,
-                flipped: false,
-                onPieceSelected: (square) {
-                  // Handle piece selection if needed
-                },
-                onMove: (CompletedMove move) {
-                  // Handle moves in repertoire
-                  _handleMove(move);
-                },
+          children: [
+            // Left panel - Chess board (60% of width)
+            Expanded(
+              flex: 6,
+              child: Container(
+                padding: const EdgeInsets.all(16.0),
+                child: ChessBoardWidget(
+                  // Force widget recreation when position changes to prevent race conditions
+                  key: ValueKey(_controller.fen),
+                  // Read game state from controller
+                  game: _controller.game,
+                  flipped: false,
+                  onPieceSelected: (square) {
+                    // Handle piece selection if needed
+                  },
+                  onMove: (CompletedMove move) {
+                    // Handle moves in repertoire
+                    _handleMove(move);
+                  },
+                ),
               ),
             ),
-          ),
 
-          // Divider
-          const VerticalDivider(width: 1, thickness: 1),
+            // Divider
+            const VerticalDivider(width: 1, thickness: 1),
 
-          // Right panel - Tabbed content (40% of width)
-          Expanded(
-            flex: 4,
-            child: Container(
-              padding: const EdgeInsets.all(8.0),
-              child: Column(
-                children: [
-                  // Tab bar
-                  TabBar(
-                    controller: _tabController,
-                    tabs: const [
-                      Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
-                      Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
-                      Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
-                    ],
-                  ),
-                  // Tab views
-                  Expanded(
-                    child: TabBarView(
+            // Right panel - Tabbed content (40% of width)
+            Expanded(
+              flex: 4,
+              child: Container(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  children: [
+                    // Tab bar
+                    TabBar(
                       controller: _tabController,
-                      children: [
-                        _buildOpeningTreeTab(),
-                        _buildPgnTab(),
-                        _buildActionsTab(),
+                      tabs: const [
+                        Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
+                        Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
+                        Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
                       ],
                     ),
-                  ),
-                ],
+                    // Tab views
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildOpeningTreeTab(),
+                          _buildPgnTab(),
+                          _buildActionsTab(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
         ),
       ),
     );
@@ -515,9 +568,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           // Interactive PGN editor
           Expanded(
             child: InteractivePgnEditor(
+              // Force recreation when selected line changes
+              key: ValueKey(_controller.selectedPgnLine?.id ?? 'no_selection'),
               controller: _pgnEditorController,
-              // Read initial PGN from controller
-              initialPgn: _controller.repertoirePgn,
+              // Load selected line PGN or default to repertoire PGN
+              initialPgn: _getInitialPgnForEditor(),
               // Pass current repertoire name
               currentRepertoireName: _controller.currentRepertoire?['name'] as String?,
               onPositionChanged: (position) {
@@ -534,8 +589,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 });
               },
               onPgnChanged: (pgn) {
-                // We might want to save this to the controller
-                // _controller.updatePgn(pgn);
+                // Clear selected line when user edits
+                if (_controller.selectedPgnLine != null) {
+                  _controller.clearSelectedPgnLine();
+                }
               },
             ),
           ),
@@ -568,12 +625,21 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       padding: const EdgeInsets.all(8.0),
       child: OpeningTreeWidget(
         tree: _controller.openingTree!,
+        showPgnSearch: _controller.repertoireLines.isNotEmpty,
+        repertoireLines: _controller.repertoireLines,
+        currentMoveSequence: _controller.currentMoveSequence,
         onPositionSelected: (fen) {
           // Update board and PGN when tree position changes
           _controller.onTreePositionChanged(fen);
 
           // Also sync the PGN editor to the new position
           _pgnEditorController.syncToPosition(fen);
+        },
+        onLineSelected: (line) {
+          // Load the selected PGN line
+          _controller.loadPgnLine(line);
+          // Switch to PGN tab
+          _tabController.animateTo(1);
         },
       ),
     );
@@ -639,6 +705,17 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         ],
       ),
     );
+  }
+
+  // --- HELPER METHODS ---
+
+  String? _getInitialPgnForEditor() {
+    // If a specific PGN line is selected, return its full PGN
+    if (_controller.selectedPgnLine != null) {
+      return _controller.selectedPgnLine!.fullPgn;
+    }
+    // Otherwise return the full repertoire PGN
+    return _controller.repertoirePgn;
   }
 
   // --- METHODS (Now simple calls to the controller) ---

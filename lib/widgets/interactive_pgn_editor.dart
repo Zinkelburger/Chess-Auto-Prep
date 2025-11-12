@@ -98,6 +98,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // UI state
   int? _selectedMoveIndex;
   final TextEditingController _commentController = TextEditingController();
+  final TextEditingController _titleController = TextEditingController();
   bool _showingContextMenu = false;
   Offset _contextMenuPosition = Offset.zero;
   int? _contextMenuMoveIndex;
@@ -122,6 +123,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   @override
   void dispose() {
     _commentController.dispose();
+    _titleController.dispose();
     super.dispose();
   }
 
@@ -400,6 +402,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     });
   }
 
+  void _updateLineTitle(String title) {
+    setState(() {
+      _hasUnsavedChanges = true;
+    });
+  }
+
   Future<void> _addToRepertoire() async {
     if (_workingPgn.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -486,15 +494,23 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     final file = io.File('${repertoireDir.path}/$repertoireName.pgn');
 
-    // Create PGN entry with headers
+    // Create PGN entry with headers including custom title
     final timestamp = DateTime.now().toIso8601String().split('T')[0];
+    final customTitle = _titleController.text.trim();
+    final eventTitle = customTitle.isNotEmpty ? customTitle : "$repertoireName Line";
+
+    final headers = StringBuffer();
+    headers.writeln('[Event "$eventTitle"]');
+    if (customTitle.isNotEmpty) {
+      headers.writeln('[Title "$customTitle"]');
+    }
+    headers.writeln('[Date "$timestamp"]');
+    headers.writeln('[White "Training"]');
+    headers.writeln('[Black "Me"]');
+
     final entry = '''
 
-[Event "$repertoireName Line"]
-[Date "$timestamp"]
-[White "Training"]
-[Black "Me"]
-
+$headers
 $pgn
 ''';
 
@@ -576,22 +592,45 @@ $pgn
                       ),
                     ),
 
-                    // Comment editing
+                    // Comment and title editing
                     const Divider(),
-                    Row(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Comment: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                        Expanded(
-                          child: TextField(
-                            controller: _commentController,
-                            decoration: const InputDecoration(
-                              hintText: 'Add comment to selected move...',
-                              border: InputBorder.none,
-                              isDense: true,
+                        Row(
+                          children: [
+                            const Text('Comment: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Expanded(
+                              child: TextField(
+                                controller: _commentController,
+                                decoration: const InputDecoration(
+                                  hintText: 'Add comment to selected move...',
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                ),
+                                style: const TextStyle(fontSize: 12),
+                                onChanged: _updateSelectedMoveComment,
+                              ),
                             ),
-                            style: const TextStyle(fontSize: 12),
-                            onChanged: _updateSelectedMoveComment,
-                          ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Text('Title: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                            Expanded(
+                              child: TextField(
+                                controller: _titleController,
+                                decoration: const InputDecoration(
+                                  hintText: 'Set title for this line...',
+                                  border: InputBorder.none,
+                                  isDense: true,
+                                ),
+                                style: const TextStyle(fontSize: 12),
+                                onChanged: _updateLineTitle,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
