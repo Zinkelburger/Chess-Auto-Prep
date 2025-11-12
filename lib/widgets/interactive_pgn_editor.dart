@@ -5,6 +5,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:path_provider/path_provider.dart';
 import 'dart:io' as io;
 
 class PgnMove {
@@ -423,11 +424,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         _hasUnsavedChanges = false;
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added line to repertoire: $repertoireName')),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -453,7 +449,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
               controller: controller,
               decoration: const InputDecoration(
                 labelText: 'Repertoire Name',
-                hintText: 'e.g., "Sicilian Dragon"',
+                hintText: '',
               ),
               autofocus: true,
             ),
@@ -479,10 +475,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   Future<void> _saveToRepertoireFile(String repertoireName, String pgn) async {
-    // Get repertoire directory
-    final homeDir = io.Platform.environment['HOME'] ?? '/tmp';
-    final repertoireDir = io.Directory('$homeDir/Documents/CodingProjects/Chess-Auto-Prep/repertoires');
+    // Get documents directory and create repertoires subdirectory
+    final directory = await getApplicationDocumentsDirectory();
+    final repertoireDir = io.Directory('${directory.path}/repertoires');
 
+    // Create repertoires directory if it doesn't exist
     if (!await repertoireDir.exists()) {
       await repertoireDir.create(recursive: true);
     }

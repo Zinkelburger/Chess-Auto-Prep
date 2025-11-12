@@ -30,6 +30,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
       final directory = await getApplicationDocumentsDirectory();
       final repertoireDir = Directory('${directory.path}/repertoires');
 
+      // Create repertoires directory if it doesn't exist
       if (!await repertoireDir.exists()) {
         await repertoireDir.create(recursive: true);
       }
@@ -262,7 +263,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
                 controller: nameController,
                 decoration: const InputDecoration(
                   labelText: 'Repertoire Name',
-                  hintText: 'e.g., "Sicilian Dragon", "French Defense"',
+                  hintText: 'Enter repertoire name',
                 ),
                 autofocus: true,
               ),
@@ -323,6 +324,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
       final directory = await getApplicationDocumentsDirectory();
       final repertoireDir = Directory('${directory.path}/repertoires');
 
+      // Create repertoires directory if it doesn't exist
       if (!await repertoireDir.exists()) {
         await repertoireDir.create(recursive: true);
       }
@@ -442,8 +444,9 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     if (result != null && result.isNotEmpty) {
       try {
         final directory = await getApplicationDocumentsDirectory();
+        final repertoireDir = Directory('${directory.path}/repertoires');
         final oldFile = File(filePath);
-        final newFile = File('${directory.path}/repertoires/$result.pgn');
+        final newFile = File('${repertoireDir.path}/$result.pgn');
 
         if (await newFile.exists()) {
           if (mounted) {
