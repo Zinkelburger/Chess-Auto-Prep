@@ -246,50 +246,79 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
   Future<void> _showCreateDialog() async {
     final nameController = TextEditingController();
+    String selectedColor = 'White';
 
-    final result = await showDialog<String>(
+    final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create New Repertoire'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter a name for your new repertoire:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Repertoire Name',
-                hintText: 'e.g., "Sicilian Dragon", "French Defense"',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Create New Repertoire'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Enter a name for your new repertoire:'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Repertoire Name',
+                  hintText: 'e.g., "Sicilian Dragon", "French Defense"',
+                ),
+                autofocus: true,
               ),
-              autofocus: true,
+              const SizedBox(height: 16),
+              const Text('Choose your color:'),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'White',
+                    label: Text('White'),
+                    icon: Icon(Icons.circle_outlined, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: 'Black',
+                    label: Text('Black'),
+                    icon: Icon(Icons.circle, size: 16),
+                  ),
+                ],
+                selected: {selectedColor},
+                onSelectionChanged: (Set<String> newSelection) {
+                  setState(() {
+                    selectedColor = newSelection.first;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  Navigator.of(context).pop({
+                    'name': name,
+                    'color': selectedColor,
+                  });
+                }
+              },
+              child: const Text('Create'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final name = nameController.text.trim();
-              if (name.isNotEmpty) {
-                Navigator.of(context).pop(name);
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
       ),
     );
 
-    if (result != null && result.isNotEmpty) {
-      await _createRepertoire(result);
+    if (result != null) {
+      await _createRepertoire(result['name']!, result['color']!);
     }
   }
 
-  Future<void> _createRepertoire(String name) async {
+  Future<void> _createRepertoire(String name, String color) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final repertoireDir = Directory('${directory.path}/repertoires');
@@ -309,16 +338,16 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
         return;
       }
 
-      // Create empty PGN file with a comment
-      await file.writeAsString('// $name Repertoire\n// Created on ${DateTime.now().toString().split('.')[0]}\n\n');
+      // Create empty PGN file with color metadata in comments
+      final header = '''// $name Repertoire
+// Color: $color
+// Created on ${DateTime.now().toString().split('.')[0]}
+
+''';
+
+      await file.writeAsString(header);
 
       await _loadRepertoires();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Created repertoire "$name"')),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -359,12 +388,6 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
         }
 
         await _loadRepertoires();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Deleted repertoire "$name"')),
-          );
-        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -433,12 +456,6 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
         await oldFile.rename(newFile.path);
         await _loadRepertoires();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Renamed repertoire to "$result"')),
-          );
-        }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

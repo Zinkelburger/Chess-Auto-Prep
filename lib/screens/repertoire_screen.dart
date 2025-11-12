@@ -87,9 +87,23 @@ class RepertoireController with ChangeNotifier {
     }
 
     try {
+      // Parse repertoire color from comments
+      String? repertoireColor;
+      final lines = _repertoirePgn!.split('\n');
+
+      for (final line in lines) {
+        final trimmedLine = line.trim();
+        if (trimmedLine.startsWith('// Color:')) {
+          repertoireColor = trimmedLine.substring(9).trim(); // Remove "// Color:" prefix
+          break;
+        }
+      }
+
+      // Default to White if no color specified
+      final isWhiteRepertoire = repertoireColor != 'Black';
+
       // Parse PGN content properly - each game starts with headers and ends with moves
       final processedGames = <String>[];
-      final lines = _repertoirePgn!.split('\n');
 
       String? currentEvent;
       String? currentDate;
@@ -157,12 +171,13 @@ class RepertoireController with ChangeNotifier {
         return;
       }
 
-      // For repertoire, we'll treat all games as "Training" games
-      // and build the tree from the perspective of the player learning
+      // Build tree from the correct perspective based on repertoire color
+      final playerName = isWhiteRepertoire ? 'Training' : 'Me';
+
       _openingTree = await OpeningTreeBuilder.buildTree(
         pgnList: processedGames,
-        username: 'Training', // Matches the White player in repertoire PGNs
-        userIsWhite: true,
+        username: playerName, // Matches the player learning this repertoire
+        userIsWhite: isWhiteRepertoire, // Use parsed color from repertoire
         maxDepth: 50, // Allow deeper analysis for repertoire study
       );
 
@@ -625,11 +640,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   Future<void> _reloadRepertoire() async {
     // Tell the controller to reload
     await _controller.loadRepertoire();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Repertoire reloaded')),
-      );
-    }
   }
 
   /// Handle moves from the chessboard - board has already made the move and gives us rich info
