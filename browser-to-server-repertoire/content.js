@@ -5,6 +5,12 @@
   'use strict';
 
   const REPERTOIRE_SERVER = 'http://localhost:9812/add-line';
+  const LIST_REPERTOIRES_URL = 'http://localhost:9812/list-repertoires';
+
+  // Cached repertoire list
+  let cachedRepertoires = null;
+  let cacheTimestamp = null;
+  const CACHE_DURATION = 5000; // 5 seconds
 
   // Glyph symbol mapping (from Lichess glyphs)
   const GLYPH_SYMBOLS = {
@@ -112,15 +118,68 @@
     };
   }
 
-  // Send line to repertoire server
-  async function sendToRepertoire(lineData) {
+  // Fetch list of available repertoires
+  async function fetchRepertoires() {
+    const now = Date.now();
+
+    // Use cache if fresh
+    if (cachedRepertoires && cacheTimestamp && (now - cacheTimestamp) < CACHE_DURATION) {
+      return cachedRepertoires;
+    }
+
     try {
+      const response = await fetch(LIST_REPERTOIRES_URL);
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+      const data = await response.json();
+      cachedRepertoires = data.repertoires || [];
+      cacheTimestamp = now;
+      return cachedRepertoires;
+    } catch (error) {
+      console.error('Failed to fetch repertoires:', error);
+      return [];
+    }
+  }
+
+  // Simple fuzzy search implementation
+  function fuzzyMatch(text, query) {
+    text = text.toLowerCase();
+    query = query.toLowerCase();
+
+    let queryIndex = 0;
+    let textIndex = 0;
+
+    while (queryIndex < query.length && textIndex < text.length) {
+      if (text[textIndex] === query[queryIndex]) {
+        queryIndex++;
+      }
+      textIndex++;
+    }
+
+    return queryIndex === query.length;
+  }
+
+  // Filter repertoires by search query
+  function filterRepertoires(repertoires, query) {
+    if (!query) return repertoires;
+    return repertoires.filter(r => fuzzyMatch(r.name, query));
+  }
+
+  // Send line to repertoire server
+  async function sendToRepertoire(lineData, targetRepertoire) {
+    try {
+      const payload = { ...lineData };
+      if (targetRepertoire) {
+        payload.targetRepertoire = targetRepertoire;
+      }
+
       const response = await fetch(REPERTOIRE_SERVER, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(lineData)
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -215,6 +274,209 @@
     return null;
   }
 
+  // Extract line data from DOM
+  function extractLineDataFromDOM(path) {
+    const allMoves = document.querySelectorAll('move[p]');
+    const movesUpToPath = [];
+    let foundTargetMove = false;
+
+    for (const moveEl of allMoves) {
+      const movePath = moveEl.getAttribute('p');
+      const san = moveEl.querySelector('san')?.textContent;
+
+      if (san) {
+        movesUpToPath.push({ path: movePath, san: san });
+      }
+
+      if (path.startsWith(movePath) || movePath === path) {
+        if (movePath === path) {
+          foundTargetMove = true;
+          break;
+        }
+      }
+    }
+
+    if (!foundTargetMove) {
+      movesUpToPath.length = 0;
+      for (const moveEl of allMoves) {
+        const movePath = moveEl.getAttribute('p');
+        const san = moveEl.querySelector('san')?.textContent;
+
+        if (path.startsWith(movePath) && san) {
+          movesUpToPath.push({ path: movePath, san: san });
+        }
+      }
+    }
+
+    // Build PGN from moves
+    let pgn = '';
+    movesUpToPath.forEach((move, i) => {
+      const moveNum = Math.floor(i / 2) + 1;
+      if (i % 2 === 0) {
+        pgn += `${moveNum}. ${move.san} `;
+      } else {
+        pgn += `${move.san} `;
+      }
+    });
+
+    return {
+      pgn: pgn.trim(),
+      moves: movesUpToPath.map((move, i) => ({
+        ply: i + 1,
+        moveNumber: Math.floor(i / 2) + 1,
+        color: i % 2 === 0 ? 'white' : 'black',
+        san: move.san,
+        path: move.path
+      })),
+      startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+      variant: 'standard'
+    };
+  }
+
+  // Show repertoire selection submenu
+  async function showRepertoireMenu(parentMenu, path) {
+    console.log('[REPERTOIRE] Showing repertoire selection menu');
+
+    // Fetch repertoires
+    const repertoires = await fetchRepertoires();
+    console.log('[REPERTOIRE] Fetched repertoires:', repertoires);
+
+    // Create submenu container
+    const submenu = document.createElement('div');
+    submenu.className = 'repertoire-submenu';
+    submenu.style.cssText = `
+      position: fixed;
+      background: #2e2a24;
+      border: 1px solid #3d3933;
+      border-radius: 4px;
+      padding: 8px 0;
+      z-index: 10001;
+      min-width: 250px;
+      max-width: 350px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      font-family: 'Noto Sans', sans-serif;
+    `;
+
+    // Position submenu next to parent menu
+    const rect = parentMenu.getBoundingClientRect();
+    submenu.style.left = `${rect.right + 5}px`;
+    submenu.style.top = `${rect.top}px`;
+
+    // Search input
+    const searchContainer = document.createElement('div');
+    searchContainer.style.cssText = 'padding: 4px 8px; border-bottom: 1px solid #3d3933;';
+
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Search repertoires...';
+    searchInput.style.cssText = `
+      width: 100%;
+      padding: 6px 8px;
+      background: #3d3933;
+      border: 1px solid #4d4944;
+      border-radius: 3px;
+      color: #d0d0d0;
+      font-size: 13px;
+      outline: none;
+    `;
+    searchContainer.appendChild(searchInput);
+    submenu.appendChild(searchContainer);
+
+    // Repertoire list container
+    const listContainer = document.createElement('div');
+    listContainer.style.cssText = 'max-height: 400px; overflow-y: auto;';
+    submenu.appendChild(listContainer);
+
+    // Function to render repertoire list
+    function renderList(items) {
+      listContainer.innerHTML = '';
+
+      if (items.length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.textContent = 'No repertoires found';
+        emptyMsg.style.cssText = 'padding: 12px; color: #888; text-align: center; font-size: 13px;';
+        listContainer.appendChild(emptyMsg);
+        return;
+      }
+
+      // Show top 3 most recent if no search query
+      const itemsToShow = searchInput.value.trim() === '' ? items.slice(0, 3) : items;
+
+      itemsToShow.forEach((rep, index) => {
+        const item = document.createElement('a');
+        item.className = 'action';
+        item.style.cssText = `
+          display: block;
+          padding: 10px 12px;
+          cursor: pointer;
+          color: #d0d0d0;
+          text-decoration: none;
+          font-size: 14px;
+          border-bottom: 1px solid #3d3933;
+        `;
+        item.innerHTML = `
+          <div style="font-weight: 500;">${rep.name}.pgn</div>
+          <div style="font-size: 11px; color: #888; margin-top: 2px;">${rep.lineCount} lines</div>
+        `;
+
+        item.onmouseenter = () => item.style.background = '#3d3933';
+        item.onmouseleave = () => item.style.background = 'transparent';
+
+        item.onclick = async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          try {
+            const lineData = extractLineDataFromDOM(path);
+            const result = await sendToRepertoire(lineData, rep.filename);
+
+            if (result.success) {
+              if (result.data?.status === 'duplicate') {
+                showNotification(`Line already in ${rep.name}`);
+              } else {
+                showNotification(`Added to ${rep.name}!`);
+              }
+            } else {
+              showNotification(`Failed: ${result.error}`, true);
+            }
+          } catch (error) {
+            console.error('[REPERTOIRE] Error:', error);
+            showNotification(`Error: ${error.message}`, true);
+          }
+
+          submenu.remove();
+          parentMenu.remove();
+        };
+
+        listContainer.appendChild(item);
+      });
+    }
+
+    // Initial render with top 3
+    renderList(repertoires);
+
+    // Search functionality
+    searchInput.oninput = () => {
+      const query = searchInput.value.trim();
+      const filtered = filterRepertoires(repertoires, query);
+      renderList(filtered);
+    };
+
+    // Close submenu when clicking outside
+    function closeHandler(e) {
+      if (!submenu.contains(e.target) && !parentMenu.contains(e.target)) {
+        submenu.remove();
+        document.removeEventListener('click', closeHandler);
+      }
+    }
+    setTimeout(() => document.addEventListener('click', closeHandler), 100);
+
+    document.body.appendChild(submenu);
+
+    // Focus search input
+    searchInput.focus();
+  }
+
   // Inject our button into the context menu
   function injectRepertoireButton(menu, path) {
     console.log('[REPERTOIRE] injectRepertoireButton called with menu:', menu, 'path:', path);
@@ -230,7 +492,7 @@
     // Create our button
     const button = document.createElement('a');
     button.className = 'action repertoire-action';
-    button.innerHTML = '<i data-icon=""></i>Add to repertoire';
+    button.innerHTML = '<i data-icon=""></i>Add to repertoire...';
     button.style.cssText = 'cursor: pointer;';
     console.log('[REPERTOIRE] Created button element:', button);
 
@@ -239,97 +501,12 @@
       e.preventDefault();
       e.stopPropagation();
 
-      // Extract line data directly from DOM instead of using the controller
       try {
-        // Find all moves up to and including the clicked path
-        const allMoves = document.querySelectorAll('move[p]');
-        console.log('[REPERTOIRE] Found', allMoves.length, 'moves in DOM');
-
-        // Find the clicked move and get all moves up to it
-        const movesUpToPath = [];
-        let foundTargetMove = false;
-
-        for (const moveEl of allMoves) {
-          const movePath = moveEl.getAttribute('p');
-          const san = moveEl.querySelector('san')?.textContent;
-
-          if (san) {
-            movesUpToPath.push({ path: movePath, san: san });
-          }
-
-          // Check if this move or any parent is our target
-          if (path.startsWith(movePath) || movePath === path) {
-            if (movePath === path) {
-              foundTargetMove = true;
-              break;
-            }
-          }
-        }
-
-        if (!foundTargetMove) {
-          // Just collect all moves with matching prefix
-          movesUpToPath.length = 0;
-          for (const moveEl of allMoves) {
-            const movePath = moveEl.getAttribute('p');
-            const san = moveEl.querySelector('san')?.textContent;
-
-            if (path.startsWith(movePath) && san) {
-              movesUpToPath.push({ path: movePath, san: san });
-            }
-          }
-        }
-
-        console.log('[REPERTOIRE] Moves up to path:', movesUpToPath);
-
-        // Build PGN from moves
-        let pgn = '';
-        movesUpToPath.forEach((move, i) => {
-          const moveNum = Math.floor(i / 2) + 1;
-          if (i % 2 === 0) {
-            pgn += `${moveNum}. ${move.san} `;
-          } else {
-            pgn += `${move.san} `;
-          }
-        });
-
-        console.log('[REPERTOIRE] Built PGN:', pgn);
-
-        // Create simple line data (without evals/comments for now)
-        const lineData = {
-          pgn: pgn.trim(),
-          moves: movesUpToPath.map((move, i) => ({
-            ply: i + 1,
-            moveNumber: Math.floor(i / 2) + 1,
-            color: i % 2 === 0 ? 'white' : 'black',
-            san: move.san,
-            path: move.path
-          })),
-          startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
-          variant: 'standard'
-        };
-
-        console.log('[REPERTOIRE] Sending to repertoire:', lineData);
-
-        // Send to server
-        const result = await sendToRepertoire(lineData);
-        console.log('[REPERTOIRE] Server response:', result);
-
-        if (result.success) {
-          if (result.data?.status === 'duplicate') {
-            showNotification('Line already in repertoire');
-          } else {
-            showNotification('Line added to repertoire!');
-          }
-        } else {
-          showNotification(`Failed to add line: ${result.error}`, true);
-        }
+        await showRepertoireMenu(menu, path);
       } catch (error) {
         console.error('[REPERTOIRE] Error:', error);
         showNotification(`Error: ${error.message}`, true);
       }
-
-      // Close the context menu
-      menu.remove();
     };
 
     // Insert before the delete action or at the end

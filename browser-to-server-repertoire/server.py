@@ -19,11 +19,44 @@ import threading
 import queue
 from datetime import datetime
 from pathlib import Path
+import glob
 
 app = Flask(__name__)
 CORS(app)
 
+# Default repertoire file (for backward compatibility)
 REPERTOIRE_FILE = 'repertoire.pgn'
+
+# Get the Flutter app's repertoire directory
+def get_repertoire_directory():
+    """Get the repertoire directory path - Flutter app's actual location"""
+    import platform
+
+    # Check environment variable override first
+    if 'REPERTOIRE_DIR' in os.environ:
+        return Path(os.environ['REPERTOIRE_DIR'])
+
+    home = Path.home()
+    system = platform.system()
+
+    # Flutter's getApplicationDocumentsDirectory() returns different paths per platform:
+    # https://pub.dev/packages/path_provider
+
+    if system == 'Windows':
+        # Windows: C:\Users\<username>\Documents
+        return home / 'Documents' / 'repertoires'
+    elif system == 'Darwin':  # macOS
+        # macOS: ~/Documents
+        return home / 'Documents' / 'repertoires'
+    elif system == 'Linux':
+        # Linux: ~/Documents (on desktop)
+        # But could also be ~/.local/share/<app_name> on some distros
+        return home / 'Documents' / 'repertoires'
+    else:
+        # Fallback to Documents
+        return home / 'Documents' / 'repertoires'
+
+REPERTOIRE_DIR = get_repertoire_directory()
 
 # Request queue for handling concurrent requests
 request_queue = queue.Queue()
@@ -150,15 +183,18 @@ def get_line_signature(line_data):
     return signature
 
 
-def is_duplicate(line_data):
+def is_duplicate(line_data, target_file=None):
     """Check if this line already exists in the repertoire"""
-    if not os.path.exists(REPERTOIRE_FILE):
+    if target_file is None:
+        target_file = REPERTOIRE_FILE
+
+    if not os.path.exists(target_file):
         return False
 
     new_signature = get_line_signature(line_data)
 
     # Read existing games and check for duplicates
-    with open(REPERTOIRE_FILE) as f:
+    with open(target_file) as f:
         while True:
             game = chess.pgn.read_game(f)
             if game is None:
@@ -186,57 +222,66 @@ def is_duplicate(line_data):
     return False
 
 
-def append_to_pgn_file(game):
+def append_to_pgn_file(game, target_file=None):
     """Append a game to the repertoire PGN file"""
+    if target_file is None:
+        target_file = REPERTOIRE_FILE
+
     # Create file if it doesn't exist
-    if not os.path.exists(REPERTOIRE_FILE):
-        Path(REPERTOIRE_FILE).touch()
+    if not os.path.exists(target_file):
+        Path(target_file).touch()
 
     # Append the game
-    with open(REPERTOIRE_FILE, 'a') as f:
+    with open(target_file, 'a') as f:
         # Add newline separator if file is not empty
-        if os.path.getsize(REPERTOIRE_FILE) > 0:
+        if os.path.getsize(target_file) > 0:
             f.write('\n\n')
 
         exporter = chess.pgn.FileExporter(f)
         game.accept(exporter)
 
 
-def count_games_in_pgn():
+def count_games_in_pgn(target_file=None):
     """Count the number of games in the PGN file"""
-    if not os.path.exists(REPERTOIRE_FILE):
+    if target_file is None:
+        target_file = REPERTOIRE_FILE
+
+    if not os.path.exists(target_file):
         return 0
 
     count = 0
-    with open(REPERTOIRE_FILE) as f:
+    with open(target_file) as f:
         while chess.pgn.read_game(f):
             count += 1
     return count
 
 
-def process_add_line_request(line_data):
+def process_add_line_request(line_data, target_file=None):
     """Process a single add-line request (runs in queue)"""
     with processing_lock:
+        if target_file is None:
+            target_file = REPERTOIRE_FILE
+
         # Check for duplicates
-        if is_duplicate(line_data):
+        if is_duplicate(line_data, target_file):
             return {
                 'status': 'duplicate',
                 'message': 'Line already exists in repertoire',
-                'lineCount': count_games_in_pgn()
+                'lineCount': count_games_in_pgn(target_file)
             }
 
         # Create PGN game from the line data
         game = create_pgn_game(line_data)
 
         # Append to PGN file
-        append_to_pgn_file(game)
+        append_to_pgn_file(game, target_file)
 
         # Get total count
-        total_games = count_games_in_pgn()
+        total_games = count_games_in_pgn(target_file)
 
         # Print summary
         pgn_text = line_data.get('pgn', '')
-        print(f"✓ Added line to {REPERTOIRE_FILE}")
+        print(f"✓ Added line to {target_file}")
         print(f"  {pgn_text[:80]}{'...' if len(pgn_text) > 80 else ''}")
         print(f"  Moves: {len(line_data.get('moves', []))}")
         print(f"  Total: {total_games}")
@@ -244,7 +289,7 @@ def process_add_line_request(line_data):
         return {
             'status': 'success',
             'lineCount': total_games,
-            'message': f'Line added to {REPERTOIRE_FILE}'
+            'message': f'Line added to {os.path.basename(target_file)}'
         }
 
 
@@ -257,11 +302,11 @@ def request_worker():
             if task is None:  # Shutdown signal
                 break
 
-            line_data, result_queue = task
+            line_data, result_queue, target_file = task
 
             # Process the request
             try:
-                result = process_add_line_request(line_data)
+                result = process_add_line_request(line_data, target_file)
                 result_queue.put(('success', result))
             except Exception as e:
                 print(f"✗ Error processing request: {str(e)}")
@@ -281,6 +326,39 @@ worker_thread = threading.Thread(target=request_worker, daemon=True)
 worker_thread.start()
 
 
+@app.route('/list-repertoires', methods=['GET'])
+def list_repertoires():
+    """List all repertoire files with metadata"""
+    try:
+        # Ensure directory exists
+        if not REPERTOIRE_DIR.exists():
+            REPERTOIRE_DIR.mkdir(parents=True, exist_ok=True)
+            return jsonify({'repertoires': []}), 200
+
+        repertoires = []
+        for pgn_file in REPERTOIRE_DIR.glob('*.pgn'):
+            stat = pgn_file.stat()
+            repertoires.append({
+                'name': pgn_file.stem,  # filename without .pgn
+                'filename': pgn_file.name,
+                'path': str(pgn_file),
+                'modified': stat.st_mtime,
+                'size': stat.st_size,
+                'lineCount': count_games_in_pgn(str(pgn_file))
+            })
+
+        # Sort by modification time (most recent first)
+        repertoires.sort(key=lambda x: x['modified'], reverse=True)
+
+        return jsonify({'repertoires': repertoires}), 200
+
+    except Exception as e:
+        print(f"✗ Error listing repertoires: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/add-line', methods=['POST'])
 def add_line():
     """Receive a line from the browser extension and queue it for processing"""
@@ -294,9 +372,27 @@ def add_line():
         if len(data['moves']) == 0:
             return jsonify({'error': 'No moves provided'}), 400
 
+        # Get target repertoire file (optional)
+        target_filename = data.get('targetRepertoire')
+        target_file = None
+
+        if target_filename:
+            # Sanitize filename
+            target_filename = os.path.basename(target_filename)
+            if not target_filename.endswith('.pgn'):
+                target_filename += '.pgn'
+
+            target_file = str(REPERTOIRE_DIR / target_filename)
+
+            # Create directory if needed
+            REPERTOIRE_DIR.mkdir(parents=True, exist_ok=True)
+        else:
+            # Use default file for backward compatibility
+            target_file = REPERTOIRE_FILE
+
         # Queue the request
         result_queue = queue.Queue()
-        request_queue.put((data, result_queue))
+        request_queue.put((data, result_queue, target_file))
 
         # Wait for result (with timeout)
         status, result = result_queue.get(timeout=30)
@@ -339,13 +435,16 @@ if __name__ == '__main__':
     print("Lichess Repertoire Server")
     print("=" * 70)
     print(f"Server:         http://localhost:9812")
-    print(f"PGN file:       {os.path.abspath(REPERTOIRE_FILE)}")
+    print(f"Repertoire dir: {REPERTOIRE_DIR}")
+    print(f"Fallback file:  {os.path.abspath(REPERTOIRE_FILE)}")
     print()
     print("Endpoints:")
-    print("  POST /add-line     - Add a line to repertoire (queued)")
-    print("  GET  /health       - Health check")
+    print("  GET  /list-repertoires - List all repertoires")
+    print("  POST /add-line         - Add a line to repertoire (queued)")
+    print("  GET  /health           - Health check")
     print()
     print("Features:")
+    print("  ✓ Flutter app integration (reads from app's repertoire directory)")
     print("  ✓ Duplicate detection (won't add same line twice)")
     print("  ✓ Request queueing (handles concurrent requests)")
     print("  ✓ Comments and annotations preserved")
@@ -353,11 +452,14 @@ if __name__ == '__main__':
     print("Usage:")
     print("  1. Install extension in Chrome (chrome://extensions/)")
     print("  2. Go to lichess.org/analysis")
-    print("  3. Right-click any move → 'Add to repertoire'")
+    print("  3. Right-click any move → Select repertoire → Add line")
     print()
-    print("View your repertoire:")
-    print(f"  cat {REPERTOIRE_FILE}")
+    print("Test endpoints:")
+    print(f"  curl http://localhost:9812/list-repertoires")
     print(f"  curl http://localhost:9812/health")
+    print()
+    print("Set custom directory:")
+    print("  export REPERTOIRE_DIR=/path/to/repertoires")
     print()
     print("Press Ctrl+C to stop")
     print("=" * 70)
