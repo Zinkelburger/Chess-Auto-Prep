@@ -1,18 +1,22 @@
 # Lichess Repertoire Sync
 
-Chrome extension that adds an "Add to repertoire" button to the Lichess analysis board context menu. Right-click on any move to save the entire line (with comments and annotations) to your local repertoire server.
+Chrome extension that integrates Lichess analysis board with your Chess-Auto-Prep Flutter app. Right-click on any move to save it to one of your repertoire files, with fuzzy search to quickly find the right repertoire.
 
 ## Features
 
-- Adds "Add to repertoire" button to analysis board context menu
-- Captures full move line with:
+- **Flutter App Integration** - Automatically finds and uses your Flutter app's repertoire directory
+- **Repertoire Selection Menu** - Choose which repertoire to add lines to
+  - Shows 3 most recently modified repertoires by default
+  - Fuzzy search to quickly find any repertoire
+  - Displays line count for each repertoire
+- **Full Move Capture** - Saves complete lines with:
   - Move sequence in PGN format
   - Comments on moves
   - Annotations/glyphs (!, ?, !!, ??, !?, ?!, etc.)
   - Engine evaluations
   - Position FENs
   - Variant information
-- Sends data to local repertoire server via HTTP POST
+- **Smart Duplicate Detection** - Won't add the same line twice to the same repertoire
 
 ## Installation
 
@@ -26,35 +30,51 @@ Chrome extension that adds an "Add to repertoire" button to the Lichess analysis
 
 ```bash
 # 1. Install Python dependencies
-cd browser_extension
+cd browser-to-server-repertoire
 pip install -r requirements.txt
 
-# 2. Start the repertoire server
-python server.py
+# 2. (Optional) Find your repertoire directory
+python find_repertoire_dir.py
 
-# 3. Install Chrome extension
+# 3. Start the repertoire server
+python server.py
+# Or with custom directory:
+# export REPERTOIRE_DIR=/path/to/your/repertoires
+# python server.py
+
+# 4. Install Chrome extension
 # - Open chrome://extensions/
 # - Enable "Developer mode"
 # - Click "Load unpacked"
-# - Select the browser_extension/ folder
-
-# 4. Test the server (optional)
-python test_server.py
+# - Select the browser-to-server-repertoire/ folder
 
 # 5. Use it!
 # - Go to lichess.org/analysis
 # - Right-click any move
-# - Click "Add to repertoire"
-# - Check repertoire.pgn to see your saved lines!
+# - Click "Add to repertoire..."
+# - Select your repertoire or search for it
+# - Line is added to your chosen repertoire!
 ```
 
 ## Usage
 
-1. Start your repertoire server: `python server.py`
-2. Go to any Lichess analysis board: https://lichess.org/analysis
-3. Right-click on any move in the move list
-4. Click "Add to repertoire"
-5. The entire line (from start to clicked move, extended to the end) will be saved to `repertoire.pgn`
+1. **Start the server**: `python server.py`
+   - Server automatically finds your Flutter app's repertoire directory
+   - Searches common locations: `~/.local/share/com.example.chess_auto_prep/repertoires`, `~/Documents/Chess-Auto-Prep/repertoires`, etc.
+   - Set `REPERTOIRE_DIR` environment variable to override
+
+2. **On Lichess**: Go to https://lichess.org/analysis
+
+3. **Right-click** any move in the analysis board
+
+4. **Click** "Add to repertoire..." in the context menu
+
+5. **Select repertoire**:
+   - Top 3 most recent repertoires shown by default
+   - Type to fuzzy search all repertoires (e.g., "bnni" matches "Benoni")
+   - Click the repertoire to add the line
+
+6. **Done!** The line is saved to your chosen repertoire PGN file
 
 ## Server
 
@@ -69,17 +89,25 @@ The included `server.py` saves all lines to `repertoire.pgn` in standard PGN for
 
 ### Server Endpoints
 
+- **GET /list-repertoires** - List all repertoire files with metadata (name, modified time, line count)
 - **POST /add-line** - Add a line to repertoire (queued, duplicate-checked)
+  - Optional `targetRepertoire` field to specify which repertoire file
 - **GET /health** - Health check with queue status
 
 ### Examples
 
 ```bash
-# View your repertoire
-cat repertoire.pgn
+# List all repertoires
+curl http://localhost:9812/list-repertoires
 
 # Check server health
 curl http://localhost:9812/health
+
+# View a specific repertoire (adjust path based on your system)
+cat ~/.local/share/com.example.chess_auto_prep/repertoires/Benoni.pgn
+
+# Find your repertoire directory
+python find_repertoire_dir.py
 ```
 
 ## Data Format
@@ -88,6 +116,7 @@ The browser extension sends POST requests to `http://localhost:9812/add-line` wi
 
 ```json
 {
+  "targetRepertoire": "Benoni.pgn",  // Optional: which repertoire to add to
   "pgn": "1. e4 e5 2. Nf3! { Best move } 2... Nc6 3. Bb5",
   "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
   "variant": "standard",
@@ -187,9 +216,28 @@ The test script will:
 
 ## Configuration
 
+### Server Configuration
+
+Set the repertoire directory via environment variable:
+```bash
+export REPERTOIRE_DIR=/path/to/your/repertoires
+python server.py
+```
+
+The server automatically searches these locations (in order):
+1. `$REPERTOIRE_DIR` (if set)
+2. `~/.local/share/com.example.chess_auto_prep/repertoires`
+3. `~/.local/share/com.example.auto_prep/repertoires`
+4. `~/Documents/Chess-Auto-Prep/repertoires`
+5. `./repertoires` (current directory)
+
+### Extension Configuration
+
 Edit `content.js` to change:
-- `REPERTOIRE_SERVER` - Change port or server URL (line 6)
-- `GLYPH_SYMBOLS` - Add/modify annotation symbols (lines 9-27)
+- `REPERTOIRE_SERVER` - Change port or server URL (line 7)
+- `LIST_REPERTOIRES_URL` - Change repertoire list endpoint (line 8)
+- `CACHE_DURATION` - How long to cache repertoire list in ms (line 13)
+- `GLYPH_SYMBOLS` - Add/modify annotation symbols (lines 16-26)
 
 ## Files
 
@@ -198,9 +246,9 @@ Edit `content.js` to change:
   - `content.js` - Main script that injects into Lichess pages
 
 - **Server:**
-  - `server.py` - Main repertoire server (appends to PGN file)
+  - `server.py` - Main repertoire server with Flutter integration
+  - `find_repertoire_dir.py` - Helper script to locate repertoire directory
   - `test_server.py` - Test script to verify server works
-  - `example-server.py` - Simple example server (saves to JSON)
   - `requirements.txt` - Python dependencies
 
 - **Documentation:**
@@ -218,18 +266,35 @@ To modify the extension:
 
 **Button doesn't appear:**
 - Check browser console for errors (F12)
-- Make sure you're on an analysis board page
+- Make sure you're on an analysis board page (lichess.org/analysis)
 - Verify extension is enabled in `chrome://extensions/`
+- Try reloading the Lichess page
 
-**Server request fails:**
-- Check that your server is running on port 9812
-- Look for CORS errors in console
-- Verify server accepts JSON POST requests
+**No repertoires showing in menu:**
+- Verify server is running: `curl http://localhost:9812/list-repertoires`
+- Check repertoire directory exists and has .pgn files
+- Run `python find_repertoire_dir.py` to verify location
+- Check server console for errors
+
+**"Failed to fetch repertoires" error:**
+- Server not running - start with `python server.py`
+- Wrong port - verify server is on localhost:9812
+- Check browser console for CORS or network errors
+
+**Server can't find repertoires:**
+- Run `python find_repertoire_dir.py` to see which directories are checked
+- Set `REPERTOIRE_DIR` environment variable to your repertoire location
+- Make sure Flutter app has created the repertoires directory
+
+**Line added to wrong file:**
+- Check server console output to see which file was used
+- Verify you clicked the correct repertoire in the menu
 
 **Extension not loading:**
 - Check manifest.json is valid JSON
 - Ensure all file paths are correct
 - Look for errors in `chrome://extensions/` page
+- Try removing and re-adding the extension
 
 ## Icons
 

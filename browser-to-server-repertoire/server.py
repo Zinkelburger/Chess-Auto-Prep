@@ -114,14 +114,22 @@ def create_pgn_game(line_data):
     moves = line_data.get('moves', [])
 
     for move_data in moves:
+        # Try SAN first (from DOM extraction), then fall back to UCI
+        san = move_data.get('san')
         uci = move_data.get('uci')
-        if not uci:
+
+        if not san and not uci:
             continue
 
         try:
-            move = chess.Move.from_uci(uci)
+            # Parse move from SAN or UCI
+            if san:
+                move = board.parse_san(san)
+            else:
+                move = chess.Move.from_uci(uci)
+
             if move not in board.legal_moves:
-                print(f"Warning: Illegal move {uci} in position {board.fen()}")
+                print(f"Warning: Illegal move {san or uci} in position {board.fen()}")
                 continue
 
             # Add the move
@@ -154,7 +162,7 @@ def create_pgn_game(line_data):
                         node.comment = f"[{eval_comment}]"
 
         except ValueError as e:
-            print(f"Error parsing move {uci}: {e}")
+            print(f"Error parsing move {san or uci}: {e}")
             continue
 
     return game
@@ -177,9 +185,9 @@ def get_line_signature(line_data):
     start_fen = line_data.get('startFen', 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
     variant = line_data.get('variant', 'standard')
 
-    # Create signature from variant, start FEN, and move UCIs
-    uci_sequence = [m.get('uci', '') for m in moves if m.get('uci')]
-    signature = f"{variant}:{start_fen}:{':'.join(uci_sequence)}"
+    # Create signature from variant, start FEN, and move SANs (more reliable than UCI for DOM extraction)
+    san_sequence = [m.get('san', '') for m in moves if m.get('san')]
+    signature = f"{variant}:{start_fen}:{':'.join(san_sequence)}"
     return signature
 
 
@@ -188,37 +196,47 @@ def is_duplicate(line_data, target_file=None):
     if target_file is None:
         target_file = REPERTOIRE_FILE
 
+    print(f"[DUPLICATE CHECK] Checking for duplicates in: {target_file}")
+
     if not os.path.exists(target_file):
+        print(f"[DUPLICATE CHECK] File does not exist, no duplicates")
         return False
 
     new_signature = get_line_signature(line_data)
+    print(f"[DUPLICATE CHECK] New line signature: {new_signature}")
 
     # Read existing games and check for duplicates
+    game_count = 0
     with open(target_file) as f:
         while True:
             game = chess.pgn.read_game(f)
             if game is None:
                 break
 
-            # Extract moves from existing game
+            game_count += 1
+
+            # Extract SAN moves from existing game
             board = game.board()
-            existing_ucis = []
+            existing_sans = []
             node = game
             while node.variations:
                 next_node = node.variation(0)
                 move = next_node.move
-                existing_ucis.append(move.uci())
+                existing_sans.append(board.san(move))
                 board.push(move)
                 node = next_node
 
             # Create signature for existing game
             existing_variant = game.headers.get('Variant', 'Standard').lower()
             existing_fen = game.headers.get('FEN', 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
-            existing_signature = f"{existing_variant}:{existing_fen}:{':'.join(existing_ucis)}"
+            existing_signature = f"{existing_variant}:{existing_fen}:{':'.join(existing_sans)}"
 
             if new_signature == existing_signature:
+                print(f"[DUPLICATE CHECK] MATCH FOUND in game #{game_count}")
+                print(f"[DUPLICATE CHECK] Existing signature: {existing_signature}")
                 return True
 
+    print(f"[DUPLICATE CHECK] No duplicates found after checking {game_count} games")
     return False
 
 

@@ -275,53 +275,44 @@
   }
 
   // Extract line data from DOM
-  function extractLineDataFromDOM(path) {
-    const allMoves = document.querySelectorAll('move[p]');
-    const movesUpToPath = [];
-    let foundTargetMove = false;
+  // Reconstructs the line by finding all ancestor moves and sorting by path length
+  function extractLineDataFromDOM(targetPath) {
+    const allMoveElements = Array.from(document.querySelectorAll('move[p]'));
+    const ancestorMoves = [];
 
-    for (const moveEl of allMoves) {
-      const movePath = moveEl.getAttribute('p');
-      const san = moveEl.querySelector('san')?.textContent;
+    // 1. Find all moves that are ancestors of the target path
+    for (const moveEl of allMoveElements) {
+      const path = moveEl.getAttribute('p');
 
-      if (san) {
-        movesUpToPath.push({ path: movePath, san: san });
-      }
-
-      if (path.startsWith(movePath) || movePath === path) {
-        if (movePath === path) {
-          foundTargetMove = true;
-          break;
-        }
-      }
-    }
-
-    if (!foundTargetMove) {
-      movesUpToPath.length = 0;
-      for (const moveEl of allMoves) {
-        const movePath = moveEl.getAttribute('p');
+      // Check if the move's path is an ancestor of our target path
+      if (targetPath.startsWith(path)) {
         const san = moveEl.querySelector('san')?.textContent;
-
-        if (path.startsWith(movePath) && san) {
-          movesUpToPath.push({ path: movePath, san: san });
+        if (san) {
+          ancestorMoves.push({ path: path, san: san });
         }
       }
     }
 
-    // Build PGN from moves
+    // 2. CRITICAL FIX: Sort moves by path length
+    // This puts "1. d4" (shortest path) first and the clicked move last
+    // This correctly handles branches because each move in the branch
+    // has a longer path than its ancestors
+    ancestorMoves.sort((a, b) => a.path.length - b.path.length);
+
+    // 3. Build the PGN string
     let pgn = '';
-    movesUpToPath.forEach((move, i) => {
+    ancestorMoves.forEach((move, i) => {
       const moveNum = Math.floor(i / 2) + 1;
-      if (i % 2 === 0) {
+      if (i % 2 === 0) { // White's move
         pgn += `${moveNum}. ${move.san} `;
-      } else {
+      } else { // Black's move
         pgn += `${move.san} `;
       }
     });
 
     return {
       pgn: pgn.trim(),
-      moves: movesUpToPath.map((move, i) => ({
+      moves: ancestorMoves.map((move, i) => ({
         ply: i + 1,
         moveNumber: Math.floor(i / 2) + 1,
         color: i % 2 === 0 ? 'white' : 'black',
