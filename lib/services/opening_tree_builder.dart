@@ -1,7 +1,7 @@
 /// Opening tree builder - Builds a move tree from PGN games
 /// Similar to how openingtree.com builds its database
 
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess_webok/dartchess_webok.dart';
 import '../models/opening_tree.dart';
 
 class OpeningTreeBuilder {

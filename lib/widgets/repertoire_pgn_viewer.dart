@@ -4,7 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess_webok/dartchess_webok.dart';
 
 class RepertoirePgnViewer extends StatefulWidget {
   final String pgnContent;

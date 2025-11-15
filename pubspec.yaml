@@ -15,7 +15,7 @@ dependencies:
 
   # Chess functionality
   chess: ^0.7.0
-  dartchess: ^0.11.1
+  dartchess_webok: ^0.2.2
 
   # UI and state management
   cupertino_icons: ^1.0.6

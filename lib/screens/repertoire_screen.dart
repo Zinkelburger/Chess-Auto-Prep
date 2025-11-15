@@ -5,7 +5,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:chess/chess.dart' as chess;
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess_webok/dartchess_webok.dart';
 import 'dart:io' as io;
 
 import '../widgets/chess_board_widget.dart';

@@ -2,7 +2,7 @@
 /// Extracts trainable lines from PGN files and manages training sessions
 library;
 
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess_webok/dartchess_webok.dart';
 import 'dart:io' as io;
 import '../models/repertoire_line.dart';
 

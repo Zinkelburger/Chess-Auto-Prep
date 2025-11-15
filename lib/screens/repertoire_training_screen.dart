@@ -3,7 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:chess/chess.dart' as chess;
 
 import '../models/repertoire_line.dart';

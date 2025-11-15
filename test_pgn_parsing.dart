@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:chess/chess.dart' as chess_lib;
-import 'package:dartchess/dartchess.dart' as dartchess;
+import 'package:dartchess_webok/dartchess_webok.dart' as dartchess;
 
 void main() async {
   print('=== TESTING PGN PARSING CAPABILITIES ===');

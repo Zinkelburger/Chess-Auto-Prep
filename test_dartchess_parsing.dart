@@ -1,5 +1,5 @@
 import 'dart:io' as io;
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess_webok/dartchess_webok.dart';
 
 void main() async {
   print('=== TESTING DARTCHESS PGN PARSING ===');

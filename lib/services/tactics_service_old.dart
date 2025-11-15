@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:chess/chess.dart' as chess_engine;
-import 'package:dartchess/dartchess.dart';
+import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
