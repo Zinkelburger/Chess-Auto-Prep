@@ -1,0 +1,11 @@
+maia2
+python-chess
+torch
+numpy
+gdown
+pyzstd
+einops
+gdown
+pandas
+tqdm
+PyYAML
