@@ -17,3 +17,18 @@ In Scenario B (0% Draw): Penalty is maximum. Ease score drops to 0.
 Maia: "What do I want to play?"
 Lc0 (Q): "Is that move actually a blunder?" (The Regret)
 Lc0 (Draw%): "Is this position a coin-flip?" (The Safety Factor)
+
+
+---
+the "Ease" metric is basically just a fancy, non-linear version of Expected Loss.
+Why not just do ∑(P×Q)?
+
+"Ease" takes that same data but applies Risk Aversion (via the exponents α and β).
+"I don't care about the 50 random moves I might play 1% of the time. I only care about the 2 or 3 moves I am VERY likely to play."
+
+Instead of measuring "How good is this?", it measures "How much do I lose if I mess up?"
+
+we forcibly downgrade the "Coin Flip" position.
+Dead Draw: Ease = 0.9 × Safety(0.8) = High Score (Easy).
+Coin Flip: Ease = 0.9 × Safety(0.0) = Zero (Terrifying).
+
