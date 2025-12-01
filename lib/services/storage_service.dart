@@ -1,8 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-// Conditional import for web
-import 'storage_web.dart' if (dart.library.io) 'storage_io.dart' as platform;
 
 class StorageService {
   static StorageService? _instance;
@@ -30,31 +28,24 @@ class StorageService {
     return File(path);
   }
 
-  // Web-specific storage methods using localStorage
-  Future<void> saveToWeb(String key, String content) async {
-    if (!kIsWeb) return;
-    platform.PlatformStorage.saveToLocalStorage(key, content);
-  }
-
-  Future<String?> loadFromWeb(String key) async {
-    if (!kIsWeb) return null;
-    return platform.PlatformStorage.loadFromLocalStorage(key);
-  }
-
-  // Unified save method that works on all platforms
+  // Unified save method
   Future<void> saveContent(String filename, String content) async {
     if (kIsWeb) {
-      await saveToWeb(filename, content);
+      // Web storage handling removed for simplicity as it requires extra dependencies
+      // or conditional imports which were causing issues.
+      // Re-implement using shared_preferences if web support is needed.
+      return;
     } else {
       final file = await getStorageFile(filename);
       await file.writeAsString(content);
     }
   }
 
-  // Unified load method that works on all platforms
+  // Unified load method
   Future<String?> loadContent(String filename) async {
     if (kIsWeb) {
-      return await loadFromWeb(filename);
+       // Web storage handling removed
+       return null;
     } else {
       try {
         final file = await getStorageFile(filename);

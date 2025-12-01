@@ -3,7 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io' as io;
@@ -48,12 +48,16 @@ class PgnEditorController {
   }
 
   void addMove(String san) {
-    print('PgnEditorController.addMove called with: $san'); // Debug
     _state?.addMove(san);
   }
 
   void syncToPosition(String fen) {
     _state?._syncToPosition(fen);
+  }
+
+  /// Sync editor to a specific move index with given move list
+  void syncToMoveHistory(List<String> moves, int moveIndex) {
+    _state?._syncToMoveHistory(moves, moveIndex);
   }
 
   void clearLine() {
@@ -67,22 +71,33 @@ class PgnEditorController {
   void goForward() {
     _state?._goForward();
   }
+
+  /// Get current move index
+  int get currentMoveIndex => _state?._currentMoveIndex ?? -1;
+
+  /// Get current moves list
+  List<String> get moves => _state?._moves.map((m) => m.san).toList() ?? [];
 }
 
 class InteractivePgnEditor extends StatefulWidget {
   final Function(Position)? onPositionChanged;
+  /// Called when move state changes - reports current move index and full move list
+  final Function(int moveIndex, List<String> moves)? onMoveStateChanged;
   final String? initialPgn;
   final Function(String)? onPgnChanged;
   final PgnEditorController? controller;
   final String? currentRepertoireName;
+  final String? repertoireColor; // "White" or "Black"
 
   const InteractivePgnEditor({
     super.key,
     this.onPositionChanged,
+    this.onMoveStateChanged,
     this.initialPgn,
     this.onPgnChanged,
     this.controller,
     this.currentRepertoireName,
+    this.repertoireColor,
   });
 
   @override
@@ -222,6 +237,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     _currentPosition = position;
     widget.onPositionChanged?.call(_currentPosition);
+
+    // Also notify about move state change
+    _notifyMoveStateChanged();
+  }
+
+  /// Notify parent about current move state
+  void _notifyMoveStateChanged() {
+    widget.onMoveStateChanged?.call(
+      _currentMoveIndex,
+      _moves.map((m) => m.san).toList(),
+    );
   }
 
   void _syncToPosition(String fen) {
@@ -251,11 +277,34 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           _currentMoveIndex = targetIndex;
           _currentPosition = targetPosition;
         });
-        print('Synced PGN editor to move index: $targetIndex'); // Debug
       }
     } catch (e) {
-      print('Error syncing PGN editor position: $e'); // Debug
+      // Ignore sync errors
     }
+  }
+
+  /// Sync editor to a specific move history from external source
+  void _syncToMoveHistory(List<String> moves, int moveIndex) {
+    setState(() {
+      // Rebuild moves list, preserving comments for existing moves that match
+      final newMoves = <PgnMove>[];
+
+      for (int i = 0; i < moves.length; i++) {
+        final san = moves[i];
+        // If we have an existing move at this index that matches SAN, keep it (and its comments)
+        if (i < _moves.length && _moves[i].san == san) {
+          newMoves.add(_moves[i]);
+        } else {
+          // Otherwise create new move
+          newMoves.add(PgnMove(san: san));
+        }
+      }
+
+      _moves = newMoves;
+      _currentMoveIndex = moveIndex.clamp(-1, _moves.length - 1);
+      _updatePosition();
+      _generateWorkingPgn();
+    });
   }
 
   /// Normalize FEN by removing move counters for comparison
@@ -350,16 +399,18 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     FocusScope.of(context).requestFocus();
   }
 
-  void _deleteMove() {
+  void _deleteFromHere() {
     if (_contextMenuMoveIndex == null) return;
 
     setState(() {
-      _moves.removeAt(_contextMenuMoveIndex!);
+      // Remove all moves from this index onwards
+      final deleteFrom = _contextMenuMoveIndex!;
+      _moves.removeRange(deleteFrom, _moves.length);
       _hasUnsavedChanges = true;
 
       // Adjust current move index if necessary
-      if (_currentMoveIndex >= _contextMenuMoveIndex!) {
-        _currentMoveIndex = (_contextMenuMoveIndex! - 1).clamp(-1, _moves.length - 1);
+      if (_currentMoveIndex >= deleteFrom) {
+        _currentMoveIndex = (deleteFrom - 1).clamp(-1, _moves.length - 1);
       }
 
       _hideContextMenu();
@@ -368,24 +419,62 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     });
   }
 
+  void _copyPgnFromHere() {
+    if (_contextMenuMoveIndex == null) return;
+
+    // Generate PGN from this move onwards
+    final fromIndex = _contextMenuMoveIndex!;
+    final buffer = StringBuffer();
+
+    // Calculate starting move number
+    var moveNumber = (fromIndex ~/ 2) + 1;
+    var isWhiteTurn = fromIndex % 2 == 0;
+
+    // If starting on black's move, add the move number with dots
+    if (!isWhiteTurn) {
+      buffer.write('$moveNumber... ');
+    }
+
+    for (int i = fromIndex; i < _moves.length; i++) {
+      final move = _moves[i];
+
+      if (isWhiteTurn) {
+        buffer.write('$moveNumber. ');
+      }
+
+      buffer.write('${move.san} ');
+
+      if (move.comment != null && move.comment!.isNotEmpty) {
+        buffer.write('{${move.comment}} ');
+      }
+
+      if (!isWhiteTurn) {
+        moveNumber++;
+      }
+      isWhiteTurn = !isWhiteTurn;
+    }
+
+    // Copy to clipboard
+    final pgn = buffer.toString().trim();
+    Clipboard.setData(ClipboardData(text: pgn));
+
+    _hideContextMenu();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Copied: $pgn'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _promoteVariation() {
     // Future: Move variation to become the mainline, demoting current mainline to variation
     _hideContextMenu();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Promote Variation: Will make this variation the new mainline'),
-        duration: Duration(seconds: 3),
-      ),
-    );
-  }
-
-  void _setMainline() {
-    // Future: Make this move the main continuation, creating variations for alternative moves
-    _hideContextMenu();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Set Mainline: Will establish this as the primary continuation'),
-        duration: Duration(seconds: 3),
+        content: Text('Promote to Mainline: Coming soon'),
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -505,8 +594,18 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       headers.writeln('[Title "$customTitle"]');
     }
     headers.writeln('[Date "$timestamp"]');
-    headers.writeln('[White "Training"]');
-    headers.writeln('[Black "Me"]');
+
+    // Determine player names based on repertoire color (if known)
+    // For a White repertoire, "Me" is White. For Black repertoire, "Me" is Black.
+    // Default to Black if unknown, matching previous behavior.
+    final isWhiteRepertoire = widget.repertoireColor == 'White';
+    if (isWhiteRepertoire) {
+      headers.writeln('[White "Me"]');
+      headers.writeln('[Black "Training"]');
+    } else {
+      headers.writeln('[White "Training"]');
+      headers.writeln('[Black "Me"]');
+    }
 
     final entry = '''
 
@@ -687,7 +786,8 @@ $pgn
       );
     }
 
-    final spans = <InlineSpan>[];
+    // Build individual move widgets that can each handle right-click
+    final widgets = <Widget>[];
     var moveNumber = 1;
     var isWhiteTurn = true;
 
@@ -695,12 +795,17 @@ $pgn
       final move = _moves[i];
       final isSelected = i == _selectedMoveIndex;
       final isCurrent = i == _currentMoveIndex;
+      final moveIndex = i; // Capture for closure
 
       // Add move number for white's moves
       if (isWhiteTurn) {
-        spans.add(TextSpan(
-          text: '$moveNumber. ',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        widgets.add(Text(
+          '$moveNumber. ',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontFamily: 'monospace',
+            fontSize: 14,
+          ),
         ));
       }
 
@@ -718,27 +823,44 @@ $pgn
         moveColor = Colors.blue[300]!;
       }
 
-      spans.add(TextSpan(
-        text: move.san,
-        style: TextStyle(
-          color: moveColor,
-          backgroundColor: backgroundColor,
-          fontWeight: isSelected || isCurrent ? FontWeight.bold : FontWeight.normal,
-          decoration: TextDecoration.underline,
+      // Each move is a separate GestureDetector for proper right-click handling
+      widgets.add(
+        GestureDetector(
+          onTap: () => _goToMove(moveIndex),
+          onSecondaryTapDown: (details) {
+            _showContextMenu(moveIndex, details.globalPosition);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+            child: Text(
+              move.san,
+              style: TextStyle(
+                color: moveColor,
+                fontWeight: isSelected || isCurrent ? FontWeight.bold : FontWeight.normal,
+                decoration: TextDecoration.underline,
+                fontFamily: 'monospace',
+                fontSize: 14,
+              ),
+            ),
+          ),
         ),
-        recognizer: TapGestureRecognizer()
-          ..onTap = () => _goToMove(i),
-      ));
+      );
 
-      spans.add(const TextSpan(text: ' '));
+      widgets.add(const SizedBox(width: 4));
 
       // Add comment if exists
       if (move.comment != null && move.comment!.isNotEmpty) {
-        spans.add(TextSpan(
-          text: '{${move.comment}} ',
+        widgets.add(Text(
+          '{${move.comment}} ',
           style: const TextStyle(
             color: Colors.green,
             fontStyle: FontStyle.italic,
+            fontFamily: 'monospace',
+            fontSize: 14,
           ),
         ));
       }
@@ -750,66 +872,85 @@ $pgn
       isWhiteTurn = !isWhiteTurn;
     }
 
-    return GestureDetector(
-      onSecondaryTapDown: (details) {
-        // Capture position for context menu
-        _contextMenuPosition = details.globalPosition;
-
-        // Find which move was right-clicked (simplified - would need more precise hit testing)
-        if (_selectedMoveIndex != null) {
-          _showContextMenu(_selectedMoveIndex!, details.globalPosition);
-        }
-      },
-      child: RichText(
-        text: TextSpan(
-          style: const TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 14,
-            color: Colors.white,
-          ),
-          children: spans,
-        ),
-      ),
+    return Wrap(
+      spacing: 0,
+      runSpacing: 4,
+      children: widgets,
     );
   }
 
   Widget _buildContextMenu() {
-    return Positioned(
-      left: _contextMenuPosition.dx + 10,
-      top: _contextMenuPosition.dy + 10,
-      child: Material(
-        elevation: 8,
-        borderRadius: BorderRadius.circular(8),
-        color: Colors.grey[800],
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildContextMenuItem(
-                icon: Icons.comment,
-                text: 'Add Comment',
-                onTap: _addComment,
+    // Get the move being acted on
+    final moveIndex = _contextMenuMoveIndex;
+    final moveName = moveIndex != null && moveIndex < _moves.length
+        ? _moves[moveIndex].san
+        : 'Move';
+
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _hideContextMenu, // Dismiss when tapping outside
+        onSecondaryTap: _hideContextMenu, // Also dismiss on right-click outside
+        child: Stack(
+          children: [
+            Positioned(
+              left: _contextMenuPosition.dx,
+              top: _contextMenuPosition.dy,
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.grey[850],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  constraints: const BoxConstraints(minWidth: 180),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header showing which move
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: Colors.grey[700]!),
+                          ),
+                        ),
+                        child: Text(
+                          moveName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      _buildContextMenuItem(
+                        icon: Icons.comment,
+                        text: 'Add Comment',
+                        onTap: _addComment,
+                      ),
+                      _buildContextMenuItem(
+                        icon: Icons.arrow_upward,
+                        text: 'Promote to Mainline',
+                        onTap: _promoteVariation,
+                      ),
+                      _buildContextMenuItem(
+                        icon: Icons.content_copy,
+                        text: 'Copy PGN from Here',
+                        onTap: _copyPgnFromHere,
+                      ),
+                      const Divider(height: 1),
+                      _buildContextMenuItem(
+                        icon: Icons.delete_outline,
+                        text: 'Delete from Here',
+                        onTap: _deleteFromHere,
+                        color: Colors.red[300],
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              _buildContextMenuItem(
-                icon: Icons.arrow_upward,
-                text: 'Promote Variation',
-                onTap: _promoteVariation,
-              ),
-              _buildContextMenuItem(
-                icon: Icons.trending_up,
-                text: 'Set Mainline',
-                onTap: _setMainline,
-              ),
-              _buildContextMenuItem(
-                icon: Icons.delete,
-                text: 'Delete',
-                onTap: _deleteMove,
-                color: Colors.red,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

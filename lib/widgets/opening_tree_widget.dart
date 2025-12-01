@@ -8,6 +8,7 @@ import '../models/repertoire_line.dart';
 class OpeningTreeWidget extends StatefulWidget {
   final OpeningTree tree;
   final Function(String fen)? onPositionSelected;
+  final Function(String move)? onMoveSelected;
   final Function(String searchTerm)? onSearchChanged;
   final Function(RepertoireLine line)? onLineSelected;
   final List<RepertoireLine> repertoireLines;
@@ -18,6 +19,7 @@ class OpeningTreeWidget extends StatefulWidget {
     super.key,
     required this.tree,
     this.onPositionSelected,
+    this.onMoveSelected,
     this.onSearchChanged,
     this.onLineSelected,
     this.repertoireLines = const [],
@@ -203,6 +205,18 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
             ],
           ),
         ),
+
+        // Out of book warning
+        if (widget.currentMoveSequence.length > widget.tree.currentDepth)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+            color: Colors.orange[900],
+            child: const Text(
+              'Current position is out of book',
+              style: TextStyle(fontSize: 11, color: Colors.white),
+            ),
+          ),
 
         // Move list
         Expanded(
@@ -403,11 +417,10 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
 
     return InkWell(
       onTap: () {
-        setState(() {
-          widget.tree.makeMove(node.move);
-        });
-        // Notify parent about position change
-        widget.onPositionSelected?.call(widget.tree.currentNode.fen);
+        // Delegate move handling to parent controller
+        widget.onMoveSelected?.call(node.move);
+        // Also support legacy callback if needed (though we should prefer onMoveSelected)
+        widget.onPositionSelected?.call(node.fen);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

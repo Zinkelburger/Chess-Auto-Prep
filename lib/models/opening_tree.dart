@@ -193,4 +193,23 @@ class OpeningTree {
 
   /// Get current depth in the tree
   int get currentDepth => currentNode.getMovePath().length;
+
+  /// Sync the tree state to match a specific list of moves (SANs)
+  /// Returns true if the full path was found in the tree
+  bool syncToMoveHistory(List<String> moves) {
+    reset(); // Start at root
+
+    for (final move in moves) {
+      // Try to make the move
+      final success = makeMove(move);
+
+      // If the move doesn't exist in the tree, we stop.
+      // We remain at the last known node, which is usually exactly what we want
+      // (showing the user they have left the "book" moves).
+      if (!success) {
+        return false;
+      }
+    }
+    return true;
+  }
 }

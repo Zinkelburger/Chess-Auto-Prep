@@ -1,210 +1,131 @@
-/// Opening tree builder - Builds a move tree from PGN games
-/// Similar to how openingtree.com builds its database
-
 import 'package:dartchess_webok/dartchess_webok.dart';
 import '../models/opening_tree.dart';
 
 class OpeningTreeBuilder {
-  /// Build an opening tree from a list of PGN strings
-  ///
-  /// Parameters:
-  /// - pgnList: List of PGN game strings
-  /// - username: Player's username to track
-  /// - userIsWhite: Whether the user plays white (null = include all games)
-  /// - maxDepth: Maximum ply depth to analyze (default: 30)
+  /// Common player name patterns used in repertoire files
+  static const _repertoirePlayerPatterns = [
+    'repertoire',
+    'training',
+    'me',
+    'player',
+    'study',
+  ];
+
   static Future<OpeningTree> buildTree({
     required List<String> pgnList,
     required String username,
-    required bool userIsWhite,
+    required bool? userIsWhite, // Nullable to allow "All Colors"
     int maxDepth = 30,
+    bool strictPlayerMatching = true, // New parameter
   }) async {
     final tree = OpeningTree();
     final usernameLower = username.toLowerCase();
 
-    for (final pgnText in pgnList) {
-      try {
-        await _processGame(
-          tree,
-          pgnText,
-          usernameLower,
-          userIsWhite,
-          maxDepth,
-        );
-      } catch (e) {
-        // Skip malformed PGNs
-        continue;
-      }
+    // 1. Combine all PGNs into one block
+    final fullPgnText = pgnList.join('\n\n');
+
+    // 2. Parse everything at once using the library
+    // This handles variations (..), comments {}, and headers automatically.
+    final pgnGames = PgnGame.parseMultiGamePgn(fullPgnText);
+
+    for (final game in pgnGames) {
+      _processGame(tree, game, usernameLower, userIsWhite, maxDepth, strictPlayerMatching);
     }
 
     return tree;
   }
 
-  /// Process a single game and add it to the tree
-  static Future<void> _processGame(
+  /// Check if a player name matches any known repertoire player pattern
+  static bool _isRepertoirePlayer(String playerName) {
+    final lowerName = playerName.toLowerCase();
+    return _repertoirePlayerPatterns.any((pattern) => lowerName.contains(pattern));
+  }
+
+  static void _processGame(
     OpeningTree tree,
-    String pgnText,
+    PgnGame<PgnNodeData> game,
     String usernameLower,
-    bool userIsWhite,
+    bool? userIsWhiteFilter,
     int maxDepth,
-  ) async {
-    final lines = pgnText.split('\n');
+    bool strictPlayerMatching,
+  ) {
+    // 1. Safe Header Access
+    final white = (game.headers['White'] ?? '').toLowerCase();
+    final black = (game.headers['Black'] ?? '').toLowerCase();
+    final result = game.headers['Result'] ?? '*';
 
-    // Parse headers
-    String? white;
-    String? black;
-    String? result;
+    bool isUserWhiteInGame;
 
-    for (final line in lines) {
-      if (line.startsWith('[White "')) {
-        white = _extractHeader(line);
-      } else if (line.startsWith('[Black "')) {
-        black = _extractHeader(line);
-      } else if (line.startsWith('[Result "')) {
-        result = _extractHeader(line);
+    if (!strictPlayerMatching) {
+      // In Repertoire Mode, we don't filter by name.
+      // We assume the userIsWhiteFilter dictates the perspective.
+      // If no filter, we assume White perspective for stats (arbitrary but consistent).
+      isUserWhiteInGame = userIsWhiteFilter ?? true;
+    } else {
+      // 2. Identify User - match by username OR any repertoire player pattern
+      final whiteIsUser = white.contains(usernameLower) || _isRepertoirePlayer(white);
+      final blackIsUser = black.contains(usernameLower) || _isRepertoirePlayer(black);
+
+      // For repertoire files, if neither matches, try to infer from userIsWhiteFilter
+      if (whiteIsUser && !blackIsUser) {
+        isUserWhiteInGame = true;
+      } else if (blackIsUser && !whiteIsUser) {
+        isUserWhiteInGame = false;
+      } else if (userIsWhiteFilter != null) {
+        // Both or neither match - use the filter to decide
+        isUserWhiteInGame = userIsWhiteFilter;
+      } else {
+        // Can't determine - skip game
+        return;
+      }
+
+      // Apply color filter if specified
+      if (userIsWhiteFilter != null && userIsWhiteFilter != isUserWhiteInGame) {
+        return;
       }
     }
 
-    if (white == null || black == null || result == null) return;
+    // 3. Calculate Result
+    final userResult = _calculateUserResult(result, isUserWhiteInGame);
 
-    // Determine if user played this game and their color
-    final whiteIsUser = white.toLowerCase() == usernameLower;
-    final blackIsUser = black.toLowerCase() == usernameLower;
-
-    // Skip if user didn't play in this game
-    if (!whiteIsUser && !blackIsUser) return;
-
-    // Determine user's color in this game
-    final gameUserWhite = whiteIsUser;
-
-    // Skip if color doesn't match filter
-    if (userIsWhite != gameUserWhite) return;
-
-    // Extract moves from PGN
-    final moves = _extractMoves(pgnText);
-    if (moves.isEmpty) return;
-
-    // Calculate result from user's perspective (1.0 = win, 0.5 = draw, 0.0 = loss)
-    final userResult = _calculateUserResult(result, gameUserWhite);
-
-    // Traverse tree and add/update nodes using dartchess
+    // 4. Traverse Moves using mainline() iterator
     Position position = Chess.initial;
     var currentNode = tree.root;
 
-    // Update root node stats
+    // Update root stats
     currentNode.updateStats(userResult);
 
-    // Process moves
-    for (int i = 0; i < moves.length && i < maxDepth; i++) {
-      try {
-        // The move string from PGN is already in SAN format
-        final moveSan = moves[i];
+    int depth = 0;
+    for (final nodeData in game.moves.mainline()) {
+      if (depth >= maxDepth) break;
 
-        // Try to parse the move using dartchess
+      try {
+        final moveSan = nodeData.san;
+
+        // Parse SAN into a Move object for the engine
         final move = position.parseSan(moveSan);
         if (move == null) break;
 
-        // Make the move
+        // Apply move
         position = position.play(move);
 
-        // Get FEN after the move
-        final fenAfterMove = position.fen;
-
-        // Get or create child node
-        final childNode = currentNode.getOrCreateChild(moveSan, fenAfterMove);
-
-        // Update statistics
+        // Tree Building
+        final childNode = currentNode.getOrCreateChild(moveSan, position.fen);
         childNode.updateStats(userResult);
-
-        // Index this node by FEN for quick lookup
         tree.indexNode(childNode);
 
-        // Move to child node
+        // Advance
         currentNode = childNode;
+        depth++;
       } catch (e) {
-        // Invalid move, stop processing this game
-        break;
+        break; // Stop if an illegal move is encountered
       }
     }
   }
 
-  /// Extract header value from PGN header line
-  static String _extractHeader(String line) {
-    final start = line.indexOf('"') + 1;
-    final end = line.lastIndexOf('"');
-    if (start > 0 && end > start) {
-      return line.substring(start, end);
-    }
-    return '';
-  }
-
-  /// Extract moves from PGN text
-  static List<String> _extractMoves(String pgnText) {
-    final moves = <String>[];
-    final lines = pgnText.split('\n');
-
-    // Find the moves section (after headers, before result)
-    final moveBuffer = StringBuffer();
-
-    for (final line in lines) {
-      if (line.startsWith('[')) {
-        continue;
-      }
-
-      // Non-empty, non-header line = moves
-      if (line.trim().isNotEmpty) {
-        moveBuffer.write(line);
-        moveBuffer.write(' ');
-      }
-    }
-
-    // Parse moves from buffer
-    final moveText = moveBuffer.toString();
-
-    // Remove move numbers and result notation
-    var cleaned = moveText
-        .replaceAll(RegExp(r'\d+\.'), ' ') // Remove move numbers
-        .replaceAll(RegExp(r'\{[^}]*\}'), ' ') // Remove comments in braces
-        .replaceAll(RegExp(r'1-0|0-1|1/2-1/2|\*'), '') // Remove result
-        .replaceAll(RegExp(r'\s+'), ' ') // Normalize whitespace
-        .trim();
-
-    // Split into individual moves
-    final tokens = cleaned.split(' ');
-
-    for (final token in tokens) {
-      final trimmed = token.trim();
-      // Skip empty tokens, brackets, and PGN ellipsis notation (.., ...)
-      if (trimmed.isNotEmpty &&
-          !trimmed.contains('[') &&
-          !trimmed.contains(']') &&
-          trimmed != '..' &&
-          trimmed != '...') {
-        moves.add(trimmed);
-      }
-    }
-
-    return moves;
-  }
-
-  /// Calculate game result from user's perspective
   static double _calculateUserResult(String result, bool userIsWhite) {
-    if (result == '1-0') {
-      return userIsWhite ? 1.0 : 0.0;
-    } else if (result == '0-1') {
-      return userIsWhite ? 0.0 : 1.0;
-    } else {
-      // Draw or unknown
-      return 0.5;
-    }
-  }
-
-  /// Get shortened FEN key (without move counters)
-  static String _getFenKey(Position position) {
-    final fen = position.fen;
-    final parts = fen.split(' ');
-    if (parts.length >= 4) {
-      return '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
-    }
-    return fen;
+    if (result.contains('1-0')) return userIsWhite ? 1.0 : 0.0;
+    if (result.contains('0-1')) return userIsWhite ? 0.0 : 1.0;
+    return 0.5; // Draws or '*'
   }
 }

@@ -23,6 +23,12 @@ import 'repertoire_training_screen.dart';
 // -------------------------------------------------------------------
 /// Manages the state and business logic for the repertoire screen.
 /// This uses ChangeNotifier to notify the UI of updates.
+///
+/// KEY ARCHITECTURE: This controller is the SINGLE SOURCE OF TRUTH.
+/// - _moveHistory is the canonical state (list of SAN moves)
+/// - Board, PGN editor, and Opening Tree all derive their state from this
+/// - When any component changes position, it calls controller methods which
+///   update _moveHistory and notify all listeners
 class RepertoireController with ChangeNotifier {
   Map<String, dynamic>? _currentRepertoire;
   Map<String, dynamic>? get currentRepertoire => _currentRepertoire;
@@ -39,6 +45,19 @@ class RepertoireController with ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
+  // ============================================================
+  // SOURCE OF TRUTH: Move history and derived position
+  // ============================================================
+
+  /// The canonical move history - THIS is the source of truth
+  List<String> _moveHistory = [];
+  List<String> get moveHistory => List.unmodifiable(_moveHistory);
+
+  /// Current move index (-1 = starting position, 0 = after first move, etc.)
+  int _currentMoveIndex = -1;
+  int get currentMoveIndex => _currentMoveIndex;
+
+  /// Derived position from move history
   chess.Chess _game = chess.Chess();
   chess.Chess get game => _game;
   String get fen => _game.fen;
@@ -46,15 +65,151 @@ class RepertoireController with ChangeNotifier {
   /// Convert Chess to Position for dartchess compatibility
   Position get position => Chess.fromSetup(Setup.parseFen(_game.fen));
 
-  /// Get current move sequence from opening tree
+  /// Get current move sequence (moves up to current index)
   List<String> get currentMoveSequence {
-    if (_openingTree == null) return [];
-    return _openingTree!.currentNode.getMovePath();
+    if (_currentMoveIndex < 0) return [];
+    return _moveHistory.sublist(0, _currentMoveIndex + 1);
   }
 
   // Flag to prevent update loops between board and PGN editor
   bool _isInternalUpdate = false;
   bool get isInternalUpdate => _isInternalUpdate;
+
+  // ============================================================
+  // UNIFIED STATE MANAGEMENT METHODS
+  // ============================================================
+
+  /// Called when user makes a move on the board or clicks an explorer move
+  /// This is THE method to use for any new move
+  void userPlayedMove(String sanMove) {
+    // Validate move against current position using a test game
+    final testGame = chess.Chess.fromFEN(_game.fen);
+    final isValid = testGame.move(sanMove);
+    if (!isValid) {
+      print('Invalid move: $sanMove for position ${_game.fen}');
+      return;
+    }
+
+    // If we're not at the end of the line, check if this creates a variation
+    if (_currentMoveIndex < _moveHistory.length - 1) {
+      final existingNextMove = _moveHistory[_currentMoveIndex + 1];
+      if (existingNextMove == sanMove) {
+        // Same move - just advance
+        _currentMoveIndex++;
+        _rebuildPosition();
+        _syncOpeningTree();
+        notifyListeners();
+        return;
+      }
+      // Different move - truncate and add new move (or create variation in future)
+      _moveHistory = _moveHistory.sublist(0, _currentMoveIndex + 1);
+    }
+
+    // Add the move
+    _moveHistory.add(sanMove);
+    _currentMoveIndex++;
+
+    // Rebuild position and sync tree
+    _rebuildPosition();
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  /// Called when user selects a move in the opening tree
+  /// This handles branching from the current tree position
+  void userSelectedTreeMove(String sanMove) {
+    if (_openingTree == null) return;
+
+    // Determine where we are branching from based on tree depth
+    // If tree is "out of book", this allows us to recover/branch from the last known book position
+    final branchIndex = _openingTree!.currentDepth;
+
+    // Truncate history to the branch point if necessary
+    if (branchIndex < _moveHistory.length) {
+      _moveHistory = _moveHistory.sublist(0, branchIndex);
+    }
+
+    // Add the new move
+    _moveHistory.add(sanMove);
+    _currentMoveIndex = _moveHistory.length - 1;
+
+    // Rebuild and sync
+    _rebuildPosition();
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  /// Jump to a specific move index in the history
+  /// -1 = starting position, 0 = after first move, etc.
+  void jumpToMoveIndex(int index) {
+    if (index < -1 || index >= _moveHistory.length) return;
+    if (index == _currentMoveIndex) return;
+
+    _currentMoveIndex = index;
+    _rebuildPosition();
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  /// Go back one move
+  void goBack() {
+    if (_currentMoveIndex >= 0) {
+      jumpToMoveIndex(_currentMoveIndex - 1);
+    }
+  }
+
+  /// Go forward one move
+  void goForward() {
+    if (_currentMoveIndex < _moveHistory.length - 1) {
+      jumpToMoveIndex(_currentMoveIndex + 1);
+    }
+  }
+
+  /// Go to start
+  void goToStart() {
+    jumpToMoveIndex(-1);
+  }
+
+  /// Go to end
+  void goToEnd() {
+    jumpToMoveIndex(_moveHistory.length - 1);
+  }
+
+  /// Load a specific line of moves (replaces current history)
+  void loadMoveHistory(List<String> moves) {
+    _moveHistory = List.from(moves);
+    _currentMoveIndex = moves.isEmpty ? -1 : moves.length - 1;
+    _rebuildPosition();
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  /// Clear the current line
+  void clearMoveHistory() {
+    _moveHistory.clear();
+    _currentMoveIndex = -1;
+    _game = chess.Chess();
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  /// Rebuild the chess position from move history up to current index
+  void _rebuildPosition() {
+    _game = chess.Chess();
+    for (int i = 0; i <= _currentMoveIndex && i < _moveHistory.length; i++) {
+      final result = _game.move(_moveHistory[i]);
+      if (!result) {
+        break;
+      }
+    }
+  }
+
+  /// Sync the opening tree to match current move history
+  void _syncOpeningTree() {
+    if (_openingTree != null) {
+      _openingTree!.syncToMoveHistory(currentMoveSequence);
+    }
+  }
 
   // --- Public Methods ---
 
@@ -76,7 +231,11 @@ class RepertoireController with ChangeNotifier {
 
       if (await file.exists()) {
         _repertoirePgn = await file.readAsString();
-        _game = chess.Chess(); // Reset to starting position
+
+        // Reset all state when loading a new repertoire
+        _game = chess.Chess();
+        _moveHistory.clear();
+        _currentMoveIndex = -1;
 
         // Build opening tree from the repertoire PGN
         await _buildOpeningTree();
@@ -88,6 +247,8 @@ class RepertoireController with ChangeNotifier {
         _openingTree = null;
         _repertoireLines = [];
         _game = chess.Chess();
+        _moveHistory.clear();
+        _currentMoveIndex = -1;
       }
     } catch (e) {
       print('Failed to load repertoire: $e');
@@ -95,6 +256,8 @@ class RepertoireController with ChangeNotifier {
       _openingTree = null;
       _repertoireLines = [];
       _game = chess.Chess();
+      _moveHistory.clear();
+      _currentMoveIndex = -1;
     } finally {
       _setLoading(false);
     }
@@ -210,13 +373,12 @@ class RepertoireController with ChangeNotifier {
       }
 
       // Build tree from the correct perspective based on repertoire color
-      final playerName = isWhiteRepertoire ? 'Training' : 'Me';
-
       _openingTree = await OpeningTreeBuilder.buildTree(
         pgnList: processedGames,
-        username: playerName, // Matches the player learning this repertoire
-        userIsWhite: isWhiteRepertoire, // Use parsed color from repertoire
-        maxDepth: 50, // Allow deeper analysis for repertoire study
+        username: '', // Builder auto-detects repertoire player names
+        userIsWhite: isWhiteRepertoire,
+        maxDepth: 50,
+        strictPlayerMatching: false, // Allow all games regardless of player names
       );
 
       print('✅ Built opening tree with ${_openingTree?.totalGames} total games');
@@ -228,52 +390,59 @@ class RepertoireController with ChangeNotifier {
 
 
   /// Syncs the game state from an external source (like the PGN editor).
+  /// This now uses move history matching to stay in sync.
   void syncGameFromFen(String fen) {
-
     // Prevent loops and redundant updates
     if (_game.fen == fen || _isInternalUpdate) {
       return;
     }
 
-    try {
-      _game = chess.Chess.fromFEN(fen);
+    // Don't use FEN-based sync anymore - let the PGN editor report its move index
+    // This method is kept for backward compatibility but now does nothing
+    // The proper sync happens via syncFromMoveIndex
+  }
 
-      // Also sync the opening tree to this position
-      if (_openingTree != null) {
-        _openingTree!.navigateToFen(fen);
-      }
+  /// Sync to a specific move index from the PGN editor
+  void syncFromMoveIndex(int moveIndex, List<String> moves) {
+    // Prevent loops
+    if (_isInternalUpdate) return;
 
-      notifyListeners();
-    } catch (e) {
-      print('Error syncing board position: $e');
-    }
+    // Update our move history to match the editor's
+    _moveHistory = List.from(moves);
+    _currentMoveIndex = moveIndex;
+    _rebuildPosition();
+    _syncOpeningTree();
+    notifyListeners();
   }
 
   /// Handles position changes from the opening tree
+  /// When user clicks a move in the tree, we load that move sequence
   void onTreePositionChanged(String fen) {
-    try {
-      _game = chess.Chess.fromFEN(fen);
+    if (_openingTree == null) return;
 
-      // Also update the PGN editor to show the moves that led to this position
-      if (_openingTree != null) {
-        final moves = _openingTree!.currentNode.getMovePath();
-        _currentTreeMoves = moves;
-      }
+    // Get the move path from the tree's current node
+    final moves = _openingTree!.currentNode.getMovePath();
 
-      notifyListeners();
-    } catch (e) {
-      print('Error syncing tree position: $e');
-    }
+    // Load this move sequence as our history
+    _isInternalUpdate = true;
+    _moveHistory = List.from(moves);
+    _currentMoveIndex = moves.isEmpty ? -1 : moves.length - 1;
+    _rebuildPosition();
+    _isInternalUpdate = false;
+
+    notifyListeners();
   }
-
-  List<String>? _currentTreeMoves;
-  List<String>? get currentTreeMoves => _currentTreeMoves;
 
   /// Loads a specific PGN line for editing
   void loadPgnLine(RepertoireLine line) {
-    // This will be called by the bottom sheet to load a line in the PGN editor
-    // We'll implement this by notifying listeners with a special flag
     _selectedPgnLine = line;
+
+    // Also load the line's moves into our move history
+    _moveHistory = List.from(line.moves);
+    _currentMoveIndex = line.moves.isEmpty ? -1 : line.moves.length - 1;
+    _rebuildPosition();
+    _syncOpeningTree();
+
     notifyListeners();
   }
 
@@ -316,21 +485,6 @@ class RepertoireController with ChangeNotifier {
     _isLoading = loading;
     notifyListeners();
   }
-
-  /// Parses a UCI move string into a Map for the chess.dart library
-  Map<String, String> _parseUciToMoveMap(String moveUci) {
-    final fromSquare = moveUci.substring(0, 2);
-    final toSquare = moveUci.substring(2, 4);
-    final moveMap = {
-      'from': fromSquare,
-      'to': toSquare,
-    };
-    if (moveUci.length > 4) {
-      moveMap['promotion'] = moveUci.substring(4, 5);
-    }
-    return moveMap;
-  }
-
 }
 
 // -------------------------------------------------------------------
@@ -573,20 +727,20 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               controller: _pgnEditorController,
               // Load selected line PGN or default to repertoire PGN
               initialPgn: _getInitialPgnForEditor(),
-              // Pass current repertoire name
+              // Pass current repertoire name and color
               currentRepertoireName: _controller.currentRepertoire?['name'] as String?,
-              onPositionChanged: (position) {
-                // Update board position when PGN editor changes position
-                // This IS called during build, so it MUST be deferred.
+              repertoireColor: _controller.currentRepertoire?['color'] as String?,
+              // New unified state callback
+              onMoveStateChanged: (moveIndex, moves) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (!mounted) return;
-
-                  // Only sync if this is NOT an internal update from the controller
-                  // This prevents feedback loops when moves come from the board
                   if (!_controller.isInternalUpdate) {
-                    _controller.syncGameFromFen(position.fen);
+                    _controller.syncFromMoveIndex(moveIndex, moves);
                   }
                 });
+              },
+              onPositionChanged: (position) {
+                // Keep for backward compatibility but defer to onMoveStateChanged
               },
               onPgnChanged: (pgn) {
                 // Clear selected line when user edits
@@ -628,16 +782,30 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         showPgnSearch: _controller.repertoireLines.isNotEmpty,
         repertoireLines: _controller.repertoireLines,
         currentMoveSequence: _controller.currentMoveSequence,
-        onPositionSelected: (fen) {
-          // Update board and PGN when tree position changes
-          _controller.onTreePositionChanged(fen);
+        onMoveSelected: (move) {
+           // Handle tree move selection
+           _controller.userSelectedTreeMove(move);
 
-          // Also sync the PGN editor to the new position
-          _pgnEditorController.syncToPosition(fen);
+           // Sync PGN editor
+           _pgnEditorController.syncToMoveHistory(
+             _controller.moveHistory,
+             _controller.currentMoveIndex,
+           );
+        },
+        onPositionSelected: (fen) {
+          // Deprecated: Use onMoveSelected instead
+          // Keeping this empty or minimal as onMoveSelected handles the logic now
         },
         onLineSelected: (line) {
-          // Load the selected PGN line
+          // Load the selected PGN line - this updates move history
           _controller.loadPgnLine(line);
+
+          // Sync PGN editor to the loaded line
+          _pgnEditorController.syncToMoveHistory(
+            _controller.moveHistory,
+            _controller.currentMoveIndex,
+          );
+
           // Switch to PGN tab
           _tabController.animateTo(1);
         },
@@ -742,15 +910,15 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   void _handleMove(CompletedMove move) {
     if (!mounted) return;
 
-    print('Repertoire: Received move ${move.uci} -> ${move.san}');
-    print('Repertoire: Controller FEN before sync: ${_controller.fen}');
+    // Use the unified state approach:
+    // 1. Tell controller about the move (updates move history, position, tree)
+    _controller.userPlayedMove(move.san);
 
-    // Board has already made the move and calculated the SAN
-    // Just add it to the PGN editor
-    _pgnEditorController.addMove(move.san);
-    print('Repertoire: Added move to PGN: ${move.san}');
-
-    // The PGN editor will call onPositionChanged to sync the controller
+    // 2. Sync the PGN editor to match the controller's state
+    _pgnEditorController.syncToMoveHistory(
+      _controller.moveHistory,
+      _controller.currentMoveIndex,
+    );
   }
 
   void _expandRepertoire() {
@@ -783,22 +951,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       builder: (context) => AlertDialog(
         title: const Text('Feature Not Implemented'),
         content: Text('$featureName feature will be implemented in the future.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showError(String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
