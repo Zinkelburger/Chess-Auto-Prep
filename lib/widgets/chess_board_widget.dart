@@ -440,7 +440,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       }
 
       // Generate SAN notation before making the move
-      final correctSan = _generateSan(from, to, gameCopy);
+      var correctSan = _generateSan(from, to, gameCopy);
 
       // Create the move map for the chess.dart library
       final moveMap = <String, String>{
@@ -466,6 +466,14 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       // Check for success (true)
       if (moveResult == true) {
         final fenAfter = gameCopy.fen;
+        
+        // Update SAN with check/checkmate symbols if needed
+        // We do this after the move is made on the copy so we can check the resulting state
+        if (gameCopy.in_checkmate) {
+          correctSan += '#';
+        } else if (gameCopy.in_check) {
+          correctSan += '+';
+        }
 
         print('Board: Move successful! $uci -> $correctSan');
         print('Board: Position changed from $fenBefore to $fenAfter');
