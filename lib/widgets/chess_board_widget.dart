@@ -419,10 +419,14 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       final uci = '$from$to';
       final fenBefore = widget.game.fen;
 
+      // Create a local copy of the game to validate and make the move
+      // This prevents mutating the parent's state which causes sync issues
+      final gameCopy = chess.Chess.fromFEN(fenBefore);
+
       print('Board: Attempting move $uci on position $fenBefore');
 
       // Validate the move is legal first
-      final legalMoves = widget.game.generate_moves();
+      final legalMoves = gameCopy.generate_moves();
       final isLegal = legalMoves.any((move) =>
           move.fromAlgebraic == from && move.toAlgebraic == to);
 
@@ -436,7 +440,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       }
 
       // Generate SAN notation before making the move
-      final correctSan = _generateSan(from, to, widget.game);
+      final correctSan = _generateSan(from, to, gameCopy);
 
       // Create the move map for the chess.dart library
       final moveMap = <String, String>{
@@ -445,7 +449,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       };
 
       // Check for promotion and auto-promote to Queen
-      final piece = widget.game.get(from);
+      final piece = gameCopy.get(from);
       if (piece?.type == chess.PieceType.PAWN) {
         if ((piece!.color == chess.Color.WHITE && to[1] == '8') ||
             (piece.color == chess.Color.BLACK && to[1] == '1')) {
@@ -455,13 +459,13 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
       // Now make the move on the actual game object
       // In chess ^0.7.0, this returns a bool
-      final moveResult = widget.game.move(moveMap);
+      final moveResult = gameCopy.move(moveMap);
 
       print('Board: Move result: $moveResult (${moveResult.runtimeType})');
 
       // Check for success (true)
       if (moveResult == true) {
-        final fenAfter = widget.game.fen;
+        final fenAfter = gameCopy.fen;
 
         print('Board: Move successful! $uci -> $correctSan');
         print('Board: Position changed from $fenBefore to $fenAfter');

@@ -249,7 +249,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Loaded ${analysis.positionStats.length} positions from cache',
+                  'Loaded ${analysis!.positionStats.length} positions from cache',
                 ),
               ),
             );
@@ -287,7 +287,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           platform,
           username,
           userIsWhite,
-          analysis.toJson(),
+          analysis!.toJson(),
         );
       } catch (e) {
         // Failed to cache, but continue
@@ -304,7 +304,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Found ${analysis.positionStats.length} positions to analyze',
+              'Found ${analysis!.positionStats.length} positions to analyze',
             ),
           ),
         );
