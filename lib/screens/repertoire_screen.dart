@@ -45,6 +45,9 @@ class RepertoireController with ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+  
+  bool _isRepertoireWhite = true;
+  bool get isRepertoireWhite => _isRepertoireWhite;
 
   // ============================================================
   // SOURCE OF TRUTH: Move history and derived position
@@ -303,6 +306,7 @@ class RepertoireController with ChangeNotifier {
 
       // Default to White if no color specified
       final isWhiteRepertoire = repertoireColor != 'Black';
+      _isRepertoireWhite = isWhiteRepertoire; // New field
 
       // Parse PGN content properly - each game starts with headers and ends with moves
       final processedGames = <String>[];
@@ -803,6 +807,34 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             child: EngineAnalysisWidget(
               fen: _controller.fen,
               isActive: isEngineTabActive,
+              isUserTurn: _controller.game.turn == (_controller.isRepertoireWhite ? chess.Color.WHITE : chess.Color.BLACK),
+              onMoveSelected: (uciMove) {
+                // Convert UCI (e2e4) to SAN for consistency
+                // Or just let the controller handle UCI if possible, but current method takes SAN.
+                // Simpler: Use the chess library to parse UCI to move object, then get SAN.
+                try {
+                  final from = uciMove.substring(0, 2);
+                  final to = uciMove.substring(2, 4);
+                  String? promotion;
+                  if (uciMove.length > 4) promotion = uciMove.substring(4);
+                  
+                  // We need to find the move in legal moves to get SAN
+                  final moves = _controller.game.moves({ 'verbose': true });
+                  // This is a list of maps. Find the matching one.
+                  final match = moves.firstWhere((m) => 
+                    m['from'] == from && 
+                    m['to'] == to && 
+                    (promotion == null || m['promotion'] == promotion),
+                    orElse: () => null
+                  );
+                  
+                  if (match != null) {
+                    _controller.userPlayedMove(match['san']);
+                  }
+                } catch (e) {
+                  print('Error playing engine move: $e');
+                }
+              },
             ),
           ),
         ],
