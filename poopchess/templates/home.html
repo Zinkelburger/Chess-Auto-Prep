@@ -1,0 +1,35 @@
+
+{% extends 'base.html' %}
+
+{% block content %}
+<div style="text-align: center; margin-bottom: 40px;">
+    <h2>Find Your Next Opening</h2>
+    <form action="." method="get" style="max-width: 500px; margin: 0 auto; display: flex; gap: 10px;">
+        <input type="text" name="q" placeholder="Search courses..." value="{{ request.GET.q }}">
+        <button type="submit">Search</button>
+    </form>
+</div>
+
+<div class="courses-grid">
+    {% for course in courses %}
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <h3><a href="{% url 'course_detail' course.id %}">{{ course.title }}</a></h3>
+                {% if course.is_moderator_approved %}
+                    <span class="badge badge-success">Verified</span>
+                {% endif %}
+            </div>
+            <p style="color: #aaa;">By {{ course.author.username }} • {{ course.created_at|date:"M d, Y" }}</p>
+            <p>{{ course.description|truncatewords:30 }}</p>
+            <div style="margin-top: 15px;">
+                <a href="{% url 'course_detail' course.id %}" class="btn">View Course</a>
+            </div>
+        </div>
+    {% empty %}
+        <div style="text-align: center; padding: 40px;">
+            <p>No courses found. Why not upload one?</p>
+        </div>
+    {% endfor %}
+</div>
+{% endblock %}
+

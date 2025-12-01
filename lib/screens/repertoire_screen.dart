@@ -632,6 +632,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               return KeyEventResult.handled;
             }
           }
+          // Engine Tab (Index 2) - Main controller handles navigation
+          else if (_tabController.index == 2) {
+            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              _controller.goBack();
+              return KeyEventResult.handled;
+            } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              _controller.goForward();
+              return KeyEventResult.handled;
+            }
+          }
           
           return KeyEventResult.ignored;
         },

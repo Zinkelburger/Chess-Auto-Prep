@@ -1,0 +1,65 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}PoopChess{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css">
+    <style>
+        body { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; border-bottom: 1px solid #444; padding-bottom: 20px; }
+        .nav-links a { margin-left: 20px; text-decoration: none; }
+        .card { border: 1px solid #444; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .btn { display: inline-block; padding: 10px 20px; background: #0074d9; color: white; text-decoration: none; border-radius: 4px; }
+        .btn-secondary { background: #555; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; }
+        .badge-success { background: #2ecc40; color: black; }
+        .tree-explorer { display: flex; gap: 20px; }
+        .board-container { flex: 0 0 400px; }
+        .moves-container { flex: 1; }
+        .move-btn { display: inline-block; margin: 5px; padding: 8px 16px; background: #333; border: 1px solid #555; cursor: pointer; border-radius: 4px; }
+        .move-btn:hover { background: #444; }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav>
+        <div class="logo">
+            <h1><a href="{% url 'home' %}" style="text-decoration:none; color:inherit;">PoopChess ♟️</a></h1>
+        </div>
+        <div class="nav-links">
+            <a href="{% url 'home' %}">Courses</a>
+            {% if user.is_authenticated %}
+                <span>Welcome, {{ user.username }}</span>
+                {% if user.is_staff %}
+                    <a href="/admin/">Admin</a>
+                {% endif %}
+                <a href="{% url 'account_logout' %}">Logout</a>
+            {% else %}
+                <a href="{% url 'account_login' %}">Login</a>
+                <a href="{% url 'account_signup' %}">Sign Up</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <main>
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <div class="card" style="background: #333;">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer style="margin-top: 50px; text-align: center; color: #666;">
+        <p>PoopChess - The totally legit chess course repository.</p>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+
