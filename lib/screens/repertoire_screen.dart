@@ -11,6 +11,7 @@ import 'dart:io' as io;
 import '../widgets/chess_board_widget.dart';
 import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/opening_tree_widget.dart';
+import '../widgets/engine_analysis_widget.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
 import '../services/opening_tree_builder.dart';
@@ -508,7 +509,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging || _tabController.animation?.value == _tabController.index) {
+        setState(() {});
+      }
+    });
 
     // 1. Initialize the controller
     _controller = RepertoireController();
@@ -604,18 +610,29 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       body: Focus(
         autofocus: true,
         onKeyEvent: (node, event) {
-          // Only handle arrow keys when PGN tab is active (index 1)
-          if (_tabController.index == 1 && event is KeyDownEvent) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+          // PGN Tab (Index 1) - PGN Editor handles navigation
+          if (_tabController.index == 1) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-              // Go back in PGN
               _pgnEditorController.goBack();
               return KeyEventResult.handled;
             } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-              // Go forward in PGN
               _pgnEditorController.goForward();
               return KeyEventResult.handled;
             }
           }
+          // Tree Tab (Index 0) - Main controller handles navigation
+          else if (_tabController.index == 0) {
+            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              _controller.goBack();
+              return KeyEventResult.handled;
+            } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              _controller.goForward();
+              return KeyEventResult.handled;
+            }
+          }
+          
           return KeyEventResult.ignored;
         },
         child: Row(
@@ -658,6 +675,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                       tabs: const [
                         Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
                         Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
+                        Tab(text: 'Engine', icon: Icon(Icons.developer_board, size: 16)),
                         Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
                       ],
                     ),
@@ -668,6 +686,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                         children: [
                           _buildOpeningTreeTab(),
                           _buildPgnTab(),
+                          _buildEngineTab(),
                           _buildActionsTab(),
                         ],
                       ),
@@ -750,6 +769,30 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   _controller.clearSelectedPgnLine();
                 }
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEngineTab() {
+    // Calculate if the engine tab is currently active/visible
+    final isEngineTabActive = _tabController.index == 2;
+
+    return Container(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        children: [
+          Text(
+            'Engine Analysis',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const Divider(),
+          Expanded(
+            child: EngineAnalysisWidget(
+              fen: _controller.fen,
+              isActive: isEngineTabActive,
             ),
           ),
         ],
