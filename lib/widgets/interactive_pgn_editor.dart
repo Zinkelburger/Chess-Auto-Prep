@@ -47,6 +47,10 @@ class PgnEditorController {
     _state = state;
   }
 
+  void _unbindState() {
+    _state = null;
+  }
+
   void addMove(String san) {
     _state?.addMove(san);
   }
@@ -88,6 +92,8 @@ class InteractivePgnEditor extends StatefulWidget {
   final PgnEditorController? controller;
   final String? currentRepertoireName;
   final String? repertoireColor; // "White" or "Black"
+  final List<String> moveHistory;
+  final int currentMoveIndex;
 
   const InteractivePgnEditor({
     super.key,
@@ -98,6 +104,8 @@ class InteractivePgnEditor extends StatefulWidget {
     this.controller,
     this.currentRepertoireName,
     this.repertoireColor,
+    this.moveHistory = const [],
+    this.currentMoveIndex = -1,
   });
 
   @override
@@ -132,11 +140,35 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (widget.initialPgn != null && widget.initialPgn!.isNotEmpty) {
       _loadInitialPgn(widget.initialPgn!);
     }
-    _updatePosition();
+    
+    // Sync to initial move history if provided
+    if (widget.moveHistory.isNotEmpty || widget.currentMoveIndex != -1) {
+      _syncToMoveHistory(widget.moveHistory, widget.currentMoveIndex);
+    } else {
+      _updatePosition();
+    }
+  }
+
+  @override
+  void didUpdateWidget(InteractivePgnEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_listsEqual(widget.moveHistory, oldWidget.moveHistory) ||
+        widget.currentMoveIndex != oldWidget.currentMoveIndex) {
+      _syncToMoveHistory(widget.moveHistory, widget.currentMoveIndex);
+    }
+  }
+
+  bool _listsEqual(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   @override
   void dispose() {
+    widget.controller?._unbindState();
     _commentController.dispose();
     _titleController.dispose();
     super.dispose();
@@ -285,6 +317,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   /// Sync editor to a specific move history from external source
   void _syncToMoveHistory(List<String> moves, int moveIndex) {
+    if (!mounted) return;
+    
     setState(() {
       // Rebuild moves list, preserving comments for existing moves that match
       final newMoves = <PgnMove>[];

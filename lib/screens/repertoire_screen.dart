@@ -730,6 +730,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               // Pass current repertoire name and color
               currentRepertoireName: _controller.currentRepertoire?['name'] as String?,
               repertoireColor: _controller.currentRepertoire?['color'] as String?,
+              moveHistory: _controller.moveHistory,
+              currentMoveIndex: _controller.currentMoveIndex,
               // New unified state callback
               onMoveStateChanged: (moveIndex, moves) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -785,12 +787,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onMoveSelected: (move) {
            // Handle tree move selection
            _controller.userSelectedTreeMove(move);
-
-           // Sync PGN editor
-           _pgnEditorController.syncToMoveHistory(
-             _controller.moveHistory,
-             _controller.currentMoveIndex,
-           );
         },
         onPositionSelected: (fen) {
           // Deprecated: Use onMoveSelected instead
@@ -799,12 +795,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onLineSelected: (line) {
           // Load the selected PGN line - this updates move history
           _controller.loadPgnLine(line);
-
-          // Sync PGN editor to the loaded line
-          _pgnEditorController.syncToMoveHistory(
-            _controller.moveHistory,
-            _controller.currentMoveIndex,
-          );
 
           // Switch to PGN tab
           _tabController.animateTo(1);
@@ -913,12 +903,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     // Use the unified state approach:
     // 1. Tell controller about the move (updates move history, position, tree)
     _controller.userPlayedMove(move.san);
-
-    // 2. Sync the PGN editor to match the controller's state
-    _pgnEditorController.syncToMoveHistory(
-      _controller.moveHistory,
-      _controller.currentMoveIndex,
-    );
   }
 
   void _expandRepertoire() {
