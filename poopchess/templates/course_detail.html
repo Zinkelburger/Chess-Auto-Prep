@@ -1,0 +1,234 @@
+
+{% extends 'base.html' %}
+
+{% block title %}{{ course.title }} - PoopChess{% endblock %}
+
+{% block extra_head %}
+<!-- Chess libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 20px;">
+    <a href="{% url 'home' %}">&larr; Back to Courses</a>
+</div>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h1>{{ course.title }}</h1>
+        {% if course.pgn_file %}
+            <a href="{{ course.pgn_file.url }}" class="btn" download>Download PGN</a>
+        {% endif %}
+    </div>
+    <p><strong>Author:</strong> {{ course.author.username }} {% if course.is_moderator_approved %}<span class="badge badge-success">Verified</span>{% endif %}</p>
+    <p>{{ course.description }}</p>
+</div>
+
+<div class="card">
+    <h3>Opening Explorer</h3>
+    <div class="tree-explorer">
+        <div class="board-container">
+            <div id="board" style="width: 400px"></div>
+        </div>
+        <div class="moves-container">
+            <div id="move-history" style="margin-bottom: 15px; padding: 10px; background: #222; border-radius: 4px; min-height: 30px;">
+                <span id="history-text" style="color: #aaa;">Starting position</span>
+            </div>
+            <h4>Next Moves</h4>
+            <div id="move-list" style="min-height: 50px;">
+                <p style="color: #666;">Loading...</p>
+            </div>
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button id="back-btn" class="btn btn-secondary" title="Back (←)">&lt;</button>
+                <button id="forward-btn" class="btn btn-secondary" title="Forward (→)">&gt;</button>
+                <button id="reset-btn" class="btn btn-secondary">Reset</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Reviews</h3>
+    {% if user.is_authenticated %}
+        <form method="post" action="{% url 'add_review' course.id %}" style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #444;">
+            {% csrf_token %}
+            <div style="margin-bottom: 10px;">
+                <label>Rating:</label>
+                <select name="rating">
+                    <option value="5">⭐⭐⭐⭐⭐ (5)</option>
+                    <option value="4">⭐⭐⭐⭐ (4)</option>
+                    <option value="3">⭐⭐⭐ (3)</option>
+                    <option value="2">⭐⭐ (2)</option>
+                    <option value="1">⭐ (1)</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <textarea name="text" placeholder="Write your review..." rows="3" style="width: 100%;"></textarea>
+            </div>
+            <button type="submit" class="btn">Post Review</button>
+        </form>
+    {% else %}
+        <p><a href="{% url 'account_login' %}">Login</a> to leave a review.</p>
+    {% endif %}
+
+    {% for review in course.reviews.all %}
+        <div style="margin-bottom: 15px; padding: 10px; background: #2a2a2a; border-radius: 4px;">
+            <div style="display: flex; justify-content: space-between;">
+                <strong>{{ review.author.username }}</strong>
+                <span>{{ review.rating }}⭐</span>
+            </div>
+            <p style="margin: 5px 0;">{{ review.text }}</p>
+            <small style="color: #888;">{{ review.created_at|date:"M d, Y" }}</small>
+        </div>
+    {% empty %}
+        <p>No reviews yet.</p>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let treeData = null;
+    let currentNode = null;
+    let board = null;
+    let game = new Chess();
+    let moveHistory = [];      // SAN moves played
+    let nodeHistory = [];      // Tree nodes for going back
+
+    // Initialize the board immediately with Lichess SVG pieces
+    function initBoard() {
+        board = Chessboard('board', {
+            position: 'start',
+            draggable: false,
+            pieceTheme: '/static/pieces/{piece}.svg'
+        });
+    }
+
+    function renderMoves() {
+        const moveList = document.getElementById('move-list');
+        const historyText = document.getElementById('history-text');
+        moveList.innerHTML = '';
+
+        // Update move history display
+        if (moveHistory.length === 0) {
+            historyText.innerText = 'Starting position';
+        } else {
+            // Format as move pairs: 1. e4 e5 2. Nf3 Nc6 ...
+            let formatted = '';
+            for (let i = 0; i < moveHistory.length; i++) {
+                if (i % 2 === 0) {
+                    formatted += (Math.floor(i/2) + 1) + '. ';
+                }
+                formatted += moveHistory[i] + ' ';
+            }
+            historyText.innerText = formatted.trim();
+        }
+
+        if (!currentNode || !currentNode.moves) {
+            moveList.innerHTML = '<p style="color: #666;">No moves available</p>';
+            return;
+        }
+
+        const moves = Object.keys(currentNode.moves);
+
+        if (moves.length === 0) {
+            moveList.innerHTML = '<p style="color: #888;">End of line.</p>';
+            return;
+        }
+
+        moves.forEach(san => {
+            const el = document.createElement('div');
+            el.className = 'move-btn';
+            el.innerHTML = `<strong>${san}</strong>`;
+            el.onclick = () => makeMove(san);
+            moveList.appendChild(el);
+        });
+    }
+
+    function makeMove(san) {
+        if (currentNode && currentNode.moves && currentNode.moves[san]) {
+            nodeHistory.push(currentNode);  // Save current node before moving
+            currentNode = currentNode.moves[san];
+            game.move(san);
+            moveHistory.push(san);
+            board.position(game.fen());
+            renderMoves();
+        }
+    }
+
+    function goBack() {
+        if (nodeHistory.length > 0 && moveHistory.length > 0) {
+            currentNode = nodeHistory.pop();
+            moveHistory.pop();
+            game.undo();
+            board.position(game.fen());
+            renderMoves();
+        }
+    }
+
+    function goForward() {
+        // Go forward plays the first available move
+        if (currentNode && currentNode.moves) {
+            const moves = Object.keys(currentNode.moves);
+            if (moves.length > 0) {
+                makeMove(moves[0]);
+            }
+        }
+    }
+
+    function resetPosition() {
+        currentNode = treeData;
+        game.reset();
+        moveHistory = [];
+        nodeHistory = [];
+        board.position('start');
+        renderMoves();
+    }
+
+    // Initialize board right away
+    $(document).ready(function() {
+        initBoard();
+        
+        {% if course.tree_json_file %}
+        // Fetch tree data
+        const treeUrl = "{{ course.tree_json_file.url }}";
+        fetch(treeUrl)
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to load tree');
+                return response.json();
+            })
+            .then(data => {
+                console.log('Tree loaded:', data);
+                treeData = data;
+                currentNode = treeData;
+                renderMoves();
+            })
+            .catch(err => {
+                console.error('Error loading tree:', err);
+                document.getElementById('move-list').innerHTML = '<p style="color: #f66;">Error loading repertoire data</p>';
+            });
+        {% else %}
+        document.getElementById('move-list').innerHTML = '<p style="color: #666;">No repertoire data available</p>';
+        {% endif %}
+
+        // Button handlers
+        document.getElementById('back-btn').onclick = goBack;
+        document.getElementById('forward-btn').onclick = goForward;
+        document.getElementById('reset-btn').onclick = resetPosition;
+
+        // Arrow key handlers
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                goBack();
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                goForward();
+            }
+        });
+    });
+</script>
+{% endblock %}
