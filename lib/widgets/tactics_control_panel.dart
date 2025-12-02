@@ -7,7 +7,7 @@ import '../core/app_state.dart';
 import '../models/tactics_position.dart';
 import '../services/tactics_database.dart';
 import '../services/tactics_engine.dart';
-import '../services/tactics_service.dart';
+import '../services/tactics_import_service.dart';
 import 'pgn_viewer_widget.dart';
 
 /// Tactics training control panel - Flutter port of Python's TacticsWidget
@@ -36,6 +36,14 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   String _feedback = '';
   bool _showSolution = false;
   bool _autoAdvance = true;  // Auto-advance setting (matches Python default)
+  String? _importStatus;
+
+  // Import controllers
+  late TextEditingController _lichessUserController;
+  late TextEditingController _lichessCountController;
+  late TextEditingController _chessComUserController;
+  late TextEditingController _chessComCountController;
+  late TextEditingController _stockfishDepthController;
 
   // Position history (for Previous button)
   final List<TacticsPosition> _positionHistory = [];
@@ -47,6 +55,23 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _database = TacticsDatabase();
     _engine = TacticsEngine();
     _tabController = TabController(length: 2, vsync: this);
+
+    _lichessUserController = TextEditingController();
+    _lichessCountController = TextEditingController(text: '20');
+    _chessComUserController = TextEditingController();
+    _chessComCountController = TextEditingController(text: '20');
+    _stockfishDepthController = TextEditingController(text: '15');
+
+    // Initialize controllers from AppState
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final appState = context.read<AppState>();
+        _lichessUserController.text = appState.lichessUsername ?? '';
+        _chessComUserController.text = appState.chesscomUsername ?? '';
+        
+        context.read<AppState>().setMoveAttemptedCallback(_onMoveAttempted);
+      }
+    });
 
     // Listen for tab changes to enter/exit analysis mode
     _tabController.addListener(() {
@@ -62,26 +87,22 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
     // Auto-load positions on startup
     _loadPositions();
-
-    // Register move validation callback
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<AppState>().setMoveAttemptedCallback(_onMoveAttempted);
-      }
-    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _lichessUserController.dispose();
+    _lichessCountController.dispose();
+    _chessComUserController.dispose();
+    _chessComCountController.dispose();
+    _stockfishDepthController.dispose();
     super.dispose();
   }
 
   Future<void> _loadPositions() async {
     final count = await _database.loadPositions();
-    if (count == 0 && mounted) {
-      setState(() {});
-    } else if (count > 0 && mounted) {
+    if (mounted) {
       setState(() {});
     }
   }
@@ -130,7 +151,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _getFeedbackColor().withOpacity(0.1),
+                color: _getFeedbackColor().withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: _getFeedbackColor()),
               ),
@@ -144,6 +165,26 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               ),
             ),
             const SizedBox(height: 16),
+          ],
+          
+          // Import Status Message
+          if (_importStatus != null) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(_importStatus!)),
+                ],
+              ),
+            ),
           ],
 
           // Solution display (like Python's solution_widget)
@@ -223,10 +264,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               ],
             ),
             const SizedBox(height: 16),
-          ],
-
-          // Settings (like Python's auto-advance checkbox)
-          if (_currentPosition != null) ...[
+            
             CheckboxListTile(
               value: _autoAdvance,
               onChanged: (value) {
@@ -237,31 +275,145 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               title: const Text('Auto-advance to next position'),
               contentPadding: EdgeInsets.zero,
             ),
-            const SizedBox(height: 16),
           ],
 
-          // Session controls (like Python)
+          // Import controls (shown when no active position)
           if (_currentPosition == null) ...[
-            if (_database.positions.isEmpty) ...[
-              Text(
-                'No tactics positions found.\n\nUse the button below to load tactics from Lichess.',
-                style: Theme.of(context).textTheme.bodyMedium,
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Import Games', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    
+                    // Lichess Row
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _lichessUserController,
+                            decoration: const InputDecoration(
+                              labelText: 'Lichess Username',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (value) {
+                              context.read<AppState>().setLichessUsername(value);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 80,
+                          child: TextField(
+                            controller: _lichessCountController,
+                            decoration: const InputDecoration(
+                              labelText: 'Games',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: _importStatus == null ? _importLichess : null,
+                          child: const Text('Import'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Chess.com Row
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _chessComUserController,
+                            decoration: const InputDecoration(
+                              labelText: 'Chess.com Username',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            onChanged: (value) {
+                              context.read<AppState>().setChesscomUsername(value);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 80,
+                          child: TextField(
+                            controller: _chessComCountController,
+                            decoration: const InputDecoration(
+                              labelText: 'Games',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: _importStatus == null ? _importChessCom : null,
+                          child: const Text('Import'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Stockfish Depth Row
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 140,
+                          child: TextField(
+                            controller: _stockfishDepthController,
+                            decoration: const InputDecoration(
+                              labelText: 'Stockfish Depth',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                onPressed: _onLoadTactics,
-                icon: const Icon(Icons.psychology),
-                label: const Text('Load Tactics from Lichess'),
+            ),
+            const SizedBox(height: 16),
+
+            // Start Session Button
+            if (_database.positions.isNotEmpty)
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _onStartSession,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.all(16),
+                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                  ),
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text(
+                    'Start Practice Session (${_database.positions.length} positions found)',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ),
-            ] else ...[
-              Text(
-                '${_database.positions.length} tactics positions available.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _onStartSession,
-                child: const Text('Start Practice Session'),
+              
+            if (_database.positions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () {
+                  _database.clearPositions().then((_) => setState(() {}));
+                },
+                child: const Text('Clear Database'),
               ),
             ],
           ],
@@ -365,39 +517,111 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     return Colors.red;
   }
 
-  Future<void> _onLoadTactics() async {
+  Future<void> _importLichess() async {
     final appState = context.read<AppState>();
-    final tacticsService = TacticsService();
+    final importService = TacticsImportService();
+    final username = _lichessUserController.text.trim();
+    final count = int.tryParse(_lichessCountController.text) ?? 20;
+    final depth = (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
 
-    if (appState.chesscomUsername == null) {
-      _showUsernameRequired();
+    if (username.isEmpty) {
+      _showUsernameRequired('Lichess');
       return;
     }
 
-    setState(() => appState.setLoading(true));
+    setState(() {
+      _importStatus = 'Starting import...';
+      appState.setLoading(true);
+    });
 
     try {
-      final positions = await tacticsService.generateTacticsFromLichess(
-        appState.chesscomUsername!,
+      final positions = await importService.importGamesFromLichess(
+        username,
+        maxGames: count,
+        depth: depth,
+        progressCallback: (msg) {
+          if (mounted) setState(() => _importStatus = msg);
+        },
       );
 
+      await _handleImportResults(positions);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _importStatus = null;
+          appState.setLoading(false);
+        });
+      }
+    }
+  }
+
+  Future<void> _importChessCom() async {
+    final appState = context.read<AppState>();
+    final importService = TacticsImportService();
+    final username = _chessComUserController.text.trim();
+    final count = int.tryParse(_chessComCountController.text) ?? 20;
+    final depth = (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
+
+    if (username.isEmpty) {
+      _showUsernameRequired('Chess.com');
+      return;
+    }
+
+    setState(() {
+      _importStatus = 'Starting import...';
+      appState.setLoading(true);
+    });
+
+    try {
+      final positions = await importService.importGamesFromChessCom(
+        username,
+        maxGames: count,
+        depth: depth,
+        progressCallback: (msg) {
+          if (mounted) setState(() => _importStatus = msg);
+        },
+      );
+
+      await _handleImportResults(positions);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _importStatus = null;
+          appState.setLoading(false);
+        });
+      }
+    }
+  }
+  
+  Future<void> _handleImportResults(List<TacticsPosition> positions) async {
+    if (positions.isEmpty) {
+       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No blunders found in recent games.')),
+        );
+      }
+    } else {
       // Save to CSV database
       await _database.importAndSave(positions);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Loaded ${positions.length} tactics positions')),
+          SnackBar(content: Text('Generated ${positions.length} tactics positions')),
         );
         setState(() {});
       }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load tactics: $e')),
-        );
-      }
-    } finally {
-      setState(() => appState.setLoading(false));
     }
   }
 
@@ -603,12 +827,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
   }
 
-  void _showUsernameRequired() {
+  void _showUsernameRequired(String platform) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Username Required'),
-        content: const Text('Please set your Chess.com username in Settings first.'),
+        content: Text('Please set your $platform username in Settings first.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

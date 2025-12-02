@@ -132,6 +132,12 @@ class TacticsDatabase {
     }
   }
 
+  /// Clear all positions from database
+  Future<void> clearPositions() async {
+    positions.clear();
+    await savePositions();
+  }
+
   /// Get positions for linear review - matches Python logic
   List<TacticsPosition> getPositionsForReview(int limit) {
     if (positions.isEmpty) return [];

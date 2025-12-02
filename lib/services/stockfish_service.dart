@@ -11,6 +11,7 @@ class StockfishService {
 
   EngineConnection? _engine;
   StreamSubscription? _engineSubscription;
+  Completer<EngineEvaluation>? _analysisCompleter;
   
   final ValueNotifier<EngineEvaluation?> evaluation = ValueNotifier(null);
   final ValueNotifier<bool> isReady = ValueNotifier(false);
@@ -47,6 +48,12 @@ class StockfishService {
 
       // Initialize UCI
       _sendCommand('uci');
+      
+      // Set multithreading if available (standard UCI option 'Threads')
+      // We'll try to set it to 4 threads by default for better performance
+      _sendCommand('setoption name Threads value 4');
+      _sendCommand('setoption name Hash value 128'); // 128MB hash
+      
       _sendCommand('isready');
       
     } catch (e) {
@@ -75,6 +82,12 @@ class StockfishService {
       _restoreAnalysis(); // Restore if we were waiting for readyok
     } else if (line.startsWith('info')) {
       _parseInfo(line);
+    } else if (line.startsWith('bestmove')) {
+      _isAnalyzing = false;
+      if (_analysisCompleter != null && !_analysisCompleter!.isCompleted) {
+        _analysisCompleter!.complete(evaluation.value ?? EngineEvaluation());
+        _analysisCompleter = null;
+      }
     }
   }
 
@@ -154,6 +167,59 @@ class StockfishService {
   void stopAnalysis() {
     _sendCommand('stop');
     _isAnalyzing = false;
+    if (_analysisCompleter != null && !_analysisCompleter!.isCompleted) {
+      _analysisCompleter!.completeError(Exception('Analysis stopped'));
+      _analysisCompleter = null;
+    }
+  }
+
+  Future<EngineEvaluation> getEvaluation(String fen, {int depth = 15}) async {
+    if (_engine == null) throw Exception('Engine not initialized');
+    
+    // Wait for engine to be ready
+    if (!isReady.value) {
+      print('Waiting for Stockfish to be ready...');
+      // Wait up to 10 seconds for engine to be ready
+      int waited = 0;
+      while (!isReady.value && waited < 100) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        waited++;
+      }
+      if (!isReady.value) {
+        throw Exception('Stockfish engine not ready after 10 seconds');
+      }
+      print('Stockfish is ready!');
+    }
+    
+    // Cancel any ongoing analysis
+    if (_isAnalyzing) {
+      stopAnalysis();
+    }
+
+    _analysisCompleter = Completer<EngineEvaluation>();
+    _isAnalyzing = true;
+    
+    // Reset evaluation
+    evaluation.value = null;
+    
+    final parts = fen.split(' ');
+    if (parts.length >= 2) {
+      _isWhiteTurn = parts[1] == 'w';
+    }
+    
+    _sendCommand('stop'); // Ensure stopped
+    _sendCommand('position fen $fen');
+    _sendCommand('go depth $depth');
+    
+    // Add a timeout to prevent hanging forever
+    return _analysisCompleter!.future.timeout(
+      const Duration(seconds: 30),
+      onTimeout: () {
+        print('Analysis timed out for FEN: $fen');
+        _isAnalyzing = false;
+        return evaluation.value ?? EngineEvaluation();
+      },
+    );
   }
 
   void dispose() {
