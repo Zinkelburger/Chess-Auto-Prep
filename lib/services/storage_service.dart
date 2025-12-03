@@ -10,11 +10,8 @@ class StorageService {
 
   Future<Directory> getStorageDirectory() async {
     if (kIsWeb) {
-      throw UnsupportedError('File storage not supported on web platform');
+      throw UnsupportedError('File storage not supported on web platform. Use shared_preferences or IndexedDB instead.');
     }
-
-    // Use proper Flutter path_provider approach
-    // This now works correctly with xdg-user-dirs installed
     return await getApplicationDocumentsDirectory();
   }
 
@@ -28,34 +25,26 @@ class StorageService {
     return File(path);
   }
 
-  // Unified save method
   Future<void> saveContent(String filename, String content) async {
     if (kIsWeb) {
-      // Web storage handling removed for simplicity as it requires extra dependencies
-      // or conditional imports which were causing issues.
-      // Re-implement using shared_preferences if web support is needed.
-      return;
-    } else {
-      final file = await getStorageFile(filename);
-      await file.writeAsString(content);
+      throw UnsupportedError('StorageService.saveContent() is not supported on web. Use shared_preferences or IndexedDB instead.');
     }
+    final file = await getStorageFile(filename);
+    await file.writeAsString(content);
   }
 
-  // Unified load method
   Future<String?> loadContent(String filename) async {
     if (kIsWeb) {
-       // Web storage handling removed
-       return null;
-    } else {
-      try {
-        final file = await getStorageFile(filename);
-        if (await file.exists()) {
-          return await file.readAsString();
-        }
-        return null;
-      } catch (e) {
-        return null;
+      throw UnsupportedError('StorageService.loadContent() is not supported on web. Use shared_preferences or IndexedDB instead.');
+    }
+    try {
+      final file = await getStorageFile(filename);
+      if (await file.exists()) {
+        return await file.readAsString();
       }
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 }

@@ -296,8 +296,8 @@ class TacticsImportService {
         final evalB = await _stockfish.getEvaluation(fenAfter, depth: depth);
         
         // 4. Calculate Win Chances
-        int cpA = _getEffectiveCp(evalA);
-        int cpB = _getEffectiveCp(evalB);
+        int cpA = evalA.effectiveCp;
+        int cpB = evalB.effectiveCp;
         
         // Normalize to User perspective
         if (userColor == chess.Color.BLACK) {
@@ -389,16 +389,6 @@ class TacticsImportService {
     }
   }
 
-  int _getEffectiveCp(EngineEvaluation eval) {
-    if (eval.scoreMate != null) {
-      if (eval.scoreMate! > 0) {
-        return 10000 - eval.scoreMate!;
-      } else {
-        return -10000 - eval.scoreMate!;
-      }
-    }
-    return eval.scoreCp ?? 0;
-  }
   
   String? _makeUciMoveAndGetSan(chess.Chess game, String uci) {
     final from = uci.substring(0, 2);

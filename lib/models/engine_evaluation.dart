@@ -2,9 +2,10 @@ class EngineEvaluation {
   final int depth;
   final int? scoreCp; // Centipawns
   final int? scoreMate; // Mate in N
-  final List<String> pv; // Best line
+  final List<String> pv; // Best line (UCI format)
   final int nodes;
   final int nps;
+  final List<int>? wdl; // Win/Draw/Loss probabilities [wins, draws, losses] per 1000
 
   EngineEvaluation({
     this.depth = 0,
@@ -13,7 +14,19 @@ class EngineEvaluation {
     this.pv = const [],
     this.nodes = 0,
     this.nps = 0,
+    this.wdl,
   });
+
+  /// Get the best move from the principal variation (first move in PV)
+  String? get bestMove => pv.isNotEmpty ? pv.first : null;
+
+  /// Get effective centipawn score (converts mate to large cp value)
+  int get effectiveCp {
+    if (scoreMate != null) {
+      return scoreMate! > 0 ? 10000 - scoreMate! : -10000 - scoreMate!;
+    }
+    return scoreCp ?? 0;
+  }
 
   String get scoreString {
     if (scoreMate != null) {
@@ -26,7 +39,6 @@ class EngineEvaluation {
     return '...';
   }
   
-  // Basic copyWith
   EngineEvaluation copyWith({
     int? depth,
     int? scoreCp,
@@ -34,6 +46,7 @@ class EngineEvaluation {
     List<String>? pv,
     int? nodes,
     int? nps,
+    List<int>? wdl,
   }) {
     return EngineEvaluation(
       depth: depth ?? this.depth,
@@ -42,8 +55,12 @@ class EngineEvaluation {
       pv: pv ?? this.pv,
       nodes: nodes ?? this.nodes,
       nps: nps ?? this.nps,
+      wdl: wdl ?? this.wdl,
     );
   }
 }
+
+
+
 
 

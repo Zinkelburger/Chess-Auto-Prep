@@ -45,6 +45,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   late TextEditingController _chessComCountController;
   late TextEditingController _stockfishDepthController;
 
+  // PGN Viewer controller for analysis tab
+  final PgnViewerController _pgnViewerController = PgnViewerController();
+
   // Position history (for Previous button)
   final List<TacticsPosition> _positionHistory = [];
   int _historyIndex = -1;
@@ -494,20 +497,23 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
 
     return PgnViewerWidget(
+      key: ValueKey('analysis_${_currentPosition!.gameId}'),
       gameId: _currentPosition!.gameId,
       moveNumber: moveNumber,
       isWhiteToPlay: isWhiteToPlay,
+      controller: _pgnViewerController,
       onPositionChanged: (position) {
         // Update the chess board when clicking moves in the PGN
-        try {
+        // Use addPostFrameCallback to avoid setState during build
+        print('TacticsControlPanel: onPositionChanged called with FEN: ${position.fen}');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             final appState = context.read<AppState>();
             final chessGame = chess.Chess.fromFEN(position.fen);
+            print('TacticsControlPanel: Updating appState.currentGame');
             appState.setCurrentGame(chessGame);
           }
-        } catch (e) {
-          // Handle conversion error
-        }
+        });
       },
     );
   }
@@ -661,6 +667,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _feedback = '';
       _showSolution = false;
     });
+    
+    // Reset ephemeral moves in the PGN viewer
+    _pgnViewerController.clearEphemeralMoves();
 
     // Set up the chess board
     try {
@@ -691,6 +700,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _feedback = '';
       _showSolution = false;
     });
+    
+    // Reset ephemeral moves in the PGN viewer
+    _pgnViewerController.clearEphemeralMoves();
 
     // Set up the chess board
     try {
@@ -741,7 +753,18 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _onMoveAttempted(String moveUci) {
-    if (_currentPosition == null || _positionSolved) return;
+    if (_currentPosition == null) return;
+    
+    final appState = context.read<AppState>();
+    
+    // In analysis mode, just add the move to the PGN editor
+    if (appState.isAnalysisMode) {
+      _addMoveToAnalysis(moveUci);
+      return;
+    }
+    
+    // In tactic mode, validate the move
+    if (_positionSolved) return;
 
     // Use TacticsEngine for proper move validation
     final result = _engine.checkMove(_currentPosition!, moveUci);
@@ -753,6 +776,48 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _handleCorrectMove(timeTaken);
     } else {
       _handleIncorrectMove(timeTaken);
+    }
+  }
+  
+  void _addMoveToAnalysis(String moveUci) {
+    print('TacticsControlPanel: _addMoveToAnalysis called with UCI="$moveUci"');
+    
+    // Convert UCI to SAN for the PGN viewer
+    final appState = context.read<AppState>();
+    final game = appState.currentGame;
+    
+    print('TacticsControlPanel: Current game FEN: ${game.fen}');
+    
+    try {
+      final from = moveUci.substring(0, 2);
+      final to = moveUci.substring(2, 4);
+      String? promotion;
+      if (moveUci.length > 4) promotion = moveUci.substring(4);
+      
+      print('TacticsControlPanel: Looking for move from=$from to=$to promotion=$promotion');
+      
+      // Find the move in legal moves to get SAN
+      final moves = game.moves({'verbose': true});
+      print('TacticsControlPanel: Legal moves count: ${moves.length}');
+      
+      final match = moves.firstWhere(
+        (m) => m['from'] == from && m['to'] == to && 
+               (promotion == null || m['promotion'] == promotion),
+        orElse: () => <String, dynamic>{},
+      );
+      
+      if (match.isNotEmpty && match['san'] != null) {
+        final san = match['san'] as String;
+        print('TacticsControlPanel: Found SAN="$san", calling addEphemeralMove');
+        
+        // Add to the PGN viewer as an ephemeral move
+        _pgnViewerController.addEphemeralMove(san);
+      } else {
+        print('TacticsControlPanel: ERROR - Could not find matching move!');
+        print('TacticsControlPanel: Available moves: ${moves.map((m) => "${m['from']}${m['to']}").toList()}');
+      }
+    } catch (e) {
+      print('TacticsControlPanel: Error adding move to analysis: $e');
     }
   }
 

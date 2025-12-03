@@ -168,6 +168,12 @@ class AppState extends ChangeNotifier {
     if (_isAnalysisMode) {
       _isAnalysisMode = false;
       _initialBoardFlipped = null;
+      
+      // Reset board to current tactic position
+      if (_currentPosition != null) {
+        _currentGame = chess.Chess.fromFEN(_currentPosition!.fen);
+      }
+      
       notifyListeners();
     }
   }
@@ -180,8 +186,38 @@ class AppState extends ChangeNotifier {
   }
 
   void onMoveAttempted(String moveUci) {
-    if (_onMoveAttempted != null) {
+    if (_isAnalysisMode) {
+      // In analysis mode, call the callback FIRST so it can get the SAN
+      // while the move is still legal, then make the move on the game
+      print('AppState: Analysis mode - calling callback for $moveUci');
+      _onMoveAttempted?.call(moveUci);
+      // Don't call _makeMoveFree here - the PgnViewerWidget will update
+      // the position and sync back via onPositionChanged
+    } else if (_onMoveAttempted != null) {
+      // In tactics mode, validate via callback
       _onMoveAttempted!(moveUci);
+    }
+  }
+  
+  // Make a move without validation (for analysis mode)
+  void _makeMoveFree(String moveUci) {
+    if (moveUci.length < 4) return;
+    
+    final from = moveUci.substring(0, 2);
+    final to = moveUci.substring(2, 4);
+    String? promotion;
+    if (moveUci.length > 4) {
+      promotion = moveUci.substring(4, 5);
+    }
+    
+    Map<String, String?> moveMap = {'from': from, 'to': to};
+    if (promotion != null) {
+      moveMap['promotion'] = promotion;
+    }
+    
+    final success = _currentGame.move(moveMap);
+    if (success) {
+      notifyListeners();
     }
   }
 }
