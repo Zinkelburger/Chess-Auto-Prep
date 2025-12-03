@@ -4,6 +4,45 @@ import 'dart:io' as io;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/gestures.dart';
 
+/// A node in the analysis tree. Each node represents a move.
+/// Children[0] is the main continuation, children[1+] are variations.
+class AnalysisNode {
+  final String san;
+  final String fenAfter;
+  final List<AnalysisNode> children;
+  final int id; // Unique ID for this node
+  
+  static int _nextId = 0;
+  
+  AnalysisNode({
+    required this.san,
+    required this.fenAfter,
+  }) : children = [], id = _nextId++;
+  
+  /// Find a child with the given SAN, or null if not found
+  AnalysisNode? findChild(String san) {
+    for (final child in children) {
+      if (child.san == san) return child;
+    }
+    return null;
+  }
+  
+  /// Add a child node. If a node with the same SAN exists, return it instead.
+  /// Returns the node (existing or new) and whether it's the main line (index 0).
+  (AnalysisNode node, bool isMainLine) addChild(String san, String fenAfter) {
+    // Check if this move already exists
+    final existing = findChild(san);
+    if (existing != null) {
+      return (existing, children.indexOf(existing) == 0);
+    }
+    
+    // Create new node
+    final newNode = AnalysisNode(san: san, fenAfter: fenAfter);
+    children.add(newNode);
+    return (newNode, children.length == 1);
+  }
+}
+
 class PgnViewerController {
   _PgnViewerWidgetState? _state;
 
@@ -21,6 +60,16 @@ class PgnViewerController {
 
   void goForward() {
     _state?._goForward();
+  }
+  
+  /// Add an ephemeral move (not saved to the original PGN)
+  void addEphemeralMove(String san) {
+    _state?._addAnalysisMove(san);
+  }
+  
+  /// Clear all ephemeral moves
+  void clearEphemeralMoves() {
+    _state?._clearAnalysis();
   }
 }
 
@@ -46,14 +95,23 @@ class PgnViewerWidget extends StatefulWidget {
   State<PgnViewerWidget> createState() => _PgnViewerWidgetState();
 }
 
-class _PgnViewerWidgetState extends State<PgnViewerWidget> {
+class _PgnViewerWidgetState extends State<PgnViewerWidget> 
+    with AutomaticKeepAliveClientMixin {
   PgnGame? _game;
   List<PgnNodeData> _moveHistory = [];
-  int _currentMoveIndex = 0;
+  int _mainLineIndex = 0; // Current position in the original game's main line
   Position _currentPosition = Chess.initial;
   String _gameInfo = '';
   bool _isLoading = true;
   String? _error;
+  
+  // Analysis tree (sub-variations support)
+  int _analysisBranchPoint = -1; // Where in main line the analysis branches (-1 = no analysis)
+  List<AnalysisNode> _analysisRoots = []; // Root moves of analysis (alternatives at branch point)
+  List<AnalysisNode> _analysisPath = []; // Current path through analysis tree
+  
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -77,7 +135,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
   }
 
   Future<void> _loadGame() async {
-    // Check if we have pgnText or need to load from gameId
     if (widget.pgnText == null && widget.gameId == null) {
       setState(() {
         _error = 'No game ID or PGN text provided';
@@ -94,11 +151,9 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
     try {
       String pgnText;
 
-      // If pgnText is provided directly, use it
       if (widget.pgnText != null) {
         pgnText = widget.pgnText!;
       } else {
-        // Otherwise, load from file using gameId
         pgnText = await _findGamePgn(widget.gameId!);
         if (pgnText.isEmpty) {
           setState(() {
@@ -115,13 +170,14 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
       setState(() {
         _game = game;
         _moveHistory = moveHistory;
-        _currentMoveIndex = 0;
+        _mainLineIndex = 0;
         _currentPosition = Chess.initial;
         _gameInfo = _buildGameInfo(game);
         _isLoading = false;
+        // Clear analysis when loading new game
+        _clearAnalysis();
       });
 
-      // Jump to the tactic move if specified
       if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
         _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
       }
@@ -196,20 +252,18 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
   void _jumpToMove(int moveNumber, bool isWhiteToPlay) {
     if (_moveHistory.isEmpty) return;
 
-    // Calculate ply number
     int targetPly = (moveNumber - 1) * 2;
     if (!isWhiteToPlay) targetPly += 1;
 
-    // Clamp to valid range
     targetPly = targetPly.clamp(0, _moveHistory.length);
 
-    _goToMove(targetPly);
+    _goToMainLineMove(targetPly);
   }
 
-  void _goToMove(int moveIndex) {
+  /// Navigate to a position in the main line
+  void _goToMainLineMove(int moveIndex) {
     if (moveIndex < 0 || moveIndex > _moveHistory.length) return;
 
-    // Rebuild position up to the target move
     Position position = Chess.initial;
     for (int i = 0; i < moveIndex; i++) {
       final move = position.parseSan(_moveHistory[i].san);
@@ -221,39 +275,199 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
     }
 
     setState(() {
-      _currentMoveIndex = moveIndex;
+      _mainLineIndex = moveIndex;
       _currentPosition = position;
+      _analysisPath = []; // Exit analysis, but keep it visible
     });
 
     widget.onPositionChanged?.call(position);
   }
 
+  /// Navigate to a specific node in the analysis tree
+  void _goToAnalysisNode(AnalysisNode targetNode) {
+    // Find path to this node
+    final path = _findPathToNode(targetNode);
+    if (path == null) return;
+    
+    // Rebuild position
+    Position position = Chess.initial;
+    
+    // First, go to branch point in main line
+    for (int i = 0; i < _analysisBranchPoint; i++) {
+      final move = position.parseSan(_moveHistory[i].san);
+      if (move != null) {
+        position = position.play(move);
+      }
+    }
+    
+    // Then apply analysis moves
+    for (final node in path) {
+      final move = position.parseSan(node.san);
+      if (move != null) {
+        position = position.play(move);
+      }
+    }
+    
+    setState(() {
+      _mainLineIndex = _analysisBranchPoint;
+      _currentPosition = position;
+      _analysisPath = path;
+    });
+    
+    widget.onPositionChanged?.call(position);
+  }
+  
+  /// Find path from roots to a target node
+  List<AnalysisNode>? _findPathToNode(AnalysisNode target) {
+    for (final root in _analysisRoots) {
+      final path = _findPathRecursive(root, target, []);
+      if (path != null) return path;
+    }
+    return null;
+  }
+  
+  List<AnalysisNode>? _findPathRecursive(AnalysisNode current, AnalysisNode target, List<AnalysisNode> pathSoFar) {
+    final newPath = [...pathSoFar, current];
+    if (current.id == target.id) return newPath;
+    
+    for (final child in current.children) {
+      final result = _findPathRecursive(child, target, newPath);
+      if (result != null) return result;
+    }
+    return null;
+  }
+
   void _goToStart() {
-    _goToMove(0);
+    setState(() {
+      _analysisRoots = [];
+      _analysisBranchPoint = -1;
+      _analysisPath = [];
+    });
+    _goToMainLineMove(0);
   }
 
   void _goBack() {
-    if (_currentMoveIndex > 0) {
-      _goToMove(_currentMoveIndex - 1);
+    if (_analysisPath.isNotEmpty) {
+      // In analysis - go back within analysis
+      if (_analysisPath.length > 1) {
+        // Go to parent node
+        final parentPath = _analysisPath.sublist(0, _analysisPath.length - 1);
+        _goToAnalysisNode(parentPath.last);
+      } else {
+        // At root of analysis, go back to branch point in main line
+        _goToMainLineMove(_analysisBranchPoint);
+      }
+    } else if (_mainLineIndex > 0) {
+      // In main line
+      _goToMainLineMove(_mainLineIndex - 1);
     }
   }
 
   void _goForward() {
-    if (_currentMoveIndex < _moveHistory.length) {
-      _goToMove(_currentMoveIndex + 1);
+    if (_analysisPath.isNotEmpty) {
+      // In analysis - go to first child if exists
+      final current = _analysisPath.last;
+      if (current.children.isNotEmpty) {
+        _goToAnalysisNode(current.children.first);
+      }
+    } else if (_analysisRoots.isNotEmpty && _mainLineIndex == _analysisBranchPoint) {
+      // At branch point, enter analysis
+      _goToAnalysisNode(_analysisRoots.first);
+    } else if (_mainLineIndex < _moveHistory.length) {
+      // In main line
+      _goToMainLineMove(_mainLineIndex + 1);
     }
   }
 
   void _goToEnd() {
-    _goToMove(_moveHistory.length);
+    if (_analysisRoots.isNotEmpty) {
+      // Go to end of analysis main line
+      AnalysisNode current = _analysisRoots.first;
+      while (current.children.isNotEmpty) {
+        current = current.children.first;
+      }
+      _goToAnalysisNode(current);
+    } else {
+      _goToMainLineMove(_moveHistory.length);
+    }
   }
 
-  void _onMoveClicked(int moveIndex) {
-    _goToMove(moveIndex + 1); // +1 because we want position AFTER the move
+  void _onMainLineMoveClicked(int moveIndex) {
+    _goToMainLineMove(moveIndex + 1);
+  }
+  
+  bool get _canGoBack {
+    return _analysisPath.isNotEmpty || _mainLineIndex > 0;
+  }
+  
+  bool get _canGoForward {
+    if (_analysisPath.isNotEmpty && _analysisPath.last.children.isNotEmpty) {
+      return true;
+    }
+    if (_analysisPath.isEmpty && _analysisRoots.isNotEmpty && _mainLineIndex == _analysisBranchPoint) {
+      return true;
+    }
+    if (_analysisPath.isEmpty && _mainLineIndex < _moveHistory.length) {
+      return true;
+    }
+    return false;
+  }
+  
+  /// Add a move to the analysis tree
+  void _addAnalysisMove(String san) {
+    final move = _currentPosition.parseSan(san);
+    if (move == null) return;
+    
+    final newPosition = _currentPosition.play(move);
+    final fenAfter = newPosition.fen;
+    
+    setState(() {
+      if (_analysisPath.isEmpty) {
+        // Starting new analysis or adding to root level
+        if (_analysisBranchPoint == -1 || _mainLineIndex != _analysisBranchPoint) {
+          // New branch point
+          _analysisBranchPoint = _mainLineIndex;
+          _analysisRoots = [];
+        }
+        
+        // Check if this move already exists at root
+        AnalysisNode? existingRoot;
+        for (final root in _analysisRoots) {
+          if (root.san == san) {
+            existingRoot = root;
+            break;
+          }
+        }
+        
+        if (existingRoot != null) {
+          _analysisPath = [existingRoot];
+        } else {
+          final newNode = AnalysisNode(san: san, fenAfter: fenAfter);
+          _analysisRoots.add(newNode);
+          _analysisPath = [newNode];
+        }
+      } else {
+        // Adding to current analysis position
+        final current = _analysisPath.last;
+        final (node, _) = current.addChild(san, fenAfter);
+        _analysisPath = [..._analysisPath, node];
+      }
+      
+      _currentPosition = newPosition;
+    });
+    
+    widget.onPositionChanged?.call(newPosition);
+  }
+  
+  void _clearAnalysis() {
+    setState(() {
+      _analysisRoots = [];
+      _analysisBranchPoint = -1;
+      _analysisPath = [];
+    });
   }
 
   String _filterComment(String comment) {
-    // Filter out evaluation and clock comments like the Python version
     comment = comment.replaceAll(RegExp(r'\[%eval [^\]]+\]'), '');
     comment = comment.replaceAll(RegExp(r'\[%clk [^\]]+\]'), '');
     comment = comment.replaceAll(RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)'), '');
@@ -270,6 +484,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+    
     if (_isLoading) {
       return const Center(
         child: Column(
@@ -308,7 +524,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
 
     return Column(
       children: [
-        // Game info
         Container(
           padding: const EdgeInsets.all(8),
           child: Text(
@@ -318,7 +533,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
           ),
         ),
 
-        // PGN moves
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(8),
@@ -326,29 +540,28 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
           ),
         ),
 
-        // Navigation buttons
         Container(
           padding: const EdgeInsets.all(8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               IconButton(
-                onPressed: _currentMoveIndex > 0 ? _goToStart : null,
+                onPressed: _canGoBack ? _goToStart : null,
                 icon: const Icon(Icons.skip_previous),
                 tooltip: 'Start',
               ),
               IconButton(
-                onPressed: _currentMoveIndex > 0 ? _goBack : null,
+                onPressed: _canGoBack ? _goBack : null,
                 icon: const Icon(Icons.chevron_left),
                 tooltip: 'Back',
               ),
               IconButton(
-                onPressed: _currentMoveIndex < _moveHistory.length ? _goForward : null,
+                onPressed: _canGoForward ? _goForward : null,
                 icon: const Icon(Icons.chevron_right),
                 tooltip: 'Forward',
               ),
               IconButton(
-                onPressed: _currentMoveIndex < _moveHistory.length ? _goToEnd : null,
+                onPressed: _canGoForward ? _goToEnd : null,
                 icon: const Icon(Icons.skip_next),
                 tooltip: 'End',
               ),
@@ -360,9 +573,9 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
   }
 
   Widget _buildPgnDisplay() {
-    if (_moveHistory.isEmpty) return const SizedBox();
+    if (_moveHistory.isEmpty && _analysisRoots.isEmpty) return const SizedBox();
 
-    final moves = <InlineSpan>[];
+    final spans = <InlineSpan>[];
     var moveNumber = 1;
     var isWhiteTurn = true;
 
@@ -370,47 +583,56 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
       final moveData = _moveHistory[i];
       final san = moveData.san;
 
-      // Add move number for white's moves
       if (isWhiteTurn) {
-        moves.add(TextSpan(
+        spans.add(TextSpan(
           text: '$moveNumber. ',
           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600]),
         ));
       }
 
-      // Add the move as a clickable span
-      final isCurrentMove = i == _currentMoveIndex - 1; // -1 because currentMoveIndex is position after move
-      moves.add(
+      // Highlight current move
+      final isCurrentMove = i == _mainLineIndex - 1 && _analysisPath.isEmpty;
+      final isBranchPoint = i == _analysisBranchPoint - 1 && _analysisRoots.isNotEmpty;
+      
+      spans.add(
         TextSpan(
           text: san,
           style: TextStyle(
-            color: isCurrentMove ? Colors.grey[100] : Colors.blue,
-            fontWeight: isCurrentMove ? FontWeight.bold : FontWeight.normal,
-            backgroundColor: isCurrentMove ? Colors.yellow : null,
+            color: isCurrentMove ? Colors.white : (isBranchPoint ? Colors.blue[200] : Colors.blue[300]),
+            fontWeight: (isCurrentMove || isBranchPoint) ? FontWeight.bold : FontWeight.normal,
+            backgroundColor: isCurrentMove ? Colors.blue[700] : null,
           ),
           recognizer: TapGestureRecognizer()
-            ..onTap = () => _onMoveClicked(i),
+            ..onTap = () => _onMainLineMoveClicked(i),
         ),
       );
 
-      moves.add(const TextSpan(text: ' '));
+      spans.add(const TextSpan(text: ' '));
 
-      // Add comments if they exist and are meaningful
       if (moveData.comments != null && moveData.comments!.isNotEmpty) {
         final comment = _filterComment(moveData.comments!.first);
         if (comment.isNotEmpty) {
-          moves.add(TextSpan(
-            text: '($comment) ',
+          spans.add(TextSpan(
+            text: '{$comment} ',
             style: const TextStyle(color: Colors.green, fontStyle: FontStyle.italic),
           ));
         }
       }
+      
+      // Insert analysis variations inline after branch point
+      if (_analysisRoots.isNotEmpty && i == _analysisBranchPoint - 1) {
+        spans.addAll(_buildAnalysisSpans());
+      }
 
-      // Update for next iteration
       if (!isWhiteTurn) {
         moveNumber++;
       }
       isWhiteTurn = !isWhiteTurn;
+    }
+    
+    // If branch point is at end of game
+    if (_analysisRoots.isNotEmpty && _analysisBranchPoint >= _moveHistory.length) {
+      spans.addAll(_buildAnalysisSpans());
     }
 
     return RichText(
@@ -420,8 +642,102 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget> {
           fontSize: 14,
           color: Colors.grey[300],
         ),
-        children: moves,
+        children: spans,
       ),
     );
+  }
+  
+  /// Build spans for the entire analysis tree with proper nesting
+  List<InlineSpan> _buildAnalysisSpans() {
+    final spans = <InlineSpan>[];
+    
+    // Calculate starting move number
+    var moveNumber = (_analysisBranchPoint ~/ 2) + 1;
+    var isWhiteTurn = _analysisBranchPoint % 2 == 0;
+    
+    // Build all root variations
+    for (int i = 0; i < _analysisRoots.length; i++) {
+      final root = _analysisRoots[i];
+      
+      spans.add(TextSpan(
+        text: '( ',
+        style: TextStyle(color: Colors.orange[300], fontWeight: FontWeight.bold),
+      ));
+      
+      // Build this variation tree
+      spans.addAll(_buildNodeSpans(root, moveNumber, isWhiteTurn, true));
+      
+      spans.add(TextSpan(
+        text: ') ',
+        style: TextStyle(color: Colors.orange[300], fontWeight: FontWeight.bold),
+      ));
+    }
+    
+    return spans;
+  }
+  
+  /// Recursively build spans for a node and its children
+  List<InlineSpan> _buildNodeSpans(AnalysisNode node, int moveNumber, bool isWhiteTurn, bool isFirst) {
+    final spans = <InlineSpan>[];
+    
+    // Move number
+    if (isWhiteTurn) {
+      spans.add(TextSpan(
+        text: '$moveNumber. ',
+        style: TextStyle(color: Colors.orange[200], fontWeight: FontWeight.bold),
+      ));
+    } else if (isFirst) {
+      spans.add(TextSpan(
+        text: '$moveNumber... ',
+        style: TextStyle(color: Colors.orange[200], fontWeight: FontWeight.bold),
+      ));
+    }
+    
+    // The move itself
+    final isCurrentNode = _analysisPath.isNotEmpty && _analysisPath.last.id == node.id;
+    
+    spans.add(
+      TextSpan(
+        text: node.san,
+        style: TextStyle(
+          color: isCurrentNode ? Colors.white : Colors.orange[300],
+          fontWeight: isCurrentNode ? FontWeight.bold : FontWeight.normal,
+          backgroundColor: isCurrentNode ? Colors.orange[700] : null,
+        ),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () => _goToAnalysisNode(node),
+      ),
+    );
+    
+    spans.add(const TextSpan(text: ' '));
+    
+    // Update move number for next move
+    final nextMoveNumber = isWhiteTurn ? moveNumber : moveNumber + 1;
+    final nextIsWhite = !isWhiteTurn;
+    
+    // Children (variations)
+    if (node.children.isNotEmpty) {
+      // Main continuation first
+      spans.addAll(_buildNodeSpans(node.children.first, nextMoveNumber, nextIsWhite, false));
+      
+      // Then variations in parentheses
+      for (int i = 1; i < node.children.length; i++) {
+        final variation = node.children[i];
+        
+        spans.add(TextSpan(
+          text: '( ',
+          style: TextStyle(color: Colors.amber[400], fontWeight: FontWeight.bold),
+        ));
+        
+        spans.addAll(_buildNodeSpans(variation, nextMoveNumber, nextIsWhite, true));
+        
+        spans.add(TextSpan(
+          text: ') ',
+          style: TextStyle(color: Colors.amber[400], fontWeight: FontWeight.bold),
+        ));
+      }
+    }
+    
+    return spans;
   }
 }
