@@ -12,6 +12,7 @@ import '../widgets/chess_board_widget.dart';
 import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/opening_tree_widget.dart';
 import '../widgets/engine_analysis_widget.dart';
+import '../widgets/coverage_calculator_widget.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
 import '../services/opening_tree_builder.dart';
@@ -903,6 +904,36 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           Expanded(
             child: ListView(
               children: [
+                // Coverage Calculator - Featured action
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                    ),
+                  ),
+                  child: ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.analytics_outlined,
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                    title: const Text('Coverage Calculator',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: const Text('Analyze repertoire coverage with Lichess data'),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                    onTap: _showCoverageCalculator,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.expand_more, color: Colors.blue),
@@ -988,6 +1019,60 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     // Use the unified state approach:
     // 1. Tell controller about the move (updates move history, position, tree)
     _controller.userPlayedMove(move.san);
+  }
+
+  void _showCoverageCalculator() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Close button row
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              // Coverage Calculator Widget - root is auto-detected
+              Expanded(
+                child: CoverageCalculatorWidget(
+                  openingTree: _controller.openingTree,
+                  isWhiteRepertoire: _controller.isRepertoireWhite,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _expandRepertoire() {
