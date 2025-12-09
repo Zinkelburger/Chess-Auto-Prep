@@ -6,26 +6,34 @@ import '../models/tactics_position.dart';
 /// Manages tactical positions and review data - Flutter port of Python's TacticsDatabase
 class TacticsDatabase {
   static const String _csvFileName = 'tactics_positions.csv';
+  static const String _analyzedGamesFileName = 'analyzed_games.txt';
 
   List<TacticsPosition> positions = [];
+  Set<String> analyzedGameIds = {}; // Track which games have been analyzed
   ReviewSession currentSession = ReviewSession();
   int sessionPositionIndex = 0;
 
   /// Load positions from CSV file
   Future<int> loadPositions() async {
     positions.clear();
+    analyzedGameIds.clear();
 
     try {
       final file = await _getCsvFile();
       if (!await file.exists()) {
         print('No tactics CSV file found at ${file.path}');
+        // Still try to load analyzed games list
+        await _loadAnalyzedGameIds();
         return 0;
       }
 
       final content = await file.readAsString();
       final rows = const CsvToListConverter().convert(content);
 
-      if (rows.isEmpty) return 0;
+      if (rows.isEmpty) {
+        await _loadAnalyzedGameIds();
+        return 0;
+      }
 
       // Skip header row
       for (int i = 1; i < rows.length; i++) {
@@ -33,18 +41,90 @@ class TacticsDatabase {
           final position = _createPositionFromRow(rows[i]);
           if (position != null) {
             positions.add(position);
+            // Track game IDs from positions
+            if (position.gameId.isNotEmpty) {
+              analyzedGameIds.add(position.gameId);
+            }
           }
         } catch (e) {
           print('Error parsing position row $i: $e');
         }
       }
 
+      // Also load the separate analyzed games list (includes games with no blunders)
+      await _loadAnalyzedGameIds();
+
       print('Loaded ${positions.length} tactics positions from CSV');
+      print('Tracking ${analyzedGameIds.length} analyzed game IDs');
       return positions.length;
     } catch (e) {
       print('Error loading positions: $e');
       return 0;
     }
+  }
+
+  /// Load analyzed game IDs from file
+  Future<void> _loadAnalyzedGameIds() async {
+    try {
+      final file = await _getAnalyzedGamesFile();
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final ids = content.split('\n').where((id) => id.trim().isNotEmpty);
+        analyzedGameIds.addAll(ids);
+        print('Loaded ${ids.length} analyzed game IDs from file');
+      }
+    } catch (e) {
+      print('Error loading analyzed game IDs: $e');
+    }
+  }
+
+  /// Save analyzed game IDs to file
+  Future<void> _saveAnalyzedGameIds() async {
+    try {
+      final file = await _getAnalyzedGamesFile();
+      await file.writeAsString(analyzedGameIds.join('\n'));
+      print('Saved ${analyzedGameIds.length} analyzed game IDs');
+    } catch (e) {
+      print('Error saving analyzed game IDs: $e');
+    }
+  }
+
+  /// Mark a game as analyzed (even if no blunders found)
+  Future<void> markGameAnalyzed(String gameId) async {
+    if (gameId.isNotEmpty && !analyzedGameIds.contains(gameId)) {
+      analyzedGameIds.add(gameId);
+      await _saveAnalyzedGameIds();
+    }
+  }
+
+  /// Mark multiple games as analyzed
+  Future<void> markGamesAnalyzed(Iterable<String> gameIds) async {
+    final newIds = gameIds.where((id) => id.isNotEmpty && !analyzedGameIds.contains(id));
+    if (newIds.isNotEmpty) {
+      analyzedGameIds.addAll(newIds);
+      await _saveAnalyzedGameIds();
+    }
+  }
+
+  /// Check if a game has already been analyzed
+  bool isGameAnalyzed(String gameId) {
+    return gameId.isNotEmpty && analyzedGameIds.contains(gameId);
+  }
+
+  /// Get the analyzed games file
+  Future<File> _getAnalyzedGamesFile() async {
+    final directory = await getApplicationDocumentsDirectory();
+    return File('${directory.path}/$_analyzedGamesFileName');
+  }
+
+  /// Clear analyzed games tracking (for re-analysis)
+  Future<void> clearAnalyzedGames() async {
+    analyzedGameIds.clear();
+    final file = await _getAnalyzedGamesFile();
+    if (await file.exists()) {
+      await file.delete();
+    }
+    print('Cleared analyzed games tracking');
   }
 
   /// Create a TacticsPosition from a CSV row
@@ -234,7 +314,46 @@ class TacticsDatabase {
   /// Import positions from Lichess/external source and save to CSV
   Future<void> importAndSave(List<TacticsPosition> newPositions) async {
     positions = newPositions;
+    // Track game IDs from new positions
+    for (final pos in newPositions) {
+      if (pos.gameId.isNotEmpty) {
+        analyzedGameIds.add(pos.gameId);
+      }
+    }
     await savePositions();
+    await _saveAnalyzedGameIds();
+  }
+
+  /// Add a single position (for streaming/live import)
+  Future<void> addPosition(TacticsPosition position) async {
+    // Check for duplicates by FEN
+    if (!positions.any((p) => p.fen == position.fen)) {
+      positions.add(position);
+      if (position.gameId.isNotEmpty) {
+        analyzedGameIds.add(position.gameId);
+      }
+      await savePositions();
+    }
+  }
+
+  /// Add multiple positions incrementally (for streaming/live import)
+  Future<void> addPositions(List<TacticsPosition> newPositions) async {
+    int added = 0;
+    for (final position in newPositions) {
+      // Check for duplicates by FEN
+      if (!positions.any((p) => p.fen == position.fen)) {
+        positions.add(position);
+        if (position.gameId.isNotEmpty) {
+          analyzedGameIds.add(position.gameId);
+        }
+        added++;
+      }
+    }
+    if (added > 0) {
+      await savePositions();
+      await _saveAnalyzedGameIds();
+      print('Added $added new positions (${newPositions.length - added} duplicates skipped)');
+    }
   }
 }
 

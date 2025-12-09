@@ -34,7 +34,18 @@ class AppState extends ChangeNotifier {
   String? get chesscomUsername => _chesscomUsername;
   bool get isLoading => _isLoading;
   bool get isAnalysisMode => _isAnalysisMode;
-  bool get boardFlipped => _isAnalysisMode ? (_initialBoardFlipped ?? false) : (_currentGame.turn == chess.Color.BLACK);
+  bool get boardFlipped {
+    // In tactics mode, respect the initial board flip (set when loading position)
+    if (_currentMode == AppMode.tactics && _initialBoardFlipped != null) {
+      return _initialBoardFlipped!;
+    }
+    // In analysis mode, respect manual flip or default to turn
+    if (_isAnalysisMode) {
+      return _initialBoardFlipped ?? false;
+    }
+    // Default fallback (though tactics mode should always hit the first case)
+    return _currentGame.turn == chess.Color.BLACK;
+  }
 
   void setMode(AppMode mode) {
     _currentMode = mode;

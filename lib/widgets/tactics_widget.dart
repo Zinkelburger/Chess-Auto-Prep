@@ -231,7 +231,9 @@ class _TacticsWidgetState extends State<TacticsWidget> {
     final isCorrect = _checkMoveCorrectness(move, position.bestMove);
 
     if (isCorrect) {
+      // Apply the move to the board so it stays visible
       setState(() {
+        _chess = Chess.fromFEN(move.fenAfter);
         _feedback = 'Correct! Well done!';
       });
 
