@@ -161,6 +161,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Notify listeners that the current game has changed (without replacing the object)
+  /// Use this when making moves on the existing game to avoid board reset/flicker
+  void notifyGameChanged() {
+    notifyListeners();
+  }
+
   void setBoardFlipped(bool flipped) {
     _initialBoardFlipped = flipped;
     notifyListeners();

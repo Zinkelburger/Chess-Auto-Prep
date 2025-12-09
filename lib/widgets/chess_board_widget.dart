@@ -457,15 +457,15 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         }
       }
 
-      // Now make the move on the actual game object
-      // In chess ^0.7.0, this returns a bool
-      final moveResult = gameCopy.move(moveMap);
+      // Now make the move on the actual game object (mutate live board for smoothness)
+      // We already validated on the copy, so apply to the real game to avoid flicker
+      final moveResult = widget.game.move(moveMap);
 
       print('Board: Move result: $moveResult (${moveResult.runtimeType})');
 
       // Check for success (true)
       if (moveResult == true) {
-        final fenAfter = gameCopy.fen;
+        final fenAfter = widget.game.fen;
         
         // Update SAN with check/checkmate symbols if needed
         // We do this after the move is made on the copy so we can check the resulting state

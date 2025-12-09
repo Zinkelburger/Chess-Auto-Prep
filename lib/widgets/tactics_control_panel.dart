@@ -280,6 +280,17 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+
+            // Reset button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _resetAnalysis,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reset Position'),
+              ),
+            ),
             const SizedBox(height: 16),
             
             CheckboxListTile(
@@ -580,6 +591,26 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         });
       },
     );
+  }
+
+  void _resetAnalysis() {
+    if (_currentPosition == null) return;
+    
+    // Clear ephemeral moves in the PGN viewer
+    _pgnViewerController.clearEphemeralMoves();
+    
+    // Reset the board to the initial tactic position
+    final appState = context.read<AppState>();
+    final game = chess.Chess.fromFEN(_currentPosition!.fen);
+    appState.setCurrentGame(game);
+    
+    // Reset solved state and feedback
+    setState(() {
+      _positionSolved = false;
+      _feedback = '';
+      _showSolution = false;
+      _startTime = DateTime.now();
+    });
   }
 
   Color _getFeedbackColor() {
@@ -914,55 +945,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _handleCorrectMove(double timeTaken, {String? moveUci}) {
-    // Apply the solution move to the board so it stays visible
-    if (_currentPosition != null) {
-      try {
-        final appState = context.read<AppState>();
-        final game = chess.Chess.fromFEN(_currentPosition!.fen);
-        
-        // Use the played move or fallback to best move
-        final moveStringToApply = moveUci ?? _currentPosition!.bestMove;
-        bool moveApplied = false;
-
-        // 1. Try applying as SAN first (works for "Nf3", "e4", etc.)
-        try {
-          moveApplied = game.move(moveStringToApply);
-        } catch (_) {}
-
-        // 2. If SAN failed, try parsing as UCI (works for "e2e4", "a7a8q")
-        if (!moveApplied && moveStringToApply.length >= 4) {
-          final from = moveStringToApply.substring(0, 2);
-          final to = moveStringToApply.substring(2, 4);
-          String? promotion;
-          
-          if (moveStringToApply.length > 4) {
-            final possiblePromotion = moveStringToApply.substring(4, 5).toLowerCase();
-            if (['q', 'r', 'b', 'n'].contains(possiblePromotion)) {
-              promotion = possiblePromotion;
-            }
-          }
-          
-          final moveMap = <String, String>{
-            'from': from,
-            'to': to,
-          };
-          if (promotion != null) {
-            moveMap['promotion'] = promotion;
-          }
-          
-          moveApplied = game.move(moveMap);
-        }
-
-        if (moveApplied) {
-          appState.setCurrentGame(game);
-        } else {
-          print('TacticsControlPanel: Failed to apply move $moveStringToApply');
-        }
-      } catch (e) {
-        print('TacticsControlPanel: Error applying move: $e');
-      }
-    }
-    
+    // Move is already applied on the live board (chess_board_widget mutates game directly)
     setState(() {
       _positionSolved = true;
       _feedback = 'Correct!';
