@@ -37,6 +37,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   bool _showSolution = false;
   bool _autoAdvance = true;  // Auto-advance setting (matches Python default)
   String? _importStatus;
+  bool _isImporting = false;
+  int _newPositionsFound = 0;
 
   // Import controllers
   late TextEditingController _lichessUserController;
@@ -180,11 +182,23 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.blue),
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(_importStatus!)),
+                  Row(
+                    children: [
+                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      const SizedBox(width: 12),
+                      Expanded(child: Text(_importStatus!)),
+                    ],
+                  ),
+                  if (_database.analyzedGameIds.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '${_database.analyzedGameIds.length} games already analyzed (will be skipped)',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -310,11 +324,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                         ),
                         const SizedBox(width: 8),
                         SizedBox(
-                          width: 80,
+                          width: 100,
                           child: TextField(
                             controller: _lichessCountController,
                             decoration: const InputDecoration(
-                              labelText: 'Games',
+                              labelText: 'Recent Games',
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
@@ -349,11 +363,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                         ),
                         const SizedBox(width: 8),
                         SizedBox(
-                          width: 80,
+                          width: 100,
                           child: TextField(
                             controller: _chessComCountController,
                             decoration: const InputDecoration(
-                              labelText: 'Games',
+                              labelText: 'Recent Games',
                               border: OutlineInputBorder(),
                               isDense: true,
                             ),
@@ -392,7 +406,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             ),
             const SizedBox(height: 16),
 
-            // Start Session Button
+            // Start Session Button - always show if positions exist (even during import)
             if (_database.positions.isNotEmpty)
               SizedBox(
                 width: double.infinity,
@@ -400,23 +414,73 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onPressed: _onStartSession,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.all(16),
-                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    backgroundColor: _isImporting 
+                        ? Colors.green[700] 
+                        : Theme.of(context).colorScheme.primaryContainer,
                   ),
-                  icon: const Icon(Icons.play_arrow),
+                  icon: Icon(_isImporting ? Icons.play_circle : Icons.play_arrow),
                   label: Text(
-                    'Start Practice Session (${_database.positions.length} positions found)',
+                    _isImporting 
+                        ? 'Start Training Now (${_database.positions.length} positions)'
+                        : 'Start Practice Session (${_database.positions.length} positions)',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
-              
-            if (_database.positions.isNotEmpty) ...[
+            
+            // Info text during import
+            if (_isImporting && _database.positions.isNotEmpty) ...[
               const SizedBox(height: 8),
-              TextButton(
-                onPressed: () {
-                  _database.clearPositions().then((_) => setState(() {}));
-                },
-                child: const Text('Clear Database'),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, color: Colors.green, size: 16),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'You can start training now! New tactics will be added as they\'re found.',
+                        style: TextStyle(fontSize: 12, color: Colors.green),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+              
+            // Database management buttons - always show when not importing
+            if (!_isImporting) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_database.positions.isNotEmpty)
+                    TextButton(
+                      onPressed: () {
+                        _database.clearPositions().then((_) => setState(() {}));
+                      },
+                      child: const Text('Clear Database'),
+                    ),
+                  if (_database.positions.isNotEmpty)
+                    const SizedBox(width: 16),
+                  TextButton(
+                    onPressed: () async {
+                      await _database.clearAnalyzedGames();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Cleared analyzed games history. Games will be re-analyzed on next import.')),
+                        );
+                        setState(() {});
+                      }
+                    },
+                    child: Text('Reset Analyzed Games${_database.analyzedGameIds.isNotEmpty ? " (${_database.analyzedGameIds.length})" : ""}'),
+                  ),
+                ],
               ),
             ],
           ],
@@ -536,17 +600,31 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
 
     setState(() {
-      _importStatus = 'Starting import...';
+      _importStatus = 'Initializing...';
+      _isImporting = true;
+      _newPositionsFound = 0;
       appState.setLoading(true);
     });
 
     try {
+      // Initialize the import service (loads analyzed game IDs)
+      await importService.initialize();
+      
       final positions = await importService.importGamesFromLichess(
         username,
         maxGames: count,
         depth: depth,
         progressCallback: (msg) {
-          if (mounted) setState(() => _importStatus = msg);
+          if (mounted) setState(() => _importStatus = '$msg • Found $_newPositionsFound tactics');
+        },
+        onPositionFound: (position) {
+          // Add position to database immediately for live training
+          _database.addPosition(position);
+          if (mounted) {
+            setState(() {
+              _newPositionsFound++;
+            });
+          }
         },
       );
 
@@ -561,6 +639,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       if (mounted) {
         setState(() {
           _importStatus = null;
+          _isImporting = false;
           appState.setLoading(false);
         });
       }
@@ -580,17 +659,31 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
 
     setState(() {
-      _importStatus = 'Starting import...';
+      _importStatus = 'Initializing...';
+      _isImporting = true;
+      _newPositionsFound = 0;
       appState.setLoading(true);
     });
 
     try {
+      // Initialize the import service (loads analyzed game IDs)
+      await importService.initialize();
+      
       final positions = await importService.importGamesFromChessCom(
         username,
         maxGames: count,
         depth: depth,
         progressCallback: (msg) {
-          if (mounted) setState(() => _importStatus = msg);
+          if (mounted) setState(() => _importStatus = '$msg • Found $_newPositionsFound tactics');
+        },
+        onPositionFound: (position) {
+          // Add position to database immediately for live training
+          _database.addPosition(position);
+          if (mounted) {
+            setState(() {
+              _newPositionsFound++;
+            });
+          }
         },
       );
 
@@ -605,6 +698,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       if (mounted) {
         setState(() {
           _importStatus = null;
+          _isImporting = false;
           appState.setLoading(false);
         });
       }
@@ -612,22 +706,20 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
   
   Future<void> _handleImportResults(List<TacticsPosition> positions) async {
-    if (positions.isEmpty) {
-       if (mounted) {
+    // Positions are already added via streaming callback, just need to reload and show message
+    await _loadPositions();
+    
+    if (mounted) {
+      if (_newPositionsFound == 0) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No blunders found in recent games.')),
+          const SnackBar(content: Text('No new blunders found. Games may have already been analyzed.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Added $_newPositionsFound new tactics positions')),
         );
       }
-    } else {
-      // Save to CSV database
-      await _database.importAndSave(positions);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Generated ${positions.length} tactics positions')),
-        );
-        setState(() {});
-      }
+      setState(() {});
     }
   }
 
@@ -773,7 +865,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         : 0.0;
 
     if (result == TacticsResult.correct) {
-      _handleCorrectMove(timeTaken);
+      _handleCorrectMove(timeTaken, moveUci: moveUci);
     } else {
       _handleIncorrectMove(timeTaken);
     }
@@ -821,7 +913,56 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
-  void _handleCorrectMove(double timeTaken) {
+  void _handleCorrectMove(double timeTaken, {String? moveUci}) {
+    // Apply the solution move to the board so it stays visible
+    if (_currentPosition != null) {
+      try {
+        final appState = context.read<AppState>();
+        final game = chess.Chess.fromFEN(_currentPosition!.fen);
+        
+        // Use the played move or fallback to best move
+        final moveStringToApply = moveUci ?? _currentPosition!.bestMove;
+        bool moveApplied = false;
+
+        // 1. Try applying as SAN first (works for "Nf3", "e4", etc.)
+        try {
+          moveApplied = game.move(moveStringToApply);
+        } catch (_) {}
+
+        // 2. If SAN failed, try parsing as UCI (works for "e2e4", "a7a8q")
+        if (!moveApplied && moveStringToApply.length >= 4) {
+          final from = moveStringToApply.substring(0, 2);
+          final to = moveStringToApply.substring(2, 4);
+          String? promotion;
+          
+          if (moveStringToApply.length > 4) {
+            final possiblePromotion = moveStringToApply.substring(4, 5).toLowerCase();
+            if (['q', 'r', 'b', 'n'].contains(possiblePromotion)) {
+              promotion = possiblePromotion;
+            }
+          }
+          
+          final moveMap = <String, String>{
+            'from': from,
+            'to': to,
+          };
+          if (promotion != null) {
+            moveMap['promotion'] = promotion;
+          }
+          
+          moveApplied = game.move(moveMap);
+        }
+
+        if (moveApplied) {
+          appState.setCurrentGame(game);
+        } else {
+          print('TacticsControlPanel: Failed to apply move $moveStringToApply');
+        }
+      } catch (e) {
+        print('TacticsControlPanel: Error applying move: $e');
+      }
+    }
+    
     setState(() {
       _positionSolved = true;
       _feedback = 'Correct!';

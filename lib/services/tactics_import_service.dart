@@ -9,9 +9,20 @@ import 'package:path_provider/path_provider.dart';
 import '../models/tactics_position.dart';
 import 'package:chess_auto_prep/models/engine_evaluation.dart';
 import 'stockfish_service.dart';
+import 'tactics_database.dart';
+
+/// Callback for when a new tactics position is found during import
+typedef OnPositionFoundCallback = void Function(TacticsPosition position);
+
+/// Callback for progress updates during import
+typedef ProgressCallback = void Function(String message);
 
 class TacticsImportService {
   final StockfishService _stockfish = StockfishService();
+  final TacticsDatabase _database = TacticsDatabase();
+  
+  /// Whether to skip games that have already been analyzed
+  bool skipAnalyzedGames = true;
 
   // Win% formula provided by user
   // Win% = 50 + 50 * (2 / (1 + exp(-0.00368208 * centipawns)) - 1)
@@ -19,7 +30,23 @@ class TacticsImportService {
     return 50 + 50 * (2 / (1 + math.exp(-0.00368208 * centipawns)) - 1);
   }
 
-  Future<List<TacticsPosition>> importGamesFromLichess(String username, {int? maxGames, int depth = 15, Function(String)? progressCallback}) async {
+  /// Initialize the database (load analyzed game IDs)
+  Future<void> initialize() async {
+    await _database.loadPositions();
+  }
+
+  Future<List<TacticsPosition>> importGamesFromLichess(
+    String username, {
+    int? maxGames, 
+    int depth = 15, 
+    Function(String)? progressCallback,
+    OnPositionFoundCallback? onPositionFound,
+  }) async {
+    // Ensure database is loaded to check for already-analyzed games
+    if (_database.analyzedGameIds.isEmpty) {
+      await _database.loadPositions();
+    }
+    
     final url = Uri.parse('https://lichess.org/api/games/user/$username?max=${maxGames ?? 20}&evals=false&clocks=false&opening=false&moves=true');
     
     try {
@@ -29,7 +56,7 @@ class TacticsImportService {
       if (response.statusCode == 200) {
         // Save the raw PGNs first
         await _savePgns(response.body);
-        return _processGames(response.body, username, depth, progressCallback);
+        return _processGames(response.body, username, depth, progressCallback, onPositionFound);
       } else {
         throw Exception('Failed to fetch games from Lichess: ${response.statusCode}');
       }
@@ -38,7 +65,18 @@ class TacticsImportService {
     }
   }
 
-  Future<List<TacticsPosition>> importGamesFromChessCom(String username, {int? maxGames, int depth = 15, Function(String)? progressCallback}) async {
+  Future<List<TacticsPosition>> importGamesFromChessCom(
+    String username, {
+    int? maxGames, 
+    int depth = 15, 
+    Function(String)? progressCallback,
+    OnPositionFoundCallback? onPositionFound,
+  }) async {
+    // Ensure database is loaded to check for already-analyzed games
+    if (_database.analyzedGameIds.isEmpty) {
+      await _database.loadPositions();
+    }
+    
     int gamesFound = 0;
     int targetGames = maxGames ?? 10;
     List<String> allGames = [];
@@ -87,7 +125,7 @@ class TacticsImportService {
     // Save the raw PGNs first
     await _savePgns(gamesToProcess);
     
-    return _processGames(gamesToProcess, username, depth, progressCallback);
+    return _processGames(gamesToProcess, username, depth, progressCallback, onPositionFound);
   }
 
   /// Save raw PGNs to imported_games.pgn file with GameId headers injected
@@ -125,22 +163,88 @@ class TacticsImportService {
     // Try to find existing GameId header
     final gameIdMatch = RegExp(r'\[GameId "([^"]+)"\]').firstMatch(gameText);
     if (gameIdMatch != null) {
+      if (kDebugMode) print('  GameId from header: ${gameIdMatch.group(1)}');
       return gameIdMatch.group(1)!;
     }
     
-    // Fall back to extracting from Site URL (Chess.com and Lichess)
+    // Try Link header (Chess.com uses this)
+    // Format: [Link "https://www.chess.com/game/live/123456789"]
+    final linkMatch = RegExp(r'\[Link "([^"]+)"\]').firstMatch(gameText);
+    if (linkMatch != null) {
+      final link = linkMatch.group(1)!;
+      if (kDebugMode) print('  Found Link header: $link');
+      // Extract last numeric segment from URL
+      final match = RegExp(r'/(\d+)(?:\?|$|#)').firstMatch(link);
+      if (match != null) {
+        final gameId = 'chesscom_${match.group(1)}';
+        if (kDebugMode) print('  Extracted game ID from Link: $gameId');
+        return gameId;
+      }
+      // Fallback: last path segment
+      final parts = link.split('/');
+      final lastPart = parts.where((p) => p.isNotEmpty).lastOrNull;
+      if (lastPart != null && lastPart.toLowerCase() != 'chess.com') {
+        final gameId = 'chesscom_$lastPart';
+        if (kDebugMode) print('  Extracted game ID from Link (fallback): $gameId');
+        return gameId;
+      }
+    } else {
+      if (kDebugMode) print('  No Link header found');
+    }
+    
+    // Try Site URL (Lichess uses full URL in Site header)
     final siteMatch = RegExp(r'\[Site "([^"]+)"\]').firstMatch(gameText);
     if (siteMatch != null) {
       final site = siteMatch.group(1)!;
-      // Extract last path segment as ID
-      final parts = site.split('/');
-      if (parts.isNotEmpty) {
-        return parts.last;
+      final siteLower = site.toLowerCase();
+      if (kDebugMode) print('  Found Site header: $site');
+      
+      // Skip if it's just "Chess.com" without a game ID (case insensitive)
+      if (siteLower == 'chess.com' || 
+          siteLower == 'https://chess.com' || 
+          siteLower == 'https://www.chess.com' ||
+          siteLower == 'http://chess.com' ||
+          siteLower == 'http://www.chess.com') {
+        // Don't use this, fall through to other methods
+      } else if (siteLower.contains('lichess.org/')) {
+        // Lichess format: https://lichess.org/AbCdEfGh
+        final parts = site.split('/');
+        final gameId = parts.where((p) => p.isNotEmpty && !p.contains('.')).lastOrNull;
+        if (gameId != null && gameId.length >= 6) {
+          return 'lichess_$gameId';
+        }
+      } else if (site.contains('/') && !siteLower.contains('chess.com')) {
+        // Other URL format - extract last segment (but not if it's chess.com)
+        final parts = site.split('/');
+        final lastPart = parts.where((p) => p.isNotEmpty).lastOrNull;
+        if (lastPart != null && lastPart.length >= 4 && lastPart.toLowerCase() != 'chess.com') {
+          return lastPart;
+        }
       }
     }
     
+    // Try to create unique ID from game metadata
+    final whiteMatch = RegExp(r'\[White "([^"]+)"\]').firstMatch(gameText);
+    final blackMatch = RegExp(r'\[Black "([^"]+)"\]').firstMatch(gameText);
+    final dateMatch = RegExp(r'\[Date "([^"]+)"\]').firstMatch(gameText);
+    final utcTimeMatch = RegExp(r'\[UTCTime "([^"]+)"\]').firstMatch(gameText);
+    
+    if (whiteMatch != null && blackMatch != null && dateMatch != null) {
+      final white = whiteMatch.group(1)!;
+      final black = blackMatch.group(1)!;
+      final date = dateMatch.group(1)!;
+      final time = utcTimeMatch?.group(1) ?? '';
+      // Create a deterministic ID from the game details
+      final combined = '$white-$black-$date-$time';
+      final gameId = 'game_${combined.hashCode.abs()}';
+      if (kDebugMode) print('  Created game ID from metadata: $gameId ($white vs $black)');
+      return gameId;
+    }
+    
     // Last resort: generate from hash of content
-    return gameText.hashCode.abs().toString();
+    final hashId = 'hash_${gameText.hashCode.abs()}';
+    if (kDebugMode) print('  Using hash fallback: $hashId');
+    return hashId;
   }
   
   /// Inject GameId header into PGN if not present
@@ -213,24 +317,47 @@ class TacticsImportService {
     return games;
   }
 
-  Future<List<TacticsPosition>> _processGames(String pgnContent, String username, int depth, Function(String)? progressCallback) async {
+  Future<List<TacticsPosition>> _processGames(
+    String pgnContent, 
+    String username, 
+    int depth, 
+    Function(String)? progressCallback,
+    OnPositionFoundCallback? onPositionFound,
+  ) async {
     final games = _splitPgnIntoGames(pgnContent);
     final positions = <TacticsPosition>[];
     final usernameLower = username.toLowerCase();
 
     int gameIdx = 0;
+    int skippedCount = 0;
+    
     for (final gameText in games) {
       gameIdx++;
-      final progressMsg = 'Analyzing game $gameIdx/${games.length} (depth $depth)...';
-      progressCallback?.call(progressMsg);
       
-      if (kDebugMode) {
-        print(progressMsg);
-      }
-
       try {
         // Use dartchess for robust PGN header parsing
         final game = PgnGame.parsePgn(gameText);
+        
+        // Extract game ID early to check if already analyzed
+        // Always use _extractGameId which handles all formats correctly
+        final gameId = _extractGameId(gameText);
+        
+        // Skip if already analyzed
+        if (skipAnalyzedGames && _database.isGameAnalyzed(gameId)) {
+          skippedCount++;
+          if (kDebugMode) {
+            print('Skipping already-analyzed game: $gameId');
+          }
+          progressCallback?.call('Skipping game $gameIdx/${games.length} (already analyzed)...');
+          continue;
+        }
+        
+        final progressMsg = 'Analyzing game $gameIdx/${games.length} (depth $depth)... ${skippedCount > 0 ? "($skippedCount skipped)" : ""}';
+        progressCallback?.call(progressMsg);
+        
+        if (kDebugMode) {
+          print(progressMsg);
+        }
         
         final white = game.headers['White']?.toLowerCase() ?? '';
         final black = game.headers['Black']?.toLowerCase() ?? '';
@@ -247,11 +374,19 @@ class TacticsImportService {
           } else if (black.contains(usernameLower)) {
             userColor = chess.Color.BLACK;
           } else {
+            // Mark as analyzed even if user not found (to avoid re-checking)
+            await _database.markGameAnalyzed(gameId);
             continue;
           }
         }
 
-        await _analyzeGame(game, userColor!, depth, positions);
+        // Analyze the game with streaming callback
+        final gamePositions = <TacticsPosition>[];
+        await _analyzeGame(game, userColor!, depth, gamePositions, onPositionFound, gameId);
+        positions.addAll(gamePositions);
+        
+        // Mark game as analyzed (even if no blunders found)
+        await _database.markGameAnalyzed(gameId);
         
       } catch (e) {
         if (kDebugMode) {
@@ -261,10 +396,21 @@ class TacticsImportService {
       }
     }
 
+    if (skippedCount > 0) {
+      progressCallback?.call('Done! Analyzed ${gameIdx - skippedCount} new games, skipped $skippedCount already-analyzed games.');
+    }
+
     return positions;
   }
 
-  Future<void> _analyzeGame(PgnGame game, chess.Color userColor, int depth, List<TacticsPosition> positions) async {
+  Future<void> _analyzeGame(
+    PgnGame game, 
+    chess.Color userColor, 
+    int depth, 
+    List<TacticsPosition> positions,
+    OnPositionFoundCallback? onPositionFound,
+    String gameId,
+  ) async {
     // Linearize moves from the game (SAN strings)
     final moves = <String>[];
     var node = game.moves;
@@ -371,10 +517,15 @@ class TacticsImportService {
               gameBlack: game.headers['Black'] ?? '',
               gameResult: game.headers['Result'] ?? '*',
               gameDate: game.headers['Date'] ?? '',
-              gameId: game.headers['GameId'] ?? game.headers['Site']?.split('/').last ?? '',
+              gameId: gameId, // Use the same ID we used for skip-detection
             );
             
             positions.add(tacticsPosition);
+            
+            // Stream the position immediately if callback provided
+            if (onPositionFound != null) {
+              onPositionFound(tacticsPosition);
+            }
           }
         }
       } else {
