@@ -168,8 +168,8 @@ class AppState extends ChangeNotifier {
 
   void enterAnalysisMode() {
     if (!_isAnalysisMode) {
-      // Capture current board orientation before entering analysis
-      _initialBoardFlipped = _currentGame.turn == chess.Color.BLACK;
+      // Don't change board orientation - keep whatever was set when loading the position
+      // The _initialBoardFlipped is already set correctly from setBoardFlipped()
       _isAnalysisMode = true;
       notifyListeners();
     }
@@ -178,7 +178,7 @@ class AppState extends ChangeNotifier {
   void exitAnalysisMode() {
     if (_isAnalysisMode) {
       _isAnalysisMode = false;
-      _initialBoardFlipped = null;
+      // Don't reset _initialBoardFlipped - keep the board orientation stable
       
       // Reset board to current tactic position
       if (_currentPosition != null) {
