@@ -13,6 +13,7 @@ import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/opening_tree_widget.dart';
 import '../widgets/engine_analysis_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
+import '../widgets/repertoire_lines_browser.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
 import '../services/opening_tree_builder.dart';
@@ -514,7 +515,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging || _tabController.animation?.value == _tabController.index) {
         setState(() {});
@@ -617,8 +618,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-          // PGN Tab (Index 1) - PGN Editor handles navigation
-          if (_tabController.index == 1) {
+          // PGN Tab (Index 2) - PGN Editor handles navigation
+          if (_tabController.index == 2) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               _pgnEditorController.goBack();
               return KeyEventResult.handled;
@@ -627,8 +628,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               return KeyEventResult.handled;
             }
           }
-          // Tree Tab (Index 0) - Main controller handles navigation
-          else if (_tabController.index == 0) {
+          // Tree Tab (Index 0) or Lines Tab (Index 1) - Main controller handles navigation
+          else if (_tabController.index == 0 || _tabController.index == 1) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               _controller.goBack();
               return KeyEventResult.handled;
@@ -637,8 +638,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               return KeyEventResult.handled;
             }
           }
-          // Engine Tab (Index 2) - Main controller handles navigation
-          else if (_tabController.index == 2) {
+          // Engine Tab (Index 3) - Main controller handles navigation
+          else if (_tabController.index == 3) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               _controller.goBack();
               return KeyEventResult.handled;
@@ -687,8 +688,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                     // Tab bar
                     TabBar(
                       controller: _tabController,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
                       tabs: const [
                         Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
+                        Tab(text: 'Lines', icon: Icon(Icons.library_books, size: 16)),
                         Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
                         Tab(text: 'Engine', icon: Icon(Icons.developer_board, size: 16)),
                         Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
@@ -700,6 +704,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                         controller: _tabController,
                         children: [
                           _buildOpeningTreeTab(),
+                          _buildLinesTab(),
                           _buildPgnTab(),
                           _buildEngineTab(),
                           _buildActionsTab(),
@@ -727,6 +732,44 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return Text(
       '$name • $gameCount game${gameCount == 1 ? '' : 's'}',
       style: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
+    );
+  }
+
+  Widget _buildLinesTab() {
+    if (_controller.repertoireLines.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.library_books, size: 64, color: Colors.grey),
+              SizedBox(height: 16),
+              Text(
+                'No lines found in repertoire',
+                style: TextStyle(color: Colors.grey),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Load a PGN repertoire file to see lines here',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RepertoireLinesBrowser(
+      lines: _controller.repertoireLines,
+      currentMoveSequence: _controller.currentMoveSequence,
+      isExpanded: true,
+      onLineSelected: (line) {
+        _controller.loadPgnLine(line);
+        // Switch to PGN tab (now at index 2)
+        _tabController.animateTo(2);
+      },
     );
   }
 
@@ -793,7 +836,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   Widget _buildEngineTab() {
     // Calculate if the engine tab is currently active/visible
-    final isEngineTabActive = _tabController.index == 2;
+    final isEngineTabActive = _tabController.index == 3;
 
     return Container(
       padding: const EdgeInsets.all(8.0),
@@ -865,26 +908,119 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     return Container(
       padding: const EdgeInsets.all(8.0),
-      child: OpeningTreeWidget(
-        tree: _controller.openingTree!,
-        showPgnSearch: _controller.repertoireLines.isNotEmpty,
-        repertoireLines: _controller.repertoireLines,
+      child: Column(
+        children: [
+          // Opening tree explorer
+          Expanded(
+            flex: 3,
+            child: OpeningTreeWidget(
+              tree: _controller.openingTree!,
+              showPgnSearch: false, // Disabled - using new browser below
+              repertoireLines: _controller.repertoireLines,
+              currentMoveSequence: _controller.currentMoveSequence,
+              onMoveSelected: (move) {
+                 // Handle tree move selection
+                 _controller.userSelectedTreeMove(move);
+              },
+              onPositionSelected: (fen) {
+                // Deprecated: Use onMoveSelected instead
+              },
+              onLineSelected: (line) {
+                _selectLine(line);
+              },
+            ),
+          ),
+          
+          // Lines browser section
+          if (_controller.repertoireLines.isNotEmpty) ...[
+            const Divider(height: 1),
+            
+            // Quick access header with expand button
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.library_books, size: 16, color: Colors.grey[400]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Lines (${_controller.repertoireLines.length})',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[300],
+                    ),
+                  ),
+                  if (_controller.currentMoveSequence.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue[800],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        '${_getMatchingLinesCount()} matching',
+                        style: const TextStyle(fontSize: 10, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.open_in_full, size: 18),
+                    tooltip: 'Open full browser',
+                    onPressed: _showFullLinesBrowser,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Inline compact browser
+            Expanded(
+              flex: 2,
+              child: RepertoireLinesBrowser(
+                lines: _controller.repertoireLines,
+                currentMoveSequence: _controller.currentMoveSequence,
+                onLineSelected: _selectLine,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+  
+  int _getMatchingLinesCount() {
+    final currentMoves = _controller.currentMoveSequence;
+    if (currentMoves.isEmpty) return _controller.repertoireLines.length;
+    
+    return _controller.repertoireLines.where((line) {
+      if (currentMoves.length > line.moves.length) return false;
+      for (int i = 0; i < currentMoves.length; i++) {
+        if (line.moves[i] != currentMoves[i]) return false;
+      }
+      return true;
+    }).length;
+  }
+  
+  void _selectLine(RepertoireLine line) {
+    // Load the selected PGN line - this updates move history
+    _controller.loadPgnLine(line);
+    // Switch to PGN tab (index 2 after adding Lines tab)
+    _tabController.animateTo(2);
+  }
+  
+  void _showFullLinesBrowser() {
+    showDialog(
+      context: context,
+      builder: (context) => RepertoireLinesBrowserDialog(
+        lines: _controller.repertoireLines,
         currentMoveSequence: _controller.currentMoveSequence,
-        onMoveSelected: (move) {
-           // Handle tree move selection
-           _controller.userSelectedTreeMove(move);
-        },
-        onPositionSelected: (fen) {
-          // Deprecated: Use onMoveSelected instead
-          // Keeping this empty or minimal as onMoveSelected handles the logic now
-        },
-        onLineSelected: (line) {
-          // Load the selected PGN line - this updates move history
-          _controller.loadPgnLine(line);
-
-          // Switch to PGN tab
-          _tabController.animateTo(1);
-        },
+        onLineSelected: _selectLine,
       ),
     );
   }
