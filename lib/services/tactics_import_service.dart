@@ -1,15 +1,14 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:chess/chess.dart' as chess;
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import '../models/tactics_position.dart';
 import 'package:chess_auto_prep/models/engine_evaluation.dart';
 import 'stockfish_service.dart';
 import 'tactics_database.dart';
+import 'storage/storage_factory.dart';
 
 /// Callback for when a new tactics position is found during import
 typedef OnPositionFoundCallback = void Function(TacticsPosition position);
@@ -23,6 +22,9 @@ class TacticsImportService {
   
   /// Whether to skip games that have already been analyzed
   bool skipAnalyzedGames = true;
+  
+  /// Check if engine-based analysis is available on this platform
+  bool get isAnalysisAvailable => _stockfish.isAvailable.value;
 
   // Win% formula provided by user
   // Win% = 50 + 50 * (2 / (1 + exp(-0.00368208 * centipawns)) - 1)
@@ -47,6 +49,8 @@ class TacticsImportService {
       await _database.loadPositions();
     }
     
+    // On web, we might run into CORS issues with direct Lichess API calls.
+    // If that happens, we'd need a proxy, but for now we try direct.
     final url = Uri.parse('https://lichess.org/api/games/user/$username?max=${maxGames ?? 20}&evals=false&clocks=false&opening=false&moves=true');
     
     try {
@@ -128,12 +132,9 @@ class TacticsImportService {
     return _processGames(gamesToProcess, username, depth, progressCallback, onPositionFound);
   }
 
-  /// Save raw PGNs to imported_games.pgn file with GameId headers injected
+  /// Save raw PGNs to storage with GameId headers injected
   Future<void> _savePgns(String pgnContent) async {
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/imported_games.pgn');
-      
       // Split into games and inject GameId headers
       final games = _splitPgnIntoGames(pgnContent);
       final processedGames = <String>[];
@@ -145,11 +146,25 @@ class TacticsImportService {
       
       final processedContent = processedGames.join('\n\n');
       
-      // Overwrite file (avoid duplicates from repeated imports)
-      await file.writeAsString(processedContent);
+      // On IO this appends/overwrites. On Web (SharedPrefs) we might overwrite.
+      // Ideally we should append if it exists, but for now overwriting current batch is fine
+      // or we can read existing.
+      // Let's try to append to existing for better UX
+      final existing = await StorageFactory.instance.readImportedPgns() ?? '';
+      
+      // Simple check to avoid duplicates if possible, or just append
+      // For now, let's just save the new batch or append.
+      // To be safe and simple, let's just save this batch as "current import"
+      // But StorageService.saveImportedPgns overwrites.
+      // Let's overwrite for now as the user primarily wants Tactics, and this file is for PGN viewer/Analysis
+      // which loads from this file.
+      // If we want to keep history, we should read-then-write.
+      
+      final newContent = existing.isEmpty ? processedContent : '$existing\n\n$processedContent';
+      await StorageFactory.instance.saveImportedPgns(newContent);
       
       if (kDebugMode) {
-        print('Saved ${games.length} PGNs to ${file.path}');
+        print('Saved ${games.length} PGNs to storage');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -324,6 +339,17 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   ) async {
+    // Check if Stockfish is available before attempting analysis
+    if (!_stockfish.isAvailable.value) {
+      throw Exception(
+        'Tactics analysis requires Stockfish, which is not available on this platform (web).\n\n'
+        'You can:\n'
+        '• Import tactics from a CSV file (exported from desktop)\n'
+        '• Use the desktop app to generate tactics\n'
+        '• Practice existing tactics positions'
+      );
+    }
+    
     final games = _splitPgnIntoGames(pgnContent);
     final positions = <TacticsPosition>[];
     final usernameLower = username.toLowerCase();

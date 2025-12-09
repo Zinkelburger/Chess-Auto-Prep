@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:dartchess_webok/dartchess_webok.dart';
-import 'dart:io' as io;
-import 'package:path_provider/path_provider.dart';
+import 'package:chess/chess.dart' as chess;
 import 'package:flutter/gestures.dart';
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 
 /// A node in the analysis tree. Each node represents a move.
 /// Children[0] is the main continuation, children[1+] are variations.
@@ -78,7 +78,7 @@ class PgnViewerWidget extends StatefulWidget {
   final String? pgnText;
   final int? moveNumber;
   final bool? isWhiteToPlay;
-  final Function(Position)? onPositionChanged;
+  final Function(chess.Chess)? onPositionChanged;
   final PgnViewerController? controller;
 
   const PgnViewerWidget({
@@ -100,7 +100,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   PgnGame? _game;
   List<PgnNodeData> _moveHistory = [];
   int _mainLineIndex = 0; // Current position in the original game's main line
-  Position _currentPosition = Chess.initial;
+  chess.Chess _currentPosition = chess.Chess();
   String _gameInfo = '';
   bool _isLoading = true;
   String? _error;
@@ -171,7 +171,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         _game = game;
         _moveHistory = moveHistory;
         _mainLineIndex = 0;
-        _currentPosition = Chess.initial;
+        _currentPosition = chess.Chess();
         _gameInfo = _buildGameInfo(game);
         _isLoading = false;
         // Clear analysis when loading new game
@@ -191,14 +191,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   Future<String> _findGamePgn(String gameId) async {
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final pgnFile = io.File('${directory.path}/imported_games.pgn');
-
-      if (!await pgnFile.exists()) {
+      final content = await StorageFactory.instance.readImportedPgns();
+      if (content == null || content.isEmpty) {
         return '';
       }
 
-      final content = await pgnFile.readAsString();
       final games = _splitPgnIntoGames(content);
 
       for (final gameText in games) {
@@ -264,23 +261,22 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   void _goToMainLineMove(int moveIndex) {
     if (moveIndex < 0 || moveIndex > _moveHistory.length) return;
 
-    Position position = Chess.initial;
+    // Use chess.dart to handle position
+    final newGame = chess.Chess();
+    
     for (int i = 0; i < moveIndex; i++) {
-      final move = position.parseSan(_moveHistory[i].san);
-      if (move != null) {
-        position = position.play(move);
-      } else {
-        break;
-      }
+      // Replay moves
+      // We assume SANs are valid because they come from valid PGN parse
+      newGame.move(_moveHistory[i].san);
     }
 
     setState(() {
       _mainLineIndex = moveIndex;
-      _currentPosition = position;
+      _currentPosition = newGame;
       _analysisPath = []; // Exit analysis, but keep it visible
     });
 
-    widget.onPositionChanged?.call(position);
+    widget.onPositionChanged?.call(newGame);
   }
 
   /// Navigate to a specific node in the analysis tree
@@ -290,31 +286,25 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     if (path == null) return;
     
     // Rebuild position
-    Position position = Chess.initial;
+    final newGame = chess.Chess();
     
     // First, go to branch point in main line
     for (int i = 0; i < _analysisBranchPoint; i++) {
-      final move = position.parseSan(_moveHistory[i].san);
-      if (move != null) {
-        position = position.play(move);
-      }
+      newGame.move(_moveHistory[i].san);
     }
     
     // Then apply analysis moves
     for (final node in path) {
-      final move = position.parseSan(node.san);
-      if (move != null) {
-        position = position.play(move);
-      }
+      newGame.move(node.san);
     }
     
     setState(() {
       _mainLineIndex = _analysisBranchPoint;
-      _currentPosition = position;
+      _currentPosition = newGame;
       _analysisPath = path;
     });
     
-    widget.onPositionChanged?.call(position);
+    widget.onPositionChanged?.call(newGame);
   }
   
   /// Find path from roots to a target node
@@ -415,11 +405,15 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   
   /// Add a move to the analysis tree
   void _addAnalysisMove(String san) {
-    final move = _currentPosition.parseSan(san);
-    if (move == null) return;
+    // Validate move logic is handled by parent/engine, assume valid here
+    // But we need to update state
     
-    final newPosition = _currentPosition.play(move);
-    final fenAfter = newPosition.fen;
+    // Clone current game to check move validity and get FEN
+    final tempGame = chess.Chess.fromFEN(_currentPosition.fen);
+    final success = tempGame.move(san);
+    if (!success) return;
+    
+    final fenAfter = tempGame.fen;
     
     setState(() {
       if (_analysisPath.isEmpty) {
@@ -453,10 +447,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         _analysisPath = [..._analysisPath, node];
       }
       
-      _currentPosition = newPosition;
+      _currentPosition = tempGame;
     });
     
-    widget.onPositionChanged?.call(newPosition);
+    widget.onPositionChanged?.call(tempGame);
   }
   
   void _clearAnalysis() {

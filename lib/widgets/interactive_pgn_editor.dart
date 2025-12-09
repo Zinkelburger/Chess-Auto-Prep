@@ -5,8 +5,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess_webok/dartchess_webok.dart';
-import 'package:path_provider/path_provider.dart';
-import 'dart:io' as io;
+import 'package:chess/chess.dart' as chess;
+import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 
 // Simple counter for unique move IDs
 int _pgnMoveIdCounter = 0;
@@ -86,7 +86,7 @@ class PgnEditorController {
 }
 
 class InteractivePgnEditor extends StatefulWidget {
-  final Function(Position)? onPositionChanged;
+  final Function(chess.Chess)? onPositionChanged;
   /// Called when move state changes - reports current move index and full move list
   final Function(int moveIndex, List<String> moves)? onMoveStateChanged;
   final String? initialPgn;
@@ -116,7 +116,7 @@ class InteractivePgnEditor extends StatefulWidget {
 
 class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // Game state
-  Position _currentPosition = Chess.initial;
+  chess.Chess _currentPosition = chess.Chess();
   List<PgnMove> _roots = []; // The root moves (usually 1, e.g. 1. e4)
   List<PgnMove> _currentPath = []; // The path of moves to the current position
   
@@ -209,9 +209,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   /// Called when user makes a move on the chess board
   void addMove(String san) {
-    // Validate move first
-    final move = _currentPosition.parseSan(san);
-    if (move == null) return;
+    // Validate move first - assumes currentPosition is valid
+    // We use a clone to check
+    final tempGame = chess.Chess.fromFEN(_currentPosition.fen);
+    if (!tempGame.move(san)) return;
 
     setState(() {
       final newMove = PgnMove(san: san);
@@ -225,26 +226,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         _addToSiblingList(parent.children, newMove);
       }
       
-      // Advance path to include the new move (it's now the last child of the parent, or the matched one)
-      // We need to find the move we just added/matched in the updated structure
+      // Advance path to include the new move
       if (_currentPath.isEmpty) {
         final added = _roots.firstWhere((m) => m.san == san);
         _currentPath = [added];
       } else {
-        // Need to find the instance in the parent's children
-        // Note: We can't just use parent.children because 'parent' is the old immutable object.
-        // We need to find the updated parent in the new tree?
-        // Actually, since we mutated the lists (List is mutable in Dart), we might be fine IF we used mutable lists.
-        // BUT PgnMove has 'final List<PgnMove> children'.
-        // The list object itself is mutable if we created it as [].
-        // My PgnMove constructor uses `children = children ?? []`. This is a mutable list.
-        // So modifying parent.children in place works!
-        
         final parent = _currentPath.last;
         final added = parent.children.firstWhere((m) => m.san == san);
-        
-        // We don't need to rebuild _currentPath because the objects reference the same children list.
-        // However, to trigger UI update, we do setState.
         _currentPath = List.from(_currentPath)..add(added);
       }
 
@@ -262,20 +250,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         return;
       }
     }
-    // If not found, add it.
-    // Logic for ordering: If we want to keep mainline first, we insert at end?
-    // Yes, usually variations are added after the main move.
-    // But if this is the FIRST move added, it becomes main.
     siblings.add(newMove);
   }
 
   void _updatePosition() {
-    Position position = Chess.initial;
+    chess.Chess position = chess.Chess();
     for (final moveNode in _currentPath) {
-      final move = position.parseSan(moveNode.san);
-      if (move != null) {
-        position = position.play(move);
-      }
+      position.move(moveNode.san);
     }
     _currentPosition = position;
     widget.onPositionChanged?.call(_currentPosition);
@@ -290,17 +271,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   void _syncToPosition(String fen) {
-    // Difficult to sync strictly by FEN in a tree without context.
-    // We'll try to find a node in the current path or tree that matches.
-    // Simplified: just update current position but don't jump in tree if ambiguous.
-    // For now, implementing search in current path or immediate variations is complex.
-    // We will rely on user navigation or external syncToMoveHistory.
+    // No-op for now as tree navigation is complex
   }
 
   void _syncToMoveHistory(List<String> moves, int moveIndex) {
     if (!mounted) return;
     setState(() {
-      // This forces the editor to follow a specific linear path, potentially creating it
       // Reset to root
       _currentPath = [];
       var currentSiblings = _roots;
@@ -339,16 +315,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     });
   }
 
-  String _normalizeFen(String fen) {
-    final parts = fen.split(' ');
-    if (parts.length >= 4) {
-      return '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
-    }
-    return fen;
-  }
-
   void _generateWorkingPgn() {
-    // Recursive PGN generation
     final buffer = StringBuffer();
     if (_roots.isNotEmpty) {
       _writePgnTree(buffer, _roots, true);
@@ -359,39 +326,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   void _writePgnTree(StringBuffer buffer, List<PgnMove> siblings, bool isRoot) {
     if (siblings.isEmpty) return;
-
-    // Main line of this level is the first sibling
-    final main = siblings[0];
-    
-    // We need to track move number context. This is hard in simple recursion without state.
-    // For simple export, we'll just dump moves. A proper PGN writer is complex.
-    // Let's do a simplified traversal that follows the MAINLINE primarily, 
-    // and adds variations in parens.
-    
-    // But wait, we don't have move numbers passed down.
-    // Let's rely on a flattened reconstruction for the MAIN text if possible, 
-    // or just write tokens.
-    // PGN parsers are robust.
-    // "1. e4 e5 (1... c5) 2. Nf3"
-    
-    // Since we don't have easy move number tracking here, let's trust the
-    // fact that we are just writing a string.
-    // NOTE: This basic writer might produce slightly malformed move numbers in deep nested variations
-    // but standard parsers usually handle it.
-    
-    // Better approach: Use dartchess to write? We have our own structure.
-    // Let's do a best-effort PGN write.
-    
-    // We need to traverse the MAIN line (siblings[0] -> siblings[0].children[0] -> ...)
-    // But siblings[1+] are variations AT THIS POINT.
-    
-    // This function is hard to write correctly without passing move number and color.
-    // Let's try to implement a writer that walks the tree.
-    // But actually, for "Add to Repertoire", we usually want the CURRENT LINE as the PGN?
-    // Or the whole tree?
-    // The user likely wants the whole tree with variations.
-    
-    // Let's use a helper that takes (nodes, moveNumber, isWhite).
     _writeNodes(buffer, siblings, 1, true);
   }
 
@@ -403,11 +337,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     // Write main move
     if (isWhite) {
       buffer.write('$moveNumber. ');
-    } else {
-      // If we are black and it's the start of a variation or block, we might need "1... "
-      // For now, strict PGN usually requires number+dots if starting from black in a variation.
-      // We'll simplify: Only write number if white, or if we really need to (handled by context? no).
-      // Standard: "1. e4 (1... d5)"
     }
     
     buffer.write('${main.san} ');
@@ -425,7 +354,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         buffer.write('$moveNumber... ');
       }
       
-      // Write the variation move
       final variant = siblings[i];
       buffer.write('${variant.san} ');
       if (variant.comment != null && variant.comment!.isNotEmpty) {
@@ -443,7 +371,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   void _goToMove(int moveId) {
-    // We need to find the path to this moveId
     final path = <PgnMove>[];
     if (_findPathRecursive(_roots, moveId, path)) {
       setState(() {
@@ -501,9 +428,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     }
   }
 
-  // ... context menu and other helpers need update for ID based logic ...
-  // For brevity in this refactor, I'll fix the critical parts.
-
   void _showContextMenu(int moveId, Offset globalPosition) {
     setState(() {
       _contextMenuMoveId = moveId;
@@ -526,27 +450,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   void _deleteFromHere() {
     if (_contextMenuMoveId == null) return;
-    // Need to find parent and remove this node from parent's children
-    // This is tricky with just ID. We need parent reference or search.
-    
-    // Logic:
-    // Find path to node.
-    // Parent is path[len-2].
-    // Remove node from parent.children.
     
     final path = <PgnMove>[];
     if (_findPathRecursive(_roots, _contextMenuMoveId!, path)) {
       setState(() {
         if (path.length == 1) {
-          // It's a root
           _roots.remove(path.last);
         } else {
           final parent = path[path.length - 2];
           parent.children.remove(path.last);
         }
         
-        // Reset current path if it contained the deleted node
-        // If _currentPath contains path.last, we need to cut it back
         final index = _currentPath.indexOf(path.last);
         if (index != -1) {
           _currentPath = _currentPath.sublist(0, index);
@@ -566,21 +480,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final path = <PgnMove>[];
     if (_findPathRecursive(_roots, _contextMenuMoveId!, path)) {
       final buffer = StringBuffer();
-      // Start PGN generation from this node
-      // We need to guess move number?
-      // For copy-paste, usually starting with "1..." or just the move is fine.
-      // Or we can calculate it from path length.
-      // Path length includes roots.
-      // Move Number = (path length + 1) / 2 (ceil)
       
       int ply = path.length; 
       int moveNumber = (ply + 1) ~/ 2;
       bool isWhite = ply % 2 != 0;
-      
-      // Actually path contains the move we are copying.
-      // The ply of this move is path.length.
-      // e.g. path=[e4] -> ply 1. White.
-      // path=[e4, e5] -> ply 2. Black.
       
       if (!isWhite) {
         buffer.write('$moveNumber... ');
@@ -588,9 +491,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         buffer.write('$moveNumber. ');
       }
       
-      // Create a temporary list containing just this node to use existing writer
-      // But the writer expects siblings.
-      // So we pass [path.last] as the siblings list.
       _writeNodes(buffer, [path.last], moveNumber, isWhite);
       
       Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
@@ -610,7 +510,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       
       setState(() {
         if (path.length == 1) {
-          // Root level promotion
           if (_roots.indexOf(target) > 0) {
             _roots.remove(target);
             _roots.insert(0, target);
@@ -634,9 +533,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   void _updateSelectedMoveComment(String comment) {
     if (_selectedMoveId == null) return;
     
-    // Since objects are immutable but lists are mutable, 
-    // we need to replace the object in the parent's list.
-    
     final path = <PgnMove>[];
     if (_findPathRecursive(_roots, _selectedMoveId!, path)) {
       setState(() {
@@ -652,8 +548,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
            if (idx != -1) parent.children[idx] = newMove;
         }
         
-        // Update current path references to the new object?
-        // Yes, otherwise _currentPath.last has old comment
         final pathIdx = _currentPath.indexOf(target);
         if (pathIdx != -1) {
            _currentPath[pathIdx] = newMove;
@@ -665,18 +559,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     }
   }
   
-  void _updateLineTitle(String title) {
-    setState(() {
-      _hasUnsavedChanges = true;
-    });
-  }
-  
-  // ... existing addToRepertoire ...
-
   Future<void> _addToRepertoire() async {
      if (_workingPgn.isEmpty) return;
-     // ... same implementation ...
-     // Shortened for tool call limit
      String? repertoireName = widget.currentRepertoireName;
     if (repertoireName == null || repertoireName.isEmpty) {
       repertoireName = await _showAddToRepertoireDialog();
@@ -716,18 +600,18 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   Future<void> _saveToRepertoireFile(String repertoireName, String pgn) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final repertoireDir = io.Directory('${directory.path}/repertoires');
-    if (!await repertoireDir.exists()) await repertoireDir.create(recursive: true);
-    final file = io.File('${repertoireDir.path}/$repertoireName.pgn');
+    // Append to repertoire file via StorageService
+    // Note: This logic previously used dart:io append mode.
+    // StorageService read/write implies full overwrite.
+    // So we read, append, write.
     
-    // ... headers ...
+    // We treat repertoireName as filename key
+    final filename = '$repertoireName.pgn';
+    String currentContent = await StorageFactory.instance.readRepertoirePgn(filename) ?? '';
+    
     final entry = '\n[Event "Edited Line"]\n[Date "${DateTime.now().toIso8601String()}"]\n\n$pgn\n';
-    if (await file.exists()) {
-      await file.writeAsString(await file.readAsString() + entry, mode: io.FileMode.write);
-    } else {
-      await file.writeAsString(entry);
-    }
+    
+    await StorageFactory.instance.saveRepertoirePgn(filename, currentContent + entry);
   }
 
   void _clearLine() {
@@ -860,8 +744,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     // Main move
     if (isWhite) {
       widgets.add(Text('$moveNumber. ', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)));
-    } else if (moveNumber == 1 && !isWhite) {
-      // Optional: handle start from black?
     }
     
     widgets.add(_buildSingleMoveWidget(main));
@@ -871,8 +753,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
        for (int i = 1; i < siblings.length; i++) {
          widgets.add(const Text(' ( ', style: TextStyle(color: Colors.grey)));
          
-         // Variation moves
-         // A variation starts at the SAME move number as the main line it deviates from
          final variant = siblings[i];
          if (isWhite) {
             widgets.add(Text('$moveNumber. ', style: const TextStyle(color: Colors.grey)));
@@ -897,7 +777,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   Widget _buildSingleMoveWidget(PgnMove move) {
     final isSelected = move.id == _selectedMoveId;
-    // Check if in current path
     final isCurrent = _currentPath.any((m) => m.id == move.id);
     
     Color textColor = Colors.blue[300]!;
@@ -932,7 +811,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
   
   Widget _buildContextMenu() {
-    // Find the move node to display its SAN in the header
     String moveName = 'Move';
     final path = <PgnMove>[];
     if (_contextMenuMoveId != null && _findPathRecursive(_roots, _contextMenuMoveId!, path)) {
@@ -942,8 +820,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     return Positioned.fill(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _hideContextMenu, // Dismiss when tapping outside
-        onSecondaryTap: _hideContextMenu, // Also dismiss on right-click outside
+        onTap: _hideContextMenu, 
+        onSecondaryTap: _hideContextMenu, 
         child: Stack(
           children: [
             Positioned(
@@ -960,7 +838,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Header showing which move
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(

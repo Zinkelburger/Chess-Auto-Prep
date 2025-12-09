@@ -35,6 +35,7 @@ dependencies:
   flutter_bloc: ^9.1.1
   shared_preferences: ^2.5.3
   html: ^0.15.6
+  web: ^1.1.0  # Modern web API for Web Worker support
   stockfish: ^1.7.1
   onnxruntime: ^1.4.1
 

@@ -4,8 +4,8 @@ import 'package:chess/chess.dart' as chess;
 import 'package:flutter/foundation.dart';
 
 import 'engine_connection.dart';
-import 'process_connection_factory.dart';
-import 'maia_service.dart';
+import 'stockfish_connection_factory.dart';
+import 'maia_factory.dart';
 import '../models/engine_evaluation.dart';
 
 // Tuning parameters for Ease
@@ -83,9 +83,16 @@ class EaseService {
     currentResult.value = null;
 
     try {
+      // Check if Maia is available
+      if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
+        status.value = 'Maia not available on this platform';
+        _isAnalyzing = false;
+        return;
+      }
+      
       // 1. Maia Inference
       status.value = 'Running Maia...';
-      final maiaProbs = await MaiaService().evaluate(fen, 1900);
+      final maiaProbs = await MaiaFactory.instance!.evaluate(fen, 1900);
       
       final sortedMoves = maiaProbs.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
@@ -217,7 +224,8 @@ class EaseService {
   
   Future<double?> _calculateFastEase(String fen) async {
     try {
-      final maiaProbs = await MaiaService().evaluate(fen, 1900);
+      if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) return null;
+      final maiaProbs = await MaiaFactory.instance!.evaluate(fen, 1900);
       
       final sortedMoves = maiaProbs.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
@@ -287,7 +295,16 @@ class EaseService {
 
   Future<void> _ensureEngine() async {
     if (_engine != null) return;
-    _engine = await ProcessConnection.create();
+    
+    if (!StockfishConnectionFactory.isAvailable) {
+      throw Exception('Engine not available on this platform');
+    }
+    
+    _engine = await StockfishConnectionFactory.create();
+    
+    if (_engine == null) {
+      throw Exception('Failed to create engine connection');
+    }
     
     _engineSubscription = _engine!.stdout.listen((line) {
       _handleEngineOutput(line);
