@@ -3,18 +3,22 @@
 library;
 
 import 'package:dartchess_webok/dartchess_webok.dart';
-import 'dart:io' as io;
+import 'package:chess/chess.dart' as chess;
 import '../models/repertoire_line.dart';
+import 'storage/storage_factory.dart';
 
 class RepertoireService {
   /// Parses a repertoire PGN file and extracts all trainable lines
   Future<List<RepertoireLine>> parseRepertoireFile(String filePath) async {
-    final file = io.File(filePath);
-    if (!(await file.exists())) {
+    // filePath is expected to be a key or filename for StorageService
+    // On desktop it might be a full path, but readRepertoirePgn handles both logic
+    // via StorageService implementations.
+    final content = await StorageFactory.instance.readRepertoirePgn(filePath);
+    
+    if (content == null) {
       throw Exception('Repertoire file not found: $filePath');
     }
 
-    final content = await file.readAsString();
     return parseRepertoirePgn(content);
   }
 

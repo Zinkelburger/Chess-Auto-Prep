@@ -1,11 +1,16 @@
-import 'dart:io';
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'tactics_database.dart';
 import '../models/tactics_position.dart';
+import 'storage/storage_factory.dart';
 
-/// Service for exporting/importing tactics on mobile
+// Conditional imports for platform-specific features
+import 'tactics_export_import_stub.dart'
+    if (dart.library.io) 'tactics_export_import_io.dart'
+    if (dart.library.html) 'tactics_export_import_web.dart' as platform;
+
+/// Service for exporting/importing tactics on all platforms
 /// Addresses the limitation that mobile users can't directly access app files
 class TacticsExportImport {
   final TacticsDatabase _database;
@@ -15,42 +20,21 @@ class TacticsExportImport {
   /// Export tactics to a file that users can share/save
   /// On mobile: Opens share sheet
   /// On desktop: Opens file picker to choose save location
+  /// On web: Triggers browser download
   Future<void> exportTactics() async {
     try {
-      // Get the current CSV file
-      final directory = await getApplicationDocumentsDirectory();
-      final csvFile = File('${directory.path}/tactics_positions.csv');
+      // Get the current CSV content
+      final csvContent = await StorageFactory.instance.readTacticsCsv();
 
-      if (!await csvFile.exists()) {
+      if (csvContent == null || csvContent.isEmpty) {
         throw Exception('No tactics data to export');
       }
 
-      // On mobile, use share sheet
-      if (Platform.isAndroid || Platform.isIOS) {
-        final result = await Share.shareXFiles(
-          [XFile(csvFile.path)],
-          subject: 'Chess Tactics - ${_database.positions.length} positions',
-          text: 'Export of ${_database.positions.length} chess tactics positions',
-        );
-
-        if (result.status == ShareResultStatus.success) {
-          print('Tactics exported successfully');
-        }
-      } else {
-        // On desktop, let user choose save location
-        final savePath = await FilePicker.platform.saveFile(
-          dialogTitle: 'Export Tactics',
-          fileName: 'tactics_positions_export.csv',
-          type: FileType.custom,
-          allowedExtensions: ['csv'],
-        );
-
-        if (savePath != null) {
-          final content = await csvFile.readAsString();
-          await File(savePath).writeAsString(content);
-          print('Tactics exported to: $savePath');
-        }
-      }
+      await platform.exportCsvContent(
+        csvContent,
+        'tactics_positions_export.csv',
+        _database.positions.length,
+      );
     } catch (e) {
       print('Error exporting tactics: $e');
       rethrow;
@@ -58,15 +42,14 @@ class TacticsExportImport {
   }
 
   /// Import tactics from a CSV file
-  /// On mobile: Opens file picker
-  /// On desktop: Opens file picker
+  /// Uses file picker on all platforms with withData: true for web compatibility
   Future<int> importTactics() async {
     try {
-      // Let user pick a CSV file
+      // Let user pick a CSV file - withData: true ensures bytes are available on all platforms
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
-        withData: true, // Important for mobile to get file content
+        withData: true, // Important for web and mobile to get file content directly
       );
 
       if (result == null || result.files.isEmpty) {
@@ -75,14 +58,12 @@ class TacticsExportImport {
 
       final file = result.files.first;
 
-      // On mobile, we get bytes. On desktop, we get path.
+      // Use bytes (available on all platforms with withData: true)
       String content;
       if (file.bytes != null) {
-        content = String.fromCharCodes(file.bytes!);
-      } else if (file.path != null) {
-        content = await File(file.path!).readAsString();
+        content = utf8.decode(file.bytes!);
       } else {
-        throw Exception('Could not read file');
+        throw Exception('Could not read file content');
       }
 
       // Parse and import positions
@@ -96,14 +77,10 @@ class TacticsExportImport {
   }
 
   Future<int> _importFromCsvContent(String csvContent) async {
-    // This would parse the CSV and add to database
-    // For now, just replace the existing CSV file
-    final directory = await getApplicationDocumentsDirectory();
-    final csvFile = File('${directory.path}/tactics_positions.csv');
+    // Save the CSV content via StorageService
+    await StorageFactory.instance.saveTacticsCsv(csvContent);
 
-    await csvFile.writeAsString(csvContent);
-
-    // Reload from file
+    // Reload from storage
     final count = await _database.loadPositions();
 
     return count;
@@ -111,12 +88,12 @@ class TacticsExportImport {
 
   /// Get statistics about stored tactics
   Future<Map<String, dynamic>> getTacticsStats() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final csvFile = File('${directory.path}/tactics_positions.csv');
+    final csvContent = await StorageFactory.instance.readTacticsCsv();
+    final fileExists = csvContent != null && csvContent.isNotEmpty;
 
-    final stats = {
-      'file_exists': await csvFile.exists(),
-      'file_path': csvFile.path,
+    final stats = <String, dynamic>{
+      'file_exists': fileExists,
+      'storage_type': kIsWeb ? 'localStorage' : 'file',
       'positions_count': _database.positions.length,
       'total_reviews': _database.positions.fold<int>(
         0,
@@ -130,10 +107,8 @@ class TacticsExportImport {
               _database.positions.length,
     };
 
-    if (await csvFile.exists()) {
-      final fileStat = await csvFile.stat();
-      stats['file_size_bytes'] = fileStat.size;
-      stats['last_modified'] = fileStat.modified.toIso8601String();
+    if (fileExists) {
+      stats['content_size_bytes'] = csvContent.length;
     }
 
     return stats;
@@ -141,13 +116,8 @@ class TacticsExportImport {
 
   /// Clear all tactics data (useful for testing)
   Future<void> clearAllTactics() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final csvFile = File('${directory.path}/tactics_positions.csv');
-
-    if (await csvFile.exists()) {
-      await csvFile.delete();
-    }
-
+    // Save empty content to clear the data
+    await StorageFactory.instance.saveTacticsCsv('');
     _database.positions.clear();
   }
 }

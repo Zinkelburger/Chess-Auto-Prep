@@ -1,13 +1,9 @@
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:csv/csv.dart';
 import '../models/tactics_position.dart';
+import 'storage/storage_factory.dart';
 
-/// Manages tactical positions and review data - Flutter port of Python's TacticsDatabase
+/// Manages tactical positions and review data
 class TacticsDatabase {
-  static const String _csvFileName = 'tactics_positions.csv';
-  static const String _analyzedGamesFileName = 'analyzed_games.txt';
-
   List<TacticsPosition> positions = [];
   Set<String> analyzedGameIds = {}; // Track which games have been analyzed
   ReviewSession currentSession = ReviewSession();
@@ -19,15 +15,14 @@ class TacticsDatabase {
     analyzedGameIds.clear();
 
     try {
-      final file = await _getCsvFile();
-      if (!await file.exists()) {
-        print('No tactics CSV file found at ${file.path}');
-        // Still try to load analyzed games list
+      final content = await StorageFactory.instance.readTacticsCsv();
+      
+      if (content == null || content.isEmpty) {
+        // No CSV found, try to load analyzed games list (legacy or empty state)
         await _loadAnalyzedGameIds();
         return 0;
       }
 
-      final content = await file.readAsString();
       final rows = const CsvToListConverter().convert(content);
 
       if (rows.isEmpty) {
@@ -54,7 +49,7 @@ class TacticsDatabase {
       // Also load the separate analyzed games list (includes games with no blunders)
       await _loadAnalyzedGameIds();
 
-      print('Loaded ${positions.length} tactics positions from CSV');
+      print('Loaded ${positions.length} tactics positions from storage');
       print('Tracking ${analyzedGameIds.length} analyzed game IDs');
       return positions.length;
     } catch (e) {
@@ -63,26 +58,23 @@ class TacticsDatabase {
     }
   }
 
-  /// Load analyzed game IDs from file
+  /// Load analyzed game IDs from storage
   Future<void> _loadAnalyzedGameIds() async {
     try {
-      final file = await _getAnalyzedGamesFile();
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        final ids = content.split('\n').where((id) => id.trim().isNotEmpty);
+      final ids = await StorageFactory.instance.readAnalyzedGameIds();
+      if (ids.isNotEmpty) {
         analyzedGameIds.addAll(ids);
-        print('Loaded ${ids.length} analyzed game IDs from file');
+        print('Loaded ${ids.length} analyzed game IDs from storage');
       }
     } catch (e) {
       print('Error loading analyzed game IDs: $e');
     }
   }
 
-  /// Save analyzed game IDs to file
+  /// Save analyzed game IDs to storage
   Future<void> _saveAnalyzedGameIds() async {
     try {
-      final file = await _getAnalyzedGamesFile();
-      await file.writeAsString(analyzedGameIds.join('\n'));
+      await StorageFactory.instance.saveAnalyzedGameIds(analyzedGameIds.toList());
       print('Saved ${analyzedGameIds.length} analyzed game IDs');
     } catch (e) {
       print('Error saving analyzed game IDs: $e');
@@ -111,19 +103,10 @@ class TacticsDatabase {
     return gameId.isNotEmpty && analyzedGameIds.contains(gameId);
   }
 
-  /// Get the analyzed games file
-  Future<File> _getAnalyzedGamesFile() async {
-    final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/$_analyzedGamesFileName');
-  }
-
   /// Clear analyzed games tracking (for re-analysis)
   Future<void> clearAnalyzedGames() async {
     analyzedGameIds.clear();
-    final file = await _getAnalyzedGamesFile();
-    if (await file.exists()) {
-      await file.delete();
-    }
+    await StorageFactory.instance.saveAnalyzedGameIds([]);
     print('Cleared analyzed games tracking');
   }
 
@@ -163,11 +146,9 @@ class TacticsDatabase {
     }
   }
 
-  /// Save positions back to CSV file
+  /// Save positions back to CSV
   Future<void> savePositions() async {
     try {
-      final file = await _getCsvFile();
-
       // Create CSV data
       final List<List<dynamic>> csvData = [
         // Header row matching Python's field names
@@ -204,9 +185,9 @@ class TacticsDatabase {
       }
 
       final csv = const ListToCsvConverter().convert(csvData);
-      await file.writeAsString(csv);
+      await StorageFactory.instance.saveTacticsCsv(csv);
 
-      print('Saved ${positions.length} tactics positions to CSV');
+      print('Saved ${positions.length} tactics positions to storage');
     } catch (e) {
       print('Error saving positions: $e');
     }
@@ -227,7 +208,10 @@ class TacticsDatabase {
     }
 
     // Find starting point - first position with fewer reviews than max
-    final maxReviews = positions.map((p) => p.reviewCount).reduce((a, b) => a > b ? a : b);
+    int maxReviews = 0;
+    if (positions.isNotEmpty) {
+      maxReviews = positions.map((p) => p.reviewCount).reduce((a, b) => a > b ? a : b);
+    }
 
     // Start from current index and find first position with < max reviews
     final startingIndex = sessionPositionIndex;
@@ -301,17 +285,11 @@ class TacticsDatabase {
       currentSession.hintsUsed++;
     }
 
-    // Save immediately like Python does
+    // Save immediately
     await savePositions();
   }
 
-  /// Get the CSV file path
-  Future<File> _getCsvFile() async {
-    final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/$_csvFileName');
-  }
-
-  /// Import positions from Lichess/external source and save to CSV
+  /// Import positions from Lichess/external source and save
   Future<void> importAndSave(List<TacticsPosition> newPositions) async {
     positions = newPositions;
     // Track game IDs from new positions
@@ -357,7 +335,7 @@ class TacticsDatabase {
   }
 }
 
-/// Result of attempting a tactical position - matches Python enum
+/// Result of attempting a tactical position
 enum TacticsResult {
   correct,
   incorrect,
@@ -365,7 +343,7 @@ enum TacticsResult {
   timeout,
 }
 
-/// Statistics for a review session - matches Python's ReviewSession
+/// Statistics for a review session
 class ReviewSession {
   int positionsAttempted = 0;
   int positionsCorrect = 0;

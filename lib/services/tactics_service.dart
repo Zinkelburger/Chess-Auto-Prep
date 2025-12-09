@@ -1,25 +1,21 @@
-import 'dart:io' as io;
 import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../models/tactics_position.dart';
+import 'storage/storage_factory.dart';
 
 class TacticsService {
   /// Extract tactical positions using proper PGN parsing (Python approach)
   Future<List<TacticsPosition>> generateTacticsFromLichess(String username) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final file = io.File('${directory.path}/imported_games.pgn');
+    final content = await StorageFactory.instance.readImportedPgns();
 
-    if (!await file.exists()) {
+    if (content == null || content.isEmpty) {
       throw Exception('No imported games found. Please import games first.');
     }
 
     if (kDebugMode) {
       print('Parsing PGN with dartchess (Python approach)');
     }
-
-    final content = await file.readAsString();
     final allPositions = <TacticsPosition>[];
 
     // Split into individual games
@@ -310,9 +306,6 @@ class TacticsService {
   }
 
   Future<void> _saveTacticsToCSV(List<TacticsPosition> positions) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final file = io.File('${directory.path}/tactics_positions.csv');
-
     final lines = <String>[];
     lines.add('fen,user_move,correct_line,best_move,mistake_type,mistake_analysis,position_context,game_white,game_black,game_result,game_date,game_id');
 
@@ -334,10 +327,10 @@ class TacticsService {
       lines.add(line);
     }
 
-    await file.writeAsString(lines.join('\n'));
+    await StorageFactory.instance.saveTacticsCsv(lines.join('\n'));
 
     if (kDebugMode) {
-      print('Saved ${positions.length} positions to ${file.path}');
+      print('Saved ${positions.length} positions to storage');
     }
   }
 }

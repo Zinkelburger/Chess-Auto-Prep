@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'engine_connection.dart';
-import 'stockfish_package_connection.dart';
-import 'process_connection_factory.dart';
+import 'stockfish_connection_factory.dart';
 import '../models/engine_evaluation.dart';
 
 class StockfishService {
@@ -15,6 +14,7 @@ class StockfishService {
   
   final ValueNotifier<EngineEvaluation?> evaluation = ValueNotifier(null);
   final ValueNotifier<bool> isReady = ValueNotifier(false);
+  final ValueNotifier<bool> isAvailable = ValueNotifier(false);
   
   bool _isDisposed = false;
   bool _isAnalyzing = false;
@@ -29,15 +29,23 @@ class StockfishService {
     try {
       print('Initializing Stockfish...');
       
-      if (kIsWeb || defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS) {
-        // Use package:stockfish for Web and Mobile (FFI/WASM)
-        print('Using Stockfish Package (FFI/WASM)');
-        _engine = StockfishPackageConnection();
-      } else {
-        // Use bundled binary for Desktop
-        print('Using Stockfish Process (Bundled Binary)');
-        _engine = await ProcessConnection.create();
+      // Check if Stockfish is available on this platform
+      if (!StockfishConnectionFactory.isAvailable) {
+        print('Stockfish is not available on this platform');
+        isAvailable.value = false;
+        return;
       }
+      
+      // Create platform-appropriate connection
+      _engine = await StockfishConnectionFactory.create();
+      
+      if (_engine == null) {
+        print('Failed to create Stockfish connection');
+        isAvailable.value = false;
+        return;
+      }
+      
+      isAvailable.value = true;
 
       // Listen to output
       _engineSubscription = _engine?.stdout.listen(_onEngineOutput);
@@ -46,18 +54,16 @@ class StockfishService {
       await _engine?.waitForReady();
       print('Stockfish engine loaded/connected');
 
-      // Initialize UCI
-      _sendCommand('uci');
+      // Note: uci/isready handshake is handled inside waitForReady()
       
       // Set multithreading if available (standard UCI option 'Threads')
       // We'll try to set it to 4 threads by default for better performance
       _sendCommand('setoption name Threads value 4');
       _sendCommand('setoption name Hash value 128'); // 128MB hash
       
-      _sendCommand('isready');
-      
     } catch (e) {
       print('Failed to initialize Stockfish: $e');
+      isAvailable.value = false;
     }
   }
 
@@ -178,15 +184,21 @@ class StockfishService {
     
     // Wait for engine to be ready
     if (!isReady.value) {
-      print('Waiting for Stockfish to be ready...');
-      // Wait up to 10 seconds for engine to be ready
+      print('Waiting for Stockfish to be ready (Analysis request)...');
+      
+      // Increased timeout to 30 seconds and added debug info
       int waited = 0;
-      while (!isReady.value && waited < 100) {
+      // 300 iterations * 100ms = 30 seconds
+      while (!isReady.value && waited < 300) {
+        if (waited % 50 == 0) {
+           print('[StockfishService] Still waiting for ready... (waited ${waited * 0.1}s)');
+        }
         await Future.delayed(const Duration(milliseconds: 100));
         waited++;
       }
+      
       if (!isReady.value) {
-        throw Exception('Stockfish engine not ready after 10 seconds');
+        throw Exception('Stockfish engine not ready after 30 seconds. Current state: isReady=${isReady.value}, isAvailable=${isAvailable.value}, isAnalyzing=$_isAnalyzing');
       }
       print('Stockfish is ready!');
     }
