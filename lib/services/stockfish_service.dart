@@ -179,7 +179,7 @@ class StockfishService {
     }
   }
 
-  Future<EngineEvaluation> getEvaluation(String fen, {int depth = 15}) async {
+  Future<EngineEvaluation> getEvaluation(String fen, {int depth = 12}) async {
     if (_engine == null) throw Exception('Engine not initialized');
     
     // Wait for engine to be ready
