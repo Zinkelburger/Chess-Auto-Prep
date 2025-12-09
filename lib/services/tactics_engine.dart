@@ -1,3 +1,4 @@
+import 'package:chess/chess.dart' as chess;
 import '../models/tactics_position.dart';
 import 'tactics_database.dart';
 
@@ -7,21 +8,49 @@ class TacticsEngine {
   /// Returns TacticsResult.correct or .incorrect
   TacticsResult checkMove(TacticsPosition position, String moveUci) {
     try {
-      // Parse target square from UCI notation (e.g., "c7" from "d8c7")
-      if (moveUci.length < 4) {
+      if (moveUci.length < 4 || position.correctLine.isEmpty) {
         return TacticsResult.incorrect;
       }
 
-      final targetSquare = moveUci.substring(2, 4);
+      // Build game from FEN
+      final game = chess.Chess.fromFEN(position.fen);
 
-      if (position.correctLine.isEmpty) {
-        return TacticsResult.incorrect;
+      // Find the played move in legal moves to get its SAN / promotion info
+      final legalVerbose = game.moves({'verbose': true});
+      final played = legalVerbose.firstWhere(
+        (m) =>
+            m['from'] == moveUci.substring(0, 2) &&
+            m['to'] == moveUci.substring(2, 4) &&
+            ((moveUci.length == 4 && (m['promotion'] == null || m['promotion'] == '')) ||
+                (moveUci.length > 4 &&
+                    (m['promotion'] == moveUci.substring(4).toLowerCase()))),
+        orElse: () => <String, dynamic>{},
+      );
+
+      if (played.isEmpty) {
+        return TacticsResult.incorrect; // illegal or not found
       }
 
-      // Check against the first move (the best move)
-      final bestMove = position.correctLine[0];
-      if (_moveMatchesTarget(bestMove, targetSquare)) {
-        return TacticsResult.correct;
+      final playedSan = (played['san'] as String?) ?? '';
+      final playedUci = (played['from'] as String) +
+          (played['to'] as String) +
+          ((played['promotion'] as String?) ?? '');
+
+      // Best move from the line (could be SAN with annotations or UCI)
+      final bestMove = position.correctLine.first;
+      final bestIsUci = _looksLikeUci(bestMove);
+
+      if (bestIsUci) {
+        final normBestUci = bestMove.toLowerCase();
+        if (playedUci.toLowerCase() == normBestUci) {
+          return TacticsResult.correct;
+        }
+      } else {
+        final normPlayedSan = _normalizeSan(playedSan);
+        final normBestSan = _normalizeSan(bestMove);
+        if (normPlayedSan == normBestSan) {
+          return TacticsResult.correct;
+        }
       }
 
       return TacticsResult.incorrect;
@@ -30,19 +59,11 @@ class TacticsEngine {
     }
   }
 
-  /// Check if a SAN move matches the target square
-  bool _moveMatchesTarget(String sanMove, String targetSquare) {
-    // Remove annotations (+, #, !, ?)
-    final cleanMove = sanMove.replaceAll(RegExp(r'[+#!?]+'), '');
+  bool _looksLikeUci(String move) =>
+      RegExp(r'^[a-h][1-8][a-h][1-8][qrbnQRBN]?$').hasMatch(move.trim());
 
-    // Extract target square (last 2 characters)
-    if (cleanMove.length >= 2) {
-      final expectedTarget = cleanMove.substring(cleanMove.length - 2);
-      return targetSquare.toLowerCase() == expectedTarget.toLowerCase();
-    }
-
-    return false;
-  }
+  String _normalizeSan(String san) =>
+      san.replaceAll(RegExp(r'[+#?!]+'), '').trim();
 
   /// Get a hint for the position
   String? getHint(TacticsPosition position) {

@@ -83,8 +83,31 @@ class ProcessConnection implements EngineConnection {
 
   @override
   Future<void> waitForReady() async {
-    // Process is ready as soon as it's started
-    return Future.value();
+    // Perform UCI handshake: uci -> uciok -> isready -> readyok
+    final uciOk = Completer<void>();
+    final readyOk = Completer<void>();
+    late StreamSubscription sub;
+
+    sub = stdout.listen((line) {
+      if (line.trim() == 'uciok' && !uciOk.isCompleted) {
+        uciOk.complete();
+      } else if (line.trim() == 'readyok' && !readyOk.isCompleted) {
+        readyOk.complete();
+      }
+    });
+
+    sendCommand('uci');
+    await uciOk.future.timeout(const Duration(seconds: 10));
+
+    sendCommand('isready');
+    await readyOk.future.timeout(const Duration(seconds: 10));
+
+    await sub.cancel();
+
+    // Tune threads/hash for desktop
+    final threads = Platform.numberOfProcessors.clamp(2, 8);
+    sendCommand('setoption name Threads value $threads');
+    sendCommand('setoption name Hash value 512');
   }
 
   @override

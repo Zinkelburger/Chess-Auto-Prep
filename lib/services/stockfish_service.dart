@@ -56,10 +56,8 @@ class StockfishService {
 
       // Note: uci/isready handshake is handled inside waitForReady()
       
-      // Set multithreading if available (standard UCI option 'Threads')
-      // We'll try to set it to 4 threads by default for better performance
-      _sendCommand('setoption name Threads value 4');
-      _sendCommand('setoption name Hash value 128'); // 128MB hash
+      // Per-platform tuning is applied in each connection (desktop/mobile).
+      // Web build is single-thread (lite); Threads command is ignored there.
       
     } catch (e) {
       print('Failed to initialize Stockfish: $e');
