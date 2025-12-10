@@ -9,6 +9,7 @@ enum AppMode {
   tactics,
   positionAnalysis,
   repertoire,
+  repertoireTrainer,
   pgnViewer,
 }
 

@@ -2,6 +2,8 @@
 /// Extracts trainable lines from PGN files and manages training sessions
 library;
 
+import 'dart:convert';
+
 import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:chess/chess.dart' as chess;
 import '../models/repertoire_line.dart';
@@ -82,7 +84,7 @@ class RepertoireService {
 
         // Create the repertoire line
         final lineName = _generateLineName(game, gameIndex);
-        final lineId = '${lineName.toLowerCase().replaceAll(' ', '_')}_$gameIndex';
+        final lineId = _extractLineId(game, mainlineMoves, gameIndex);
 
         lines.add(RepertoireLine(
           id: lineId,
@@ -172,6 +174,28 @@ class RepertoireService {
     if (moves.children.isNotEmpty) {
       variations.add('Variations available'); // Placeholder
     }
+  }
+
+  /// Extract a stable line identifier, preferring a PGN header if present.
+  String _extractLineId(PgnGame game, List<String> moves, int index) {
+    final headerId = game.headers['LineID'] ??
+        game.headers['LineId'] ??
+        game.headers['Id'] ??
+        game.headers['Line'] ??
+        game.headers['Guid'];
+
+    if (headerId != null && headerId.trim().isNotEmpty) {
+      return headerId.trim();
+    }
+
+    // Stable fallback based on moves so it persists across sessions.
+    return _generateStableLineId(moves, index);
+  }
+
+  String _generateStableLineId(List<String> moves, int index) {
+    final raw = base64Url.encode(utf8.encode('${moves.join(' ')}|$index'));
+    final trimmed = raw.replaceAll('=', '');
+    return 'line_${trimmed.length > 22 ? trimmed.substring(0, 22) : trimmed}';
   }
 
   /// Creates training questions from repertoire lines for a specific color

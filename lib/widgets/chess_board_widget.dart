@@ -76,12 +76,12 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
             : constraints.maxHeight;
         final squareSize = boardSize / 8;
 
-        return Container(
-          width: boardSize,
-          height: boardSize,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.black, width: 2),
-          ),
+    return Container(
+      width: boardSize,
+      height: boardSize,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.black, width: 2),
+      ),
           child: GestureDetector(
             onPanStart: (details) {
               if (!widget.enableUserMoves) return;

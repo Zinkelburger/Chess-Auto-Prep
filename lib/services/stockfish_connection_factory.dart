@@ -15,3 +15,4 @@ class StockfishConnectionFactory {
   static bool get isAvailable => platform.isStockfishAvailable;
 }
 
+

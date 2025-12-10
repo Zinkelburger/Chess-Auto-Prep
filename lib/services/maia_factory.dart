@@ -24,3 +24,4 @@ class MaiaFactory {
   static bool get isAvailable => platform.isMaiaAvailable;
 }
 
+
