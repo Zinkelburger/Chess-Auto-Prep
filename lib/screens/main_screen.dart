@@ -8,6 +8,7 @@ import '../widgets/tactics_control_panel.dart';
 import '../services/imported_games_service.dart';
 import 'analysis_screen.dart';
 import 'repertoire_screen.dart';
+import 'repertoire_training_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -88,6 +89,21 @@ class _MainScreenState extends State<MainScreen> {
                       ],
                     ),
                   ),
+                  PopupMenuItem(
+                    value: AppMode.repertoireTrainer,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.school),
+                        const SizedBox(width: 12),
+                        const Text('Repertoire Trainer'),
+                        if (appState.currentMode == AppMode.repertoireTrainer)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 12),
+                            child: Icon(Icons.check, size: 16, color: Colors.green),
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -106,6 +122,8 @@ class _MainScreenState extends State<MainScreen> {
         return const AnalysisScreen();
       case AppMode.repertoire:
         return const RepertoireScreen();
+      case AppMode.repertoireTrainer:
+        return const RepertoireTrainingScreen();
       default:
         return _buildTacticsLayout(appState);
     }

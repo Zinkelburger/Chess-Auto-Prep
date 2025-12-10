@@ -13,5 +13,15 @@ abstract class StorageService {
   
   Future<String?> readRepertoirePgn(String filename);
   Future<void> saveRepertoirePgn(String filename, String content);
+
+  Future<String?> readRepertoireReviewsCsv();
+  Future<void> saveRepertoireReviewsCsv(String csvContent);
+
+  Future<String?> readRepertoireReviewHistoryCsv();
+  Future<void> saveRepertoireReviewHistoryCsv(String csvContent);
+
+  Future<String?> readRepertoireMoveProgressCsv();
+  Future<void> saveRepertoireMoveProgressCsv(String csvContent);
 }
+
 
