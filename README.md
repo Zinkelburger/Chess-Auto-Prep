@@ -41,6 +41,39 @@ flutter run
 - **Web**: `flutter build web`
 - **Desktop**: `flutter build windows/macos/linux`
 
+## Deploying to Cloudflare Pages
+
+Cloudflare Pages can serve the Flutter web build without a separate host. Two options are available:
+
+**Recommended: GitHub Actions (direct build + deploy with Wrangler)**
+
+1. In the repository settings, add secrets:
+   - `CLOUDFLARE_ACCOUNT_ID`: your Cloudflare account ID
+   - `CLOUDFLARE_API_TOKEN`: API token with “Cloudflare Pages:Edit” (or Pages write) scope for that account
+2. Adjust the project name in `.github/workflows/deploy-cloudflare-pages.yml` if you want something other than the default `chess-auto-prep`.
+3. Push to `main` → production deploy. PRs against `main` → preview deploys. Concurrency is enabled to cancel superseded runs, and the Flutter SDK is cached for faster builds.
+4. If you prefer the Pages UI integration instead of Actions, you can connect the repo directly and keep the same build command (`flutter build web --release`) and output directory (`build/web`).
+
+Optional (faster runtime via Wasm, Flutter 3.22+): switch the build command to `flutter build web --wasm --release` and add `web/_headers`:
+```
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+```
+This enables cross-origin isolation needed for Wasm shared memory.
+
+**Alternative: Peanut branch-based deploy (from the referenced blog)**
+
+1. Install peanut: `flutter pub global activate peanut`
+2. Build and export the web release to a branch (defaults to `production`): `flutter pub global run peanut -b production`
+3. Push the branch: `git push origin production`
+4. In Cloudflare Pages, point the project at the branch you exported and set:
+   - Production branch: `production` (or your chosen branch)
+   - Build command: None (the branch already contains the built site)
+   - Output directory: `.`
+
+You can target a different Pages branch by setting `CLOUDFLARE_PAGES_BRANCH=<branch>` before running `scripts/deploy_cloudflare_pages.sh`; it will push to the matching branch so Cloudflare can deploy preview environments.
+
 ## Architecture
 
 - **State Management**: Provider pattern
