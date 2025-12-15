@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:chess/chess.dart' as chess;
 import 'package:flutter/material.dart';
 
+import '../core/repertoire_controller.dart';
 import '../models/repertoire_line.dart';
 import '../models/repertoire_review_entry.dart';
 import '../models/repertoire_move_progress.dart';
@@ -45,13 +46,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   int _currentMoveIndex = 0;
   bool _lineHadMistake = false;
 
-  chess.Chess _trainerGame = chess.Chess();
-  chess.Chess _displayGame = chess.Chess();
+  // Unified session/game state shared with the board.
+  late final RepertoireController _session;
 
   bool _isLoading = true;
   String? _error;
   bool _waitingForUser = false;
-  bool _isAnimating = false;
   bool _lineFinished = false;
   String? _feedback;
   String? _currentAnnotation;
@@ -64,6 +64,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   @override
   void initState() {
     super.initState();
+    _session = RepertoireController();
+    _session.addListener(_onSessionChanged);
     _repertoire = widget.repertoire;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadOrPromptSelection();
@@ -72,8 +74,16 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
   @override
   void dispose() {
+    _session.removeListener(_onSessionChanged);
+    _session.dispose();
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _onSessionChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadOrPromptSelection() async {
@@ -181,9 +191,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       _waitingForUser = false;
       _currentAnnotation = null;
       _lineHadMistake = false;
-      _trainerGame = chess.Chess();
-      _trainerGame.load(_trainerGame.fen); // reset
-      _displayGame = chess.Chess();
+      _session.clearMoveHistory();
     });
 
     // Kick off the first animation/move preparation.
@@ -199,7 +207,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   }
 
   Future<void> _advanceToNextUserTurn() async {
-    if (_currentLine == null || _isAnimating) return;
+    if (_currentLine == null) return;
 
     final moves = _currentLine!.moves;
 
@@ -223,8 +231,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   Future<void> _playOpponentMove(int moveIndex) async {
     if (_currentLine == null) return;
     final san = _currentLine!.moves[moveIndex];
-    final cloned = chess.Chess.fromFEN(_trainerGame.fen);
-    final result = cloned.move(san);
+    final result = chess.Chess.fromFEN(_session.game.fen).move(san);
     if (result == false) {
       setState(() {
         _error = 'Could not play opponent move $san';
@@ -232,9 +239,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       return;
     }
 
+    _session.userPlayedMove(san);
     setState(() {
-      _trainerGame = cloned;
-      _displayGame = chess.Chess.fromFEN(cloned.fen);
       _currentAnnotation = _currentLine!.comments[moveIndex.toString()];
     });
 
@@ -244,31 +250,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
   Future<void> _prepareUserMove(int moveIndex) async {
     if (_currentLine == null) return;
-    final san = _currentLine!.moves[moveIndex];
-    final beforeFen = _trainerGame.fen;
-
-    final demo = chess.Chess.fromFEN(beforeFen);
-    final didPlay = demo.move(san);
-    if (didPlay == false) {
-      setState(() => _error = 'Invalid move in line: $san');
-      return;
-    }
-
     setState(() {
-      _isAnimating = true;
-      _currentAnnotation = _currentLine!.comments[moveIndex.toString()];
-    });
-
-    // Show the correct move, then reset so the user must play it.
-    setState(() => _displayGame = demo);
-    await Future.delayed(moveIndex == 0
-        ? const Duration(seconds: 1)
-        : const Duration(milliseconds: 800));
-
-    setState(() {
-      _displayGame = chess.Chess.fromFEN(beforeFen);
       _waitingForUser = true;
-      _isAnimating = false;
+      _currentAnnotation = _currentLine!.comments[moveIndex.toString()];
       _feedback = 'Your move (${_isWhiteMoveIndex(moveIndex) ? "White" : "Black"})';
     });
   }
@@ -282,12 +266,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     final isCorrect = _isCorrectUserMove(move, expectedSan);
 
     if (isCorrect) {
-      final baseGame = chess.Chess.fromFEN(_trainerGame.fen);
-      baseGame.move(expectedSan); // advance canonical game
       _updateMoveProgress(_currentLine!, _currentMoveIndex, wasCorrect: true);
+      _session.userPlayedMove(expectedSan);
       setState(() {
-        _trainerGame = baseGame;
-        _displayGame = chess.Chess.fromFEN(baseGame.fen);
         _waitingForUser = false;
         _feedback = '✓ $expectedSan';
       });
@@ -300,7 +281,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       _lineHadMistake = true;
       // Keep the position; do not advance until they play the correct move.
       setState(() {
-        _displayGame = chess.Chess.fromFEN(_trainerGame.fen);
         _feedback = 'Try again: expected $expectedSan';
       });
     }
@@ -316,13 +296,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
   bool _isCorrectUserMove(CompletedMove move, String expectedSan) {
     // Compute the expected resulting position by applying the PGN move.
-    final expectedGame = chess.Chess.fromFEN(_trainerGame.fen);
+    final expectedGame = chess.Chess.fromFEN(_session.game.fen);
     final expectedMove = expectedGame.move(expectedSan);
     if (expectedMove == null) return false;
     final expectedFen = expectedGame.fen;
 
     // Compute the user resulting position by applying the user's UCI move.
-    final userGame = chess.Chess.fromFEN(_trainerGame.fen);
+    final userGame = chess.Chess.fromFEN(_session.game.fen);
     final userMoveMap = <String, String>{
       'from': move.from,
       'to': move.to,
@@ -502,8 +482,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           const SizedBox(height: 12),
           Expanded(
             child: ChessBoardWidget(
-              key: ValueKey(_displayGame.fen),
-              game: _displayGame,
+              key: ValueKey(_session.fen),
+              game: _session.game,
               flipped: _boardFlipped,
               enableUserMoves: _waitingForUser,
               onMove: _handleUserMove,

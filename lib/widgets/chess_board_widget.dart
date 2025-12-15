@@ -419,11 +419,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       final uci = '$from$to';
       final fenBefore = widget.game.fen;
 
-      // Create a local copy of the game to validate and make the move
-      // This prevents mutating the parent's state which causes sync issues
+      // Create a local copy to validate the move WITHOUT mutating parent state
       final gameCopy = chess.Chess.fromFEN(fenBefore);
-
-      print('Board: Attempting move $uci on position $fenBefore');
 
       // Validate the move is legal first
       final legalMoves = gameCopy.generate_moves();
@@ -431,7 +428,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
           move.fromAlgebraic == from && move.toAlgebraic == to);
 
       if (!isLegal) {
-        print('Board: Move $uci failed - not found in legal moves');
         setState(() {
           selectedSquare = null;
           _internalHighlights.clear();
@@ -454,29 +450,22 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         if ((piece!.color == chess.Color.WHITE && to[1] == '8') ||
             (piece.color == chess.Color.BLACK && to[1] == '1')) {
           moveMap['promotion'] = 'q'; // Auto-promote to Queen
+          correctSan += '=Q';
         }
       }
 
-      // Now make the move on the actual game object (mutate live board for smoothness)
-      // We already validated on the copy, so apply to the real game to avoid flicker
-      final moveResult = widget.game.move(moveMap);
+      // Make the move on the COPY to get fenAfter and check/checkmate status
+      final moveResult = gameCopy.move(moveMap);
 
-      print('Board: Move result: $moveResult (${moveResult.runtimeType})');
-
-      // Check for success (true)
       if (moveResult == true) {
-        final fenAfter = widget.game.fen;
+        final fenAfter = gameCopy.fen;
         
-        // Update SAN with check/checkmate symbols if needed
-        // We do this after the move is made on the copy so we can check the resulting state
+        // Update SAN with check/checkmate symbols
         if (gameCopy.in_checkmate) {
           correctSan += '#';
         } else if (gameCopy.in_check) {
           correctSan += '+';
         }
-
-        print('Board: Move successful! $uci -> $correctSan');
-        print('Board: Position changed from $fenBefore to $fenAfter');
 
         setState(() {
           selectedSquare = null;
@@ -484,6 +473,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         });
 
         // Create rich move object with all the info
+        // IMPORTANT: We do NOT mutate widget.game - the parent controller does that
         final completedMove = CompletedMove(
           from: from,
           to: to,
@@ -493,19 +483,15 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
           uci: uci,
         );
 
-        // Call the callback with rich move info
+        // Call the callback - parent will update the game state
         widget.onMove?.call(completedMove);
       } else {
-        // Failed move (illegal)
-        print('Board: Move $uci failed - illegal');
         setState(() {
           selectedSquare = null;
           _internalHighlights.clear();
         });
       }
     } catch (e) {
-      // Exception (e.g., bad format)
-      print('Board: Move failed with exception: $e');
       setState(() {
         selectedSquare = null;
         _internalHighlights.clear();

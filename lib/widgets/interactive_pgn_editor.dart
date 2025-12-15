@@ -135,6 +135,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // Workflow state
   String _workingPgn = '';
   bool _hasUnsavedChanges = false;
+  
+  // Flag to prevent callback loops when syncing from external source (controller)
+  bool _isSyncingFromExternal = false;
 
   @override
   void initState() {
@@ -264,6 +267,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   void _notifyMoveStateChanged() {
+    // Don't notify if we're syncing from external source (prevents loops)
+    if (_isSyncingFromExternal) return;
+    
     widget.onMoveStateChanged?.call(
       _currentMoveIndex,
       _currentLineSan,
@@ -276,6 +282,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   void _syncToMoveHistory(List<String> moves, int moveIndex) {
     if (!mounted) return;
+    
+    // Mark that we're syncing from external source to prevent callback loops
+    _isSyncingFromExternal = true;
+    
     setState(() {
       // Reset to root
       _currentPath = [];
@@ -310,9 +320,20 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         }
       }
       
-      _updatePosition();
+      _updatePositionWithoutCallback();
       _generateWorkingPgn();
     });
+    
+    _isSyncingFromExternal = false;
+  }
+  
+  /// Update position without triggering external callbacks (used during sync)
+  void _updatePositionWithoutCallback() {
+    chess.Chess position = chess.Chess();
+    for (final moveNode in _currentPath) {
+      position.move(moveNode.san);
+    }
+    _currentPosition = position;
   }
 
   void _generateWorkingPgn() {
