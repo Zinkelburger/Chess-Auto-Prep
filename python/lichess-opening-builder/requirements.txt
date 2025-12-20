@@ -1,3 +1,7 @@
+# Core dependencies
 requests>=2.28.0
 python-dotenv>=1.0.0
 chess>=1.10.0
+
+# Optional: Only needed for tricks mode with Maia2 neural network
+# maia2

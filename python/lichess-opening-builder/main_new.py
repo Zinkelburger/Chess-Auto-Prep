@@ -4,8 +4,7 @@ Opening Builder - Build chess opening repertoires
 
 Modes:
   coverage - Build complete repertoire covering all common opponent responses
-  tricks   - Find positions where opponent is likely to blunder
-  pressure - Find lines with sustained pressure (low survival probability)
+  tricks   - Find tricky lines where opponent is likely to blunder
 
 Examples:
   # Build a White repertoire starting with 1.e4
@@ -13,9 +12,6 @@ Examples:
 
   # Find tricks in the Italian Game
   python main.py --color white --mode tricks --moves "e4 e5 Nf3 Nc6 Bc4" --min-ev 50
-
-  # Find lines with sustained pressure (sorted by how tricky they are)
-  python main.py --color white --mode pressure --moves "e4" --line-depth 10
 
   # Evaluate a single position
   python main.py --color white --mode tricks --moves "e4 e5" --eval-only
@@ -26,7 +22,7 @@ import chess
 from args import parse_args, get_starting_position, get_my_color
 from probability import create_provider
 from evaluation import create_engine
-from move_selectors import create_selector
+from selectors import create_selector
 from output import PgnWriter
 from builder import RepertoireBuilder
 
@@ -48,7 +44,7 @@ def print_config(args, board: chess.Board):
         print(f"  Your move algorithm: {args.my_move_algo}")
         print(f"  Min move frequency: {args.min_move_frequency:.2%}")
         print(f"  Min position games: {args.min_position_games}")
-    elif args.mode == "tricks":
+    else:
         print(f"\nTricks Settings:")
         print(f"  Min expected value: {args.min_ev:+.0f} cp")
         print(f"  Max depth: {args.max_depth} ply")
@@ -56,16 +52,6 @@ def print_config(args, board: chess.Board):
         print(f"  Your move threshold: {args.my_move_threshold:.0f} cp")
         print(f"  Opponent min prob: {args.opponent_min_prob:.0%}")
         print(f"  Player ELO: {args.player_elo}")
-        print(f"  Opponent ELO: {args.opponent_elo}")
-    elif args.mode == "pressure":
-        # Calculate min_eval default based on color
-        min_eval = args.min_eval
-        if min_eval is None:
-            min_eval = 0.0 if args.color == "white" else -50.0
-        print(f"\nPressure Settings:")
-        print(f"  Line depth: {args.line_depth} ply")
-        print(f"  Eval bounds: [{min_eval:+.0f}, {args.max_eval:+.0f}] cp")
-        print(f"  Probability threshold: {args.threshold:.1%}")
         print(f"  Opponent ELO: {args.opponent_elo}")
 
     print("=" * 70)
@@ -95,9 +81,9 @@ def main():
         engine = create_engine(args)
         move_selector = create_selector(args) if args.mode == "coverage" else None
 
-        # Create PGN writer with the board AFTER initial moves
-        # This is where the repertoire lines actually start from
-        pgn_writer = PgnWriter(output_dir=args.output_dir, starting_board=board)
+        # Create starting board for PGN (before initial moves)
+        starting_board = chess.Board(args.fen)
+        pgn_writer = PgnWriter(output_dir=args.output_dir, starting_board=starting_board)
 
         # Create builder
         builder = RepertoireBuilder(
@@ -158,39 +144,6 @@ def main():
                             expected_value=pos.expected_value
                         )
                     print(f"\n✓ Saved to: {pgn_writer.consolidated_file}")
-
-        elif args.mode == "pressure":
-            from pressure import run_pressure_analysis
-            
-            # Calculate min_eval default based on color
-            min_eval = args.min_eval
-            if min_eval is None:
-                min_eval = 0.0 if args.color == "white" else -50.0
-            
-            lines = run_pressure_analysis(
-                board=board,
-                my_color=my_color,
-                probability_provider=probability_provider,
-                engine=engine,
-                line_depth=args.line_depth,
-                min_eval_cp=min_eval,
-                max_eval_cp=args.max_eval,
-                probability_threshold=args.threshold,
-                opponent_elo=args.opponent_elo,
-                initial_moves=initial_moves,
-                max_lines=args.max_lines
-            )
-            
-            if lines:
-                print("\n[SAVING] Writing lines to PGN...")
-                save_lines = lines if args.max_lines is None else lines[:args.max_lines]
-                for line in save_lines:
-                    pgn_writer.save_line(
-                        line.moves,
-                        line.path_probability,
-                        my_color
-                    )
-                print(f"\n✓ Saved {len(save_lines)} lines to: {pgn_writer.consolidated_file}")
 
     except KeyboardInterrupt:
         print("\n\nInterrupted by user.")
