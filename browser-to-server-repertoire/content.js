@@ -324,13 +324,41 @@
     };
   }
 
+  // Determine the color of the clicked move based on path
+  // The path encodes the move tree position; we count moves to determine ply
+  function getClickedMoveColor(path) {
+    // Extract line data to get the ply of the last move
+    const lineData = extractLineDataFromDOM(path);
+    if (!lineData.moves || lineData.moves.length === 0) {
+      return null;
+    }
+    
+    // The last move in the line is the clicked move
+    const lastMove = lineData.moves[lineData.moves.length - 1];
+    const ply = lastMove.ply;
+    
+    // Odd ply = white's move, even ply = black's move
+    return ply % 2 === 1 ? 'white' : 'black';
+  }
+
   // Show repertoire selection submenu
   async function showRepertoireMenu(parentMenu, path) {
     console.log('[REPERTOIRE] Showing repertoire selection menu');
 
+    // Determine the color of the clicked move
+    const clickedColor = getClickedMoveColor(path);
+    console.log('[REPERTOIRE] Clicked move color:', clickedColor);
+
     // Fetch repertoires
     const repertoires = await fetchRepertoires();
     console.log('[REPERTOIRE] Fetched repertoires:', repertoires);
+
+    // Filter repertoires by color for suggestions (matching color only)
+    const matchingColorRepertoires = clickedColor 
+      ? repertoires.filter(r => r.color === clickedColor)
+      : repertoires;
+    
+    console.log('[REPERTOIRE] Matching color repertoires:', matchingColorRepertoires.length);
 
     // Create submenu container
     const submenu = document.createElement('div');
@@ -348,10 +376,29 @@
       font-family: 'Noto Sans', sans-serif;
     `;
 
-    // Position submenu next to parent menu
+    // Position submenu to the LEFT of parent menu
     const rect = parentMenu.getBoundingClientRect();
-    submenu.style.left = `${rect.right + 5}px`;
+    const submenuWidth = 280;
+    
+    submenu.style.left = `${rect.left - submenuWidth - 5}px`;
     submenu.style.top = `${rect.top}px`;
+
+    // Color indicator header
+    if (clickedColor) {
+      const colorHeader = document.createElement('div');
+      const colorIcon = clickedColor === 'white' ? '○' : '●';
+      const colorLabel = clickedColor.charAt(0).toUpperCase() + clickedColor.slice(1);
+      colorHeader.innerHTML = `<span style="margin-right: 6px;">${colorIcon}</span>${colorLabel} repertoires`;
+      colorHeader.style.cssText = `
+        padding: 8px 12px;
+        font-size: 12px;
+        color: #888;
+        border-bottom: 1px solid #3d3933;
+        display: flex;
+        align-items: center;
+      `;
+      submenu.appendChild(colorHeader);
+    }
 
     // Search input
     const searchContainer = document.createElement('div');
@@ -359,7 +406,7 @@
 
     const searchInput = document.createElement('input');
     searchInput.type = 'text';
-    searchInput.placeholder = 'Search repertoires...';
+    searchInput.placeholder = 'Search all repertoires...';
     searchInput.style.cssText = `
       width: 100%;
       padding: 6px 8px;
@@ -379,19 +426,19 @@
     submenu.appendChild(listContainer);
 
     // Function to render repertoire list
-    function renderList(items) {
+    function renderList(items, isFiltered = false) {
       listContainer.innerHTML = '';
 
       if (items.length === 0) {
         const emptyMsg = document.createElement('div');
-        emptyMsg.textContent = 'No repertoires found';
+        emptyMsg.textContent = isFiltered ? 'No repertoires found' : `No ${clickedColor || ''} repertoires yet`;
         emptyMsg.style.cssText = 'padding: 12px; color: #888; text-align: center; font-size: 13px;';
         listContainer.appendChild(emptyMsg);
         return;
       }
 
-      // Show top 3 most recent if no search query
-      const itemsToShow = searchInput.value.trim() === '' ? items.slice(0, 3) : items;
+      // Show top 3 if no search query
+      const itemsToShow = !isFiltered ? items.slice(0, 3) : items;
 
       itemsToShow.forEach((rep, index) => {
         const item = document.createElement('a');
@@ -405,9 +452,15 @@
           font-size: 14px;
           border-bottom: 1px solid #3d3933;
         `;
+        
+        // Show color indicator for each repertoire
+        const colorIcon = rep.color === 'white' ? '○' : (rep.color === 'black' ? '●' : '◐');
         item.innerHTML = `
-          <div style="font-weight: 500;">${rep.name}.pgn</div>
-          <div style="font-size: 11px; color: #888; margin-top: 2px;">${rep.lineCount} lines</div>
+          <div style="font-weight: 500; display: flex; align-items: center;">
+            <span style="margin-right: 8px; font-size: 12px;">${colorIcon}</span>
+            ${rep.name}.pgn
+          </div>
+          <div style="font-size: 11px; color: #888; margin-top: 2px; margin-left: 20px;">${rep.lineCount} lines</div>
         `;
 
         item.onmouseenter = () => item.style.background = '#3d3933';
@@ -443,14 +496,20 @@
       });
     }
 
-    // Initial render with top 3
-    renderList(repertoires);
+    // Initial render with top 3 matching color
+    renderList(matchingColorRepertoires, false);
 
-    // Search functionality
+    // Search functionality - searches ALL repertoires
     searchInput.oninput = () => {
       const query = searchInput.value.trim();
-      const filtered = filterRepertoires(repertoires, query);
-      renderList(filtered);
+      if (query === '') {
+        // Empty search: show top 3 matching color
+        renderList(matchingColorRepertoires, false);
+      } else {
+        // Search: filter ALL repertoires by query
+        const filtered = filterRepertoires(repertoires, query);
+        renderList(filtered, true);
+      }
     };
 
     // Close submenu when clicking outside
@@ -502,18 +561,12 @@
 
     // Insert before the delete action or at the end
     const allActions = menu.querySelectorAll('.action');
-    console.log('[REPERTOIRE] Found existing actions in menu:', allActions.length);
-
     const deleteAction = Array.from(allActions)
       .find(a => a.textContent.includes('Delete'));
 
-    console.log('[REPERTOIRE] Delete action found:', deleteAction);
-
     if (deleteAction) {
-      console.log('[REPERTOIRE] Inserting button before delete action');
       menu.insertBefore(button, deleteAction);
     } else {
-      console.log('[REPERTOIRE] No delete action, appending button to end');
       menu.appendChild(button);
     }
 
