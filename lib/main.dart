@@ -6,9 +6,31 @@ import 'screens/main_screen.dart';
 import 'services/tactics_service.dart';
 import 'services/pgn_service.dart';
 import 'services/imported_games_service.dart';
+import 'services/browser_extension_server/browser_extension_server_factory.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Start the browser extension server on desktop platforms
+  // This allows the Lichess browser extension to add lines to repertoires
+  _startBrowserExtensionServer();
+  
   runApp(const ChessAutoPrepApp());
+}
+
+/// Start the browser extension HTTP server on supported platforms (desktop only)
+/// The server listens on localhost:9812 and handles requests from the Lichess extension
+void _startBrowserExtensionServer() async {
+  if (BrowserExtensionServerFactory.isSupported) {
+    final started = await BrowserExtensionServerFactory.start(port: 9812);
+    if (started) {
+      debugPrint('Browser extension server started successfully');
+    } else {
+      debugPrint('Failed to start browser extension server');
+    }
+  } else {
+    debugPrint('Browser extension server not supported on this platform');
+  }
 }
 
 class ChessAutoPrepApp extends StatelessWidget {
