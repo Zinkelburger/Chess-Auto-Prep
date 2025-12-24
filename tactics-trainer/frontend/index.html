@@ -1,311 +1,134 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tactics Trainer - Learn From Your Mistakes</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-  
-  <!-- Google Sign-In -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-</head>
-<body>
-  <div id="app">
-    <!-- Header -->
-    <header class="header">
-      <div class="header-left">
-        <div class="logo">
-          <svg class="logo-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 22H5v-2h14v2M17.16 8.26A4.46 4.46 0 0018 6c0-2.21-1.79-4-4-4-.96 0-1.84.34-2.53.91C11.25 2.34 10.37 2 9.5 2A4 4 0 005.5 6c0 1.07.38 2.05 1 2.83L8.66 12H6l-2 5h2.5l1.5 3h8l1.5-3H20l-2-5h-2.66l2.16-3.74z"/>
-          </svg>
-          <span class="logo-text">Tactics Trainer</span>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tactics Trainer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  </head>
+  <body>
+    <div id="app" x-data="tacticsApp()" x-init="init()">
+      <div class="panel" x-show="!training">
+        <header class="panel-header">
+          <h1>Tactics Trainer</h1>
+          <button class="icon-btn" @click="settingsOpen = true" title="Settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </header>
+
+        <div class="username-fields">
+          <div class="input-row">
+            <label for="lichess-user">Lichess</label>
+            <input type="text" id="lichess-user" 
+                   x-model="lichessUser" 
+                   placeholder="username"
+                   @keypress.enter="loadTactics()">
+          </div>
+          <div class="input-row">
+            <label for="chesscom-user">Chess.com</label>
+            <input type="text" id="chesscom-user" 
+                   x-model="chesscomUser" 
+                   placeholder="username"
+                   @keypress.enter="loadTactics()">
+          </div>
+          <div class="input-row">
+            <label for="num-games">Games</label>
+            <input type="number" id="num-games" 
+                   x-model.number="numGames" 
+                   min="1" max="100"
+                   @keypress.enter="loadTactics()">
+          </div>
+        </div>
+        
+        <button class="btn-primary" 
+                @click="loadTactics()" 
+                :disabled="loading">
+          <span x-text="loading ? 'Loading...' : 'Load Tactics'"></span>
+        </button>
+        
+        <div class="status" 
+             :class="{ 'error': statusType === 'error', 'success': statusType === 'success' }">
+          <div class="spinner" x-show="loading"></div>
+          <span x-text="status"></span>
+        </div>
+        
+        <div class="tactics-counter" x-show="loading && tacticsFound > 0">
+          Found: <strong x-text="tacticsFound"></strong> tactics
+        </div>
+        
+        <div class="auth-section">
+          <div id="google-signin" x-show="!user"></div>
+          <div class="user-info" x-show="user">
+            <img class="avatar" :src="user?.picture" x-show="user?.picture">
+            <span x-text="user?.name"></span>
+            <button class="btn-link" @click="signOut()">Sign out</button>
+          </div>
         </div>
       </div>
-      <nav class="header-nav">
-        <button class="nav-btn" data-view="home">Home</button>
-        <button class="nav-btn" data-view="analyze">Analyze</button>
-        <button class="nav-btn" data-view="train">Train</button>
-        <button class="nav-btn" data-view="browse">Browse</button>
-      </nav>
-      <div class="header-right">
-        <div id="user-info" class="user-info hidden">
-          <img id="user-avatar" class="user-avatar" src="" alt="User avatar">
-          <span id="user-name" class="user-name"></span>
-          <button id="sign-out-btn" class="btn-secondary btn-sm">Sign Out</button>
+
+      <div class="panel" x-show="training" x-cloak>
+        <div class="training-header">
+          <button class="icon-btn" @click="backToSetup()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <span x-text="`${currentIndex + 1}/${tactics.length}`"></span>
+          <span class="badge" 
+                :class="badgeClass"
+                x-text="currentTactic?.mistake_type || '??'"></span>
         </div>
-        <div id="google-signin-container"></div>
+        
+        <div id="board" class="board"></div>
+        
+        <div class="message" 
+             :class="messageClass"
+             x-text="message"></div>
+        
+        <div class="controls">
+          <button class="btn-secondary" 
+                  @click="showHint()" 
+                  :disabled="solved">Hint</button>
+          <button class="btn-secondary" 
+                  @click="showSolution()" 
+                  :disabled="solved">Solution</button>
+          <button class="btn-primary" 
+                  @click="nextTactic()" 
+                  :disabled="!solved">Next</button>
+        </div>
       </div>
-    </header>
 
-    <!-- Main Content -->
-    <main class="main-content">
-      
-      <!-- Home View -->
-      <section id="view-home" class="view active">
-        <div class="hero">
-          <div class="hero-content">
-            <h1 class="hero-title">Learn From Your <span class="accent">Mistakes</span></h1>
-            <p class="hero-subtitle">
-              Analyze your chess.com and lichess games with Stockfish running in your browser.
-              Turn your blunders into training puzzles.
-            </p>
-            <div class="hero-actions">
-              <button id="get-started-btn" class="btn-primary btn-lg">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                Get Started
-              </button>
-              <button class="btn-secondary btn-lg" data-view="browse">Browse Tactics</button>
-            </div>
-          </div>
-          <div class="hero-visual">
-            <div class="chess-board-preview" id="preview-board"></div>
-          </div>
-        </div>
-        
-        <div class="features">
-          <div class="feature-card">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-            </div>
-            <h3>In-Browser Analysis</h3>
-            <p>Stockfish runs entirely in your browser using WebAssembly. No data leaves your computer during analysis.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
-            </div>
-            <h3>Personal Tactics</h3>
-            <p>Every tactic comes from your own games. Learn from the specific patterns where you struggle.</p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-            </div>
-            <h3>Train Anyone's Tactics</h3>
-            <p>Public database of tactics by username. Train with your friend's mistakes or famous players.</p>
-          </div>
-        </div>
-      </section>
-
-      <!-- Analyze View -->
-      <section id="view-analyze" class="view">
-        <div class="view-header">
-          <h2>Analyze Your Games</h2>
-          <p>Select your platform and username to fetch and analyze your recent games.</p>
-        </div>
-        
-        <div class="analyze-container">
-          <!-- Step 1: Platform & Username -->
-          <div class="analyze-step" id="step-username">
-            <div class="step-header">
-              <span class="step-number">1</span>
-              <h3>Select Platform & Username</h3>
-            </div>
-            <div class="platform-select">
-              <label class="platform-option">
-                <input type="radio" name="platform" value="lichess" checked>
-                <div class="platform-card">
-                  <svg class="platform-logo" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                  <span>Lichess</span>
-                </div>
-              </label>
-              <label class="platform-option">
-                <input type="radio" name="platform" value="chesscom">
-                <div class="platform-card">
-                  <svg class="platform-logo" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
-                  <span>Chess.com</span>
-                </div>
-              </label>
-            </div>
-            <div class="input-group">
-              <label for="username-input">Username</label>
-              <input type="text" id="username-input" placeholder="Enter your username" autocomplete="off">
-            </div>
-            <div class="input-group">
-              <label for="months-input">Games from last</label>
-              <select id="months-input">
-                <option value="1">1 month</option>
-                <option value="3" selected>3 months</option>
-                <option value="6">6 months</option>
-                <option value="12">12 months</option>
-              </select>
-            </div>
-            <button id="fetch-games-btn" class="btn-primary">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-              Fetch Games
+      <div class="modal-overlay" x-show="settingsOpen" x-transition.opacity x-cloak @click.self="settingsOpen = false">
+        <div class="modal" @click.stop>
+          <div class="modal-header">
+            <span>Settings</span>
+            <button class="icon-btn" @click="settingsOpen = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
             </button>
           </div>
-
-          <!-- Step 2: Analysis -->
-          <div class="analyze-step hidden" id="step-analysis">
-            <div class="step-header">
-              <span class="step-number">2</span>
-              <h3>Engine Analysis</h3>
-            </div>
-            <div class="analysis-status">
-              <div class="engine-status">
-                <span class="status-indicator" id="engine-indicator"></span>
-                <span id="engine-status-text">Initializing Stockfish...</span>
-              </div>
-              <div class="progress-container">
-                <div class="progress-bar">
-                  <div class="progress-fill" id="analysis-progress"></div>
-                </div>
-                <span class="progress-text" id="progress-text">0 / 0 games</span>
-              </div>
-              <div class="analysis-log" id="analysis-log"></div>
-            </div>
-            <button id="start-analysis-btn" class="btn-primary" disabled>
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-              Start Analysis
-            </button>
-          </div>
-
-          <!-- Step 3: Results -->
-          <div class="analyze-step hidden" id="step-results">
-            <div class="step-header">
-              <span class="step-number">3</span>
-              <h3>Results</h3>
-            </div>
-            <div class="results-summary">
-              <div class="result-stat">
-                <span class="stat-value" id="stat-games">0</span>
-                <span class="stat-label">Games Analyzed</span>
-              </div>
-              <div class="result-stat blunder">
-                <span class="stat-value" id="stat-blunders">0</span>
-                <span class="stat-label">Blunders (??)</span>
-              </div>
-              <div class="result-stat mistake">
-                <span class="stat-value" id="stat-mistakes">0</span>
-                <span class="stat-label">Mistakes (?)</span>
-              </div>
-              <div class="result-stat inaccuracy">
-                <span class="stat-value" id="stat-inaccuracies">0</span>
-                <span class="stat-label">Inaccuracies (?!)</span>
-              </div>
-            </div>
-            <div class="results-actions">
-              <button id="upload-tactics-btn" class="btn-primary">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
-                Upload to Cloud
-              </button>
-              <button id="train-now-btn" class="btn-secondary">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-                Train Now
-              </button>
+          <div class="modal-body">
+            <div class="setting-label">Time Controls</div>
+            <div class="chip-grid">
+              <template x-for="tc in timeControls" :key="tc.id">
+                <label class="chip" :class="{ 'active': tc.enabled }">
+                  <input type="checkbox" x-model="tc.enabled">
+                  <span x-text="tc.name"></span>
+                </label>
+              </template>
             </div>
           </div>
         </div>
-      </section>
+      </div>
+    </div>
 
-      <!-- Train View -->
-      <section id="view-train" class="view">
-        <div class="view-header">
-          <h2>Tactics Training</h2>
-          <p id="training-subtitle">Solve puzzles from your games</p>
-        </div>
-        
-        <div class="training-container">
-          <!-- Training Setup (shown when no tactics loaded) -->
-          <div id="training-setup" class="training-setup">
-            <div class="setup-card">
-              <h3>Load Your Tactics</h3>
-              <p>Enter a username to load their tactics, or analyze your own games first.</p>
-              <div class="input-group">
-                <label for="train-username">Username</label>
-                <input type="text" id="train-username" placeholder="e.g., DrNykterstein">
-              </div>
-              <div class="input-group">
-                <label for="train-platform">Platform</label>
-                <select id="train-platform">
-                  <option value="">All platforms</option>
-                  <option value="lichess">Lichess</option>
-                  <option value="chesscom">Chess.com</option>
-                </select>
-              </div>
-              <button id="load-tactics-btn" class="btn-primary">Load Tactics</button>
-            </div>
-          </div>
-
-          <!-- Training Board (shown when tactics loaded) -->
-          <div id="training-board-container" class="training-board-container hidden">
-            <div class="training-info">
-              <div class="training-meta">
-                <span class="tactic-counter" id="tactic-counter">1 / 10</span>
-                <span class="tactic-type" id="tactic-type">Blunder</span>
-              </div>
-              <div class="training-context" id="training-context">
-                Move 15, White to play
-              </div>
-            </div>
-            
-            <div class="board-wrapper">
-              <div class="chess-board" id="training-board"></div>
-            </div>
-            
-            <div class="training-controls">
-              <div class="training-message" id="training-message">Find the best move</div>
-              <div class="training-buttons">
-                <button id="hint-btn" class="btn-secondary">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
-                  Hint
-                </button>
-                <button id="solution-btn" class="btn-secondary">
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-                  Solution
-                </button>
-                <button id="next-btn" class="btn-primary" disabled>
-                  Next
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Browse View -->
-      <section id="view-browse" class="view">
-        <div class="view-header">
-          <h2>Browse Tactics</h2>
-          <p>Explore tactics from the public database</p>
-        </div>
-        
-        <div class="browse-container">
-          <div class="search-bar">
-            <input type="text" id="browse-search" placeholder="Search by username...">
-            <button id="browse-search-btn" class="btn-primary">Search</button>
-          </div>
-          
-          <div class="browse-results" id="browse-results">
-            <div class="browse-empty">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-              <p>Enter a username to find their tactics</p>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <!-- Toast Notifications -->
-    <div id="toast-container" class="toast-container"></div>
-  </div>
-
-  <!-- Chessboard Rendering (minimal, no external deps) -->
-  <script src="js/chessboard.js"></script>
-  <!-- Chess Logic -->
-  <script src="js/chess.js"></script>
-  <!-- Stockfish Worker -->
-  <script src="js/stockfish-wrapper.js"></script>
-  <!-- API Client -->
-  <script src="js/api.js"></script>
-  <!-- Main App -->
-  <script src="js/app.js"></script>
-</body>
+    <script type="module" src="/src/main.js"></script>
+  </body>
 </html>
-

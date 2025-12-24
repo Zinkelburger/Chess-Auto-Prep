@@ -104,6 +104,12 @@ async def init_db():
             ON tactics(username, platform)
         """)
         
+        # Index for fast game_id lookups
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tactics_game_id 
+            ON tactics(game_id)
+        """)
+        
         await db.commit()
 
 async def get_db():
@@ -185,6 +191,84 @@ app.add_middleware(
 async def root():
     """Health check endpoint."""
     return {"status": "ok", "service": "tactics-trainer"}
+
+@app.get("/api/tactics/game/{game_id}")
+async def get_tactics_by_game(game_id: str):
+    """
+    Get all tactics for a specific game. PUBLIC - no auth required.
+    Used by frontend to check if a game has already been analyzed.
+    """
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        
+        cursor = await db.execute(
+            "SELECT * FROM tactics WHERE game_id = ?",
+            (game_id,)
+        )
+        rows = await cursor.fetchall()
+        
+        return [
+            {
+                "fen": row["fen"],
+                "user_move": row["user_move"],
+                "correct_line": json.loads(row["correct_line"]),
+                "mistake_type": row["mistake_type"],
+                "mistake_analysis": row["mistake_analysis"] or "",
+                "position_context": row["position_context"] or "",
+                "game_id": row["game_id"] or "",
+                "game_white": row["game_white"] or "",
+                "game_black": row["game_black"] or "",
+            }
+            for row in rows
+        ]
+
+@app.post("/api/tactics/game/{game_id}")
+async def upload_tactics_by_game(game_id: str, data: dict):
+    """
+    Upload tactics for a specific game. PUBLIC - no auth required.
+    This allows caching of analyzed games without requiring login.
+    """
+    tactics = data.get("tactics", [])
+    if not tactics:
+        return {"success": True, "inserted": 0}
+    
+    async with aiosqlite.connect(DATABASE_PATH) as db:
+        inserted = 0
+        
+        for t in tactics:
+            try:
+                await db.execute("""
+                    INSERT INTO tactics (
+                        username, platform, fen, user_move, correct_line,
+                        mistake_type, mistake_analysis, position_context,
+                        game_white, game_black, game_result, game_date,
+                        game_id, game_url, difficulty, created_at, uploader_email
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    t.get("game_white", ""),  # Use player name as username
+                    "unknown",
+                    t.get("fen", ""),
+                    t.get("user_move", ""),
+                    json.dumps(t.get("correct_line", [])),
+                    t.get("mistake_type", "?"),
+                    t.get("mistake_analysis", ""),
+                    t.get("position_context", ""),
+                    t.get("game_white", ""),
+                    t.get("game_black", ""),
+                    t.get("game_result", ""),
+                    t.get("game_date", ""),
+                    game_id,
+                    t.get("game_url", ""),
+                    t.get("difficulty", 1),
+                    datetime.utcnow().isoformat(),
+                    None,
+                ))
+                inserted += 1
+            except aiosqlite.IntegrityError:
+                pass  # Duplicate, skip
+        
+        await db.commit()
+        return {"success": True, "inserted": inserted}
 
 @app.get("/api/tactics/{username}", response_model=List[TacticsResponse])
 async def get_tactics(
