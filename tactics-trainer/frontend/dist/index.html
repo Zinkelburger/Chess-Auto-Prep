@@ -87,7 +87,7 @@
         <div class="tactic-info">
           <div class="game-players" x-text="`${currentTactic?.game_white} vs ${currentTactic?.game_black}`"></div>
           <div class="you-played" x-show="currentTactic?.user_move">
-            You played: <span x-text="currentTactic?.user_move"></span>
+            You played: <span x-text="currentTactic?.user_move + currentTactic?.mistake_type"></span>
           </div>
         </div>
         

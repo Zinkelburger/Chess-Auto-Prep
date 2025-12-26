@@ -26,10 +26,19 @@ class TacticsImportService {
   /// Check if engine-based analysis is available on this platform
   bool get isAnalysisAvailable => _stockfish.isAvailable.value;
 
-  // Win% formula provided by user
-  // Win% = 50 + 50 * (2 / (1 + exp(-0.00368208 * centipawns)) - 1)
-  double _calculateWinChance(int centipawns) {
-    return 50 + 50 * (2 / (1 + math.exp(-0.00368208 * centipawns)) - 1);
+  // Lichess winning chances formula (from scalachess)
+  // Returns [-1, +1] where -1 = losing, 0 = equal, +1 = winning
+  // https://github.com/lichess-org/scalachess/blob/master/core/src/main/scala/eval.scala
+  static const double _multiplier = -0.00368208;
+  
+  double _winningChances(int centipawns) {
+    final capped = centipawns.clamp(-1000, 1000);
+    return 2 / (1 + math.exp(_multiplier * capped)) - 1;
+  }
+  
+  // Win percent for display purposes [0, 100]
+  double _winPercent(int centipawns) {
+    return 50 + 50 * _winningChances(centipawns);
   }
 
   /// Initialize the database (load analyzed game IDs)
@@ -485,19 +494,25 @@ class TacticsImportService {
           cpB = -cpB;
         }
         
-        final winChanceA = _calculateWinChance(cpA);
-        final winChanceB = _calculateWinChance(cpB);
+        // Use Lichess [-1, +1] scale for classification
+        final wcBefore = _winningChances(cpA);
+        final wcAfter = _winningChances(cpB);
         
-        final delta = winChanceA - winChanceB;
+        final delta = wcBefore - wcAfter;
         
-        // Classify: Blunder (>30%), Mistake (20-30%), or OK
-        final isBlunder = delta > 30;
-        final isMistake = delta > 20 && delta <= 30;
+        // Lichess thresholds (from lila/modules/tree/src/main/Advice.scala)
+        // Blunder: >= 0.3, Mistake: >= 0.2, Inaccuracy: >= 0.1
+        final isBlunder = delta >= 0.3;
+        final isMistake = delta >= 0.2 && delta < 0.3;
+        
+        // Use winPercent for display
+        final wpBefore = _winPercent(cpA);
+        final wpAfter = _winPercent(cpB);
         
         // Debug output for every move
         if (kDebugMode) {
           final status = isBlunder ? '⚠️ BLUNDER' : (isMistake ? '⚠ MISTAKE' : '✓');
-          print('Move $moveNumber. $san | Before: ${cpA}cp (${winChanceA.toStringAsFixed(1)}%) → After: ${cpB}cp (${winChanceB.toStringAsFixed(1)}%) | Δ${delta.toStringAsFixed(1)}% | $status');
+          print('Move $moveNumber. $san | Before: ${cpA}cp (${wpBefore.toStringAsFixed(1)}%) → After: ${cpB}cp (${wpAfter.toStringAsFixed(1)}%) | Δ${delta.toStringAsFixed(3)} | $status');
         }
         
         if (isBlunder || isMistake) {
