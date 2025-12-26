@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tactics Trainer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <script type="module" crossorigin src="/assets/index-CsEUvQN0.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-_3Ybqsiu.css">
+  </head>
+  <body>
+    <div id="app" x-data="tacticsApp()" x-init="init()">
+      <div class="panel" x-show="!training">
+        <header class="panel-header">
+          <h1>Tactics Trainer</h1>
+          <button class="icon-btn" @click="settingsOpen = true" title="Settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
+        </header>
+
+        <div class="username-fields">
+          <div class="input-row">
+            <label for="lichess-user">Lichess</label>
+            <input type="text" id="lichess-user" 
+                   x-model="lichessUser" 
+                   placeholder="username"
+                   @keypress.enter="loadTactics()">
+          </div>
+          <div class="input-row">
+            <label for="chesscom-user">Chess.com</label>
+            <input type="text" id="chesscom-user" 
+                   x-model="chesscomUser" 
+                   placeholder="username"
+                   @keypress.enter="loadTactics()">
+          </div>
+          <div class="input-row">
+            <label for="num-games">Games</label>
+            <input type="number" id="num-games" 
+                   x-model.number="numGames" 
+                   min="1" max="100"
+                   @keypress.enter="loadTactics()">
+          </div>
+        </div>
+        
+        <button class="btn-primary" 
+                @click="loadTactics()" 
+                :disabled="loading">
+          <span x-text="loading ? 'Loading...' : 'Load Tactics'"></span>
+        </button>
+        
+        <div class="status" 
+             :class="{ 'error': statusType === 'error', 'success': statusType === 'success' }">
+          <div class="spinner" x-show="loading"></div>
+          <span x-text="status"></span>
+        </div>
+        
+        <div class="tactics-counter" x-show="loading && tacticsFound > 0">
+          Found: <strong x-text="tacticsFound"></strong> tactics
+        </div>
+        
+        <div class="auth-section">
+          <div id="google-signin" x-show="!user"></div>
+          <div class="user-info" x-show="user">
+            <img class="avatar" :src="user?.picture" x-show="user?.picture">
+            <span x-text="user?.name"></span>
+            <button class="btn-link" @click="signOut()">Sign out</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" x-show="training" x-cloak>
+        <div class="training-header">
+          <button class="icon-btn" @click="backToSetup()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <span x-text="`${currentIndex + 1}/${tactics.length}`"></span>
+        </div>
+        
+        <div id="board" class="board"></div>
+        
+        <!-- Game info and You played -->
+        <div class="tactic-info">
+          <div class="game-players" x-text="`${currentTactic?.game_white} vs ${currentTactic?.game_black}`"></div>
+          <div class="you-played" x-show="currentTactic?.user_move">
+            You played: <span x-text="currentTactic?.user_move"></span>
+          </div>
+        </div>
+        
+        <div class="message" 
+             :class="messageClass"
+             x-show="message && !solved"
+             x-text="message"></div>
+        
+        <div class="solution-display" x-show="solutionShown || solved">
+          <span x-show="solved && !solutionShown">Correct</span>
+          <span x-show="solutionShown" x-text="'Best: ' + getSolutionSan()"></span>
+        </div>
+        
+        <div class="controls">
+          <button class="btn-secondary" 
+                  @click="prevTactic()" 
+                  :disabled="currentIndex === 0">Prev</button>
+          <button class="btn-secondary" 
+                  @click="showSolution()">Solution</button>
+          <button class="btn-primary" 
+                  @click="nextTactic()"
+                  x-text="autoNext ? 'Next (auto)' : 'Next'">Next</button>
+        </div>
+        
+        <div class="controls-row">
+          <label class="auto-next-toggle">
+            <input type="checkbox" x-model="autoNext">
+            <span>Auto-next</span>
+          </label>
+          <div class="links-row">
+            <a class="link-btn" 
+               :href="currentTactic?.game_url" 
+               target="_blank"
+               x-show="currentTactic?.game_url">
+              Original Game ↗
+            </a>
+            <button class="link-btn" 
+                    @click="openAnalysis()"
+                    x-show="currentTactic?.game_url">
+              Analyze on Lichess ↗
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-overlay" x-show="settingsOpen" x-transition.opacity x-cloak @click.self="settingsOpen = false">
+        <div class="modal" @click.stop>
+          <div class="modal-header">
+            <span>Settings</span>
+            <button class="icon-btn" @click="settingsOpen = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="setting-label">Time Controls</div>
+            <div class="chip-grid">
+              <template x-for="tc in timeControls" :key="tc.id">
+                <label class="chip" :class="{ 'active': tc.enabled }">
+                  <input type="checkbox" x-model="tc.enabled">
+                  <span x-text="tc.name"></span>
+                </label>
+              </template>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>

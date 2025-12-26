@@ -6,8 +6,6 @@ function calculateWinChance(centipawns) {
   return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * centipawns)) - 1);
 }
 
-const API_URL = localStorage.getItem('backendUrl') || 'http://localhost:8000';
-
 export function tacticsApp() {
   return {
     // UI State
@@ -38,6 +36,8 @@ export function tacticsApp() {
     tactics: [],
     currentIndex: 0,
     solved: false,
+    solutionShown: false,
+    autoNext: localStorage.getItem('autoNext') === 'true',
     board: null,
     
     // Engine
@@ -68,6 +68,7 @@ export function tacticsApp() {
         } catch (e) {}
       }
       this.$watch('timeControls', () => this.saveTimeControls(), { deep: true });
+      this.$watch('autoNext', (val) => localStorage.setItem('autoNext', val.toString()));
     },
     
     saveTimeControls() {
@@ -253,43 +254,6 @@ export function tacticsApp() {
       return enabledTypes.includes('classical');
     },
     
-    // ========== BACKEND ==========
-    extractGameId(pgn, headers) {
-      const site = headers.Site || headers.Link || '';
-      const match = site.match(/\/([a-zA-Z0-9]+)$/);
-      if (match) return match[1];
-      
-      const key = `${headers.White || ''}-${headers.Black || ''}-${headers.Date || ''}-${headers.UTCTime || ''}`;
-      return btoa(key).replace(/[^a-zA-Z0-9]/g, '').substring(0, 12);
-    },
-    
-    async fetchTacticsFromBackend(gameId) {
-      if (!API_URL) return null;
-      
-      try {
-        const res = await fetch(`${API_URL}/api/tactics/game/${gameId}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.length > 0) return data;
-        }
-      } catch (e) {}
-      return null;
-    },
-    
-    async uploadTacticsToBackend(gameId, tactics) {
-      if (!API_URL || tactics.length === 0) return;
-      
-      try {
-        await fetch(`${API_URL}/api/tactics/game/${gameId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ game_id: gameId, tactics })
-        });
-      } catch (e) {
-        console.warn('Upload failed:', e);
-      }
-    },
-    
     // ========== ANALYSIS ==========
     async analyzeGame(pgn, username) {
       const userLower = username.toLowerCase();
@@ -299,13 +263,9 @@ export function tacticsApp() {
         headers[match[1]] = match[2];
       }
       
-      const gameId = this.extractGameId(pgn, headers);
-      
-      const cached = await this.fetchTacticsFromBackend(gameId);
-      if (cached) {
-        console.log(`Game ${gameId}: loaded ${cached.length} tactics from cache`);
-        return cached;
-      }
+      console.log('='.repeat(80));
+      console.log(`Analyzing: ${headers.White} vs ${headers.Black}`);
+      console.log('='.repeat(80));
       
       const white = (headers.White || '').toLowerCase();
       const black = (headers.Black || '').toLowerCase();
@@ -313,6 +273,8 @@ export function tacticsApp() {
       if (white.includes(userLower)) userColor = 'w';
       else if (black.includes(userLower)) userColor = 'b';
       else return [];
+      
+      console.log(`User plays: ${userColor === 'w' ? 'White' : 'Black'}`);
       
       const movesMatch = pgn.match(/\n\n([\s\S]+)$/);
       if (!movesMatch) return [];
@@ -333,6 +295,10 @@ export function tacticsApp() {
       
       const tactics = [];
       const game = new window.Chess.Game();
+      const DEPTH = 15; // Match Flutter's depth
+      
+      console.log(`Total moves: ${moves.length}, analyzing at depth ${DEPTH}`);
+      console.log('');
       
       for (const move of moves) {
         const isUserMove = move.color === userColor;
@@ -344,29 +310,52 @@ export function tacticsApp() {
         }
         
         const fenBefore = game.getFen();
-        const evalBefore = await this.stockfish.analyze(fenBefore, 12);
+        const isWhiteTurnBefore = fenBefore.split(' ')[1] === 'w';
+        const evalBefore = await this.stockfish.analyze(fenBefore, DEPTH);
         
         const uci = this.findUci(game, move.san);
         if (!uci) continue;
         game.moveUci(uci);
         
         const fenAfter = game.getFen();
-        const evalAfter = await this.stockfish.analyze(fenAfter, 12);
+        const isWhiteTurnAfter = fenAfter.split(' ')[1] === 'w';
+        const evalAfter = await this.stockfish.analyze(fenAfter, DEPTH);
         
-        let cpBefore = (evalBefore.eval || 0) * 100;
-        let cpAfter = (evalAfter.eval || 0) * 100;
+        // Raw evals from engine (in pawns, need to multiply by 100 for centipawns)
+        const rawCpBefore = (evalBefore.eval || 0) * 100;
+        const rawCpAfter = (evalAfter.eval || 0) * 100;
         
+        // Normalize to White's perspective first (like Flutter's StockfishService does)
+        let cpBeforeWhitePerspective = isWhiteTurnBefore ? rawCpBefore : -rawCpBefore;
+        let cpAfterWhitePerspective = isWhiteTurnAfter ? rawCpAfter : -rawCpAfter;
+        
+        // Now normalize to USER's perspective
+        let cpBefore = cpBeforeWhitePerspective;
+        let cpAfter = cpAfterWhitePerspective;
         if (userColor === 'b') {
-          cpBefore = -cpBefore;
-          cpAfter = -cpAfter;
+          cpBefore = -cpBeforeWhitePerspective;
+          cpAfter = -cpAfterWhitePerspective;
         }
         
         const wcBefore = calculateWinChance(cpBefore);
         const wcAfter = calculateWinChance(cpAfter);
         const delta = wcBefore - wcAfter;
         
+        const isBlunder = delta > 30;
+        const isMistake = delta > 20 && delta <= 30;
+        const status = isBlunder ? '⚠️ BLUNDER' : (isMistake ? '⚠ MISTAKE' : '✓ OK');
+        
+        // Log like Flutter does
+        console.log(`--- Move ${move.num}. ${move.san} (${move.color === 'w' ? 'White' : 'Black'}) ---`);
+        console.log(`FEN: ${fenBefore}`);
+        console.log(`Raw eval before: ${rawCpBefore.toFixed(0)}cp, after: ${rawCpAfter.toFixed(0)}cp`);
+        console.log(`Eval Before: ${cpBefore.toFixed(0)}cp (${wcBefore.toFixed(1)}%)`);
+        console.log(`Eval After:  ${cpAfter.toFixed(0)}cp (${wcAfter.toFixed(1)}%)`);
+        console.log(`Delta: ${delta.toFixed(1)}% | ${status}`);
+        console.log(`PV: ${(evalBefore.pv || []).slice(0, 3).join(' ')}`);
+        console.log('');
+        
         if (delta > 20) {
-          const isBlunder = delta > 30;
           tactics.push({
             fen: fenBefore,
             user_move: move.san,
@@ -374,14 +363,16 @@ export function tacticsApp() {
             mistake_type: isBlunder ? '??' : '?',
             mistake_analysis: `${isBlunder ? 'Blunder' : 'Mistake'}: ${wcBefore.toFixed(0)}% → ${wcAfter.toFixed(0)}%`,
             position_context: `Move ${move.num}, ${userColor === 'w' ? 'White' : 'Black'} to play`,
-            game_id: gameId,
+            game_url: headers.Link || headers.Site || '',
             game_white: headers.White || '',
             game_black: headers.Black || '',
           });
         }
       }
       
-      await this.uploadTacticsToBackend(gameId, tactics);
+      console.log('='.repeat(80));
+      console.log(`Analysis complete. Found ${tactics.length} tactics.`);
+      console.log('='.repeat(80));
       
       return tactics;
     },
@@ -467,7 +458,8 @@ export function tacticsApp() {
       if (!t) return;
       
       this.solved = false;
-      this.setMessage('Find the best move', '');
+      this.solutionShown = false;
+      this.setMessage('', '');
       
       const isBlack = t.position_context?.includes('Black');
       this.board.setFlipped(isBlack);
@@ -483,26 +475,135 @@ export function tacticsApp() {
       
       if (played === correct || correct.startsWith(played) || played.startsWith(correct)) {
         this.solved = true;
-        this.setMessage('Correct!', 'correct');
+        this.setMessage('', 'correct');
         this.board.setInteractive(false);
+        
+        // Auto-next after delay
+        if (this.autoNext) {
+          setTimeout(() => this.nextTactic(), 1200);
+        }
       } else {
         this.setMessage('Try again', 'incorrect');
         setTimeout(() => {
           this.board.setPosition(this.currentTactic.fen);
-          this.setMessage('Find the best move', '');
+          this.setMessage('', '');
         }, 800);
       }
     },
     
-    showHint() {
-      const move = this.currentTactic?.correct_line?.[0];
-      if (move) this.setMessage(`Hint: ${move.substring(0, 2)}`, '');
+    showSolution() {
+      this.solutionShown = true;
+      // Keep board interactive - user should still play the move
     },
     
-    showSolution() {
-      this.solved = true;
-      this.setMessage(`Solution: ${this.currentTactic?.correct_line?.join(' ') || '?'}`, '');
-      this.board.setInteractive(false);
+    // Convert UCI line to SAN for display
+    getSolutionSan() {
+      const t = this.currentTactic;
+      if (!t || !t.correct_line?.length) return '?';
+      return this.convertUciLineToSan(t.fen, t.correct_line).join(' ');
+    },
+    
+    convertUciLineToSan(fen, uciMoves) {
+      if (!fen || !uciMoves?.length) return uciMoves || [];
+      
+      try {
+        const game = new window.Chess.Game(fen);
+        const sanMoves = [];
+        
+        for (const uci of uciMoves) {
+          const san = this.uciToSan(game, uci);
+          if (san) {
+            sanMoves.push(san);
+            game.moveUci(uci);
+          } else {
+            sanMoves.push(uci);
+          }
+        }
+        return sanMoves;
+      } catch (e) {
+        console.warn('Failed to convert UCI to SAN:', e);
+        return uciMoves;
+      }
+    },
+    
+    uciToSan(game, uci) {
+      if (!uci || uci.length < 4) return null;
+      
+      const from = uci.substring(0, 2);
+      const to = uci.substring(2, 4);
+      const promo = uci.length > 4 ? uci[4] : null;
+      
+      const fromSq = game.algebraicToIndex(from);
+      const toSq = game.algebraicToIndex(to);
+      const piece = game.board[fromSq];
+      
+      if (!piece) return null;
+      
+      // Castling
+      if (piece.type === 'k') {
+        if (from === 'e1' && to === 'g1') return 'O-O';
+        if (from === 'e1' && to === 'c1') return 'O-O-O';
+        if (from === 'e8' && to === 'g8') return 'O-O';
+        if (from === 'e8' && to === 'c8') return 'O-O-O';
+      }
+      
+      const captured = game.board[toSq];
+      const isCapture = !!captured || (piece.type === 'p' && from[0] !== to[0]);
+      
+      let san = '';
+      
+      if (piece.type === 'p') {
+        if (isCapture) {
+          san = from[0] + 'x' + to;
+        } else {
+          san = to;
+        }
+        if (promo) {
+          san += '=' + promo.toUpperCase();
+        }
+      } else {
+        san = piece.type.toUpperCase();
+        const disambig = this.getDisambiguation(game, piece, fromSq, toSq);
+        san += disambig;
+        if (isCapture) san += 'x';
+        san += to;
+      }
+      
+      return san;
+    },
+    
+    getDisambiguation(game, piece, fromSq, toSq) {
+      const others = [];
+      for (let sq = 0; sq < 64; sq++) {
+        if (sq === fromSq) continue;
+        const p = game.board[sq];
+        if (!p || p.type !== piece.type || p.color !== piece.color) continue;
+        
+        const moves = game.getLegalMoves(sq);
+        if (moves.some(m => m.to === toSq)) {
+          others.push(sq);
+        }
+      }
+      
+      if (others.length === 0) return '';
+      
+      const fromAlg = game.indexToAlgebraic(fromSq);
+      const fromFile = fromAlg[0];
+      const fromRank = fromAlg[1];
+      
+      const sameFile = others.some(sq => game.indexToAlgebraic(sq)[0] === fromFile);
+      const sameRank = others.some(sq => game.indexToAlgebraic(sq)[1] === fromRank);
+      
+      if (!sameFile) return fromFile;
+      if (!sameRank) return fromRank;
+      return fromFile + fromRank;
+    },
+    
+    prevTactic() {
+      if (this.currentIndex > 0) {
+        this.currentIndex--;
+        this.loadCurrentTactic();
+      }
     },
     
     nextTactic() {
@@ -511,6 +612,21 @@ export function tacticsApp() {
         this.loadCurrentTactic();
       } else {
         this.setMessage('All done!', 'correct');
+      }
+    },
+    
+    openAnalysis() {
+      const url = this.currentTactic?.game_url;
+      if (url) {
+        // For Chess.com links, we can analyze on Lichess via import
+        if (url.includes('chess.com')) {
+          // Open on Lichess analysis with FEN
+          const fen = encodeURIComponent(this.currentTactic.fen);
+          window.open(`https://lichess.org/analysis/${fen.replace(/%20/g, '_')}`, '_blank');
+        } else {
+          // Lichess game link - just open it
+          window.open(url, '_blank');
+        }
       }
     },
     

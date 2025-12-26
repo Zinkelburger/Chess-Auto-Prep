@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "alpinejs": "^3.14.5",
+    "chess.js": "^1.4.0",
     "chessground": "^9.1.1"
   },
   "devDependencies": {
     "vite": "^5.4.10"
   }
 }
-

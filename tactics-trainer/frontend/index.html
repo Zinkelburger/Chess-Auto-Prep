@@ -80,27 +80,57 @@
             </svg>
           </button>
           <span x-text="`${currentIndex + 1}/${tactics.length}`"></span>
-          <span class="badge" 
-                :class="badgeClass"
-                x-text="currentTactic?.mistake_type || '??'"></span>
         </div>
         
         <div id="board" class="board"></div>
         
+        <!-- Game info and You played -->
+        <div class="tactic-info">
+          <div class="game-players" x-text="`${currentTactic?.game_white} vs ${currentTactic?.game_black}`"></div>
+          <div class="you-played" x-show="currentTactic?.user_move">
+            You played: <span x-text="currentTactic?.user_move"></span>
+          </div>
+        </div>
+        
         <div class="message" 
              :class="messageClass"
+             x-show="message && !solved"
              x-text="message"></div>
+        
+        <div class="solution-display" x-show="solutionShown || solved">
+          <span x-show="solved && !solutionShown">Correct</span>
+          <span x-show="solutionShown" x-text="'Best: ' + getSolutionSan()"></span>
+        </div>
         
         <div class="controls">
           <button class="btn-secondary" 
-                  @click="showHint()" 
-                  :disabled="solved">Hint</button>
+                  @click="prevTactic()" 
+                  :disabled="currentIndex === 0">Prev</button>
           <button class="btn-secondary" 
-                  @click="showSolution()" 
-                  :disabled="solved">Solution</button>
+                  @click="showSolution()">Solution</button>
           <button class="btn-primary" 
-                  @click="nextTactic()" 
-                  :disabled="!solved">Next</button>
+                  @click="nextTactic()"
+                  x-text="autoNext ? 'Next (auto)' : 'Next'">Next</button>
+        </div>
+        
+        <div class="controls-row">
+          <label class="auto-next-toggle">
+            <input type="checkbox" x-model="autoNext">
+            <span>Auto-next</span>
+          </label>
+          <div class="links-row">
+            <a class="link-btn" 
+               :href="currentTactic?.game_url" 
+               target="_blank"
+               x-show="currentTactic?.game_url">
+              Original Game ↗
+            </a>
+            <button class="link-btn" 
+                    @click="openAnalysis()"
+                    x-show="currentTactic?.game_url">
+              Analyze on Lichess ↗
+            </button>
+          </div>
         </div>
       </div>
 

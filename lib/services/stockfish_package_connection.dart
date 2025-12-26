@@ -5,7 +5,7 @@ import 'engine_connection.dart';
 
 class StockfishPackageConnection implements EngineConnection {
   final Stockfish _engine;
-  final StreamController<String> _stdoutController = StreamController<String>();
+  final StreamController<String> _stdoutController = StreamController<String>.broadcast();
   late final StreamSubscription _subscription;
 
   StockfishPackageConnection() : _engine = Stockfish() {
