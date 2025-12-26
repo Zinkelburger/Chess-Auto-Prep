@@ -121,6 +121,16 @@ input:focus {
 
 input::placeholder { color: var(--text-dim); }
 
+/* Hide number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* Buttons */
 .btn-primary, .btn-secondary {
   padding: 0.65rem 1.25rem;
