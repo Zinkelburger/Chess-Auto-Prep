@@ -100,7 +100,6 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     final platform = player['platform'] as String? ?? 'Unknown';
     final username = player['username'] as String? ?? 'Unknown';
     final gameCount = player['gameCount'] as int? ?? 0;
-    final monthsBack = player['monthsBack'] as int? ?? 3;
     final downloadedAt = player['downloadedAt'] as String?;
 
     final platformName = platform == 'chesscom' ? 'Chess.com' : 'Lichess';
@@ -171,7 +170,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Last $monthsBack month${monthsBack == 1 ? '' : 's'} • Downloaded $timeAgo',
+                      'Downloaded $timeAgo',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[500],
@@ -276,10 +275,10 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   Future<void> _redownloadPlayer(Map<String, dynamic> player) async {
     final platform = player['platform'] as String;
     final username = player['username'] as String;
-    final monthsBack = player['monthsBack'] as int? ?? 3;
+    final maxGames = player['maxGames'] as int? ?? player['gameCount'] as int? ?? 100;
 
     // Re-download with same settings (no confirmation needed)
-    await _downloadGames(platform, username, monthsBack);
+    await _downloadGames(platform, username, maxGames);
   }
 
   Future<void> _redownloadPlayerCustom(Map<String, dynamic> player) async {
@@ -300,10 +299,10 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     if (result != null && mounted) {
       final newPlatform = result['platform'] as String;
       final newUsername = result['username'] as String;
-      final newMonthsBack = result['monthsBack'] as int;
+      final newMaxGames = result['maxGames'] as int;
 
       // Download with new settings
-      await _downloadGames(newPlatform, newUsername, newMonthsBack);
+      await _downloadGames(newPlatform, newUsername, newMaxGames);
     }
   }
 
@@ -321,14 +320,14 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     if (result != null && mounted) {
       final platform = result['platform'] as String;
       final username = result['username'] as String;
-      final monthsBack = result['monthsBack'] as int;
+      final maxGames = result['maxGames'] as int;
 
       // Download the games
-      await _downloadGames(platform, username, monthsBack);
+      await _downloadGames(platform, username, maxGames);
     }
   }
 
-  Future<void> _downloadGames(String platform, String username, int monthsBack) async {
+  Future<void> _downloadGames(String platform, String username, int maxGames) async {
     // Show loading dialog
     showDialog(
       context: context,
@@ -351,12 +350,12 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       if (platform == 'chesscom') {
         pgns = await _gamesService.downloadChesscomGames(
           username,
-          monthsBack: monthsBack,
+          maxGames: maxGames,
         );
       } else {
         pgns = await _gamesService.downloadLichessGames(
           username,
-          monthsBack: monthsBack,
+          maxGames: maxGames,
         );
       }
 
@@ -371,7 +370,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       }
 
       // Save games to disk
-      await _gamesService.saveAnalysisGames(pgns, platform, username, monthsBack);
+      await _gamesService.saveAnalysisGames(pgns, platform, username, maxGames);
 
       // Reload player list
       await _loadCachedPlayers();

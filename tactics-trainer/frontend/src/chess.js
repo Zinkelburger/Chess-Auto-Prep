@@ -1,96 +1,57 @@
 /**
- * Minimal chess logic library (module version)
+ * Chess logic wrapper using chess.js library
  */
+import { Chess as ChessLib } from 'chess.js';
 
-const PIECE_TYPES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
-const FILES = 'abcdefgh';
-const RANKS = '12345678';
+export const PIECE_TYPES = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+export const FILES = 'abcdefgh';
+export const RANKS = '12345678';
 
 class ChessGame {
-  constructor(fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
-    this.reset(fen);
+  constructor(fen) {
+    this.chess = new ChessLib(fen);
+    this.updateBoardCache();
   }
 
   reset(fen) {
-    this.board = Array(64).fill(null);
-    this.turn = 'w';
-    this.castling = { K: true, Q: true, k: true, q: true };
-    this.enPassant = null;
-    this.halfmoves = 0;
-    this.fullmoves = 1;
-    this.loadFen(fen);
+    try {
+      this.chess.load(fen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+    } catch (e) {
+      console.error('Invalid FEN:', fen, e);
+      this.chess.reset();
+    }
+    this.updateBoardCache();
   }
 
-  loadFen(fen) {
-    const parts = fen.split(' ');
-    const position = parts[0];
+  updateBoardCache() {
+    this.board = Array(64).fill(null);
+    // chess.js board() returns 8x8 array, rank 8 (index 0) to rank 1 (index 7)
+    const board2d = this.chess.board();
     
-    // Parse position
-    let square = 0;
-    for (const char of position) {
-      if (char === '/') continue;
-      if (/[1-8]/.test(char)) {
-        square += parseInt(char);
-      } else {
-        const color = char === char.toUpperCase() ? 'w' : 'b';
-        const type = char.toLowerCase();
-        this.board[square] = { color, type };
-        square++;
-      }
-    }
-
-    // Parse other FEN parts
-    if (parts[1]) this.turn = parts[1];
-    if (parts[2]) {
-      this.castling = { K: false, Q: false, k: false, q: false };
-      if (parts[2] !== '-') {
-        for (const c of parts[2]) {
-          this.castling[c] = true;
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const piece = board2d[r][f];
+        if (piece) {
+          this.board[r * 8 + f] = { type: piece.type, color: piece.color };
         }
       }
     }
-    if (parts[3]) this.enPassant = parts[3] === '-' ? null : parts[3];
-    if (parts[4]) this.halfmoves = parseInt(parts[4]);
-    if (parts[5]) this.fullmoves = parseInt(parts[5]);
+
+    this.turn = this.chess.turn();
+    
+    // getCastlingRights returns { k: boolean, q: boolean } for kingside/queenside
+    const whiteRights = this.chess.getCastlingRights('w');
+    const blackRights = this.chess.getCastlingRights('b');
+    this.castling = {
+        K: whiteRights.k,
+        Q: whiteRights.q,
+        k: blackRights.k,
+        q: blackRights.q,
+    };
   }
 
   getFen() {
-    let fen = '';
-    
-    // Position
-    for (let rank = 0; rank < 8; rank++) {
-      let empty = 0;
-      for (let file = 0; file < 8; file++) {
-        const piece = this.board[rank * 8 + file];
-        if (piece) {
-          if (empty > 0) {
-            fen += empty;
-            empty = 0;
-          }
-          const char = piece.type;
-          fen += piece.color === 'w' ? char.toUpperCase() : char;
-        } else {
-          empty++;
-        }
-      }
-      if (empty > 0) fen += empty;
-      if (rank < 7) fen += '/';
-    }
-
-    fen += ` ${this.turn}`;
-    
-    let castling = '';
-    if (this.castling.K) castling += 'K';
-    if (this.castling.Q) castling += 'Q';
-    if (this.castling.k) castling += 'k';
-    if (this.castling.q) castling += 'q';
-    fen += ` ${castling || '-'}`;
-    
-    fen += ` ${this.enPassant || '-'}`;
-    fen += ` ${this.halfmoves}`;
-    fen += ` ${this.fullmoves}`;
-
-    return fen;
+    return this.chess.fen();
   }
 
   algebraicToIndex(algebraic) {
@@ -114,228 +75,44 @@ class ChessGame {
 
   getLegalMoves(square) {
     const index = typeof square === 'string' ? this.algebraicToIndex(square) : square;
-    const piece = this.board[index];
-    if (!piece || piece.color !== this.turn) return [];
-
-    const moves = [];
-    const file = index % 8;
-    const rank = Math.floor(index / 8);
-
-    const addMove = (toIndex, promotion = null) => {
-      if (toIndex >= 0 && toIndex < 64) {
-        const to = this.board[toIndex];
-        if (!to || to.color !== piece.color) {
-          moves.push({
-            from: index,
-            to: toIndex,
-            fromAlg: this.indexToAlgebraic(index),
-            toAlg: this.indexToAlgebraic(toIndex),
-            promotion
-          });
-        }
-      }
-    };
-
-    const slideMove = (dFile, dRank) => {
-      let f = file + dFile;
-      let r = rank + dRank;
-      while (f >= 0 && f < 8 && r >= 0 && r < 8) {
-        const toIndex = r * 8 + f;
-        const target = this.board[toIndex];
-        if (target) {
-          if (target.color !== piece.color) addMove(toIndex);
-          break;
-        }
-        addMove(toIndex);
-        f += dFile;
-        r += dRank;
-      }
-    };
-
-    switch (piece.type) {
-      case 'p': {
-        const direction = piece.color === 'w' ? -1 : 1;
-        const startRank = piece.color === 'w' ? 6 : 1;
-        const promotionRank = piece.color === 'w' ? 0 : 7;
-        
-        const forwardIndex = (rank + direction) * 8 + file;
-        if (!this.board[forwardIndex]) {
-          if (rank + direction === promotionRank) {
-            ['q', 'r', 'b', 'n'].forEach(p => addMove(forwardIndex, p));
-          } else {
-            addMove(forwardIndex);
-          }
-          
-          if (rank === startRank) {
-            const doubleIndex = (rank + 2 * direction) * 8 + file;
-            if (!this.board[doubleIndex]) {
-              addMove(doubleIndex);
-            }
-          }
-        }
-        
-        for (const df of [-1, 1]) {
-          if (file + df >= 0 && file + df < 8) {
-            const captureIndex = (rank + direction) * 8 + (file + df);
-            const target = this.board[captureIndex];
-            if (target && target.color !== piece.color) {
-              if (rank + direction === promotionRank) {
-                ['q', 'r', 'b', 'n'].forEach(p => addMove(captureIndex, p));
-              } else {
-                addMove(captureIndex);
-              }
-            }
-            if (this.enPassant === this.indexToAlgebraic(captureIndex)) {
-              addMove(captureIndex);
-            }
-          }
-        }
-        break;
-      }
+    const squareAlg = this.indexToAlgebraic(index);
+    
+    const moves = this.chess.moves({ square: squareAlg, verbose: true });
+    
+    return moves.map(m => {
+      let castling = undefined;
+      if (m.flags.includes('k')) castling = m.color === 'w' ? 'K' : 'k';
+      if (m.flags.includes('q')) castling = m.color === 'w' ? 'Q' : 'q';
       
-      case 'n': {
-        const knightMoves = [
-          [-2, -1], [-2, 1], [-1, -2], [-1, 2],
-          [1, -2], [1, 2], [2, -1], [2, 1]
-        ];
-        for (const [dr, df] of knightMoves) {
-          const newRank = rank + dr;
-          const newFile = file + df;
-          if (newRank >= 0 && newRank < 8 && newFile >= 0 && newFile < 8) {
-            addMove(newRank * 8 + newFile);
-          }
-        }
-        break;
-      }
-      
-      case 'b':
-        slideMove(-1, -1); slideMove(-1, 1);
-        slideMove(1, -1); slideMove(1, 1);
-        break;
-      
-      case 'r':
-        slideMove(-1, 0); slideMove(1, 0);
-        slideMove(0, -1); slideMove(0, 1);
-        break;
-      
-      case 'q':
-        slideMove(-1, -1); slideMove(-1, 1);
-        slideMove(1, -1); slideMove(1, 1);
-        slideMove(-1, 0); slideMove(1, 0);
-        slideMove(0, -1); slideMove(0, 1);
-        break;
-      
-      case 'k': {
-        for (let dr = -1; dr <= 1; dr++) {
-          for (let df = -1; df <= 1; df++) {
-            if (dr === 0 && df === 0) continue;
-            const newRank = rank + dr;
-            const newFile = file + df;
-            if (newRank >= 0 && newRank < 8 && newFile >= 0 && newFile < 8) {
-              addMove(newRank * 8 + newFile);
-            }
-          }
-        }
-        
-        if (piece.color === 'w' && rank === 7) {
-          if (this.castling.K && !this.board[61] && !this.board[62]) {
-            moves.push({ from: index, to: 62, fromAlg: 'e1', toAlg: 'g1', castling: 'K' });
-          }
-          if (this.castling.Q && !this.board[57] && !this.board[58] && !this.board[59]) {
-            moves.push({ from: index, to: 58, fromAlg: 'e1', toAlg: 'c1', castling: 'Q' });
-          }
-        } else if (piece.color === 'b' && rank === 0) {
-          if (this.castling.k && !this.board[5] && !this.board[6]) {
-            moves.push({ from: index, to: 6, fromAlg: 'e8', toAlg: 'g8', castling: 'k' });
-          }
-          if (this.castling.q && !this.board[1] && !this.board[2] && !this.board[3]) {
-            moves.push({ from: index, to: 2, fromAlg: 'e8', toAlg: 'c8', castling: 'q' });
-          }
-        }
-        break;
-      }
-    }
-
-    return moves;
+      return {
+        from: this.algebraicToIndex(m.from),
+        to: this.algebraicToIndex(m.to),
+        fromAlg: m.from,
+        toAlg: m.to,
+        promotion: m.promotion,
+        castling
+      };
+    });
   }
 
   move(from, to, promotion = null) {
-    const fromIndex = typeof from === 'string' ? this.algebraicToIndex(from) : from;
-    const toIndex = typeof to === 'string' ? this.algebraicToIndex(to) : to;
-    
-    const piece = this.board[fromIndex];
-    if (!piece || piece.color !== this.turn) return false;
+    try {
+      const moveObj = {
+        from: typeof from === 'string' ? from : this.indexToAlgebraic(from),
+        to: typeof to === 'string' ? to : this.indexToAlgebraic(to),
+        promotion: promotion || undefined
+      };
 
-    const legalMoves = this.getLegalMoves(fromIndex);
-    const move = legalMoves.find(m => 
-      m.to === toIndex && 
-      (!promotion || m.promotion === promotion)
-    );
-    
-    if (!move) return false;
-
-    const captured = this.board[toIndex];
-    this.board[toIndex] = piece;
-    this.board[fromIndex] = null;
-
-    if (piece.type === 'p') {
-      if (move.promotion) {
-        this.board[toIndex] = { color: piece.color, type: move.promotion };
+      const result = this.chess.move(moveObj);
+      
+      if (result) {
+        this.updateBoardCache();
+        return true;
       }
-      if (this.enPassant === this.indexToAlgebraic(toIndex)) {
-        const epCaptureIndex = piece.color === 'w' ? toIndex + 8 : toIndex - 8;
-        this.board[epCaptureIndex] = null;
-      }
-      if (Math.abs(toIndex - fromIndex) === 16) {
-        this.enPassant = this.indexToAlgebraic((fromIndex + toIndex) / 2);
-      } else {
-        this.enPassant = null;
-      }
-    } else {
-      this.enPassant = null;
+    } catch (e) {
+      // chess.js throws on illegal moves sometimes
     }
-
-    if (move.castling) {
-      if (move.castling === 'K') {
-        this.board[61] = this.board[63];
-        this.board[63] = null;
-      } else if (move.castling === 'Q') {
-        this.board[59] = this.board[56];
-        this.board[56] = null;
-      } else if (move.castling === 'k') {
-        this.board[5] = this.board[7];
-        this.board[7] = null;
-      } else if (move.castling === 'q') {
-        this.board[3] = this.board[0];
-        this.board[0] = null;
-      }
-    }
-
-    if (piece.type === 'k') {
-      if (piece.color === 'w') {
-        this.castling.K = false;
-        this.castling.Q = false;
-      } else {
-        this.castling.k = false;
-        this.castling.q = false;
-      }
-    }
-    if (fromIndex === 63 || toIndex === 63) this.castling.K = false;
-    if (fromIndex === 56 || toIndex === 56) this.castling.Q = false;
-    if (fromIndex === 7 || toIndex === 7) this.castling.k = false;
-    if (fromIndex === 0 || toIndex === 0) this.castling.q = false;
-
-    if (piece.type === 'p' || captured) {
-      this.halfmoves = 0;
-    } else {
-      this.halfmoves++;
-    }
-    if (this.turn === 'b') {
-      this.fullmoves++;
-    }
-    this.turn = this.turn === 'w' ? 'b' : 'w';
-
-    return true;
+    return false;
   }
 
   parseUci(uci) {
@@ -353,15 +130,39 @@ class ChessGame {
     return this.move(parsed.from, parsed.to, parsed.promotion);
   }
 
-  clone() {
-    const clone = new ChessGame();
-    clone.board = [...this.board.map(p => p ? {...p} : null)];
-    clone.turn = this.turn;
-    clone.castling = {...this.castling};
-    clone.enPassant = this.enPassant;
-    clone.halfmoves = this.halfmoves;
-    clone.fullmoves = this.fullmoves;
-    return clone;
+  /**
+   * Make a move using SAN notation (e.g., "Nf3", "e4", "O-O")
+   * Returns the move object on success, null on failure
+   * Move object contains: { from, to, san, lan, color, piece, flags, before, after, ... }
+   */
+  moveSan(san) {
+    try {
+      const result = this.chess.move(san);
+      if (result) {
+        this.updateBoardCache();
+        return result;
+      }
+    } catch (e) {
+      // chess.js throws on illegal/invalid moves
+    }
+    return null;
+  }
+
+  inCheck() {
+    return this.chess.inCheck();
+  }
+  
+  getSan(uci) {
+    const parsed = this.parseUci(uci);
+    if (!parsed) return null;
+    
+    const moves = this.chess.moves({ verbose: true });
+    const match = moves.find(m => 
+      m.from === parsed.from && 
+      m.to === parsed.to && 
+      (!parsed.promotion || m.promotion === parsed.promotion)
+    );
+    return match ? match.san : null;
   }
 }
 
@@ -371,4 +172,3 @@ export const Chess = {
   FILES,
   RANKS
 };
-

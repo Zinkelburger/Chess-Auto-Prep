@@ -25,58 +25,55 @@ class AnalysisGamesService {
   }
 
   /// Download games from Chess.com, excluding bullet
+  /// Fetches month by month until maxGames is reached
   Future<String> downloadChesscomGames(
     String username, {
-    int monthsBack = 3,
+    int maxGames = 100,
     Function(String)? progressCallback,
   }) async {
-    progressCallback?.call('Downloading Chess.com games for $username (last $monthsBack months)...');
+    progressCallback?.call('Downloading up to $maxGames Chess.com games for $username...');
 
     final now = DateTime.now();
-
-    // Generate list of months to fetch
-    final List<DateTime> months = [];
-    for (int i = 0; i < monthsBack; i++) {
-      final monthDate = DateTime(now.year, now.month - i);
-      months.add(monthDate);
-    }
-
     final List<String> allGames = [];
+    
+    // Fetch month by month going backwards until we have enough games
+    // Limit to 24 months max to avoid infinite loops for inactive accounts
+    int currentYear = now.year;
+    int currentMonth = now.month;
+    
+    for (int i = 0; i < 24 && allGames.length < maxGames; i++) {
+      final url = 'https://api.chess.com/pub/player/${username.toLowerCase()}/games/$currentYear/${currentMonth.toString().padLeft(2, '0')}/pgn';
 
-    for (final month in months) {
-      final url = 'https://api.chess.com/pub/player/${username.toLowerCase()}/games/${month.year}/${month.month.toString().padLeft(2, '0')}/pgn';
-
-      progressCallback?.call('Fetching games from ${month.year}-${month.month}...');
+      progressCallback?.call('Fetching games from $currentYear-$currentMonth... (${allGames.length}/$maxGames)');
 
       try {
         final response = await http.get(Uri.parse(url));
 
-        if (response.statusCode != 200) {
-          progressCallback?.call('Warning: Failed to fetch games from ${month.year}-${month.month}');
-          continue;
-        }
+        if (response.statusCode == 200 && response.body.isNotEmpty) {
+          // Split PGN into individual games
+          final games = _splitPgnIntoGames(response.body);
 
-        // Split PGN into individual games
-        final games = _splitPgnIntoGames(response.body);
-
-        // Filter out bullet games (< 180 seconds)
-        int filtered = 0;
-        for (final game in games) {
-          if (!_isBulletGame(game)) {
-            allGames.add(game);
-          } else {
-            filtered++;
+          // Filter out bullet games (< 180 seconds) and add until we hit max
+          for (final game in games) {
+            if (allGames.length >= maxGames) break;
+            if (!_isBulletGame(game)) {
+              allGames.add(game);
+            }
           }
         }
-
-        progressCallback?.call('Found ${games.length} games ($filtered bullet games filtered)');
-
       } catch (e) {
-        progressCallback?.call('Error fetching ${month.year}-${month.month}: $e');
+        progressCallback?.call('Error fetching $currentYear-$currentMonth: $e');
+      }
+
+      // Go to previous month
+      currentMonth--;
+      if (currentMonth == 0) {
+        currentMonth = 12;
+        currentYear--;
       }
 
       // Be polite to the API
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 300));
     }
 
     progressCallback?.call('Downloaded ${allGames.length} non-bullet games from Chess.com');
@@ -84,21 +81,19 @@ class AnalysisGamesService {
   }
 
   /// Download games from Lichess with filters
+  /// Uses 'max' parameter to get last N games
   Future<String> downloadLichessGames(
     String username, {
-    int? monthsBack = 3,
+    int? maxGames = 100,
     Function(String)? progressCallback,
   }) async {
     progressCallback?.call('Downloading Lichess games for $username...');
 
-    // Calculate timestamp for 3 months ago
-    final now = DateTime.now();
-    final threeMonthsAgo = DateTime(now.year, now.month - (monthsBack ?? 3));
-    final sinceTimestamp = threeMonthsAgo.millisecondsSinceEpoch;
+    final max = maxGames ?? 100;
 
     // Build URL with query parameters
     final params = {
-      'since': sinceTimestamp.toString(),
+      'max': max.toString(),
       'perfType': 'blitz,rapid,classical,correspondence', // Exclude bullet
       'moves': 'true',
       'tags': 'true',
@@ -111,7 +106,7 @@ class AnalysisGamesService {
     final uri = Uri.parse('https://lichess.org/api/games/user/$username').replace(queryParameters: params);
 
     try {
-      progressCallback?.call('Fetching games from Lichess API...');
+      progressCallback?.call('Fetching up to $max games from Lichess API...');
 
       final response = await http.get(
         uri,
@@ -141,7 +136,7 @@ class AnalysisGamesService {
     String pgns,
     String platform,
     String username,
-    int monthsBack,
+    int maxGames,
   ) async {
     final directory = await _getAnalysisDirectory();
     final playerKey = _getPlayerKey(platform, username);
@@ -154,7 +149,7 @@ class AnalysisGamesService {
     final metadata = {
       'platform': platform,
       'username': username,
-      'monthsBack': monthsBack,
+      'maxGames': maxGames,
       'downloadedAt': DateTime.now().toIso8601String(),
       'gameCount': _splitPgnIntoGames(pgns).length,
     };
