@@ -8,7 +8,7 @@ import 'engine_connection.dart';
 
 class ProcessConnection implements EngineConnection {
   Process? _process;
-  final StreamController<String> _stdoutController = StreamController<String>();
+  final StreamController<String> _stdoutController = StreamController<String>.broadcast();
   StreamSubscription? _processSubscription;
   bool _isDisposed = false;
 

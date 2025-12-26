@@ -339,7 +339,15 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   ) async {
-    // Check if Stockfish is available before attempting analysis
+    // Wait for Stockfish to initialize before checking availability
+    // (isAvailable is set async in _initEngine, so we need to wait)
+    int waited = 0;
+    while (!_stockfish.isAvailable.value && waited < 50) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      waited++;
+    }
+    
+    // Check if Stockfish is available after waiting for initialization
     if (!_stockfish.isAvailable.value) {
       throw Exception(
         'Tactics analysis requires Stockfish, which is not available on this platform (web).\n\n'

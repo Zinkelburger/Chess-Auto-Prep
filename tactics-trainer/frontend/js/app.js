@@ -1,12 +1,14 @@
-import { StockfishEngine } from './stockfish-wrapper';
-import { Board as ChessBoard } from './chessboard';
+/**
+ * Tactics Trainer - Alpine.js App
+ * Download games → Analyze locally → Train
+ */
 
 // Win chance formula (from Lichess)
 function calculateWinChance(centipawns) {
   return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * centipawns)) - 1);
 }
 
-export function tacticsApp() {
+function tacticsApp() {
   return {
     // UI State
     training: false,
@@ -37,14 +39,10 @@ export function tacticsApp() {
     currentIndex: 0,
     solved: false,
     solutionShown: false,
-    autoNext: localStorage.getItem('autoNext') === 'true',
     board: null,
     
     // Engine
     stockfish: null,
-    
-    // Auth (placeholder)
-    user: null,
     
     get currentTactic() {
       return this.tactics[this.currentIndex] || null;
@@ -68,7 +66,6 @@ export function tacticsApp() {
         } catch (e) {}
       }
       this.$watch('timeControls', () => this.saveTimeControls(), { deep: true });
-      this.$watch('autoNext', (val) => localStorage.setItem('autoNext', val.toString()));
     },
     
     saveTimeControls() {
@@ -97,12 +94,14 @@ export function tacticsApp() {
       this.tacticsFound = 0;
       
       try {
+        // Step 1: Initialize engine
         this.setStatus('Loading engine...');
         if (!this.stockfish) {
           this.stockfish = new StockfishEngine();
         }
         await this.stockfish.init();
         
+        // Step 2: Download and analyze games
         const enabledTypes = this.getEnabledPerfTypes();
         
         if (lichess) {
@@ -114,19 +113,22 @@ export function tacticsApp() {
         }
         
         if (this.tactics.length === 0) {
-          this.setStatus('No mistakes found in your recent games!', 'success');
+          this.setStatus('');
           this.loading = false;
           return;
         }
         
+        // Shuffle tactics
         this.tactics = this.shuffle(this.tactics);
         
+        // Start training
         this.currentIndex = 0;
-        this.training = true;
+        this.training = true; // show the board panel
         this.setStatus('');
 
+        // Ensure the board element has real dimensions before init
         await this.$nextTick();
-        await this.initBoard();
+        await this.ensureBoardReady();
         this.loadCurrentTactic();
 
       } catch (e) {
@@ -148,7 +150,7 @@ export function tacticsApp() {
       if (enabledTypes.includes('classical')) perfTypes.push('classical');
       if (enabledTypes.includes('correspondence')) perfTypes.push('correspondence');
       
-      const since = Date.now() - (90 * 24 * 60 * 60 * 1000);
+      const since = Date.now() - (90 * 24 * 60 * 60 * 1000); // 3 months
       const params = new URLSearchParams({
         since: since.toString(),
         perfType: perfTypes.join(','),
@@ -187,6 +189,7 @@ export function tacticsApp() {
       const now = new Date();
       const games = [];
       
+      // Fetch last 3 months
       for (let i = 0; i < 3 && games.length < this.numGames; i++) {
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -197,6 +200,7 @@ export function tacticsApp() {
             const pgn = await res.text();
             const monthGames = this.splitPgn(pgn);
             
+            // Filter by time control
             for (const game of monthGames) {
               if (games.length >= this.numGames) break;
               if (this.matchesTimeControl(game, enabledTypes)) {
@@ -258,15 +262,13 @@ export function tacticsApp() {
     async analyzeGame(pgn, username) {
       const userLower = username.toLowerCase();
       
+      // Parse headers
       const headers = {};
       for (const match of pgn.matchAll(/\[(\w+)\s+"([^"]*)"\]/g)) {
         headers[match[1]] = match[2];
       }
       
-      console.log('='.repeat(80));
-      console.log(`Analyzing: ${headers.White} vs ${headers.Black}`);
-      console.log('='.repeat(80));
-      
+      // Find user's color
       const white = (headers.White || '').toLowerCase();
       const black = (headers.Black || '').toLowerCase();
       let userColor = null;
@@ -274,8 +276,7 @@ export function tacticsApp() {
       else if (black.includes(userLower)) userColor = 'b';
       else return [];
       
-      console.log(`User plays: ${userColor === 'w' ? 'White' : 'Black'}`);
-      
+      // Extract moves text
       const movesMatch = pgn.match(/\n\n([\s\S]+)$/);
       if (!movesMatch) return [];
       
@@ -286,6 +287,7 @@ export function tacticsApp() {
         .replace(/\d+\.\.\./g, '')
         .trim();
       
+      // Parse moves
       const moves = [];
       for (const m of movesText.matchAll(/(\d+)\.\s*(\S+)(?:\s+(\S+))?/g)) {
         const num = parseInt(m[1]);
@@ -293,73 +295,72 @@ export function tacticsApp() {
         if (m[3] && !this.isResult(m[3])) moves.push({ num, san: m[3], color: 'b' });
       }
       
+      // Replay and analyze
       const tactics = [];
-      const game = new window.Chess.Game();
-      const DEPTH = 15; // Match Flutter's depth
-      
-      console.log(`Total moves: ${moves.length}, analyzing at depth ${DEPTH}`);
-      console.log('');
+      const game = new Chess.Game();
       
       for (const move of moves) {
         const isUserMove = move.color === userColor;
         
         if (!isUserMove) {
           const uci = this.findUci(game, move.san);
-          if (uci) game.moveUci(uci);
+          if (uci) {
+            game.moveUci(uci);
+          } else {
+            console.warn(`Failed to parse opponent move: ${move.san} in game ${gameId}`);
+            break; // Stop analyzing this game if we lose track of state
+          }
           continue;
         }
         
+        // User's move - analyze before and after
         const fenBefore = game.getFen();
-        const isWhiteTurnBefore = fenBefore.split(' ')[1] === 'w';
-        const evalBefore = await this.stockfish.analyze(fenBefore, DEPTH);
+        const evalBefore = await this.stockfish.analyze(fenBefore, 15);
         
         const uci = this.findUci(game, move.san);
-        if (!uci) continue;
+        if (!uci) {
+          console.warn(`Failed to parse user move: ${move.san} in game ${gameId}`);
+          break; // Stop analyzing this game
+        }
         game.moveUci(uci);
         
         const fenAfter = game.getFen();
-        const isWhiteTurnAfter = fenAfter.split(' ')[1] === 'w';
-        const evalAfter = await this.stockfish.analyze(fenAfter, DEPTH);
+        const evalAfter = await this.stockfish.analyze(fenAfter, 15);
         
-        // Raw evals from engine (in pawns, need to multiply by 100 for centipawns)
-        const rawCpBefore = (evalBefore.eval || 0) * 100;
-        const rawCpAfter = (evalAfter.eval || 0) * 100;
+        // Calculate win chance delta
+        let cpBefore = (evalBefore.eval || 0) * 100;
+        let cpAfter = (evalAfter.eval || 0) * 100;
         
-        // Normalize to White's perspective first (like Flutter's StockfishService does)
-        let cpBeforeWhitePerspective = isWhiteTurnBefore ? rawCpBefore : -rawCpBefore;
-        let cpAfterWhitePerspective = isWhiteTurnAfter ? rawCpAfter : -rawCpAfter;
+        // CRITICAL: cpAfter is from opponent's perspective (their turn after user moved)
+        // Negate it to get user's perspective, matching how Flutter normalizes in StockfishService
+        cpAfter = -cpAfter;
         
-        // Now normalize to USER's perspective
-        let cpBefore = cpBeforeWhitePerspective;
-        let cpAfter = cpAfterWhitePerspective;
         if (userColor === 'b') {
-          cpBefore = -cpBeforeWhitePerspective;
-          cpAfter = -cpAfterWhitePerspective;
+          cpBefore = -cpBefore;
+          cpAfter = -cpAfter;
         }
+        
+        // Skip if position is already hopeless (worse than -4 pawns even with best play)
+        if (cpBefore < -400) continue;
+        
+        // Skip if position is too winning (better than +5) AND still comfortable after the mistake
+        // But keep it if the mistake dropped us significantly (e.g., +10 to +1)
+        if (cpBefore > 500 && cpAfter > 100) continue;
         
         const wcBefore = calculateWinChance(cpBefore);
         const wcAfter = calculateWinChance(cpAfter);
         const delta = wcBefore - wcAfter;
         
-        const isBlunder = delta > 30;
-        const isMistake = delta > 20 && delta <= 30;
-        const status = isBlunder ? '⚠️ BLUNDER' : (isMistake ? '⚠ MISTAKE' : '✓ OK');
-        
-        // Log like Flutter does
-        console.log(`--- Move ${move.num}. ${move.san} (${move.color === 'w' ? 'White' : 'Black'}) ---`);
-        console.log(`FEN: ${fenBefore}`);
-        console.log(`Raw eval before: ${rawCpBefore.toFixed(0)}cp, after: ${rawCpAfter.toFixed(0)}cp`);
-        console.log(`Eval Before: ${cpBefore.toFixed(0)}cp (${wcBefore.toFixed(1)}%)`);
-        console.log(`Eval After:  ${cpAfter.toFixed(0)}cp (${wcAfter.toFixed(1)}%)`);
-        console.log(`Delta: ${delta.toFixed(1)}% | ${status}`);
-        console.log(`PV: ${(evalBefore.pv || []).slice(0, 3).join(' ')}`);
-        console.log('');
-        
         if (delta > 20) {
+          const isBlunder = delta > 30;
+          
+          // Store UCI line directly - convert to SAN only when displaying
+          const uciLine = evalBefore.pv?.slice(0, 3) || [];
+          
           tactics.push({
             fen: fenBefore,
             user_move: move.san,
-            correct_line: evalBefore.pv?.slice(0, 3) || [],
+            correct_line: uciLine,
             mistake_type: isBlunder ? '??' : '?',
             mistake_analysis: `${isBlunder ? 'Blunder' : 'Mistake'}: ${wcBefore.toFixed(0)}% → ${wcAfter.toFixed(0)}%`,
             position_context: `Move ${move.num}, ${userColor === 'w' ? 'White' : 'Black'} to play`,
@@ -370,10 +371,6 @@ export function tacticsApp() {
         }
       }
       
-      console.log('='.repeat(80));
-      console.log(`Analysis complete. Found ${tactics.length} tactics.`);
-      console.log('='.repeat(80));
-      
       return tactics;
     },
     
@@ -381,8 +378,35 @@ export function tacticsApp() {
       return ['1-0', '0-1', '1/2-1/2', '*'].includes(s);
     },
     
+    // Convert a line of UCI moves to SAN for display (used during analysis)
+    convertUciLineToSan(fen, uciMoves) {
+      if (!fen || !uciMoves?.length) return uciMoves || [];
+      
+      try {
+        const game = new Chess.Game(fen);
+        const sanMoves = [];
+        
+        for (const uci of uciMoves) {
+          const san = this.uciToSan(game, uci);
+          if (san) {
+            sanMoves.push(san);
+            game.moveUci(uci);
+          } else {
+            // Fallback to UCI if conversion fails
+            sanMoves.push(uci);
+          }
+        }
+        return sanMoves;
+      } catch (e) {
+        console.warn('Failed to convert UCI to SAN:', e);
+        return uciMoves;
+      }
+    },
+    
     findUci(game, san) {
-      const clean = san.replace(/[+#!?=]/g, '');
+      // Parse the SAN move properly
+      const parsed = this.parseSan(san);
+      if (!parsed) return null;
       
       for (let sq = 0; sq < 64; sq++) {
         const piece = game.board[sq];
@@ -390,7 +414,7 @@ export function tacticsApp() {
         
         const moves = game.getLegalMoves(sq);
         for (const m of moves) {
-          if (this.matchesSan(game, m, clean)) {
+          if (this.matchesParsedSan(game, m, parsed)) {
             return m.fromAlg + m.toAlg + (m.promotion || '');
           }
         }
@@ -398,26 +422,99 @@ export function tacticsApp() {
       return null;
     },
     
-    matchesSan(game, move, san) {
+    // Parse SAN into structured components
+    parseSan(san) {
+      // Handle castling
+      if (san === 'O-O' || san === '0-0') {
+        return { castling: 'K' };
+      }
+      if (san === 'O-O-O' || san === '0-0-0') {
+        return { castling: 'Q' };
+      }
+      
+      // Strip check/checkmate symbols
+      let s = san.replace(/[+#!?]/g, '');
+      
+      // Extract promotion piece (e.g., e8=Q or e8Q)
+      let promotion = null;
+      const promoMatch = s.match(/[=]?([QRBN])$/i);
+      if (promoMatch) {
+        promotion = promoMatch[1].toLowerCase();
+        s = s.replace(/[=]?[QRBN]$/i, '');
+      }
+      
+      // Now s should be like: e4, exd5, Nf3, Nbd2, R1e1, Qxe4, etc.
+      
+      // Extract destination square (always last 2 chars now)
+      if (s.length < 2) return null;
+      const dest = s.slice(-2);
+      if (!/^[a-h][1-8]$/.test(dest)) return null;
+      s = s.slice(0, -2);
+      
+      // Check for capture marker
+      const isCapture = s.includes('x');
+      s = s.replace('x', '');
+      
+      // Determine piece type
+      let pieceType = 'p'; // default pawn
+      if (s.length > 0 && /^[KQRBN]$/.test(s[0])) {
+        pieceType = s[0].toLowerCase();
+        s = s.slice(1);
+      }
+      
+      // What remains is disambiguation (file, rank, or both)
+      let disambigFile = null;
+      let disambigRank = null;
+      if (s.length === 1) {
+        if (/^[a-h]$/.test(s)) {
+          disambigFile = s;
+        } else if (/^[1-8]$/.test(s)) {
+          disambigRank = s;
+        }
+      } else if (s.length === 2) {
+        disambigFile = s[0];
+        disambigRank = s[1];
+      }
+      
+      // For pawn captures, the character before 'x' in original SAN is the file
+      if (pieceType === 'p' && isCapture) {
+        const cleanSan = san.replace(/[+#!?]/g, '').replace(/[=]?[QRBN]$/i, '');
+        const xIndex = cleanSan.indexOf('x');
+        if (xIndex > 0) {
+          disambigFile = cleanSan[xIndex - 1];
+        }
+      }
+      
+      return { pieceType, dest, promotion, isCapture, disambigFile, disambigRank };
+    },
+    
+    matchesParsedSan(game, move, parsed) {
       const piece = game.board[move.from];
       if (!piece) return false;
       
-      if (san === 'O-O' || san === 'O-O-O') {
-        return move.castling === (san === 'O-O' ? (piece.color === 'w' ? 'K' : 'k') : (piece.color === 'w' ? 'Q' : 'q'));
+      // Handle castling
+      if (parsed.castling) {
+        if (!move.castling) return false;
+        const expected = piece.color === 'w' ? parsed.castling : parsed.castling.toLowerCase();
+        return move.castling === expected;
       }
       
-      if (piece.type === 'p') {
-        if (san.includes('x')) {
-          return san[0] === move.fromAlg[0] && san.slice(-2) === move.toAlg;
-        }
-        return san === move.toAlg || san.startsWith(move.toAlg);
+      // Check piece type
+      if (piece.type !== parsed.pieceType) return false;
+      
+      // Check destination
+      if (move.toAlg !== parsed.dest) return false;
+      
+      // Check promotion
+      if (parsed.promotion) {
+        if (move.promotion !== parsed.promotion) return false;
       }
       
-      const pieceChar = piece.type.toUpperCase();
-      if (!san.startsWith(pieceChar)) return false;
+      // Check disambiguation
+      if (parsed.disambigFile && move.fromAlg[0] !== parsed.disambigFile) return false;
+      if (parsed.disambigRank && move.fromAlg[1] !== parsed.disambigRank) return false;
       
-      const dest = san.slice(-2);
-      return dest === move.toAlg;
+      return true;
     },
     
     getEnabledPerfTypes() {
@@ -443,14 +540,24 @@ export function tacticsApp() {
     },
     
     // ========== TRAINING UI ==========
-    async initBoard() {
+    initBoard() {
       if (!this.board) {
-        this.board = new ChessBoard('board', {
+        this.board = new ChessBoard.Board('board', {
           interactive: true,
           onMove: (uci) => this.handleMove(uci)
         });
       }
-      await this.board.mount();
+    },
+
+    async ensureBoardReady() {
+      const el = document.getElementById('board');
+      if (!el) return;
+
+      await this.waitForVisible(el);
+      this.initBoard();
+      if (this.board?.redraw) {
+        this.board.redraw();
+      }
     },
     
     loadCurrentTactic() {
@@ -459,7 +566,7 @@ export function tacticsApp() {
       
       this.solved = false;
       this.solutionShown = false;
-      this.setMessage('', '');
+      this.setMessage('Find the best move', '');
       
       const isBlack = t.position_context?.includes('Black');
       this.board.setFlipped(isBlack);
@@ -470,60 +577,35 @@ export function tacticsApp() {
     handleMove(uci) {
       if (this.solved) return;
       
-      const correct = this.currentTactic?.correct_line?.[0]?.toLowerCase() || '';
-      const played = uci.toLowerCase();
+      // correct_line stores UCI - compare directly
+      const correctUci = this.currentTactic?.correct_line?.[0]?.toLowerCase() || '';
+      const playedUci = uci.toLowerCase();
       
-      if (played === correct || correct.startsWith(played) || played.startsWith(correct)) {
+      // Simple UCI comparison
+      const isCorrect = playedUci === correctUci;
+      
+      if (isCorrect) {
         this.solved = true;
-        this.setMessage('', 'correct');
+        this.setMessage('Correct!', 'correct');
         this.board.setInteractive(false);
-        
-        // Auto-next after delay
-        if (this.autoNext) {
-          setTimeout(() => this.nextTactic(), 1200);
-        }
       } else {
         this.setMessage('Try again', 'incorrect');
         setTimeout(() => {
           this.board.setPosition(this.currentTactic.fen);
-          this.setMessage('', '');
+          this.setMessage('Find the best move', '');
         }, 800);
       }
     },
     
     showSolution() {
       this.solutionShown = true;
-      // Keep board interactive - user should still play the move
-    },
-    
-    // Convert UCI line to SAN for display
-    getSolutionSan() {
-      const t = this.currentTactic;
-      if (!t || !t.correct_line?.length) return '?';
-      return this.convertUciLineToSan(t.fen, t.correct_line).join(' ');
-    },
-    
-    convertUciLineToSan(fen, uciMoves) {
-      if (!fen || !uciMoves?.length) return uciMoves || [];
+      const uciLine = this.currentTactic?.correct_line || [];
       
-      try {
-        const game = new window.Chess.Game(fen);
-        const sanMoves = [];
-        
-        for (const uci of uciMoves) {
-          const san = this.uciToSan(game, uci);
-          if (san) {
-            sanMoves.push(san);
-            game.moveUci(uci);
-          } else {
-            sanMoves.push(uci);
-          }
-        }
-        return sanMoves;
-      } catch (e) {
-        console.warn('Failed to convert UCI to SAN:', e);
-        return uciMoves;
-      }
+      // Convert UCI to SAN for display
+      const sanLine = this.convertUciLineToSan(this.currentTactic?.fen, uciLine);
+      
+      this.setMessage(`Solution: ${sanLine.join(' ') || '?'}`, '');
+      // Keep board interactive - user must play the move
     },
     
     uciToSan(game, uci) {
@@ -533,6 +615,7 @@ export function tacticsApp() {
       const to = uci.substring(2, 4);
       const promo = uci.length > 4 ? uci[4] : null;
       
+      // Use the game's algebraicToIndex method for correct board indexing
       const fromSq = game.algebraicToIndex(from);
       const toSq = game.algebraicToIndex(to);
       const piece = game.board[fromSq];
@@ -548,11 +631,12 @@ export function tacticsApp() {
       }
       
       const captured = game.board[toSq];
-      const isCapture = !!captured || (piece.type === 'p' && from[0] !== to[0]);
+      const isCapture = !!captured || (piece.type === 'p' && from[0] !== to[0]); // en passant
       
       let san = '';
       
       if (piece.type === 'p') {
+        // Pawn move
         if (isCapture) {
           san = from[0] + 'x' + to;
         } else {
@@ -562,9 +646,13 @@ export function tacticsApp() {
           san += '=' + promo.toUpperCase();
         }
       } else {
+        // Piece move
         san = piece.type.toUpperCase();
+        
+        // Check for ambiguity
         const disambig = this.getDisambiguation(game, piece, fromSq, toSq);
         san += disambig;
+        
         if (isCapture) san += 'x';
         san += to;
       }
@@ -573,6 +661,7 @@ export function tacticsApp() {
     },
     
     getDisambiguation(game, piece, fromSq, toSq) {
+      // Find other pieces of same type that can move to same square
       const others = [];
       for (let sq = 0; sq < 64; sq++) {
         if (sq === fromSq) continue;
@@ -587,6 +676,7 @@ export function tacticsApp() {
       
       if (others.length === 0) return '';
       
+      // Use game's indexToAlgebraic to get correct file/rank
       const fromAlg = game.indexToAlgebraic(fromSq);
       const fromFile = fromAlg[0];
       const fromRank = fromAlg[1];
@@ -594,16 +684,9 @@ export function tacticsApp() {
       const sameFile = others.some(sq => game.indexToAlgebraic(sq)[0] === fromFile);
       const sameRank = others.some(sq => game.indexToAlgebraic(sq)[1] === fromRank);
       
-      if (!sameFile) return fromFile;
-      if (!sameRank) return fromRank;
-      return fromFile + fromRank;
-    },
-    
-    prevTactic() {
-      if (this.currentIndex > 0) {
-        this.currentIndex--;
-        this.loadCurrentTactic();
-      }
+      if (!sameFile) return fromFile; // file letter
+      if (!sameRank) return fromRank; // rank number
+      return fromFile + fromRank; // both
     },
     
     nextTactic() {
@@ -615,29 +698,10 @@ export function tacticsApp() {
       }
     },
     
-    openAnalysis() {
-      const url = this.currentTactic?.game_url;
-      if (url) {
-        // For Chess.com links, we can analyze on Lichess via import
-        if (url.includes('chess.com')) {
-          // Open on Lichess analysis with FEN
-          const fen = encodeURIComponent(this.currentTactic.fen);
-          window.open(`https://lichess.org/analysis/${fen.replace(/%20/g, '_')}`, '_blank');
-        } else {
-          // Lichess game link - just open it
-          window.open(url, '_blank');
-        }
-      }
-    },
-    
     backToSetup() {
       this.training = false;
       this.tactics = [];
       this.currentIndex = 0;
-    },
-    
-    signOut() {
-      this.user = null;
     },
     
     setStatus(text, type = '') {
@@ -648,7 +712,33 @@ export function tacticsApp() {
     setMessage(text, type = '') {
       this.message = text;
       this.messageClass = type;
+    },
+
+    waitForVisible(el, timeout = 3000) {
+      return new Promise((resolve) => {
+        const start = performance.now();
+        const check = () => {
+          const style = getComputedStyle(el);
+          const visible = el.isConnected &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            el.offsetWidth > 10 &&
+            el.offsetHeight > 10;
+
+          if (visible) {
+            resolve();
+            return;
+          }
+
+          if (performance.now() - start > timeout) {
+            resolve(); // best effort fallback
+            return;
+          }
+
+          requestAnimationFrame(check);
+        };
+        check();
+      });
     }
   };
 }
-
