@@ -96,6 +96,7 @@ export class Board {
     this.cg.set({
       fen: parts[0],
       turnColor: turn,
+      lastMove: undefined,  // Clear last move highlighting for fresh position
       movable: {
         color: this.options.interactive ? turn : undefined,
         dests: this.options.interactive ? this.getDestinations() : new Map()
@@ -132,7 +133,7 @@ export class Board {
   }
 
   isInCheck() {
-    return false;
+    return this.game ? this.game.inCheck() : false;
   }
 
   handleMove(orig, dest) {

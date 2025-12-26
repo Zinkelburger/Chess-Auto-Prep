@@ -12,15 +12,17 @@ export function tacticsApp() {
     training: false,
     settingsOpen: false,
     loading: false,
+    hasStarted: false,  // true only after Load Tactics clicked
     status: '',
     statusType: '',
-    message: 'Find the best move',
+    message: '',
     messageClass: '',
     
     // Form State
     lichessUser: localStorage.getItem('lichessUser') || '',
     chesscomUser: localStorage.getItem('chesscomUser') || '',
     numGames: parseInt(localStorage.getItem('numGames')) || 20,
+    analysisDepth: parseInt(localStorage.getItem('analysisDepth')) || 15,
     tacticsFound: 0,
     
     // Time Controls
@@ -37,7 +39,7 @@ export function tacticsApp() {
     currentIndex: 0,
     solved: false,
     solutionShown: false,
-    autoNext: localStorage.getItem('autoNext') === 'true',
+    autoNext: localStorage.getItem('autoNext') !== 'false',  // default true
     board: null,
     
     // Engine
@@ -90,11 +92,13 @@ export function tacticsApp() {
       if (lichess) localStorage.setItem('lichessUser', lichess);
       if (chesscom) localStorage.setItem('chesscomUser', chesscom);
       localStorage.setItem('numGames', this.numGames.toString());
+      localStorage.setItem('analysisDepth', this.analysisDepth.toString());
       
       this.settingsOpen = false;
       this.loading = true;
       this.tactics = [];
       this.tacticsFound = 0;
+      this.gamesAnalyzed = 0;
       
       try {
         this.setStatus('Loading engine...');
@@ -113,13 +117,20 @@ export function tacticsApp() {
           await this.processChesscomGames(chesscom, enabledTypes);
         }
         
-        if (this.tactics.length === 0) {
-          this.setStatus('No mistakes found in your recent games!', 'success');
+        if (this.gamesAnalyzed === 0) {
+          this.setStatus('No games found', 'error');
           this.loading = false;
           return;
         }
         
-        this.tactics = this.shuffle(this.tactics);
+        if (this.tactics.length === 0) {
+          this.setStatus('No mistakes found', '');
+          this.loading = false;
+          return;
+        }
+        
+        // Keep tactics in chronological order (game by game, move by move)
+        // Previously shuffled: this.tactics = this.shuffle(this.tactics);
         
         this.currentIndex = 0;
         this.training = true;
@@ -148,9 +159,9 @@ export function tacticsApp() {
       if (enabledTypes.includes('classical')) perfTypes.push('classical');
       if (enabledTypes.includes('correspondence')) perfTypes.push('correspondence');
       
-      const since = Date.now() - (90 * 24 * 60 * 60 * 1000);
+      // Use only 'max' parameter to get last N games regardless of date
+      // (removed 'since' filter which excluded games older than 90 days)
       const params = new URLSearchParams({
-        since: since.toString(),
         perfType: perfTypes.join(','),
         moves: 'true',
         max: this.numGames.toString()
@@ -174,6 +185,7 @@ export function tacticsApp() {
           const newTactics = await this.analyzeGame(games[i], username);
           this.tactics.push(...newTactics);
           this.tacticsFound = this.tactics.length;
+          this.gamesAnalyzed++;
         }
       } catch (e) {
         console.warn('Lichess fetch error:', e);
@@ -216,6 +228,7 @@ export function tacticsApp() {
         const newTactics = await this.analyzeGame(games[i], username);
         this.tactics.push(...newTactics);
         this.tacticsFound = this.tactics.length;
+        this.gamesAnalyzed++;
       }
     },
     
@@ -295,31 +308,40 @@ export function tacticsApp() {
       
       const tactics = [];
       const game = new window.Chess.Game();
-      const DEPTH = 15; // Match Flutter's depth
+      const depth = Math.min(this.analysisDepth || 15, 25); // User-configurable, max 25
       
-      console.log(`Total moves: ${moves.length}, analyzing at depth ${DEPTH}`);
+      console.log(`Total moves: ${moves.length}, analyzing at depth ${depth}`);
       console.log('');
       
       for (const move of moves) {
         const isUserMove = move.color === userColor;
         
         if (!isUserMove) {
-          const uci = this.findUci(game, move.san);
-          if (uci) game.moveUci(uci);
+          // Opponent's move - just play it using SAN directly
+          const result = game.moveSan(move.san);
+          if (!result) {
+            console.warn(`Failed to play opponent move: ${move.san}`);
+          }
           continue;
         }
         
         const fenBefore = game.getFen();
         const isWhiteTurnBefore = fenBefore.split(' ')[1] === 'w';
-        const evalBefore = await this.stockfish.analyze(fenBefore, DEPTH);
+        const evalBefore = await this.stockfish.analyze(fenBefore, depth);
         
-        const uci = this.findUci(game, move.san);
-        if (!uci) continue;
-        game.moveUci(uci);
+        // Play the user's move using SAN directly - library handles parsing
+        const moveResult = game.moveSan(move.san);
+        if (!moveResult) {
+          console.warn(`Failed to play user move: ${move.san}`);
+          continue;
+        }
+        
+        // moveResult contains: { from, to, san, lan (UCI), before, after, ... }
+        const uci = moveResult.lan || (moveResult.from + moveResult.to + (moveResult.promotion || ''));
         
         const fenAfter = game.getFen();
         const isWhiteTurnAfter = fenAfter.split(' ')[1] === 'w';
-        const evalAfter = await this.stockfish.analyze(fenAfter, DEPTH);
+        const evalAfter = await this.stockfish.analyze(fenAfter, depth);
         
         // Raw evals from engine (in pawns, need to multiply by 100 for centipawns)
         const rawCpBefore = (evalBefore.eval || 0) * 100;
@@ -381,45 +403,6 @@ export function tacticsApp() {
       return ['1-0', '0-1', '1/2-1/2', '*'].includes(s);
     },
     
-    findUci(game, san) {
-      const clean = san.replace(/[+#!?=]/g, '');
-      
-      for (let sq = 0; sq < 64; sq++) {
-        const piece = game.board[sq];
-        if (!piece || piece.color !== game.turn) continue;
-        
-        const moves = game.getLegalMoves(sq);
-        for (const m of moves) {
-          if (this.matchesSan(game, m, clean)) {
-            return m.fromAlg + m.toAlg + (m.promotion || '');
-          }
-        }
-      }
-      return null;
-    },
-    
-    matchesSan(game, move, san) {
-      const piece = game.board[move.from];
-      if (!piece) return false;
-      
-      if (san === 'O-O' || san === 'O-O-O') {
-        return move.castling === (san === 'O-O' ? (piece.color === 'w' ? 'K' : 'k') : (piece.color === 'w' ? 'Q' : 'q'));
-      }
-      
-      if (piece.type === 'p') {
-        if (san.includes('x')) {
-          return san[0] === move.fromAlg[0] && san.slice(-2) === move.toAlg;
-        }
-        return san === move.toAlg || san.startsWith(move.toAlg);
-      }
-      
-      const pieceChar = piece.type.toUpperCase();
-      if (!san.startsWith(pieceChar)) return false;
-      
-      const dest = san.slice(-2);
-      return dest === move.toAlg;
-    },
-    
     getEnabledPerfTypes() {
       const types = [];
       this.timeControls.forEach(tc => {
@@ -475,7 +458,11 @@ export function tacticsApp() {
       
       if (played === correct || correct.startsWith(played) || played.startsWith(correct)) {
         this.solved = true;
-        this.setMessage('', 'correct');
+        
+        // Get the SAN notation for the correct move
+        const correctSan = this.getFirstMoveSan();
+        this.setMessage(`${correctSan} is correct`, 'correct');
+        
         this.board.setInteractive(false);
         
         // Auto-next after delay
@@ -488,6 +475,20 @@ export function tacticsApp() {
           this.board.setPosition(this.currentTactic.fen);
           this.setMessage('', '');
         }, 800);
+      }
+    },
+    
+    // Get SAN of the first correct move
+    getFirstMoveSan() {
+      const t = this.currentTactic;
+      if (!t || !t.correct_line?.length) return '?';
+      
+      try {
+        const game = new window.Chess.Game(t.fen);
+        const san = game.getSan(t.correct_line[0]);
+        return san || t.correct_line[0];
+      } catch (e) {
+        return t.correct_line[0];
       }
     },
     
@@ -527,76 +528,12 @@ export function tacticsApp() {
     },
     
     uciToSan(game, uci) {
-      if (!uci || uci.length < 4) return null;
-      
-      const from = uci.substring(0, 2);
-      const to = uci.substring(2, 4);
-      const promo = uci.length > 4 ? uci[4] : null;
-      
-      const fromSq = game.algebraicToIndex(from);
-      const toSq = game.algebraicToIndex(to);
-      const piece = game.board[fromSq];
-      
-      if (!piece) return null;
-      
-      // Castling
-      if (piece.type === 'k') {
-        if (from === 'e1' && to === 'g1') return 'O-O';
-        if (from === 'e1' && to === 'c1') return 'O-O-O';
-        if (from === 'e8' && to === 'g8') return 'O-O';
-        if (from === 'e8' && to === 'c8') return 'O-O-O';
+      // Use library function - handles checks/mates/castling/disambiguation correctly
+      if (game.getSan) {
+        return game.getSan(uci);
       }
-      
-      const captured = game.board[toSq];
-      const isCapture = !!captured || (piece.type === 'p' && from[0] !== to[0]);
-      
-      let san = '';
-      
-      if (piece.type === 'p') {
-        if (isCapture) {
-          san = from[0] + 'x' + to;
-        } else {
-          san = to;
-        }
-        if (promo) {
-          san += '=' + promo.toUpperCase();
-        }
-      } else {
-        san = piece.type.toUpperCase();
-        const disambig = this.getDisambiguation(game, piece, fromSq, toSq);
-        san += disambig;
-        if (isCapture) san += 'x';
-        san += to;
-      }
-      
-      return san;
-    },
-    
-    getDisambiguation(game, piece, fromSq, toSq) {
-      const others = [];
-      for (let sq = 0; sq < 64; sq++) {
-        if (sq === fromSq) continue;
-        const p = game.board[sq];
-        if (!p || p.type !== piece.type || p.color !== piece.color) continue;
-        
-        const moves = game.getLegalMoves(sq);
-        if (moves.some(m => m.to === toSq)) {
-          others.push(sq);
-        }
-      }
-      
-      if (others.length === 0) return '';
-      
-      const fromAlg = game.indexToAlgebraic(fromSq);
-      const fromFile = fromAlg[0];
-      const fromRank = fromAlg[1];
-      
-      const sameFile = others.some(sq => game.indexToAlgebraic(sq)[0] === fromFile);
-      const sameRank = others.some(sq => game.indexToAlgebraic(sq)[1] === fromRank);
-      
-      if (!sameFile) return fromFile;
-      if (!sameRank) return fromRank;
-      return fromFile + fromRank;
+      // Fallback to raw UCI if getSan not available
+      return uci;
     },
     
     prevTactic() {
@@ -616,17 +553,14 @@ export function tacticsApp() {
     },
     
     openAnalysis() {
-      const url = this.currentTactic?.game_url;
-      if (url) {
-        // For Chess.com links, we can analyze on Lichess via import
-        if (url.includes('chess.com')) {
-          // Open on Lichess analysis with FEN
-          const fen = encodeURIComponent(this.currentTactic.fen);
-          window.open(`https://lichess.org/analysis/${fen.replace(/%20/g, '_')}`, '_blank');
-        } else {
-          // Lichess game link - just open it
-          window.open(url, '_blank');
-        }
+      const fen = this.currentTactic?.fen;
+      if (fen) {
+        // Format FEN for Lichess: replace spaces with underscores, keep slashes
+        const fenForUrl = fen.replace(/ /g, '_');
+        // Determine color from FEN (second field is turn)
+        const turn = fen.split(' ')[1];
+        const color = turn === 'w' ? 'white' : 'black';
+        window.open(`https://lichess.org/analysis?fen=${fenForUrl}&color=${color}`, '_blank');
       }
     },
     

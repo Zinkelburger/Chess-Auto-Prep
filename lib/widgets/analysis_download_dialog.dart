@@ -20,8 +20,8 @@ class AnalysisDownloadDialog extends StatefulWidget {
 class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   String _selectedPlatform = 'chesscom';
   late TextEditingController _usernameController;
-  late TextEditingController _monthsController;
-  int _monthsBack = 3;
+  late TextEditingController _maxGamesController;
+  int _maxGames = 100;
 
   @override
   void initState() {
@@ -29,7 +29,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     // Prefill with appropriate username based on default platform
     final initialUsername = widget.chesscomUsername ?? widget.lichessUsername ?? '';
     _usernameController = TextEditingController(text: initialUsername);
-    _monthsController = TextEditingController(text: _monthsBack.toString());
+    _maxGamesController = TextEditingController(text: _maxGames.toString());
 
     // Default to platform that has a username set
     if (widget.chesscomUsername != null && widget.chesscomUsername!.isNotEmpty) {
@@ -42,7 +42,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   @override
   void dispose() {
     _usernameController.dispose();
-    _monthsController.dispose();
+    _maxGamesController.dispose();
     super.dispose();
   }
 
@@ -60,18 +60,18 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     });
   }
 
-  void _onMonthsChanged(double value) {
+  void _onMaxGamesChanged(double value) {
     setState(() {
-      _monthsBack = value.round();
-      _monthsController.text = _monthsBack.toString();
+      _maxGames = value.round();
+      _maxGamesController.text = _maxGames.toString();
     });
   }
 
-  void _onMonthsTextChanged(String value) {
-    final months = int.tryParse(value);
-    if (months != null && months >= 1 && months <= 24) {
+  void _onMaxGamesTextChanged(String value) {
+    final games = int.tryParse(value);
+    if (games != null && games >= 1 && games <= 500) {
       setState(() {
-        _monthsBack = months;
+        _maxGames = games;
       });
     }
   }
@@ -89,22 +89,22 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
       return;
     }
 
-    // Validate months
-    if (_monthsBack < 1 || _monthsBack > 24) {
+    // Validate max games
+    if (_maxGames < 1 || _maxGames > 500) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a valid number of months (1-24)'),
+          content: Text('Please enter a valid number of games (1-500)'),
           duration: Duration(seconds: 2),
         ),
       );
       return;
     }
 
-    // Return platform, username, and months
+    // Return platform, username, and maxGames
     Navigator.of(context).pop({
       'platform': _selectedPlatform,
       'username': username,
-      'monthsBack': _monthsBack,
+      'maxGames': _maxGames,
     });
   }
 
@@ -119,7 +119,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Select platform, enter username, and choose date range:',
+              'Select platform, enter username, and choose how many games:',
               style: TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 16),
@@ -157,9 +157,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
 
             const SizedBox(height: 24),
 
-            // Date range selector
+            // Max games selector
             const Text(
-              'Date Range',
+              'Number of Games',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -171,16 +171,16 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Slider(
-                        value: _monthsBack.toDouble(),
+                        value: _maxGames.toDouble().clamp(1, 500),
                         min: 1,
-                        max: 24,
-                        divisions: 23,
-                        label: '$_monthsBack month${_monthsBack == 1 ? '' : 's'}',
-                        onChanged: _onMonthsChanged,
+                        max: 500,
+                        divisions: 499,
+                        label: '$_maxGames game${_maxGames == 1 ? '' : 's'}',
+                        onChanged: _onMaxGamesChanged,
                       ),
                       Center(
                         child: Text(
-                          'Last $_monthsBack month${_monthsBack == 1 ? '' : 's'}',
+                          'Last $_maxGames game${_maxGames == 1 ? '' : 's'}',
                           style: TextStyle(color: Colors.grey[700]),
                         ),
                       ),
@@ -191,24 +191,24 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 SizedBox(
                   width: 70,
                   child: TextField(
-                    controller: _monthsController,
+                    controller: _maxGamesController,
                     keyboardType: TextInputType.number,
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
                     ],
                     decoration: const InputDecoration(
-                      labelText: 'Months',
+                      labelText: 'Games',
                       border: OutlineInputBorder(),
                       contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     ),
-                    onChanged: _onMonthsTextChanged,
+                    onChanged: _onMaxGamesTextChanged,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              'Download games from the last 1-24 months',
+              'Download the last 1-500 games (excluding bullet)',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],

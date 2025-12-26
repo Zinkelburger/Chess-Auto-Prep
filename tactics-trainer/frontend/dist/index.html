@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-    <script type="module" crossorigin src="/assets/index-CsEUvQN0.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-_3Ybqsiu.css">
+    <script type="module" crossorigin src="/assets/index-BrAyhkRU.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DEE_f-Lh.css">
   </head>
   <body>
     <div id="app" x-data="tacticsApp()" x-init="init()">
@@ -29,22 +29,19 @@
             <label for="lichess-user">Lichess</label>
             <input type="text" id="lichess-user" 
                    x-model="lichessUser" 
-                   placeholder="username"
-                   @keypress.enter="loadTactics()">
+                   placeholder="username">
           </div>
           <div class="input-row">
             <label for="chesscom-user">Chess.com</label>
             <input type="text" id="chesscom-user" 
                    x-model="chesscomUser" 
-                   placeholder="username"
-                   @keypress.enter="loadTactics()">
+                   placeholder="username">
           </div>
           <div class="input-row">
             <label for="num-games">Games</label>
             <input type="number" id="num-games" 
                    x-model.number="numGames" 
-                   min="1" max="100"
-                   @keypress.enter="loadTactics()">
+                   min="1" max="100">
           </div>
         </div>
         
@@ -94,14 +91,11 @@
           </div>
         </div>
         
-        <div class="message" 
-             :class="messageClass"
-             x-show="message && !solved"
-             x-text="message"></div>
-        
-        <div class="solution-display" x-show="solutionShown || solved">
+        <div class="feedback-area">
+          <span x-show="message && !solved" x-text="message"></span>
           <span x-show="solved && !solutionShown">Correct</span>
           <span x-show="solutionShown" x-text="'Best: ' + getSolutionSan()"></span>
+          <span x-show="!message && !solved && !solutionShown">&nbsp;</span>
         </div>
         
         <div class="controls">
@@ -111,8 +105,7 @@
           <button class="btn-secondary" 
                   @click="showSolution()">Solution</button>
           <button class="btn-primary" 
-                  @click="nextTactic()"
-                  x-text="autoNext ? 'Next (auto)' : 'Next'">Next</button>
+                  @click="nextTactic()">Next</button>
         </div>
         
         <div class="controls-row">

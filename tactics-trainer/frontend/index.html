@@ -27,22 +27,19 @@
             <label for="lichess-user">Lichess</label>
             <input type="text" id="lichess-user" 
                    x-model="lichessUser" 
-                   placeholder="username"
-                   @keypress.enter="loadTactics()">
+                   placeholder="username">
           </div>
           <div class="input-row">
             <label for="chesscom-user">Chess.com</label>
             <input type="text" id="chesscom-user" 
                    x-model="chesscomUser" 
-                   placeholder="username"
-                   @keypress.enter="loadTactics()">
+                   placeholder="username">
           </div>
           <div class="input-row">
             <label for="num-games">Games</label>
             <input type="number" id="num-games" 
                    x-model.number="numGames" 
-                   min="1" max="100"
-                   @keypress.enter="loadTactics()">
+                   min="1" max="100">
           </div>
         </div>
         
@@ -92,14 +89,11 @@
           </div>
         </div>
         
-        <div class="message" 
-             :class="messageClass"
-             x-show="message && !solved"
-             x-text="message"></div>
-        
-        <div class="solution-display" x-show="solutionShown || solved">
+        <div class="feedback-area">
+          <span x-show="message && !solved" x-text="message"></span>
           <span x-show="solved && !solutionShown">Correct</span>
           <span x-show="solutionShown" x-text="'Best: ' + getSolutionSan()"></span>
+          <span x-show="!message && !solved && !solutionShown">&nbsp;</span>
         </div>
         
         <div class="controls">
@@ -109,8 +103,7 @@
           <button class="btn-secondary" 
                   @click="showSolution()">Solution</button>
           <button class="btn-primary" 
-                  @click="nextTactic()"
-                  x-text="autoNext ? 'Next (auto)' : 'Next'">Next</button>
+                  @click="nextTactic()">Next</button>
         </div>
         
         <div class="controls-row">
@@ -145,14 +138,25 @@
             </button>
           </div>
           <div class="modal-body">
-            <div class="setting-label">Time Controls</div>
-            <div class="chip-grid">
-              <template x-for="tc in timeControls" :key="tc.id">
-                <label class="chip" :class="{ 'active': tc.enabled }">
-                  <input type="checkbox" x-model="tc.enabled">
-                  <span x-text="tc.name"></span>
-                </label>
-              </template>
+            <div class="setting-group">
+              <div class="setting-label">Analysis Depth</div>
+              <div class="input-row compact">
+                <input type="number" id="depth" 
+                       x-model.number="analysisDepth" 
+                       min="1" max="25"
+                       class="depth-input">
+              </div>
+            </div>
+            <div class="setting-group">
+              <div class="setting-label">Time Controls</div>
+              <div class="chip-grid">
+                <template x-for="tc in timeControls" :key="tc.id">
+                  <label class="chip" :class="{ 'active': tc.enabled }">
+                    <input type="checkbox" x-model="tc.enabled">
+                    <span x-text="tc.name"></span>
+                  </label>
+                </template>
+              </div>
             </div>
           </div>
         </div>
