@@ -3,9 +3,18 @@
  * Download games → Analyze locally → Train
  */
 
-// Win chance formula (from Lichess)
-function calculateWinChance(centipawns) {
-  return 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * centipawns)) - 1);
+// Winning chances formula (from Lichess scalachess)
+// Returns [-1, +1] where -1 = losing, 0 = equal, +1 = winning
+// https://github.com/lichess-org/scalachess/blob/master/core/src/main/scala/eval.scala
+const MULTIPLIER = -0.00368208;
+function winningChances(centipawns) {
+  const capped = Math.max(-1000, Math.min(1000, centipawns));
+  return 2 / (1 + Math.exp(MULTIPLIER * capped)) - 1;
+}
+
+// Win percent for display purposes [0, 100]
+function winPercent(centipawns) {
+  return 50 + 50 * winningChances(centipawns);
 }
 
 function tacticsApp() {
@@ -347,22 +356,29 @@ function tacticsApp() {
         // But keep it if the mistake dropped us significantly (e.g., +10 to +1)
         if (cpBefore > 500 && cpAfter > 100) continue;
         
-        const wcBefore = calculateWinChance(cpBefore);
-        const wcAfter = calculateWinChance(cpAfter);
+        // Use Lichess [-1, +1] scale for classification
+        const wcBefore = winningChances(cpBefore);
+        const wcAfter = winningChances(cpAfter);
         const delta = wcBefore - wcAfter;
         
-        if (delta > 20) {
-          const isBlunder = delta > 30;
+        // Lichess thresholds (from lila/modules/tree/src/main/Advice.scala)
+        // Blunder: >= 0.3, Mistake: >= 0.2, Inaccuracy: >= 0.1
+        if (delta >= 0.2) {
+          const isBlunder = delta >= 0.3;
           
           // Store UCI line directly - convert to SAN only when displaying
           const uciLine = evalBefore.pv?.slice(0, 3) || [];
+          
+          // Use winPercent for display
+          const wpBefore = winPercent(cpBefore);
+          const wpAfter = winPercent(cpAfter);
           
           tactics.push({
             fen: fenBefore,
             user_move: move.san,
             correct_line: uciLine,
             mistake_type: isBlunder ? '??' : '?',
-            mistake_analysis: `${isBlunder ? 'Blunder' : 'Mistake'}: ${wcBefore.toFixed(0)}% → ${wcAfter.toFixed(0)}%`,
+            mistake_analysis: `${isBlunder ? 'Blunder' : 'Mistake'}: ${wpBefore.toFixed(0)}% → ${wpAfter.toFixed(0)}%`,
             position_context: `Move ${move.num}, ${userColor === 'w' ? 'White' : 'Black'} to play`,
             game_url: headers.Link || headers.Site || '',
             game_white: headers.White || '',
