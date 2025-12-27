@@ -481,6 +481,20 @@ class TacticsImportService {
         
         final fenAfter = chessGame.fen;
         
+        // Skip analysis if position after move is terminal (checkmate, stalemate, etc.)
+        // These positions can't be properly evaluated by Stockfish and would produce
+        // misleading delta values (e.g., user delivering checkmate flagged as "blunder")
+        if (chessGame.game_over) {
+          if (kDebugMode) {
+            print('Move $moveNumber. $san | Skipping: Game over after this move');
+          }
+          // Update move number and continue
+          if (chessGame.turn == chess.Color.WHITE) {
+            moveNumber++;
+          }
+          continue;
+        }
+        
         // 3. Analyze Position B (After Move)
         final evalB = await _stockfish.getEvaluation(fenAfter, depth: depth);
         
@@ -549,8 +563,8 @@ class TacticsImportService {
             // Format best move SAN for display
             final bestMoveSan = _formatUciToSan(fenBefore, bestMoveUci);
 
-            final chanceA = winChanceA.toStringAsFixed(1);
-            final chanceB = winChanceB.toStringAsFixed(1);
+            final chanceA = wpBefore.toStringAsFixed(1);
+            final chanceB = wpAfter.toStringAsFixed(1);
             final mistakeType = isBlunder ? '??' : '?';
             final label = isBlunder ? 'Blunder' : 'Mistake';
             final analysis = '$label. Win chance dropped from $chanceA% to $chanceB% (${delta.toStringAsFixed(1)}%). Best was $bestMoveSan.';

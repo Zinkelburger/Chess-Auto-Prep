@@ -334,6 +334,15 @@ function tacticsApp() {
         game.moveUci(uci);
         
         const fenAfter = game.getFen();
+        
+        // Skip analysis if position after move is terminal (checkmate, stalemate, etc.)
+        // These positions can't be properly evaluated by Stockfish and would produce
+        // misleading delta values (e.g., user delivering checkmate flagged as "blunder")
+        if (typeof game.isGameOver === 'function' && game.isGameOver()) {
+          console.log(`Move ${move.num}. ${move.san} | Skipping: Game over after this move`);
+          continue;
+        }
+        
         const evalAfter = await this.stockfish.analyze(fenAfter, 15);
         
         // Calculate win chance delta

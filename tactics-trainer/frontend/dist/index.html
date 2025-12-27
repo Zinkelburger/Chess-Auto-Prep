@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-    <script type="module" crossorigin src="/assets/index-BrAyhkRU.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DEE_f-Lh.css">
+    <script type="module" crossorigin src="/assets/index-SeKYqodT.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CwSaUikQ.css">
   </head>
   <body>
     <div id="app" x-data="tacticsApp()" x-init="init()">
@@ -140,14 +140,25 @@
             </button>
           </div>
           <div class="modal-body">
-            <div class="setting-label">Time Controls</div>
-            <div class="chip-grid">
-              <template x-for="tc in timeControls" :key="tc.id">
-                <label class="chip" :class="{ 'active': tc.enabled }">
-                  <input type="checkbox" x-model="tc.enabled">
-                  <span x-text="tc.name"></span>
-                </label>
-              </template>
+            <div class="setting-group">
+              <div class="setting-label">Analysis Depth</div>
+              <div class="input-row compact">
+                <input type="number" id="depth" 
+                       x-model.number="analysisDepth" 
+                       min="1" max="25"
+                       class="depth-input">
+              </div>
+            </div>
+            <div class="setting-group">
+              <div class="setting-label">Time Controls</div>
+              <div class="chip-grid">
+                <template x-for="tc in timeControls" :key="tc.id">
+                  <label class="chip" :class="{ 'active': tc.enabled }">
+                    <input type="checkbox" x-model="tc.enabled">
+                    <span x-text="tc.name"></span>
+                  </label>
+                </template>
+              </div>
             </div>
           </div>
         </div>

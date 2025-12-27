@@ -349,6 +349,16 @@ export function tacticsApp() {
         const uci = moveResult.lan || (moveResult.from + moveResult.to + (moveResult.promotion || ''));
         
         const fenAfter = game.getFen();
+        
+        // Skip analysis if position after move is terminal (checkmate, stalemate, etc.)
+        // These positions can't be properly evaluated by Stockfish and would produce
+        // misleading delta values (e.g., user delivering checkmate flagged as "blunder")
+        if (game.isGameOver()) {
+          console.log(`--- Move ${move.num}. ${move.san} | Skipping: Game over after this move ---`);
+          console.log('');
+          continue;
+        }
+        
         const isWhiteTurnAfter = fenAfter.split(' ')[1] === 'w';
         const evalAfter = await this.stockfish.analyze(fenAfter, depth);
         

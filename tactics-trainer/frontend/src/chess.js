@@ -151,6 +151,10 @@ class ChessGame {
   inCheck() {
     return this.chess.inCheck();
   }
+
+  isGameOver() {
+    return this.chess.isGameOver();
+  }
   
   getSan(uci) {
     const parsed = this.parseUci(uci);
