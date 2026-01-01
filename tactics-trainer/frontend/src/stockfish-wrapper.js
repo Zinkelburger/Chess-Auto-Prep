@@ -15,6 +15,20 @@ export class StockfishEngine {
     this.initPromise = null;
   }
 
+  getOptimalThreadCount() {
+    // Conservative approach for better compatibility
+    const cores = navigator.hardwareConcurrency || 1;
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+    if (isMobile) {
+      // Mobile: conservative to avoid battery drain
+      return Math.min(cores, 2);
+    } else {
+      // Desktop: more aggressive but still reasonable
+      return Math.min(cores, 4);
+    }
+  }
+
   async init() {
     if (this.ready) return;
     if (this.initPromise) return this.initPromise;
@@ -32,11 +46,16 @@ export class StockfishEngine {
 
         this.worker.onmessage = (e) => {
           const msg = e.data;
-          
+
           if (msg.includes('uciok')) {
             this.ready = true;
             this.worker.postMessage('setoption name Hash value 32');
-            this.worker.postMessage('setoption name Threads value 1');
+
+            // Use more threads for better performance, with safety checks
+            const maxThreads = this.getOptimalThreadCount();
+            console.log(`Setting Stockfish threads to: ${maxThreads}`);
+            this.worker.postMessage(`setoption name Threads value ${maxThreads}`);
+
             this.worker.postMessage('isready');
           }
           

@@ -1,4 +1,5 @@
-import { StockfishEngine } from './stockfish-wrapper';
+import { StockfishEngine } from './stockfish-wrapper.js';
+import { ModernStockfishEngine } from './stockfish-modern.js';
 import { Board as ChessBoard } from './chessboard';
 
 // Winning chances formula (from Lichess scalachess)
@@ -112,7 +113,18 @@ export function tacticsApp() {
       try {
         this.setStatus('Loading engine...');
         if (!this.stockfish) {
-          this.stockfish = new StockfishEngine();
+          // Check if modern Stockfish is supported
+          const support = ModernStockfishEngine.isSupported();
+          console.log('Engine support:', support);
+
+          if (!support.recommended) {
+            // Use legacy engine as last resort
+            console.warn('SharedArrayBuffer not available, using single-threaded engine');
+            this.stockfish = new StockfishEngine();
+          } else {
+            console.log('Using modern Stockfish with SharedArrayBuffer');
+            this.stockfish = new ModernStockfishEngine();
+          }
         }
         await this.stockfish.init();
         
