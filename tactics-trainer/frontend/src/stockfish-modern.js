@@ -29,26 +29,35 @@ export class ModernStockfishEngine {
 
         // Import the Stockfish 17.1 module directly (7MB version)
         const scriptUrl = '/stockfish-web/sf171-7.js';
+        console.log('Importing module from:', scriptUrl);
         const makeModule = await import(/* @vite-ignore */ scriptUrl);
+        console.log('Module imported successfully');
 
         // Initialize the module with SharedArrayBuffer
+        console.log('Initializing WASM module...');
         this.module = await makeModule.default({
           wasmMemory,
           locateFile: (file) => {
+            console.log('Locating file:', file);
             if (file.endsWith('.wasm')) {
-              return `/stockfish-web/${file}`;
+              const wasmPath = `/stockfish-web/${file}`;
+              console.log('WASM file path:', wasmPath);
+              return wasmPath;
             }
             return file;
           },
           mainScriptUrlOrBlob: scriptUrl
         });
+        console.log('WASM module initialized');
 
         // Set up message handling
         this.module.listen = (data) => {
+          console.log('Engine message:', data);
           this.handleEngineMessage(data);
         };
 
         // Send initial UCI command
+        console.log('Sending UCI command...');
         this.module.uci('uci');
 
         setTimeout(() => {
