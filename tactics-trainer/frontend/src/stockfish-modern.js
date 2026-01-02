@@ -8,7 +8,8 @@ export class ModernStockfishEngine {
     this.module = null;
     this.ready = false;
     this.analyzing = false;
-    this.resolve = null;
+    this.initResolve = null;  // Separate resolver for init
+    this.analyzeResolve = null;  // Separate resolver for analyze
     this.currentEval = null;
     this.bestMove = null;
     this.pv = [];
@@ -21,6 +22,9 @@ export class ModernStockfishEngine {
     if (this.initPromise) return this.initPromise;
 
     this.initPromise = new Promise(async (resolve, reject) => {
+      // Store the init resolver
+      this.initResolve = resolve;
+
       try {
         // Create shared WASM memory for multi-threading
         const wasmMemory = this.createSharedWasmMemory(1536, 32767);
@@ -128,7 +132,11 @@ export class ModernStockfishEngine {
     if (msg.includes('readyok') && !this.analyzing) {
       this.ready = true;
       console.log('Modern Stockfish ready for analysis');
-      this.resolve?.();
+      // Resolve the init promise
+      if (this.initResolve) {
+        this.initResolve();
+        this.initResolve = null;
+      }
     }
 
     if (msg.startsWith('info depth') && msg.includes(' pv ')) {
@@ -154,14 +162,14 @@ export class ModernStockfishEngine {
         this.bestMove = match[1];
       }
       this.analyzing = false;
-      if (this.resolve) {
-        this.resolve({
+      if (this.analyzeResolve) {
+        this.analyzeResolve({
           eval: this.currentEval,
           bestMove: this.bestMove,
           pv: [...this.pv],
           engine: this.engineName
         });
-        this.resolve = null;
+        this.analyzeResolve = null;
       }
     }
   }
@@ -188,7 +196,7 @@ export class ModernStockfishEngine {
     }
 
     return new Promise((resolve) => {
-      this.resolve = resolve;
+      this.analyzeResolve = resolve;
       this.analyzing = true;
       this.currentEval = 0;
       this.bestMove = null;
