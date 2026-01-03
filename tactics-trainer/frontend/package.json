@@ -9,14 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lichess-org/stockfish-web": "0.0.14",
     "alpinejs": "^3.14.5",
     "chess.js": "^1.4.0",
     "chessground": "^9.1.1",
-    "@lichess-org/stockfish-web": "0.0.14"
+    "stockfish": "^17.1.0"
   },
   "devDependencies": {
     "vite": "^5.4.10"
   }
 }
-
-

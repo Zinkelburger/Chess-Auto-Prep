@@ -1,5 +1,4 @@
-import { StockfishEngine } from './stockfish-wrapper.js';
-import { ModernStockfishEngine } from './stockfish-modern.js';
+import { ProperStockfishEngine } from './stockfish-proper.js';
 import { Board as ChessBoard } from './chessboard';
 
 // Winning chances formula (from Lichess scalachess)
@@ -32,7 +31,7 @@ export function tacticsApp() {
     lichessUser: localStorage.getItem('lichessUser') || '',
     chesscomUser: localStorage.getItem('chesscomUser') || '',
     numGames: parseInt(localStorage.getItem('numGames')) || 20,
-    analysisDepth: parseInt(localStorage.getItem('analysisDepth')) || 15,
+    analysisDepth: parseInt(localStorage.getItem('analysisDepth')) || 20,
     tacticsFound: 0,
     
     // Time Controls
@@ -113,18 +112,9 @@ export function tacticsApp() {
       try {
         this.setStatus('Loading engine...');
         if (!this.stockfish) {
-          // Check if modern Stockfish is supported
-          const support = ModernStockfishEngine.isSupported();
-          console.log('Engine support:', support);
-
-          if (!support.recommended) {
-            // Use legacy engine as last resort
-            console.warn('SharedArrayBuffer not available, using single-threaded engine');
-            this.stockfish = new StockfishEngine();
-          } else {
-            console.log('Using modern Stockfish with SharedArrayBuffer');
-            this.stockfish = new ModernStockfishEngine();
-          }
+          // Use proper Stockfish.js from Chess.com with working NNUE
+          console.log('Using Chess.com Stockfish.js with proper NNUE support');
+          this.stockfish = new ProperStockfishEngine();
         }
         await this.stockfish.init();
         
