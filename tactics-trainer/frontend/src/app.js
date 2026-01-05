@@ -53,7 +53,9 @@ export function tacticsApp() {
     
     // Engine
     stockfish: null,
-    
+    engineLoading: false,
+    engineReady: false,
+
     // Auth (placeholder)
     user: null,
     
@@ -80,6 +82,29 @@ export function tacticsApp() {
       }
       this.$watch('timeControls', () => this.saveTimeControls(), { deep: true });
       this.$watch('autoNext', (val) => localStorage.setItem('autoNext', val.toString()));
+
+      // Start loading engine immediately on page load (silently in background)
+      this.preloadEngine();
+    },
+
+    async preloadEngine() {
+      if (this.stockfish || this.engineLoading) return;
+
+      this.engineLoading = true;
+      console.log('Preloading engine in background...');
+
+      try {
+        this.stockfish = new ProperStockfishEngine();
+        await this.stockfish.init();
+        this.engineReady = true;
+        console.log('Engine preloaded and ready!');
+      } catch (error) {
+        console.error('Engine preload failed:', error);
+        // Don't show error to user - will retry when they click Load Tactics
+        this.stockfish = null;
+      } finally {
+        this.engineLoading = false;
+      }
     },
     
     saveTimeControls() {
@@ -110,13 +135,44 @@ export function tacticsApp() {
       this.gamesAnalyzed = 0;
       
       try {
-        this.setStatus('Loading engine...');
-        if (!this.stockfish) {
-          // Use proper Stockfish.js from Chess.com with working NNUE
-          console.log('Using Chess.com Stockfish.js with proper NNUE support');
-          this.stockfish = new ProperStockfishEngine();
+        // If engine isn't ready yet, show loading status and wait
+        if (!this.engineReady) {
+          this.setStatus('Loading engine...');
+
+          // If not already loading, start loading now
+          if (!this.stockfish && !this.engineLoading) {
+            this.engineLoading = true;
+            console.log('Engine not preloaded, loading now...');
+            try {
+              this.stockfish = new ProperStockfishEngine();
+              await this.stockfish.init();
+              this.engineReady = true;
+            } catch (error) {
+              console.error('Engine loading failed:', error);
+              this.setStatus('Engine loading failed', 'error');
+              this.loading = false;
+              this.engineLoading = false;
+              return;
+            }
+            this.engineLoading = false;
+          } else if (this.engineLoading) {
+            // Engine is loading in background, wait for it
+            console.log('Waiting for engine to finish loading...');
+            let attempts = 0;
+            while (this.engineLoading && attempts < 300) { // 30 second timeout
+              await new Promise(r => setTimeout(r, 100));
+              attempts++;
+            }
+            if (!this.engineReady) {
+              this.setStatus('Engine loading timeout', 'error');
+              this.loading = false;
+              return;
+            }
+          }
         }
-        await this.stockfish.init();
+
+        // Engine is ready, proceed with analysis
+        this.setStatus('Analyzing games...');
         
         const enabledTypes = this.getEnabledPerfTypes();
         
