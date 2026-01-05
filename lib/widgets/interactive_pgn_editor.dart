@@ -96,6 +96,8 @@ class InteractivePgnEditor extends StatefulWidget {
   final String? repertoireColor; // "White" or "Black"
   final List<String> moveHistory;
   final int currentMoveIndex;
+  /// Starting FEN if different from standard position (for custom positions)
+  final String? startingFen;
 
   const InteractivePgnEditor({
     super.key,
@@ -108,6 +110,7 @@ class InteractivePgnEditor extends StatefulWidget {
     this.repertoireColor,
     this.moveHistory = const [],
     this.currentMoveIndex = -1,
+    this.startingFen,
   });
 
   @override
@@ -212,8 +215,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   /// Called when user makes a move on the chess board
   void addMove(String san) {
-    // Validate move first - assumes currentPosition is valid
-    // We use a clone to check
+    // Validate move first - use current position FEN
     final tempGame = chess.Chess.fromFEN(_currentPosition.fen);
     if (!tempGame.move(san)) return;
 
@@ -257,7 +259,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   void _updatePosition() {
-    chess.Chess position = chess.Chess();
+    chess.Chess position = widget.startingFen != null
+        ? chess.Chess.fromFEN(widget.startingFen!)
+        : chess.Chess();
     for (final moveNode in _currentPath) {
       position.move(moveNode.san);
     }
@@ -329,7 +333,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   
   /// Update position without triggering external callbacks (used during sync)
   void _updatePositionWithoutCallback() {
-    chess.Chess position = chess.Chess();
+    chess.Chess position = widget.startingFen != null
+        ? chess.Chess.fromFEN(widget.startingFen!)
+        : chess.Chess();
     for (final moveNode in _currentPath) {
       position.move(moveNode.san);
     }
@@ -338,26 +344,51 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   void _generateWorkingPgn() {
     final buffer = StringBuffer();
+    
+    // Add FEN header if we have a custom starting position
+    if (widget.startingFen != null) {
+      buffer.writeln('[FEN "${widget.startingFen}"]');
+      buffer.writeln('[SetUp "1"]');
+      buffer.writeln();
+    }
+    
     if (_roots.isNotEmpty) {
-      _writePgnTree(buffer, _roots, true);
+      _writePgnTree(buffer, _roots);
     }
     _workingPgn = buffer.toString().trim();
     widget.onPgnChanged?.call(_workingPgn);
   }
 
-  void _writePgnTree(StringBuffer buffer, List<PgnMove> siblings, bool isRoot) {
+  void _writePgnTree(StringBuffer buffer, List<PgnMove> siblings) {
     if (siblings.isEmpty) return;
-    _writeNodes(buffer, siblings, 1, true);
+    
+    // Determine starting move number and side to move from FEN
+    int startMoveNumber = 1;
+    bool startIsWhite = true;
+    
+    if (widget.startingFen != null) {
+      final fenParts = widget.startingFen!.split(' ');
+      if (fenParts.length >= 2) {
+        startIsWhite = fenParts[1] == 'w';
+      }
+      if (fenParts.length >= 6) {
+        startMoveNumber = int.tryParse(fenParts[5]) ?? 1;
+      }
+    }
+    
+    _writeNodes(buffer, siblings, startMoveNumber, startIsWhite, isFirstMove: true);
   }
 
-  void _writeNodes(StringBuffer buffer, List<PgnMove> siblings, int moveNumber, bool isWhite) {
+  void _writeNodes(StringBuffer buffer, List<PgnMove> siblings, int moveNumber, bool isWhite, {bool isFirstMove = false}) {
     if (siblings.isEmpty) return;
 
     final main = siblings[0];
     
-    // Write main move
+    // Write main move - move number for White, or "X..." for Black on first move
     if (isWhite) {
       buffer.write('$moveNumber. ');
+    } else if (isFirstMove) {
+      buffer.write('$moveNumber... ');
     }
     
     buffer.write('${main.san} ');
@@ -502,9 +533,31 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (_findPathRecursive(_roots, _contextMenuMoveId!, path)) {
       final buffer = StringBuffer();
       
-      int ply = path.length; 
-      int moveNumber = (ply + 1) ~/ 2;
-      bool isWhite = ply % 2 != 0;
+      // Determine starting move number and side from FEN
+      int startMoveNumber = 1;
+      bool startIsWhite = true;
+      
+      if (widget.startingFen != null) {
+        final fenParts = widget.startingFen!.split(' ');
+        if (fenParts.length >= 2) {
+          startIsWhite = fenParts[1] == 'w';
+        }
+        if (fenParts.length >= 6) {
+          startMoveNumber = int.tryParse(fenParts[5]) ?? 1;
+        }
+      }
+      
+      // Calculate current move number based on path position
+      int moveNumber = startMoveNumber;
+      bool isWhite = startIsWhite;
+      for (int i = 0; i < path.length - 1; i++) {
+        if (isWhite) {
+          isWhite = false;
+        } else {
+          isWhite = true;
+          moveNumber++;
+        }
+      }
       
       if (!isWhite) {
         buffer.write('$moveNumber... ');
@@ -748,23 +801,40 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       );
     }
     
+    // Determine starting move number and side to move from FEN
+    int startMoveNumber = 1;
+    bool startIsWhite = true;
+    
+    if (widget.startingFen != null) {
+      final fenParts = widget.startingFen!.split(' ');
+      if (fenParts.length >= 2) {
+        startIsWhite = fenParts[1] == 'w';
+      }
+      if (fenParts.length >= 6) {
+        startMoveNumber = int.tryParse(fenParts[5]) ?? 1;
+      }
+    }
+    
     // Recursive rendering
     return Wrap(
       spacing: 2,
       runSpacing: 4,
-      children: _buildMoveWidgets(_roots, 1, true),
+      children: _buildMoveWidgets(_roots, startMoveNumber, startIsWhite, isFirstMove: true),
     );
   }
   
-  List<Widget> _buildMoveWidgets(List<PgnMove> siblings, int moveNumber, bool isWhite) {
+  List<Widget> _buildMoveWidgets(List<PgnMove> siblings, int moveNumber, bool isWhite, {bool isFirstMove = false}) {
     final widgets = <Widget>[];
     if (siblings.isEmpty) return widgets;
     
     final main = siblings[0];
     
-    // Main move
+    // Main move - show move number for White, or "X..." for Black on first move
     if (isWhite) {
       widgets.add(Text('$moveNumber. ', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)));
+    } else if (isFirstMove) {
+      // Black's first move needs the "X..." notation
+      widgets.add(Text('$moveNumber... ', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)));
     }
     
     widgets.add(_buildSingleMoveWidget(main));
