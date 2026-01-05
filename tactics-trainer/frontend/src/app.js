@@ -31,7 +31,7 @@ export function tacticsApp() {
     lichessUser: localStorage.getItem('lichessUser') || '',
     chesscomUser: localStorage.getItem('chesscomUser') || '',
     numGames: parseInt(localStorage.getItem('numGames')) || 20,
-    analysisDepth: parseInt(localStorage.getItem('analysisDepth')) || 20,
+    analysisDepth: parseInt(localStorage.getItem('analysisDepth')) || 14,
     tacticsFound: 0,
     
     // Time Controls
@@ -375,7 +375,7 @@ export function tacticsApp() {
       
       const tactics = [];
       const game = new window.Chess.Game();
-      const depth = Math.min(this.analysisDepth || 15, 25); // User-configurable, max 25
+      const depth = Math.min(this.analysisDepth || 14, 25); // User-configurable, max 25
       
       console.log(`Total moves: ${moves.length}, analyzing at depth ${depth}`);
       console.log('');
