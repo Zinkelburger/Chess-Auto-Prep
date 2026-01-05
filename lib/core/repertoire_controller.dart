@@ -47,6 +47,10 @@ class RepertoireController with ChangeNotifier {
   chess.Chess get game => _game;
   String get fen => _game.fen;
 
+  /// Starting FEN if different from standard position (for PGN FEN header).
+  String? _startingFen;
+  String? get startingFen => _startingFen;
+
   /// Convert Chess to Position for dartchess compatibility.
   Position get position => Chess.fromSetup(Setup.parseFen(_game.fen));
 
@@ -150,13 +154,55 @@ class RepertoireController with ChangeNotifier {
     _moveHistory.clear();
     _currentMoveIndex = -1;
     _game = chess.Chess();
+    _startingFen = null;
     _syncOpeningTree();
     notifyListeners();
   }
 
+  /// Set the board position from a FEN string.
+  /// Returns true if the FEN was valid and position was set.
+  /// Returns false if the FEN was invalid.
+  bool setPositionFromFen(String fen) {
+    try {
+      // Trim whitespace
+      final trimmedFen = fen.trim();
+      if (trimmedFen.isEmpty) return false;
+
+      // Try to create a game from the FEN to validate it
+      final newGame = chess.Chess.fromFEN(trimmedFen);
+      
+      // If we got here, the FEN is valid
+      _game = newGame;
+      _moveHistory.clear();
+      _currentMoveIndex = -1;
+      
+      // Store starting FEN only if it's not the standard starting position
+      const standardFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      if (trimmedFen != standardFen && !trimmedFen.startsWith(standardFen.split(' ')[0])) {
+        _startingFen = trimmedFen;
+      } else {
+        _startingFen = null;
+      }
+      
+      // Clear selected line since we're in a custom position
+      _selectedPgnLine = null;
+      
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Invalid FEN: $e');
+      return false;
+    }
+  }
+
   /// Rebuild the chess position from move history up to current index.
   void _rebuildPosition() {
-    _game = chess.Chess();
+    // Start from custom FEN if set, otherwise standard position
+    if (_startingFen != null) {
+      _game = chess.Chess.fromFEN(_startingFen!);
+    } else {
+      _game = chess.Chess();
+    }
     for (int i = 0; i <= _currentMoveIndex && i < _moveHistory.length; i++) {
       final result = _game.move(_moveHistory[i]);
       if (!result) {
@@ -194,6 +240,7 @@ class RepertoireController with ChangeNotifier {
         _game = chess.Chess();
         _moveHistory.clear();
         _currentMoveIndex = -1;
+        _startingFen = null;
 
         await _buildOpeningTree();
         await _parseRepertoireLines();
@@ -204,6 +251,7 @@ class RepertoireController with ChangeNotifier {
         _game = chess.Chess();
         _moveHistory.clear();
         _currentMoveIndex = -1;
+        _startingFen = null;
       }
     } catch (e) {
       debugPrint('Failed to load repertoire: $e');
@@ -213,6 +261,7 @@ class RepertoireController with ChangeNotifier {
       _game = chess.Chess();
       _moveHistory.clear();
       _currentMoveIndex = -1;
+      _startingFen = null;
     } finally {
       _setLoading(false);
     }

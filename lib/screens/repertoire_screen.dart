@@ -36,6 +36,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   late final RepertoireController _controller;
   late final TabController _tabController;
   final PgnEditorController _pgnEditorController = PgnEditorController();
+  
+  // Board orientation - true = Black's perspective (board flipped)
+  bool _boardFlipped = false;
+  
+  // Track which repertoire we last set the flip for (to reset on switch)
+  String? _lastRepertoireId;
 
   @override
   void initState() {
@@ -64,7 +70,15 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   // 3. The listener that calls setState
   void _onRepertoireChanged() {
     setState(() {
-      // Just call setState. The controller holds the new data.
+      // Update board orientation when switching to a new repertoire
+      if (_controller.currentRepertoire != null) {
+        final currentId = _controller.currentRepertoire!['filePath'] as String?;
+        if (currentId != null && currentId != _lastRepertoireId) {
+          // New repertoire loaded - set orientation based on color
+          _lastRepertoireId = currentId;
+          _boardFlipped = !_controller.isRepertoireWhite; // Flip for Black repertoires
+        }
+      }
     });
   }
 
@@ -143,6 +157,32 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onKeyEvent: (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
+          // Ctrl+Shift+V - Paste FEN from clipboard
+          if (event.logicalKey == LogicalKeyboardKey.keyV &&
+              HardwareKeyboard.instance.isControlPressed &&
+              HardwareKeyboard.instance.isShiftPressed) {
+            _pastePositionFromClipboard();
+            return KeyEventResult.handled;
+          }
+
+          // 'F' key - Flip the board (only if not typing in a text field)
+          // Check if we're in the PGN tab where text fields exist
+          if (event.logicalKey == LogicalKeyboardKey.keyF &&
+              !HardwareKeyboard.instance.isControlPressed &&
+              !HardwareKeyboard.instance.isShiftPressed &&
+              !HardwareKeyboard.instance.isAltPressed) {
+            // Don't flip if PGN tab is active (has text fields for comments)
+            // User can still flip with the keyboard when not focused on a text field
+            final primaryFocus = FocusManager.instance.primaryFocus;
+            final isTextInput = primaryFocus?.context?.widget is EditableText;
+            if (!isTextInput) {
+              setState(() {
+                _boardFlipped = !_boardFlipped;
+              });
+              return KeyEventResult.handled;
+            }
+          }
+
           // PGN Tab (Index 2) - PGN Editor handles navigation
           if (_tabController.index == 2) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
@@ -188,7 +228,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   key: ValueKey(_controller.fen),
                   // Read game state from controller
                   game: _controller.game,
-                  flipped: false,
+                  flipped: _boardFlipped,
                   onPieceSelected: (square) {
                     // Handle piece selection if needed
                   },
@@ -324,8 +364,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           // Interactive PGN editor
           Expanded(
             child: InteractivePgnEditor(
-              // Force recreation when selected line changes
-              key: ValueKey(_controller.selectedPgnLine?.id ?? 'no_selection'),
+              // Force recreation when selected line or starting FEN changes
+              key: ValueKey('${_controller.selectedPgnLine?.id ?? 'no_selection'}_${_controller.startingFen ?? 'standard'}'),
               controller: _pgnEditorController,
               // Load selected line PGN or default to repertoire PGN
               initialPgn: _getInitialPgnForEditor(),
@@ -334,6 +374,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               repertoireColor: _controller.currentRepertoire?['color'] as String?,
               moveHistory: _controller.moveHistory,
               currentMoveIndex: _controller.currentMoveIndex,
+              // Pass starting FEN for custom positions (e.g., pasted via Ctrl+Shift+V)
+              startingFen: _controller.startingFen,
               // New unified state callback
               onMoveStateChanged: (moveIndex, moves) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -721,6 +763,60 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   // --- HELPER METHODS ---
+
+  /// Paste a FEN position from clipboard (Ctrl+Shift+V)
+  Future<void> _pastePositionFromClipboard() async {
+    try {
+      final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+      if (clipboardData == null || clipboardData.text == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Clipboard is empty'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      final fen = clipboardData.text!.trim();
+      if (fen.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Clipboard is empty'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      final success = _controller.setPositionFromFen(fen);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success
+                ? 'Position loaded from FEN'
+                : 'Invalid FEN: $fen'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: success ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to read clipboard: $e'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   String? _getInitialPgnForEditor() {
     // If a specific PGN line is selected, return its full PGN
