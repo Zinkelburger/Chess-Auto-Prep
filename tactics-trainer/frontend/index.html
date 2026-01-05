@@ -43,11 +43,16 @@
           </div>
         </div>
         
-        <button class="btn-primary" 
-                @click="loadTactics()" 
+        <button class="btn-primary"
+                @click="loadTactics()"
                 :disabled="loading">
           <span x-text="loading ? 'Loading...' : 'Load Tactics'"></span>
         </button>
+
+        <!-- Engine status indicator (subtle, only shows while loading) -->
+        <div class="engine-status" x-show="engineLoading" style="font-size: 0.85em; color: #666; margin-top: 5px;">
+          Engine loading in background...
+        </div>
         
         <div class="status" 
              :class="{ 'error': statusType === 'error', 'success': statusType === 'success' }">
