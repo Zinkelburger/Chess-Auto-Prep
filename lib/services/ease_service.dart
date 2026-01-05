@@ -68,6 +68,15 @@ class EaseService {
   StreamSubscription? _engineSubscription;
   bool _isAnalyzing = false;
   
+  // Cache for ease results by FEN
+  final Map<String, EaseResult> _cache = {};
+  // Cache for fast ease (move ease) by FEN
+  final Map<String, double> _fastEaseCache = {};
+  String? _currentFen;
+  
+  // Max cache size to prevent memory issues
+  static const int _maxCacheSize = 100;
+  
   // State for the current evaluation request
   Completer<EngineEvaluation>? _currentEvalCompleter;
   int? _currentEvalBestScore;
@@ -77,8 +86,17 @@ class EaseService {
   EaseService._internal();
 
   Future<void> calculateEase(String fen) async {
+    // Check cache first - if we have a result for this FEN, use it
+    if (_cache.containsKey(fen)) {
+      currentResult.value = _cache[fen];
+      status.value = 'Loaded from cache';
+      _currentFen = fen;
+      return;
+    }
+    
     if (_isAnalyzing) return;
     _isAnalyzing = true;
+    _currentFen = fen;
     status.value = 'Calculating...';
     currentResult.value = null;
 
@@ -125,18 +143,31 @@ class EaseService {
       await _ensureEngine();
       
       // 2a. Root Eval (Ceiling)
-      status.value = 'Analyzing Root...';
-      final rootEval = await _evaluateFen(fen, 12);
+      status.value = 'Analyzing Root (depth 15)...';
+      final rootEval = await _evaluateFen(fen, 15);
       final maxQ = _scoreToQ(rootEval.effectiveCp);
       final bestMove = rootEval.bestMove ?? '-';
       final safetyFactor = 1.0; // Feature disabled
 
+      // Show initial result with just the root eval (ease = 1.0 initially)
+      // This gives the user something to see while candidates are analyzed
+      currentResult.value = EaseResult(
+        ease: 1.0, // Will be updated after candidate analysis
+        rawEase: 1.0,
+        safetyFactor: safetyFactor,
+        bestMove: bestMove,
+        maxQ: maxQ,
+        moves: [],
+        maiaMoves: topMaiaMoves,
+      );
+
       // 2b. Candidate Evals
-      status.value = 'Analyzing Candidates...';
+      status.value = 'Analyzing Candidates (0/${candidateUcis.length})...';
       final List<EaseMove> results = [];
       double sumWeightedRegret = 0.0;
       
       final chessGame = chess.Chess.fromFEN(fen);
+      int analyzedCount = 0;
       
       for (final uci in candidateUcis) {
         final from = uci.substring(0, 2);
@@ -153,7 +184,7 @@ class EaseService {
         }
         
         final nextFen = chessGame.fen;
-        final eval = await _evaluateFen(nextFen, 10);
+        final eval = await _evaluateFen(nextFen, 15);
         chessGame.undo();
         
         final score = -eval.effectiveCp; 
@@ -164,6 +195,7 @@ class EaseService {
         final term = math.pow(prob, _kBeta) * regret;
         sumWeightedRegret += term;
         
+        // Add this move to results
         results.add(EaseMove(
           uci: uci,
           prob: prob,
@@ -172,6 +204,21 @@ class EaseService {
           regret: regret,
           moveEase: null,
         ));
+        
+        analyzedCount++;
+        status.value = 'Analyzing Candidates ($analyzedCount/${candidateUcis.length})...';
+        
+        // Update ease progressively so user sees it changing
+        final currentRawEase = 1.0 - math.pow(sumWeightedRegret / 2, _kAlpha);
+        currentResult.value = EaseResult(
+          ease: currentRawEase * safetyFactor,
+          rawEase: currentRawEase,
+          safetyFactor: safetyFactor,
+          bestMove: bestMove,
+          maxQ: maxQ,
+          moves: List.from(results), // Current results so far
+          maiaMoves: topMaiaMoves,
+        );
       }
       
       // Populate moveEase for top 5 moves
@@ -202,7 +249,7 @@ class EaseService {
       final rawEase = 1.0 - math.pow(sumWeightedRegret / 2, _kAlpha);
       final finalEase = rawEase * safetyFactor;
       
-      currentResult.value = EaseResult(
+      final result = EaseResult(
         ease: finalEase,
         rawEase: rawEase,
         safetyFactor: safetyFactor,
@@ -211,6 +258,15 @@ class EaseService {
         moves: results,
         maiaMoves: topMaiaMoves,
       );
+      
+      // Cache the result for this FEN
+      _cache[fen] = result;
+      currentResult.value = result;
+      
+      // Limit cache size
+      if (_cache.length > _maxCacheSize) {
+        _cache.remove(_cache.keys.first);
+      }
       
       status.value = 'Calculation Complete';
 
@@ -223,6 +279,11 @@ class EaseService {
   }
   
   Future<double?> _calculateFastEase(String fen) async {
+    // Check fast ease cache first
+    if (_fastEaseCache.containsKey(fen)) {
+      return _fastEaseCache[fen];
+    }
+    
     try {
       if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) return null;
       final maiaProbs = await MaiaFactory.instance!.evaluate(fen, 1900);
@@ -243,7 +304,8 @@ class EaseService {
       
       if (candidateUcis.isEmpty) return null;
 
-      final rootEval = await _evaluateFen(fen, 1);
+      // Use depth 15 for fast ease
+      final rootEval = await _evaluateFen(fen, 15);
       final maxQ = _scoreToQ(rootEval.effectiveCp);
       
       double sumWeightedRegret = 0.0;
@@ -257,7 +319,7 @@ class EaseService {
         
         if (!chessGame.move({'from': from, 'to': to, 'promotion': promotion})) continue;
         
-        final eval = await _evaluateFen(chessGame.fen, 1);
+        final eval = await _evaluateFen(chessGame.fen, 15);
         chessGame.undo();
         
         final score = -eval.effectiveCp;
@@ -269,7 +331,17 @@ class EaseService {
         sumWeightedRegret += term;
       }
       
-      return 1.0 - math.pow(sumWeightedRegret / 2, _kAlpha);
+      final result = 1.0 - math.pow(sumWeightedRegret / 2, _kAlpha);
+      
+      // Cache the result
+      _fastEaseCache[fen] = result;
+      
+      // Limit cache size
+      if (_fastEaseCache.length > _maxCacheSize) {
+        _fastEaseCache.remove(_fastEaseCache.keys.first);
+      }
+      
+      return result;
     } catch (e) {
       print('Fast Ease Error: $e');
       return null;
@@ -389,6 +461,18 @@ class EaseService {
     if (cp.abs() > 9000) return cp > 0 ? 1.0 : -1.0;
     final winProb = 1.0 / (1.0 + math.exp(-0.004 * cp));
     return 2.0 * winProb - 1.0;
+  }
+
+  /// Clear all cached ease results
+  void clearCache() {
+    _cache.clear();
+    _fastEaseCache.clear();
+  }
+  
+  /// Clear cache for a specific FEN
+  void clearCacheForFen(String fen) {
+    _cache.remove(fen);
+    _fastEaseCache.remove(fen);
   }
 
   void dispose() {
