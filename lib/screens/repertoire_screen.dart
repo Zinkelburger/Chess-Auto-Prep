@@ -70,8 +70,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   // 3. The listener that calls setState
   void _onRepertoireChanged() {
     setState(() {
-      // Update board orientation when switching to a new repertoire
-      if (_controller.currentRepertoire != null) {
+      // Update board orientation when a new repertoire finishes loading
+      // We check !isLoading to ensure the color has been determined from the PGN
+      if (_controller.currentRepertoire != null && !_controller.isLoading) {
         final currentId = _controller.currentRepertoire!['filePath'] as String?;
         if (currentId != null && currentId != _lastRepertoireId) {
           // New repertoire loaded - set orientation based on color

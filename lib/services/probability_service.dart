@@ -135,6 +135,10 @@ class ProbabilityService {
       return _cache[cacheKey];
     }
 
+    // Clear old position data immediately when fetching for a new FEN
+    // This prevents showing stale data from a different position
+    currentPosition.value = null;
+    
     isLoading.value = true;
     error.value = null;
 
@@ -256,8 +260,8 @@ class ProbabilityService {
       double moveProb = 100.0; // Default for user moves
 
       if (isOpponentMove) {
-        // Fetch probabilities for current position
-        final probs = await fetchProbabilities(game.fen);
+        // Fetch probabilities for this position (without updating currentPosition)
+        final probs = await _fetchProbabilitiesInternal(game.fen);
         
         if (probs != null && probs.moves.isNotEmpty) {
           // Find the probability for this move
@@ -307,6 +311,78 @@ class ProbabilityService {
     lineBreakdown.value = breakdown;
     cumulativeProbability.value = cumulative;
     return cumulative;
+  }
+
+  /// Internal fetch that doesn't update currentPosition (for cumulative calculations)
+  Future<PositionProbabilities?> _fetchProbabilitiesInternal(String fen, {
+    String variant = 'standard',
+    String speeds = 'rapid,classical',
+    String ratings = '1800,2000,2200,2500',
+  }) async {
+    // Check cache first
+    final cacheKey = fen;
+    if (_cache.containsKey(cacheKey)) {
+      return _cache[cacheKey];
+    }
+
+    try {
+      final encodedFen = Uri.encodeComponent(fen);
+      final url = 'https://explorer.lichess.ovh/lichess?'
+          'variant=$variant&'
+          'speeds=$speeds&'
+          'ratings=$ratings&'
+          'fen=$encodedFen';
+
+      final response = await http.get(Uri.parse(url));
+
+      if (response.statusCode != 200) {
+        return null;
+      }
+
+      final data = json.decode(response.body);
+
+      final moves = <MoveProbability>[];
+      int totalGames = 0;
+
+      for (final move in data['moves'] ?? []) {
+        final white = move['white'] as int? ?? 0;
+        final draws = move['draws'] as int? ?? 0;
+        final black = move['black'] as int? ?? 0;
+        totalGames += white + draws + black;
+      }
+
+      for (final move in data['moves'] ?? []) {
+        final white = move['white'] as int? ?? 0;
+        final draws = move['draws'] as int? ?? 0;
+        final black = move['black'] as int? ?? 0;
+        final moveTotal = white + draws + black;
+
+        final probability = totalGames > 0 ? (moveTotal / totalGames) * 100 : 0.0;
+
+        moves.add(MoveProbability(
+          san: move['san'] as String? ?? '',
+          uci: move['uci'] as String? ?? '',
+          white: white,
+          draws: draws,
+          black: black,
+          probability: probability,
+        ));
+      }
+
+      moves.sort((a, b) => b.probability.compareTo(a.probability));
+
+      final result = PositionProbabilities(
+        fen: fen,
+        moves: moves,
+        totalGames: totalGames,
+      );
+
+      _cache[cacheKey] = result;
+      return result;
+
+    } catch (e) {
+      return null;
+    }
   }
 
   /// Get probability for a specific move from the current position
