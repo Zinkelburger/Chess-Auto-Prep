@@ -205,7 +205,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
               if (_settings.showStockfish) _buildStockfishSection(),
               if (_settings.showMaia) _buildMaiaSection(),
               if (_settings.showEase) _buildEaseSection(),
-              if (_settings.showCoherence) _buildCoherenceSection(),
               if (_settings.showProbability) _buildProbabilitySection(),
             ],
           ),
@@ -486,7 +485,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       title: 'Ease',
       icon: Icons.speed,
       iconColor: Colors.orange,
-      onTap: widget.onEaseDetailsTap,
       child: ValueListenableBuilder<EaseResult?>(
         valueListenable: _easeService.currentResult,
         builder: (context, result, _) {
@@ -519,54 +517,198 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
             );
           }
 
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                Text(
-                  result.ease.toStringAsFixed(2),
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: _getEaseColor(result.ease),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Ease score header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Text(
+                      result.ease.toStringAsFixed(2),
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: _getEaseColor(result.ease),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _getEaseDescription(result.ease),
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            widget.isUserTurn == true
+                                ? 'Your turn • Lower ease = harder for opponent'
+                                : "Opponent's turn • Higher ease = easier for you",
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Candidate moves list
+              if (result.moves.isNotEmpty) ...[
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: Text(
+                    'Candidate Moves',
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _getEaseDescription(result.ease),
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.isUserTurn == true
-                            ? 'Your turn • Lower ease = harder for opponent'
-                            : "Opponent's turn • Higher ease = easier for you",
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: Colors.grey[600],
-                  size: 20,
-                ),
+                ...result.moves.take(5).map((move) => _buildEaseMoveRow(move, result.maxQ)),
               ],
-            ),
+            ],
           );
         },
       ),
     );
+  }
+  
+  Widget _buildEaseMoveRow(EaseMove move, double maxQ) {
+    // Convert UCI to SAN for display
+    String displayMove = move.uci;
+    try {
+      final game = chess.Chess.fromFEN(widget.fen);
+      final from = move.uci.substring(0, 2);
+      final to = move.uci.substring(2, 4);
+      String? promotion;
+      if (move.uci.length > 4) promotion = move.uci.substring(4);
+      
+      final legalMoves = game.moves({'verbose': true});
+      final matchingMove = legalMoves.firstWhere(
+        (m) => m['from'] == from && m['to'] == to && 
+               (promotion == null || m['promotion'] == promotion),
+        orElse: () => <String, dynamic>{},
+      );
+      if (matchingMove.isNotEmpty) {
+        displayMove = matchingMove['san'] as String;
+      }
+    } catch (e) {
+      // Keep UCI if conversion fails
+    }
+    
+    // Color based on regret (lower regret = greener)
+    final regretColor = move.regret < 0.1 
+        ? Colors.green[400] 
+        : (move.regret < 0.3 ? Colors.yellow[600] : Colors.red[400]);
+    
+    return InkWell(
+      onTap: () => widget.onMoveSelected?.call(move.uci),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Row(
+          children: [
+            // Move name
+            SizedBox(
+              width: 50,
+              child: Text(
+                displayMove,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'monospace',
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            // Maia probability bar
+            Expanded(
+              child: LinearProgressIndicator(
+                value: move.prob,
+                backgroundColor: Colors.grey[800],
+                valueColor: AlwaysStoppedAnimation(Colors.purple[300]),
+              ),
+            ),
+            const SizedBox(width: 6),
+            // Maia %
+            SizedBox(
+              width: 38,
+              child: Text(
+                '${(move.prob * 100).toStringAsFixed(0)}%',
+                style: TextStyle(
+                  color: Colors.purple[300],
+                  fontSize: 11,
+                ),
+                textAlign: TextAlign.right,
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Regret indicator
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: regretColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 4),
+            // Score (centipawns)
+            SizedBox(
+              width: 45,
+              child: Text(
+                _formatCp(move.score),
+                style: TextStyle(
+                  color: move.score > 20 
+                      ? Colors.green[400] 
+                      : (move.score < -20 ? Colors.red[400] : Colors.grey[400]),
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                ),
+                textAlign: TextAlign.right,
+              ),
+            ),
+            // Move ease (if available)
+            if (move.moveEase != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: _getEaseColor(move.moveEase!).withAlpha(40),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  move.moveEase!.toStringAsFixed(2),
+                  style: TextStyle(
+                    color: _getEaseColor(move.moveEase!),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
+  String _formatCp(int cp) {
+    if (cp.abs() > 9000) {
+      return cp > 0 ? 'M${10000 - cp}' : '-M${10000 + cp}';
+    }
+    final sign = cp >= 0 ? '+' : '';
+    return '$sign${(cp / 100).toStringAsFixed(1)}';
   }
 
   String _getEaseDescription(double ease) {
@@ -583,39 +725,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     if (ease >= 0.4) return Colors.orange[400]!;
     if (ease >= 0.2) return Colors.deepOrange[400]!;
     return Colors.red[400]!;
-  }
-
-  Widget _buildCoherenceSection() {
-    return _AnalysisSection(
-      title: 'Coherence',
-      icon: Icons.link,
-      iconColor: Colors.teal,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          children: [
-            Text(
-              '—',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                'Coherence analysis coming soon',
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Widget _buildProbabilitySection() {
@@ -907,7 +1016,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
               _buildToggleTile('Stockfish', _settings.showStockfish, (v) => _settings.showStockfish = v),
               _buildToggleTile('Maia', _settings.showMaia, (v) => _settings.showMaia = v),
               _buildToggleTile('Ease', _settings.showEase, (v) => _settings.showEase = v),
-              _buildToggleTile('Coherence', _settings.showCoherence, (v) => _settings.showCoherence = v),
               _buildToggleTile('Probability', _settings.showProbability, (v) => _settings.showProbability = v),
             ],
           ),

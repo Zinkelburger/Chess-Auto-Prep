@@ -74,6 +74,9 @@ class EaseService {
   final Map<String, double> _fastEaseCache = {};
   String? _currentFen;
   
+  // Pending FEN to analyze after current analysis completes
+  String? _pendingFen;
+  
   // Max cache size to prevent memory issues
   static const int _maxCacheSize = 100;
   
@@ -94,9 +97,21 @@ class EaseService {
       return;
     }
     
-    if (_isAnalyzing) return;
+    // Clear old result immediately when a new FEN comes in (not cached)
+    // This prevents showing stale results from a different position
+    if (_currentFen != fen) {
+      currentResult.value = null;
+    }
+    
+    if (_isAnalyzing) {
+      // Queue this FEN to be analyzed when current analysis finishes
+      _pendingFen = fen;
+      status.value = 'Waiting for previous analysis...';
+      return;
+    }
     _isAnalyzing = true;
     _currentFen = fen;
+    _pendingFen = null; // Clear any pending request since we're handling this one
     status.value = 'Calculating...';
     currentResult.value = null;
 
@@ -275,6 +290,14 @@ class EaseService {
       status.value = 'Error: $e';
     } finally {
       _isAnalyzing = false;
+      
+      // Check if there's a pending FEN to analyze
+      if (_pendingFen != null) {
+        final pendingFen = _pendingFen!;
+        _pendingFen = null;
+        // Schedule the pending analysis after a small delay to avoid stack overflow
+        Future.microtask(() => calculateEase(pendingFen));
+      }
     }
   }
   
