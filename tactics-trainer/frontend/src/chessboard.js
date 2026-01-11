@@ -49,6 +49,8 @@ export class Board {
   initChessground() {
     this.cg = Chessground(this.container, {
       orientation: this.options.flipped ? 'black' : 'white',
+      coordinates: true,  // Enable coordinate display
+      coordinatesOnSquares: false,  // Use edge coordinates, not on squares
       movable: {
         free: false,
         color: 'both',
