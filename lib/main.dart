@@ -78,6 +78,11 @@ class ChessAutoPrepApp extends StatelessWidget {
               foregroundColor: Colors.white,
             ),
           ),
+          snackBarTheme: SnackBarThemeData(
+            backgroundColor: Colors.grey[900],
+            contentTextStyle: const TextStyle(color: Colors.white),
+            behavior: SnackBarBehavior.floating,
+          ),
           useMaterial3: true,
         ),
         home: const MainScreen(),
