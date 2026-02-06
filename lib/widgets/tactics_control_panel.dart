@@ -10,8 +10,7 @@ import '../services/tactics_engine.dart';
 import '../services/tactics_import_service.dart';
 import 'pgn_viewer_widget.dart';
 
-/// Tactics training control panel - Flutter port of Python's TacticsWidget
-/// Matches all features: position history, auto-advance, full stats, etc.
+/// Tactics training control panel with import, review, and analysis.
 class TacticsControlPanel extends StatefulWidget {
   const TacticsControlPanel({super.key});
 
@@ -49,10 +48,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   // PGN Viewer controller for analysis tab
   final PgnViewerController _pgnViewerController = PgnViewerController();
-
-  // Position history (for Previous button)
-  final List<TacticsPosition> _positionHistory = [];
-  int _historyIndex = -1;
 
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();
@@ -174,15 +169,26 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return KeyEventResult.handled;
     }
 
-    // s or Right arrow — Skip / Next position
-    if (key == LogicalKeyboardKey.keyS || key == LogicalKeyboardKey.arrowRight) {
-      _onSkipPosition();
+    // Left/Right arrow — PGN move navigation (works on both tabs)
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _pgnViewerController.goForward();
       return KeyEventResult.handled;
     }
 
-    // b or Left arrow — Previous position
-    if (key == LogicalKeyboardKey.keyB || key == LogicalKeyboardKey.arrowLeft) {
-      if (_historyIndex > 0) _onPreviousPosition();
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _pgnViewerController.goBack();
+      return KeyEventResult.handled;
+    }
+
+    // b — Previous position
+    if (key == LogicalKeyboardKey.keyB) {
+      _onPreviousPosition();
+      return KeyEventResult.handled;
+    }
+
+    // n — Next / Skip position
+    if (key == LogicalKeyboardKey.keyN) {
+      _onSkipPosition();
       return KeyEventResult.handled;
     }
 
@@ -221,27 +227,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             const SizedBox(height: 16),
           ],
 
-          // Feedback label (like Python)
-          if (_feedback.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _getFeedbackColor().withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _getFeedbackColor()),
-              ),
-              child: Text(
-                _feedback,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: _getFeedbackColor(),
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
-          
           // Import Status Message (hidden during active training to avoid distraction)
           if (_importStatus != null && _currentPosition == null) ...[
             Container(
@@ -272,42 +257,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                 ],
               ),
             ),
-          ],
-
-          // Solution display (like Python's solution_widget)
-          if (_showSolution && _currentPosition != null) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Solution: ${_engine.getSolution(_currentPosition!)}',
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: _copyFen,
-                        child: const Text('Copy FEN'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
           ],
 
           // Action buttons
@@ -362,7 +311,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   child: _shortcutTooltip(
                     message: 'b',
                     child: ElevatedButton(
-                      onPressed: _historyIndex > 0 ? _onPreviousPosition : null,
+                      onPressed: _onPreviousPosition,
                       child: const Text('Previous'),
                     ),
                   ),
@@ -370,7 +319,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                 const SizedBox(width: 8),
                 Expanded(
                   child: _shortcutTooltip(
-                    message: 's',
+                    message: 'n',
                     child: ElevatedButton(
                       onPressed: _onSkipPosition,
                       child: const Text('Skip'),
@@ -380,7 +329,64 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               ],
             ),
             const SizedBox(height: 16),
-            
+
+            // Feedback + Solution area — stacked so they overlay in the same spot
+            Stack(
+              children: [
+                // Solution — always laid out to reserve space (no bounce)
+                Visibility(
+                  visible: _showSolution && _feedback.isEmpty,
+                  maintainSize: true,
+                  maintainAnimation: true,
+                  maintainState: true,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Solution: ${_engine.getSolution(_currentPosition!)}',
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: _showSolution ? _copyFen : null,
+                          child: const Text('Copy FEN'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Feedback overlay — sits on top, same position
+                if (_feedback.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _getFeedbackColor().withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _getFeedbackColor()),
+                    ),
+                    child: Text(
+                      _feedback,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: _getFeedbackColor(),
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+
             CheckboxListTile(
               value: _autoAdvance,
               onChanged: (value) {
@@ -584,12 +590,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             ],
           ],
 
-          // Session stats (like Python)
-          if (_database.currentSession.positionsAttempted > 0) ...[
+          // Session stats
+          if (_currentPosition != null) ...[
             const SizedBox(height: 16),
             Text(
-              'Session: ${_database.currentSession.positionsCorrect}/${_database.currentSession.positionsAttempted} '
-              '(${(_database.currentSession.accuracy * 100).toStringAsFixed(1)}%)',
+              '${_database.currentSession.positionsCorrect}/${_database.currentSession.positionsAttempted}',
               style: const TextStyle(fontSize: 14),
             ),
           ],
@@ -615,7 +620,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
   }
 
-  /// Build position info display - matches Python's _update_position_info
+  /// Build position info display
   Widget _buildPositionInfo() {
     if (_currentPosition == null) return const SizedBox();
 
@@ -683,13 +688,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       controller: _pgnViewerController,
       onPositionChanged: (position) {
         // Update the chess board when clicking moves in the PGN
-        // Use addPostFrameCallback to avoid setState during build
-        print('TacticsControlPanel: onPositionChanged called with FEN: ${position.fen}');
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             final appState = context.read<AppState>();
             final chessGame = chess.Chess.fromFEN(position.fen);
-            print('TacticsControlPanel: Updating appState.currentGame');
             appState.setCurrentGame(chessGame);
           }
         });
@@ -840,8 +842,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
   
-  Future<void> _handleImportResults(List<TacticsPosition> positions) async {
-    // Positions are already added via streaming callback, just need to reload and show message
+  Future<void> _handleImportResults(List<TacticsPosition> _) async {
     await _loadPositions();
     
     if (mounted) {
@@ -860,32 +861,20 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   void _onStartSession() {
     _database.startSession();
-    _positionHistory.clear();
-    _historyIndex = -1;
-    _loadNextPosition();
+    if (_database.positions.isEmpty) return;
+    _showCurrentPosition();
   }
 
-  void _loadNextPosition() {
-    final positions = _database.getPositionsForReview(1);
-    if (positions.isEmpty) {
+  /// Show whatever position is at _database.sessionPositionIndex
+  void _showCurrentPosition() {
+    if (_database.positions.isEmpty) {
       _sessionComplete();
       return;
     }
 
-    final position = positions[0];
-
-    // Add to history (only if we're not navigating backwards)
-    if (_historyIndex == _positionHistory.length - 1) {
-      _positionHistory.add(position);
-      _historyIndex = _positionHistory.length - 1;
-    } else {
-      // We went back and then forward, update from this point
-      _historyIndex++;
-      if (_historyIndex >= _positionHistory.length) {
-        _positionHistory.add(position);
-        _historyIndex = _positionHistory.length - 1;
-      }
-    }
+    // Wrap index
+    _database.sessionPositionIndex %= _database.positions.length;
+    final position = _database.positions[_database.sessionPositionIndex];
 
     setState(() {
       _currentPosition = position;
@@ -894,7 +883,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _feedback = '';
       _showSolution = false;
     });
-    
+
     // Reset ephemeral moves in the PGN viewer
     _pgnViewerController.clearEphemeralMoves();
 
@@ -918,53 +907,36 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _onPreviousPosition() {
-    if (_historyIndex <= 0) return;
-
-    _historyIndex--;
-    final position = _positionHistory[_historyIndex];
-
-    setState(() {
-      _currentPosition = position;
-      _positionSolved = false;
-      _startTime = DateTime.now();
-      _feedback = '';
-      _showSolution = false;
-    });
-    
-    // Reset ephemeral moves in the PGN viewer
-    _pgnViewerController.clearEphemeralMoves();
-
-    // Set up the chess board
-    try {
-      final appState = context.read<AppState>();
-      final game = chess.Chess.fromFEN(position.fen);
-      appState.setCurrentGame(game);
-
-      final isWhiteToMove = position.positionContext.contains('White');
-      appState.setBoardFlipped(!isWhiteToMove);
-    } catch (e) {
-      setState(() {
-        _feedback = 'Error loading position: $e';
-      });
+    if (_database.positions.isEmpty) return;
+    _database.sessionPositionIndex--;
+    if (_database.sessionPositionIndex < 0) {
+      _database.sessionPositionIndex = _database.positions.length - 1;
     }
+    _showCurrentPosition();
   }
 
   void _onSkipPosition() {
-    // Advance the database index so we don't get the same position again
+    if (_database.positions.isEmpty) return;
     _database.sessionPositionIndex++;
-    _loadNextPosition();
-  }
-
-  void _onShowSolution() {
-    setState(() {
-      _showSolution = true;
-    });
+    _showCurrentPosition();
   }
 
   void _toggleSolution() {
     setState(() {
       _showSolution = !_showSolution;
+      if (_showSolution) _feedback = '';
     });
+  }
+
+  /// Refresh _currentPosition from the database so displayed stats are up to date
+  void _refreshCurrentPosition() {
+    if (_currentPosition == null) return;
+    final index = _database.positions.indexWhere((p) => p.fen == _currentPosition!.fen);
+    if (index != -1) {
+      setState(() {
+        _currentPosition = _database.positions[index];
+      });
+    }
   }
 
   void _onAnalyze() {
@@ -1018,13 +990,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
   
   void _addMoveToAnalysis(String moveUci) {
-    print('TacticsControlPanel: _addMoveToAnalysis called with UCI="$moveUci"');
-    
-    // Convert UCI to SAN for the PGN viewer
     final appState = context.read<AppState>();
     final game = appState.currentGame;
-    
-    print('TacticsControlPanel: Current game FEN: ${game.fen}');
     
     try {
       final from = moveUci.substring(0, 2);
@@ -1032,11 +999,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       String? promotion;
       if (moveUci.length > 4) promotion = moveUci.substring(4);
       
-      print('TacticsControlPanel: Looking for move from=$from to=$to promotion=$promotion');
-      
-      // Find the move in legal moves to get SAN
       final moves = game.moves({'verbose': true});
-      print('TacticsControlPanel: Legal moves count: ${moves.length}');
       
       final match = moves.firstWhere(
         (m) => m['from'] == from && m['to'] == to && 
@@ -1045,17 +1008,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       );
       
       if (match.isNotEmpty && match['san'] != null) {
-        final san = match['san'] as String;
-        print('TacticsControlPanel: Found SAN="$san", calling addEphemeralMove');
-        
-        // Add to the PGN viewer as an ephemeral move
-        _pgnViewerController.addEphemeralMove(san);
-      } else {
-        print('TacticsControlPanel: ERROR - Could not find matching move!');
-        print('TacticsControlPanel: Available moves: ${moves.map((m) => "${m['from']}${m['to']}").toList()}');
+        _pgnViewerController.addEphemeralMove(match['san'] as String);
       }
     } catch (e) {
-      print('TacticsControlPanel: Error adding move to analysis: $e');
+      // Failed to convert move to SAN
     }
   }
 
@@ -1080,24 +1036,26 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _feedback = 'Correct!';
     });
 
-    // Record the attempt
+    // Record the attempt and refresh _currentPosition with updated stats
     _database.recordAttempt(
       _currentPosition!,
       TacticsResult.correct,
       timeTaken,
-    );
+    ).then((_) {
+      if (mounted) {
+        _refreshCurrentPosition();
+      }
+    });
 
     // Auto-advance or enable skip button
     if (_autoAdvance) {
       Future.delayed(const Duration(milliseconds: 1500), () {
         if (mounted && _positionSolved) {
-          _loadNextPosition();
+          _onSkipPosition();
         }
       });
     }
 
-    // Update session stats display
-    setState(() {});
   }
 
   void _handleIncorrectMove(double timeTaken, {String? moveUci}) {
@@ -1120,7 +1078,20 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _feedback = 'Incorrect';
     });
 
-    // After a brief moment, reset the board back to the original position
+    // Record the incorrect attempt and refresh _currentPosition with updated stats
+    if (_currentPosition != null) {
+      _database.recordAttempt(
+        _currentPosition!,
+        TacticsResult.incorrect,
+        timeTaken,
+      ).then((_) {
+        if (mounted) {
+          _refreshCurrentPosition();
+        }
+      });
+    }
+
+    // After a brief moment, reset the board and clear feedback
     if (_currentPosition != null) {
       Future.delayed(const Duration(milliseconds: 600), () {
         if (mounted && _currentPosition != null) {
@@ -1131,6 +1102,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           } catch (e) {
             // Handle error
           }
+          setState(() {
+            _feedback = '';
+          });
         }
       });
     }
