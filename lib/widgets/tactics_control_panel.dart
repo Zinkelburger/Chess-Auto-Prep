@@ -54,6 +54,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   final List<TacticsPosition> _positionHistory = [];
   int _historyIndex = -1;
 
+  // Focus node for keyboard shortcuts during training
+  final FocusNode _focusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
@@ -96,6 +99,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _tabController.dispose();
     _lichessUserController.dispose();
     _lichessCountController.dispose();
@@ -114,29 +118,95 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Tab bar
-        TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Tactic'),
-            Tab(text: 'PGN'),
-          ],
-        ),
-
-        // Tab content
-        Expanded(
-          child: TabBarView(
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: Column(
+        children: [
+          // Tab bar
+          TabBar(
             controller: _tabController,
-            children: [
-              _buildTacticTab(),
-              _buildAnalysisTab(),
+            tabs: const [
+              Tab(text: 'Tactic'),
+              Tab(text: 'PGN'),
             ],
           ),
-        ),
-      ],
+
+          // Tab content
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildTacticTab(),
+                _buildAnalysisTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    // Only handle key-down events, and only during active training
+    if (event is! KeyDownEvent || _currentPosition == null) {
+      return KeyEventResult.ignored;
+    }
+
+    // Don't handle shortcuts when a text field has focus
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus != null && primaryFocus != _focusNode) {
+      final context = primaryFocus.context;
+      if (context != null) {
+        final widget = context.widget;
+        if (widget is EditableText) {
+          return KeyEventResult.ignored;
+        }
+      }
+    }
+
+    final key = event.logicalKey;
+
+    // Space — Toggle Solution
+    if (key == LogicalKeyboardKey.space) {
+      _toggleSolution();
+      return KeyEventResult.handled;
+    }
+
+    // s or Right arrow — Skip / Next position
+    if (key == LogicalKeyboardKey.keyS || key == LogicalKeyboardKey.arrowRight) {
+      _onSkipPosition();
+      return KeyEventResult.handled;
+    }
+
+    // b or Left arrow — Previous position
+    if (key == LogicalKeyboardKey.keyB || key == LogicalKeyboardKey.arrowLeft) {
+      if (_historyIndex > 0) _onPreviousPosition();
+      return KeyEventResult.handled;
+    }
+
+    // a — Analyze / Reset (same as the combined button)
+    if (key == LogicalKeyboardKey.keyA) {
+      final appState = context.read<AppState>();
+      final isAtStartingPosition = appState.currentGame.fen == _currentPosition!.fen;
+      if (isAtStartingPosition) {
+        _onAnalyze();
+      } else {
+        _resetAnalysis();
+      }
+      return KeyEventResult.handled;
+    }
+
+    // Escape — Return to Tactic tab from PGN analysis
+    if (key == LogicalKeyboardKey.escape) {
+      if (_tabController.index != 0) {
+        _tabController.animateTo(0);
+        return KeyEventResult.handled;
+      }
+    }
+
+    return KeyEventResult.ignored;
   }
 
   Widget _buildTacticTab() {
@@ -172,8 +242,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             const SizedBox(height: 16),
           ],
           
-          // Import Status Message
-          if (_importStatus != null) ...[
+          // Import Status Message (hidden during active training to avoid distraction)
+          if (_importStatus != null && _currentPosition == null) ...[
             Container(
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 16),
@@ -240,22 +310,45 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             const SizedBox(height: 16),
           ],
 
-          // Action buttons (like Python's action buttons)
+          // Action buttons
           if (_currentPosition != null) ...[
-            // Top row: Solution, Analyze
+            // Top row: Solution, Analyze/Reset (context-aware)
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: _showSolution ? null : _onShowSolution,
-                    child: const Text('Show Solution'),
+                  child: _shortcutTooltip(
+                    message: 'space',
+                    child: ElevatedButton(
+                      onPressed: _toggleSolution,
+                      child: Text(_showSolution ? 'Hide Solution' : 'Show Solution'),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: _onAnalyze,
-                    child: const Text('Analyze'),
+                  child: Builder(
+                    builder: (context) {
+                      final appState = context.watch<AppState>();
+                      final isAtStartingPosition = appState.currentGame.fen == _currentPosition!.fen;
+                      if (isAtStartingPosition) {
+                        return _shortcutTooltip(
+                          message: 'a',
+                          child: ElevatedButton(
+                            onPressed: _onAnalyze,
+                            child: const Text('Analyze'),
+                          ),
+                        );
+                      } else {
+                        return _shortcutTooltip(
+                          message: 'a',
+                          child: ElevatedButton.icon(
+                            onPressed: _resetAnalysis,
+                            icon: const Icon(Icons.refresh, size: 16),
+                            label: const Text('Reset'),
+                          ),
+                        );
+                      }
+                    },
                   ),
                 ),
               ],
@@ -266,30 +359,25 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: _historyIndex > 0 ? _onPreviousPosition : null,
-                    child: const Text('Previous Position'),
+                  child: _shortcutTooltip(
+                    message: 'b',
+                    child: ElevatedButton(
+                      onPressed: _historyIndex > 0 ? _onPreviousPosition : null,
+                      child: const Text('Previous'),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: !_autoAdvance || _positionSolved ? _onSkipPosition : null,
-                    child: const Text('Skip Position'),
+                  child: _shortcutTooltip(
+                    message: 's',
+                    child: ElevatedButton(
+                      onPressed: _onSkipPosition,
+                      child: const Text('Skip'),
+                    ),
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-
-            // Reset button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _resetAnalysis,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reset Position'),
-              ),
             ),
             const SizedBox(height: 16),
             
@@ -510,6 +598,23 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
   }
 
+  /// Tooltip styled for keyboard shortcut hints
+  Widget _shortcutTooltip({required String message, required Widget child}) {
+    return Tooltip(
+      message: message,
+      waitDuration: const Duration(seconds: 1),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(4),
+      ),
+      textStyle: const TextStyle(
+        color: Colors.white,
+        fontSize: 12,
+      ),
+      child: child,
+    );
+  }
+
   /// Build position info display - matches Python's _update_position_info
   Widget _buildPositionInfo() {
     if (_currentPosition == null) return const SizedBox();
@@ -531,7 +636,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
         // Game info
         Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}', style: const TextStyle(fontSize: 14)),
-        Text('Difficulty: ${pos.difficulty}/5', style: const TextStyle(fontSize: 14)),
         Text('Success rate: ${(pos.successRate * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 14)),
         Text('Reviews: ${pos.reviewCount}', style: const TextStyle(fontSize: 14)),
 
@@ -808,6 +912,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         _feedback = 'Error loading position: $e';
       });
     }
+
+    // Re-grab keyboard focus for shortcuts
+    _focusNode.requestFocus();
   }
 
   void _onPreviousPosition() {
@@ -843,12 +950,20 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _onSkipPosition() {
+    // Advance the database index so we don't get the same position again
+    _database.sessionPositionIndex++;
     _loadNextPosition();
   }
 
   void _onShowSolution() {
     setState(() {
       _showSolution = true;
+    });
+  }
+
+  void _toggleSolution() {
+    setState(() {
+      _showSolution = !_showSolution;
     });
   }
 
@@ -898,7 +1013,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     if (result == TacticsResult.correct) {
       _handleCorrectMove(timeTaken, moveUci: moveUci);
     } else {
-      _handleIncorrectMove(timeTaken);
+      _handleIncorrectMove(timeTaken, moveUci: moveUci);
     }
   }
   
@@ -945,7 +1060,21 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _handleCorrectMove(double timeTaken, {String? moveUci}) {
-    // Move is already applied on the live board (chess_board_widget mutates game directly)
+    // Apply the correct move to the board so it's visually shown
+    if (moveUci != null) {
+      final appState = context.read<AppState>();
+      final game = appState.currentGame;
+      final from = moveUci.substring(0, 2);
+      final to = moveUci.substring(2, 4);
+      String? promotion;
+      if (moveUci.length > 4) promotion = moveUci.substring(4, 5);
+
+      final moveMap = <String, String?>{'from': from, 'to': to};
+      if (promotion != null) moveMap['promotion'] = promotion;
+      game.move(moveMap);
+      appState.notifyGameChanged();
+    }
+
     setState(() {
       _positionSolved = true;
       _feedback = 'Correct!';
@@ -971,20 +1100,39 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     setState(() {});
   }
 
-  void _handleIncorrectMove(double timeTaken) {
+  void _handleIncorrectMove(double timeTaken, {String? moveUci}) {
+    // Apply the incorrect move on the board so the user sees it briefly
+    if (moveUci != null && _currentPosition != null) {
+      final appState = context.read<AppState>();
+      final game = appState.currentGame;
+      final from = moveUci.substring(0, 2);
+      final to = moveUci.substring(2, 4);
+      String? promotion;
+      if (moveUci.length > 4) promotion = moveUci.substring(4, 5);
+
+      final moveMap = <String, String?>{'from': from, 'to': to};
+      if (promotion != null) moveMap['promotion'] = promotion;
+      game.move(moveMap);
+      appState.notifyGameChanged();
+    }
+
     setState(() {
       _feedback = 'Incorrect';
     });
 
-    // Reset the board to original position
+    // After a brief moment, reset the board back to the original position
     if (_currentPosition != null) {
-      try {
-        final appState = context.read<AppState>();
-        final game = chess.Chess.fromFEN(_currentPosition!.fen);
-        appState.setCurrentGame(game);
-      } catch (e) {
-        // Handle error
-      }
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted && _currentPosition != null) {
+          try {
+            final appState = context.read<AppState>();
+            final game = chess.Chess.fromFEN(_currentPosition!.fen);
+            appState.setCurrentGame(game);
+          } catch (e) {
+            // Handle error
+          }
+        }
+      });
     }
   }
 
