@@ -32,6 +32,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   TacticsPosition? _currentPosition;
   bool _positionSolved = false;
   bool _attemptRecorded = false;
+  bool _skipNextPositionChanged = false;
   DateTime? _startTime;
   String _feedback = '';
   bool _showSolution = false;
@@ -680,6 +681,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       isWhiteToPlay: isWhiteToPlay,
       controller: _pgnViewerController,
       onPositionChanged: (position) {
+        // Skip if the board was already updated directly (e.g. from a board move)
+        if (_skipNextPositionChanged) {
+          _skipNextPositionChanged = false;
+          return;
+        }
         // Update the chess board when clicking moves in the PGN
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -1002,6 +1008,14 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       );
       
       if (match.isNotEmpty && match['san'] != null) {
+        // Apply move to existing game object for smooth animation
+        final moveMap = <String, String?>{'from': from, 'to': to};
+        if (promotion != null) moveMap['promotion'] = promotion;
+        game.move(moveMap);
+        appState.notifyGameChanged();
+        
+        // Tell the PGN viewer about the move (for display only, skip board update)
+        _skipNextPositionChanged = true;
         _pgnViewerController.addEphemeralMove(match['san'] as String);
       }
     } catch (e) {
