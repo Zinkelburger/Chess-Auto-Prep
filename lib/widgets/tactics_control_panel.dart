@@ -279,7 +279,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   child: Builder(
                     builder: (context) {
                       final appState = context.watch<AppState>();
-                      final isAtStartingPosition = appState.currentGame.fen == _currentPosition!.fen;
+                      final isAtStartingPosition = _positionSolved || appState.currentGame.fen == _currentPosition!.fen;
                       if (isAtStartingPosition) {
                         return _shortcutTooltip(
                           message: 'a',
