@@ -331,6 +331,17 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             ),
             const SizedBox(height: 16),
 
+            CheckboxListTile(
+              value: _autoAdvance,
+              onChanged: (value) {
+                setState(() {
+                  _autoAdvance = value ?? true;
+                });
+              },
+              title: const Text('Auto-advance to next position'),
+              contentPadding: EdgeInsets.zero,
+            ),
+
             // Feedback + Solution area — stacked so they overlay in the same spot
             Stack(
               children: [
@@ -386,17 +397,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                     ),
                   ),
               ],
-            ),
-
-            CheckboxListTile(
-              value: _autoAdvance,
-              onChanged: (value) {
-                setState(() {
-                  _autoAdvance = value ?? true;
-                });
-              },
-              title: const Text('Auto-advance to next position'),
-              contentPadding: EdgeInsets.zero,
             ),
           ],
 
@@ -634,7 +634,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
         // Game info
         Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}', style: const TextStyle(fontSize: 14)),
-        Text('Success: ${(pos.successRate * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 14)),
+        // TODO: figure out an elegant way to show success %
+        // Text('Success: ${(pos.successRate * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 14)),
 
         // Show the move that was played
         if (pos.userMove.isNotEmpty) ...[
