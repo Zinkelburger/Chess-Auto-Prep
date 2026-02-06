@@ -31,6 +31,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   // State
   TacticsPosition? _currentPosition;
   bool _positionSolved = false;
+  bool _attemptRecorded = false;
   DateTime? _startTime;
   String _feedback = '';
   bool _showSolution = false;
@@ -590,14 +591,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             ],
           ],
 
-          // Session stats
-          if (_currentPosition != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              '${_database.currentSession.positionsCorrect}/${_database.currentSession.positionsAttempted}',
-              style: const TextStyle(fontSize: 14),
-            ),
-          ],
         ],
       ),
     );
@@ -641,8 +634,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
         // Game info
         Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}', style: const TextStyle(fontSize: 14)),
-        Text('Success rate: ${(pos.successRate * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 14)),
-        Text('Reviews: ${pos.reviewCount}', style: const TextStyle(fontSize: 14)),
+        Text('Success: ${(pos.successRate * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 14)),
 
         // Show the move that was played
         if (pos.userMove.isNotEmpty) ...[
@@ -879,6 +871,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     setState(() {
       _currentPosition = position;
       _positionSolved = false;
+      _attemptRecorded = false;
       _startTime = DateTime.now();
       _feedback = '';
       _showSolution = false;
@@ -1036,16 +1029,19 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _feedback = 'Correct!';
     });
 
-    // Record the attempt and refresh _currentPosition with updated stats
-    _database.recordAttempt(
-      _currentPosition!,
-      TacticsResult.correct,
-      timeTaken,
-    ).then((_) {
-      if (mounted) {
-        _refreshCurrentPosition();
-      }
-    });
+    // Only record on first attempt per position encounter (binary: first-try = success)
+    if (!_attemptRecorded) {
+      _attemptRecorded = true;
+      _database.recordAttempt(
+        _currentPosition!,
+        TacticsResult.correct,
+        timeTaken,
+      ).then((_) {
+        if (mounted) {
+          _refreshCurrentPosition();
+        }
+      });
+    }
 
     // Auto-advance or enable skip button
     if (_autoAdvance) {
@@ -1078,8 +1074,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _feedback = 'Incorrect';
     });
 
-    // Record the incorrect attempt and refresh _currentPosition with updated stats
-    if (_currentPosition != null) {
+    // Only record on first attempt per position encounter (binary: first-try wrong = failure)
+    if (!_attemptRecorded && _currentPosition != null) {
+      _attemptRecorded = true;
       _database.recordAttempt(
         _currentPosition!,
         TacticsResult.incorrect,
