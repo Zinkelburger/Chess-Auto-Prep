@@ -199,41 +199,22 @@ class TacticsDatabase {
     await savePositions();
   }
 
-  /// Get positions for linear review - matches Python logic
-  List<TacticsPosition> getPositionsForReview(int limit) {
-    if (positions.isEmpty) return [];
-
-    if (sessionPositionIndex >= positions.length) {
-      sessionPositionIndex = 0;
-    }
-
-    // Find starting point - first position with fewer reviews than max
-    int maxReviews = 0;
-    if (positions.isNotEmpty) {
-      maxReviews = positions.map((p) => p.reviewCount).reduce((a, b) => a > b ? a : b);
-    }
-
-    // Start from current index and find first position with < max reviews
-    final startingIndex = sessionPositionIndex;
-    for (int i = 0; i < positions.length; i++) {
-      final index = (startingIndex + i) % positions.length;
-      if (positions[index].reviewCount < maxReviews) {
-        sessionPositionIndex = index;
-        return [positions[index]];
-      }
-    }
-
-    // If all have max reviews, start from current index
-    if (sessionPositionIndex >= positions.length) {
-      sessionPositionIndex = 0;
-    }
-
-    return [positions[sessionPositionIndex]];
-  }
-
-  /// Start a new review session
+  /// Start a new review session, starting at the least-reviewed position
   void startSession() {
     currentSession = ReviewSession();
+
+    // Start at the least-reviewed position (pick up where you left off)
+    if (positions.isNotEmpty) {
+      int minReviews = positions.first.reviewCount;
+      int minIndex = 0;
+      for (int i = 1; i < positions.length; i++) {
+        if (positions[i].reviewCount < minReviews) {
+          minReviews = positions[i].reviewCount;
+          minIndex = i;
+        }
+      }
+      sessionPositionIndex = minIndex;
+    }
   }
 
   /// Record an attempt at a position
@@ -277,8 +258,6 @@ class TacticsDatabase {
 
     if (result == TacticsResult.correct) {
       currentSession.positionsCorrect++;
-      // Advance to next position in linear sequence
-      sessionPositionIndex = (sessionPositionIndex + 1) % positions.length;
     } else if (result == TacticsResult.incorrect) {
       currentSession.positionsIncorrect++;
     } else if (result == TacticsResult.hint) {
