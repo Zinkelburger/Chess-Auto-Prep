@@ -9,6 +9,8 @@ import 'package:chess_auto_prep/models/engine_evaluation.dart';
 import 'stockfish_service.dart';
 import 'tactics_database.dart';
 import 'storage/storage_factory.dart';
+import 'tactics_parallel_analyzer_stub.dart'
+    if (dart.library.io) 'tactics_parallel_analyzer.dart' as parallel;
 
 /// Callback for when a new tactics position is found during import
 typedef OnPositionFoundCallback = void Function(TacticsPosition position);
@@ -25,6 +27,12 @@ class TacticsImportService {
   
   /// Check if engine-based analysis is available on this platform
   bool get isAnalysisAvailable => _stockfish.isAvailable.value;
+
+  /// Whether parallel multi-core analysis is available (desktop only).
+  static bool get isParallelAvailable => parallel.isParallelAnalysisAvailable;
+
+  /// Number of logical CPU cores on this machine (1 on web).
+  static int get availableCores => parallel.availableProcessors;
 
   // Lichess winning chances formula (from scalachess)
   // Returns [-1, +1] where -1 = losing, 0 = equal, +1 = winning
@@ -49,7 +57,8 @@ class TacticsImportService {
   Future<List<TacticsPosition>> importGamesFromLichess(
     String username, {
     int? maxGames, 
-    int depth = 15, 
+    int depth = 15,
+    int? maxCores,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
@@ -69,7 +78,7 @@ class TacticsImportService {
       if (response.statusCode == 200) {
         // Save the raw PGNs first
         await _savePgns(response.body);
-        return _processGames(response.body, username, depth, progressCallback, onPositionFound);
+        return _processGames(response.body, username, depth, progressCallback, onPositionFound, maxCores: maxCores);
       } else {
         throw Exception('Failed to fetch games from Lichess: ${response.statusCode}');
       }
@@ -81,7 +90,8 @@ class TacticsImportService {
   Future<List<TacticsPosition>> importGamesFromChessCom(
     String username, {
     int? maxGames, 
-    int depth = 15, 
+    int depth = 15,
+    int? maxCores,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
@@ -138,7 +148,7 @@ class TacticsImportService {
     // Save the raw PGNs first
     await _savePgns(gamesToProcess);
     
-    return _processGames(gamesToProcess, username, depth, progressCallback, onPositionFound);
+    return _processGames(gamesToProcess, username, depth, progressCallback, onPositionFound, maxCores: maxCores);
   }
 
   /// Save raw PGNs to storage with GameId headers injected.
@@ -311,17 +321,76 @@ class TacticsImportService {
     String username, 
     int depth, 
     Function(String)? progressCallback,
-    OnPositionFoundCallback? onPositionFound,
-  ) async {
-    // Wait for Stockfish to initialize before checking availability
-    // (isAvailable is set async in _initEngine, so we need to wait)
+    OnPositionFoundCallback? onPositionFound, {
+    int? maxCores,
+  }) async {
+    final games = _splitPgnIntoGames(pgnContent);
+    final usernameLower = username.toLowerCase();
+
+    // ── Pre-filter: skip already-analyzed games ──────────────
+    final gameTasks = <Map<String, dynamic>>[];
+    int skippedCount = 0;
+
+    for (int i = 0; i < games.length; i++) {
+      final gameId = _extractGameId(games[i]);
+      if (skipAnalyzedGames && _database.isGameAnalyzed(gameId)) {
+        skippedCount++;
+        if (kDebugMode) print('Skipping already-analyzed game: $gameId');
+        progressCallback?.call(
+          'Skipping game ${i + 1}/${games.length} (already analyzed)...',
+        );
+        continue;
+      }
+      gameTasks.add({
+        'gameText': games[i],
+        'globalIndex': i + 1,
+        'gameId': gameId,
+      });
+    }
+
+    if (gameTasks.isEmpty) {
+      progressCallback?.call(
+        'All ${games.length} games already analyzed!',
+      );
+      return [];
+    }
+
+    // ── PARALLEL PATH (desktop, 2+ games) ────────────────────
+    if (parallel.isParallelAnalysisAvailable && gameTasks.length > 1) {
+      try {
+        final positions = await parallel.analyzeGamesParallel(
+          gameTasks: gameTasks,
+          username: usernameLower,
+          depth: depth,
+          totalGames: games.length,
+          maxCores: maxCores,
+          progressCallback: progressCallback,
+          onPositionFound: onPositionFound,
+          onGameComplete: (gameId) => _database.markGameAnalyzed(gameId),
+        );
+        progressCallback?.call(
+          'Done! Analyzed ${gameTasks.length} games'
+          '${skippedCount > 0 ? ', skipped $skippedCount' : ''}. '
+          'Found ${positions.length} tactics positions.',
+        );
+        return positions;
+      } catch (e) {
+        if (kDebugMode) {
+          print('Parallel analysis failed, falling back to sequential: $e');
+        }
+        progressCallback?.call('Parallel analysis unavailable, using sequential...');
+        // Fall through to sequential path.
+      }
+    }
+
+    // ── SEQUENTIAL PATH (web, mobile, single game, or fallback) ─
+    // Wait for the singleton Stockfish to initialise.
     int waited = 0;
     while (!_stockfish.isAvailable.value && waited < 50) {
       await Future.delayed(const Duration(milliseconds: 100));
       waited++;
     }
-    
-    // Check if Stockfish is available after waiting for initialization
+
     if (!_stockfish.isAvailable.value) {
       throw Exception(
         'Tactics analysis requires Stockfish, which is not available on this platform (web).\n\n'
@@ -331,81 +400,55 @@ class TacticsImportService {
         '• Practice existing tactics positions'
       );
     }
-    
-    final games = _splitPgnIntoGames(pgnContent);
-    final positions = <TacticsPosition>[];
-    final usernameLower = username.toLowerCase();
 
-    int gameIdx = 0;
-    int skippedCount = 0;
-    
-    for (final gameText in games) {
-      gameIdx++;
-      
+    final positions = <TacticsPosition>[];
+
+    for (final task in gameTasks) {
+      final gameText = task['gameText'] as String;
+      final globalIndex = task['globalIndex'] as int;
+      final gameId = task['gameId'] as String;
+
       try {
-        // Use dartchess for robust PGN header parsing
         final game = PgnGame.parsePgn(gameText);
-        
-        // Extract game ID early to check if already analyzed
-        // Always use _extractGameId which handles all formats correctly
-        final gameId = _extractGameId(gameText);
-        
-        // Skip if already analyzed
-        if (skipAnalyzedGames && _database.isGameAnalyzed(gameId)) {
-          skippedCount++;
-          if (kDebugMode) {
-            print('Skipping already-analyzed game: $gameId');
-          }
-          progressCallback?.call('Skipping game $gameIdx/${games.length} (already analyzed)...');
-          continue;
-        }
-        
-        final progressMsg = 'Analyzing game $gameIdx/${games.length} (depth $depth)... ${skippedCount > 0 ? "($skippedCount skipped)" : ""}';
+
+        final progressMsg =
+            'Analyzing game $globalIndex/${games.length} (depth $depth)... '
+            '${skippedCount > 0 ? "($skippedCount skipped)" : ""}';
         progressCallback?.call(progressMsg);
-        
-        if (kDebugMode) {
-          print(progressMsg);
-        }
-        
+        if (kDebugMode) print(progressMsg);
+
         final white = game.headers['White']?.toLowerCase() ?? '';
         final black = game.headers['Black']?.toLowerCase() ?? '';
-        
-        chess.Color? userColor; // chess.dart Color enum
-        
+
+        chess.Color? userColor;
         if (white == usernameLower) {
           userColor = chess.Color.WHITE;
         } else if (black == usernameLower) {
           userColor = chess.Color.BLACK;
+        } else if (white.contains(usernameLower)) {
+          userColor = chess.Color.WHITE;
+        } else if (black.contains(usernameLower)) {
+          userColor = chess.Color.BLACK;
         } else {
-          if (white.contains(usernameLower)) {
-            userColor = chess.Color.WHITE;
-          } else if (black.contains(usernameLower)) {
-            userColor = chess.Color.BLACK;
-          } else {
-            // Mark as analyzed even if user not found (to avoid re-checking)
-            await _database.markGameAnalyzed(gameId);
-            continue;
-          }
+          await _database.markGameAnalyzed(gameId);
+          continue;
         }
 
-        // Analyze the game with streaming callback
         final gamePositions = <TacticsPosition>[];
-        await _analyzeGame(game, userColor!, depth, gamePositions, onPositionFound, gameId);
+        await _analyzeGame(game, userColor, depth, gamePositions, onPositionFound, gameId);
         positions.addAll(gamePositions);
-        
-        // Mark game as analyzed (even if no blunders found)
+
         await _database.markGameAnalyzed(gameId);
-        
       } catch (e) {
-        if (kDebugMode) {
-          print('Error parsing game $gameIdx: $e');
-        }
+        if (kDebugMode) print('Error parsing game $globalIndex: $e');
         continue;
       }
     }
 
     if (skippedCount > 0) {
-      progressCallback?.call('Done! Analyzed ${gameIdx - skippedCount} new games, skipped $skippedCount already-analyzed games.');
+      progressCallback?.call(
+        'Done! Analyzed ${gameTasks.length} new games, skipped $skippedCount already-analyzed games.',
+      );
     }
 
     return positions;

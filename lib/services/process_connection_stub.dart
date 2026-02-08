@@ -7,6 +7,11 @@ class ProcessConnection implements EngineConnection {
     throw UnsupportedError('Process connection not supported on this platform');
   }
 
+  /// Not available on this platform.
+  static Future<String> resolveExecutablePath() async {
+    throw UnsupportedError('Process connection not supported on this platform');
+  }
+
   @override
   Stream<String> get stdout => const Stream.empty();
 
