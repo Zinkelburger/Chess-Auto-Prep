@@ -141,39 +141,43 @@ class TacticsImportService {
     return _processGames(gamesToProcess, username, depth, progressCallback, onPositionFound);
   }
 
-  /// Save raw PGNs to storage with GameId headers injected
+  /// Save raw PGNs to storage with GameId headers injected.
+  ///
+  /// Appends to existing PGNs, skipping any games whose GameId already
+  /// appears in the stored file.
   Future<void> _savePgns(String pgnContent) async {
     try {
-      // Split into games and inject GameId headers
       final games = _splitPgnIntoGames(pgnContent);
-      final processedGames = <String>[];
+      final processedGames = games.map(_injectGameIdHeader).toList();
       
-      for (final game in games) {
-        final processedGame = _injectGameIdHeader(game);
-        processedGames.add(processedGame);
-      }
-      
-      final processedContent = processedGames.join('\n\n');
-      
-      // On IO this appends/overwrites. On Web (SharedPrefs) we might overwrite.
-      // Ideally we should append if it exists, but for now overwriting current batch is fine
-      // or we can read existing.
-      // Let's try to append to existing for better UX
       final existing = await StorageFactory.instance.readImportedPgns() ?? '';
       
-      // Simple check to avoid duplicates if possible, or just append
-      // For now, let's just save the new batch or append.
-      // To be safe and simple, let's just save this batch as "current import"
-      // But StorageService.saveImportedPgns overwrites.
-      // Let's overwrite for now as the user primarily wants Tactics, and this file is for PGN viewer/Analysis
-      // which loads from this file.
-      // If we want to keep history, we should read-then-write.
+      // Collect GameIds already in storage to avoid duplicates
+      final existingIds = <String>{};
+      if (existing.isNotEmpty) {
+        for (final match in RegExp(r'\[GameId "([^"]+)"\]').allMatches(existing)) {
+          existingIds.add(match.group(1)!);
+        }
+      }
       
-      final newContent = existing.isEmpty ? processedContent : '$existing\n\n$processedContent';
+      // Only append games not already stored
+      final newGames = processedGames.where((game) {
+        final idMatch = RegExp(r'\[GameId "([^"]+)"\]').firstMatch(game);
+        return idMatch == null || !existingIds.contains(idMatch.group(1));
+      }).toList();
+      
+      if (newGames.isEmpty) {
+        if (kDebugMode) print('All ${games.length} PGNs already in storage, nothing to append');
+        return;
+      }
+      
+      final newContent = existing.isEmpty
+          ? newGames.join('\n\n')
+          : '$existing\n\n${newGames.join('\n\n')}';
       await StorageFactory.instance.saveImportedPgns(newContent);
       
       if (kDebugMode) {
-        print('Saved ${games.length} PGNs to storage');
+        print('Appended ${newGames.length} new PGNs to storage (${games.length - newGames.length} duplicates skipped)');
       }
     } catch (e) {
       if (kDebugMode) {
@@ -182,93 +186,54 @@ class TacticsImportService {
     }
   }
   
-  /// Extract gameId from PGN headers using same logic as TacticsPosition
+  /// Extract game ID from PGN headers.
+  ///
+  /// Lichess provides the game URL in the [Site] header, Chess.com in [Link].
+  /// Both APIs always include one of these, so we only handle those two
+  /// sources (plus our own injected [GameId] header). Returns empty string
+  /// if no ID can be determined, which causes the game to be analyzed every
+  /// time (safe fallback).
   String _extractGameId(String gameText) {
-    // Try to find existing GameId header
+    // 1. Our own injected GameId header (from a previous import)
     final gameIdMatch = RegExp(r'\[GameId "([^"]+)"\]').firstMatch(gameText);
     if (gameIdMatch != null) {
-      if (kDebugMode) print('  GameId from header: ${gameIdMatch.group(1)}');
       return gameIdMatch.group(1)!;
     }
     
-    // Try Link header (Chess.com uses this)
-    // Format: [Link "https://www.chess.com/game/live/123456789"]
+    // 2. Chess.com: [Link "https://www.chess.com/game/live/123456789"]
     final linkMatch = RegExp(r'\[Link "([^"]+)"\]').firstMatch(gameText);
     if (linkMatch != null) {
       final link = linkMatch.group(1)!;
-      if (kDebugMode) print('  Found Link header: $link');
-      // Extract last numeric segment from URL
       final match = RegExp(r'/(\d+)(?:\?|$|#)').firstMatch(link);
       if (match != null) {
-        final gameId = 'chesscom_${match.group(1)}';
-        if (kDebugMode) print('  Extracted game ID from Link: $gameId');
-        return gameId;
+        return 'chesscom_${match.group(1)}';
       }
       // Fallback: last path segment
       final parts = link.split('/');
       final lastPart = parts.where((p) => p.isNotEmpty).lastOrNull;
       if (lastPart != null && lastPart.toLowerCase() != 'chess.com') {
-        final gameId = 'chesscom_$lastPart';
-        if (kDebugMode) print('  Extracted game ID from Link (fallback): $gameId');
-        return gameId;
+        return 'chesscom_$lastPart';
       }
-    } else {
-      if (kDebugMode) print('  No Link header found');
     }
     
-    // Try Site URL (Lichess uses full URL in Site header)
+    // 3. Lichess: [Site "https://lichess.org/AbCdEfGh"]
     final siteMatch = RegExp(r'\[Site "([^"]+)"\]').firstMatch(gameText);
     if (siteMatch != null) {
       final site = siteMatch.group(1)!;
-      final siteLower = site.toLowerCase();
-      if (kDebugMode) print('  Found Site header: $site');
-      
-      // Skip if it's just "Chess.com" without a game ID (case insensitive)
-      if (siteLower == 'chess.com' || 
-          siteLower == 'https://chess.com' || 
-          siteLower == 'https://www.chess.com' ||
-          siteLower == 'http://chess.com' ||
-          siteLower == 'http://www.chess.com') {
-        // Don't use this, fall through to other methods
-      } else if (siteLower.contains('lichess.org/')) {
-        // Lichess format: https://lichess.org/AbCdEfGh
+      if (site.toLowerCase().contains('lichess.org/')) {
         final parts = site.split('/');
         final gameId = parts.where((p) => p.isNotEmpty && !p.contains('.')).lastOrNull;
         if (gameId != null && gameId.length >= 6) {
           return 'lichess_$gameId';
         }
-      } else if (site.contains('/') && !siteLower.contains('chess.com')) {
-        // Other URL format - extract last segment (but not if it's chess.com)
-        final parts = site.split('/');
-        final lastPart = parts.where((p) => p.isNotEmpty).lastOrNull;
-        if (lastPart != null && lastPart.length >= 4 && lastPart.toLowerCase() != 'chess.com') {
-          return lastPart;
-        }
       }
     }
     
-    // Try to create unique ID from game metadata
-    final whiteMatch = RegExp(r'\[White "([^"]+)"\]').firstMatch(gameText);
-    final blackMatch = RegExp(r'\[Black "([^"]+)"\]').firstMatch(gameText);
-    final dateMatch = RegExp(r'\[Date "([^"]+)"\]').firstMatch(gameText);
-    final utcTimeMatch = RegExp(r'\[UTCTime "([^"]+)"\]').firstMatch(gameText);
-    
-    if (whiteMatch != null && blackMatch != null && dateMatch != null) {
-      final white = whiteMatch.group(1)!;
-      final black = blackMatch.group(1)!;
-      final date = dateMatch.group(1)!;
-      final time = utcTimeMatch?.group(1) ?? '';
-      // Create a deterministic ID from the game details
-      final combined = '$white-$black-$date-$time';
-      final gameId = 'game_${combined.hashCode.abs()}';
-      if (kDebugMode) print('  Created game ID from metadata: $gameId ($white vs $black)');
-      return gameId;
+    // No recognizable game ID found
+    if (kDebugMode) {
+      print('Warning: could not extract game ID from PGN headers');
     }
-    
-    // Last resort: generate from hash of content
-    final hashId = 'hash_${gameText.hashCode.abs()}';
-    if (kDebugMode) print('  Using hash fallback: $hashId');
-    return hashId;
+    return '';
   }
   
   /// Inject GameId header into PGN if not present
