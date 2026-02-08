@@ -12,7 +12,6 @@ class TacticsPosition {
   final String gameDate;
   final String gameId;
   final String gameUrl;
-  final int difficulty;            // 1-5 scale matching Python
   final DateTime? lastReviewed;
   final int reviewCount;           // Number of times reviewed
   final int successCount;          // Number of times solved correctly
@@ -32,7 +31,6 @@ class TacticsPosition {
     required this.gameDate,
     required this.gameId,
     this.gameUrl = '',
-    this.difficulty = 1,
     this.lastReviewed,
     this.reviewCount = 0,
     this.successCount = 0,
@@ -59,10 +57,10 @@ class TacticsPosition {
     return match != null ? int.tryParse(match.group(1)!) ?? 1 : 1;
   }
 
-  /// Create from CSV row - matches Python's CSV format exactly
+  /// Create from CSV row (17 columns).
   factory TacticsPosition.fromCsv(List<dynamic> row) {
-    if (row.length < 18) {
-      throw ArgumentError('Not enough CSV values for TacticsPosition (need 18, got ${row.length})');
+    if (row.length < 17) {
+      throw ArgumentError('Not enough CSV values for TacticsPosition (need 17, got ${row.length})');
     }
 
     return TacticsPosition(
@@ -78,14 +76,13 @@ class TacticsPosition {
       correctLine: row[9].toString().split('|').where((s) => s.isNotEmpty).toList(),
       mistakeType: row[10].toString(),
       mistakeAnalysis: row[11].toString(),
-      difficulty: int.tryParse(row[12].toString()) ?? 1,
-      reviewCount: int.tryParse(row[13].toString()) ?? 0,
-      successCount: int.tryParse(row[14].toString()) ?? 0,
-      lastReviewed: row[15].toString().isNotEmpty
-          ? DateTime.tryParse(row[15].toString())
+      reviewCount: int.tryParse(row[12].toString()) ?? 0,
+      successCount: int.tryParse(row[13].toString()) ?? 0,
+      lastReviewed: row[14].toString().isNotEmpty
+          ? DateTime.tryParse(row[14].toString())
           : null,
-      timeToSolve: double.tryParse(row[16].toString()) ?? 0.0,
-      hintsUsed: int.tryParse(row[17].toString()) ?? 0,
+      timeToSolve: double.tryParse(row[15].toString()) ?? 0.0,
+      hintsUsed: int.tryParse(row[16].toString()) ?? 0,
     );
   }
 
@@ -108,7 +105,6 @@ class TacticsPosition {
       gameDate: json['game_date'] ?? '',
       gameId: json['game_id'] ?? '',
       gameUrl: json['game_url'] ?? '',
-      difficulty: json['difficulty'] as int? ?? 1,
       lastReviewed: json['last_reviewed'] != null ? DateTime.tryParse(json['last_reviewed']) : null,
       reviewCount: json['review_count'] as int? ?? 0,
       successCount: json['success_count'] as int? ?? 0,
@@ -132,7 +128,6 @@ class TacticsPosition {
       'game_date': gameDate,
       'game_id': gameId,
       'game_url': gameUrl,
-      'difficulty': difficulty,
       'last_reviewed': lastReviewed?.toIso8601String(),
       'review_count': reviewCount,
       'success_count': successCount,
@@ -156,7 +151,6 @@ class TacticsPosition {
       correctLine.join('|'),
       mistakeType,
       mistakeAnalysis,
-      difficulty,
       reviewCount,
       successCount,
       lastReviewed?.toIso8601String() ?? '',

@@ -110,36 +110,15 @@ class TacticsDatabase {
     print('Cleared analyzed games tracking');
   }
 
-  /// Create a TacticsPosition from a CSV row
+  /// Create a TacticsPosition from a CSV row.
   TacticsPosition? _createPositionFromRow(List<dynamic> row) {
-    if (row.length < 18) {
+    if (row.length < 17) {
       print('Row too short: ${row.length} fields');
       return null;
     }
 
     try {
-      return TacticsPosition(
-        fen: row[0].toString(),
-        gameWhite: row[1].toString(),
-        gameBlack: row[2].toString(),
-        gameResult: row[3].toString(),
-        gameDate: row[4].toString(),
-        gameId: row[5].toString(),
-        gameUrl: row[6].toString(),
-        positionContext: row[7].toString(),
-        userMove: row[8].toString(),
-        correctLine: row[9].toString().split('|').where((s) => s.isNotEmpty).toList(),
-        mistakeType: row[10].toString(),
-        mistakeAnalysis: row[11].toString(),
-        difficulty: int.tryParse(row[12].toString()) ?? 1,
-        reviewCount: int.tryParse(row[13].toString()) ?? 0,
-        successCount: int.tryParse(row[14].toString()) ?? 0,
-        lastReviewed: row[15].toString().isNotEmpty
-            ? DateTime.tryParse(row[15].toString())
-            : null,
-        timeToSolve: double.tryParse(row[16].toString()) ?? 0.0,
-        hintsUsed: int.tryParse(row[17].toString()) ?? 0,
-      );
+      return TacticsPosition.fromCsv(row);
     } catch (e) {
       print('Error creating position from row: $e');
       return null;
@@ -151,37 +130,18 @@ class TacticsDatabase {
     try {
       // Create CSV data
       final List<List<dynamic>> csvData = [
-        // Header row matching Python's field names
+        // Header row
         [
           'fen', 'game_white', 'game_black', 'game_result', 'game_date',
           'game_id', 'game_url', 'position_context', 'user_move', 'correct_line',
-          'mistake_type', 'mistake_analysis', 'difficulty', 'review_count',
+          'mistake_type', 'mistake_analysis', 'review_count',
           'success_count', 'last_reviewed', 'time_to_solve', 'hints_used'
         ]
       ];
 
       // Data rows
       for (final pos in positions) {
-        csvData.add([
-          pos.fen,
-          pos.gameWhite,
-          pos.gameBlack,
-          pos.gameResult,
-          pos.gameDate,
-          pos.gameId,
-          pos.gameUrl,
-          pos.positionContext,
-          pos.userMove,
-          pos.correctLine.join('|'),
-          pos.mistakeType,
-          pos.mistakeAnalysis,
-          pos.difficulty,
-          pos.reviewCount,
-          pos.successCount,
-          pos.lastReviewed?.toIso8601String() ?? '',
-          pos.timeToSolve,
-          pos.hintsUsed,
-        ]);
+        csvData.add(pos.toCsvRow());
       }
 
       final csv = const ListToCsvConverter().convert(csvData);
@@ -242,7 +202,6 @@ class TacticsDatabase {
       correctLine: position.correctLine,
       mistakeType: position.mistakeType,
       mistakeAnalysis: position.mistakeAnalysis,
-      difficulty: position.difficulty,
       reviewCount: position.reviewCount + 1,
       successCount: position.successCount + (result == TacticsResult.correct ? 1 : 0),
       lastReviewed: DateTime.now(),

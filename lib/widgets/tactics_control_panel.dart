@@ -888,7 +888,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final correctLineCtrl = TextEditingController(text: pos.correctLine.join(' | '));
     final mistakeTypeCtrl = TextEditingController(text: pos.mistakeType);
     final analysisCtrl = TextEditingController(text: pos.mistakeAnalysis);
-    final difficultyCtrl = TextEditingController(text: pos.difficulty.toString());
 
     final saved = await showDialog<bool>(
       context: context,
@@ -943,16 +942,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   ),
                   maxLines: 3,
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: difficultyCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Difficulty (1–5)',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
               ],
             ),
           ),
@@ -982,7 +971,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         gameDate: pos.gameDate,
         gameId: pos.gameId,
         gameUrl: pos.gameUrl,
-        difficulty: (int.tryParse(difficultyCtrl.text) ?? pos.difficulty).clamp(1, 5),
         lastReviewed: pos.lastReviewed,
         reviewCount: pos.reviewCount,
         successCount: pos.successCount,
@@ -998,7 +986,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     correctLineCtrl.dispose();
     mistakeTypeCtrl.dispose();
     analysisCtrl.dispose();
-    difficultyCtrl.dispose();
   }
 
   Widget _readOnlyField(String label, String value) {
