@@ -10,7 +10,7 @@ import '../models/tactics_position.dart';
 import '../services/tactics_database.dart';
 import '../services/tactics_engine.dart';
 import '../services/tactics_import_service.dart';
-import 'pgn_viewer_widget.dart';
+import '../services/storage/storage_factory.dart';
 
 /// Tactics training control panel with import, review, and analysis.
 class TacticsControlPanel extends StatefulWidget {
@@ -34,7 +34,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   TacticsPosition? _currentPosition;
   bool _positionSolved = false;
   bool _attemptRecorded = false;
-  bool _skipNextPositionChanged = false;
   DateTime? _startTime;
   String _feedback = '';
   bool _showSolution = false;
@@ -49,9 +48,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   late TextEditingController _chessComUserController;
   late TextEditingController _chessComCountController;
   late TextEditingController _stockfishDepthController;
-
-  // PGN Viewer controller for analysis tab
-  final PgnViewerController _pgnViewerController = PgnViewerController();
 
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();
@@ -77,18 +73,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         _chessComUserController.text = appState.chesscomUsername ?? '';
         
         context.read<AppState>().setMoveAttemptedCallback(_onMoveAttempted);
-      }
-    });
-
-    // Listen for tab changes to enter/exit analysis mode
-    _tabController.addListener(() {
-      if (mounted) {
-        final appState = context.read<AppState>();
-        if (_tabController.index == 1) {
-          appState.enterAnalysisMode();
-        } else {
-          appState.exitAnalysisMode();
-        }
       }
     });
 
@@ -128,7 +112,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             controller: _tabController,
             tabs: const [
               Tab(text: 'Tactic'),
-              Tab(text: 'PGN'),
+              Tab(text: 'Browse'),
             ],
           ),
 
@@ -138,7 +122,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               controller: _tabController,
               children: [
                 _buildTacticTab(),
-                _buildAnalysisTab(),
+                _buildBrowseTab(),
               ],
             ),
           ),
@@ -170,17 +154,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Space — Toggle Solution
     if (key == LogicalKeyboardKey.space) {
       _toggleSolution();
-      return KeyEventResult.handled;
-    }
-
-    // Left/Right arrow — PGN move navigation (works on both tabs)
-    if (key == LogicalKeyboardKey.arrowRight) {
-      _pgnViewerController.goForward();
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      _pgnViewerController.goBack();
       return KeyEventResult.handled;
     }
 
@@ -543,7 +516,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
+                  color: Colors.green.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.green),
                 ),
@@ -562,32 +535,22 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               ),
             ],
               
-            // Database management buttons - always show when not importing
-            if (!_isImporting) ...[
+            // Database management buttons
+            if (!_isImporting && _database.positions.isNotEmpty) ...[
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (_database.positions.isNotEmpty)
-                    TextButton(
-                      onPressed: () {
-                        _database.clearPositions().then((_) => setState(() {}));
-                      },
-                      child: const Text('Clear Database'),
-                    ),
-                  if (_database.positions.isNotEmpty)
-                    const SizedBox(width: 16),
-                  TextButton(
-                    onPressed: () async {
-                      await _database.clearAnalyzedGames();
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Cleared analyzed games history. Games will be re-analyzed on next import.')),
-                        );
-                        setState(() {});
-                      }
-                    },
-                    child: Text('Reset Analyzed Games${_database.analyzedGameIds.isNotEmpty ? " (${_database.analyzedGameIds.length})" : ""}'),
+                  TextButton.icon(
+                    onPressed: _confirmClearDatabase,
+                    icon: const Icon(Icons.delete_outline, size: 16),
+                    label: const Text('Clear Database'),
+                  ),
+                  const SizedBox(width: 16),
+                  TextButton.icon(
+                    onPressed: () => _tabController.animateTo(1),
+                    icon: const Icon(Icons.list_alt, size: 16),
+                    label: const Text('Browse Tactics'),
                   ),
                 ],
               ),
@@ -650,56 +613,417 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
   }
 
-  Widget _buildAnalysisTab() {
-    if (_currentPosition == null) {
+  // ---------------------------------------------------------------------------
+  // Browse tab
+  // ---------------------------------------------------------------------------
+
+  Widget _buildBrowseTab() {
+    if (_database.positions.isEmpty) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(16.0),
-          child: Text('Load a tactics position to analyze'),
+          child: Text(
+            'No tactics found yet.\nImport games to discover tactical positions.',
+            textAlign: TextAlign.center,
+          ),
         ),
       );
     }
 
-    // Extract move number and player to move from position context
-    int? moveNumber;
-    bool? isWhiteToPlay;
+    return Column(
+      children: [
+        // Header bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              Text(
+                '${_database.positions.length} tactics',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _confirmClearDatabase,
+                icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                label: const Text('Clear All', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
 
-    final positionContext = _currentPosition!.positionContext;
-    final match = RegExp(r'Move (\d+)').firstMatch(positionContext);
-    if (match != null) {
-      moveNumber = int.tryParse(match.group(1)!);
-      isWhiteToPlay = positionContext.contains('White');
+        // Column headers
+        _buildBrowseHeader(),
+        const Divider(height: 1),
+
+        // Scrollable list of tactics
+        Expanded(
+          child: ListView.builder(
+            itemCount: _database.positions.length,
+            itemBuilder: (context, index) => _buildBrowseRow(index),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBrowseHeader() {
+    const headerStyle = TextStyle(
+      fontWeight: FontWeight.bold,
+      fontSize: 12,
+      color: Colors.grey,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Row(
+        children: const [
+          SizedBox(width: 72), // space for action icons
+          SizedBox(width: 32, child: Text('Type', style: headerStyle)),
+          SizedBox(width: 8),
+          Expanded(flex: 3, child: Text('Game', style: headerStyle)),
+          SizedBox(width: 8),
+          Expanded(flex: 2, child: Text('Context', style: headerStyle)),
+          SizedBox(width: 8),
+          Expanded(flex: 2, child: Text('Played → Best', style: headerStyle)),
+          SizedBox(width: 8),
+          SizedBox(width: 60, child: Text('Stats', style: headerStyle, textAlign: TextAlign.right)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBrowseRow(int index) {
+    final pos = _database.positions[index];
+    final isSelected = _currentPosition != null && _currentPosition!.fen == pos.fen;
+
+    return InkWell(
+      onTap: () => _selectTacticFromBrowse(index),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+              : (index.isEven ? Colors.transparent : Colors.white.withValues(alpha: 0.02)),
+          border: Border(
+            bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Row(
+          children: [
+            // Delete button
+            IconButton(
+              onPressed: () => _deleteTactic(index),
+              icon: Icon(Icons.close, size: 16, color: Colors.red.withValues(alpha: 0.6)),
+              tooltip: 'Delete tactic',
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
+            ),
+            // Edit button
+            IconButton(
+              onPressed: () => _showEditDialog(index),
+              icon: const Icon(Icons.edit, size: 16),
+              tooltip: 'Edit tactic',
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              padding: EdgeInsets.zero,
+            ),
+            const SizedBox(width: 4),
+
+            // Type badge
+            SizedBox(
+              width: 32,
+              child: Text(
+                pos.mistakeType,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: pos.mistakeType == '??' ? Colors.red : Colors.orange,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Game (players)
+            Expanded(
+              flex: 3,
+              child: Text(
+                '${pos.gameWhite} vs ${pos.gameBlack}',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Context (move number & color)
+            Expanded(
+              flex: 2,
+              child: Text(
+                pos.positionContext,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Played → Best
+            Expanded(
+              flex: 2,
+              child: Text(
+                '${pos.userMove} → ${pos.bestMove}',
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Stats
+            SizedBox(
+              width: 60,
+              child: Text(
+                pos.reviewCount > 0
+                    ? '${pos.successCount}/${pos.reviewCount} ${(pos.successRate * 100).toStringAsFixed(0)}%'
+                    : 'new',
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: pos.reviewCount == 0
+                      ? Colors.grey
+                      : pos.successRate >= 0.7
+                          ? Colors.green
+                          : pos.successRate >= 0.4
+                              ? Colors.orange
+                              : Colors.red,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _selectTacticFromBrowse(int index) {
+    final pos = _database.positions[index];
+    try {
+      final appState = context.read<AppState>();
+      final game = chess.Chess.fromFEN(pos.fen);
+      appState.setCurrentGame(game);
+
+      // Orient the board to the side that's to move
+      final isWhiteToMove = pos.positionContext.contains('White');
+      appState.setBoardFlipped(!isWhiteToMove);
+
+      setState(() {}); // refresh highlight
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading position: $e')),
+        );
+      }
+    }
+  }
+
+  void _deleteTactic(int index) async {
+    final pos = _database.positions[index];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Tactic'),
+        content: Text(
+          'Delete this tactic?\n\n'
+          '${pos.mistakeType} ${pos.gameWhite} vs ${pos.gameBlack}\n'
+          '${pos.positionContext}',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      _database.positions.removeAt(index);
+      await _database.savePositions();
+      setState(() {});
+    }
+  }
+
+  void _confirmClearDatabase() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear Database'),
+        content: Text(
+          'Delete all ${_database.positions.length} tactics positions, '
+          'imported PGNs, and analyzed-games history?\n\n'
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear All', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      // Wipe everything: positions, analyzed-games list, and stored PGNs
+      await _database.clearPositions();
+      await _database.clearAnalyzedGames();
+      await StorageFactory.instance.saveImportedPgns('');
+      setState(() {
+        _currentPosition = null;
+      });
+    }
+  }
+
+  Future<void> _showEditDialog(int index) async {
+    final pos = _database.positions[index];
+
+    final correctLineCtrl = TextEditingController(text: pos.correctLine.join(' | '));
+    final mistakeTypeCtrl = TextEditingController(text: pos.mistakeType);
+    final analysisCtrl = TextEditingController(text: pos.mistakeAnalysis);
+    final difficultyCtrl = TextEditingController(text: pos.difficulty.toString());
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit Tactic #${index + 1}'),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Read-only context
+                _readOnlyField('FEN', pos.fen),
+                _readOnlyField('Game', '${pos.gameWhite} vs ${pos.gameBlack}'),
+                _readOnlyField('Context', pos.positionContext),
+                _readOnlyField('You Played', pos.userMove),
+                _readOnlyField('Game ID', pos.gameId),
+                if (pos.reviewCount > 0)
+                  _readOnlyField('Stats', '${pos.successCount}/${pos.reviewCount} (${(pos.successRate * 100).toStringAsFixed(0)}%)'),
+                const SizedBox(height: 16),
+                const Text('Editable fields', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+
+                // Editable fields
+                TextField(
+                  controller: mistakeTypeCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Mistake Type',
+                    hintText: '? or ??',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: correctLineCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Correct Line (pipe-separated)',
+                    hintText: 'Nf3 | e4 | Bb5',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: analysisCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Analysis',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: difficultyCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Difficulty (1–5)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (saved == true && mounted) {
+      final updated = TacticsPosition(
+        fen: pos.fen,
+        userMove: pos.userMove,
+        correctLine: correctLineCtrl.text
+            .split('|')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList(),
+        mistakeType: mistakeTypeCtrl.text.trim(),
+        mistakeAnalysis: analysisCtrl.text,
+        positionContext: pos.positionContext,
+        gameWhite: pos.gameWhite,
+        gameBlack: pos.gameBlack,
+        gameResult: pos.gameResult,
+        gameDate: pos.gameDate,
+        gameId: pos.gameId,
+        gameUrl: pos.gameUrl,
+        difficulty: (int.tryParse(difficultyCtrl.text) ?? pos.difficulty).clamp(1, 5),
+        lastReviewed: pos.lastReviewed,
+        reviewCount: pos.reviewCount,
+        successCount: pos.successCount,
+        timeToSolve: pos.timeToSolve,
+        hintsUsed: pos.hintsUsed,
+      );
+
+      _database.positions[index] = updated;
+      await _database.savePositions();
+      setState(() {});
     }
 
-    return PgnViewerWidget(
-      key: ValueKey('analysis_${_currentPosition!.gameId}'),
-      gameId: _currentPosition!.gameId,
-      moveNumber: moveNumber,
-      isWhiteToPlay: isWhiteToPlay,
-      controller: _pgnViewerController,
-      onPositionChanged: (position) {
-        // Skip if the board was already updated directly (e.g. from a board move)
-        if (_skipNextPositionChanged) {
-          _skipNextPositionChanged = false;
-          return;
-        }
-        // Update the chess board when clicking moves in the PGN
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            final appState = context.read<AppState>();
-            final chessGame = chess.Chess.fromFEN(position.fen);
-            appState.setCurrentGame(chessGame);
-          }
-        });
-      },
+    correctLineCtrl.dispose();
+    mistakeTypeCtrl.dispose();
+    analysisCtrl.dispose();
+    difficultyCtrl.dispose();
+  }
+
+  Widget _readOnlyField(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text('$label:', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          ),
+          Expanded(
+            child: SelectableText(
+              value,
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   void _resetAnalysis() {
     if (_currentPosition == null) return;
-    
-    // Clear ephemeral moves in the PGN viewer
-    _pgnViewerController.clearEphemeralMoves();
     
     // Reset the board to the initial tactic position
     final appState = context.read<AppState>();
@@ -881,9 +1205,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _showSolution = false;
     });
 
-    // Reset ephemeral moves in the PGN viewer
-    _pgnViewerController.clearEphemeralMoves();
-
     // Set up the chess board
     try {
       final appState = context.read<AppState>();
@@ -962,15 +1283,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   void _onMoveAttempted(String moveUci) {
     if (_currentPosition == null) return;
     
-    final appState = context.read<AppState>();
-    
-    // In analysis mode, just add the move to the PGN editor
-    if (appState.isAnalysisMode) {
-      _addMoveToAnalysis(moveUci);
-      return;
-    }
-    
-    // In tactic mode, validate the move
+    // Validate the move against the tactic's correct line
     if (_positionSolved) return;
 
     // Use TacticsEngine for proper move validation
@@ -986,40 +1299,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
   
-  void _addMoveToAnalysis(String moveUci) {
-    final appState = context.read<AppState>();
-    final game = appState.currentGame;
-    
-    try {
-      final from = moveUci.substring(0, 2);
-      final to = moveUci.substring(2, 4);
-      String? promotion;
-      if (moveUci.length > 4) promotion = moveUci.substring(4);
-      
-      final moves = game.moves({'verbose': true});
-      
-      final match = moves.firstWhere(
-        (m) => m['from'] == from && m['to'] == to && 
-               (promotion == null || m['promotion'] == promotion),
-        orElse: () => <String, dynamic>{},
-      );
-      
-      if (match.isNotEmpty && match['san'] != null) {
-        // Apply move to existing game object for smooth animation
-        final moveMap = <String, String?>{'from': from, 'to': to};
-        if (promotion != null) moveMap['promotion'] = promotion;
-        game.move(moveMap);
-        appState.notifyGameChanged();
-        
-        // Tell the PGN viewer about the move (for display only, skip board update)
-        _skipNextPositionChanged = true;
-        _pgnViewerController.addEphemeralMove(match['san'] as String);
-      }
-    } catch (e) {
-      // Failed to convert move to SAN
-    }
-  }
-
   void _handleCorrectMove(double timeTaken, {String? moveUci}) {
     // Apply the correct move to the board so it's visually shown
     if (moveUci != null) {
