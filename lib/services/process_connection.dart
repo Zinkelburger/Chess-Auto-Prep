@@ -20,45 +20,47 @@ class ProcessConnection implements EngineConnection {
     return connection;
   }
 
+  /// Resolve the Stockfish binary path, extracting from assets if needed.
+  ///
+  /// Must be called from the main isolate (uses platform channels for
+  /// asset loading and path resolution). Worker isolates should receive
+  /// the resolved path string instead of calling this directly.
+  static Future<String> resolveExecutablePath() async {
+    String binaryName;
+    if (Platform.isWindows) {
+      binaryName = 'stockfish-windows.exe';
+    } else if (Platform.isMacOS) {
+      binaryName = 'stockfish-macos';
+    } else if (Platform.isLinux) {
+      binaryName = 'stockfish-linux';
+    } else {
+      throw UnsupportedError('Unsupported desktop platform');
+    }
+
+    final dir = await getApplicationSupportDirectory();
+    final file = File(path.join(dir.path, binaryName));
+
+    if (!await file.exists()) {
+      print('Extracting Stockfish binary to ${file.path}...');
+      await file.parent.create(recursive: true);
+
+      final byteData = await rootBundle.load('assets/executables/$binaryName');
+      await file.writeAsBytes(byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      ));
+
+      if (!Platform.isWindows) {
+        await Process.run('chmod', ['+x', file.path]);
+      }
+    }
+
+    return file.path;
+  }
+
   Future<void> _init() async {
-    String? executablePath;
-    
     try {
-      // Determine platform-specific binary name
-      String binaryName;
-      if (Platform.isWindows) {
-        binaryName = 'stockfish-windows.exe';
-      } else if (Platform.isMacOS) {
-        binaryName = 'stockfish-macos';
-      } else if (Platform.isLinux) {
-        binaryName = 'stockfish-linux';
-      } else {
-        throw UnsupportedError('Unsupported desktop platform');
-      }
-
-      // Get application support directory
-      final dir = await getApplicationSupportDirectory();
-      final file = File(path.join(dir.path, binaryName));
-
-      // Check if binary exists, if not copy from assets
-      if (!await file.exists()) {
-        print('Extracting Stockfish binary to ${file.path}...');
-        // Ensure directory exists
-        await file.parent.create(recursive: true);
-        
-        final byteData = await rootBundle.load('assets/executables/$binaryName');
-        await file.writeAsBytes(byteData.buffer.asUint8List(
-          byteData.offsetInBytes,
-          byteData.lengthInBytes,
-        ));
-        
-        // Make executable on Linux/Mac
-        if (!Platform.isWindows) {
-          await Process.run('chmod', ['+x', file.path]);
-        }
-      }
-      
-      executablePath = file.path;
+      final executablePath = await resolveExecutablePath();
       print('Starting Stockfish from: $executablePath');
       
       _process = await Process.start(executablePath, []);

@@ -48,6 +48,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   late TextEditingController _chessComUserController;
   late TextEditingController _chessComCountController;
   late TextEditingController _stockfishDepthController;
+  late TextEditingController _coresController;
 
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();
@@ -64,6 +65,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _chessComUserController = TextEditingController();
     _chessComCountController = TextEditingController(text: '20');
     _stockfishDepthController = TextEditingController(text: '15');
+    // Default cores: host cores - 2 (leave headroom for OS + main isolate), min 1
+    final defaultCores = (TacticsImportService.availableCores - 2).clamp(1, 8);
+    _coresController = TextEditingController(text: '$defaultCores');
 
     // Initialize controllers from AppState
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -89,6 +93,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _chessComUserController.dispose();
     _chessComCountController.dispose();
     _stockfishDepthController.dispose();
+    _coresController.dispose();
     super.dispose();
   }
 
@@ -465,17 +470,36 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                     ),
                     const SizedBox(height: 16),
                     
-                    // Stockfish Depth Row
+                    // Stockfish Depth + Cores Row
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(
                           width: 140,
                           child: TextField(
                             controller: _stockfishDepthController,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Stockfish Depth',
-                              border: OutlineInputBorder(),
+                              border: const OutlineInputBorder(),
                               isDense: true,
+                              helperText: ' ', // reserve space to match Cores field height
+                              helperStyle: const TextStyle(fontSize: 11),
+                            ),
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 140,
+                          child: TextField(
+                            controller: _coresController,
+                            enabled: TacticsImportService.isParallelAvailable,
+                            decoration: InputDecoration(
+                              labelText: 'Cores',
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                              helperText: '${TacticsImportService.availableCores} available',
+                              helperStyle: const TextStyle(fontSize: 11),
                             ),
                             keyboardType: TextInputType.number,
                           ),
@@ -535,26 +559,40 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               ),
             ],
               
-            // Database management buttons
-            if (!_isImporting && _database.positions.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextButton.icon(
-                    onPressed: _confirmClearDatabase,
+            // Database management buttons (always visible, disabled when empty/importing)
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Tooltip(
+                  message: _database.positions.isEmpty
+                      ? 'No positions in database'
+                      : _isImporting
+                          ? 'Import in progress'
+                          : '',
+                  child: TextButton.icon(
+                    onPressed: !_isImporting && _database.positions.isNotEmpty
+                        ? _confirmClearDatabase
+                        : null,
                     icon: const Icon(Icons.delete_outline, size: 16),
                     label: const Text('Clear Database'),
                   ),
-                  const SizedBox(width: 16),
-                  TextButton.icon(
-                    onPressed: () => _tabController.animateTo(1),
+                ),
+                const SizedBox(width: 16),
+                Tooltip(
+                  message: _database.positions.isEmpty
+                      ? 'No tactics to browse'
+                      : '',
+                  child: TextButton.icon(
+                    onPressed: _database.positions.isNotEmpty
+                        ? () => _tabController.animateTo(1)
+                        : null,
                     icon: const Icon(Icons.list_alt, size: 16),
                     label: const Text('Browse Tactics'),
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ],
 
         ],
@@ -602,10 +640,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         if (pos.userMove.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
-            'You played: ${pos.userMove}',
-            style: const TextStyle(
+            'You played: ${pos.userMove}${pos.mistakeType}',
+            style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 14,
+              color: pos.mistakeType == '??' ? Colors.red : Colors.orange,
             ),
           ),
         ],
@@ -1037,6 +1076,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final username = _lichessUserController.text.trim();
     final count = int.tryParse(_lichessCountController.text) ?? 20;
     final depth = (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
+    final cores = (int.tryParse(_coresController.text) ?? 1).clamp(1, TacticsImportService.availableCores);
 
     if (username.isEmpty) {
       _showUsernameRequired('Lichess');
@@ -1058,8 +1098,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         username,
         maxGames: count,
         depth: depth,
+        maxCores: cores,
         progressCallback: (msg) {
-          if (mounted) setState(() => _importStatus = '$msg • Found $_newPositionsFound tactics');
+          if (mounted) setState(() => _importStatus = msg);
         },
         onPositionFound: (position) {
           // Add position to database immediately for live training
@@ -1096,6 +1137,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final username = _chessComUserController.text.trim();
     final count = int.tryParse(_chessComCountController.text) ?? 20;
     final depth = (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
+    final cores = (int.tryParse(_coresController.text) ?? 1).clamp(1, TacticsImportService.availableCores);
 
     if (username.isEmpty) {
       _showUsernameRequired('Chess.com');
@@ -1117,8 +1159,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         username,
         maxGames: count,
         depth: depth,
+        maxCores: cores,
         progressCallback: (msg) {
-          if (mounted) setState(() => _importStatus = '$msg • Found $_newPositionsFound tactics');
+          if (mounted) setState(() => _importStatus = msg);
         },
         onPositionFound: (position) {
           // Add position to database immediately for live training
