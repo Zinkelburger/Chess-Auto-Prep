@@ -66,15 +66,13 @@ class FenMapBuilder {
     
     for (final nodeData in game.moves.mainline()) {
         final moveSan = nodeData.san;
-        
-        // We want to record stats for the position *before* the move if it's the user's turn to move?
-        // Or the position reached?
-        // "Weak positions" usually means "positions I reached and then played a move (maybe bad) or opponent played a move".
-        // If I am White, I want to know my stats from positions where it is White to move.
-        
-        // Let's store stats for the position on the board *before* the move is made.
-        // If it's White's turn (position.turn == Side.white) and user is White, this is a position the user faced.
-        
+
+        // Always link this game to the current position so the Games list
+        // works for every position the user navigates to (tree / PGN).
+        _linkGameToFen(position.fen, gameIndex);
+
+        // Record win/loss/draw stats only for positions where it is the
+        // user's turn (these drive the "Weak Positions" list).
         bool isUserTurn = (position.turn == Side.white && isUserWhite) || 
                           (position.turn == Side.black && isUserBlack);
 
@@ -86,15 +84,13 @@ class FenMapBuilder {
         if (move == null) break;
         position = position.play(move);
     }
+
+    // Link the final position too (after the last move).
+    _linkGameToFen(position.fen, gameIndex);
   }
 
   void _updateStats(String fen, double result, int gameIndex) {
-      // Normalize FEN (remove halfmove clock and fullmove number for aggregation)
-      // Actually, PositionAnalysis might want exact FENs or normalized ones. 
-      // OpeningTree uses normalized FENs implicitly or explicitly. 
-      // Let's strip the last two fields.
-      final parts = fen.split(' ');
-      final normalizedFen = parts.take(4).join(' ');
+      final normalizedFen = _normaliseFen(fen);
 
       if (!_stats.containsKey(normalizedFen)) {
           _stats[normalizedFen] = PositionStats(fen: normalizedFen);
@@ -102,16 +98,34 @@ class FenMapBuilder {
 
       final stats = _stats[normalizedFen]!;
       stats.games++;
-      if (result == 1.0) stats.wins++;
-      else if (result == 0.0) stats.losses++;
-      else stats.draws++;
-      
+      if (result == 1.0) {
+        stats.wins++;
+      } else if (result == 0.0) {
+        stats.losses++;
+      } else {
+        stats.draws++;
+      }
+
+      // Also link for stats-only positions (covered by _linkGameToFen too,
+      // but harmless to double-call because of the contains guard).
+      _linkGameToFen(normalizedFen, gameIndex);
+  }
+
+  /// Index a game against a position so the Games list works for every FEN.
+  void _linkGameToFen(String fen, int gameIndex) {
+      final normalizedFen = _normaliseFen(fen);
+
       if (!_fenToGameIndices.containsKey(normalizedFen)) {
           _fenToGameIndices[normalizedFen] = [];
       }
       if (!_fenToGameIndices[normalizedFen]!.contains(gameIndex)) {
           _fenToGameIndices[normalizedFen]!.add(gameIndex);
       }
+  }
+
+  static String _normaliseFen(String fen) {
+      final parts = fen.split(' ');
+      return parts.length >= 4 ? parts.take(4).join(' ') : fen;
   }
 
   static Future<PositionAnalysis> fromFenMapBuilder(
