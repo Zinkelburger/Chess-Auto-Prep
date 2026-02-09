@@ -11,6 +11,7 @@ import '../services/tactics_database.dart';
 import '../services/tactics_engine.dart';
 import '../services/tactics_import_service.dart';
 import '../services/storage/storage_factory.dart';
+import 'pgn_viewer_widget.dart';
 
 /// Tactics training control panel with import, review, and analysis.
 class TacticsControlPanel extends StatefulWidget {
@@ -34,6 +35,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   TacticsPosition? _currentPosition;
   bool _positionSolved = false;
   bool _attemptRecorded = false;
+  bool _skipNextPositionChanged = false;
   DateTime? _startTime;
   String _feedback = '';
   bool _showSolution = false;
@@ -64,6 +66,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   Timer? _depthErrorTimer;
   Timer? _coresErrorTimer;
 
+  // PGN Viewer controller for analysis tab
+  final PgnViewerController _pgnViewerController = PgnViewerController();
+
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();
 
@@ -83,7 +88,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final defaultCores = (TacticsImportService.availableCores - 2).clamp(1, 8);
     _coresController = TextEditingController(text: '$defaultCores');
 
-    // Initialize controllers from AppState
+    // Initialize controllers from AppState and reset board
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final appState = context.read<AppState>();
@@ -91,6 +96,34 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         _chessComUserController.text = appState.chesscomUsername ?? '';
         
         context.read<AppState>().setMoveAttemptedCallback(_onMoveAttempted);
+        _resetBoardToStart();
+      }
+    });
+
+    // Listen for tab changes to enter/exit analysis mode
+    _tabController.addListener(() {
+      if (mounted) {
+        final appState = context.read<AppState>();
+        if (_tabController.index == 1) {
+          appState.enterAnalysisMode();
+          // Sync the board to the PGN viewer's current position so that
+          // moves made on the board match the PGN viewer's state.
+          // Without this, solving a tactic advances the board past the
+          // PGN viewer's position, causing analysis moves to silently fail.
+          // NOTE: Do NOT set _skipNextPositionChanged here — setCurrentGame
+          // doesn't trigger the PGN viewer's onPositionChanged callback, so
+          // the flag would linger and cause the next PGN navigation to
+          // silently skip the board update.
+          final fen = _pgnViewerController.currentFen;
+          if (fen != null) {
+            appState.setCurrentGame(chess.Chess.fromFEN(fen));
+          }
+        } else {
+          appState.exitAnalysisMode();
+          // Don't reset the board position — keep whatever the PGN viewer
+          // was showing so the two panels stay in sync. The user can click
+          // "Reset" on the Tactic tab to return to the tactic position.
+        }
       }
     });
 
@@ -131,9 +164,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           // Tab bar
           TabBar(
             controller: _tabController,
-            tabs: const [
-              Tab(text: 'Tactic'),
-              Tab(text: 'Browse'),
+            tabs: [
+              const Tab(text: 'Tactic'),
+              Tab(text: _currentPosition != null ? 'PGN' : 'Browse'),
             ],
           ),
 
@@ -143,7 +176,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               controller: _tabController,
               children: [
                 _buildTacticTab(),
-                _buildBrowseTab(),
+                _currentPosition != null
+                    ? _buildAnalysisTab()
+                    : _buildBrowseTab(),
               ],
             ),
           ),
@@ -175,6 +210,17 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Space — Toggle Solution
     if (key == LogicalKeyboardKey.space) {
       _toggleSolution();
+      return KeyEventResult.handled;
+    }
+
+    // Left/Right arrow — PGN move navigation (works on both tabs)
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _pgnViewerController.goForward();
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _pgnViewerController.goBack();
       return KeyEventResult.handled;
     }
 
@@ -651,17 +697,24 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         // TODO: figure out an elegant way to show success %
         // Text('Success: ${(pos.successRate * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 14)),
 
-        // Show the move that was played
+        // Show the move that was played and what it allows
         if (pos.userMove.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             'You played: ${pos.userMove}${pos.mistakeType}',
-            style: TextStyle(
+            style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 14,
-              color: pos.mistakeType == '??' ? Colors.red : Colors.orange,
             ),
           ),
+          if (pos.opponentBestResponse.isNotEmpty)
+            Text(
+              'Allows: ${pos.opponentBestResponse}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
         ],
 
         // Multi-move tactic indicator
@@ -669,14 +722,60 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           const SizedBox(height: 4),
           Text(
             'Multi-move tactic (${_engine.userMoveCount(pos)} moves)',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.blue[300],
-              fontStyle: FontStyle.italic,
-            ),
+            style: const TextStyle(fontSize: 14),
           ),
         ],
       ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Analysis (PGN) tab
+  // ---------------------------------------------------------------------------
+
+  Widget _buildAnalysisTab() {
+    if (_currentPosition == null) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Text('Load a tactics position to analyze'),
+        ),
+      );
+    }
+
+    // Extract move number and player to move from position context
+    int? moveNumber;
+    bool? isWhiteToPlay;
+
+    final positionContext = _currentPosition!.positionContext;
+    final match = RegExp(r'Move (\d+)').firstMatch(positionContext);
+    if (match != null) {
+      moveNumber = int.tryParse(match.group(1)!);
+      isWhiteToPlay = positionContext.contains('White');
+    }
+
+    return PgnViewerWidget(
+      key: ValueKey('analysis_${_currentPosition!.gameId}'),
+      gameId: _currentPosition!.gameId,
+      moveNumber: moveNumber,
+      isWhiteToPlay: isWhiteToPlay,
+      showStartEndButtons: false,
+      controller: _pgnViewerController,
+      onPositionChanged: (position) {
+        // Skip if the board was already updated directly (e.g. from a board move)
+        if (_skipNextPositionChanged) {
+          _skipNextPositionChanged = false;
+          return;
+        }
+        // Update the chess board when clicking moves in the PGN
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            final appState = context.read<AppState>();
+            final chessGame = chess.Chess.fromFEN(position.fen);
+            appState.setCurrentGame(chessGame);
+          }
+        });
+      },
     );
   }
 
@@ -946,6 +1045,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       setState(() {
         _currentPosition = null;
       });
+      _resetBoardToStart();
     }
   }
 
@@ -1021,9 +1121,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
 
     if (saved == true && mounted) {
-      final updated = TacticsPosition(
-        fen: pos.fen,
-        userMove: pos.userMove,
+      final updated = pos.copyWith(
         correctLine: correctLineCtrl.text
             .split('|')
             .map((s) => s.trim())
@@ -1031,18 +1129,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             .toList(),
         mistakeType: mistakeTypeCtrl.text.trim(),
         mistakeAnalysis: analysisCtrl.text,
-        positionContext: pos.positionContext,
-        gameWhite: pos.gameWhite,
-        gameBlack: pos.gameBlack,
-        gameResult: pos.gameResult,
-        gameDate: pos.gameDate,
-        gameId: pos.gameId,
-        gameUrl: pos.gameUrl,
-        lastReviewed: pos.lastReviewed,
-        reviewCount: pos.reviewCount,
-        successCount: pos.successCount,
-        timeToSolve: pos.timeToSolve,
-        hintsUsed: pos.hintsUsed,
       );
 
       _database.positions[index] = updated;
@@ -1076,8 +1162,43 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
   }
 
+  /// Reset the board to the standard starting position (used when returning
+  /// to the import screen so a stale tactic FEN isn't left on the board).
+  void _resetBoardToStart() {
+    final appState = context.read<AppState>();
+    appState.setCurrentGame(chess.Chess());
+    appState.setBoardFlipped(false);
+  }
+
+  /// Compare two FENs ignoring half-move clock and full-move number.
+  /// This avoids false mismatches when only the move counters differ.
+  static String _normaliseFen(String fen) {
+    final parts = fen.split(' ');
+    return parts.length >= 4 ? parts.take(4).join(' ') : fen;
+  }
+
+  /// Re-sync the PGN viewer's highlighted move to the current tactic position.
+  void _syncPgnToCurrentTactic() {
+    if (_currentPosition == null) return;
+    final ctx = _currentPosition!.positionContext;
+    final match = RegExp(r'Move (\d+)').firstMatch(ctx);
+    if (match != null) {
+      final moveNumber = int.tryParse(match.group(1)!);
+      final isWhiteToPlay = ctx.contains('White');
+      if (moveNumber != null) {
+        _pgnViewerController.jumpToMove(moveNumber, isWhiteToPlay);
+      }
+    }
+  }
+
   void _resetAnalysis() {
     if (_currentPosition == null) return;
+    
+    // Clear ephemeral moves and re-sync PGN highlight to tactic position.
+    // Skip the redundant board update — we set the board explicitly below.
+    _skipNextPositionChanged = true;
+    _syncPgnToCurrentTactic();
+    _skipNextPositionChanged = false;
     
     // Reset the board to the initial tactic position
     final appState = context.read<AppState>();
@@ -1150,7 +1271,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   Future<void> _importLichess() async {
-    final appState = context.read<AppState>();
     final importService = TacticsImportService();
     final username = _lichessUserController.text.trim();
     final count = int.tryParse(_lichessCountController.text) ?? 20;
@@ -1166,7 +1286,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _importStatus = 'Initializing...';
       _isImporting = true;
       _newPositionsFound = 0;
-      appState.setLoading(true);
     });
 
     try {
@@ -1204,14 +1323,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         setState(() {
           _importStatus = null;
           _isImporting = false;
-          appState.setLoading(false);
         });
       }
     }
   }
 
   Future<void> _importChessCom() async {
-    final appState = context.read<AppState>();
     final importService = TacticsImportService();
     final username = _chessComUserController.text.trim();
     final count = int.tryParse(_chessComCountController.text) ?? 20;
@@ -1227,7 +1344,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _importStatus = 'Initializing...';
       _isImporting = true;
       _newPositionsFound = 0;
-      appState.setLoading(true);
     });
 
     try {
@@ -1265,7 +1381,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         setState(() {
           _importStatus = null;
           _isImporting = false;
-          appState.setLoading(false);
         });
       }
     }
@@ -1316,6 +1431,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _currentTacticFen = position.fen;
       _waitingForOpponent = false;
     });
+
+    // Re-sync PGN viewer to the new tactic position.
+    // Skip the redundant board update from the PGN viewer's onPositionChanged
+    // callback — we set the board explicitly below.
+    _skipNextPositionChanged = true;
+    _syncPgnToCurrentTactic();
+    _skipNextPositionChanged = false;
 
     // Set up the chess board
     try {
@@ -1393,12 +1515,24 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _onMoveAttempted(String moveUci) {
-    if (_currentPosition == null || _positionSolved || _waitingForOpponent) {
+    if (_currentPosition == null) return;
+
+    final appState = context.read<AppState>();
+
+    // In analysis mode, just add the move to the PGN editor
+    if (appState.isAnalysisMode) {
+      _addMoveToAnalysis(moveUci);
       return;
     }
 
-    // Validate against the correct move at the current index
+    // In tactic mode, validate the move
+    if (_positionSolved || _waitingForOpponent) return;
+
+    // Only validate when the board is at the expected tactic position.
+    // If the user navigated away (e.g. via PGN viewer), ignore the move.
     final fen = _currentTacticFen ?? _currentPosition!.fen;
+    if (_normaliseFen(appState.currentGame.fen) != _normaliseFen(fen)) return;
+
     final result = _engine.checkMoveAtIndex(
       _currentPosition!,
       moveUci,
@@ -1415,7 +1549,41 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _handleIncorrectMove(timeTaken, moveUci: moveUci);
     }
   }
-  
+
+  void _addMoveToAnalysis(String moveUci) {
+    final appState = context.read<AppState>();
+    final game = appState.currentGame;
+
+    try {
+      final from = moveUci.substring(0, 2);
+      final to = moveUci.substring(2, 4);
+      String? promotion;
+      if (moveUci.length > 4) promotion = moveUci.substring(4);
+
+      final moves = game.moves({'verbose': true});
+
+      final match = moves.firstWhere(
+        (m) => m['from'] == from && m['to'] == to &&
+               (promotion == null || m['promotion'] == promotion),
+        orElse: () => <String, dynamic>{},
+      );
+
+      if (match.isNotEmpty && match['san'] != null) {
+        // Apply move to existing game object for smooth animation
+        final moveMap = <String, String?>{'from': from, 'to': to};
+        if (promotion != null) moveMap['promotion'] = promotion;
+        game.move(moveMap);
+        appState.notifyGameChanged();
+
+        // Tell the PGN viewer about the move (for display only, skip board update)
+        _skipNextPositionChanged = true;
+        _pgnViewerController.addEphemeralMove(match['san'] as String);
+      }
+    } catch (e) {
+      // Failed to convert move to SAN
+    }
+  }
+
   void _handleCorrectMove(double timeTaken, {String? moveUci}) {
     // Apply the correct move to the board so it's visually shown
     if (moveUci != null) {
@@ -1570,6 +1738,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     setState(() {
       _currentPosition = null;
     });
+    _resetBoardToStart();
 
     final session = _database.currentSession;
 

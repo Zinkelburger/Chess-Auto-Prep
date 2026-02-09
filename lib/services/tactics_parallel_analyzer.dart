@@ -110,7 +110,16 @@ Future<List<TacticsPosition>> analyzeGamesParallel({
 
         case 'gameComplete':
           completedGames++;
-          onGameComplete?.call(message['gameId'] as String);
+          final gId = message['gameId'] as String;
+          onGameComplete?.call(gId);
+          // Flush all positions from this game atomically so training
+          // encounters them as a coherent block.
+          final gameTactics = gamePositions[gId];
+          if (gameTactics != null && onPositionFound != null) {
+            for (final pos in gameTactics) {
+              onPositionFound(pos);
+            }
+          }
           progressCallback?.call(
             'Analyzed $completedGames/${gameTasks.length} games '
             '($totalPositionsFound tactics found)...',
@@ -167,12 +176,7 @@ Future<List<TacticsPosition>> analyzeGamesParallel({
 
   final positions = <TacticsPosition>[];
   for (final gameId in sortedGameIds) {
-    final gamePositionsList = gamePositions[gameId]!;
-    positions.addAll(gamePositionsList);
-    // Emit positions game-by-game so DB writes are grouped.
-    for (final pos in gamePositionsList) {
-      onPositionFound?.call(pos);
-    }
+    positions.addAll(gamePositions[gameId]!);
   }
 
   return positions;
@@ -319,42 +323,56 @@ Future<void> _analyzeGameInWorker({
         final bestMoveUci = evalA.pv.first;
 
         // Build correct line from PV, extending for tactical sequences.
-        // If the user's move is a check (+), capture (x), or checkmate (#),
-        // keep consuming the PV to include the opponent's response and the
-        // next user move, up to a maximum of 5 user moves.
-        final correctLine = <String>[];
+        // Convert all PV moves to SAN first, then build the line by
+        // peeking ahead: only extend if the NEXT user move is also a
+        // check (+), capture (x), or checkmate (#). Max 5 user moves.
+        final allPvSan = <String>[];
         final tempGame = chess.Chess.fromFEN(fenBefore);
 
-        int userMoveCount = 0;
+        for (final uci in evalA.pv) {
+          final sanMove = _makeUciMoveAndGetSan(tempGame, uci);
+          if (sanMove == null) break;
+          allPvSan.add(sanMove);
+        }
+
+        final correctLine = <String>[];
         const maxUserMoves = 5;
 
-        for (int i = 0; i < evalA.pv.length; i++) {
-          final sanMove = _makeUciMoveAndGetSan(tempGame, evalA.pv[i]);
-          if (sanMove == null) break;
+        if (allPvSan.isNotEmpty) {
+          correctLine.add(allPvSan[0]);
+          int userMoveCount = 1;
 
-          final isUserMove = (i % 2 == 0);
+          int i = 0;
+          while (userMoveCount < maxUserMoves) {
+            final currentUserSan = allPvSan[i];
+            final currentIsTactical = currentUserSan.contains('x') ||
+                currentUserSan.contains('+') ||
+                currentUserSan.contains('#');
 
-          if (isUserMove) {
-            correctLine.add(sanMove);
+            if (!currentIsTactical) break;
+            if (i + 2 >= allPvSan.length) break;
+
+            final nextUserSan = allPvSan[i + 2];
+            final nextIsTactical = nextUserSan.contains('x') ||
+                nextUserSan.contains('+') ||
+                nextUserSan.contains('#');
+
+            if (!nextIsTactical) break;
+
+            correctLine.add(allPvSan[i + 1]);
+            correctLine.add(nextUserSan);
             userMoveCount++;
-
-            if (userMoveCount >= maxUserMoves) break;
-
-            final isTactical = sanMove.contains('x') ||
-                sanMove.contains('+') ||
-                sanMove.contains('#');
-            if (!isTactical) break;
-          } else {
-            correctLine.add(sanMove);
+            i += 2;
           }
         }
 
-        // Ensure the line always ends on a user move.
-        if (correctLine.length > 1 && correctLine.length.isEven) {
-          correctLine.removeLast();
-        }
-
         final bestMoveSan = _formatUciToSan(fenBefore, bestMoveUci);
+
+        // Opponent's best response after the user's bad move
+        final opponentResponse = evalB.pv.isNotEmpty
+            ? _formatUciToSan(chessGame.fen, evalB.pv.first)
+            : '';
+
         final wpBefore = _winPercent(cpA);
         final wpAfter = _winPercent(cpB);
         final mistakeType = isBlunder ? '??' : '?';
@@ -381,6 +399,7 @@ Future<void> _analyzeGameInWorker({
             'game_result': game.headers['Result'] ?? '*',
             'game_date': game.headers['Date'] ?? '',
             'game_id': gameId,
+            'opponent_best_response': opponentResponse,
           },
         });
       }

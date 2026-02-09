@@ -67,9 +67,21 @@ class PgnViewerController {
     _state?._addAnalysisMove(san);
   }
   
-  /// Clear all ephemeral moves
+  /// Get the FEN of the PGN viewer's current position.
+  /// Returns null if the controller is not attached to a PGN viewer.
+  String? get currentFen => _state?._currentPosition.fen;
+  
+  /// Clear all ephemeral moves and optionally re-sync to a game position.
   void clearEphemeralMoves() {
     _state?._clearAnalysis();
+  }
+
+  /// Jump the PGN viewer to a specific move number + color.
+  void jumpToMove(int moveNumber, bool isWhiteToPlay) {
+    final state = _state;
+    if (state == null) return;
+    state._clearAnalysis();
+    state._jumpToMove(moveNumber, isWhiteToPlay);
   }
 }
 
@@ -85,6 +97,11 @@ class PgnViewerWidget extends StatefulWidget {
   /// whose FEN matches [initialFen] (normalised to 4 fields) on load.
   final String? initialFen;
 
+  /// Whether to show the "go to start" / "go to end" navigation buttons.
+  /// Defaults to true. Set to false in contexts (like tactics) where jumping
+  /// to the very start or end of the game is not useful.
+  final bool showStartEndButtons;
+
   const PgnViewerWidget({
     super.key,
     this.gameId,
@@ -94,6 +111,7 @@ class PgnViewerWidget extends StatefulWidget {
     this.onPositionChanged,
     this.controller,
     this.initialFen,
+    this.showStartEndButtons = true,
   });
 
   @override
@@ -136,6 +154,13 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     super.didUpdateWidget(oldWidget);
     if (widget.gameId != oldWidget.gameId || widget.pgnText != oldWidget.pgnText) {
       _loadGame();
+    } else if (widget.moveNumber != oldWidget.moveNumber ||
+               widget.isWhiteToPlay != oldWidget.isWhiteToPlay) {
+      // Same game but different tactic position — re-jump without reloading PGN.
+      _clearAnalysis();
+      if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
+        _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
+      }
     }
   }
 
@@ -569,11 +594,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              IconButton(
-                onPressed: _canGoBack ? _goToStart : null,
-                icon: const Icon(Icons.skip_previous),
-                tooltip: 'Start',
-              ),
+              if (widget.showStartEndButtons)
+                IconButton(
+                  onPressed: _canGoBack ? _goToStart : null,
+                  icon: const Icon(Icons.skip_previous),
+                  tooltip: 'Start',
+                ),
               IconButton(
                 onPressed: _canGoBack ? _goBack : null,
                 icon: const Icon(Icons.chevron_left),
@@ -584,11 +610,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                 icon: const Icon(Icons.chevron_right),
                 tooltip: 'Forward',
               ),
-              IconButton(
-                onPressed: _canGoForward ? _goToEnd : null,
-                icon: const Icon(Icons.skip_next),
-                tooltip: 'End',
-              ),
+              if (widget.showStartEndButtons)
+                IconButton(
+                  onPressed: _canGoForward ? _goToEnd : null,
+                  icon: const Icon(Icons.skip_next),
+                  tooltip: 'End',
+                ),
             ],
           ),
         ),
@@ -602,6 +629,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final spans = <InlineSpan>[];
     var moveNumber = 1;
     var isWhiteTurn = true;
+
+    // Handle analysis branching from before the first move (start position)
+    if (_analysisRoots.isNotEmpty && _analysisBranchPoint == 0) {
+      spans.addAll(_buildAnalysisSpans());
+    }
 
     for (int i = 0; i < _moveHistory.length; i++) {
       final moveData = _moveHistory[i];

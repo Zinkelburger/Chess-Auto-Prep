@@ -17,6 +17,7 @@ class TacticsPosition {
   final int successCount;          // Number of times solved correctly
   final double timeToSolve;        // Time taken to solve (seconds)
   final int hintsUsed;             // Number of hints used
+  final String opponentBestResponse; // Opponent's best reply after user's bad move
 
   const TacticsPosition({
     required this.fen,
@@ -36,7 +37,52 @@ class TacticsPosition {
     this.successCount = 0,
     this.timeToSolve = 0.0,
     this.hintsUsed = 0,
+    this.opponentBestResponse = '',
   });
+
+  /// Create a copy with selected fields overridden.
+  TacticsPosition copyWith({
+    String? fen,
+    String? userMove,
+    List<String>? correctLine,
+    String? mistakeType,
+    String? mistakeAnalysis,
+    String? positionContext,
+    String? gameWhite,
+    String? gameBlack,
+    String? gameResult,
+    String? gameDate,
+    String? gameId,
+    String? gameUrl,
+    DateTime? lastReviewed,
+    bool clearLastReviewed = false,
+    int? reviewCount,
+    int? successCount,
+    double? timeToSolve,
+    int? hintsUsed,
+    String? opponentBestResponse,
+  }) {
+    return TacticsPosition(
+      fen: fen ?? this.fen,
+      userMove: userMove ?? this.userMove,
+      correctLine: correctLine ?? this.correctLine,
+      mistakeType: mistakeType ?? this.mistakeType,
+      mistakeAnalysis: mistakeAnalysis ?? this.mistakeAnalysis,
+      positionContext: positionContext ?? this.positionContext,
+      gameWhite: gameWhite ?? this.gameWhite,
+      gameBlack: gameBlack ?? this.gameBlack,
+      gameResult: gameResult ?? this.gameResult,
+      gameDate: gameDate ?? this.gameDate,
+      gameId: gameId ?? this.gameId,
+      gameUrl: gameUrl ?? this.gameUrl,
+      lastReviewed: clearLastReviewed ? null : (lastReviewed ?? this.lastReviewed),
+      reviewCount: reviewCount ?? this.reviewCount,
+      successCount: successCount ?? this.successCount,
+      timeToSolve: timeToSolve ?? this.timeToSolve,
+      hintsUsed: hintsUsed ?? this.hintsUsed,
+      opponentBestResponse: opponentBestResponse ?? this.opponentBestResponse,
+    );
+  }
 
   /// Calculate success rate for this position - matches Python property
   double get successRate => reviewCount > 0 ? successCount / reviewCount : 0.0;
@@ -57,10 +103,13 @@ class TacticsPosition {
     return match != null ? int.tryParse(match.group(1)!) ?? 1 : 1;
   }
 
-  /// Create from CSV row (17 columns).
+  /// CSV column count.  Old files may have 17; current format has 18.
+  static const int csvColumnCount = 18;
+
+  /// Create from CSV row (18 columns; tolerates legacy 17-column rows).
   factory TacticsPosition.fromCsv(List<dynamic> row) {
     if (row.length < 17) {
-      throw ArgumentError('Not enough CSV values for TacticsPosition (need 17, got ${row.length})');
+      throw ArgumentError('Not enough CSV values for TacticsPosition (need ≥17, got ${row.length})');
     }
 
     return TacticsPosition(
@@ -83,6 +132,8 @@ class TacticsPosition {
           : null,
       timeToSolve: double.tryParse(row[15].toString()) ?? 0.0,
       hintsUsed: int.tryParse(row[16].toString()) ?? 0,
+      // Column 17 — added after initial 17-col format; tolerate old files.
+      opponentBestResponse: row.length > 17 ? row[17].toString() : '',
     );
   }
 
@@ -110,6 +161,7 @@ class TacticsPosition {
       successCount: json['success_count'] as int? ?? 0,
       timeToSolve: json['time_to_solve'] as double? ?? 0.0,
       hintsUsed: json['hints_used'] as int? ?? 0,
+      opponentBestResponse: json['opponent_best_response'] as String? ?? '',
     );
   }
 
@@ -133,6 +185,7 @@ class TacticsPosition {
       'success_count': successCount,
       'time_to_solve': timeToSolve,
       'hints_used': hintsUsed,
+      'opponent_best_response': opponentBestResponse,
     };
   }
 
@@ -156,6 +209,7 @@ class TacticsPosition {
       lastReviewed?.toIso8601String() ?? '',
       timeToSolve,
       hintsUsed,
+      opponentBestResponse,
     ];
   }
 }
