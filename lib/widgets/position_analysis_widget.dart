@@ -1,5 +1,8 @@
-/// Position analysis widget - Flutter port of Python's PositionAnalysisMode
-/// Three-panel layout: FEN list (left), chess board (center), tabs (right)
+/// Position analysis widget – three-panel layout for the Player Analysis screen.
+///
+/// Left: FEN list (or loading spinner). Centre: chess board. Right: tabbed pane.
+/// Always renders the full layout – never collapses to a centred placeholder.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,7 +19,8 @@ import 'pgn_viewer_widget.dart';
 class PositionAnalysisWidget extends StatefulWidget {
   final PositionAnalysis? analysis;
   final OpeningTree? openingTree;
-  final bool? playerIsWhite; // Player's color for consistent board orientation
+  final bool? playerIsWhite;
+  final bool isLoading;
   final Function()? onAnalyze;
 
   const PositionAnalysisWidget({
@@ -24,11 +28,13 @@ class PositionAnalysisWidget extends StatefulWidget {
     this.analysis,
     this.openingTree,
     this.playerIsWhite,
+    this.isLoading = false,
     this.onAnalyze,
   });
 
   @override
-  State<PositionAnalysisWidget> createState() => _PositionAnalysisWidgetState();
+  State<PositionAnalysisWidget> createState() =>
+      _PositionAnalysisWidgetState();
 }
 
 class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
@@ -39,6 +45,9 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   late TabController _tabController;
   List<GameInfo> _currentGames = [];
   final PgnViewerController _pgnController = PgnViewerController();
+
+  /// Starting-position board, shown when no FEN has been selected yet.
+  static final chess.Chess _startingPosition = chess.Chess();
 
   @override
   void initState() {
@@ -52,237 +61,310 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
     super.dispose();
   }
 
+  // ── Build ──────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    if (widget.analysis == null) {
-      return Center(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _onKeyEvent,
+      child: Row(
+        children: [
+          // ── Left panel: FEN list or loading state ──
+          SizedBox(width: 300, child: _buildLeftPanel()),
+
+          Container(width: 1, color: Colors.grey[700]),
+
+          // ── Centre panel: chess board ──
+          Expanded(
+            flex: 3,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: AspectRatio(
+                  aspectRatio: 1.0,
+                  child: ChessBoardWidget(
+                    game: _currentBoard ?? _startingPosition,
+                    flipped: widget.playerIsWhite != null
+                        ? !widget.playerIsWhite!
+                        : false,
+                    onMove: null,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          Container(width: 1, color: Colors.grey[700]),
+
+          // ── Right panel: tabs ──
+          SizedBox(width: 350, child: _buildRightPanel()),
+        ],
+      ),
+    );
+  }
+
+  // ── Key handler ────────────────────────────────────────────────────
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    // Move Tree tab (index 0): arrow keys navigate the tree.
+    if (_tabController.index == 0 && widget.openingTree != null) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        _treeGoBack();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        _treeGoForward();
+        return KeyEventResult.handled;
+      }
+    }
+
+    // PGN tab (index 2): arrow keys navigate the PGN.
+    if (_tabController.index == 2) {
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+        _pgnController.goBack();
+        return KeyEventResult.handled;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        _pgnController.goForward();
+        return KeyEventResult.handled;
+      }
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  // ── Left panel ─────────────────────────────────────────────────────
+
+  Widget _buildLeftPanel() {
+    if (widget.analysis != null) {
+      return FenListWidget(
+        analysis: widget.analysis!,
+        onFenSelected: _onFenSelected,
+      );
+    }
+
+    if (widget.isLoading) {
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.analytics, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            const Text(
-              'No positions analyzed',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Click "Analyze Positions" to begin',
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Analyzing positions…',
               style: TextStyle(color: Colors.grey),
-              textAlign: TextAlign.center,
             ),
-            if (widget.onAnalyze != null) ...[
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: widget.onAnalyze,
-                icon: const Icon(Icons.analytics),
-                label: const Text('Analyze Positions'),
-              ),
-            ],
           ],
         ),
       );
     }
 
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        // Only handle arrow keys when PGN tab is active (index 2)
-        if (_tabController.index == 2 && event is KeyDownEvent) {
-          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-            // Go back in PGN
-            _pgnController.goBack();
-            return KeyEventResult.handled;
-          } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-            // Go forward in PGN
-            _pgnController.goForward();
-            return KeyEventResult.handled;
-          }
-        }
-        return KeyEventResult.ignored;
-      },
-      child: Row(
-      children: [
-        // Left panel - FEN list
-        SizedBox(
-          width: 300,
-          child: FenListWidget(
-            analysis: widget.analysis!,
-            onFenSelected: _onFenSelected,
-          ),
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'Select a player to begin',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey),
         ),
-
-        // Divider
-        Container(
-          width: 1,
-          color: Colors.grey[700],
-        ),
-
-        // Center panel - Chess board
-        Expanded(
-          flex: 3,
-          child: Center(
-            child: _currentBoard != null
-                ? Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: AspectRatio(
-                      aspectRatio: 1.0,
-                      child: ChessBoardWidget(
-                        game: _currentBoard!,
-                        // Keep board oriented from player's perspective
-                        flipped: widget.playerIsWhite != null
-                            ? !widget.playerIsWhite!
-                            : false,
-                        onMove: null, // No moves allowed in analysis view
-                      ),
-                    ),
-                  )
-                : const Text(
-                    'Select a position to view',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-          ),
-        ),
-
-        // Divider
-        Container(
-          width: 1,
-          color: Colors.grey[700],
-        ),
-
-        // Right panel - Tabs (Move Tree, Games, and PGN)
-        SizedBox(
-          width: 350,
-          child: Column(
-            children: [
-              TabBar(
-                controller: _tabController,
-                tabs: const [
-                  Tab(text: 'Move Tree'),
-                  Tab(text: 'Games'),
-                  Tab(text: 'PGN'),
-                ],
-              ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    // Move Tree tab
-                    widget.openingTree != null
-                        ? OpeningTreeWidget(
-                            tree: widget.openingTree!,
-                            onPositionSelected: _onTreePositionSelected,
-                          )
-                        : const Center(
-                            child: Text(
-                              'Opening tree not available',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ),
-
-                    // Games tab
-                    GamesListWidget(
-                      games: _currentGames,
-                      currentFen: _currentFen,
-                      onGameSelected: _onGameSelected,
-                    ),
-
-                    // PGN tab
-                    _selectedGame != null && _selectedGame!.pgnText != null
-                        ? PgnViewerWidget(
-                            pgnText: _selectedGame!.pgnText!,
-                            controller: _pgnController,
-                            onPositionChanged: (position) {
-                              // Update chess board when clicking moves
-                              try {
-                                setState(() {
-                                  _currentBoard = chess.Chess.fromFEN(position.fen);
-                                });
-                              } catch (e) {
-                                // Handle error
-                              }
-                            },
-                          )
-                        : const Center(
-                            child: Text(
-                              'Select a game to view PGN',
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
       ),
     );
   }
 
+  // ── Right panel ────────────────────────────────────────────────────
+
+  Widget _buildRightPanel() {
+    return Column(
+      children: [
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Move Tree'),
+            Tab(text: 'Games'),
+            Tab(text: 'PGN'),
+          ],
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              // ── Move Tree tab ──
+              _buildMoveTreeTab(),
+
+              // ── Games tab ──
+              GamesListWidget(
+                games: _currentGames,
+                currentFen: _currentFen,
+                onGameSelected: _onGameSelected,
+              ),
+
+              // ── PGN tab ──
+              _selectedGame != null && _selectedGame!.pgnText != null
+                  ? PgnViewerWidget(
+                      pgnText: _selectedGame!.pgnText!,
+                      controller: _pgnController,
+                      onPositionChanged: (position) {
+                        try {
+                          setState(() {
+                            _currentBoard =
+                                chess.Chess.fromFEN(position.fen);
+                          });
+                        } catch (_) {}
+                      },
+                    )
+                  : const Center(
+                      child: Text(
+                        'Select a game to view PGN',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMoveTreeTab() {
+    if (widget.openingTree == null) {
+      return const Center(
+        child: Text(
+          'Opening tree not available',
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    final tree = widget.openingTree!;
+    final canGoBack = tree.currentNode.parent != null;
+
+    return Column(
+      children: [
+        // ── Back button + breadcrumb ──
+        if (canGoBack)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _treeGoBack,
+              icon: const Icon(Icons.arrow_back, size: 16),
+              label: const Text('Back', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
+        // ── Tree widget ──
+        Expanded(
+          child: OpeningTreeWidget(
+            tree: tree,
+            onMoveSelected: _onTreeMoveSelected,
+            onPositionSelected: _onTreePositionSelected,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Tree navigation ────────────────────────────────────────────────
+
+  /// Advance the tree to a child by SAN move, update board + games.
+  void _onTreeMoveSelected(String move) {
+    final tree = widget.openingTree;
+    if (tree == null) return;
+
+    if (tree.makeMove(move)) {
+      _syncBoardToTree();
+    }
+  }
+
+  /// Go back one move in the tree.
+  void _treeGoBack() {
+    final tree = widget.openingTree;
+    if (tree == null) return;
+
+    if (tree.goBack()) {
+      _syncBoardToTree();
+    }
+  }
+
+  /// Advance to the most-played child (main line).
+  void _treeGoForward() {
+    final tree = widget.openingTree;
+    if (tree == null) return;
+
+    final children = tree.currentNode.sortedChildren;
+    if (children.isNotEmpty) {
+      tree.makeMove(children.first.move);
+      _syncBoardToTree();
+    }
+  }
+
+  /// Sync the board, FEN, and games list to the tree's current position.
+  void _syncBoardToTree() {
+    final tree = widget.openingTree;
+    if (tree == null) return;
+
+    setState(() {
+      _currentFen = tree.currentNode.fen;
+      _currentBoard = _parseFen(tree.currentNode.fen);
+      _selectedGame = null;
+
+      if (widget.analysis != null) {
+        _currentGames = widget.analysis!.getGamesForFen(tree.currentNode.fen);
+      }
+    });
+  }
+
+  // ── FEN list selection ─────────────────────────────────────────────
+
   void _onFenSelected(String fen) {
     setState(() {
       _currentFen = fen;
-      try {
-        // FEN might be shortened (without move counters), add them if missing
-        String fullFen = fen;
-        final parts = fen.split(' ');
-        if (parts.length == 4) {
-          // Add default halfmove and fullmove counters
-          fullFen = '$fen 0 1';
-        }
-        _currentBoard = chess.Chess.fromFEN(fullFen);
-      } catch (e) {
-        _currentBoard = null;
-      }
+      _currentBoard = _parseFen(fen);
       _selectedGame = null;
 
-      // Update games list
       if (widget.analysis != null) {
         _currentGames = widget.analysis!.getGamesForFen(fen);
       }
     });
 
-    // Navigate the opening tree to this position
-    if (widget.openingTree != null) {
-      widget.openingTree!.navigateToFen(fen);
-    }
+    // Navigate the tree to this position so its children are visible.
+    widget.openingTree?.navigateToFen(fen);
 
-    // Switch to games tab when new position selected from FEN list
-    _tabController.animateTo(1);
+    // Default to Move Tree tab so the user sees continuations immediately.
+    _tabController.animateTo(0);
   }
 
+  /// Legacy FEN callback from the tree widget (fires alongside onMoveSelected).
+  /// Board sync is already handled by [_onTreeMoveSelected], so this is a
+  /// no-op to avoid double updates.
   void _onTreePositionSelected(String fen) {
-    // Update board and games when clicking through the move tree
-    setState(() {
-      _currentFen = fen;
-      try {
-        // FEN might be shortened (without move counters), add them if missing
-        String fullFen = fen;
-        final parts = fen.split(' ');
-        if (parts.length == 4) {
-          // Add default halfmove and fullmove counters
-          fullFen = '$fen 0 1';
-        }
-        _currentBoard = chess.Chess.fromFEN(fullFen);
-      } catch (e) {
-        _currentBoard = null;
-      }
-      _selectedGame = null;
-
-      // Update games list
-      if (widget.analysis != null) {
-        _currentGames = widget.analysis!.getGamesForFen(fen);
-      }
-    });
+    // Intentionally empty – navigation is driven by _onTreeMoveSelected.
   }
 
   void _onGameSelected(GameInfo game) {
-    setState(() {
-      _selectedGame = game;
-    });
-
-    // Switch to PGN tab when game selected
+    setState(() => _selectedGame = game);
     _tabController.animateTo(2);
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────
+
+  static chess.Chess? _parseFen(String fen) {
+    try {
+      String fullFen = fen;
+      if (fen.split(' ').length == 4) {
+        fullFen = '$fen 0 1';
+      }
+      return chess.Chess.fromFEN(fullFen);
+    } catch (_) {
+      return null;
+    }
   }
 }

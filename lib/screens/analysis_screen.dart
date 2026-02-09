@@ -1,5 +1,6 @@
 /// Analysis screen – position analysis view.
 library;
+
 ///
 /// Designed to be embedded as the `body` of [MainScreen]'s Scaffold (no
 /// Scaffold of its own) so the main app bar with the mode selector stays
@@ -96,8 +97,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ),
           ),
 
-          // ── White / Black toggle (visible once analysis exists) ──
-          if (_positionAnalysis != null) ...[
+          // ── White / Black toggle (always visible once a player is selected) ──
+          if (_currentPlayer != null) ...[
             SegmentedButton<bool>(
               segments: const [
                 ButtonSegment(
@@ -116,7 +117,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 final chosen = selection.first;
                 if (chosen != _playerIsWhite) {
                   setState(() => _playerIsWhite = chosen);
-                  _analyzeWeakPositions();
+                  _loadColorAnalysis();
                 }
               },
             ),
@@ -158,15 +159,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       );
     }
 
-    // Show the analysis widget immediately. If _positionAnalysis is null
-    // (first load), the widget shows its own "no data" placeholder.
-    // If we're re-analyzing (colour switch), the previous data stays
-    // visible while the new analysis loads in the background.
+    // Always show the three-panel layout. The widget handles null analysis
+    // gracefully (starting-position board, spinner in left pane, etc.).
     return PositionAnalysisWidget(
       analysis: _positionAnalysis,
       openingTree: _openingTree,
       playerIsWhite: _playerIsWhite,
-      onAnalyze: _analyzeWeakPositions,
+      isLoading: _isAnalyzing,
+      onAnalyze: _loadColorAnalysis,
     );
   }
 
@@ -176,7 +176,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String get _metadataSubtitle {
     final p = _currentPlayer;
     if (p == null) return '';
-    final base = '${p.gameCount} games · ${p.platformDisplayName} (${p.username})';
+    final base =
+        '${p.gameCount} games · ${p.platformDisplayName} (${p.username})'
+        ' · ${p.rangeDescription}';
     return _isAnalyzing ? '$base · Analyzing…' : base;
   }
 
@@ -193,103 +195,69 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _openingTree = null;
         _playerIsWhite = true;
       });
-      await _analyzeWeakPositions();
+      await _analyzeBothColors();
     }
   }
 
-  /// Build (or load cached) position analysis for the current player + colour.
-  Future<void> _analyzeWeakPositions() async {
+  // ── Analysis ─────────────────────────────────────────────────────
+
+  /// Analyse **both** colours on first load so toggling White/Black is instant.
+  /// Shows the White results as soon as they're ready, then pre-warms Black
+  /// in the background.
+  Future<void> _analyzeBothColors() async {
     final player = _currentPlayer;
-    if (player == null) {
-      _showError('No player selected. Please select a player first.');
-      return;
-    }
+    if (player == null) return;
 
     setState(() => _isAnalyzing = true);
 
     try {
-      // Load the raw PGN from disk.
-      final pgns = await _gamesService.loadAnalysisGames(
-        player.platform,
-        player.username,
-      );
-      if (pgns == null || pgns.isEmpty) {
-        if (mounted) {
-          _showError(
-            'No games found. Please re-download games for this player.',
-          );
-          setState(() => _isAnalyzing = false);
-        }
-        return;
+      final pgnList = await _loadPgnList(player);
+      if (pgnList == null) return; // error already shown
+
+      // ── White first (display immediately) ──
+      final (whiteAnalysis, whiteTree) =
+          await _buildAnalysis(player, pgnList, true);
+
+      if (mounted) {
+        setState(() {
+          _positionAnalysis = whiteAnalysis;
+          _openingTree = whiteTree;
+          _playerIsWhite = true;
+          _isAnalyzing = false;
+        });
       }
 
-      final pgnList = AnalysisGamesService.splitPgnIntoGames(pgns);
-      if (pgnList.isEmpty) {
-        if (mounted) {
-          _showError('No valid games found in downloaded data.');
-          setState(() => _isAnalyzing = false);
-        }
-        return;
+      // ── Pre-warm Black cache in background ──
+      await _buildAnalysis(player, pgnList, false);
+    } catch (e) {
+      if (mounted) {
+        _showError('Failed to analyze positions: $e');
+        setState(() => _isAnalyzing = false);
       }
+    }
+  }
 
-      final userIsWhite = _playerIsWhite;
+  /// Load (or rebuild from cache) the analysis for the currently selected
+  /// colour.  Used when toggling the White/Black segmented button.
+  Future<void> _loadColorAnalysis() async {
+    final player = _currentPlayer;
+    if (player == null) return;
 
-      // ── Try the cache first ──
-      PositionAnalysis? analysis;
+    setState(() => _isAnalyzing = true);
 
-      final cachedData = await _gamesService.loadCachedAnalysis(
-        player.platform,
-        player.username,
-        userIsWhite,
-      );
+    try {
+      final pgnList = await _loadPgnList(player);
+      if (pgnList == null) return;
 
-      if (cachedData != null) {
-        try {
-          analysis = PositionAnalysis.fromJson(cachedData);
-        } catch (_) {
-          // Corrupted cache – fall through to fresh analysis.
-        }
-      }
-
-      // ── Fresh analysis if cache missed ──
-      if (analysis == null) {
-        final fenBuilder = FenMapBuilder();
-        await fenBuilder.processPgns(pgnList, player.username, userIsWhite);
-        analysis = await FenMapBuilder.fromFenMapBuilder(fenBuilder, pgnList);
-
-        // Persist for next time (non-fatal on failure).
-        try {
-          await _gamesService.saveCachedAnalysis(
-            player.platform,
-            player.username,
-            userIsWhite,
-            analysis.toJson(),
-          );
-        } catch (_) {}
-      }
-
-      // Build opening tree (quick, not cached).
-      final openingTree = await OpeningTreeBuilder.buildTree(
-        pgnList: pgnList,
-        username: player.username,
-        userIsWhite: userIsWhite,
-      );
+      final (analysis, tree) =
+          await _buildAnalysis(player, pgnList, _playerIsWhite);
 
       if (mounted) {
         setState(() {
           _positionAnalysis = analysis;
-          _openingTree = openingTree;
+          _openingTree = tree;
           _isAnalyzing = false;
         });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Loaded ${analysis.positionStats.length} positions'
-              '${cachedData != null ? ' (cached)' : ''}',
-            ),
-          ),
-        );
       }
     } catch (e) {
       if (mounted) {
@@ -297,6 +265,85 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         setState(() => _isAnalyzing = false);
       }
     }
+  }
+
+  /// Load the raw PGN from disk and split into individual games.
+  /// Shows an error dialog and returns `null` on failure.
+  Future<List<String>?> _loadPgnList(AnalysisPlayerInfo player) async {
+    final pgns = await _gamesService.loadAnalysisGames(
+      player.platform,
+      player.username,
+    );
+    if (pgns == null || pgns.isEmpty) {
+      if (mounted) {
+        _showError(
+          'No games found. Please re-download games for this player.',
+        );
+        setState(() => _isAnalyzing = false);
+      }
+      return null;
+    }
+
+    final pgnList = AnalysisGamesService.splitPgnIntoGames(pgns);
+    if (pgnList.isEmpty) {
+      if (mounted) {
+        _showError('No valid games found in downloaded data.');
+        setState(() => _isAnalyzing = false);
+      }
+      return null;
+    }
+
+    return pgnList;
+  }
+
+  /// Build (or load from cache) the position analysis and opening tree
+  /// for a single colour.  Caches the result on disk for next time.
+  Future<(PositionAnalysis, OpeningTree)> _buildAnalysis(
+    AnalysisPlayerInfo player,
+    List<String> pgnList,
+    bool isWhite,
+  ) async {
+    // ── Try cache ──
+    PositionAnalysis? analysis;
+
+    final cachedData = await _gamesService.loadCachedAnalysis(
+      player.platform,
+      player.username,
+      isWhite,
+    );
+    if (cachedData != null) {
+      try {
+        analysis = PositionAnalysis.fromJson(cachedData);
+      } catch (_) {
+        // Corrupted – fall through to fresh analysis.
+      }
+    }
+
+    // ── Fresh analysis if cache missed ──
+    if (analysis == null) {
+      final fenBuilder = FenMapBuilder();
+      await fenBuilder.processPgns(pgnList, player.username, isWhite);
+      analysis = await FenMapBuilder.fromFenMapBuilder(fenBuilder, pgnList);
+
+      // Persist (non-fatal on failure).
+      try {
+        await _gamesService.saveCachedAnalysis(
+          player.platform,
+          player.username,
+          isWhite,
+          analysis.toJson(),
+        );
+      } catch (_) {}
+    }
+
+    // Opening tree (fast, not cached).
+    final tree = await OpeningTreeBuilder.buildTree(
+      pgnList: pgnList,
+      username: player.username,
+      userIsWhite: isWhite,
+    );
+
+    return (analysis, tree);
   }
 
   void _showError(String message) {
