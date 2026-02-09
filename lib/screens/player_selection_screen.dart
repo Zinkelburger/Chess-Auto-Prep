@@ -139,7 +139,8 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${player.gameCount} games · ${player.platformDisplayName}',
+                      '${player.gameCount} games · ${player.platformDisplayName}'
+                      ' · ${player.rangeDescription}',
                       style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 2),
@@ -245,9 +246,11 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     }
   }
 
-  /// Re-download with the same settings (platform, username, maxGames).
+  /// Re-download using the last 6 months as the default range.
   Future<void> _redownloadPlayer(AnalysisPlayerInfo player) async {
-    await _downloadGames(player.platform, player.username, player.maxGames);
+    await _downloadGames(
+      player.copyWith(monthsBack: 6, clearMonthsBack: false),
+    );
   }
 
   /// Re-download but let the user tweak the settings first.
@@ -267,7 +270,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
 
     if (result != null && mounted) {
-      await _downloadGames(result.platform, result.username, result.maxGames);
+      await _downloadGames(result);
     }
   }
 
@@ -283,17 +286,13 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
 
     if (result != null && mounted) {
-      await _downloadGames(result.platform, result.username, result.maxGames);
+      await _downloadGames(result);
     }
   }
 
   // ── Download with live progress ──────────────────────────────────
 
-  Future<void> _downloadGames(
-    String platform,
-    String username,
-    int maxGames,
-  ) async {
+  Future<void> _downloadGames(AnalysisPlayerInfo config) async {
     final progress = ValueNotifier<String>('Downloading games…');
 
     // Show a non-dismissible progress dialog.
@@ -321,16 +320,18 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     try {
       final String pgns;
 
-      if (platform == 'chesscom') {
+      if (config.platform == 'chesscom') {
         pgns = await _gamesService.downloadChesscomGames(
-          username,
-          maxGames: maxGames,
+          config.username,
+          maxGames: config.maxGames,
+          monthsBack: config.monthsBack,
           onProgress: (msg) => progress.value = msg,
         );
       } else {
         pgns = await _gamesService.downloadLichessGames(
-          username,
-          maxGames: maxGames,
+          config.username,
+          maxGames: config.maxGames,
+          monthsBack: config.monthsBack,
           onProgress: (msg) => progress.value = msg,
         );
       }
@@ -339,7 +340,9 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         if (mounted) {
           Navigator.of(context).pop(); // close progress dialog
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('No games found for $username')),
+            SnackBar(
+              content: Text('No games found for ${config.username}'),
+            ),
           );
         }
         return;
@@ -350,9 +353,10 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       // Saves games and automatically clears stale cached analysis.
       await _gamesService.saveAnalysisGames(
         pgns,
-        platform: platform,
-        username: username,
-        maxGames: maxGames,
+        platform: config.platform,
+        username: config.username,
+        maxGames: config.maxGames,
+        monthsBack: config.monthsBack,
       );
 
       await _loadCachedPlayers();
@@ -360,7 +364,9 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       if (mounted) {
         Navigator.of(context).pop(); // close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Downloaded games for $username')),
+          SnackBar(
+            content: Text('Downloaded games for ${config.username}'),
+          ),
         );
       }
     } catch (e) {

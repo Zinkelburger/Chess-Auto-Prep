@@ -29,11 +29,15 @@ class AnalysisGamesService {
 
   /// Download games from Chess.com, excluding bullet.
   ///
-  /// Fetches month-by-month going backwards until [maxGames] non-bullet games
-  /// have been collected (capped at 24 months).
+  /// Two modes controlled by [monthsBack]:
+  ///   • `null` (game-count mode) – walk backwards up to 24 months, stop at
+  ///     [maxGames] non-bullet games.
+  ///   • non-null (months mode) – fetch exactly [monthsBack] calendar months,
+  ///     collecting every non-bullet game found.
   Future<String> downloadChesscomGames(
     String username, {
     int maxGames = 100,
+    int? monthsBack,
     void Function(String)? onProgress,
   }) async {
     onProgress?.call('Fetching Chess.com games for $username…');
@@ -43,21 +47,33 @@ class AnalysisGamesService {
     int currentYear = now.year;
     int currentMonth = now.month;
 
-    for (int i = 0; i < 24 && allGames.length < maxGames; i++) {
+    final totalMonths = monthsBack ?? 24;
+
+    for (int i = 0; i < totalMonths; i++) {
+      // In game-count mode, stop once we have enough.
+      if (monthsBack == null && allGames.length >= maxGames) break;
+
       final monthStr = currentMonth.toString().padLeft(2, '0');
       final url =
           'https://api.chess.com/pub/player/${username.toLowerCase()}'
           '/games/$currentYear/$monthStr/pgn';
 
-      onProgress?.call(
-        'Fetching $currentYear-$monthStr… (${allGames.length}/$maxGames)',
-      );
+      if (monthsBack != null) {
+        onProgress?.call(
+          'Fetching $currentYear-$monthStr… '
+          '(month ${i + 1}/$monthsBack, ${allGames.length} games)',
+        );
+      } else {
+        onProgress?.call(
+          'Fetching $currentYear-$monthStr… (${allGames.length}/$maxGames)',
+        );
+      }
 
       try {
         final response = await http.get(Uri.parse(url));
         if (response.statusCode == 200 && response.body.isNotEmpty) {
           for (final game in splitPgnIntoGames(response.body)) {
-            if (allGames.length >= maxGames) break;
+            if (monthsBack == null && allGames.length >= maxGames) break;
             if (!_isBulletGame(game)) allGames.add(game);
           }
         }
@@ -80,15 +96,20 @@ class AnalysisGamesService {
   }
 
   /// Download games from Lichess, excluding bullet.
+  ///
+  /// Two modes controlled by [monthsBack]:
+  ///   • `null` (game-count mode) – uses the `max` API parameter.
+  ///   • non-null (months mode) – uses the `since` API parameter with a
+  ///     timestamp [monthsBack] months in the past.
   Future<String> downloadLichessGames(
     String username, {
     int maxGames = 100,
+    int? monthsBack,
     void Function(String)? onProgress,
   }) async {
     onProgress?.call('Fetching Lichess games for $username…');
 
-    final params = {
-      'max': maxGames.toString(),
+    final params = <String, String>{
       'perfType': 'blitz,rapid,classical,correspondence',
       'moves': 'true',
       'tags': 'true',
@@ -98,10 +119,22 @@ class AnalysisGamesService {
       'sort': 'dateDesc',
     };
 
+    if (monthsBack != null) {
+      // Calculate a timestamp N months ago (approximate: 30 days/month).
+      final since = DateTime.now()
+          .subtract(Duration(days: monthsBack * 30))
+          .millisecondsSinceEpoch;
+      params['since'] = since.toString();
+      onProgress?.call(
+        'Downloading games from the last $monthsBack months…',
+      );
+    } else {
+      params['max'] = maxGames.toString();
+      onProgress?.call('Downloading up to $maxGames games…');
+    }
+
     final uri = Uri.parse('https://lichess.org/api/games/user/$username')
         .replace(queryParameters: params);
-
-    onProgress?.call('Downloading up to $maxGames games…');
 
     final response = await http.get(
       uri,
@@ -126,6 +159,7 @@ class AnalysisGamesService {
     required String platform,
     required String username,
     required int maxGames,
+    int? monthsBack,
   }) async {
     final directory = await _getAnalysisDirectory();
     final key = AnalysisPlayerInfo(
@@ -142,6 +176,7 @@ class AnalysisGamesService {
       platform: platform,
       username: username,
       maxGames: maxGames,
+      monthsBack: monthsBack,
       downloadedAt: DateTime.now(),
       gameCount: gameCount,
     );
