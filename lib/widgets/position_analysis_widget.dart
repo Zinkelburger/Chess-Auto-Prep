@@ -206,13 +206,9 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
                   ? PgnViewerWidget(
                       pgnText: _selectedGame!.pgnText!,
                       controller: _pgnController,
+                      initialFen: _currentFen,
                       onPositionChanged: (position) {
-                        try {
-                          setState(() {
-                            _currentBoard =
-                                chess.Chess.fromFEN(position.fen);
-                          });
-                        } catch (_) {}
+                        _syncToFen(position.fen);
                       },
                     )
                   : const Center(
@@ -320,6 +316,26 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
         _currentGames = widget.analysis!.getGamesForFen(tree.currentNode.fen);
       }
     });
+  }
+
+  /// Sync board, FEN, games list, and tree to an arbitrary FEN (e.g. from
+  /// the PGN viewer).  Unlike [_syncBoardToTree], this starts from a raw FEN
+  /// rather than the tree's current node.
+  void _syncToFen(String fen) {
+    try {
+      setState(() {
+        _currentFen = fen;
+        _currentBoard = chess.Chess.fromFEN(fen);
+
+        if (widget.analysis != null) {
+          _currentGames = widget.analysis!.getGamesForFen(fen);
+        }
+      });
+
+      // Best-effort: move the tree to this position so the Move Tree tab
+      // stays in sync if the user switches to it.
+      widget.openingTree?.navigateToFen(fen);
+    } catch (_) {}
   }
 
   // ── FEN list selection ─────────────────────────────────────────────

@@ -81,6 +81,10 @@ class PgnViewerWidget extends StatefulWidget {
   final Function(chess.Chess)? onPositionChanged;
   final PgnViewerController? controller;
 
+  /// When set, the viewer will jump to the first position in the main line
+  /// whose FEN matches [initialFen] (normalised to 4 fields) on load.
+  final String? initialFen;
+
   const PgnViewerWidget({
     super.key,
     this.gameId,
@@ -89,6 +93,7 @@ class PgnViewerWidget extends StatefulWidget {
     this.isWhiteToPlay,
     this.onPositionChanged,
     this.controller,
+    this.initialFen,
   });
 
   @override
@@ -180,6 +185,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
       if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
         _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
+      } else if (widget.initialFen != null) {
+        _jumpToFen(widget.initialFen!);
       }
     } catch (e) {
       setState(() {
@@ -255,6 +262,29 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     targetPly = targetPly.clamp(0, _moveHistory.length);
 
     _goToMainLineMove(targetPly);
+  }
+
+  /// Walk the main line and jump to the first position whose normalised FEN
+  /// matches [targetFen].
+  void _jumpToFen(String targetFen) {
+    if (_moveHistory.isEmpty) return;
+
+    final normalised = _normaliseFen(targetFen);
+    final game = chess.Chess();
+
+    for (int i = 0; i < _moveHistory.length; i++) {
+      game.move(_moveHistory[i].san);
+      if (_normaliseFen(game.fen) == normalised) {
+        _goToMainLineMove(i + 1);
+        return;
+      }
+    }
+  }
+
+  /// Strip half-move clock and full-move number for FEN comparison.
+  static String _normaliseFen(String fen) {
+    final parts = fen.split(' ');
+    return parts.length >= 4 ? parts.take(4).join(' ') : fen;
   }
 
   /// Navigate to a position in the main line
