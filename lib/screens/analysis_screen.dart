@@ -77,7 +77,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Position Analysis', style: theme.textTheme.titleMedium),
+                Text('Player Analysis', style: theme.textTheme.titleMedium),
                 if (_currentPlayer != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),

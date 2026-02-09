@@ -65,7 +65,7 @@ class _MainScreenState extends State<MainScreen> {
                       children: [
                         const Icon(Icons.analytics),
                         const SizedBox(width: 12),
-                        const Text('Analysis'),
+                        const Text('Player Analysis'),
                         if (appState.currentMode == AppMode.positionAnalysis)
                           const Padding(
                             padding: EdgeInsets.only(left: 12),
