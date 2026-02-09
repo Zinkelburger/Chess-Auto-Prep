@@ -1,7 +1,12 @@
-/// FEN list widget - Flutter port of Python's fen_list.py
-/// Displays a list of FENs with statistics, allows filtering and sorting
+/// FEN list widget – left panel of the Player Analysis screen.
+/// Displays positions with statistics, filtered by minimum games and sorted.
+library;
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import '../models/position_analysis.dart';
 
 class FenListWidget extends StatefulWidget {
@@ -23,11 +28,61 @@ class _FenListWidgetState extends State<FenListWidget> {
   String _sortBy = 'Lowest Win Rate';
   String? _selectedFen;
 
-  final Map<String, String> _sortMap = {
+  // Min-games text field with debounced validation.
+  late final TextEditingController _minGamesController;
+  Timer? _minGamesErrorTimer;
+  String? _minGamesError;
+
+  static const Map<String, String> _sortMap = {
     'Lowest Win Rate': 'win_rate',
+    'Highest Win Rate': 'win_rate_desc',
     'Most Games': 'games',
     'Most Losses': 'losses',
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _minGamesController = TextEditingController(text: _minGames.toString());
+  }
+
+  @override
+  void dispose() {
+    _minGamesController.dispose();
+    _minGamesErrorTimer?.cancel();
+    super.dispose();
+  }
+
+  // ── Validation ─────────────────────────────────────────────────────
+
+  void _validateMinGames(String value) {
+    final v = int.tryParse(value);
+    String? error;
+    if (v == null) {
+      error = 'Must be a number';
+    } else if (v < 1) {
+      error = 'Minimum is 1';
+    }
+
+    _minGamesErrorTimer?.cancel();
+
+    // Clear error immediately when the value becomes valid.
+    setState(() {
+      if (error == null) {
+        _minGamesError = null;
+        _minGames = v!;
+      }
+    });
+
+    // Debounce showing the red error text so it doesn't flash while typing.
+    if (error != null) {
+      _minGamesErrorTimer = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) setState(() => _minGamesError = error);
+      });
+    }
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -37,44 +92,42 @@ class _FenListWidgetState extends State<FenListWidget> {
         Container(
           padding: const EdgeInsets.all(8),
           child: const Text(
-            'Position Analysis',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+            'Weak Positions',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             textAlign: TextAlign.center,
           ),
         ),
 
-        // Filters
+        // ── Min games filter ──
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
             children: [
               const Text('Min games:', style: TextStyle(fontSize: 12)),
               const SizedBox(width: 8),
-              Expanded(
-                child: DropdownButton<int>(
-                  value: _minGames,
-                  isExpanded: true,
-                  items: [1, 2, 3, 4, 5, 10, 15, 20]
-                      .map((value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value.toString()),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _minGames = value);
-                    }
-                  },
+              SizedBox(
+                width: 72,
+                child: TextField(
+                  controller: _minGamesController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    border: const OutlineInputBorder(),
+                    errorText: _minGamesError,
+                    errorStyle: const TextStyle(fontSize: 10),
+                  ),
+                  onChanged: _validateMinGames,
                 ),
               ),
             ],
           ),
         ),
 
-        // Sort by
+        // ── Sort selector ──
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
@@ -88,7 +141,8 @@ class _FenListWidgetState extends State<FenListWidget> {
                   items: _sortMap.keys
                       .map((key) => DropdownMenuItem(
                             value: key,
-                            child: Text(key, style: const TextStyle(fontSize: 12)),
+                            child:
+                                Text(key, style: const TextStyle(fontSize: 12)),
                           ))
                       .toList(),
                   onChanged: (value) {
@@ -104,10 +158,8 @@ class _FenListWidgetState extends State<FenListWidget> {
 
         const Divider(height: 1),
 
-        // List
-        Expanded(
-          child: _buildPositionsList(),
-        ),
+        // ── Positions list ──
+        Expanded(child: _buildPositionsList()),
       ],
     );
   }
@@ -144,17 +196,18 @@ class _FenListWidgetState extends State<FenListWidget> {
   Widget _buildPositionItem(int rank, PositionStats stats) {
     final isSelected = _selectedFen == stats.fen;
 
-    // Color code by win rate
+    // Colour-code by win rate.
     Color? backgroundColor;
     if (stats.winRate < 0.3) {
-      backgroundColor = Colors.red.withOpacity(0.2);
+      backgroundColor = Colors.red.withValues(alpha: 0.2);
     } else if (stats.winRate < 0.4) {
-      backgroundColor = Colors.yellow.withOpacity(0.2);
+      backgroundColor = Colors.yellow.withValues(alpha: 0.2);
     }
 
     return ListTile(
       selected: isSelected,
-      selectedTileColor: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+      selectedTileColor:
+          Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
       tileColor: backgroundColor,
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -164,7 +217,9 @@ class _FenListWidgetState extends State<FenListWidget> {
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       ),
       subtitle: Text(
-        stats.fen.length > 40 ? '${stats.fen.substring(0, 40)}...' : stats.fen,
+        stats.fen.length > 40
+            ? '${stats.fen.substring(0, 40)}...'
+            : stats.fen,
         style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,

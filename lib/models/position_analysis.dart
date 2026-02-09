@@ -238,6 +238,8 @@ class PositionAnalysis {
 
     if (sortBy == 'win_rate') {
       filtered.sort((a, b) => a.winRate.compareTo(b.winRate));
+    } else if (sortBy == 'win_rate_desc') {
+      filtered.sort((a, b) => b.winRate.compareTo(a.winRate));
     } else if (sortBy == 'games') {
       filtered.sort((a, b) => b.games.compareTo(a.games));
     } else if (sortBy == 'losses') {
