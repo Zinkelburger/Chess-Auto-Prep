@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Dialog for downloading games for analysis
-/// Allows user to select platform, username, and date range
+import '../models/analysis_player_info.dart';
+
+/// Dialog for downloading games for analysis.
+///
+/// Pops with an [AnalysisPlayerInfo] containing the chosen platform, username,
+/// and max-games count, or `null` if the user cancels.
 class AnalysisDownloadDialog extends StatefulWidget {
   final String? chesscomUsername;
   final String? lichessUsername;
@@ -14,27 +18,31 @@ class AnalysisDownloadDialog extends StatefulWidget {
   });
 
   @override
-  State<AnalysisDownloadDialog> createState() => _AnalysisDownloadDialogState();
+  State<AnalysisDownloadDialog> createState() =>
+      _AnalysisDownloadDialogState();
 }
 
 class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   String _selectedPlatform = 'chesscom';
-  late TextEditingController _usernameController;
-  late TextEditingController _maxGamesController;
+  late final TextEditingController _usernameController;
+  late final TextEditingController _maxGamesController;
   int _maxGames = 100;
 
   @override
   void initState() {
     super.initState();
-    // Prefill with appropriate username based on default platform
-    final initialUsername = widget.chesscomUsername ?? widget.lichessUsername ?? '';
+
+    final initialUsername =
+        widget.chesscomUsername ?? widget.lichessUsername ?? '';
     _usernameController = TextEditingController(text: initialUsername);
     _maxGamesController = TextEditingController(text: _maxGames.toString());
 
-    // Default to platform that has a username set
-    if (widget.chesscomUsername != null && widget.chesscomUsername!.isNotEmpty) {
+    // Default to whichever platform already has a username.
+    if (widget.chesscomUsername != null &&
+        widget.chesscomUsername!.isNotEmpty) {
       _selectedPlatform = 'chesscom';
-    } else if (widget.lichessUsername != null && widget.lichessUsername!.isNotEmpty) {
+    } else if (widget.lichessUsername != null &&
+        widget.lichessUsername!.isNotEmpty) {
       _selectedPlatform = 'lichess';
     }
   }
@@ -46,12 +54,12 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     super.dispose();
   }
 
+  // ── Callbacks ────────────────────────────────────────────────────
+
   void _onPlatformChanged(String? platform) {
     if (platform == null) return;
-
     setState(() {
       _selectedPlatform = platform;
-      // Update username field when platform changes
       if (platform == 'chesscom' && widget.chesscomUsername != null) {
         _usernameController.text = widget.chesscomUsername!;
       } else if (platform == 'lichess' && widget.lichessUsername != null) {
@@ -60,7 +68,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
     });
   }
 
-  void _onMaxGamesChanged(double value) {
+  void _onMaxGamesSliderChanged(double value) {
     setState(() {
       _maxGames = value.round();
       _maxGamesController.text = _maxGames.toString();
@@ -68,11 +76,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
   }
 
   void _onMaxGamesTextChanged(String value) {
-    final games = int.tryParse(value);
-    if (games != null && games >= 1 && games <= 500) {
-      setState(() {
-        _maxGames = games;
-      });
+    final parsed = int.tryParse(value);
+    if (parsed != null && parsed >= 1 && parsed <= 500) {
+      setState(() => _maxGames = parsed);
     }
   }
 
@@ -81,32 +87,30 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
 
     if (username.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a username'),
-          duration: Duration(seconds: 2),
-        ),
+        const SnackBar(content: Text('Please enter a username')),
       );
       return;
     }
 
-    // Validate max games
     if (_maxGames < 1 || _maxGames > 500) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a valid number of games (1-500)'),
-          duration: Duration(seconds: 2),
+          content: Text('Please enter a valid number of games (1–500)'),
         ),
       );
       return;
     }
 
-    // Return platform, username, and maxGames
-    Navigator.of(context).pop({
-      'platform': _selectedPlatform,
-      'username': username,
-      'maxGames': _maxGames,
-    });
+    Navigator.of(context).pop(
+      AnalysisPlayerInfo(
+        platform: _selectedPlatform,
+        username: username,
+        maxGames: _maxGames,
+      ),
+    );
   }
+
+  // ── Build ────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -124,25 +128,29 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
             ),
             const SizedBox(height: 16),
 
-            // Platform selection
-            RadioListTile<String>(
-              title: const Text('Chess.com'),
-              subtitle: const Text('Download games (no bullet)'),
-              value: 'chesscom',
+            // ── Platform ──
+            RadioGroup<String>(
               groupValue: _selectedPlatform,
-              onChanged: _onPlatformChanged,
-            ),
-            RadioListTile<String>(
-              title: const Text('Lichess'),
-              subtitle: const Text('Download games (no bullet)'),
-              value: 'lichess',
-              groupValue: _selectedPlatform,
-              onChanged: _onPlatformChanged,
+              onChanged: (value) => _onPlatformChanged(value),
+              child: const Column(
+                children: [
+                  RadioListTile<String>(
+                    title: Text('Chess.com'),
+                    subtitle: Text('Download games (no bullet)'),
+                    value: 'chesscom',
+                  ),
+                  RadioListTile<String>(
+                    title: Text('Lichess'),
+                    subtitle: Text('Download games (no bullet)'),
+                    value: 'lichess',
+                  ),
+                ],
+              ),
             ),
 
             const SizedBox(height: 16),
 
-            // Username input
+            // ── Username ──
             TextField(
               controller: _usernameController,
               decoration: InputDecoration(
@@ -157,7 +165,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
 
             const SizedBox(height: 24),
 
-            // Max games selector
+            // ── Max games ──
             const Text(
               'Number of Games',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
@@ -175,8 +183,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                         min: 1,
                         max: 500,
                         divisions: 499,
-                        label: '$_maxGames game${_maxGames == 1 ? '' : 's'}',
-                        onChanged: _onMaxGamesChanged,
+                        label:
+                            '$_maxGames game${_maxGames == 1 ? '' : 's'}',
+                        onChanged: _onMaxGamesSliderChanged,
                       ),
                       Center(
                         child: Text(
@@ -199,7 +208,8 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                     decoration: const InputDecoration(
                       labelText: 'Games',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     ),
                     onChanged: _onMaxGamesTextChanged,
                   ),
@@ -208,7 +218,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Download the last 1-500 games (excluding bullet)',
+              'Download the last 1–500 games (excluding bullet)',
               style: TextStyle(fontSize: 12, color: Colors.grey[600]),
             ),
           ],
