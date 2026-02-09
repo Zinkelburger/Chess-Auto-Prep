@@ -76,12 +76,9 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
             : constraints.maxHeight;
         final squareSize = boardSize / 8;
 
-    return Container(
+    return SizedBox(
       width: boardSize,
       height: boardSize,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.black, width: 2),
-      ),
           child: GestureDetector(
             onPanStart: (details) {
               if (!widget.enableUserMoves) return;
@@ -491,6 +488,16 @@ class _BoardPainter extends CustomPainter {
         }
       }
     }
+
+    // Draw board border (painted here instead of Container decoration
+    // to avoid border width affecting child layout and piece positioning)
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..color = Colors.black
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
   }
 
   /// Convert square name to screen coordinates (shared logic)
