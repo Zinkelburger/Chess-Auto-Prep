@@ -30,8 +30,6 @@ dependencies:
   csv: ^6.0.0
   share_plus: ^10.0.0  # For exporting/sharing tactics on mobile
 
-  # Chess board widget
-  flutter_chess_board: ^1.0.1
   flutter_bloc: ^9.1.1
   shared_preferences: ^2.5.3
   html: ^0.15.6
