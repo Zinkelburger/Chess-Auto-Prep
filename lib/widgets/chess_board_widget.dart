@@ -326,108 +326,34 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     }
   }
 
-  /// Generate SAN notation for a move
-  String _generateSan(String from, String to, chess.Chess game) {
-    final piece = game.get(from);
-    if (piece == null) return '$from$to'; // Fallback to UCI
-
-    final pieceType = piece.type;
-    final isWhite = piece.color == chess.Color.WHITE;
-
-    // Get piece symbol (uppercase for white, lowercase for black)
-    String pieceSymbol = '';
-    switch (pieceType) {
-      case chess.PieceType.KING:
-        pieceSymbol = 'K';
-        break;
-      case chess.PieceType.QUEEN:
-        pieceSymbol = 'Q';
-        break;
-      case chess.PieceType.ROOK:
-        pieceSymbol = 'R';
-        break;
-      case chess.PieceType.BISHOP:
-        pieceSymbol = 'B';
-        break;
-      case chess.PieceType.KNIGHT:
-        pieceSymbol = 'N';
-        break;
-      case chess.PieceType.PAWN:
-        pieceSymbol = ''; // Pawns don't have a symbol
-        break;
-    }
-
-    // Check if it's a capture
-    final targetPiece = game.get(to);
-    final isCapture = targetPiece != null;
-
-    // For pawns, we need special handling
-    if (pieceType == chess.PieceType.PAWN) {
-      if (isCapture) {
-        // Pawn capture: exd4
-        return '${from[0]}x$to';
-      } else {
-        // Simple pawn move: d4
-        return to;
-      }
-    }
-
-    // For other pieces, check for ambiguity
-    String disambiguation = '';
-    final legalMoves = game.generate_moves();
-    final samePieceMoves = legalMoves.where((move) {
-      final movePiece = game.get(move.fromAlgebraic);
-      return movePiece?.type == pieceType &&
-             movePiece?.color == piece.color &&
-             move.toAlgebraic == to &&
-             move.fromAlgebraic != from;
-    }).toList();
-
-    if (samePieceMoves.isNotEmpty) {
-      // Need disambiguation
-      final sameFile = samePieceMoves.any((move) => move.fromAlgebraic[0] == from[0]);
-      final sameRank = samePieceMoves.any((move) => move.fromAlgebraic[1] == from[1]);
-
-      if (!sameFile) {
-        disambiguation = from[0]; // Use file
-      } else if (!sameRank) {
-        disambiguation = from[1]; // Use rank
-      } else {
-        disambiguation = from; // Use full square
-      }
-    }
-
-    // Build the SAN
-    String san = pieceSymbol + disambiguation;
-    if (isCapture) {
-      san += 'x';
-    }
-    san += to;
-
-    // Check for promotion (should already be handled in moveMap)
-    if (pieceType == chess.PieceType.PAWN) {
-      if ((isWhite && to[1] == '8') || (!isWhite && to[1] == '1')) {
-        san += '=Q'; // Auto-promote to Queen
-      }
-    }
-
-    return san;
-  }
-
   void _tryMakeMove(String from, String to) {
     try {
-      final uci = '$from$to';
       final fenBefore = widget.game.fen;
 
       // Create a local copy to validate the move WITHOUT mutating parent state
       final gameCopy = chess.Chess.fromFEN(fenBefore);
 
-      // Validate the move is legal first
+      // Find the matching legal move object from the library
       final legalMoves = gameCopy.generate_moves();
-      final isLegal = legalMoves.any((move) =>
-          move.fromAlgebraic == from && move.toAlgebraic == to);
+      final fromSquare = chess.Chess.SQUARES[from];
+      final toSquare = chess.Chess.SQUARES[to];
 
-      if (!isLegal) {
+      // Check for promotion (auto-promote to Queen)
+      final piece = gameCopy.get(from);
+      final isPromotion = piece?.type == chess.PieceType.PAWN &&
+          ((piece!.color == chess.Color.WHITE && to[1] == '8') ||
+           (piece.color == chess.Color.BLACK && to[1] == '1'));
+
+      // Find the exact move object so we can get proper SAN from the library
+      final matchingMove = legalMoves.cast<dynamic>().firstWhere(
+        (move) =>
+            move.from == fromSquare &&
+            move.to == toSquare &&
+            (!isPromotion || move.promotion == chess.PieceType.QUEEN),
+        orElse: () => null,
+      );
+
+      if (matchingMove == null) {
         setState(() {
           selectedSquare = null;
           _internalHighlights.clear();
@@ -435,37 +361,21 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         return;
       }
 
-      // Generate SAN notation before making the move
-      var correctSan = _generateSan(from, to, gameCopy);
+      // Use the library to generate correct SAN (handles castling, en passant,
+      // disambiguation, check/checkmate symbols, etc.)
+      final san = gameCopy.move_to_san(matchingMove);
 
-      // Create the move map for the chess.dart library
-      final moveMap = <String, String>{
-        'from': from,
-        'to': to,
-      };
+      // Build UCI string (include promotion piece if applicable)
+      final uci = isPromotion ? '${from}${to}q' : '$from$to';
 
-      // Check for promotion and auto-promote to Queen
-      final piece = gameCopy.get(from);
-      if (piece?.type == chess.PieceType.PAWN) {
-        if ((piece!.color == chess.Color.WHITE && to[1] == '8') ||
-            (piece.color == chess.Color.BLACK && to[1] == '1')) {
-          moveMap['promotion'] = 'q'; // Auto-promote to Queen
-          correctSan += '=Q';
-        }
-      }
+      // Make the move on the copy to get the resulting FEN
+      final moveMap = <String, String>{'from': from, 'to': to};
+      if (isPromotion) moveMap['promotion'] = 'q';
 
-      // Make the move on the COPY to get fenAfter and check/checkmate status
       final moveResult = gameCopy.move(moveMap);
 
       if (moveResult == true) {
         final fenAfter = gameCopy.fen;
-        
-        // Update SAN with check/checkmate symbols
-        if (gameCopy.in_checkmate) {
-          correctSan += '#';
-        } else if (gameCopy.in_check) {
-          correctSan += '+';
-        }
 
         setState(() {
           selectedSquare = null;
@@ -477,7 +387,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         final completedMove = CompletedMove(
           from: from,
           to: to,
-          san: correctSan,
+          san: san,
           fenBefore: fenBefore,
           fenAfter: fenAfter,
           uci: uci,
@@ -560,13 +470,9 @@ class _BoardPainter extends CustomPainter {
         final rankIndex = rank - 1; // FIX: Use 0-based index
         final isLightSquare = (fileIndex + rankIndex) % 2 != 0; // FIX: Check for non-zero
 
-        Color color;
+        final Color color;
         if (square == selectedSquare) {
           color = _ChessBoardWidgetState.selectedSquareColor;
-        } else if (highlightedSquares.contains(square)) {
-          color = isLightSquare
-              ? _ChessBoardWidgetState.lightSquareColor
-              : _ChessBoardWidgetState.darkSquareColor;
         } else {
           color = isLightSquare
               ? _ChessBoardWidgetState.lightSquareColor

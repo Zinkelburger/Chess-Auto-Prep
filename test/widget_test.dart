@@ -11,7 +11,6 @@ import 'package:chess/chess.dart' as chess;
 
 import 'package:chess_auto_prep/main.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
-import 'package:chess_auto_prep/widgets/simple_chess_board.dart';
 
 void main() {
   testWidgets('App loads without crashing', (WidgetTester tester) async {
@@ -141,38 +140,4 @@ void main() {
     });
   });
 
-  group('SimpleChessBoard Tests', () {
-    late chess.Chess testGame;
-
-    setUp(() {
-      testGame = chess.Chess();
-    });
-
-    testWidgets('renders without errors', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SimpleChessBoard(game: testGame),
-          ),
-        ),
-      );
-
-      expect(find.byType(SimpleChessBoard), findsOneWidget);
-    });
-
-    testWidgets('handles piece selection correctly', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SimpleChessBoard(game: testGame),
-          ),
-        ),
-      );
-
-      // The SimpleChessBoard uses a different structure (Column/Row)
-      expect(find.byType(SimpleChessBoard), findsOneWidget);
-      expect(find.byType(Column), findsWidgets);
-      expect(find.byType(Row), findsWidgets);
-    });
-  });
 }
