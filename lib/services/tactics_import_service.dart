@@ -545,12 +545,17 @@ class TacticsImportService {
           if (evalA.pv.isNotEmpty) {
             final bestMoveUci = evalA.pv.first;
             
-            // Generate correct line as pure SAN moves (for solution matching)
+            // Generate correct line from PV, extending for tactical sequences.
+            // If the user's move is a check (+), capture (x), or checkmate (#),
+            // keep consuming the PV to include the opponent's response and the
+            // next user move, up to a maximum of 5 user moves.
             final correctLine = <String>[];
             final tempGame = chess.Chess.fromFEN(fenBefore);
             
-            int pvLimit = math.min(3, evalA.pv.length);
-            for (int i = 0; i < pvLimit; i++) {
+            int userMoveCount = 0;
+            const maxUserMoves = 5;
+            
+            for (int i = 0; i < evalA.pv.length; i++) {
               final uci = evalA.pv[i];
               final sanMove = _makeUciMoveAndGetSan(tempGame, uci);
               
@@ -558,10 +563,30 @@ class TacticsImportService {
                 print('  → UCI: $uci → SAN: $sanMove');
               }
               
-              if (sanMove != null) {
-                // Store pure SAN move (e.g., "Nf3", "e4") for solution matching
+              if (sanMove == null) break;
+              
+              final isUserMove = (i % 2 == 0); // Even indices = user moves
+              
+              if (isUserMove) {
+                correctLine.add(sanMove);
+                userMoveCount++;
+                
+                if (userMoveCount >= maxUserMoves) break;
+                
+                // Check if this user move is tactical (check, capture, checkmate)
+                final isTactical = sanMove.contains('x') ||
+                    sanMove.contains('+') ||
+                    sanMove.contains('#');
+                if (!isTactical) break; // Non-forcing move ends the sequence
+              } else {
+                // Opponent response — always include when extending
                 correctLine.add(sanMove);
               }
+            }
+            
+            // Ensure the line always ends on a user move
+            if (correctLine.length > 1 && correctLine.length.isEven) {
+              correctLine.removeLast();
             }
             
             if (kDebugMode) {

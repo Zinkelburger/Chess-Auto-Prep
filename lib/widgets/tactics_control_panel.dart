@@ -42,6 +42,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   bool _isImporting = false;
   int _newPositionsFound = 0;
 
+  // Multi-move tactic state
+  int _currentMoveIndex = 0;      // Index into correctLine for next expected user move
+  String? _currentTacticFen;      // Board FEN before the current user move (for reset)
+  bool _waitingForOpponent = false; // True while opponent response is being animated
+
   // Import controllers
   late TextEditingController _lichessUserController;
   late TextEditingController _lichessCountController;
@@ -354,7 +359,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                       children: [
                         Expanded(
                           child: Text(
-                            'Solution: ${_engine.getSolution(_currentPosition!)}',
+                            'Solution: ${_engine.getSolution(_currentPosition!, fromIndex: _currentMoveIndex)}',
                             style: const TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 14,
@@ -655,6 +660,19 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               fontWeight: FontWeight.bold,
               fontSize: 14,
               color: pos.mistakeType == '??' ? Colors.red : Colors.orange,
+            ),
+          ),
+        ],
+
+        // Multi-move tactic indicator
+        if (_engine.userMoveCount(pos) > 1) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Multi-move tactic (${_engine.userMoveCount(pos)} moves)',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.blue[300],
+              fontStyle: FontStyle.italic,
             ),
           ),
         ],
@@ -1066,12 +1084,15 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final game = chess.Chess.fromFEN(_currentPosition!.fen);
     appState.setCurrentGame(game);
     
-    // Reset solved state and feedback
+    // Reset solved state, feedback, and multi-move tracking
     setState(() {
       _positionSolved = false;
       _feedback = '';
       _showSolution = false;
       _startTime = DateTime.now();
+      _currentMoveIndex = 0;
+      _currentTacticFen = _currentPosition!.fen;
+      _waitingForOpponent = false;
     });
   }
 
@@ -1291,6 +1312,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _startTime = DateTime.now();
       _feedback = '';
       _showSolution = false;
+      _currentMoveIndex = 0;
+      _currentTacticFen = position.fen;
+      _waitingForOpponent = false;
     });
 
     // Set up the chess board
@@ -1369,13 +1393,18 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _onMoveAttempted(String moveUci) {
-    if (_currentPosition == null) return;
-    
-    // Validate the move against the tactic's correct line
-    if (_positionSolved) return;
+    if (_currentPosition == null || _positionSolved || _waitingForOpponent) {
+      return;
+    }
 
-    // Use TacticsEngine for proper move validation
-    final result = _engine.checkMove(_currentPosition!, moveUci);
+    // Validate against the correct move at the current index
+    final fen = _currentTacticFen ?? _currentPosition!.fen;
+    final result = _engine.checkMoveAtIndex(
+      _currentPosition!,
+      moveUci,
+      fen,
+      _currentMoveIndex,
+    );
     final timeTaken = _startTime != null
         ? DateTime.now().difference(_startTime!).inMilliseconds / 1000.0
         : 0.0;
@@ -1403,8 +1432,57 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       appState.notifyGameChanged();
     }
 
+    _currentMoveIndex++; // Advance past the user's move
+
+    final totalUserMoves = _engine.userMoveCount(_currentPosition!);
+    final completedUserMoves = (_currentMoveIndex + 1) ~/ 2;
+
+    // Check if there's an opponent response to play next
+    if (_currentMoveIndex < _currentPosition!.correctLine.length &&
+        _currentMoveIndex % 2 == 1) {
+      // Intermediate correct move — show brief feedback and queue opponent response
+      setState(() {
+        _waitingForOpponent = true;
+        _feedback = totalUserMoves > 1
+            ? 'Correct! ($completedUserMoves/$totalUserMoves)'
+            : 'Correct!';
+      });
+
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (!mounted || _currentPosition == null) return;
+
+        // Play the opponent's response from the correct line
+        final appState = context.read<AppState>();
+        final game = appState.currentGame;
+        final opponentSan = _currentPosition!.correctLine[_currentMoveIndex];
+        game.move(opponentSan);
+        appState.notifyGameChanged();
+
+        _currentMoveIndex++; // Advance past the opponent's move
+        _currentTacticFen = game.fen; // Save FEN for reset on wrong answer
+
+        // Edge case: PV ended right after opponent (even-length line)
+        if (_currentMoveIndex >= _currentPosition!.correctLine.length) {
+          _completeTactic(timeTaken);
+          return;
+        }
+
+        setState(() {
+          _feedback = '';
+          _waitingForOpponent = false;
+        });
+      });
+    } else {
+      // All user moves completed — tactic solved!
+      _completeTactic(timeTaken);
+    }
+  }
+
+  /// Mark the tactic as fully solved, record the attempt, and auto-advance.
+  void _completeTactic(double timeTaken) {
     setState(() {
       _positionSolved = true;
+      _waitingForOpponent = false;
       _feedback = 'Correct!';
     });
 
@@ -1430,7 +1508,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         }
       });
     }
-
   }
 
   void _handleIncorrectMove(double timeTaken, {String? moveUci}) {
@@ -1467,13 +1544,16 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       });
     }
 
-    // After a brief moment, reset the board and clear feedback
+    // After a brief moment, reset the board to the current tactic position
+    // (for multi-move tactics this is where the current user move should be,
+    // not necessarily the original FEN)
     if (_currentPosition != null) {
       Future.delayed(const Duration(milliseconds: 600), () {
         if (mounted && _currentPosition != null) {
           try {
             final appState = context.read<AppState>();
-            final game = chess.Chess.fromFEN(_currentPosition!.fen);
+            final fen = _currentTacticFen ?? _currentPosition!.fen;
+            final game = chess.Chess.fromFEN(fen);
             appState.setCurrentGame(game);
           } catch (e) {
             // Handle error

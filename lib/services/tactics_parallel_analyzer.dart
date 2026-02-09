@@ -318,14 +318,40 @@ Future<void> _analyzeGameInWorker({
       if ((isBlunder || isMistake) && evalA.pv.isNotEmpty) {
         final bestMoveUci = evalA.pv.first;
 
-        // Build correct line from PV (up to 3 moves).
+        // Build correct line from PV, extending for tactical sequences.
+        // If the user's move is a check (+), capture (x), or checkmate (#),
+        // keep consuming the PV to include the opponent's response and the
+        // next user move, up to a maximum of 5 user moves.
         final correctLine = <String>[];
         final tempGame = chess.Chess.fromFEN(fenBefore);
-        final pvLimit = math.min(3, evalA.pv.length);
 
-        for (int i = 0; i < pvLimit; i++) {
+        int userMoveCount = 0;
+        const maxUserMoves = 5;
+
+        for (int i = 0; i < evalA.pv.length; i++) {
           final sanMove = _makeUciMoveAndGetSan(tempGame, evalA.pv[i]);
-          if (sanMove != null) correctLine.add(sanMove);
+          if (sanMove == null) break;
+
+          final isUserMove = (i % 2 == 0);
+
+          if (isUserMove) {
+            correctLine.add(sanMove);
+            userMoveCount++;
+
+            if (userMoveCount >= maxUserMoves) break;
+
+            final isTactical = sanMove.contains('x') ||
+                sanMove.contains('+') ||
+                sanMove.contains('#');
+            if (!isTactical) break;
+          } else {
+            correctLine.add(sanMove);
+          }
+        }
+
+        // Ensure the line always ends on a user move.
+        if (correctLine.length > 1 && correctLine.length.isEven) {
+          correctLine.removeLast();
         }
 
         final bestMoveSan = _formatUciToSan(fenBefore, bestMoveUci);
