@@ -130,12 +130,13 @@ class TacticsDatabase {
     try {
       // Create CSV data
       final List<List<dynamic>> csvData = [
-        // Header row
+        // Header row — must match toCsvRow() column order exactly.
         [
           'fen', 'game_white', 'game_black', 'game_result', 'game_date',
           'game_id', 'game_url', 'position_context', 'user_move', 'correct_line',
           'mistake_type', 'mistake_analysis', 'review_count',
-          'success_count', 'last_reviewed', 'time_to_solve', 'hints_used'
+          'success_count', 'last_reviewed', 'time_to_solve', 'hints_used',
+          'opponent_best_response',
         ]
       ];
 
@@ -188,20 +189,8 @@ class TacticsDatabase {
     final index = positions.indexWhere((p) => p.fen == position.fen);
     if (index == -1) return;
 
-    // Create updated position with new stats
-    final updatedPosition = TacticsPosition(
-      fen: position.fen,
-      gameWhite: position.gameWhite,
-      gameBlack: position.gameBlack,
-      gameResult: position.gameResult,
-      gameDate: position.gameDate,
-      gameId: position.gameId,
-      gameUrl: position.gameUrl,
-      positionContext: position.positionContext,
-      userMove: position.userMove,
-      correctLine: position.correctLine,
-      mistakeType: position.mistakeType,
-      mistakeAnalysis: position.mistakeAnalysis,
+    // Update only the stats that changed — copyWith preserves everything else.
+    final updatedPosition = position.copyWith(
       reviewCount: position.reviewCount + 1,
       successCount: position.successCount + (result == TacticsResult.correct ? 1 : 0),
       lastReviewed: DateTime.now(),

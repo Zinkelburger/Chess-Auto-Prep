@@ -355,8 +355,8 @@ class TacticsImportService {
       return [];
     }
 
-    // ── PARALLEL PATH (desktop, 2+ games) ────────────────────
-    if (parallel.isParallelAnalysisAvailable && gameTasks.length > 1) {
+    // ── PARALLEL PATH (desktop — works fine with 1 game / 1 core) ──
+    if (parallel.isParallelAnalysisAvailable) {
       try {
         final positions = await parallel.analyzeGamesParallel(
           gameTasks: gameTasks,
@@ -383,7 +383,7 @@ class TacticsImportService {
       }
     }
 
-    // ── SEQUENTIAL PATH (web, mobile, single game, or fallback) ─
+    // ── SEQUENTIAL PATH (web, mobile, or parallel-fallback) ──────
     // Wait for the singleton Stockfish to initialise.
     int waited = 0;
     while (!_stockfish.isAvailable.value && waited < 50) {
@@ -437,6 +437,14 @@ class TacticsImportService {
         final gamePositions = <TacticsPosition>[];
         await _analyzeGame(game, userColor, depth, gamePositions, onPositionFound, gameId);
         positions.addAll(gamePositions);
+
+        // Flush all positions from this game atomically so training
+        // encounters them as a coherent block.
+        if (onPositionFound != null) {
+          for (final pos in gamePositions) {
+            onPositionFound(pos);
+          }
+        }
 
         await _database.markGameAnalyzed(gameId);
       } catch (e) {
@@ -546,47 +554,56 @@ class TacticsImportService {
             final bestMoveUci = evalA.pv.first;
             
             // Generate correct line from PV, extending for tactical sequences.
-            // If the user's move is a check (+), capture (x), or checkmate (#),
-            // keep consuming the PV to include the opponent's response and the
-            // next user move, up to a maximum of 5 user moves.
-            final correctLine = <String>[];
+            // Convert all PV moves to SAN first, then build the line by
+            // peeking ahead: only extend if the NEXT user move is also a
+            // check (+), capture (x), or checkmate (#). Max 5 user moves.
+            final allPvSan = <String>[];
             final tempGame = chess.Chess.fromFEN(fenBefore);
             
-            int userMoveCount = 0;
-            const maxUserMoves = 5;
-            
-            for (int i = 0; i < evalA.pv.length; i++) {
-              final uci = evalA.pv[i];
+            for (final uci in evalA.pv) {
               final sanMove = _makeUciMoveAndGetSan(tempGame, uci);
-              
               if (kDebugMode) {
                 print('  → UCI: $uci → SAN: $sanMove');
               }
-              
               if (sanMove == null) break;
-              
-              final isUserMove = (i % 2 == 0); // Even indices = user moves
-              
-              if (isUserMove) {
-                correctLine.add(sanMove);
-                userMoveCount++;
-                
-                if (userMoveCount >= maxUserMoves) break;
-                
-                // Check if this user move is tactical (check, capture, checkmate)
-                final isTactical = sanMove.contains('x') ||
-                    sanMove.contains('+') ||
-                    sanMove.contains('#');
-                if (!isTactical) break; // Non-forcing move ends the sequence
-              } else {
-                // Opponent response — always include when extending
-                correctLine.add(sanMove);
-              }
+              allPvSan.add(sanMove);
             }
             
-            // Ensure the line always ends on a user move
-            if (correctLine.length > 1 && correctLine.length.isEven) {
-              correctLine.removeLast();
+            final correctLine = <String>[];
+            const maxUserMoves = 5;
+            
+            if (allPvSan.isNotEmpty) {
+              // Always include the first user move
+              correctLine.add(allPvSan[0]);
+              int userMoveCount = 1;
+              
+              // Extend while: current user move is tactical AND next
+              // user move (2 ahead) is also tactical.
+              int i = 0; // index of the last added user move
+              while (userMoveCount < maxUserMoves) {
+                final currentUserSan = allPvSan[i];
+                final currentIsTactical = currentUserSan.contains('x') ||
+                    currentUserSan.contains('+') ||
+                    currentUserSan.contains('#');
+                
+                if (!currentIsTactical) break; // current move is quiet, stop
+                
+                // Need opponent response (i+1) and next user move (i+2)
+                if (i + 2 >= allPvSan.length) break;
+                
+                final nextUserSan = allPvSan[i + 2];
+                final nextIsTactical = nextUserSan.contains('x') ||
+                    nextUserSan.contains('+') ||
+                    nextUserSan.contains('#');
+                
+                if (!nextIsTactical) break; // next user move is quiet, stop
+                
+                // Both are tactical — extend the line
+                correctLine.add(allPvSan[i + 1]); // opponent response
+                correctLine.add(nextUserSan);      // next user move
+                userMoveCount++;
+                i += 2;
+              }
             }
             
             if (kDebugMode) {
@@ -595,6 +612,11 @@ class TacticsImportService {
             
             // Format best move SAN for display
             final bestMoveSan = _formatUciToSan(fenBefore, bestMoveUci);
+
+            // Opponent's best response after the user's bad move
+            final opponentResponse = evalB.pv.isNotEmpty
+                ? _formatUciToSan(fenAfter, evalB.pv.first)
+                : '';
 
             final chanceA = wpBefore.toStringAsFixed(1);
             final chanceB = wpAfter.toStringAsFixed(1);
@@ -608,6 +630,7 @@ class TacticsImportService {
               correctLine: correctLine,
               mistakeType: mistakeType,
               mistakeAnalysis: analysis,
+              opponentBestResponse: opponentResponse,
               positionContext: 'Move $moveNumber, ${userColor == chess.Color.WHITE ? 'White' : 'Black'} to play',
               gameWhite: game.headers['White'] ?? '',
               gameBlack: game.headers['Black'] ?? '',
@@ -617,11 +640,6 @@ class TacticsImportService {
             );
             
             positions.add(tacticsPosition);
-            
-            // Stream the position immediately if callback provided
-            if (onPositionFound != null) {
-              onPositionFound(tacticsPosition);
-            }
           }
         }
       } else {

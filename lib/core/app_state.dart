@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess/chess.dart' as chess;
-import '../models/tactics_position.dart';
 import '../models/chess_game.dart';
 import '../services/pgn_service.dart';
 
@@ -15,9 +14,7 @@ enum AppMode {
 
 class AppState extends ChangeNotifier {
   AppMode _currentMode = AppMode.tactics;
-  List<TacticsPosition> _tacticsPositions = [];
   List<ChessGameModel> _loadedGames = [];
-  TacticsPosition? _currentPosition;
   chess.Chess _currentGame = chess.Chess();
   String? _lichessUsername;
   String? _chesscomUsername;
@@ -27,9 +24,7 @@ class AppState extends ChangeNotifier {
   final PgnService _pgnService = PgnService();
 
   AppMode get currentMode => _currentMode;
-  List<TacticsPosition> get tacticsPositions => _tacticsPositions;
   List<ChessGameModel> get loadedGames => _loadedGames;
-  TacticsPosition? get currentPosition => _currentPosition;
   chess.Chess get currentGame => _currentGame;
   String? get lichessUsername => _lichessUsername;
   String? get chesscomUsername => _chesscomUsername;
@@ -105,47 +100,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setTacticsPositions(List<TacticsPosition> positions) {
-    _tacticsPositions = positions;
-    if (positions.isNotEmpty) {
-      _currentPosition = positions.first;
-    }
-    notifyListeners();
-  }
-
-  void nextTacticsPosition() {
-    if (_tacticsPositions.isEmpty || _currentPosition == null) return;
-
-    final currentIndex = _tacticsPositions.indexOf(_currentPosition!);
-    if (currentIndex < _tacticsPositions.length - 1) {
-      _currentPosition = _tacticsPositions[currentIndex + 1];
-      notifyListeners();
-    }
-  }
-
-  void removeCurrentTacticsPosition() {
-    if (_tacticsPositions.isEmpty || _currentPosition == null) return;
-
-    _tacticsPositions.remove(_currentPosition);
-
-    if (_tacticsPositions.isNotEmpty) {
-      _currentPosition = _tacticsPositions.first;
-    } else {
-      _currentPosition = null;
-    }
-    notifyListeners();
-  }
-
-  void previousTacticsPosition() {
-    if (_tacticsPositions.isEmpty || _currentPosition == null) return;
-
-    final currentIndex = _tacticsPositions.indexOf(_currentPosition!);
-    if (currentIndex > 0) {
-      _currentPosition = _tacticsPositions[currentIndex - 1];
-      notifyListeners();
-    }
-  }
-
   void setLoadedGames(List<ChessGameModel> games) {
     _loadedGames = games;
     notifyListeners();
@@ -185,13 +139,6 @@ class AppState extends ChangeNotifier {
   void exitAnalysisMode() {
     if (_isAnalysisMode) {
       _isAnalysisMode = false;
-      // Don't reset _initialBoardFlipped - keep the board orientation stable
-      
-      // Reset board to current tactic position
-      if (_currentPosition != null) {
-        _currentGame = chess.Chess.fromFEN(_currentPosition!.fen);
-      }
-      
       notifyListeners();
     }
   }
@@ -206,36 +153,13 @@ class AppState extends ChangeNotifier {
   void onMoveAttempted(String moveUci) {
     if (_isAnalysisMode) {
       // In analysis mode, call the callback FIRST so it can get the SAN
-      // while the move is still legal, then make the move on the game
-      print('AppState: Analysis mode - calling callback for $moveUci');
+      // while the move is still legal, then make the move on the game.
+      // The PgnViewerWidget will update the position and sync back via
+      // onPositionChanged.
       _onMoveAttempted?.call(moveUci);
-      // Don't call _makeMoveFree here - the PgnViewerWidget will update
-      // the position and sync back via onPositionChanged
     } else if (_onMoveAttempted != null) {
       // In tactics mode, validate via callback
       _onMoveAttempted!(moveUci);
-    }
-  }
-  
-  // Make a move without validation (for analysis mode)
-  void _makeMoveFree(String moveUci) {
-    if (moveUci.length < 4) return;
-    
-    final from = moveUci.substring(0, 2);
-    final to = moveUci.substring(2, 4);
-    String? promotion;
-    if (moveUci.length > 4) {
-      promotion = moveUci.substring(4, 5);
-    }
-    
-    Map<String, String?> moveMap = {'from': from, 'to': to};
-    if (promotion != null) {
-      moveMap['promotion'] = promotion;
-    }
-    
-    final success = _currentGame.move(moveMap);
-    if (success) {
-      notifyListeners();
     }
   }
 }
