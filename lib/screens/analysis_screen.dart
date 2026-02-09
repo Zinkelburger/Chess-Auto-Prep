@@ -52,7 +52,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return Column(
       children: [
         _buildToolbar(context),
-        const Divider(height: 1),
+        // Thin progress bar that appears/disappears without layout shift.
+        if (_isAnalyzing)
+          const LinearProgressIndicator(minHeight: 2)
+        else
+          const Divider(height: 2, thickness: 2),
         Expanded(child: _buildBody(context)),
       ],
     );
@@ -131,20 +135,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   Widget _buildBody(BuildContext context) {
-    // Loading spinner while analysis is running.
-    if (_isAnalyzing) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Analyzing positions…'),
-          ],
-        ),
-      );
-    }
-
     // No player selected yet.
     if (_currentPlayer == null) {
       return Center(
@@ -168,7 +158,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       );
     }
 
-    // Analysis loaded (or awaiting the first analysis trigger).
+    // Show the analysis widget immediately. If _positionAnalysis is null
+    // (first load), the widget shows its own "no data" placeholder.
+    // If we're re-analyzing (colour switch), the previous data stays
+    // visible while the new analysis loads in the background.
     return PositionAnalysisWidget(
       analysis: _positionAnalysis,
       openingTree: _openingTree,
@@ -183,7 +176,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String get _metadataSubtitle {
     final p = _currentPlayer;
     if (p == null) return '';
-    return '${p.gameCount} games · ${p.platformDisplayName} (${p.username})';
+    final base = '${p.gameCount} games · ${p.platformDisplayName} (${p.username})';
+    return _isAnalyzing ? '$base · Analyzing…' : base;
   }
 
   /// Push the player-selection screen and handle the returned choice.
