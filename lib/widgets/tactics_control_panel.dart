@@ -50,6 +50,15 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   late TextEditingController _stockfishDepthController;
   late TextEditingController _coresController;
 
+  // Validation: _*Valid tracks logical state (immediate), _*Error is the
+  // displayed red text (debounced so it doesn't flash while typing).
+  bool _depthValid = true;
+  bool _coresValid = true;
+  String? _depthError;
+  String? _coresError;
+  Timer? _depthErrorTimer;
+  Timer? _coresErrorTimer;
+
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();
 
@@ -94,6 +103,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _chessComCountController.dispose();
     _stockfishDepthController.dispose();
     _coresController.dispose();
+    _depthErrorTimer?.cancel();
+    _coresErrorTimer?.cancel();
     super.dispose();
   }
 
@@ -424,7 +435,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: _importStatus == null ? _importLichess : null,
+                          onPressed: _importStatus == null && _importFieldsValid ? _importLichess : null,
                           child: const Text('Import'),
                         ),
                       ],
@@ -463,7 +474,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: _importStatus == null ? _importChessCom : null,
+                          onPressed: _importStatus == null && _importFieldsValid ? _importChessCom : null,
                           child: const Text('Import'),
                         ),
                       ],
@@ -472,7 +483,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                     
                     // Stockfish Depth + Cores Row
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(
                           width: 140,
@@ -482,10 +492,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                               labelText: 'Stockfish Depth',
                               border: const OutlineInputBorder(),
                               isDense: true,
-                              helperText: ' ', // reserve space to match Cores field height
-                              helperStyle: const TextStyle(fontSize: 11),
+                              errorText: _depthError,
                             ),
                             keyboardType: TextInputType.number,
+                            onChanged: _validateDepth,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -498,10 +508,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                               labelText: 'Cores',
                               border: const OutlineInputBorder(),
                               isDense: true,
-                              helperText: '${TacticsImportService.availableCores} available',
-                              helperStyle: const TextStyle(fontSize: 11),
+                              errorText: _coresError,
                             ),
                             keyboardType: TextInputType.number,
+                            onChanged: _validateCores,
                           ),
                         ),
                       ],
@@ -1064,6 +1074,54 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _startTime = DateTime.now();
     });
   }
+
+  void _validateDepth(String value) {
+    final v = int.tryParse(value);
+    String? error;
+    if (v == null) {
+      error = 'Must be a number';
+    } else if (v < 1 || v > 25) {
+      error = 'Must be 1–25';
+    }
+
+    _depthErrorTimer?.cancel();
+    // Immediately update logical validity + clear error when valid.
+    setState(() {
+      _depthValid = error == null;
+      if (error == null) _depthError = null;
+    });
+    // Debounce showing the red error text.
+    if (error != null) {
+      _depthErrorTimer = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) setState(() => _depthError = error);
+      });
+    }
+  }
+
+  void _validateCores(String value) {
+    final v = int.tryParse(value);
+    final max = TacticsImportService.availableCores;
+    String? error;
+    if (v == null) {
+      error = 'Must be a number';
+    } else if (v < 1 || v > max) {
+      error = 'Must be 1–$max';
+    }
+
+    _coresErrorTimer?.cancel();
+    setState(() {
+      _coresValid = error == null;
+      if (error == null) _coresError = null;
+    });
+    if (error != null) {
+      _coresErrorTimer = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) setState(() => _coresError = error);
+      });
+    }
+  }
+
+  /// True when both Stockfish depth and cores fields pass validation.
+  bool get _importFieldsValid => _depthValid && _coresValid;
 
   Color _getFeedbackColor() {
     if (_feedback.contains('Correct')) return Colors.green;
