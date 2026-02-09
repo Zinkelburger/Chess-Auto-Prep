@@ -1,10 +1,15 @@
-/// Player selection screen for analysis
-/// Shows all cached player game sets and allows selecting or downloading new ones
+/// Player selection screen for analysis.
+library;
+///
+/// Pushed as a full-screen route from [AnalysisScreen]. Lists every cached
+/// player game-set and lets the user select one, re-download, or delete.
+/// Pops with the chosen [AnalysisPlayerInfo].
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
+import '../models/analysis_player_info.dart';
 import '../services/analysis_games_service.dart';
 import '../widgets/analysis_download_dialog.dart';
 
@@ -17,7 +22,7 @@ class PlayerSelectionScreen extends StatefulWidget {
 
 class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   final AnalysisGamesService _gamesService = AnalysisGamesService();
-  List<Map<String, dynamic>> _cachedPlayers = [];
+  List<AnalysisPlayerInfo> _cachedPlayers = [];
   bool _isLoading = true;
 
   @override
@@ -29,18 +34,20 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   Future<void> _loadCachedPlayers() async {
     setState(() => _isLoading = true);
     final players = await _gamesService.getAllCachedPlayers();
-    setState(() {
-      _cachedPlayers = players;
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _cachedPlayers = players;
+        _isLoading = false;
+      });
+    }
   }
+
+  // ── Build ────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Select Player to Analyze'),
-      ),
+      appBar: AppBar(title: const Text('Select Player to Analyze')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _buildBody(),
@@ -58,11 +65,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.person_search,
-              size: 64,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 24),
             Text(
               'No Players Downloaded',
@@ -71,9 +74,10 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
             const SizedBox(height: 8),
             Text(
               'Download games for a player to get started',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.grey[600]),
             ),
             const SizedBox(height: 32),
             FilledButton.icon(
@@ -89,40 +93,17 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: _cachedPlayers.length,
-      itemBuilder: (context, index) {
-        final player = _cachedPlayers[index];
-        return _buildPlayerCard(player);
-      },
+      itemBuilder: (_, index) => _buildPlayerCard(_cachedPlayers[index]),
     );
   }
 
-  Widget _buildPlayerCard(Map<String, dynamic> player) {
-    final platform = player['platform'] as String? ?? 'Unknown';
-    final username = player['username'] as String? ?? 'Unknown';
-    final gameCount = player['gameCount'] as int? ?? 0;
-    final downloadedAt = player['downloadedAt'] as String?;
+  // ── Player card ──────────────────────────────────────────────────
 
-    final platformName = platform == 'chesscom' ? 'Chess.com' : 'Lichess';
-    final platformIcon = platform == 'chesscom' ? Icons.language : Icons.bolt;
-    final platformColor = platform == 'chesscom' ? Colors.green : Colors.blue;
-
-    String timeAgo = 'Unknown';
-    if (downloadedAt != null) {
-      try {
-        final downloaded = DateTime.parse(downloadedAt);
-        final difference = DateTime.now().difference(downloaded);
-
-        if (difference.inDays > 0) {
-          timeAgo = '${difference.inDays}d ago';
-        } else if (difference.inHours > 0) {
-          timeAgo = '${difference.inHours}h ago';
-        } else {
-          timeAgo = '${difference.inMinutes}m ago';
-        }
-      } catch (e) {
-        // Keep default
-      }
-    }
+  Widget _buildPlayerCard(AnalysisPlayerInfo player) {
+    final platformIcon =
+        player.platform == 'chesscom' ? Icons.language : Icons.bolt;
+    final platformColor =
+        player.platform == 'chesscom' ? Colors.green : Colors.blue;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -133,18 +114,14 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Platform icon
+              // Platform badge
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: platformColor.withOpacity(0.1),
+                  color: platformColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
-                  platformIcon,
-                  color: platformColor,
-                  size: 32,
-                ),
+                child: Icon(platformIcon, color: platformColor, size: 32),
               ),
               const SizedBox(width: 16),
 
@@ -154,7 +131,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      username,
+                      player.username,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -162,38 +139,33 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$gameCount games • $platformName',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
+                      '${player.gameCount} games · ${player.platformDisplayName}',
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Downloaded $timeAgo',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
+                      'Downloaded ${player.downloadTimeAgo}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
                 ),
               ),
 
-              // Actions
+              // Overflow menu
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert),
                 onSelected: (value) {
-                  if (value == 'delete') {
-                    _deletePlayer(player);
-                  } else if (value == 'redownload') {
-                    _redownloadPlayer(player);
-                  } else if (value == 'redownload_custom') {
-                    _redownloadPlayerCustom(player);
+                  switch (value) {
+                    case 'delete':
+                      _deletePlayer(player);
+                    case 'redownload':
+                      _redownloadPlayer(player);
+                    case 'redownload_custom':
+                      _redownloadPlayerCustom(player);
                   }
                 },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
                     value: 'redownload',
                     child: Row(
                       children: [
@@ -203,7 +175,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'redownload_custom',
                     child: Row(
                       children: [
@@ -213,7 +185,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'delete',
                     child: Row(
                       children: [
@@ -232,27 +204,25 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
   }
 
-  void _selectPlayer(Map<String, dynamic> player) {
-    // Return the selected player to the previous screen
+  // ── Actions ──────────────────────────────────────────────────────
+
+  void _selectPlayer(AnalysisPlayerInfo player) {
     Navigator.of(context).pop(player);
   }
 
-  Future<void> _deletePlayer(Map<String, dynamic> player) async {
-    final platform = player['platform'] as String;
-    final username = player['username'] as String;
-
+  Future<void> _deletePlayer(AnalysisPlayerInfo player) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Delete Games'),
-        content: Text('Delete all games for $username?'),
+        content: Text('Delete all games for ${player.username}?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
           ),
@@ -261,107 +231,113 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
     );
 
     if (confirmed == true) {
-      await _gamesService.deleteAnalysisGames(platform, username);
+      await _gamesService.deletePlayerData(
+        player.platform,
+        player.username,
+      );
       await _loadCachedPlayers();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deleted games for $username')),
+          SnackBar(content: Text('Deleted games for ${player.username}')),
         );
       }
     }
   }
 
-  Future<void> _redownloadPlayer(Map<String, dynamic> player) async {
-    final platform = player['platform'] as String;
-    final username = player['username'] as String;
-    final maxGames = player['maxGames'] as int? ?? player['gameCount'] as int? ?? 100;
-
-    // Re-download with same settings (no confirmation needed)
-    await _downloadGames(platform, username, maxGames);
+  /// Re-download with the same settings (platform, username, maxGames).
+  Future<void> _redownloadPlayer(AnalysisPlayerInfo player) async {
+    await _downloadGames(player.platform, player.username, player.maxGames);
   }
 
-  Future<void> _redownloadPlayerCustom(Map<String, dynamic> player) async {
-    final platform = player['platform'] as String;
-    final username = player['username'] as String;
-
-    // Show download dialog with pre-filled username
+  /// Re-download but let the user tweak the settings first.
+  Future<void> _redownloadPlayerCustom(AnalysisPlayerInfo player) async {
     final appState = context.read<AppState>();
 
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showDialog<AnalysisPlayerInfo>(
       context: context,
-      builder: (context) => AnalysisDownloadDialog(
-        chesscomUsername: platform == 'chesscom' ? username : appState.chesscomUsername,
-        lichessUsername: platform == 'lichess' ? username : appState.lichessUsername,
+      builder: (_) => AnalysisDownloadDialog(
+        chesscomUsername: player.platform == 'chesscom'
+            ? player.username
+            : appState.chesscomUsername,
+        lichessUsername: player.platform == 'lichess'
+            ? player.username
+            : appState.lichessUsername,
       ),
     );
 
     if (result != null && mounted) {
-      final newPlatform = result['platform'] as String;
-      final newUsername = result['username'] as String;
-      final newMaxGames = result['maxGames'] as int;
-
-      // Download with new settings
-      await _downloadGames(newPlatform, newUsername, newMaxGames);
+      await _downloadGames(result.platform, result.username, result.maxGames);
     }
   }
 
   Future<void> _showDownloadDialog() async {
     final appState = context.read<AppState>();
 
-    final result = await showDialog<Map<String, dynamic>>(
+    final result = await showDialog<AnalysisPlayerInfo>(
       context: context,
-      builder: (context) => AnalysisDownloadDialog(
+      builder: (_) => AnalysisDownloadDialog(
         chesscomUsername: appState.chesscomUsername,
         lichessUsername: appState.lichessUsername,
       ),
     );
 
     if (result != null && mounted) {
-      final platform = result['platform'] as String;
-      final username = result['username'] as String;
-      final maxGames = result['maxGames'] as int;
-
-      // Download the games
-      await _downloadGames(platform, username, maxGames);
+      await _downloadGames(result.platform, result.username, result.maxGames);
     }
   }
 
-  Future<void> _downloadGames(String platform, String username, int maxGames) async {
-    // Show loading dialog
+  // ── Download with live progress ──────────────────────────────────
+
+  Future<void> _downloadGames(
+    String platform,
+    String username,
+    int maxGames,
+  ) async {
+    final progress = ValueNotifier<String>('Downloading games…');
+
+    // Show a non-dismissible progress dialog.
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Downloading games...'),
-          ],
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: ValueListenableBuilder<String>(
+            valueListenable: progress,
+            builder: (_, message, __) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(message, textAlign: TextAlign.center),
+              ],
+            ),
+          ),
         ),
       ),
     );
 
     try {
-      String pgns;
+      final String pgns;
 
       if (platform == 'chesscom') {
         pgns = await _gamesService.downloadChesscomGames(
           username,
           maxGames: maxGames,
+          onProgress: (msg) => progress.value = msg,
         );
       } else {
         pgns = await _gamesService.downloadLichessGames(
           username,
           maxGames: maxGames,
+          onProgress: (msg) => progress.value = msg,
         );
       }
 
       if (pgns.isEmpty) {
         if (mounted) {
-          Navigator.of(context).pop(); // Close loading dialog
+          Navigator.of(context).pop(); // close progress dialog
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('No games found for $username')),
           );
@@ -369,21 +345,27 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         return;
       }
 
-      // Save games to disk
-      await _gamesService.saveAnalysisGames(pgns, platform, username, maxGames);
+      progress.value = 'Saving…';
 
-      // Reload player list
+      // Saves games and automatically clears stale cached analysis.
+      await _gamesService.saveAnalysisGames(
+        pgns,
+        platform: platform,
+        username: username,
+        maxGames: maxGames,
+      );
+
       await _loadCachedPlayers();
 
       if (mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
+        Navigator.of(context).pop(); // close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Downloaded games for $username')),
         );
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
+        Navigator.of(context).pop(); // close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
         );

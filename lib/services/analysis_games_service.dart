@@ -3,18 +3,19 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:convert';
 
-/// Service for downloading and managing games specifically for position analysis
-/// Separate from the imported games used for tactics
-/// Supports multiple cached player game sets
+import '../models/analysis_player_info.dart';
+
+/// Service for downloading and managing games for position analysis.
+///
+/// Maintains a separate on-disk store from the imported games used for tactics.
+/// Each player's data consists of:
+///   • `<key>.pgn`  – raw PGN text
+///   • `<key>.json` – [AnalysisPlayerInfo] metadata
+///   • `<key>_white_analysis.json` / `<key>_black_analysis.json` – cached analysis
 class AnalysisGamesService {
   static const String _analysisGamesDir = 'analysis_games';
 
-  /// Get unique key for a player's game set
-  String _getPlayerKey(String platform, String username) {
-    return '${platform}_${username.toLowerCase()}';
-  }
-
-  /// Get directory for analysis games
+  /// Resolve (and create if needed) the on-disk directory for analysis data.
   Future<Directory> _getAnalysisDirectory() async {
     final appDir = await getApplicationDocumentsDirectory();
     final analysisDir = Directory('${appDir.path}/$_analysisGamesDir');
@@ -24,77 +25,71 @@ class AnalysisGamesService {
     return analysisDir;
   }
 
-  /// Download games from Chess.com, excluding bullet
-  /// Fetches month by month until maxGames is reached
+  // ── Downloads ──────────────────────────────────────────────────────
+
+  /// Download games from Chess.com, excluding bullet.
+  ///
+  /// Fetches month-by-month going backwards until [maxGames] non-bullet games
+  /// have been collected (capped at 24 months).
   Future<String> downloadChesscomGames(
     String username, {
     int maxGames = 100,
-    Function(String)? progressCallback,
+    void Function(String)? onProgress,
   }) async {
-    progressCallback?.call('Downloading up to $maxGames Chess.com games for $username...');
+    onProgress?.call('Fetching Chess.com games for $username…');
 
     final now = DateTime.now();
-    final List<String> allGames = [];
-    
-    // Fetch month by month going backwards until we have enough games
-    // Limit to 24 months max to avoid infinite loops for inactive accounts
+    final allGames = <String>[];
     int currentYear = now.year;
     int currentMonth = now.month;
-    
-    for (int i = 0; i < 24 && allGames.length < maxGames; i++) {
-      final url = 'https://api.chess.com/pub/player/${username.toLowerCase()}/games/$currentYear/${currentMonth.toString().padLeft(2, '0')}/pgn';
 
-      progressCallback?.call('Fetching games from $currentYear-$currentMonth... (${allGames.length}/$maxGames)');
+    for (int i = 0; i < 24 && allGames.length < maxGames; i++) {
+      final monthStr = currentMonth.toString().padLeft(2, '0');
+      final url =
+          'https://api.chess.com/pub/player/${username.toLowerCase()}'
+          '/games/$currentYear/$monthStr/pgn';
+
+      onProgress?.call(
+        'Fetching $currentYear-$monthStr… (${allGames.length}/$maxGames)',
+      );
 
       try {
         final response = await http.get(Uri.parse(url));
-
         if (response.statusCode == 200 && response.body.isNotEmpty) {
-          // Split PGN into individual games
-          final games = _splitPgnIntoGames(response.body);
-
-          // Filter out bullet games (< 180 seconds) and add until we hit max
-          for (final game in games) {
+          for (final game in splitPgnIntoGames(response.body)) {
             if (allGames.length >= maxGames) break;
-            if (!_isBulletGame(game)) {
-              allGames.add(game);
-            }
+            if (!_isBulletGame(game)) allGames.add(game);
           }
         }
       } catch (e) {
-        progressCallback?.call('Error fetching $currentYear-$currentMonth: $e');
+        onProgress?.call('Error fetching $currentYear-$monthStr: $e');
       }
 
-      // Go to previous month
       currentMonth--;
       if (currentMonth == 0) {
         currentMonth = 12;
         currentYear--;
       }
 
-      // Be polite to the API
+      // Be polite to the API.
       await Future.delayed(const Duration(milliseconds: 300));
     }
 
-    progressCallback?.call('Downloaded ${allGames.length} non-bullet games from Chess.com');
+    onProgress?.call('Downloaded ${allGames.length} non-bullet games');
     return allGames.join('\n\n');
   }
 
-  /// Download games from Lichess with filters
-  /// Uses 'max' parameter to get last N games
+  /// Download games from Lichess, excluding bullet.
   Future<String> downloadLichessGames(
     String username, {
-    int? maxGames = 100,
-    Function(String)? progressCallback,
+    int maxGames = 100,
+    void Function(String)? onProgress,
   }) async {
-    progressCallback?.call('Downloading Lichess games for $username...');
+    onProgress?.call('Fetching Lichess games for $username…');
 
-    final max = maxGames ?? 100;
-
-    // Build URL with query parameters
     final params = {
-      'max': max.toString(),
-      'perfType': 'blitz,rapid,classical,correspondence', // Exclude bullet
+      'max': maxGames.toString(),
+      'perfType': 'blitz,rapid,classical,correspondence',
       'moves': 'true',
       'tags': 'true',
       'clocks': 'false',
@@ -103,173 +98,135 @@ class AnalysisGamesService {
       'sort': 'dateDesc',
     };
 
-    final uri = Uri.parse('https://lichess.org/api/games/user/$username').replace(queryParameters: params);
+    final uri = Uri.parse('https://lichess.org/api/games/user/$username')
+        .replace(queryParameters: params);
 
-    try {
-      progressCallback?.call('Fetching up to $max games from Lichess API...');
+    onProgress?.call('Downloading up to $maxGames games…');
 
-      final response = await http.get(
-        uri,
-        headers: {
-          'Accept': 'application/x-chess-pgn',
-        },
-      );
+    final response = await http.get(
+      uri,
+      headers: {'Accept': 'application/x-chess-pgn'},
+    );
 
-      if (response.statusCode != 200) {
-        throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
-      }
-
-      // Count games
-      final games = _splitPgnIntoGames(response.body);
-      progressCallback?.call('Downloaded ${games.length} games from Lichess');
-
-      return response.body;
-
-    } catch (e) {
-      progressCallback?.call('Error downloading from Lichess: $e');
-      rethrow;
+    if (response.statusCode != 200) {
+      throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
     }
+
+    final games = splitPgnIntoGames(response.body);
+    onProgress?.call('Downloaded ${games.length} games');
+    return response.body;
   }
 
-  /// Save analysis games to persistent storage
-  Future<void> saveAnalysisGames(
-    String pgns,
-    String platform,
-    String username,
-    int maxGames,
-  ) async {
+  // ── Persistence ────────────────────────────────────────────────────
+
+  /// Save downloaded PGN + metadata. Also **clears** any stale cached analysis
+  /// so the next view triggers a fresh rebuild. Returns the saved info.
+  Future<AnalysisPlayerInfo> saveAnalysisGames(
+    String pgns, {
+    required String platform,
+    required String username,
+    required int maxGames,
+  }) async {
     final directory = await _getAnalysisDirectory();
-    final playerKey = _getPlayerKey(platform, username);
+    final key = AnalysisPlayerInfo(
+      platform: platform,
+      username: username,
+    ).playerKey;
+    final gameCount = splitPgnIntoGames(pgns).length;
 
-    // Save PGN file
-    final pgnFile = File('${directory.path}/$playerKey.pgn');
-    await pgnFile.writeAsString(pgns);
+    // Write PGN.
+    await File('${directory.path}/$key.pgn').writeAsString(pgns);
 
-    // Save metadata
-    final metadata = {
-      'platform': platform,
-      'username': username,
-      'maxGames': maxGames,
-      'downloadedAt': DateTime.now().toIso8601String(),
-      'gameCount': _splitPgnIntoGames(pgns).length,
-    };
+    // Write metadata.
+    final info = AnalysisPlayerInfo(
+      platform: platform,
+      username: username,
+      maxGames: maxGames,
+      downloadedAt: DateTime.now(),
+      gameCount: gameCount,
+    );
+    await File('${directory.path}/$key.json')
+        .writeAsString(json.encode(info.toJson()));
 
-    final metadataFile = File('${directory.path}/$playerKey.json');
-    await metadataFile.writeAsString(json.encode(metadata));
+    // Invalidate stale cached analysis so it gets rebuilt on next view.
+    await clearCachedAnalysis(platform, username);
+
+    return info;
   }
 
-  /// Load analysis games for a specific player
+  /// Load the raw PGN for [username] on [platform]. Returns `null` on miss.
   Future<String?> loadAnalysisGames(String platform, String username) async {
     try {
       final directory = await _getAnalysisDirectory();
-      final playerKey = _getPlayerKey(platform, username);
-      final pgnFile = File('${directory.path}/$playerKey.pgn');
-
-      if (!await pgnFile.exists()) {
-        return null;
-      }
-
-      return await pgnFile.readAsString();
-    } catch (e) {
-      // Error loading analysis games: $e
+      final key = AnalysisPlayerInfo(
+        platform: platform,
+        username: username,
+      ).playerKey;
+      final file = File('${directory.path}/$key.pgn');
+      return await file.exists() ? file.readAsString() : null;
+    } catch (_) {
       return null;
     }
   }
 
-  /// Get metadata for a specific player
-  Future<Map<String, dynamic>?> getAnalysisMetadata(String platform, String username) async {
+  /// List every cached player, most-recently-downloaded first.
+  Future<List<AnalysisPlayerInfo>> getAllCachedPlayers() async {
     try {
       final directory = await _getAnalysisDirectory();
-      final playerKey = _getPlayerKey(platform, username);
-      final metadataFile = File('${directory.path}/$playerKey.json');
-
-      if (!await metadataFile.exists()) {
-        return null;
-      }
-
-      final content = await metadataFile.readAsString();
-      return json.decode(content) as Map<String, dynamic>;
-    } catch (e) {
-      // Error loading analysis metadata: $e
-      return null;
-    }
-  }
-
-  /// Get all cached player game sets
-  Future<List<Map<String, dynamic>>> getAllCachedPlayers() async {
-    try {
-      final directory = await _getAnalysisDirectory();
-
-      final List<Map<String, dynamic>> players = [];
+      final players = <AnalysisPlayerInfo>[];
 
       await for (final entity in directory.list()) {
-        if (entity is File && entity.path.endsWith('.json')) {
+        if (entity is File &&
+            entity.path.endsWith('.json') &&
+            !entity.path.contains('_analysis.json')) {
           try {
             final content = await entity.readAsString();
-            final metadata = json.decode(content) as Map<String, dynamic>;
-            players.add(metadata);
-          } catch (e) {
-            // Skip invalid metadata files
+            players.add(
+              AnalysisPlayerInfo.fromJson(
+                json.decode(content) as Map<String, dynamic>,
+              ),
+            );
+          } catch (_) {
+            // Skip corrupt metadata files.
           }
         }
       }
 
-      // Sort by download date (most recent first)
       players.sort((a, b) {
-        final aDate = DateTime.tryParse(a['downloadedAt'] as String? ?? '');
-        final bDate = DateTime.tryParse(b['downloadedAt'] as String? ?? '');
+        final aDate = a.downloadedAt;
+        final bDate = b.downloadedAt;
         if (aDate == null || bDate == null) return 0;
         return bDate.compareTo(aDate);
       });
 
       return players;
-    } catch (e) {
+    } catch (_) {
       return [];
     }
   }
 
-  /// Check if any analysis games exist
-  Future<bool> hasAnyAnalysisGames() async {
-    final players = await getAllCachedPlayers();
-    return players.isNotEmpty;
-  }
-
-  /// Check if specific player games exist
-  Future<bool> hasAnalysisGames(String platform, String username) async {
+  /// Remove **all** on-disk data for a player (PGN, metadata, cached analysis).
+  Future<void> deletePlayerData(String platform, String username) async {
     final directory = await _getAnalysisDirectory();
-    final playerKey = _getPlayerKey(platform, username);
-    final pgnFile = File('${directory.path}/$playerKey.pgn');
-    return await pgnFile.exists();
-  }
+    final key = AnalysisPlayerInfo(
+      platform: platform,
+      username: username,
+    ).playerKey;
 
-  /// Delete specific player's games
-  Future<void> deleteAnalysisGames(String platform, String username) async {
-    final directory = await _getAnalysisDirectory();
-    final playerKey = _getPlayerKey(platform, username);
-
-    final pgnFile = File('${directory.path}/$playerKey.pgn');
-    if (await pgnFile.exists()) {
-      await pgnFile.delete();
-    }
-
-    final metadataFile = File('${directory.path}/$playerKey.json');
-    if (await metadataFile.exists()) {
-      await metadataFile.delete();
-    }
-
-    // Delete cached analysis files
-    final whiteCacheFile = File('${directory.path}/${playerKey}_white_analysis.json');
-    if (await whiteCacheFile.exists()) {
-      await whiteCacheFile.delete();
-    }
-
-    final blackCacheFile = File('${directory.path}/${playerKey}_black_analysis.json');
-    if (await blackCacheFile.exists()) {
-      await blackCacheFile.delete();
+    for (final suffix in [
+      '.pgn',
+      '.json',
+      '_white_analysis.json',
+      '_black_analysis.json',
+    ]) {
+      final file = File('${directory.path}/$key$suffix');
+      if (await file.exists()) await file.delete();
     }
   }
 
-  /// Save cached analysis for a player and color
+  // ── Analysis cache ─────────────────────────────────────────────────
+
+  /// Persist computed analysis for a player + colour.
   Future<void> saveCachedAnalysis(
     String platform,
     String username,
@@ -277,14 +234,17 @@ class AnalysisGamesService {
     Map<String, dynamic> analysisData,
   ) async {
     final directory = await _getAnalysisDirectory();
-    final playerKey = _getPlayerKey(platform, username);
-    final colorSuffix = isWhite ? 'white' : 'black';
-    final cacheFile = File('${directory.path}/${playerKey}_${colorSuffix}_analysis.json');
+    final key = AnalysisPlayerInfo(
+      platform: platform,
+      username: username,
+    ).playerKey;
+    final colour = isWhite ? 'white' : 'black';
 
-    await cacheFile.writeAsString(json.encode(analysisData));
+    await File('${directory.path}/${key}_${colour}_analysis.json')
+        .writeAsString(json.encode(analysisData));
   }
 
-  /// Load cached analysis for a player and color
+  /// Load cached analysis for a player + colour. Returns `null` on miss.
   Future<Map<String, dynamic>?> loadCachedAnalysis(
     String platform,
     String username,
@@ -292,75 +252,75 @@ class AnalysisGamesService {
   ) async {
     try {
       final directory = await _getAnalysisDirectory();
-      final playerKey = _getPlayerKey(platform, username);
-      final colorSuffix = isWhite ? 'white' : 'black';
-      final cacheFile = File('${directory.path}/${playerKey}_${colorSuffix}_analysis.json');
+      final key = AnalysisPlayerInfo(
+        platform: platform,
+        username: username,
+      ).playerKey;
+      final colour = isWhite ? 'white' : 'black';
+      final file =
+          File('${directory.path}/${key}_${colour}_analysis.json');
 
-      if (!await cacheFile.exists()) {
-        return null;
-      }
-
-      final content = await cacheFile.readAsString();
-      return json.decode(content) as Map<String, dynamic>;
-    } catch (e) {
-      // Error loading cached analysis
+      if (!await file.exists()) return null;
+      return json.decode(await file.readAsString()) as Map<String, dynamic>;
+    } catch (_) {
       return null;
     }
   }
 
-  /// Check if cached analysis exists
-  Future<bool> hasCachedAnalysis(
-    String platform,
-    String username,
-    bool isWhite,
-  ) async {
+  /// Remove cached analysis for both colours (e.g. after a re-download).
+  Future<void> clearCachedAnalysis(String platform, String username) async {
     final directory = await _getAnalysisDirectory();
-    final playerKey = _getPlayerKey(platform, username);
-    final colorSuffix = isWhite ? 'white' : 'black';
-    final cacheFile = File('${directory.path}/${playerKey}_${colorSuffix}_analysis.json');
-    return await cacheFile.exists();
+    final key = AnalysisPlayerInfo(
+      platform: platform,
+      username: username,
+    ).playerKey;
+
+    for (final colour in ['white', 'black']) {
+      final file =
+          File('${directory.path}/${key}_${colour}_analysis.json');
+      if (await file.exists()) await file.delete();
+    }
   }
 
-  /// Helper: Split PGN text into individual games
-  List<String> _splitPgnIntoGames(String pgn) {
+  // ── Utilities ──────────────────────────────────────────────────────
+
+  /// Split a multi-game PGN string into individual game strings.
+  ///
+  /// This is a static utility so callers outside the service can reuse it
+  /// without duplicating the logic.
+  static List<String> splitPgnIntoGames(String pgn) {
     final games = <String>[];
     final lines = pgn.split('\n');
-
-    String currentGame = '';
+    final buffer = StringBuffer();
     bool inGame = false;
 
     for (final line in lines) {
       if (line.startsWith('[Event')) {
-        if (inGame && currentGame.isNotEmpty) {
-          games.add(currentGame.trim());
+        if (inGame && buffer.isNotEmpty) {
+          games.add(buffer.toString().trim());
+          buffer.clear();
         }
-        currentGame = '$line\n';
+        buffer.writeln(line);
         inGame = true;
       } else if (inGame) {
-        currentGame += '$line\n';
+        buffer.writeln(line);
       }
     }
 
-    if (inGame && currentGame.isNotEmpty) {
-      games.add(currentGame.trim());
+    if (inGame && buffer.isNotEmpty) {
+      games.add(buffer.toString().trim());
     }
 
     return games;
   }
 
-  /// Helper: Check if a game is bullet (< 3 minutes main time)
+  /// Returns `true` if the PGN's TimeControl is under 3 minutes (bullet).
   bool _isBulletGame(String pgn) {
-    // Look for TimeControl tag like [TimeControl "180+0"]
-    final timeControlRegex = RegExp(r'\[TimeControl "(\d+)\+\d+"\]');
-    final match = timeControlRegex.firstMatch(pgn);
-
+    final match = RegExp(r'\[TimeControl "(\d+)\+\d+"\]').firstMatch(pgn);
     if (match != null) {
       final mainTime = int.tryParse(match.group(1) ?? '');
-      if (mainTime != null && mainTime < 180) {
-        return true; // Bullet game
-      }
+      if (mainTime != null && mainTime < 180) return true;
     }
-
     return false;
   }
 }
