@@ -1,5 +1,6 @@
 /// Position analysis models - Flutter port of Python's core/models.py
 /// Provides data structures for positions, games, and analysis results
+library;
 
 class PositionStats {
   final String fen;
@@ -218,13 +219,27 @@ class PositionAnalysis {
     }
   }
 
-  /// Get all games containing a specific position
+  /// Get all games containing a specific position.
+  ///
+  /// Normalises the FEN to 4 fields (board/active/castling/en-passant) so
+  /// lookups succeed regardless of whether half-move and full-move counters
+  /// are present.
   List<GameInfo> getGamesForFen(String fen) {
-    final indices = fenToGameIndices[fen] ?? [];
+    final normalised = _normaliseFen(fen);
+    final indices = fenToGameIndices[normalised] ?? [];
     return indices
         .where((i) => i < games.length)
         .map((i) => games[i])
         .toList();
+  }
+
+  /// Strip half-move clock and full-move number from a FEN string.
+  static String _normaliseFen(String fen) {
+    final parts = fen.split(' ');
+    if (parts.length >= 4) {
+      return parts.take(4).join(' ');
+    }
+    return fen;
   }
 
   /// Get positions sorted by various criteria

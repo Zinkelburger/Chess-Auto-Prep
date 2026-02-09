@@ -4,16 +4,31 @@ import 'tactics_database.dart';
 
 /// Engine for checking tactical solutions - Flutter port of Python's TacticsEngine
 class TacticsEngine {
-  /// Check if a move (in UCI format) is correct for the given position
-  /// Returns TacticsResult.correct or .incorrect
+  /// Check if a move (in UCI format) is correct for the given position.
+  ///
+  /// Legacy single-move check — delegates to [checkMoveAtIndex] with index 0.
   TacticsResult checkMove(TacticsPosition position, String moveUci) {
+    return checkMoveAtIndex(position, moveUci, position.fen, 0);
+  }
+
+  /// Check if a move (in UCI format) matches [correctLine] at [moveIndex],
+  /// starting from the board state represented by [fen].
+  ///
+  /// Used for multi-move tactical sequences where the board has advanced
+  /// past the original position FEN.
+  TacticsResult checkMoveAtIndex(
+    TacticsPosition position,
+    String moveUci,
+    String fen,
+    int moveIndex,
+  ) {
     try {
-      if (moveUci.length < 4 || position.correctLine.isEmpty) {
+      if (moveUci.length < 4 || moveIndex >= position.correctLine.length) {
         return TacticsResult.incorrect;
       }
 
-      // Build game from FEN
-      final game = chess.Chess.fromFEN(position.fen);
+      // Build game from the *current* board state
+      final game = chess.Chess.fromFEN(fen);
 
       // Find the played move in legal moves to get its SAN / promotion info
       final legalVerbose = game.moves({'verbose': true});
@@ -21,9 +36,11 @@ class TacticsEngine {
         (m) =>
             m['from'] == moveUci.substring(0, 2) &&
             m['to'] == moveUci.substring(2, 4) &&
-            ((moveUci.length == 4 && (m['promotion'] == null || m['promotion'] == '')) ||
+            ((moveUci.length == 4 &&
+                    (m['promotion'] == null || m['promotion'] == '')) ||
                 (moveUci.length > 4 &&
-                    (m['promotion'] == moveUci.substring(4).toLowerCase()))),
+                    (m['promotion'] ==
+                        moveUci.substring(4).toLowerCase()))),
         orElse: () => <String, dynamic>{},
       );
 
@@ -36,8 +53,8 @@ class TacticsEngine {
           (played['to'] as String) +
           ((played['promotion'] as String?) ?? '');
 
-      // Best move from the line (could be SAN with annotations or UCI)
-      final bestMove = position.correctLine.first;
+      // Expected move at this index
+      final bestMove = position.correctLine[moveIndex];
       final bestIsUci = _looksLikeUci(bestMove);
 
       if (bestIsUci) {
@@ -65,22 +82,26 @@ class TacticsEngine {
   String _normalizeSan(String san) =>
       san.replaceAll(RegExp(r'[+#?!]+'), '').trim();
 
-  /// Get a hint for the position
-  String? getHint(TacticsPosition position) {
-    if (position.correctLine.isEmpty) {
+  /// Get a hint for the position at the given move index.
+  String? getHint(TacticsPosition position, {int moveIndex = 0}) {
+    if (moveIndex >= position.correctLine.length) {
       return null;
     }
 
-    // Return the first move of the correct line as a hint
-    return 'Try: ${position.correctLine[0]}';
+    return 'Try: ${position.correctLine[moveIndex]}';
   }
 
-  /// Get the full solution for the position
-  String getSolution(TacticsPosition position) {
-    if (position.correctLine.isEmpty) {
+  /// Total number of user moves in the tactic (odd-indexed moves are opponent).
+  int userMoveCount(TacticsPosition position) =>
+      (position.correctLine.length + 1) ~/ 2;
+
+  /// Get the full solution for the position, optionally starting from [fromIndex].
+  String getSolution(TacticsPosition position, {int fromIndex = 0}) {
+    if (position.correctLine.isEmpty ||
+        fromIndex >= position.correctLine.length) {
       return 'No solution available';
     }
 
-    return position.correctLine.join(' ');
+    return position.correctLine.sublist(fromIndex).join(' ');
   }
 }
