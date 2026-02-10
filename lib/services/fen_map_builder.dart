@@ -1,5 +1,6 @@
 import 'package:dartchess_webok/dartchess_webok.dart';
 import '../models/position_analysis.dart';
+import '../utils/fen_utils.dart';
 
 class FenMapBuilder {
   final Map<String, PositionStats> _stats = {};
@@ -90,13 +91,9 @@ class FenMapBuilder {
   }
 
   void _updateStats(String fen, double result, int gameIndex) {
-      final normalizedFen = _normaliseFen(fen);
+      final key = normalizeFen(fen);
 
-      if (!_stats.containsKey(normalizedFen)) {
-          _stats[normalizedFen] = PositionStats(fen: normalizedFen);
-      }
-
-      final stats = _stats[normalizedFen]!;
+      final stats = _stats[key] ??= PositionStats(fen: key);
       stats.games++;
       if (result == 1.0) {
         stats.wins++;
@@ -108,24 +105,16 @@ class FenMapBuilder {
 
       // Also link for stats-only positions (covered by _linkGameToFen too,
       // but harmless to double-call because of the contains guard).
-      _linkGameToFen(normalizedFen, gameIndex);
+      _linkGameToFen(key, gameIndex);
   }
 
   /// Index a game against a position so the Games list works for every FEN.
   void _linkGameToFen(String fen, int gameIndex) {
-      final normalizedFen = _normaliseFen(fen);
-
-      if (!_fenToGameIndices.containsKey(normalizedFen)) {
-          _fenToGameIndices[normalizedFen] = [];
+      final key = normalizeFen(fen);
+      final list = _fenToGameIndices[key] ??= [];
+      if (!list.contains(gameIndex)) {
+        list.add(gameIndex);
       }
-      if (!_fenToGameIndices[normalizedFen]!.contains(gameIndex)) {
-          _fenToGameIndices[normalizedFen]!.add(gameIndex);
-      }
-  }
-
-  static String _normaliseFen(String fen) {
-      final parts = fen.split(' ');
-      return parts.length >= 4 ? parts.take(4).join(' ') : fen;
   }
 
   static Future<PositionAnalysis> fromFenMapBuilder(

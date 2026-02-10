@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:dartchess_webok/dartchess_webok.dart';
 import '../models/opening_tree.dart';
+import '../utils/fen_utils.dart';
 
 /// Database types for Lichess Explorer
 enum LichessDatabase {
@@ -131,18 +132,9 @@ class CoverageService {
     }
   }
 
-  /// Normalize FEN for caching (remove move counters)
-  String _normalizeFen(String fen) {
-    final parts = fen.split(' ');
-    if (parts.length >= 4) {
-      return '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
-    }
-    return fen;
-  }
-
   /// Query Lichess Explorer API with caching and rate limiting
   Future<Map<String, dynamic>?> getPositionData(String fen) async {
-    final cacheKey = _normalizeFen(fen);
+    final cacheKey = normalizeFen(fen);
 
     // Check cache
     if (_cache.containsKey(cacheKey)) {
@@ -383,7 +375,7 @@ class CoverageService {
     }
 
     final fen = position.fen;
-    allPositions[_normalizeFen(fen)] = List.from(currentMoves);
+    allPositions[normalizeFen(fen)] = List.from(currentMoves);
 
     // Check if this is a leaf node
     if (node.children.isEmpty) {

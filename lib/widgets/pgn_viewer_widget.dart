@@ -3,6 +3,7 @@ import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:chess/chess.dart' as chess;
 import 'package:flutter/gestures.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/utils/fen_utils.dart';
 
 /// A node in the analysis tree. Each node represents a move.
 /// Children[0] is the main continuation, children[1+] are variations.
@@ -208,11 +209,17 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         _clearAnalysis();
       });
 
-      if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
-        _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
-      } else if (widget.initialFen != null) {
-        _jumpToFen(widget.initialFen!);
-      }
+      // Defer the initial jump to after the current build frame.  The
+      // callback may trigger onPositionChanged → parent setState, which is
+      // illegal during a build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
+          _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
+        } else if (widget.initialFen != null) {
+          _jumpToFen(widget.initialFen!);
+        }
+      });
     } catch (e) {
       setState(() {
         _error = 'Error loading PGN: $e';
@@ -294,22 +301,16 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   void _jumpToFen(String targetFen) {
     if (_moveHistory.isEmpty) return;
 
-    final normalised = _normaliseFen(targetFen);
+    final target = normalizeFen(targetFen);
     final game = chess.Chess();
 
     for (int i = 0; i < _moveHistory.length; i++) {
       game.move(_moveHistory[i].san);
-      if (_normaliseFen(game.fen) == normalised) {
+      if (normalizeFen(game.fen) == target) {
         _goToMainLineMove(i + 1);
         return;
       }
     }
-  }
-
-  /// Strip half-move clock and full-move number for FEN comparison.
-  static String _normaliseFen(String fen) {
-    final parts = fen.split(' ');
-    return parts.length >= 4 ? parts.take(4).join(' ') : fen;
   }
 
   /// Navigate to a position in the main line

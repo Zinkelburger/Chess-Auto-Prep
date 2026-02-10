@@ -2,6 +2,8 @@
 /// Provides data structures for positions, games, and analysis results
 library;
 
+import '../utils/fen_utils.dart';
+
 class PositionStats {
   final String fen;
   int games;
@@ -225,21 +227,11 @@ class PositionAnalysis {
   /// lookups succeed regardless of whether half-move and full-move counters
   /// are present.
   List<GameInfo> getGamesForFen(String fen) {
-    final normalised = _normaliseFen(fen);
-    final indices = fenToGameIndices[normalised] ?? [];
+    final indices = fenToGameIndices[normalizeFen(fen)] ?? [];
     return indices
         .where((i) => i < games.length)
         .map((i) => games[i])
         .toList();
-  }
-
-  /// Strip half-move clock and full-move number from a FEN string.
-  static String _normaliseFen(String fen) {
-    final parts = fen.split(' ');
-    if (parts.length >= 4) {
-      return parts.take(4).join(' ');
-    }
-    return fen;
   }
 
   /// Get positions sorted by various criteria
