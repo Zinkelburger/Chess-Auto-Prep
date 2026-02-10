@@ -2,6 +2,7 @@
 /// Similar to openingtree.com's move explorer functionality
 library;
 
+import 'package:dartchess_webok/dartchess_webok.dart';
 import '../utils/fen_utils.dart';
 
 class OpeningTreeNode {
@@ -180,6 +181,23 @@ class OpeningTree {
 
   /// Get current depth in the tree
   int get currentDepth => currentNode.getMovePath().length;
+
+  /// Append a single line of moves to the tree without rebuilding.
+  /// Each move is walked node-by-node; new nodes are created as needed.
+  void appendLine(List<String> moves) {
+    Position position = Chess.initial;
+    var node = root;
+    node.updateStats(0.5); // repertoire lines have no game result
+
+    for (final san in moves) {
+      final move = position.parseSan(san);
+      if (move == null) break;
+      position = position.play(move);
+      node = node.getOrCreateChild(san, position.fen);
+      node.updateStats(0.5);
+      indexNode(node);
+    }
+  }
 
   /// Sync the tree state to match a specific list of moves (SANs)
   /// Returns true if the full path was found in the tree

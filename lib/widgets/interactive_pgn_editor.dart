@@ -98,6 +98,10 @@ class InteractivePgnEditor extends StatefulWidget {
   final int currentMoveIndex;
   /// Starting FEN if different from standard position (for custom positions)
   final String? startingFen;
+  /// Called after a line is successfully saved to the repertoire file.
+  /// Provides the moves list, title, and full PGN so the caller can
+  /// append to the in-memory tree without a full reload.
+  final Function(List<String> moves, String title, String pgn)? onLineSaved;
 
   const InteractivePgnEditor({
     super.key,
@@ -111,6 +115,7 @@ class InteractivePgnEditor extends StatefulWidget {
     this.moveHistory = const [],
     this.currentMoveIndex = -1,
     this.startingFen,
+    this.onLineSaved,
   });
 
   @override
@@ -194,6 +199,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       _roots = _convertNodes(rootNodes);
       // Default path is empty (start position)
       _currentPath = [];
+
+      // Pre-populate title from [Event] header (skip placeholders)
+      final event = game.headers['Event'] ?? '';
+      if (event.isNotEmpty &&
+          event != '?' &&
+          event != 'Repertoire Line' &&
+          event != 'Edited Line') {
+        _titleController.text = event;
+      }
     } catch (e) {
       _roots = [];
       _currentPath = [];
@@ -646,6 +660,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       setState(() {
         _hasUnsavedChanges = false;
       });
+
+      // Notify parent to append to in-memory tree
+      final moves = _currentLineSan;
+      final title = _titleController.text.trim();
+      widget.onLineSaved?.call(moves, title, _workingPgn);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Line added to repertoire')),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -679,11 +704,16 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     // StorageService read/write implies full overwrite.
     // So we read, append, write.
     
-    // We treat repertoireName as filename key
-    final filename = '$repertoireName.pgn';
+    // Repertoire files live in the repertoires/ subdirectory
+    final filename = 'repertoires/$repertoireName.pgn';
     String currentContent = await StorageFactory.instance.readRepertoirePgn(filename) ?? '';
     
-    final entry = '\n[Event "Edited Line"]\n[Date "${DateTime.now().toIso8601String()}"]\n\n$pgn\n';
+    // Use user-provided title, falling back to "Repertoire Line"
+    final title = _titleController.text.trim().isNotEmpty
+        ? _titleController.text.trim()
+        : 'Repertoire Line';
+    
+    final entry = '\n[Event "$title"]\n[Date "${DateTime.now().toIso8601String()}"]\n\n$pgn\n';
     
     await StorageFactory.instance.saveRepertoirePgn(filename, currentContent + entry);
   }
@@ -716,48 +746,44 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header
-                    Row(
-                      children: [
-                        const Text(
-                          'PGN Editor',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                        ),
-                        const Spacer(),
-                        if (_hasUnsavedChanges)
-                          const Icon(Icons.circle, size: 8, color: Colors.orange),
-                      ],
+                    // Line title
+                    TextField(
+                      controller: _titleController,
+                      decoration: InputDecoration(
+                        hintText: 'Title',
+                        hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 2),
+                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[300]),
+                      onChanged: (_) {
+                        setState(() {
+                          _hasUnsavedChanges = true;
+                        });
+                      },
                     ),
-                    const SizedBox(height: 8),
+                    Divider(height: 1, color: Colors.grey[800]),
+                    const SizedBox(height: 4),
                     // Moves display
                     Expanded(
                       child: SingleChildScrollView(
                         child: _buildMovesDisplay(),
                       ),
                     ),
-                    // Controls...
-                    const Divider(),
-                     Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('Comment: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                            Expanded(
-                              child: TextField(
-                                controller: _commentController,
-                                decoration: const InputDecoration(
-                                  hintText: 'Add comment to selected move...',
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                ),
-                                style: const TextStyle(fontSize: 12),
-                                onChanged: _updateSelectedMoveComment,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    // Comment for selected move
+                    Divider(height: 1, color: Colors.grey[800]),
+                    TextField(
+                      controller: _commentController,
+                      decoration: InputDecoration(
+                        hintText: 'Add comment',
+                        hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[300]),
+                      onChanged: _updateSelectedMoveComment,
                     ),
                   ],
                 ),

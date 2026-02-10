@@ -25,6 +25,7 @@ class RepertoireLinesBrowser extends StatefulWidget {
   final List<RepertoireLine> lines;
   final List<String> currentMoveSequence;
   final Function(RepertoireLine line)? onLineSelected;
+  final Function(RepertoireLine line, String newTitle)? onLineRenamed;
   final bool isExpanded; // For inline vs fullscreen mode
 
   const RepertoireLinesBrowser({
@@ -32,6 +33,7 @@ class RepertoireLinesBrowser extends StatefulWidget {
     required this.lines,
     this.currentMoveSequence = const [],
     this.onLineSelected,
+    this.onLineRenamed,
     this.isExpanded = false,
   });
 
@@ -175,12 +177,18 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     return depth;
   }
 
+  bool _isPlaceholderTitle(String title) =>
+      title.isEmpty ||
+      title == '?' ||
+      title == 'Repertoire Line' ||
+      title == 'Edited Line';
+
   String _getGroupName(RepertoireLine line) {
     // Try to extract opening name from event/title
     final eventTitle = _extractEventTitle(line.fullPgn);
-    if (eventTitle.isNotEmpty && eventTitle != 'Repertoire Line') {
+    if (!_isPlaceholderTitle(eventTitle)) {
       // Take first part before colon or dash for grouping
-      final parts = eventTitle.split(RegExp(r'[:\-–]'));
+      final parts = eventTitle.split(RegExp(r'[:\-–#]'));
       if (parts.isNotEmpty) {
         return parts[0].trim();
       }
@@ -425,10 +433,10 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
 
   Widget _buildEmptyState() {
     return Center(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.search_off, size: 48, color: Colors.grey[600]),
             const SizedBox(height: 16),
@@ -550,11 +558,53 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     );
   }
 
+  void _showRenameDialog(RepertoireLine line) {
+    final eventTitle = _extractEventTitle(line.fullPgn);
+    final currentTitle = !_isPlaceholderTitle(eventTitle) ? eventTitle : '';
+    final controller = TextEditingController(text: currentTitle);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename Line'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'e.g., KID - Fianchetto Variation',
+            labelText: 'Line Title',
+          ),
+          onSubmitted: (value) {
+            final title = value.trim();
+            if (title.isNotEmpty) {
+              widget.onLineRenamed?.call(line, title);
+            }
+            Navigator.of(context).pop();
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final title = controller.text.trim();
+              if (title.isNotEmpty) {
+                widget.onLineRenamed?.call(line, title);
+              }
+              Navigator.of(context).pop();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildLineItem(RepertoireLine line, int index, {bool indented = false}) {
     final eventTitle = _extractEventTitle(line.fullPgn);
-    final displayTitle = eventTitle.isNotEmpty && eventTitle != 'Repertoire Line' 
-        ? eventTitle 
-        : line.name;
+    final displayTitle = !_isPlaceholderTitle(eventTitle) ? eventTitle : line.name;
     
     final currentMoves = widget.currentMoveSequence;
     final matchDepth = _getPositionMatchDepth(line, currentMoves);
@@ -598,7 +648,19 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 8),
+                // Edit title button
+                if (widget.onLineRenamed != null)
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: IconButton(
+                      icon: Icon(Icons.edit, size: 14, color: Colors.grey[500]),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Rename line',
+                      onPressed: () => _showRenameDialog(line),
+                    ),
+                  ),
+                const SizedBox(width: 4),
                 // Color indicator
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -636,7 +698,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
             if (line.comments.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(
-                '💬 ${line.comments.length} comment${line.comments.length == 1 ? '' : 's'}',
+                '${line.comments.length} comment${line.comments.length == 1 ? '' : 's'}',
                 style: TextStyle(
                   fontSize: 10,
                   color: Colors.green[400],
@@ -707,12 +769,14 @@ class RepertoireLinesBrowserDialog extends StatelessWidget {
   final List<RepertoireLine> lines;
   final List<String> currentMoveSequence;
   final Function(RepertoireLine line)? onLineSelected;
+  final Function(RepertoireLine line, String newTitle)? onLineRenamed;
 
   const RepertoireLinesBrowserDialog({
     super.key,
     required this.lines,
     this.currentMoveSequence = const [],
     this.onLineSelected,
+    this.onLineRenamed,
   });
 
   @override
@@ -764,6 +828,7 @@ class RepertoireLinesBrowserDialog extends StatelessWidget {
                   onLineSelected?.call(line);
                   Navigator.of(context).pop();
                 },
+                onLineRenamed: onLineRenamed,
               ),
             ),
           ],
