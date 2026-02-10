@@ -11,6 +11,7 @@ import '../services/tactics_database.dart';
 import '../services/tactics_engine.dart';
 import '../services/tactics_import_service.dart';
 import '../services/storage/storage_factory.dart';
+import '../utils/fen_utils.dart';
 import 'pgn_viewer_widget.dart';
 
 /// Tactics training control panel with import, review, and analysis.
@@ -1170,12 +1171,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     appState.setBoardFlipped(false);
   }
 
-  /// Compare two FENs ignoring half-move clock and full-move number.
-  /// This avoids false mismatches when only the move counters differ.
-  static String _normaliseFen(String fen) {
-    final parts = fen.split(' ');
-    return parts.length >= 4 ? parts.take(4).join(' ') : fen;
-  }
 
   /// Re-sync the PGN viewer's highlighted move to the current tactic position.
   void _syncPgnToCurrentTactic() {
@@ -1531,7 +1526,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Only validate when the board is at the expected tactic position.
     // If the user navigated away (e.g. via PGN viewer), ignore the move.
     final fen = _currentTacticFen ?? _currentPosition!.fen;
-    if (_normaliseFen(appState.currentGame.fen) != _normaliseFen(fen)) return;
+    if (normalizeFen(appState.currentGame.fen) != normalizeFen(fen)) return;
 
     final result = _engine.checkMoveAtIndex(
       _currentPosition!,

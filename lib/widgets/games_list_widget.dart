@@ -35,12 +35,15 @@ class _GamesListWidgetState extends State<GamesListWidget> {
   @override
   Widget build(BuildContext context) {
     if (widget.games.isEmpty) {
-      return const Center(
+      final message = widget.currentFen != null
+          ? 'No games found in this position'
+          : 'Select a position to see games';
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Text(
-            'Select a position to see games',
-            style: TextStyle(color: Colors.grey),
+            message,
+            style: const TextStyle(color: Colors.grey),
             textAlign: TextAlign.center,
           ),
         ),

@@ -1,5 +1,8 @@
 /// Opening tree models - Represents a tree of moves from analyzed games
 /// Similar to openingtree.com's move explorer functionality
+library;
+
+import '../utils/fen_utils.dart';
 
 class OpeningTreeNode {
   /// The move that led to this node (SAN notation, e.g. "e4", "Nf3")
@@ -157,35 +160,19 @@ class OpeningTree {
 
   /// Navigate to a specific FEN position (finds the first matching node)
   bool navigateToFen(String fen) {
-    // Normalize FEN (remove move counters if present)
-    final normalizedFen = _normalizeFen(fen);
-
-    if (fenToNodes.containsKey(normalizedFen)) {
-      final nodes = fenToNodes[normalizedFen]!;
-      if (nodes.isNotEmpty) {
-        currentNode = nodes.first;
-        return true;
-      }
+    final key = normalizeFen(fen);
+    final nodes = fenToNodes[key];
+    if (nodes != null && nodes.isNotEmpty) {
+      currentNode = nodes.first;
+      return true;
     }
     return false;
   }
 
   /// Add a FEN to node mapping
   void indexNode(OpeningTreeNode node) {
-    final normalizedFen = _normalizeFen(node.fen);
-    if (!fenToNodes.containsKey(normalizedFen)) {
-      fenToNodes[normalizedFen] = [];
-    }
-    fenToNodes[normalizedFen]!.add(node);
-  }
-
-  /// Normalize FEN (remove move counters) for consistent lookups
-  String _normalizeFen(String fen) {
-    final parts = fen.split(' ');
-    if (parts.length >= 4) {
-      return '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
-    }
-    return fen;
+    final key = normalizeFen(node.fen);
+    (fenToNodes[key] ??= []).add(node);
   }
 
   /// Get total number of games in the tree (games at root)
