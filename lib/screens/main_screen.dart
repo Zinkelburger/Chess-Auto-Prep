@@ -80,7 +80,7 @@ class _MainScreenState extends State<MainScreen> {
                       children: [
                         const Icon(Icons.library_books),
                         const SizedBox(width: 12),
-                        const Text('Repertoire'),
+                        const Text('Repertoire Builder'),
                         if (appState.currentMode == AppMode.repertoire)
                           const Padding(
                             padding: EdgeInsets.only(left: 12),

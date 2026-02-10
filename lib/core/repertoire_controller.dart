@@ -462,6 +462,34 @@ class RepertoireController with ChangeNotifier {
     return [...headers, '', moves].join('\n');
   }
 
+  /// Append a newly saved line to the in-memory tree and lines list
+  /// without reloading the entire repertoire from disk.
+  void appendNewLine(List<String> moves, String title, String pgn) {
+    // 1. Append to the opening tree
+    _openingTree?.appendLine(moves);
+
+    // 2. Build a RepertoireLine and add to the list
+    final index = _repertoireLines.length;
+    final service = RepertoireService();
+    final id = service.generateLineId(moves, index);
+    final name = title.isNotEmpty && title != 'Repertoire Line'
+        ? title
+        : (moves.length >= 3
+            ? 'Line: ${moves.take(3).join(' ')}'
+            : 'Repertoire Line ${index + 1}');
+
+    _repertoireLines.add(RepertoireLine(
+      id: id,
+      name: name,
+      moves: moves,
+      color: _isRepertoireWhite ? 'white' : 'black',
+      startPosition: Chess.initial,
+      fullPgn: pgn,
+    ));
+
+    notifyListeners();
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();

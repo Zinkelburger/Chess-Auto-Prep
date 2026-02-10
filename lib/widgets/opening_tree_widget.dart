@@ -11,6 +11,8 @@ class OpeningTreeWidget extends StatefulWidget {
   final Function(String move)? onMoveSelected;
   final Function(String searchTerm)? onSearchChanged;
   final Function(RepertoireLine line)? onLineSelected;
+  final VoidCallback? onGoBack;
+  final VoidCallback? onGoForward;
   final List<RepertoireLine> repertoireLines;
   final List<String> currentMoveSequence;
   final bool showPgnSearch;
@@ -22,6 +24,8 @@ class OpeningTreeWidget extends StatefulWidget {
     this.onMoveSelected,
     this.onSearchChanged,
     this.onLineSelected,
+    this.onGoBack,
+    this.onGoForward,
     this.repertoireLines = const [],
     this.currentMoveSequence = const [],
     this.showPgnSearch = false,
@@ -175,19 +179,44 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Simplified header without navigation buttons
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
                 children: [
-                  Text(
-                    movePath,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[300],
-                      fontWeight: FontWeight.w500,
+                  Expanded(
+                    child: Text(
+                      movePath,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[300],
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: IconButton(
+                      icon: Icon(Icons.arrow_back, size: 18, color: Colors.grey[400]),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Back',
+                      onPressed: currentNode.parent != null
+                          ? () => widget.onGoBack?.call()
+                          : null,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: IconButton(
+                      icon: Icon(Icons.arrow_forward, size: 18, color: Colors.grey[400]),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Forward',
+                      onPressed: sortedChildren.isNotEmpty
+                          ? () => widget.onGoForward?.call()
+                          : null,
+                    ),
                   ),
                 ],
               ),

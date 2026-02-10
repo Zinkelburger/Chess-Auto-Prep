@@ -9,6 +9,7 @@ import 'package:chess/chess.dart' as chess;
 import '../core/repertoire_controller.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
+import '../services/repertoire_service.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
 import '../widgets/engine_analysis_widget.dart';
@@ -336,6 +337,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         // Switch to PGN tab (now at index 2)
         _tabController.animateTo(2);
       },
+      onLineRenamed: _renameLine,
     );
   }
 
@@ -394,6 +396,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 if (_controller.selectedPgnLine != null) {
                   _controller.clearSelectedPgnLine();
                 }
+              },
+              onLineSaved: (moves, title, pgn) {
+                _controller.appendNewLine(moves, title, pgn);
               },
             ),
           ),
@@ -568,6 +573,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                  // Handle tree move selection
                  _controller.userSelectedTreeMove(move);
               },
+              onGoBack: () => _controller.goBack(),
+              onGoForward: () => _controller.goForward(),
               onPositionSelected: (fen) {
                 // Deprecated: Use onMoveSelected instead
               },
@@ -632,6 +639,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 lines: _controller.repertoireLines,
                 currentMoveSequence: _controller.currentMoveSequence,
                 onLineSelected: _selectLine,
+                onLineRenamed: _renameLine,
               ),
             ),
           ],
@@ -659,6 +667,30 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     // Switch to PGN tab (index 2 after adding Lines tab)
     _tabController.animateTo(2);
   }
+
+  Future<void> _renameLine(RepertoireLine line, String newTitle) async {
+    final filePath = _controller.currentRepertoire?['filePath'] as String?;
+    if (filePath == null) return;
+
+    final service = RepertoireService();
+    final success = await service.updateLineTitle(filePath, line.id, newTitle);
+
+    if (success) {
+      // Reload repertoire to pick up the change
+      await _controller.loadRepertoire();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Renamed to "$newTitle"')),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to rename line')),
+        );
+      }
+    }
+  }
   
   void _showFullLinesBrowser() {
     showDialog(
@@ -667,6 +699,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         lines: _controller.repertoireLines,
         currentMoveSequence: _controller.currentMoveSequence,
         onLineSelected: _selectLine,
+        onLineRenamed: _renameLine,
       ),
     );
   }

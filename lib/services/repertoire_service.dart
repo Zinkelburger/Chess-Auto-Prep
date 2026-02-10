@@ -3,6 +3,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io' as io;
 
 import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:chess/chess.dart' as chess;
@@ -152,9 +153,9 @@ class RepertoireService {
     final event = game.headers['Event'] ?? '';
     final opening = game.headers['Opening'] ?? '';
 
-    if (opening.isNotEmpty) {
+    if (opening.isNotEmpty && opening != '?') {
       return opening;
-    } else if (event.isNotEmpty && event != 'Repertoire Line') {
+    } else if (event.isNotEmpty && event != '?' && event != 'Repertoire Line' && event != 'Edited Line') {
       return event;
     } else {
       // Generate name from first few moves
@@ -191,6 +192,10 @@ class RepertoireService {
     // Stable fallback based on moves so it persists across sessions.
     return _generateStableLineId(moves, index);
   }
+
+  /// Public access to generate a stable line ID from moves.
+  String generateLineId(List<String> moves, int index) =>
+      _generateStableLineId(moves, index);
 
   String _generateStableLineId(List<String> moves, int index) {
     final raw = base64Url.encode(utf8.encode('${moves.join(' ')}|$index'));
@@ -255,5 +260,53 @@ class RepertoireService {
     final shuffled = List<TrainingQuestion>.from(questions);
     shuffled.shuffle();
     return shuffled;
+  }
+
+  /// Updates the [Event] header (title) for a specific line in a PGN file.
+  ///
+  /// Finds the game matching [lineId] by re-parsing the file, then rewrites
+  /// the [Event] header with [newTitle].
+  Future<bool> updateLineTitle(String filePath, String lineId, String newTitle) async {
+    final file = io.File(filePath);
+    if (!await file.exists()) return false;
+
+    final content = await file.readAsString();
+    final games = _splitPgnIntoGames(content);
+
+    // Find the game that matches this lineId
+    int? matchIndex;
+    for (int i = 0; i < games.length; i++) {
+      try {
+        final game = PgnGame.parsePgn(games[i]);
+        final moves = game.moves.mainline().map((n) => n.san).toList();
+        final id = _extractLineId(game, moves, i);
+        if (id == lineId) {
+          matchIndex = i;
+          break;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+
+    if (matchIndex == null) return false;
+
+    // Replace or insert the [Event] header in the matched game text
+    final gameText = games[matchIndex];
+    final eventRegex = RegExp(r'\[Event\s+"[^"]*"\]');
+
+    String updatedGame;
+    if (eventRegex.hasMatch(gameText)) {
+      updatedGame = gameText.replaceFirst(eventRegex, '[Event "$newTitle"]');
+    } else {
+      // No Event header — prepend one
+      updatedGame = '[Event "$newTitle"]\n$gameText';
+    }
+
+    games[matchIndex] = updatedGame;
+
+    // Reassemble and write back
+    await file.writeAsString(games.join('\n'));
+    return true;
   }
 }
