@@ -6,6 +6,8 @@ import '../core/app_state.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/tactics_control_panel.dart';
 import '../services/imported_games_service.dart';
+import '../services/stockfish_analysis_service.dart';
+import '../services/move_analysis_pool.dart';
 import 'analysis_screen.dart';
 import 'repertoire_screen.dart';
 import 'repertoire_training_screen.dart';
@@ -17,15 +19,32 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appState = Provider.of<AppState>(context, listen: false);
       appState.loadUsernames();
       appState.loadSavedGames();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      // App is shutting down — send 'quit' to every Stockfish process
+      // so we don't leave orphan OS processes behind.
+      StockfishAnalysisService().dispose();
+      MoveAnalysisPool().dispose();
+    }
   }
 
   @override

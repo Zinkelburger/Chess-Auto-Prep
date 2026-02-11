@@ -12,7 +12,6 @@ import '../models/repertoire_line.dart';
 import '../services/repertoire_service.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
-import '../widgets/engine_analysis_widget.dart';
 import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/opening_tree_widget.dart';
 import '../widgets/repertoire_lines_browser.dart';
@@ -408,21 +407,14 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildEngineTab() {
-    // Calculate if the engine tab is currently active/visible
-    final isEngineTabActive = _tabController.index == 3;
-
     return Container(
       padding: const EdgeInsets.all(8.0),
       child: UnifiedEnginePane(
         fen: _controller.fen,
-        isActive: isEngineTabActive,
+        isActive: true, // Always analyze — even when on other tabs
         isUserTurn: _controller.game.turn == (_controller.isRepertoireWhite ? chess.Color.WHITE : chess.Color.BLACK),
         currentMoveSequence: _controller.currentMoveSequence,
         isWhiteRepertoire: _controller.isRepertoireWhite,
-        onEaseDetailsTap: () {
-          // Switch to a detailed ease view if needed
-          _showEaseDetails();
-        },
         onMoveSelected: (uciMove) {
           // Convert UCI (e2e4) to SAN for consistency
           try {
@@ -452,91 +444,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     );
   }
   
-  void _showEaseDetails() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) => Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              // Title and close
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.speed, color: Colors.orange),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Ease Analysis Details',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(),
-              // Full ease widget
-              Expanded(
-                child: EngineAnalysisWidget(
-                  fen: _controller.fen,
-                  isActive: true,
-                  isUserTurn: _controller.game.turn == (_controller.isRepertoireWhite ? chess.Color.WHITE : chess.Color.BLACK),
-                  onMoveSelected: (uciMove) {
-                    Navigator.of(context).pop();
-                    try {
-                      final from = uciMove.substring(0, 2);
-                      final to = uciMove.substring(2, 4);
-                      String? promotion;
-                      if (uciMove.length > 4) promotion = uciMove.substring(4);
-                      
-                      final moves = _controller.game.moves({ 'verbose': true });
-                      final match = moves.firstWhere((m) => 
-                        m['from'] == from && 
-                        m['to'] == to && 
-                        (promotion == null || m['promotion'] == promotion),
-                        orElse: () => null
-                      );
-                      
-                      if (match != null) {
-                        _controller.userPlayedMove(match['san']);
-                      }
-                    } catch (e) {
-                      print('Error playing engine move: $e');
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildOpeningTreeTab() {
     if (_controller.openingTree == null) {
       return Container(

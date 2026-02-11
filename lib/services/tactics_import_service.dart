@@ -5,6 +5,7 @@ import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:chess/chess.dart' as chess;
 import 'package:flutter/foundation.dart';
 import '../models/tactics_position.dart';
+import '../models/engine_settings.dart';
 import 'package:chess_auto_prep/models/engine_evaluation.dart';
 import 'stockfish_service.dart';
 import 'tactics_database.dart';
@@ -358,12 +359,18 @@ class TacticsImportService {
     // ── PARALLEL PATH (desktop — works fine with 1 game / 1 core) ──
     if (parallel.isParallelAnalysisAvailable) {
       try {
+        // Compute per-worker hash from the global engine settings
+        final settings = EngineSettings();
+        final hashPerWorker = settings.hashMb ~/
+            (math.max(1, maxCores ?? settings.cores) + 1);
+
         final positions = await parallel.analyzeGamesParallel(
           gameTasks: gameTasks,
           username: usernameLower,
           depth: depth,
           totalGames: games.length,
           maxCores: maxCores,
+          hashPerWorkerMb: hashPerWorker.clamp(16, settings.hashMb),
           progressCallback: progressCallback,
           onPositionFound: onPositionFound,
           onGameComplete: (gameId) => _database.markGameAnalyzed(gameId),

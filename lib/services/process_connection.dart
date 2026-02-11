@@ -85,7 +85,10 @@ class ProcessConnection implements EngineConnection {
 
   @override
   Future<void> waitForReady() async {
-    // Perform UCI handshake: uci -> uciok -> isready -> readyok
+    // UCI handshake only — callers configure Hash / Threads themselves.
+    // Previously this set Hash 512 + multi-thread, causing every process
+    // (including pool workers that only need 16 MB) to briefly allocate
+    // 512 MB of RAM that the OS may never reclaim.
     final uciOk = Completer<void>();
     final readyOk = Completer<void>();
     late StreamSubscription sub;
@@ -105,11 +108,6 @@ class ProcessConnection implements EngineConnection {
     await readyOk.future.timeout(const Duration(seconds: 10));
 
     await sub.cancel();
-
-    // Tune threads/hash for desktop
-    final threads = Platform.numberOfProcessors.clamp(2, 8);
-    sendCommand('setoption name Threads value $threads');
-    sendCommand('setoption name Hash value 512');
   }
 
   @override
@@ -121,9 +119,25 @@ class ProcessConnection implements EngineConnection {
 
   @override
   void dispose() {
+    if (_isDisposed) return; // idempotent
     _isDisposed = true;
     _processSubscription?.cancel();
-    _process?.kill();
+
+    final proc = _process;
+    _process = null;
+    if (proc != null) {
+      // Ask Stockfish to exit gracefully, then SIGTERM.
+      // Schedule a SIGKILL fallback in case it doesn't respond.
+      try {
+        proc.stdin.writeln('quit');
+      } catch (_) {}
+      proc.kill(); // SIGTERM
+      Future.delayed(const Duration(seconds: 2), () {
+        try {
+          proc.kill(ProcessSignal.sigkill);
+        } catch (_) {} // already exited — ignore
+      });
+    }
     _stdoutController.close();
   }
 }

@@ -14,6 +14,7 @@ Future<List<TacticsPosition>> analyzeGamesParallel({
   required int depth,
   required int totalGames,
   int? maxCores,
+  int? hashPerWorkerMb,
   Function(String)? progressCallback,
   void Function(TacticsPosition)? onPositionFound,
   void Function(String)? onGameComplete,
