@@ -43,6 +43,7 @@ Future<List<TacticsPosition>> analyzeGamesParallel({
   required int depth,
   required int totalGames,
   int? maxCores,
+  int? hashPerWorkerMb,
   Function(String)? progressCallback,
   void Function(TacticsPosition)? onPositionFound,
   void Function(String)? onGameComplete,
@@ -133,6 +134,9 @@ Future<List<TacticsPosition>> analyzeGamesParallel({
       }
     });
 
+    // Hash per worker: if not specified, split 50% of system RAM across workers.
+    final effectiveHash = hashPerWorkerMb ?? 128;
+
     final isolate = await Isolate.spawn(
       _analysisWorkerEntryPoint,
       <dynamic>[
@@ -144,6 +148,7 @@ Future<List<TacticsPosition>> analyzeGamesParallel({
           'depth': depth,
           'totalGames': totalGames,
           'workerIndex': w,
+          'hashMb': effectiveHash,
         },
       ],
     );
@@ -200,11 +205,12 @@ void _analysisWorkerEntryPoint(List<dynamic> args) async {
   final username = config['username'] as String;
   final depth = config['depth'] as int;
   final workerIndex = config['workerIndex'] as int;
+  final hashMb = config['hashMb'] as int? ?? 128;
 
   _WorkerStockfish? stockfish;
 
   try {
-    stockfish = await _WorkerStockfish.start(stockfishPath);
+    stockfish = await _WorkerStockfish.start(stockfishPath, hashMb: hashMb);
 
     for (final gameInfo in games) {
       final gameText = gameInfo['gameText'] as String;
@@ -492,20 +498,23 @@ class _WorkerStockfish {
 
   /// Spawn a Stockfish process, perform UCI handshake, and configure
   /// for single-threaded operation (1 core per worker).
-  static Future<_WorkerStockfish> start(String executablePath) async {
+  static Future<_WorkerStockfish> start(
+    String executablePath, {
+    int hashMb = 128,
+  }) async {
     final process = await Process.start(executablePath, []);
     final sf = _WorkerStockfish._(process);
-    await sf._init();
+    await sf._init(hashMb);
     return sf;
   }
 
-  Future<void> _init() async {
+  Future<void> _init(int hashMb) async {
     _uciOkCompleter = Completer<void>();
     _process.stdin.writeln('uci');
     await _uciOkCompleter!.future.timeout(const Duration(seconds: 10));
 
     _process.stdin.writeln('setoption name Threads value 1');
-    _process.stdin.writeln('setoption name Hash value 128');
+    _process.stdin.writeln('setoption name Hash value $hashMb');
 
     _readyCompleter = Completer<void>();
     _process.stdin.writeln('isready');

@@ -1,4 +1,7 @@
-/// Stockfish analysis service with multi-PV and configurable settings
+/// Stockfish analysis service — MultiPV only, 1 thread.
+///
+/// Handles the initial top-N line analysis. Individual move evaluations
+/// and ease calculations are handled by [MoveAnalysisPool].
 library;
 
 import 'dart:async';
@@ -115,9 +118,12 @@ class StockfishAnalysisService {
   final ValueNotifier<String> status = ValueNotifier('Initializing...');
 
   bool _isDisposed = false;
-  String _currentFen = '';
   bool _isWhiteTurn = true;
   int _currentMultiPv = 3;
+
+  /// When true, the next `bestmove` is from a `stop` command (old search)
+  /// and should be silently consumed — not treated as a real completion.
+  bool _expectingStopBestmove = false;
 
   // Temp storage for building lines during analysis
   final Map<int, AnalysisLine> _currentLines = {};
@@ -165,8 +171,10 @@ class StockfishAnalysisService {
   Future<void> _applySettings() async {
     if (_engine == null) return;
     
-    _engine!.sendCommand('setoption name Threads value ${_settings.cores}');
-    _engine!.sendCommand('setoption name Hash value ${_settings.hashMb}');
+    // Always 1 thread — parallelism comes from the worker pool.
+    // Hash is the per-instance share of the total budget.
+    _engine!.sendCommand('setoption name Threads value 1');
+    _engine!.sendCommand('setoption name Hash value ${_settings.hashPerWorker}');
     _engine!.sendCommand('setoption name MultiPV value ${_settings.multiPv}');
     _currentMultiPv = _settings.multiPv;
     _engine!.sendCommand('isready');
@@ -190,10 +198,22 @@ class StockfishAnalysisService {
     } else if (line.startsWith('info')) {
       _parseInfo(line);
     } else if (line.startsWith('bestmove')) {
+      if (_expectingStopBestmove) {
+        // This bestmove is from the 'stop' command that was sent to
+        // terminate the previous search — not a real completion.
+        if (kDebugMode) {
+          print('[Stockfish] Ignored stale bestmove from stop: $line');
+        }
+        _expectingStopBestmove = false;
+        return;
+      }
+      if (kDebugMode) {
+        print('[Stockfish] Analysis complete: $line '
+            '(${analysis.value.lines.length} lines, '
+            'depth ${analysis.value.depth})');
+      }
       isAnalyzing.value = false;
       status.value = 'Analysis complete';
-      
-      // Mark as complete
       analysis.value = analysis.value.copyWith(isComplete: true);
     }
   }
@@ -284,8 +304,18 @@ class StockfishAnalysisService {
 
   void startAnalysis(String fen, {int? depth, int? multiPv}) {
     if (!isReady.value || !isAvailable.value) return;
-    
-    _currentFen = fen;
+
+    // If the engine is currently searching, 'stop' will produce a
+    // bestmove that we must ignore (it belongs to the OLD search).
+    // MUST read this BEFORE setting isAnalyzing to true.
+    _expectingStopBestmove = isAnalyzing.value;
+
+    if (kDebugMode) {
+      print('[Stockfish] startAnalysis — '
+          'wasAnalyzing=${_expectingStopBestmove}, '
+          'fen=${fen.split(" ").take(2).join(" ")}');
+    }
+
     isAnalyzing.value = true;
     _currentLines.clear();
     analysis.value = AnalysisResult();
@@ -323,5 +353,3 @@ class StockfishAnalysisService {
     _engine?.dispose();
   }
 }
-
-
