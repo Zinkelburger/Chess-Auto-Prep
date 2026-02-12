@@ -10,8 +10,10 @@ import 'package:flutter/foundation.dart';
 
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
+import '../services/move_analysis_pool.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
+import '../utils/pgn_utils.dart' as pgn_utils;
 
 /// Manages repertoire state and acts as the single source of truth.
 /// All UI components should derive their chess position from this class.
@@ -264,6 +266,12 @@ class RepertoireController with ChangeNotifier {
       _startingFen = null;
     } finally {
       _setLoading(false);
+
+      // Fire-and-forget: start Stockfish workers in the background so
+      // they're warm by the time the user triggers their first analysis.
+      // Each worker takes ~3-5s for NNUE init; this hides that behind
+      // the time the user spends looking at the tree / navigating moves.
+      MoveAnalysisPool().warmUp();
     }
   }
 
@@ -432,14 +440,8 @@ class RepertoireController with ChangeNotifier {
     notifyListeners();
   }
 
-  String? _extractHeaderValue(String line) {
-    final start = line.indexOf('"') + 1;
-    final end = line.lastIndexOf('"');
-    if (start > 0 && end > start) {
-      return line.substring(start, end);
-    }
-    return null;
-  }
+  String? _extractHeaderValue(String line) =>
+      pgn_utils.extractHeaderValue(line);
 
   String? _buildGame(
       String? event,

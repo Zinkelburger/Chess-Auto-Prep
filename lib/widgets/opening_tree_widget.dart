@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
+import '../utils/pgn_utils.dart' as pgn_utils;
 
 class OpeningTreeWidget extends StatefulWidget {
   final OpeningTree tree;
@@ -103,59 +104,15 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
     });
   }
 
-  bool _lineMatchesPosition(RepertoireLine line, List<String> currentMoves) {
-    if (currentMoves.isEmpty) {
-      return true; // Starting position matches all lines
-    }
-
-    // Check if line contains the current move sequence
-    if (currentMoves.length > line.moves.length) {
-      return false;
-    }
-
-    for (int i = 0; i < currentMoves.length; i++) {
-      if (i >= line.moves.length || line.moves[i] != currentMoves[i]) {
-        return false;
-      }
-    }
-
-    return true;
-  }
+  bool _lineMatchesPosition(RepertoireLine line, List<String> currentMoves) =>
+      pgn_utils.lineMatchesPosition(line, currentMoves);
 
   bool _isExactPositionMatch(RepertoireLine line, List<String> currentMoves) {
     return line.moves.length >= currentMoves.length &&
-           _lineMatchesPosition(line, currentMoves);
+           pgn_utils.lineMatchesPosition(line, currentMoves);
   }
 
-  String _extractEventTitle(String pgn) {
-    // Extract custom title or Event header from PGN
-    final lines = pgn.split('\n');
-
-    // Look for Title header first
-    for (final line in lines) {
-      if (line.trim().startsWith('[Title ')) {
-        return _extractHeaderValue(line) ?? '';
-      }
-    }
-
-    // Fallback to Event header
-    for (final line in lines) {
-      if (line.trim().startsWith('[Event ')) {
-        return _extractHeaderValue(line) ?? '';
-      }
-    }
-
-    return '';
-  }
-
-  String? _extractHeaderValue(String line) {
-    final start = line.indexOf('"') + 1;
-    final end = line.lastIndexOf('"');
-    if (start > 0 && end > start) {
-      return line.substring(start, end);
-    }
-    return null;
-  }
+  String _extractEventTitle(String pgn) => pgn_utils.extractEventTitle(pgn);
   @override
   Widget build(BuildContext context) {
     final currentNode = widget.tree.currentNode;

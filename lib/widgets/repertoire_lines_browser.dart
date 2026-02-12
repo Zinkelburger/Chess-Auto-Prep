@@ -5,6 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 import '../models/repertoire_line.dart';
+import '../utils/pgn_utils.dart' as pgn_utils;
 
 /// Groups lines by their opening structure for better organization
 class LineGroup {
@@ -153,29 +154,11 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     });
   }
 
-  bool _lineMatchesPosition(RepertoireLine line, List<String> currentMoves) {
-    if (currentMoves.isEmpty) return true;
-    if (currentMoves.length > line.moves.length) return false;
+  bool _lineMatchesPosition(RepertoireLine line, List<String> currentMoves) =>
+      pgn_utils.lineMatchesPosition(line, currentMoves);
 
-    for (int i = 0; i < currentMoves.length; i++) {
-      if (line.moves[i] != currentMoves[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  int _getPositionMatchDepth(RepertoireLine line, List<String> currentMoves) {
-    int depth = 0;
-    for (int i = 0; i < currentMoves.length && i < line.moves.length; i++) {
-      if (line.moves[i] == currentMoves[i]) {
-        depth++;
-      } else {
-        break;
-      }
-    }
-    return depth;
-  }
+  int _getPositionMatchDepth(RepertoireLine line, List<String> currentMoves) =>
+      pgn_utils.getPositionMatchDepth(line, currentMoves);
 
   bool _isPlaceholderTitle(String title) =>
       title.isEmpty ||
@@ -204,54 +187,10 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     return 'Other';
   }
 
-  String _extractEventTitle(String pgn) {
-    final lines = pgn.split('\n');
-    for (final line in lines) {
-      if (line.trim().startsWith('[Title ')) {
-        return _extractHeaderValue(line) ?? '';
-      }
-    }
-    for (final line in lines) {
-      if (line.trim().startsWith('[Event ')) {
-        return _extractHeaderValue(line) ?? '';
-      }
-    }
-    return '';
-  }
+  String _extractEventTitle(String pgn) => pgn_utils.extractEventTitle(pgn);
 
-  String? _extractHeaderValue(String line) {
-    final start = line.indexOf('"') + 1;
-    final end = line.lastIndexOf('"');
-    if (start > 0 && end > start) {
-      return line.substring(start, end);
-    }
-    return null;
-  }
-
-  String _formatMovesForSearch(List<String> moves) {
-    final buffer = StringBuffer();
-    for (int i = 0; i < moves.length; i++) {
-      if (i % 2 == 0) {
-        buffer.write('${(i ~/ 2) + 1}.');
-      }
-      buffer.write(moves[i]);
-      buffer.write(' ');
-    }
-    return buffer.toString().trim();
-  }
-
-  String _formatMoves(List<String> moves, {int? highlightUpTo}) {
-    final buffer = StringBuffer();
-    for (int i = 0; i < moves.length; i++) {
-      if (i % 2 == 0) {
-        if (i > 0) buffer.write(' ');
-        buffer.write('${(i ~/ 2) + 1}.');
-      }
-      buffer.write(moves[i]);
-      if (i < moves.length - 1 && i % 2 == 1) buffer.write(' ');
-    }
-    return buffer.toString();
-  }
+  String _formatMovesForSearch(List<String> moves) =>
+      pgn_utils.formatMovesForSearch(moves);
 
   @override
   Widget build(BuildContext context) {

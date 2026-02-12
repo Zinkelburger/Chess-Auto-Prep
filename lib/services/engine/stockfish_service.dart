@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'engine_connection.dart';
 import 'stockfish_connection_factory.dart';
-import '../models/engine_evaluation.dart';
+import '../../models/engine_evaluation.dart';
 
 class StockfishService {
   static final StockfishService _instance = StockfishService._internal();

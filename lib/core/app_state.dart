@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess/chess.dart' as chess;
 import '../models/chess_game.dart';
 import '../services/pgn_service.dart';
+import '../services/lichess_auth_service.dart';
 
 enum AppMode {
   tactics,
@@ -64,6 +65,10 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _lichessUsername = prefs.getString('lichess_username');
     _chesscomUsername = prefs.getString('chesscom_username');
+
+    // Load Lichess OAuth / PAT tokens (persisted between runs)
+    await LichessAuthService().loadTokens();
+
     notifyListeners();
   }
 

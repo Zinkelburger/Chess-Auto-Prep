@@ -7,9 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:chess/chess.dart' as chess;
 
 import '../core/repertoire_controller.dart';
-import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
+import '../services/move_analysis_pool.dart';
 import '../services/repertoire_service.dart';
+import '../utils/chess_utils.dart' show uciToSan;
 import '../widgets/chess_board_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
 import '../widgets/interactive_pgn_editor.dart';
@@ -86,9 +87,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   @override
   void dispose() {
     _tabController.dispose();
-    // 4. Clean up the controller and listener
     _controller.removeListener(_onRepertoireChanged);
     _controller.dispose();
+
+    // Tear down pool workers — they persist for the repertoire session
+    // and are only killed when leaving the repertoire builder.
+    MoveAnalysisPool().dispose();
+
     super.dispose();
   }
 
@@ -272,7 +277,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                           _buildOpeningTreeTab(),
                           _buildLinesTab(),
                           _buildPgnTab(),
-                          _buildEngineTab(),
+                          _KeepAliveTab(child: _buildEngineTab()),
                           _buildActionsTab(),
                         ],
                       ),
@@ -416,28 +421,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         currentMoveSequence: _controller.currentMoveSequence,
         isWhiteRepertoire: _controller.isRepertoireWhite,
         onMoveSelected: (uciMove) {
-          // Convert UCI (e2e4) to SAN for consistency
-          try {
-            final from = uciMove.substring(0, 2);
-            final to = uciMove.substring(2, 4);
-            String? promotion;
-            if (uciMove.length > 4) promotion = uciMove.substring(4);
-            
-            // We need to find the move in legal moves to get SAN
-            final moves = _controller.game.moves({ 'verbose': true });
-            // This is a list of maps. Find the matching one.
-            final match = moves.firstWhere((m) => 
-              m['from'] == from && 
-              m['to'] == to && 
-              (promotion == null || m['promotion'] == promotion),
-              orElse: () => null
-            );
-            
-            if (match != null) {
-              _controller.userPlayedMove(match['san']);
-            }
-          } catch (e) {
-            print('Error playing engine move: $e');
+          // Convert UCI (e2e4) to SAN using shared utility
+          final san = uciToSan(_controller.fen, uciMove);
+          if (san != uciMove) {
+            _controller.userPlayedMove(san);
           }
         },
       ),
@@ -889,5 +876,26 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         ],
       ),
     );
+  }
+}
+
+/// Wraps a child widget so [TabBarView] keeps it alive when off-screen.
+class _KeepAliveTab extends StatefulWidget {
+  final Widget child;
+  const _KeepAliveTab({required this.child});
+
+  @override
+  State<_KeepAliveTab> createState() => _KeepAliveTabState();
+}
+
+class _KeepAliveTabState extends State<_KeepAliveTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // required by AutomaticKeepAliveClientMixin
+    return widget.child;
   }
 }
