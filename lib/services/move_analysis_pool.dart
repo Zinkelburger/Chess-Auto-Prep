@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 
 import 'engine/stockfish_connection_factory.dart';
 import 'maia_factory.dart';
+import 'probability_service.dart';
 import 'engine/eval_worker.dart';
 import 'pool_resource_budget.dart';
 import '../models/engine_settings.dart';
@@ -50,6 +51,7 @@ class MoveAnalysisPool {
   int _targetMaxWorkers = 1;
 
   final Map<int, String> _workerCurrentMoves = {};
+  final ProbabilityService _probabilityService = ProbabilityService();
 
   // ── Public notifiers ──
   final ValueNotifier<DiscoveryResult> discoveryResult =
@@ -679,27 +681,58 @@ class MoveAnalysisPool {
     int depth,
     int generation,
   ) async {
-    if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
-      return null;
-    }
-    final maiaProbs = await MaiaFactory.instance!.evaluate(fen, 1900);
-    if (maiaProbs.isEmpty) return null;
-
-    final maxQ = scoreToQ(rootEval.effectiveCp);
-
-    final sorted = maiaProbs.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
     final candidates = <MapEntry<String, double>>[];
-    double cumulativeProb = 0.0;
-    for (final entry in sorted) {
-      if (entry.value < 0.01) continue;
-      candidates.add(entry);
-      cumulativeProb += entry.value;
-      if (cumulativeProb > 0.90) break;
+    final dbData = await _probabilityService.getProbabilitiesForFen(fen);
+    if (dbData != null && dbData.moves.isNotEmpty) {
+      final sortedDb = dbData.moves.toList()
+        ..sort((a, b) => b.probability.compareTo(a.probability));
+
+      double cumulativeProb = 0.0;
+      for (final move in sortedDb) {
+        if (move.uci.isEmpty) continue;
+        final prob = move.probability / 100.0;
+        if (prob < 0.01) continue;
+        candidates.add(MapEntry(move.uci, prob));
+        cumulativeProb += prob;
+        if (cumulativeProb > 0.90) break;
+      }
+
+      // Use DB only when every move in the selected probability mass has
+      // enough support (>50 games). Otherwise, fall back to Maia.
+      final hasReliableDbMass = candidates.isNotEmpty &&
+          candidates.every((entry) {
+            for (final move in sortedDb) {
+              if (move.uci == entry.key) return move.total > 50;
+            }
+            return false;
+          });
+      if (!hasReliableDbMass) {
+        candidates.clear();
+      }
     }
+
+    if (candidates.isEmpty) {
+      if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
+        return null;
+      }
+      final maiaProbs = await MaiaFactory.instance!.evaluate(fen, 1900);
+      if (maiaProbs.isEmpty) return null;
+
+      final sortedMaia = maiaProbs.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+      double cumulativeProb = 0.0;
+      for (final entry in sortedMaia) {
+        if (entry.value < 0.01) continue;
+        candidates.add(entry);
+        cumulativeProb += entry.value;
+        if (cumulativeProb > 0.90) break;
+      }
+    }
+
     if (candidates.isEmpty) return null;
 
+    final maxQ = scoreToQ(rootEval.effectiveCp);
     double sumWeightedRegret = 0.0;
     final game = chess.Chess.fromFEN(fen);
 
