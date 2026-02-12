@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:dartchess_webok/dartchess_webok.dart';
 import '../models/opening_tree.dart';
 import '../utils/fen_utils.dart';
+import 'lichess_auth_service.dart';
 
 /// Database types for Lichess Explorer
 enum LichessDatabase {
@@ -178,7 +179,8 @@ class CoverageService {
 
       try {
         final uri = Uri.parse(_baseUrl).replace(queryParameters: params);
-        final response = await http.get(uri);
+        final headers = await LichessAuthService().getHeaders();
+        final response = await http.get(uri, headers: headers);
 
         if (response.statusCode == 429) {
           // Rate limited - exponential backoff

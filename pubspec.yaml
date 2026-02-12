@@ -24,6 +24,7 @@ dependencies:
   # File handling and HTTP
   file_picker: ^6.1.1
   http: ^1.1.2
+  crypto: ^3.0.6  # SHA-256 for Lichess OAuth PKCE
   path_provider: ^2.1.1
   path_provider_linux: ^2.2.1
   flutter_svg: ^2.0.9

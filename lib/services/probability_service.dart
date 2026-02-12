@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:chess/chess.dart' as chess;
 
+import 'lichess_auth_service.dart';
+
 /// Stores probability data for a single move
 class MoveProbability {
   final String san;
@@ -150,7 +152,8 @@ class ProbabilityService {
           'ratings=$ratings&'
           'fen=$encodedFen';
 
-      final response = await http.get(Uri.parse(url));
+      final headers = await LichessAuthService().getHeaders();
+      final response = await http.get(Uri.parse(url), headers: headers);
 
       if (response.statusCode != 200) {
         throw Exception('Failed to fetch data: ${response.statusCode}');
@@ -333,7 +336,8 @@ class ProbabilityService {
           'ratings=$ratings&'
           'fen=$encodedFen';
 
-      final response = await http.get(Uri.parse(url));
+      final headers = await LichessAuthService().getHeaders();
+      final response = await http.get(Uri.parse(url), headers: headers);
 
       if (response.statusCode != 200) {
         return null;

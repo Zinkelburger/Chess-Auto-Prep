@@ -12,6 +12,10 @@ class ProcessConnection implements EngineConnection {
   StreamSubscription? _processSubscription;
   bool _isDisposed = false;
 
+  /// Cached resolved path — avoids repeated file-existence checks and
+  /// platform-channel calls for every worker spawn.
+  static String? _cachedPath;
+
   ProcessConnection._();
 
   static Future<ProcessConnection> create() async {
@@ -22,10 +26,15 @@ class ProcessConnection implements EngineConnection {
 
   /// Resolve the Stockfish binary path, extracting from assets if needed.
   ///
+  /// The result is cached after the first successful call so subsequent
+  /// workers skip the platform channel and file-system checks entirely.
+  ///
   /// Must be called from the main isolate (uses platform channels for
   /// asset loading and path resolution). Worker isolates should receive
   /// the resolved path string instead of calling this directly.
   static Future<String> resolveExecutablePath() async {
+    if (_cachedPath != null) return _cachedPath!;
+
     String binaryName;
     if (Platform.isWindows) {
       binaryName = 'stockfish-windows.exe';
@@ -55,7 +64,8 @@ class ProcessConnection implements EngineConnection {
       }
     }
 
-    return file.path;
+    _cachedPath = file.path;
+    return _cachedPath!;
   }
 
   Future<void> _init() async {

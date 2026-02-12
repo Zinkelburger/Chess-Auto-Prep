@@ -27,8 +27,9 @@ int defaultHashMb() {
   return half < 64 ? 64 : half;
 }
 
-/// Suggested default parallel worker count (half of cores, 1–8 range).
+/// Suggested default parallel worker count (half of logical cores, floor 1).
 int defaultWorkerCount() {
   final cores = getLogicalCores();
-  return (cores ~/ 2).clamp(1, 8);
+  final half = cores ~/ 2;
+  return half < 1 ? 1 : half;
 }

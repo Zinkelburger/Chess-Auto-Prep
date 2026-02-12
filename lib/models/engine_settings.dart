@@ -9,36 +9,28 @@ class EngineSettings with ChangeNotifier {
 
   /// Maximum number of parallel Stockfish workers (each uses 1 thread).
   ///
-  /// This is a **cap** — the pool dynamically determines the actual count
-  /// from live CPU / RAM headroom and will never exceed this value.
-  int _cores = _defaultCores;
-  int get cores => _cores;
-  set cores(int value) {
-    if (value != _cores && value >= 1 && value <= 32) {
-      _cores = value;
-      notifyListeners();
-    }
-  }
+  /// Always reserves 2 cores: 1 for the host OS and 1 for the Flutter
+  /// UI / main isolate.  The pool further constrains the *actual* count
+  /// from live RAM headroom at spawn time, so this is a **ceiling**.
+  int get cores => (systemCores - 2).clamp(1, systemCores);
 
-  /// Maximum Stockfish hash budget in MB (cap per worker).
+  /// Maximum Stockfish hash budget in MB, derived from [maxSystemLoad]%
+  /// of total system RAM.
   ///
-  /// The pool computes a dynamic hash per worker from actual free RAM.
-  /// This value acts as a **ceiling** — no worker will receive more than
-  /// `hashMb / (cores + 1)` even when plenty of RAM is available.
-  int _hashMb = _defaultHashMb;
-  int get hashMb => _hashMb;
-  set hashMb(int value) {
-    if (value != _hashMb && value >= 64 && value <= systemRamMb) {
-      _hashMb = value;
-      notifyListeners();
-    }
-  }
+  /// The pool computes a dynamic hash per worker from actual free RAM;
+  /// this value acts as an absolute **ceiling**.
+  int get hashMb =>
+      ((systemRamMb * _maxSystemLoad) ~/ 100).clamp(64, systemRamMb);
 
-  /// Maximum hash allocated per worker = total / (workers + 1 for MultiPV engine).
-  /// The pool may assign less based on available RAM.
+  /// Per-worker hash ceiling = total budget / (workers + 1).
+  ///
+  /// The extra +1 reserves a share for the interactive analysis engine
+  /// that runs alongside the pool.  The pool may assign *less* based on
+  /// live RAM headroom.
   int get hashPerWorker {
-    final totalInstances = _cores + 1; // workers + MultiPV engine
-    return (_hashMb / totalInstances).floor().clamp(16, _hashMb);
+    final c = cores;
+    if (c <= 0) return hashMb;
+    return (hashMb / (c + 1)).floor().clamp(16, hashMb);
   }
 
   int _depth = 20;
@@ -53,7 +45,7 @@ class EngineSettings with ChangeNotifier {
   /// Depth used for ease sub-evaluations (each Maia candidate move).
   /// Lower than [depth] because ease evaluates multiple positions per move,
   /// so the cost multiplies quickly.
-  int _easeDepth = 12;
+  int _easeDepth = 18;
   int get easeDepth => _easeDepth;
   set easeDepth(int value) {
     if (value != _easeDepth && value >= 1 && value <= 99) {
@@ -75,9 +67,9 @@ class EngineSettings with ChangeNotifier {
   ///
   /// RAM headroom = `maxSystemLoad% × totalRam − usedRam`.
   /// CPU budget = cores whose load stays below this threshold.
-  /// Workers are spawned one at a time; both budgets are rechecked before
-  /// each spawn so the pool never drives the system above this ceiling.
-  int _maxSystemLoad = 80;
+  /// Workers are spawned in parallel; the budget is computed upfront so
+  /// the pool never drives the system above this ceiling.
+  int _maxSystemLoad = 90;
   int get maxSystemLoad => _maxSystemLoad;
   set maxSystemLoad(int value) {
     if (value != _maxSystemLoad && value >= 50 && value <= 100) {
@@ -158,15 +150,12 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
-  // ── Singleton + smart defaults ────────────────────────────────────────
+  // ── Singleton + system detection ─────────────────────────────────────
 
-  static final int _defaultCores = defaultWorkerCount();
-  static final int _defaultHashMb = defaultHashMb();
-
-  /// Detected system RAM in MB (for display in settings UI).
+  /// Detected system RAM in MB.
   static final int systemRamMb = getSystemRamMb();
 
-  /// Detected logical cores (for display in settings UI).
+  /// Detected logical CPU cores.
   static final int systemCores = getLogicalCores();
 
   static final EngineSettings _instance = EngineSettings._internal();
@@ -175,13 +164,11 @@ class EngineSettings with ChangeNotifier {
 
   /// Reset all settings to defaults
   void resetToDefaults() {
-    _cores = _defaultCores;
-    _hashMb = _defaultHashMb;
     _depth = 20;
-    _easeDepth = 12;
+    _easeDepth = 18;
     _multiPv = 3;
     _maxAnalysisMoves = 8;
-    _maxSystemLoad = 80;
+    _maxSystemLoad = 90;
     _showStockfish = true;
     _showMaia = true;
     _showEase = true;

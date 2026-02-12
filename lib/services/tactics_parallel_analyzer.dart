@@ -17,7 +17,7 @@ import 'package:dartchess_webok/dartchess_webok.dart';
 import 'package:chess/chess.dart' as chess;
 
 import '../models/tactics_position.dart';
-import 'process_connection.dart';
+import 'engine/process_connection.dart';
 
 // ════════════════════════════════════════════════════════════════
 // Public API (called from main isolate)
@@ -53,11 +53,11 @@ Future<List<TacticsPosition>> analyzeGamesParallel({
 
   // Determine worker count.
   // If maxCores is specified by the user, respect it (clamped to safe range).
-  // Otherwise, leave 1 core for the main isolate, cap at 8.
+  // Otherwise, leave 1 core for the main isolate.
   final coreLimit = maxCores ?? math.max(1, Platform.numberOfProcessors - 1);
   final numWorkers = math.min(
     coreLimit.clamp(1, Platform.numberOfProcessors),
-    math.min(8, gameTasks.length),
+    gameTasks.length,
   );
 
   progressCallback?.call(

@@ -7,8 +7,9 @@ import 'package:flutter/foundation.dart';
 import '../models/tactics_position.dart';
 import '../models/engine_settings.dart';
 import 'package:chess_auto_prep/models/engine_evaluation.dart';
-import 'stockfish_service.dart';
+import 'engine/stockfish_service.dart';
 import 'tactics_database.dart';
+import 'lichess_auth_service.dart';
 import 'storage/storage_factory.dart';
 import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart' as parallel;
@@ -74,7 +75,10 @@ class TacticsImportService {
     
     try {
       progressCallback?.call('Downloading games from Lichess...');
-      final response = await http.get(url, headers: {'Accept': 'application/x-chess-pgn'});
+      final headers = await LichessAuthService().getHeaders(
+        {'Accept': 'application/x-chess-pgn'},
+      );
+      final response = await http.get(url, headers: headers);
       
       if (response.statusCode == 200) {
         // Save the raw PGNs first

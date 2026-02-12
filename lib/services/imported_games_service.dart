@@ -2,6 +2,8 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart';
 
+import 'lichess_auth_service.dart';
+
 class ImportedGamesService {
   static const String _lichessBase = 'https://lichess.org';
   static const String _apiBase = 'https://lichess.org/api/games/export/_ids';
@@ -87,10 +89,10 @@ class ImportedGamesService {
 
     progressCallback?.call('Preparing to download ${gameIds.length} games with evaluations...');
 
-    final Map<String, String> headers = {
+    final Map<String, String> headers = await LichessAuthService().getHeaders({
       'Content-Type': 'text/plain',
       'Accept': 'application/x-chess-pgn',
-    };
+    });
 
     final StringBuffer allPgns = StringBuffer();
 
