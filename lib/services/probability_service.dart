@@ -213,6 +213,25 @@ class ProbabilityService {
     }
   }
 
+  /// Fetch probabilities for an arbitrary FEN without mutating current UI state.
+  ///
+  /// This is intended for background analysis (e.g. per-move ease computation),
+  /// where callers need database frequencies but should not overwrite
+  /// [currentPosition].
+  Future<PositionProbabilities?> getProbabilitiesForFen(
+    String fen, {
+    String variant = 'standard',
+    String speeds = 'rapid,classical',
+    String ratings = '1800,2000,2200,2500',
+  }) {
+    return _fetchProbabilitiesInternal(
+      fen,
+      variant: variant,
+      speeds: speeds,
+      ratings: ratings,
+    );
+  }
+
   /// Calculate cumulative probability for a move sequence
   /// Only opponent moves count against the probability
   Future<double> calculateCumulativeProbability(
