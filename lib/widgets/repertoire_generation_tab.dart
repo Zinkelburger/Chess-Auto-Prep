@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../models/engine_settings.dart';
 import '../services/repertoire_generation_service.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
@@ -30,6 +31,7 @@ class RepertoireGenerationTab extends StatefulWidget {
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final RepertoireGenerationService _service = RepertoireGenerationService();
+  final EngineSettings _engineSettings = EngineSettings();
 
   final TextEditingController _cutoffCtrl = TextEditingController(text: '0.001');
   final TextEditingController _depthCtrl = TextEditingController(text: '15');
@@ -40,6 +42,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   late final TextEditingController _maxEvalCtrl;
   final TextEditingController _alphaCtrl = TextEditingController(text: '0.35');
   final TextEditingController _maiaEloCtrl = TextEditingController(text: '2100');
+  late final TextEditingController _coresCtrl;
+  late final TextEditingController _maxLoadCtrl;
 
   GenerationStrategy _strategy = GenerationStrategy.metaEval;
   bool _isGenerating = false;
@@ -58,6 +62,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _maxEvalCtrl = TextEditingController(
       text: widget.isWhiteRepertoire ? '200' : '100',
     );
+    final defaultCores = (_engineSettings.cores ~/ 2).clamp(1, _engineSettings.cores);
+    _coresCtrl = TextEditingController(text: '$defaultCores');
+    _maxLoadCtrl = TextEditingController(text: '${_engineSettings.maxSystemLoad}');
   }
 
   @override
@@ -71,6 +78,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _maxEvalCtrl.dispose();
     _alphaCtrl.dispose();
     _maiaEloCtrl.dispose();
+    _coresCtrl.dispose();
+    _maxLoadCtrl.dispose();
     super.dispose();
   }
 
@@ -112,6 +121,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       maxCandidates: 8,
     );
 
+    final maxLoad = (int.tryParse(_maxLoadCtrl.text.trim()) ?? 80).clamp(50, 100);
+    _engineSettings.maxSystemLoad = maxLoad;
+    final cores = (int.tryParse(_coresCtrl.text.trim()) ?? 1).clamp(1, EngineSettings.systemCores);
+
     setState(() {
       _isGenerating = true;
       _cancelRequested = false;
@@ -126,6 +139,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       await _service.generate(
         config: config,
         strategy: _strategy,
+        workerCount: cores,
         isCancelled: () => _cancelRequested,
         onProgress: (p) {
           if (!mounted) return;
@@ -137,12 +151,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           });
         },
         onLine: (line) async {
-          // Use the service's counter (reported via onProgress) as
-          // the authoritative line count. Don't double-increment.
           final idx = _lines + 1;
           final title = 'Generated Line $idx';
+          final fullMoves = [...widget.currentMoveSequence, ...line.movesSan];
           final pgn = _buildPgnEntry(
-            moves: line.movesSan,
+            moves: fullMoves,
             title: title,
             cumulativeProb: line.cumulativeProbability,
             finalEvalWhiteCp: line.finalEvalWhiteCp,
@@ -155,7 +168,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             flush: true,
           );
 
-          widget.onLineSaved(line.movesSan, title, pgn);
+          widget.onLineSaved(fullMoves, title, pgn);
           if (!mounted) return;
           setState(() {
             _status = 'Saved line $idx';
@@ -241,6 +254,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             spacing: 8,
             runSpacing: 8,
             children: [
+              _numField(_coresCtrl, 'Cores'),
+              _numField(_maxLoadCtrl, 'Max Load %'),
               _numField(_cutoffCtrl, 'Cum Prob Cutoff'),
               _numField(_depthCtrl, 'Max Depth Ply'),
               _numField(_opponentMassCtrl, 'Opp Mass'),
