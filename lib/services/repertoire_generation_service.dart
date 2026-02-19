@@ -35,7 +35,6 @@ class RepertoireGenerationConfig {
   final int maxDepthPly;
   final int engineDepth;
   final int easeDepth;
-  final int maxLines;
   final int engineTopK;
   final int maxCandidates;
   final int maxEvalLossCp;
@@ -52,7 +51,6 @@ class RepertoireGenerationConfig {
     this.maxDepthPly = 15,
     this.engineDepth = 20,
     this.easeDepth = 18,
-    this.maxLines = 64,
     this.engineTopK = 3,
     this.maxCandidates = 8,
     this.maxEvalLossCp = 50,
@@ -256,7 +254,7 @@ class RepertoireGenerationService {
         final nodeEase = await _computeNodeEase(pool, fen, config.easeDepth, maiaElo: config.maiaElo);
         metaEase = 1.0 - (nodeEase ?? 0.5);
       }
-      if (emitLines && lineSan.isNotEmpty && _linesGenerated < config.maxLines) {
+      if (emitLines && lineSan.isNotEmpty) {
         _linesGenerated++;
         await onLine(GeneratedLine(
           movesSan: lineSan,
@@ -458,7 +456,6 @@ class RepertoireGenerationService {
     double future = 0.0;
     for (int j = 0; j < childFens.length; j++) {
       if (isCancelled()) break;
-      if (emitLines && _linesGenerated >= config.maxLines) break;
 
       final idx = validIndices[j];
       final prob = normalizedMoves[idx].probability;
