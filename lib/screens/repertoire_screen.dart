@@ -94,12 +94,47 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       if (_controller.currentRepertoire != null && !_controller.isLoading) {
         final currentId = _controller.currentRepertoire!['filePath'] as String?;
         if (currentId != null && currentId != _lastRepertoireId) {
-          // New repertoire loaded - set orientation based on color
           _lastRepertoireId = currentId;
-          _boardFlipped = !_controller.isRepertoireWhite; // Flip for Black repertoires
+          _boardFlipped = !_controller.isRepertoireWhite;
+        }
+
+        if (_controller.needsColorSelection) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _showColorSelectionDialog();
+          });
         }
       }
     });
+  }
+
+  Future<void> _showColorSelectionDialog() async {
+    final name = _controller.currentRepertoire?['name'] ?? 'this repertoire';
+    final isWhite = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Which color is this repertoire for?'),
+        content: Text(
+          '"$name" doesn\'t have a color set yet. '
+          'This will be saved so you won\'t be asked again.',
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.pop(context, false),
+            icon: const Icon(Icons.circle, color: Colors.black),
+            label: const Text('Black'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.circle_outlined),
+            label: const Text('White'),
+          ),
+        ],
+      ),
+    );
+    if (isWhite != null) {
+      await _controller.setRepertoireColor(isWhite);
+    }
   }
 
   @override
@@ -457,6 +492,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       fen: _controller.fen,
       isWhiteRepertoire: _controller.isRepertoireWhite,
       currentRepertoire: _controller.currentRepertoire,
+      currentMoveSequence: _controller.currentMoveSequence,
       onGeneratingChanged: (generating) {
         if (!mounted) return;
         setState(() {

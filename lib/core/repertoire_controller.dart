@@ -36,6 +36,9 @@ class RepertoireController with ChangeNotifier {
   bool _isRepertoireWhite = true;
   bool get isRepertoireWhite => _isRepertoireWhite;
 
+  bool _needsColorSelection = false;
+  bool get needsColorSelection => _needsColorSelection;
+
   /// The canonical move history - source of truth for position.
   List<String> _moveHistory = [];
   List<String> get moveHistory => List.unmodifiable(_moveHistory);
@@ -227,6 +230,20 @@ class RepertoireController with ChangeNotifier {
     await loadRepertoire();
   }
 
+  /// Writes the color header to the PGN file and reloads.
+  Future<void> setRepertoireColor(bool isWhite) async {
+    if (_currentRepertoire == null) return;
+    final filePath = _currentRepertoire!['filePath'] as String;
+    final file = io.File(filePath);
+    if (!await file.exists()) return;
+
+    final colorLabel = isWhite ? 'White' : 'Black';
+    final existing = await file.readAsString();
+    await file.writeAsString('// Color: $colorLabel\n$existing');
+    _needsColorSelection = false;
+    await loadRepertoire();
+  }
+
   /// (Re)loads the PGN content for the current repertoire.
   Future<void> loadRepertoire() async {
     if (_currentRepertoire == null) return;
@@ -311,6 +328,7 @@ class RepertoireController with ChangeNotifier {
         }
       }
 
+      _needsColorSelection = repertoireColor == null;
       final isWhiteRepertoire = repertoireColor != 'Black';
       _isRepertoireWhite = isWhiteRepertoire;
 

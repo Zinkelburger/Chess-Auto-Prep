@@ -10,6 +10,7 @@ class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
   final bool isWhiteRepertoire;
   final Map<String, dynamic>? currentRepertoire;
+  final List<String> currentMoveSequence;
   final void Function(bool generating) onGeneratingChanged;
   final void Function(List<String> moves, String title, String pgn) onLineSaved;
 
@@ -18,6 +19,7 @@ class RepertoireGenerationTab extends StatefulWidget {
     required this.fen,
     required this.isWhiteRepertoire,
     required this.currentRepertoire,
+    required this.currentMoveSequence,
     required this.onGeneratingChanged,
     required this.onLineSaved,
   });
@@ -33,7 +35,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final TextEditingController _depthCtrl = TextEditingController(text: '15');
   final TextEditingController _opponentMassCtrl = TextEditingController(text: '0.80');
   final TextEditingController _engineDepthCtrl = TextEditingController(text: '20');
-  final TextEditingController _lineCapCtrl = TextEditingController(text: '64');
   final TextEditingController _evalGuardCtrl = TextEditingController(text: '50');
   late final TextEditingController _minEvalCtrl;
   late final TextEditingController _maxEvalCtrl;
@@ -65,7 +66,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _depthCtrl.dispose();
     _opponentMassCtrl.dispose();
     _engineDepthCtrl.dispose();
-    _lineCapCtrl.dispose();
     _evalGuardCtrl.dispose();
     _minEvalCtrl.dispose();
     _maxEvalCtrl.dispose();
@@ -101,7 +101,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       maxDepthPly: int.tryParse(_depthCtrl.text.trim()) ?? 15,
       opponentMassTarget: double.tryParse(_opponentMassCtrl.text.trim()) ?? 0.80,
       engineDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
-      maxLines: int.tryParse(_lineCapCtrl.text.trim()) ?? 64,
       maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 50,
       minEvalCpForUs: int.tryParse(_minEvalCtrl.text.trim()) ??
           (widget.isWhiteRepertoire ? 0 : -200),
@@ -232,6 +231,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         children: [
           Text('Auto Repertoire Generation',
               style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          Text(
+            'Starting position: ${widget.currentMoveSequence.isEmpty ? 'Initial position' : _movesToPgnMoveText(widget.currentMoveSequence)}',
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
+          ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -241,7 +245,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               _numField(_depthCtrl, 'Max Depth Ply'),
               _numField(_opponentMassCtrl, 'Opp Mass'),
               _numField(_engineDepthCtrl, 'Engine Depth'),
-              _numField(_lineCapCtrl, 'Max Lines'),
               _numField(_evalGuardCtrl, 'Max Eval Loss (cp)'),
               _numField(_minEvalCtrl, 'Min Eval For Us (cp)'),
               _numField(_maxEvalCtrl, 'Max Eval For Us (cp)'),
