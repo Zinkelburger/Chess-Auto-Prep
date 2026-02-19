@@ -28,50 +28,89 @@ class AnalysisGamesService {
 
   // ── Downloads ──────────────────────────────────────────────────────
 
+  /// Fetch the list of monthly archive URLs from Chess.com.
+  ///
+  /// Returns the URLs in chronological order (oldest first), or an empty
+  /// list if the player has no archives.
+  Future<List<String>> _fetchChesscomArchives(String username) async {
+    final url = Uri.parse(
+      'https://api.chess.com/pub/player/${username.toLowerCase()}'
+      '/games/archives',
+    );
+    final response = await http.get(url);
+    if (response.statusCode != 200) return [];
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return List<String>.from(data['archives'] as List);
+  }
+
   /// Download games from Chess.com, excluding bullet.
   ///
+  /// Uses the Chess.com archives endpoint to discover which months actually
+  /// have games, avoiding wasted requests to empty months and reliably
+  /// finding games for inactive players.
+  ///
   /// Two modes controlled by [monthsBack]:
-  ///   • `null` (game-count mode) – walk backwards up to 24 months, stop at
-  ///     [maxGames] non-bullet games.
-  ///   • non-null (months mode) – fetch exactly [monthsBack] calendar months,
-  ///     collecting every non-bullet game found.
+  ///   • `null` (game-count mode) – walk backwards through every available
+  ///     archive, stop at [maxGames] non-bullet games.
+  ///   • non-null (months mode) – fetch only archives that fall within the
+  ///     last [monthsBack] calendar months.
   Future<String> downloadChesscomGames(
     String username, {
     int maxGames = 100,
     int? monthsBack,
     void Function(String)? onProgress,
   }) async {
-    onProgress?.call('Fetching Chess.com games for $username…');
+    onProgress?.call('Fetching Chess.com game archives for $username…');
+
+    // Fetch the list of months that actually have games.
+    final archives = await _fetchChesscomArchives(username);
+    if (archives.isEmpty) {
+      onProgress?.call('No game archives found for $username');
+      return '';
+    }
 
     final now = DateTime.now();
     final allGames = <String>[];
-    int currentYear = now.year;
-    int currentMonth = now.month;
 
-    final totalMonths = monthsBack ?? 24;
+    // In months mode, compute the earliest allowed archive date.
+    // E.g. monthsBack=6 and now=2026-02 → cutoff = 2025-09.
+    DateTime? cutoff;
+    if (monthsBack != null) {
+      cutoff = DateTime(now.year, now.month - monthsBack + 1);
+    }
 
-    for (int i = 0; i < totalMonths; i++) {
+    // Walk backwards from the most recent archive.
+    for (int i = archives.length - 1; i >= 0; i--) {
       // In game-count mode, stop once we have enough.
       if (monthsBack == null && allGames.length >= maxGames) break;
 
-      final monthStr = currentMonth.toString().padLeft(2, '0');
-      final url =
-          'https://api.chess.com/pub/player/${username.toLowerCase()}'
-          '/games/$currentYear/$monthStr/pgn';
+      // In months mode, skip archives outside the requested date range.
+      if (cutoff != null) {
+        // Parse year/month from the archive URL (e.g. .../games/2025/07).
+        final parts = archives[i].split('/');
+        if (parts.length >= 2) {
+          final year = int.tryParse(parts[parts.length - 2]);
+          final month = int.tryParse(parts[parts.length - 1]);
+          if (year != null && month != null) {
+            if (DateTime(year, month).isBefore(cutoff)) break;
+          }
+        }
+      }
 
       if (monthsBack != null) {
         onProgress?.call(
-          'Fetching $currentYear-$monthStr… '
-          '(month ${i + 1}/$monthsBack, ${allGames.length} games)',
+          'Fetching archive ${archives.length - i}… '
+          '(${allGames.length} games so far)',
         );
       } else {
         onProgress?.call(
-          'Fetching $currentYear-$monthStr… (${allGames.length}/$maxGames)',
+          'Fetching archive ${archives.length - i}… '
+          '(${allGames.length}/$maxGames)',
         );
       }
 
       try {
-        final response = await http.get(Uri.parse(url));
+        final response = await http.get(Uri.parse('${archives[i]}/pgn'));
         if (response.statusCode == 200 && response.body.isNotEmpty) {
           for (final game in splitPgnIntoGames(response.body)) {
             if (monthsBack == null && allGames.length >= maxGames) break;
@@ -79,13 +118,7 @@ class AnalysisGamesService {
           }
         }
       } catch (e) {
-        onProgress?.call('Error fetching $currentYear-$monthStr: $e');
-      }
-
-      currentMonth--;
-      if (currentMonth == 0) {
-        currentMonth = 12;
-        currentYear--;
+        onProgress?.call('Error fetching archive: $e');
       }
 
       // Be polite to the API.

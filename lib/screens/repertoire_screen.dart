@@ -16,6 +16,7 @@ import '../widgets/coverage_calculator_widget.dart';
 import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/opening_tree_widget.dart';
 import '../widgets/repertoire_lines_browser.dart';
+import '../widgets/repertoire_generation_tab.dart';
 import '../widgets/unified_engine_pane.dart';
 import 'repertoire_selection_screen.dart';
 import 'repertoire_training_screen.dart';
@@ -37,6 +38,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   late final RepertoireController _controller;
   late final TabController _tabController;
   final PgnEditorController _pgnEditorController = PgnEditorController();
+  final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
+      GlobalKey<RepertoireGenerationTabState>();
+  bool _isGenerating = false;
   
   // Board orientation - true = Black's perspective (board flipped)
   bool _boardFlipped = false;
@@ -47,11 +51,25 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _tabController.addListener(() {
-      if (_tabController.indexIsChanging || _tabController.animation?.value == _tabController.index) {
-        setState(() {});
+      final settled = _tabController.indexIsChanging ||
+          _tabController.animation?.value == _tabController.index;
+      if (!settled) return;
+
+      // Engine tab selected while generating -> stop generation first.
+      if (_tabController.index == 3 && _isGenerating) {
+        _generationTabKey.currentState?.cancelGeneration(
+          reason: 'Generation paused because Engine tab was opened.',
+        );
       }
+
+      // Leaving engine tab -> hard-cancel engine pool to avoid overlap.
+      if (_tabController.index != 3) {
+        MoveAnalysisPool().cancel();
+      }
+
+      setState(() {});
     });
 
     // 1. Initialize the controller
@@ -266,6 +284,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                         Tab(text: 'Lines', icon: Icon(Icons.library_books, size: 16)),
                         Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
                         Tab(text: 'Engine', icon: Icon(Icons.developer_board, size: 16)),
+                        Tab(text: 'Generate', icon: Icon(Icons.auto_awesome, size: 16)),
                         Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
                       ],
                     ),
@@ -278,6 +297,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                           _buildLinesTab(),
                           _buildPgnTab(),
                           _KeepAliveTab(child: _buildEngineTab()),
+                          _KeepAliveTab(child: _buildGenerateTab()),
                           _buildActionsTab(),
                         ],
                       ),
@@ -416,7 +436,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       padding: const EdgeInsets.all(8.0),
       child: UnifiedEnginePane(
         fen: _controller.fen,
-        isActive: true, // Always analyze — even when on other tabs
+        isActive: _tabController.index == 3 && !_isGenerating,
         isUserTurn: _controller.game.turn == (_controller.isRepertoireWhite ? chess.Color.WHITE : chess.Color.BLACK),
         currentMoveSequence: _controller.currentMoveSequence,
         isWhiteRepertoire: _controller.isRepertoireWhite,
@@ -428,6 +448,24 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           }
         },
       ),
+    );
+  }
+
+  Widget _buildGenerateTab() {
+    return RepertoireGenerationTab(
+      key: _generationTabKey,
+      fen: _controller.fen,
+      isWhiteRepertoire: _controller.isRepertoireWhite,
+      currentRepertoire: _controller.currentRepertoire,
+      onGeneratingChanged: (generating) {
+        if (!mounted) return;
+        setState(() {
+          _isGenerating = generating;
+        });
+      },
+      onLineSaved: (moves, title, pgn) {
+        _controller.appendNewLine(moves, title, pgn);
+      },
     );
   }
   
