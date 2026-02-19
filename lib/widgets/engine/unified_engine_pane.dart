@@ -580,55 +580,34 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         _probabilityService.currentPosition,
       ]),
       builder: (context, _) {
-        final ps = _pool.poolStatus.value;
-
-        // Show loading if nothing is ready yet
-        if (ps.isIdle &&
-            _maiaProbs == null &&
-            _probabilityService.currentPosition.value == null) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Initializing analysis...',
-                    style: TextStyle(color: Colors.grey, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-
         final moves = _mergeMoves();
-
-        if (moves.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          );
-        }
 
         return ListView(
           padding: const EdgeInsets.only(top: 4, bottom: 4),
           children: [
             _buildTableHeader(),
             const Divider(height: 1),
-            ...moves.map(_buildMoveRow),
+            if (moves.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 1.5),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Analyzing...',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...moves.map(_buildMoveRow),
           ],
         );
       },
@@ -687,7 +666,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
               width: 46,
               child: Tooltip(
                 message:
-                    'Ease from your perspective\n'
+                    'Ease from your perspective (0–5 scale)\n'
                     'Higher = better for you',
                 child: Text('EASE',
                     style: headerStyle, textAlign: TextAlign.right),
@@ -715,8 +694,11 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     final fenParts = widget.fen.split(' ');
     final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
     final isPlayerTurn = (isWhiteToMove == widget.isWhiteRepertoire);
-    final displayEase = move.moveEase != null
+    final rawDisplayEase = move.moveEase != null
         ? (isPlayerTurn ? 1.0 - move.moveEase! : move.moveEase!)
+        : null;
+    final displayEase = rawDisplayEase != null
+        ? rawDisplayEase * kEaseDisplayScale
         : null;
 
     return InkWell(
@@ -809,7 +791,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                 width: 46,
                 child: Text(
                   displayEase != null
-                      ? displayEase.toStringAsFixed(2)
+                      ? displayEase.toStringAsFixed(1)
                       : '--',
                   textAlign: TextAlign.right,
                   style: TextStyle(

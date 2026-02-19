@@ -35,9 +35,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final TextEditingController _engineDepthCtrl = TextEditingController(text: '20');
   final TextEditingController _lineCapCtrl = TextEditingController(text: '64');
   final TextEditingController _evalGuardCtrl = TextEditingController(text: '50');
-  final TextEditingController _minEvalCtrl = TextEditingController(text: '0');
-  final TextEditingController _maxEvalCtrl = TextEditingController(text: '200');
+  late final TextEditingController _minEvalCtrl;
+  late final TextEditingController _maxEvalCtrl;
   final TextEditingController _alphaCtrl = TextEditingController(text: '0.35');
+  final TextEditingController _maiaEloCtrl = TextEditingController(text: '2100');
 
   GenerationStrategy _strategy = GenerationStrategy.metaEval;
   bool _isGenerating = false;
@@ -46,6 +47,17 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   int _nodes = 0;
   int _lines = 0;
   int _depth = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _minEvalCtrl = TextEditingController(
+      text: widget.isWhiteRepertoire ? '0' : '-200',
+    );
+    _maxEvalCtrl = TextEditingController(
+      text: widget.isWhiteRepertoire ? '200' : '100',
+    );
+  }
 
   @override
   void dispose() {
@@ -58,6 +70,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _minEvalCtrl.dispose();
     _maxEvalCtrl.dispose();
     _alphaCtrl.dispose();
+    _maiaEloCtrl.dispose();
     super.dispose();
   }
 
@@ -89,10 +102,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       opponentMassTarget: double.tryParse(_opponentMassCtrl.text.trim()) ?? 0.80,
       engineDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
       maxLines: int.tryParse(_lineCapCtrl.text.trim()) ?? 64,
-      evalGuardCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 50,
-      minEvalCpForUs: int.tryParse(_minEvalCtrl.text.trim()) ?? 0,
-      maxEvalCpForUs: int.tryParse(_maxEvalCtrl.text.trim()) ?? 200,
+      maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 50,
+      minEvalCpForUs: int.tryParse(_minEvalCtrl.text.trim()) ??
+          (widget.isWhiteRepertoire ? 0 : -200),
+      maxEvalCpForUs: int.tryParse(_maxEvalCtrl.text.trim()) ??
+          (widget.isWhiteRepertoire ? 200 : 100),
       metaAlpha: double.tryParse(_alphaCtrl.text.trim()) ?? 0.35,
+      maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2100,
       engineTopK: 3,
       maxCandidates: 8,
     );
@@ -226,10 +242,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               _numField(_opponentMassCtrl, 'Opp Mass'),
               _numField(_engineDepthCtrl, 'Engine Depth'),
               _numField(_lineCapCtrl, 'Max Lines'),
-              _numField(_evalGuardCtrl, 'Eval Guard (cp)'),
+              _numField(_evalGuardCtrl, 'Max Eval Loss (cp)'),
               _numField(_minEvalCtrl, 'Min Eval For Us (cp)'),
               _numField(_maxEvalCtrl, 'Max Eval For Us (cp)'),
               _numField(_alphaCtrl, 'Meta Alpha'),
+              _numField(_maiaEloCtrl, 'Maia Elo'),
             ],
           ),
           const SizedBox(height: 8),

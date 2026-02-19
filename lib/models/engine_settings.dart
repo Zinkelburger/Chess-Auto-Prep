@@ -141,10 +141,10 @@ class EngineSettings with ChangeNotifier {
 
   // ── Maia ELO setting ──────────────────────────────────────────────────
 
-  int _maiaElo = 1900;
+  int _maiaElo = 2100;
   int get maiaElo => _maiaElo;
   set maiaElo(int value) {
-    if (value != _maiaElo && value >= 1100 && value <= 1900) {
+    if (value != _maiaElo && value >= 1100 && value <= 2100) {
       _maiaElo = value;
       notifyListeners();
     }
@@ -174,7 +174,7 @@ class EngineSettings with ChangeNotifier {
     _showEase = true;
     _showProbability = true;
     _probabilityStartMoves = '';
-    _maiaElo = 1900;
+    _maiaElo = 2100;
     notifyListeners();
   }
 }

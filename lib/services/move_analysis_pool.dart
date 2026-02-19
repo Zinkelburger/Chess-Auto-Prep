@@ -27,7 +27,8 @@ import '../utils/chess_utils.dart' show playUciMove;
 // statements continue to resolve DiscoveryResult, MoveAnalysisResult, etc.
 export '../models/analysis/discovery_result.dart';
 export '../models/analysis/move_analysis_result.dart';
-export '../utils/ease_utils.dart' show scoreToQ, kEaseAlpha, kEaseBeta;
+export '../utils/ease_utils.dart'
+    show scoreToQ, kEaseAlpha, kEaseBeta, kEaseDisplayScale;
 
 // ── Worker Pool ──────────────────────────────────────────────────────────
 
