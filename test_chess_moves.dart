@@ -1,9 +1,9 @@
-import 'package:chess/chess.dart';
+import 'package:dartchess/dartchess.dart';
 
 void main() {
-  print('=== TESTING CHESS LIBRARY MOVE FORMATS ===');
+  print('=== TESTING DARTCHESS LIBRARY MOVE FORMATS ===');
 
-  final chess = Chess();
+  Position pos = Chess.initial;
 
   // Test standard opening moves
   final testMoves = [
@@ -12,24 +12,23 @@ void main() {
 
   print('Testing moves in sequence:');
   for (int i = 0; i < testMoves.length; i++) {
-    final move = testMoves[i];
-    final currentTurn = chess.turn == Color.WHITE ? 'White' : 'Black';
+    final san = testMoves[i];
+    final currentTurn = pos.turn == Side.white ? 'White' : 'Black';
 
-    print('${i+1}. $currentTurn to play: "$move"');
+    print('${i+1}. $currentTurn to play: "$san"');
 
     try {
-      final result = chess.move(move);
-      if (result) {
+      final move = pos.parseSan(san);
+      if (move != null) {
+        pos = pos.play(move);
         print('   ✅ SUCCESS');
-        print('   Position after: ${chess.fen}');
+        print('   Position after: ${pos.fen}');
       } else {
         print('   ❌ FAILED - Invalid move');
-        print('   Legal moves: ${chess.moves().take(10).join(', ')}...');
         break;
       }
     } catch (e) {
       print('   💥 EXCEPTION: $e');
-      print('   Legal moves: ${chess.moves().take(10).join(', ')}...');
       break;
     }
     print('');
@@ -37,43 +36,25 @@ void main() {
 
   // Test different move formats for the same capture
   print('\n=== TESTING CAPTURE FORMATS ===');
-  final chess2 = Chess();
-  chess2.move('e4');
-  chess2.move('d5');
-  chess2.move('exd5'); // Set up a capture position
+  Position pos2 = Chess.initial;
+  pos2 = pos2.play(pos2.parseSan('e4')!);
+  pos2 = pos2.play(pos2.parseSan('d5')!);
+  pos2 = pos2.play(pos2.parseSan('exd5')!);
 
-  print('Position: ${chess2.fen}');
-  print('Legal moves: ${chess2.moves()}');
+  print('Position: ${pos2.fen}');
 
-  final chess3 = Chess();
-  chess3.move('e4');
-  chess3.move('c5');
-  chess3.move('Nf3');
-  chess3.move('d6');
-  chess3.move('d4');
+  Position pos3 = Chess.initial;
+  pos3 = pos3.play(pos3.parseSan('e4')!);
+  pos3 = pos3.play(pos3.parseSan('c5')!);
+  pos3 = pos3.play(pos3.parseSan('Nf3')!);
+  pos3 = pos3.play(pos3.parseSan('d6')!);
+  pos3 = pos3.play(pos3.parseSan('d4')!);
 
   print('\nAfter 1.e4 c5 2.Nf3 d6 3.d4:');
-  print('Position: ${chess3.fen}');
-  print('Legal moves: ${chess3.moves()}');
+  print('Position: ${pos3.fen}');
 
   // Test the problematic capture
   print('\nTesting "cxd4":');
-  final result = chess3.move('cxd4');
-  print('Result: $result');
-
-  if (!result) {
-    print('Trying alternative formats:');
-    final alternatives = ['c5xd4', 'c5-d4', 'cd4'];
-    for (final alt in alternatives) {
-      final chess4 = Chess();
-      chess4.move('e4');
-      chess4.move('c5');
-      chess4.move('Nf3');
-      chess4.move('d6');
-      chess4.move('d4');
-
-      final altResult = chess4.move(alt);
-      print('  "$alt": $altResult');
-    }
-  }
+  final result = pos3.parseSan('cxd4');
+  print('Result: ${result != null ? "success" : "failed"}');
 }

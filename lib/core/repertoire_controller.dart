@@ -4,8 +4,7 @@
 // and synchronizes the opening tree and parsed repertoire lines.
 import 'dart:io' as io;
 
-import 'package:chess/chess.dart' as chess;
-import 'package:dartchess_webok/dartchess_webok.dart';
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/opening_tree.dart';
@@ -48,16 +47,13 @@ class RepertoireController with ChangeNotifier {
   int get currentMoveIndex => _currentMoveIndex;
 
   /// Derived position from move history.
-  chess.Chess _game = chess.Chess();
-  chess.Chess get game => _game;
-  String get fen => _game.fen;
+  Position _position = Chess.initial;
+  Position get position => _position;
+  String get fen => _position.fen;
 
   /// Starting FEN if different from standard position (for PGN FEN header).
   String? _startingFen;
   String? get startingFen => _startingFen;
-
-  /// Convert Chess to Position for dartchess compatibility.
-  Position get position => Chess.fromSetup(Setup.parseFen(_game.fen));
 
   /// Get current move sequence (moves up to current index).
   List<String> get currentMoveSequence {
@@ -77,14 +73,12 @@ class RepertoireController with ChangeNotifier {
     if (_currentMoveIndex < _moveHistory.length - 1) {
       final existingNextMove = _moveHistory[_currentMoveIndex + 1];
       if (existingNextMove == sanMove) {
-        // Same move - just advance
         _currentMoveIndex++;
         _rebuildPosition();
         _syncOpeningTree();
         notifyListeners();
         return;
       }
-      // Different move - truncate history to create new line
       _moveHistory = _moveHistory.sublist(0, _currentMoveIndex + 1);
     }
 
@@ -158,7 +152,9 @@ class RepertoireController with ChangeNotifier {
   void clearMoveHistory() {
     _moveHistory.clear();
     _currentMoveIndex = -1;
-    _game = chess.Chess();
+    _position = _startingFen != null
+        ? Chess.fromSetup(Setup.parseFen(_startingFen!))
+        : Chess.initial;
     _startingFen = null;
     _syncOpeningTree();
     notifyListeners();
@@ -166,32 +162,26 @@ class RepertoireController with ChangeNotifier {
 
   /// Set the board position from a FEN string.
   /// Returns true if the FEN was valid and position was set.
-  /// Returns false if the FEN was invalid.
   bool setPositionFromFen(String fen) {
     try {
-      // Trim whitespace
       final trimmedFen = fen.trim();
       if (trimmedFen.isEmpty) return false;
 
-      // Try to create a game from the FEN to validate it
-      final newGame = chess.Chess.fromFEN(trimmedFen);
-      
-      // If we got here, the FEN is valid
-      _game = newGame;
+      final newPos = Chess.fromSetup(Setup.parseFen(trimmedFen));
+
+      _position = newPos;
       _moveHistory.clear();
       _currentMoveIndex = -1;
-      
-      // Store starting FEN only if it's not the standard starting position
+
       const standardFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
       if (trimmedFen != standardFen && !trimmedFen.startsWith(standardFen.split(' ')[0])) {
         _startingFen = trimmedFen;
       } else {
         _startingFen = null;
       }
-      
-      // Clear selected line since we're in a custom position
+
       _selectedPgnLine = null;
-      
+
       notifyListeners();
       return true;
     } catch (e) {
@@ -202,18 +192,22 @@ class RepertoireController with ChangeNotifier {
 
   /// Rebuild the chess position from move history up to current index.
   void _rebuildPosition() {
-    // Start from custom FEN if set, otherwise standard position
+    Position pos;
     if (_startingFen != null) {
-      _game = chess.Chess.fromFEN(_startingFen!);
+      try {
+        pos = Chess.fromSetup(Setup.parseFen(_startingFen!));
+      } catch (_) {
+        pos = Chess.initial;
+      }
     } else {
-      _game = chess.Chess();
+      pos = Chess.initial;
     }
     for (int i = 0; i <= _currentMoveIndex && i < _moveHistory.length; i++) {
-      final result = _game.move(_moveHistory[i]);
-      if (!result) {
-        break;
-      }
+      final move = pos.parseSan(_moveHistory[i]);
+      if (move == null) break;
+      pos = pos.play(move);
     }
+    _position = pos;
   }
 
   /// Sync the opening tree to match current move history.
@@ -255,7 +249,7 @@ class RepertoireController with ChangeNotifier {
       if (await file.exists()) {
         _repertoirePgn = await file.readAsString();
 
-        _game = chess.Chess();
+        _position = Chess.initial;
         _moveHistory.clear();
         _currentMoveIndex = -1;
         _startingFen = null;
@@ -266,7 +260,7 @@ class RepertoireController with ChangeNotifier {
         _repertoirePgn = null;
         _openingTree = null;
         _repertoireLines = [];
-        _game = chess.Chess();
+        _position = Chess.initial;
         _moveHistory.clear();
         _currentMoveIndex = -1;
         _startingFen = null;
@@ -276,17 +270,13 @@ class RepertoireController with ChangeNotifier {
       _repertoirePgn = null;
       _openingTree = null;
       _repertoireLines = [];
-      _game = chess.Chess();
+      _position = Chess.initial;
       _moveHistory.clear();
       _currentMoveIndex = -1;
       _startingFen = null;
     } finally {
       _setLoading(false);
 
-      // Fire-and-forget: start Stockfish workers in the background so
-      // they're warm by the time the user triggers their first analysis.
-      // Each worker takes ~3-5s for NNUE init; this hides that behind
-      // the time the user spends looking at the tree / navigating moves.
       MoveAnalysisPool().warmUp();
     }
   }
@@ -405,10 +395,9 @@ class RepertoireController with ChangeNotifier {
   /// Syncs the game state from an external source (like the PGN editor).
   /// Use syncFromMoveIndex instead for move-based sync.
   void syncGameFromFen(String fen) {
-    if (_game.fen == fen || _isInternalUpdate) {
+    if (_position.fen == fen || _isInternalUpdate) {
       return;
     }
-    // Deprecated: kept for compatibility.
   }
 
   /// Sync to a specific move index from the PGN editor.
@@ -484,10 +473,8 @@ class RepertoireController with ChangeNotifier {
   /// Append a newly saved line to the in-memory tree and lines list
   /// without reloading the entire repertoire from disk.
   void appendNewLine(List<String> moves, String title, String pgn) {
-    // 1. Append to the opening tree
     _openingTree?.appendLine(moves);
 
-    // 2. Build a RepertoireLine and add to the list
     final index = _repertoireLines.length;
     final service = RepertoireService();
     final id = service.generateLineId(moves, index);
@@ -514,5 +501,3 @@ class RepertoireController with ChangeNotifier {
     notifyListeners();
   }
 }
-
-

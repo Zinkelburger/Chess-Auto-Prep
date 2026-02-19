@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 
 import '../core/app_state.dart';
 import '../models/engine_settings.dart';
@@ -117,13 +117,15 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           // moves made on the board match the PGN viewer's state.
           // Without this, solving a tactic advances the board past the
           // PGN viewer's position, causing analysis moves to silently fail.
-          // NOTE: Do NOT set _skipNextPositionChanged here — setCurrentGame
+          // NOTE: Do NOT set _skipNextPositionChanged here — setCurrentPosition
           // doesn't trigger the PGN viewer's onPositionChanged callback, so
           // the flag would linger and cause the next PGN navigation to
           // silently skip the board update.
           final fen = _pgnViewerController.currentFen;
           if (fen != null) {
-            appState.setCurrentGame(chess.Chess.fromFEN(fen));
+            try {
+              appState.setCurrentPosition(Chess.fromSetup(Setup.parseFen(fen)));
+            } catch (_) {}
           }
         } else {
           appState.exitAnalysisMode();
@@ -248,7 +250,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // a — Analyze / Reset (same as the combined button)
     if (key == LogicalKeyboardKey.keyA) {
       final appState = context.read<AppState>();
-      final isAtStartingPosition = appState.currentGame.fen == _currentPosition!.fen;
+      final isAtStartingPosition = appState.currentPosition.fen == _currentPosition!.fen;
       if (isAtStartingPosition) {
         _onAnalyze();
       } else {
@@ -331,7 +333,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   child: Builder(
                     builder: (context) {
                       final appState = context.watch<AppState>();
-                      final isAtStartingPosition = _positionSolved || appState.currentGame.fen == _currentPosition!.fen;
+                      final isAtStartingPosition = _positionSolved || appState.currentPosition.fen == _currentPosition!.fen;
                       if (isAtStartingPosition) {
                         return _shortcutTooltip(
                           message: 'a',
@@ -796,8 +798,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             final appState = context.read<AppState>();
-            final chessGame = chess.Chess.fromFEN(position.fen);
-            appState.setCurrentGame(chessGame);
+            appState.setCurrentPosition(position);
           }
         });
       },
@@ -997,8 +998,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final pos = _database.positions[index];
     try {
       final appState = context.read<AppState>();
-      final game = chess.Chess.fromFEN(pos.fen);
-      appState.setCurrentGame(game);
+      final position = Chess.fromSetup(Setup.parseFen(pos.fen));
+      appState.setCurrentPosition(position);
 
       // Orient the board to the side that's to move
       final isWhiteToMove = pos.positionContext.contains('White');
@@ -1191,7 +1192,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   /// to the import screen so a stale tactic FEN isn't left on the board).
   void _resetBoardToStart() {
     final appState = context.read<AppState>();
-    appState.setCurrentGame(chess.Chess());
+    appState.setCurrentPosition(Chess.initial);
     appState.setBoardFlipped(false);
   }
 
@@ -1221,8 +1222,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     
     // Reset the board to the initial tactic position
     final appState = context.read<AppState>();
-    final game = chess.Chess.fromFEN(_currentPosition!.fen);
-    appState.setCurrentGame(game);
+    try {
+      final position = Chess.fromSetup(Setup.parseFen(_currentPosition!.fen));
+      appState.setCurrentPosition(position);
+    } catch (_) {}
     
     // Reset solved state, feedback, and multi-move tracking
     setState(() {
@@ -1485,8 +1488,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Set up the chess board
     try {
       final appState = context.read<AppState>();
-      final game = chess.Chess.fromFEN(position.fen);
-      appState.setCurrentGame(game);
+      final pos = Chess.fromSetup(Setup.parseFen(position.fen));
+      appState.setCurrentPosition(pos);
 
       // Set board orientation based on side to move
       final isWhiteToMove = position.positionContext.contains('White');
@@ -1574,7 +1577,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Only validate when the board is at the expected tactic position.
     // If the user navigated away (e.g. via PGN viewer), ignore the move.
     final fen = _currentTacticFen ?? _currentPosition!.fen;
-    if (normalizeFen(appState.currentGame.fen) != normalizeFen(fen)) return;
+    if (normalizeFen(appState.currentPosition.fen) != normalizeFen(fen)) return;
 
     final result = _engine.checkMoveAtIndex(
       _currentPosition!,
@@ -1595,34 +1598,20 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   void _addMoveToAnalysis(String moveUci) {
     final appState = context.read<AppState>();
-    final game = appState.currentGame;
+    final position = appState.currentPosition;
 
     try {
-      final from = moveUci.substring(0, 2);
-      final to = moveUci.substring(2, 4);
-      String? promotion;
-      if (moveUci.length > 4) promotion = moveUci.substring(4);
+      final move = Move.parse(moveUci);
+      if (move == null) return;
 
-      final moves = game.moves({'verbose': true});
+      final (newPos, san) = position.makeSan(move);
+      appState.setCurrentPosition(newPos);
+      appState.notifyGameChanged();
 
-      final match = moves.firstWhere(
-        (m) => m['from'] == from && m['to'] == to &&
-               (promotion == null || m['promotion'] == promotion),
-        orElse: () => <String, dynamic>{},
-      );
-
-      if (match.isNotEmpty && match['san'] != null) {
-        // Apply move to existing game object for smooth animation
-        final moveMap = <String, String?>{'from': from, 'to': to};
-        if (promotion != null) moveMap['promotion'] = promotion;
-        game.move(moveMap);
-        appState.notifyGameChanged();
-
-        // Tell the PGN viewer about the move (for display only, skip board update)
-        _skipNextPositionChanged = true;
-        _pgnViewerController.addEphemeralMove(match['san'] as String);
-      }
-    } catch (e) {
+      // Tell the PGN viewer about the move (for display only, skip board update)
+      _skipNextPositionChanged = true;
+      _pgnViewerController.addEphemeralMove(san);
+    } catch (_) {
       // Failed to convert move to SAN
     }
   }
@@ -1631,16 +1620,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Apply the correct move to the board so it's visually shown
     if (moveUci != null) {
       final appState = context.read<AppState>();
-      final game = appState.currentGame;
-      final from = moveUci.substring(0, 2);
-      final to = moveUci.substring(2, 4);
-      String? promotion;
-      if (moveUci.length > 4) promotion = moveUci.substring(4, 5);
-
-      final moveMap = <String, String?>{'from': from, 'to': to};
-      if (promotion != null) moveMap['promotion'] = promotion;
-      game.move(moveMap);
-      appState.notifyGameChanged();
+      final position = appState.currentPosition;
+      final move = Move.parse(moveUci);
+      if (move != null) {
+        final newPos = position.play(move);
+        appState.setCurrentPosition(newPos);
+        appState.notifyGameChanged();
+      }
     }
 
     _currentMoveIndex++; // Advance past the user's move
@@ -1664,13 +1650,17 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
         // Play the opponent's response from the correct line
         final appState = context.read<AppState>();
-        final game = appState.currentGame;
+        final position = appState.currentPosition;
         final opponentSan = _currentPosition!.correctLine[_currentMoveIndex];
-        game.move(opponentSan);
-        appState.notifyGameChanged();
+        final opponentMove = position.parseSan(opponentSan);
+        if (opponentMove != null) {
+          final newPos = position.play(opponentMove);
+          appState.setCurrentPosition(newPos);
+          appState.notifyGameChanged();
+          _currentTacticFen = newPos.fen; // Save FEN for reset on wrong answer
+        }
 
         _currentMoveIndex++; // Advance past the opponent's move
-        _currentTacticFen = game.fen; // Save FEN for reset on wrong answer
 
         // Edge case: PV ended right after opponent (even-length line)
         if (_currentMoveIndex >= _currentPosition!.correctLine.length) {
@@ -1725,16 +1715,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Apply the incorrect move on the board so the user sees it briefly
     if (moveUci != null && _currentPosition != null) {
       final appState = context.read<AppState>();
-      final game = appState.currentGame;
-      final from = moveUci.substring(0, 2);
-      final to = moveUci.substring(2, 4);
-      String? promotion;
-      if (moveUci.length > 4) promotion = moveUci.substring(4, 5);
-
-      final moveMap = <String, String?>{'from': from, 'to': to};
-      if (promotion != null) moveMap['promotion'] = promotion;
-      game.move(moveMap);
-      appState.notifyGameChanged();
+      final position = appState.currentPosition;
+      final move = Move.parse(moveUci);
+      if (move != null) {
+        final newPos = position.play(move);
+        appState.setCurrentPosition(newPos);
+        appState.notifyGameChanged();
+      }
     }
 
     setState(() {
@@ -1764,9 +1751,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           try {
             final appState = context.read<AppState>();
             final fen = _currentTacticFen ?? _currentPosition!.fen;
-            final game = chess.Chess.fromFEN(fen);
-            appState.setCurrentGame(game);
-          } catch (e) {
+            final position = Chess.fromSetup(Setup.parseFen(fen));
+            appState.setCurrentPosition(position);
+          } catch (_) {
             // Handle error
           }
           setState(() {

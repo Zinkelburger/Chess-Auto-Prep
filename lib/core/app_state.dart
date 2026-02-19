@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 import '../models/chess_game.dart';
 import '../services/pgn_service.dart';
 import '../services/lichess_auth_service.dart';
@@ -16,7 +16,7 @@ enum AppMode {
 class AppState extends ChangeNotifier {
   AppMode _currentMode = AppMode.tactics;
   List<ChessGameModel> _loadedGames = [];
-  chess.Chess _currentGame = chess.Chess();
+  Position _currentPosition = Chess.initial;
   String? _lichessUsername;
   String? _chesscomUsername;
   bool _isLoading = false;
@@ -26,22 +26,19 @@ class AppState extends ChangeNotifier {
 
   AppMode get currentMode => _currentMode;
   List<ChessGameModel> get loadedGames => _loadedGames;
-  chess.Chess get currentGame => _currentGame;
+  Position get currentPosition => _currentPosition;
   String? get lichessUsername => _lichessUsername;
   String? get chesscomUsername => _chesscomUsername;
   bool get isLoading => _isLoading;
   bool get isAnalysisMode => _isAnalysisMode;
   bool get boardFlipped {
-    // In tactics mode, respect the initial board flip (set when loading position)
     if (_currentMode == AppMode.tactics && _initialBoardFlipped != null) {
       return _initialBoardFlipped!;
     }
-    // In analysis mode, respect manual flip or default to turn
     if (_isAnalysisMode) {
       return _initialBoardFlipped ?? false;
     }
-    // Default fallback (though tactics mode should always hit the first case)
-    return _currentGame.turn == chess.Color.BLACK;
+    return _currentPosition.turn == Side.black;
   }
 
   void setMode(AppMode mode) {
@@ -66,7 +63,6 @@ class AppState extends ChangeNotifier {
     _lichessUsername = prefs.getString('lichess_username');
     _chesscomUsername = prefs.getString('chesscom_username');
 
-    // Load Lichess OAuth / PAT tokens (persisted between runs)
     await LichessAuthService().loadTokens();
 
     notifyListeners();
@@ -116,13 +112,12 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void setCurrentGame(chess.Chess game) {
-    _currentGame = game;
+  void setCurrentPosition(Position position) {
+    _currentPosition = position;
     notifyListeners();
   }
 
   /// Notify listeners that the current game has changed (without replacing the object)
-  /// Use this when making moves on the existing game to avoid board reset/flicker
   void notifyGameChanged() {
     notifyListeners();
   }
@@ -134,8 +129,6 @@ class AppState extends ChangeNotifier {
 
   void enterAnalysisMode() {
     if (!_isAnalysisMode) {
-      // Don't change board orientation - keep whatever was set when loading the position
-      // The _initialBoardFlipped is already set correctly from setBoardFlipped()
       _isAnalysisMode = true;
       notifyListeners();
     }
@@ -148,7 +141,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // Move validation callback for tactics
   Function(String)? _onMoveAttempted;
 
   void setMoveAttemptedCallback(Function(String)? callback) {
@@ -157,13 +149,8 @@ class AppState extends ChangeNotifier {
 
   void onMoveAttempted(String moveUci) {
     if (_isAnalysisMode) {
-      // In analysis mode, call the callback FIRST so it can get the SAN
-      // while the move is still legal, then make the move on the game.
-      // The PgnViewerWidget will update the position and sync back via
-      // onPositionChanged.
       _onMoveAttempted?.call(moveUci);
     } else if (_onMoveAttempted != null) {
-      // In tactics mode, validate via callback
       _onMoveAttempted!(moveUci);
     }
   }

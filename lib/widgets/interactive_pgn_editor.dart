@@ -4,8 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:dartchess_webok/dartchess_webok.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 
 // Simple counter for unique move IDs
@@ -86,7 +85,7 @@ class PgnEditorController {
 }
 
 class InteractivePgnEditor extends StatefulWidget {
-  final Function(chess.Chess)? onPositionChanged;
+  final Function(Position)? onPositionChanged;
   /// Called when move state changes - reports current move index and full move list
   final Function(int moveIndex, List<String> moves)? onMoveStateChanged;
   final String? initialPgn;
@@ -124,7 +123,7 @@ class InteractivePgnEditor extends StatefulWidget {
 
 class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // Game state
-  chess.Chess _currentPosition = chess.Chess();
+  Position _currentPosition = Chess.initial;
   List<PgnMove> _roots = []; // The root moves (usually 1, e.g. 1. e4)
   List<PgnMove> _currentPath = []; // The path of moves to the current position
   
@@ -229,9 +228,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   /// Called when user makes a move on the chess board
   void addMove(String san) {
-    // Validate move first - use current position FEN
-    final tempGame = chess.Chess.fromFEN(_currentPosition.fen);
-    if (!tempGame.move(san)) return;
+    final move = _currentPosition.parseSan(san);
+    if (move == null) return;
 
     setState(() {
       final newMove = PgnMove(san: san);
@@ -273,11 +271,18 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   void _updatePosition() {
-    chess.Chess position = widget.startingFen != null
-        ? chess.Chess.fromFEN(widget.startingFen!)
-        : chess.Chess();
+    Position position;
+    try {
+      position = widget.startingFen != null
+          ? Chess.fromSetup(Setup.parseFen(widget.startingFen!))
+          : Chess.initial;
+    } catch (_) {
+      position = Chess.initial;
+    }
     for (final moveNode in _currentPath) {
-      position.move(moveNode.san);
+      final move = position.parseSan(moveNode.san);
+      if (move == null) break;
+      position = position.play(move);
     }
     _currentPosition = position;
     widget.onPositionChanged?.call(_currentPosition);
@@ -347,11 +352,18 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   
   /// Update position without triggering external callbacks (used during sync)
   void _updatePositionWithoutCallback() {
-    chess.Chess position = widget.startingFen != null
-        ? chess.Chess.fromFEN(widget.startingFen!)
-        : chess.Chess();
+    Position position;
+    try {
+      position = widget.startingFen != null
+          ? Chess.fromSetup(Setup.parseFen(widget.startingFen!))
+          : Chess.initial;
+    } catch (_) {
+      position = Chess.initial;
+    }
     for (final moveNode in _currentPath) {
-      position.move(moveNode.san);
+      final move = position.parseSan(moveNode.san);
+      if (move == null) break;
+      position = position.play(move);
     }
     _currentPosition = position;
   }

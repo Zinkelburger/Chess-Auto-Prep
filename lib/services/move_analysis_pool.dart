@@ -8,7 +8,6 @@ library;
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:chess/chess.dart' as chess;
 import 'package:flutter/foundation.dart';
 
 import 'engine/stockfish_connection_factory.dart';
@@ -735,7 +734,6 @@ class MoveAnalysisPool {
 
     final maxQ = scoreToQ(rootEval.effectiveCp);
     double sumWeightedRegret = 0.0;
-    final game = chess.Chess.fromFEN(fen);
 
     for (final entry in candidates) {
       if (_generation != generation) return null;
@@ -743,16 +741,8 @@ class MoveAnalysisPool {
       final candidateUci = entry.key;
       final prob = entry.value;
 
-      final from = candidateUci.substring(0, 2);
-      final to = candidateUci.substring(2, 4);
-      String? promotion;
-      if (candidateUci.length > 4) promotion = candidateUci.substring(4);
-
-      if (!game.move({'from': from, 'to': to, 'promotion': promotion})) {
-        continue;
-      }
-      final nextFen = game.fen;
-      game.undo();
+      final nextFen = playUciMove(fen, candidateUci);
+      if (nextFen == null) continue;
 
       final candidateEval = await worker.evaluateFen(nextFen, depth);
 

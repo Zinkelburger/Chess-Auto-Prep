@@ -1,4 +1,4 @@
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 import '../models/tactics_position.dart';
 import 'tactics_database.dart';
 
@@ -27,31 +27,22 @@ class TacticsEngine {
         return TacticsResult.incorrect;
       }
 
-      // Build game from the *current* board state
-      final game = chess.Chess.fromFEN(fen);
+      // Build position from the *current* board state
+      final pos = Chess.fromSetup(Setup.parseFen(fen));
 
-      // Find the played move in legal moves to get its SAN / promotion info
-      final legalVerbose = game.moves({'verbose': true});
-      final played = legalVerbose.firstWhere(
-        (m) =>
-            m['from'] == moveUci.substring(0, 2) &&
-            m['to'] == moveUci.substring(2, 4) &&
-            ((moveUci.length == 4 &&
-                    (m['promotion'] == null || m['promotion'] == '')) ||
-                (moveUci.length > 4 &&
-                    (m['promotion'] ==
-                        moveUci.substring(4).toLowerCase()))),
-        orElse: () => <String, dynamic>{},
-      );
+      // Parse the played move and verify it's legal
+      final move = Move.parse(moveUci);
+      if (move == null) return TacticsResult.incorrect;
 
-      if (played.isEmpty) {
-        return TacticsResult.incorrect; // illegal or not found
+      String playedSan;
+      try {
+        final (_, san) = pos.makeSan(move);
+        playedSan = san;
+      } catch (_) {
+        return TacticsResult.incorrect; // illegal move
       }
 
-      final playedSan = (played['san'] as String?) ?? '';
-      final playedUci = (played['from'] as String) +
-          (played['to'] as String) +
-          ((played['promotion'] as String?) ?? '');
+      final playedUci = moveUci;
 
       // Expected move at this index
       final bestMove = position.correctLine[moveIndex];

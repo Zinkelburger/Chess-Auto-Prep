@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:http/http.dart' as http;
-import 'package:dartchess_webok/dartchess_webok.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/tactics_position.dart';
 import '../models/engine_settings.dart';
@@ -448,15 +447,15 @@ class TacticsImportService {
         final white = game.headers['White']?.toLowerCase() ?? '';
         final black = game.headers['Black']?.toLowerCase() ?? '';
 
-        chess.Color? userColor;
+        Side? userColor;
         if (white == usernameLower) {
-          userColor = chess.Color.WHITE;
+          userColor = Side.white;
         } else if (black == usernameLower) {
-          userColor = chess.Color.BLACK;
+          userColor = Side.black;
         } else if (white.contains(usernameLower)) {
-          userColor = chess.Color.WHITE;
+          userColor = Side.white;
         } else if (black.contains(usernameLower)) {
-          userColor = chess.Color.BLACK;
+          userColor = Side.black;
         } else {
           await _database.markGameAnalyzed(gameId);
           continue;
@@ -492,7 +491,7 @@ class TacticsImportService {
 
   Future<void> _analyzeGame(
     PgnGame game, 
-    chess.Color userColor, 
+    Side userColor, 
     int depth, 
     List<TacticsPosition> positions,
     OnPositionFoundCallback? onPositionFound,
@@ -507,33 +506,33 @@ class TacticsImportService {
       node = child;
     }
 
-    // Use chess.dart for game state management
-    final chessGame = chess.Chess();
+    // Use dartchess for game state management (immutable positions)
+    Position pos = Chess.initial;
     int moveNumber = 1;
     
     for (final san in moves) {
-      final isUserTurn = chessGame.turn == userColor;
+      final isUserTurn = pos.turn == userColor;
       
       if (isUserTurn) {
         // 1. Analyze Position A (Before Move)
-        final evalA = await _stockfish.getEvaluation(chessGame.fen, depth: depth);
+        final evalA = await _stockfish.getEvaluation(pos.fen, depth: depth);
         
         // 2. Make the move
-        final fenBefore = chessGame.fen;
-        final moveMap = chessGame.move(san); // Plays the move
-        if (moveMap == null) break; // Invalid move?
-        
-        final fenAfter = chessGame.fen;
+        final fenBefore = pos.fen;
+        final move = pos.parseSan(san);
+        if (move == null) break; // Invalid move?
+        pos = pos.play(move);
+        final fenAfter = pos.fen;
         
         // Skip analysis if position after move is terminal (checkmate, stalemate, etc.)
         // These positions can't be properly evaluated by Stockfish and would produce
         // misleading delta values (e.g., user delivering checkmate flagged as "blunder")
-        if (chessGame.game_over) {
+        if (pos.isGameOver) {
           if (kDebugMode) {
             print('Move $moveNumber. $san | Skipping: Game over after this move');
           }
           // Update move number and continue
-          if (chessGame.turn == chess.Color.WHITE) {
+          if (pos.turn == Side.white) {
             moveNumber++;
           }
           continue;
@@ -547,7 +546,7 @@ class TacticsImportService {
         int cpB = evalB.effectiveCp;
         
         // Normalize to User perspective
-        if (userColor == chess.Color.BLACK) {
+        if (userColor == Side.black) {
           cpA = -cpA;
           cpB = -cpB;
         }
@@ -586,15 +585,16 @@ class TacticsImportService {
             // peeking ahead: only extend if the NEXT user move is also a
             // check (+), capture (x), or checkmate (#). Max 5 user moves.
             final allPvSan = <String>[];
-            final tempGame = chess.Chess.fromFEN(fenBefore);
+            Position tempPos = Chess.fromSetup(Setup.parseFen(fenBefore));
             
             for (final uci in evalA.pv) {
-              final sanMove = _makeUciMoveAndGetSan(tempGame, uci);
+              final (sanMove, newPos) = _makeUciMoveAndGetSan(tempPos, uci);
               if (kDebugMode) {
                 print('  → UCI: $uci → SAN: $sanMove');
               }
               if (sanMove == null) break;
               allPvSan.add(sanMove);
+              tempPos = newPos;
             }
             
             final correctLine = <String>[];
@@ -659,7 +659,7 @@ class TacticsImportService {
               mistakeType: mistakeType,
               mistakeAnalysis: analysis,
               opponentBestResponse: opponentResponse,
-              positionContext: 'Move $moveNumber, ${userColor == chess.Color.WHITE ? 'White' : 'Black'} to play',
+              positionContext: 'Move $moveNumber, ${userColor == Side.white ? 'White' : 'Black'} to play',
               gameWhite: game.headers['White'] ?? '',
               gameBlack: game.headers['Black'] ?? '',
               gameResult: game.headers['Result'] ?? '*',
@@ -672,63 +672,31 @@ class TacticsImportService {
         }
       } else {
         // Opponent's move
-        chessGame.move(san);
+        final move = pos.parseSan(san);
+        if (move != null) pos = pos.play(move);
       }
       
       // Update move number
-      if (chessGame.turn == chess.Color.WHITE) {
+      if (pos.turn == Side.white) {
         moveNumber++;
       }
     }
   }
 
-  
-  String? _makeUciMoveAndGetSan(chess.Chess game, String uci) {
-    final from = uci.substring(0, 2);
-    final to = uci.substring(2, 4);
-    String? promotion;
-    if (uci.length > 4) {
-      promotion = uci.substring(4, 5);
+  (String? san, Position newPos) _makeUciMoveAndGetSan(Position pos, String uci) {
+    final move = Move.parse(uci);
+    if (move == null) return (null, pos);
+    try {
+      final (newPos, san) = pos.makeSan(move);
+      return (san, newPos);
+    } catch (_) {
+      return (null, pos);
     }
-    
-    // Build move map
-    Map<String, String?> moveMap = {'from': from, 'to': to};
-    if (promotion != null) {
-      moveMap['promotion'] = promotion;
-    }
-    
-    // Get the SAN before making the move by finding the matching legal move
-    final legalMoves = game.generate_moves();
-    String? sanMove;
-    
-    // Convert from/to strings to square indices
-    final fromSquare = chess.Chess.SQUARES[from];
-    final toSquare = chess.Chess.SQUARES[to];
-    
-    for (final move in legalMoves) {
-      // Move class has .from, .to, .promotion properties
-      if (move.from == fromSquare && move.to == toSquare) {
-        // Check promotion matches if applicable
-        if (promotion == null || move.promotion == null ||
-            move.promotion.toString().toLowerCase() == promotion.toLowerCase()) {
-          // Generate SAN for this move
-          sanMove = game.move_to_san(move);
-          break;
-        }
-      }
-    }
-    
-    // Make the move to advance game state
-    if (sanMove != null) {
-      game.move(moveMap);
-    }
-    
-    return sanMove;
   }
 
   String _formatUciToSan(String fen, String uci) {
-    final game = chess.Chess.fromFEN(fen);
-    final san = _makeUciMoveAndGetSan(game, uci);
+    final pos = Chess.fromSetup(Setup.parseFen(fen));
+    final (san, _) = _makeUciMoveAndGetSan(pos, uci);
     return san ?? uci;
   }
 }

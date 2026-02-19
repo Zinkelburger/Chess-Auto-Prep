@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:chess/chess.dart' as chess;
 
 import '../core/app_state.dart';
 import '../widgets/chess_board_widget.dart';
@@ -155,7 +154,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           child: Container(
             padding: const EdgeInsets.all(16.0),
             child: ChessBoardWidget(
-              game: appState.currentGame,
+              position: appState.currentPosition,
               flipped: appState.boardFlipped,
               onPieceSelected: (square) {
                 // Handle piece selection

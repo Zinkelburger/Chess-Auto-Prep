@@ -13,8 +13,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 
-import 'package:dartchess_webok/dartchess_webok.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 
 import '../models/tactics_position.dart';
 import 'engine/process_connection.dart';
@@ -265,15 +264,15 @@ Future<void> _analyzeGameInWorker({
   final black = (game.headers['Black'] ?? '').toLowerCase();
   final usernameLower = username.toLowerCase();
 
-  chess.Color? userColor;
+  Side? userColor;
   if (white == usernameLower) {
-    userColor = chess.Color.WHITE;
+    userColor = Side.white;
   } else if (black == usernameLower) {
-    userColor = chess.Color.BLACK;
+    userColor = Side.black;
   } else if (white.contains(usernameLower)) {
-    userColor = chess.Color.WHITE;
+    userColor = Side.white;
   } else if (black.contains(usernameLower)) {
-    userColor = chess.Color.BLACK;
+    userColor = Side.black;
   } else {
     return; // Can't determine user colour – skip silently.
   }
@@ -287,33 +286,35 @@ Future<void> _analyzeGameInWorker({
     node = child;
   }
 
-  final chessGame = chess.Chess();
+  Position pos = Chess.initial;
   int moveNumber = 1;
 
   for (final san in moves) {
-    final isUserTurn = chessGame.turn == userColor;
+    final isUserTurn = pos.turn == userColor;
 
     if (isUserTurn) {
       // 1. Evaluate BEFORE the user's move.
-      final evalA = await stockfish.evaluate(chessGame.fen, depth);
+      final evalA = await stockfish.evaluate(pos.fen, depth);
 
-      final fenBefore = chessGame.fen;
-      chessGame.move(san);
+      final fenBefore = pos.fen;
+      final move = pos.parseSan(san);
+      if (move == null) break;
+      pos = pos.play(move);
 
       // Skip terminal positions (checkmate / stalemate).
-      if (chessGame.game_over) {
-        if (chessGame.turn == chess.Color.WHITE) moveNumber++;
+      if (pos.isGameOver) {
+        if (pos.turn == Side.white) moveNumber++;
         continue;
       }
 
       // 2. Evaluate AFTER the user's move.
-      final evalB = await stockfish.evaluate(chessGame.fen, depth);
+      final evalB = await stockfish.evaluate(pos.fen, depth);
 
       // 3. Calculate win-chance delta (normalised to user's perspective).
       int cpA = evalA.effectiveCp;
       int cpB = evalB.effectiveCp;
 
-      if (userColor == chess.Color.BLACK) {
+      if (userColor == Side.black) {
         cpA = -cpA;
         cpB = -cpB;
       }
@@ -333,12 +334,13 @@ Future<void> _analyzeGameInWorker({
         // peeking ahead: only extend if the NEXT user move is also a
         // check (+), capture (x), or checkmate (#). Max 5 user moves.
         final allPvSan = <String>[];
-        final tempGame = chess.Chess.fromFEN(fenBefore);
+        Position tempPos = Chess.fromSetup(Setup.parseFen(fenBefore));
 
         for (final uci in evalA.pv) {
-          final sanMove = _makeUciMoveAndGetSan(tempGame, uci);
+          final (sanMove, newPos) = _makeUciMoveAndGetSan(tempPos, uci);
           if (sanMove == null) break;
           allPvSan.add(sanMove);
+          tempPos = newPos;
         }
 
         final correctLine = <String>[];
@@ -376,7 +378,7 @@ Future<void> _analyzeGameInWorker({
 
         // Opponent's best response after the user's bad move
         final opponentResponse = evalB.pv.isNotEmpty
-            ? _formatUciToSan(chessGame.fen, evalB.pv.first)
+            ? _formatUciToSan(pos.fen, evalB.pv.first)
             : '';
 
         final wpBefore = _winPercent(cpA);
@@ -399,7 +401,7 @@ Future<void> _analyzeGameInWorker({
             'mistake_analysis': analysis,
             'position_context':
                 'Move $moveNumber, '
-                '${userColor == chess.Color.WHITE ? 'White' : 'Black'} to play',
+                '${userColor == Side.white ? 'White' : 'Black'} to play',
             'game_white': game.headers['White'] ?? '',
             'game_black': game.headers['Black'] ?? '',
             'game_result': game.headers['Result'] ?? '*',
@@ -411,10 +413,11 @@ Future<void> _analyzeGameInWorker({
       }
     } else {
       // Opponent's move – just advance the board.
-      chessGame.move(san);
+      final move = pos.parseSan(san);
+      if (move != null) pos = pos.play(move);
     }
 
-    if (chessGame.turn == chess.Color.WHITE) moveNumber++;
+    if (pos.turn == Side.white) moveNumber++;
   }
 }
 
@@ -434,38 +437,21 @@ double _winPercent(int centipawns) {
   return 50 + 50 * _winningChances(centipawns);
 }
 
-String? _makeUciMoveAndGetSan(chess.Chess game, String uci) {
-  final from = uci.substring(0, 2);
-  final to = uci.substring(2, 4);
-  String? promotion;
-  if (uci.length > 4) promotion = uci.substring(4, 5);
-
-  final moveMap = <String, String?>{'from': from, 'to': to};
-  if (promotion != null) moveMap['promotion'] = promotion;
-
-  final legalMoves = game.generate_moves();
-  final fromSquare = chess.Chess.SQUARES[from];
-  final toSquare = chess.Chess.SQUARES[to];
-  String? sanMove;
-
-  for (final move in legalMoves) {
-    if (move.from == fromSquare && move.to == toSquare) {
-      if (promotion == null ||
-          move.promotion == null ||
-          move.promotion.toString().toLowerCase() == promotion.toLowerCase()) {
-        sanMove = game.move_to_san(move);
-        break;
-      }
-    }
+(String? san, Position newPos) _makeUciMoveAndGetSan(Position pos, String uci) {
+  final move = Move.parse(uci);
+  if (move == null) return (null, pos);
+  try {
+    final (newPos, san) = pos.makeSan(move);
+    return (san, newPos);
+  } catch (_) {
+    return (null, pos);
   }
-
-  if (sanMove != null) game.move(moveMap);
-  return sanMove;
 }
 
 String _formatUciToSan(String fen, String uci) {
-  final game = chess.Chess.fromFEN(fen);
-  return _makeUciMoveAndGetSan(game, uci) ?? uci;
+  final pos = Chess.fromSetup(Setup.parseFen(fen));
+  final (san, _) = _makeUciMoveAndGetSan(pos, uci);
+  return san ?? uci;
 }
 
 // ════════════════════════════════════════════════════════════════

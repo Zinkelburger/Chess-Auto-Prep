@@ -1,4 +1,4 @@
-import 'package:dartchess_webok/dartchess_webok.dart';
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/tactics_position.dart';
