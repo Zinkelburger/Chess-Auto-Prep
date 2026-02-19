@@ -8,14 +8,19 @@ library;
 ///
 /// Layout: toolbar row  ➜  three-panel [PositionAnalysisWidget].
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/analysis_player_info.dart';
+import '../models/engine_weakness_result.dart';
 import '../models/position_analysis.dart';
+import '../utils/fen_utils.dart';
 import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
+import '../services/engine_weakness_service.dart';
 import '../services/fen_map_builder.dart';
 import '../services/opening_tree_builder.dart';
+import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/position_analysis_widget.dart';
 import 'player_selection_screen.dart';
 
@@ -32,18 +37,34 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   AnalysisPlayerInfo? _currentPlayer;
   PositionAnalysis? _positionAnalysis;
   OpeningTree? _openingTree;
+  OpeningTree? _whiteTree;
+  OpeningTree? _blackTree;
   bool _isAnalyzing = false;
   bool _playerIsWhite = true;
+
+  // ── Engine eval state ───────────────────────────────────────────────
+  List<EngineWeaknessResult> _engineEvals = [];
+  EngineWeaknessService? _evalService;
+  bool _evalRunning = false;
+  int _evalCompleted = 0;
+  int _evalTotal = 0;
+
+  bool get _hasEvals => _engineEvals.isNotEmpty;
 
   @override
   void initState() {
     super.initState();
-    // Always prompt for player selection on first load.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _currentPlayer == null) {
         _showPlayerSelection();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _evalService?.dispose();
+    super.dispose();
   }
 
   // ── Build ────────────────────────────────────────────────────────
@@ -53,7 +74,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return Column(
       children: [
         _buildToolbar(context),
-        // Thin progress bar that appears/disappears without layout shift.
         if (_isAnalyzing)
           const LinearProgressIndicator(minHeight: 2)
         else
@@ -63,8 +83,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     );
   }
 
-  /// Secondary toolbar with title, metadata, colour toggle, and player
-  /// selection.  Sits below [MainScreen]'s AppBar.
   Widget _buildToolbar(BuildContext context) {
     final theme = Theme.of(context);
 
@@ -97,7 +115,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ),
           ),
 
-          // ── White / Black toggle (always visible once a player is selected) ──
+          // ── Engine eval progress (shown while running) ──
+          if (_evalRunning) ...[
+            _buildEvalProgress(theme),
+            const SizedBox(width: 12),
+          ],
+
+          // ── White / Black toggle ──
           if (_currentPlayer != null) ...[
             SegmentedButton<bool>(
               segments: const [
@@ -124,6 +148,16 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             const SizedBox(width: 8),
           ],
 
+          // ── Engine weakness analysis button ──
+          if (_openingTree != null && !_isAnalyzing && !_evalRunning) ...[
+            TextButton.icon(
+              icon: const Icon(Icons.psychology, size: 18),
+              label: Text(_hasEvals ? 'Re-analyze' : 'Weaknesses'),
+              onPressed: _showWeaknessConfig,
+            ),
+            const SizedBox(width: 8),
+          ],
+
           // ── Player selection ──
           IconButton(
             icon: const Icon(Icons.person_search),
@@ -135,8 +169,40 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     );
   }
 
+  Widget _buildEvalProgress(ThemeData theme) {
+    final pct = _evalTotal > 0
+        ? (_evalCompleted / _evalTotal * 100).toStringAsFixed(0)
+        : '0';
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            value: _evalTotal > 0 ? _evalCompleted / _evalTotal : null,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          'Eval $_evalCompleted/$_evalTotal ($pct%)',
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          icon: const Icon(Icons.close, size: 16),
+          tooltip: 'Cancel',
+          onPressed: _cancelEvalAnalysis,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+        ),
+      ],
+    );
+  }
+
   Widget _buildBody(BuildContext context) {
-    // No player selected yet.
     if (_currentPlayer == null) {
       return Center(
         child: Column(
@@ -159,20 +225,18 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       );
     }
 
-    // Always show the three-panel layout. The widget handles null analysis
-    // gracefully (starting-position board, spinner in left pane, etc.).
     return PositionAnalysisWidget(
       analysis: _positionAnalysis,
       openingTree: _openingTree,
       playerIsWhite: _playerIsWhite,
       isLoading: _isAnalyzing,
       onAnalyze: _loadColorAnalysis,
+      hasEvals: _hasEvals,
     );
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
 
-  /// One-line summary shown below the toolbar title.
   String get _metadataSubtitle {
     final p = _currentPlayer;
     if (p == null) return '';
@@ -182,28 +246,173 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return _isAnalyzing ? '$base · Analyzing…' : base;
   }
 
-  /// Push the player-selection screen and handle the returned choice.
   Future<void> _showPlayerSelection() async {
     final result = await Navigator.of(context).push<AnalysisPlayerInfo>(
       MaterialPageRoute(builder: (_) => const PlayerSelectionScreen()),
     );
 
     if (result != null && mounted) {
+      _cancelEvalAnalysis();
       setState(() {
         _currentPlayer = result;
         _positionAnalysis = null;
         _openingTree = null;
+        _whiteTree = null;
+        _blackTree = null;
         _playerIsWhite = true;
+        _engineEvals = [];
       });
       await _analyzeBothColors();
     }
   }
 
+  // ── Engine weakness analysis ─────────────────────────────────────
+
+  Future<void> _showWeaknessConfig() async {
+    if (_whiteTree == null && _blackTree == null) return;
+
+    final config = await showDialog<EngineWeaknessConfig>(
+      context: context,
+      builder: (_) => EngineWeaknessConfigDialog(
+        whiteTree: _whiteTree,
+        blackTree: _blackTree,
+      ),
+    );
+
+    if (config != null && mounted) {
+      _runWeaknessAnalysis(config);
+    }
+  }
+
+  Future<void> _runWeaknessAnalysis(EngineWeaknessConfig config) async {
+    _evalService?.dispose();
+    _evalService = EngineWeaknessService();
+
+    setState(() {
+      _evalRunning = true;
+      _evalCompleted = 0;
+      _evalTotal = 0;
+    });
+
+    try {
+      final results = await _evalService!.analyze(
+        whiteTree: _whiteTree,
+        blackTree: _blackTree,
+        minOccurrences: config.minGames,
+        depth: config.depth,
+        maxWorkers: config.workers,
+        maxLoadPercent: config.maxLoadPercent,
+        onProgress: (c, t) {
+          if (mounted) setState(() { _evalCompleted = c; _evalTotal = t; });
+        },
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _engineEvals = results;
+        _evalRunning = false;
+      });
+
+      _mergeEvalsIntoAnalysis();
+      _saveEngineEvals();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _evalRunning = false);
+        _showError('Engine analysis failed: $e');
+      }
+    } finally {
+      _evalService?.dispose();
+      _evalService = null;
+    }
+  }
+
+  void _cancelEvalAnalysis() {
+    _evalService?.dispose();
+    _evalService = null;
+    if (mounted) setState(() => _evalRunning = false);
+  }
+
+  /// Merge stored engine eval results into the current [_positionAnalysis].
+  void _mergeEvalsIntoAnalysis() {
+    final analysis = _positionAnalysis;
+    if (analysis == null || _engineEvals.isEmpty) return;
+
+    int matched = 0;
+    int created = 0;
+
+    for (final r in _engineEvals) {
+      if (r.playerIsWhite != _playerIsWhite) continue;
+
+      final key = normalizeFen(r.fen);
+      var stats = analysis.positionStats[key];
+
+      if (stats == null) {
+        stats = PositionStats(
+          fen: key,
+          games: r.gamesPlayed,
+          wins: r.wins,
+          losses: r.losses,
+          draws: r.draws,
+        );
+        analysis.positionStats[key] = stats;
+        created++;
+      } else {
+        matched++;
+      }
+
+      stats.evalCp = r.evalCp;
+      stats.evalMate = r.evalMate;
+      stats.evalDepth = r.depth;
+
+      if (kDebugMode && (matched + created) <= 5) {
+        debugPrint('[EvalMerge] ${r.evalDisplay} '
+            '(${r.gamesPlayed}g, ${(r.winRate * 100).toStringAsFixed(0)}%) '
+            'FEN=$key');
+      }
+    }
+
+    if (kDebugMode) {
+      final forColor = _playerIsWhite ? 'white' : 'black';
+      debugPrint('[EvalMerge] $forColor: $matched matched, '
+          '$created created, ${_engineEvals.length} total evals');
+    }
+
+    setState(() {});
+  }
+
+  Future<void> _saveEngineEvals() async {
+    final player = _currentPlayer;
+    if (player == null || _engineEvals.isEmpty) return;
+    try {
+      await _gamesService.saveEngineEvals(
+        player.platform,
+        player.username,
+        _engineEvals.map((e) => e.toJson()).toList(),
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _loadEngineEvals() async {
+    final player = _currentPlayer;
+    if (player == null) return;
+    try {
+      final data = await _gamesService.loadEngineEvals(
+        player.platform,
+        player.username,
+      );
+      if (data != null && mounted) {
+        _engineEvals = data
+            .map((e) =>
+                EngineWeaknessResult.fromJson(e as Map<String, dynamic>))
+            .toList();
+        _mergeEvalsIntoAnalysis();
+      }
+    } catch (_) {}
+  }
+
   // ── Analysis ─────────────────────────────────────────────────────
 
-  /// Analyse **both** colours on first load so toggling White/Black is instant.
-  /// Shows the White results as soon as they're ready, then pre-warms Black
-  /// in the background.
   Future<void> _analyzeBothColors() async {
     final player = _currentPlayer;
     if (player == null) return;
@@ -212,7 +421,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
     try {
       final pgnList = await _loadPgnList(player);
-      if (pgnList == null) return; // error already shown
+      if (pgnList == null) return;
 
       // ── White first (display immediately) ──
       final (whiteAnalysis, whiteTree) =
@@ -222,13 +431,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         setState(() {
           _positionAnalysis = whiteAnalysis;
           _openingTree = whiteTree;
+          _whiteTree = whiteTree;
           _playerIsWhite = true;
           _isAnalyzing = false;
         });
       }
 
+      // Load saved engine evals and merge.
+      await _loadEngineEvals();
+
       // ── Pre-warm Black cache in background ──
-      await _buildAnalysis(player, pgnList, false);
+      final (_, blackTree) = await _buildAnalysis(player, pgnList, false);
+      if (mounted) {
+        setState(() => _blackTree = blackTree);
+      }
     } catch (e) {
       if (mounted) {
         _showError('Failed to analyze positions: $e');
@@ -237,8 +453,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
-  /// Load (or rebuild from cache) the analysis for the currently selected
-  /// colour.  Used when toggling the White/Black segmented button.
   Future<void> _loadColorAnalysis() async {
     final player = _currentPlayer;
     if (player == null) return;
@@ -256,8 +470,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         setState(() {
           _positionAnalysis = analysis;
           _openingTree = tree;
+          if (_playerIsWhite) {
+            _whiteTree = tree;
+          } else {
+            _blackTree = tree;
+          }
           _isAnalyzing = false;
         });
+        _mergeEvalsIntoAnalysis();
       }
     } catch (e) {
       if (mounted) {
@@ -267,8 +487,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
-  /// Load the raw PGN from disk and split into individual games.
-  /// Shows an error dialog and returns `null` on failure.
   Future<List<String>?> _loadPgnList(AnalysisPlayerInfo player) async {
     final pgns = await _gamesService.loadAnalysisGames(
       player.platform,
@@ -296,14 +514,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return pgnList;
   }
 
-  /// Build (or load from cache) the position analysis and opening tree
-  /// for a single colour.  Caches the result on disk for next time.
   Future<(PositionAnalysis, OpeningTree)> _buildAnalysis(
     AnalysisPlayerInfo player,
     List<String> pgnList,
     bool isWhite,
   ) async {
-    // ── Try cache ──
     PositionAnalysis? analysis;
 
     final cachedData = await _gamesService.loadCachedAnalysis(
@@ -314,18 +529,14 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     if (cachedData != null) {
       try {
         analysis = PositionAnalysis.fromJson(cachedData);
-      } catch (_) {
-        // Corrupted – fall through to fresh analysis.
-      }
+      } catch (_) {}
     }
 
-    // ── Fresh analysis if cache missed ──
     if (analysis == null) {
       final fenBuilder = FenMapBuilder();
       await fenBuilder.processPgns(pgnList, player.username, isWhite);
       analysis = await FenMapBuilder.fromFenMapBuilder(fenBuilder, pgnList);
 
-      // Persist (non-fatal on failure).
       try {
         await _gamesService.saveCachedAnalysis(
           player.platform,
@@ -336,7 +547,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       } catch (_) {}
     }
 
-    // Opening tree (fast, not cached).
     final tree = await OpeningTreeBuilder.buildTree(
       pgnList: pgnList,
       username: player.username,

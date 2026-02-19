@@ -12,14 +12,24 @@ class PositionStats {
   int draws;
   final List<String> gameUrls;
 
+  /// Engine evaluation in centipawns (white's perspective). Null = not yet evaluated.
+  int? evalCp;
+  int? evalMate;
+  int? evalDepth;
+
   PositionStats({
     required this.fen,
     this.games = 0,
     this.wins = 0,
     this.losses = 0,
     this.draws = 0,
+    this.evalCp,
+    this.evalMate,
+    this.evalDepth,
     List<String>? gameUrls,
   }) : gameUrls = gameUrls ?? [];
+
+  bool get hasEval => evalCp != null;
 
   /// Calculate win rate (0.0 to 1.0)
   double get winRate {
@@ -29,6 +39,15 @@ class PositionStats {
 
   /// Win rate as percentage
   double get winRatePercent => winRate * 100;
+
+  /// Human-readable eval display (e.g. "+0.50", "-1.23", "#5").
+  String get evalDisplay {
+    if (evalMate != null) return '#${evalMate!}';
+    if (evalCp == null) return '?';
+    final pawns = evalCp! / 100.0;
+    final sign = pawns >= 0 ? '+' : '';
+    return '$sign${pawns.toStringAsFixed(2)}';
+  }
 
   PositionStats copyWith({
     String? fen,
@@ -44,6 +63,9 @@ class PositionStats {
       wins: wins ?? this.wins,
       losses: losses ?? this.losses,
       draws: draws ?? this.draws,
+      evalCp: evalCp,
+      evalMate: evalMate,
+      evalDepth: evalDepth,
       gameUrls: gameUrls ?? this.gameUrls,
     );
   }
@@ -234,7 +256,11 @@ class PositionAnalysis {
         .toList();
   }
 
-  /// Get positions sorted by various criteria
+  /// Get positions sorted by various criteria.
+  ///
+  /// `eval_bad_white` — worst eval for White first (most negative evalCp).
+  /// `eval_bad_black` — worst eval for Black first (most positive evalCp).
+  /// Both `eval_bad_*` sorts only include positions that have engine eval.
   List<PositionStats> getSortedPositions({
     int minGames = 3,
     String sortBy = 'win_rate',
@@ -243,7 +269,13 @@ class PositionAnalysis {
         .where((stats) => stats.games >= minGames)
         .toList();
 
-    if (sortBy == 'win_rate') {
+    if (sortBy == 'eval_bad_white') {
+      filtered = filtered.where((s) => s.hasEval).toList();
+      filtered.sort((a, b) => (a.evalCp ?? 0).compareTo(b.evalCp ?? 0));
+    } else if (sortBy == 'eval_bad_black') {
+      filtered = filtered.where((s) => s.hasEval).toList();
+      filtered.sort((a, b) => (b.evalCp ?? 0).compareTo(a.evalCp ?? 0));
+    } else if (sortBy == 'win_rate') {
       filtered.sort((a, b) => a.winRate.compareTo(b.winRate));
     } else if (sortBy == 'win_rate_desc') {
       filtered.sort((a, b) => b.winRate.compareTo(a.winRate));

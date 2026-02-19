@@ -62,6 +62,7 @@ class TacticsImportService {
     int? maxGames, 
     int depth = 15,
     int? maxCores,
+    int? maxLoadPercent,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
@@ -84,7 +85,7 @@ class TacticsImportService {
       if (response.statusCode == 200) {
         // Save the raw PGNs first
         await _savePgns(response.body);
-        return _processGames(response.body, username, depth, progressCallback, onPositionFound, maxCores: maxCores);
+        return _processGames(response.body, username, depth, progressCallback, onPositionFound, maxCores: maxCores, maxLoadPercent: maxLoadPercent);
       } else {
         throw Exception('Failed to fetch games from Lichess: ${response.statusCode}');
       }
@@ -113,6 +114,7 @@ class TacticsImportService {
     int? maxGames, 
     int depth = 15,
     int? maxCores,
+    int? maxLoadPercent,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
@@ -164,7 +166,7 @@ class TacticsImportService {
     // Save the raw PGNs first
     await _savePgns(gamesToProcess);
     
-    return _processGames(gamesToProcess, username, depth, progressCallback, onPositionFound, maxCores: maxCores);
+    return _processGames(gamesToProcess, username, depth, progressCallback, onPositionFound, maxCores: maxCores, maxLoadPercent: maxLoadPercent);
   }
 
   /// Save raw PGNs to storage with GameId headers injected.
@@ -339,6 +341,7 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound, {
     int? maxCores,
+    int? maxLoadPercent,
   }) async {
     final games = _splitPgnIntoGames(pgnContent);
     final usernameLower = username.toLowerCase();
@@ -374,10 +377,13 @@ class TacticsImportService {
     // ── PARALLEL PATH (desktop — works fine with 1 game / 1 core) ──
     if (parallel.isParallelAnalysisAvailable) {
       try {
-        // Compute per-worker hash from the global engine settings
         final settings = EngineSettings();
-        final hashPerWorker = settings.hashMb ~/
-            (math.max(1, maxCores ?? settings.cores) + 1);
+        final loadPct = maxLoadPercent ?? settings.maxSystemLoad;
+        final hashBudget =
+            (EngineSettings.systemRamMb * loadPct ~/ 100)
+                .clamp(64, EngineSettings.systemRamMb);
+        final hashPerWorker =
+            hashBudget ~/ (math.max(1, maxCores ?? settings.cores) + 1);
 
         final positions = await parallel.analyzeGamesParallel(
           gameTasks: gameTasks,
@@ -385,7 +391,7 @@ class TacticsImportService {
           depth: depth,
           totalGames: games.length,
           maxCores: maxCores,
-          hashPerWorkerMb: hashPerWorker.clamp(16, settings.hashMb),
+          hashPerWorkerMb: hashPerWorker.clamp(16, hashBudget),
           progressCallback: progressCallback,
           onPositionFound: onPositionFound,
           onGameComplete: (gameId) => _database.markGameAnalyzed(gameId),

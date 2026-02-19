@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:chess/chess.dart' as chess;
 
 import '../core/app_state.dart';
+import '../models/engine_settings.dart';
 import '../models/tactics_position.dart';
 import '../services/tactics_database.dart';
 import '../services/tactics_engine.dart';
@@ -57,15 +58,19 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   late TextEditingController _chessComCountController;
   late TextEditingController _stockfishDepthController;
   late TextEditingController _coresController;
+  late TextEditingController _maxLoadController;
 
   // Validation: _*Valid tracks logical state (immediate), _*Error is the
   // displayed red text (debounced so it doesn't flash while typing).
   bool _depthValid = true;
   bool _coresValid = true;
+  bool _maxLoadValid = true;
   String? _depthError;
   String? _coresError;
+  String? _maxLoadError;
   Timer? _depthErrorTimer;
   Timer? _coresErrorTimer;
+  Timer? _maxLoadErrorTimer;
 
   // PGN Viewer controller for analysis tab
   final PgnViewerController _pgnViewerController = PgnViewerController();
@@ -88,6 +93,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Default cores: host cores - 2 (leave headroom for OS + main isolate), min 1
     final defaultCores = (TacticsImportService.availableCores - 2).clamp(1, 8);
     _coresController = TextEditingController(text: '$defaultCores');
+    _maxLoadController = TextEditingController(text: '${EngineSettings().maxSystemLoad}');
 
     // Initialize controllers from AppState and reset board
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -142,8 +148,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _chessComCountController.dispose();
     _stockfishDepthController.dispose();
     _coresController.dispose();
+    _maxLoadController.dispose();
     _depthErrorTimer?.cancel();
     _coresErrorTimer?.cancel();
+    _maxLoadErrorTimer?.cancel();
     super.dispose();
   }
 
@@ -533,7 +541,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                     ),
                     const SizedBox(height: 16),
                     
-                    // Stockfish Depth + Cores Row
+                    // Stockfish Depth + Cores + Max Load Row
                     Row(
                       children: [
                         SizedBox(
@@ -552,7 +560,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                         ),
                         const SizedBox(width: 8),
                         SizedBox(
-                          width: 140,
+                          width: 100,
                           child: TextField(
                             controller: _coresController,
                             enabled: TacticsImportService.isParallelAvailable,
@@ -564,6 +572,22 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                             ),
                             keyboardType: TextInputType.number,
                             onChanged: _validateCores,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 110,
+                          child: TextField(
+                            controller: _maxLoadController,
+                            enabled: TacticsImportService.isParallelAvailable,
+                            decoration: InputDecoration(
+                              labelText: 'Max load %',
+                              border: const OutlineInputBorder(),
+                              isDense: true,
+                              errorText: _maxLoadError,
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: _validateMaxLoad,
                           ),
                         ),
                       ],
@@ -1257,8 +1281,28 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
-  /// True when both Stockfish depth and cores fields pass validation.
-  bool get _importFieldsValid => _depthValid && _coresValid;
+  void _validateMaxLoad(String value) {
+    final v = int.tryParse(value);
+    String? error;
+    if (v == null) {
+      error = 'Must be a number';
+    } else if (v < 50 || v > 100) {
+      error = 'Must be 50–100';
+    }
+
+    _maxLoadErrorTimer?.cancel();
+    setState(() {
+      _maxLoadValid = error == null;
+      if (error == null) _maxLoadError = null;
+    });
+    if (error != null) {
+      _maxLoadErrorTimer = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) setState(() => _maxLoadError = error);
+      });
+    }
+  }
+
+  bool get _importFieldsValid => _depthValid && _coresValid && _maxLoadValid;
 
   Color _getFeedbackColor() {
     if (_feedback.contains('Correct')) return Colors.green;
@@ -1271,6 +1315,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final count = int.tryParse(_lichessCountController.text) ?? 20;
     final depth = (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
     final cores = (int.tryParse(_coresController.text) ?? 1).clamp(1, TacticsImportService.availableCores);
+    final maxLoad = (int.tryParse(_maxLoadController.text) ?? EngineSettings().maxSystemLoad).clamp(50, 100);
 
     if (username.isEmpty) {
       _showUsernameRequired('Lichess');
@@ -1292,6 +1337,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         maxGames: count,
         depth: depth,
         maxCores: cores,
+        maxLoadPercent: maxLoad,
         progressCallback: (msg) {
           if (mounted) setState(() => _importStatus = msg);
         },
@@ -1329,6 +1375,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final count = int.tryParse(_chessComCountController.text) ?? 20;
     final depth = (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
     final cores = (int.tryParse(_coresController.text) ?? 1).clamp(1, TacticsImportService.availableCores);
+    final maxLoad = (int.tryParse(_maxLoadController.text) ?? EngineSettings().maxSystemLoad).clamp(50, 100);
 
     if (username.isEmpty) {
       _showUsernameRequired('Chess.com');
@@ -1350,6 +1397,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         maxGames: count,
         depth: depth,
         maxCores: cores,
+        maxLoadPercent: maxLoad,
         progressCallback: (msg) {
           if (mounted) setState(() => _importStatus = msg);
         },
