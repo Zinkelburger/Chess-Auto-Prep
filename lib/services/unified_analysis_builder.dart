@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:dartchess_webok/dartchess_webok.dart';
@@ -10,7 +11,8 @@ import '../utils/fen_utils.dart';
 /// PGN list, eliminating the redundant parsing and mainline traversal that
 /// occurred when [FenMapBuilder] and [OpeningTreeBuilder] ran independently.
 ///
-/// Use [buildInIsolate] to run the work off the UI thread.
+/// Use [buildInIsolate] to run the work off the UI thread with per-game
+/// progress reporting.
 class UnifiedAnalysisBuilder {
   static const _repertoirePlayerPatterns = [
     'repertoire',
@@ -20,42 +22,29 @@ class UnifiedAnalysisBuilder {
     'study',
   ];
 
-  /// Build both data structures synchronously (intended to run inside an
-  /// isolate).  Returns the serialised forms so they can cross the isolate
-  /// boundary without hitting cyclic-reference issues.
-  static (Map<String, dynamic>, Map<String, dynamic>) _buildSerialized({
-    required List<String> pgnList,
-    required String username,
-    required bool isWhite,
-    required bool strictPlayerMatching,
-    required int maxDepth,
-  }) {
-    final (analysis, tree) = build(
-      pgnList: pgnList,
-      username: username,
-      isWhite: isWhite,
-      strictPlayerMatching: strictPlayerMatching,
-      maxDepth: maxDepth,
-    );
-    return (analysis.toJson(), tree.toTransferJson());
-  }
-
-  /// Primary entry point: parse PGNs once, walk each mainline once, and
-  /// populate both the opening tree and the FEN-map analysis.
+  /// Parse PGNs once, walk each mainline once, and populate both the opening
+  /// tree and the FEN-map analysis.
+  ///
+  /// [onProgress] is called periodically with (gamesProcessed, totalGames).
   static (PositionAnalysis, OpeningTree) build({
     required List<String> pgnList,
     required String username,
     required bool isWhite,
     bool strictPlayerMatching = true,
     int maxDepth = 30,
+    void Function(int current, int total)? onProgress,
   }) {
     final fullPgnText = pgnList.join('\n\n');
     final pgnGames = PgnGame.parseMultiGamePgn(fullPgnText);
     final usernameLower = username.toLowerCase();
+    final total = pgnGames.length;
+    final progressInterval = (total / 100).ceil().clamp(1, 100);
 
     final tree = OpeningTree();
     final stats = <String, PositionStats>{};
     final fenToGameIndices = <String, List<int>>{};
+
+    onProgress?.call(0, total);
 
     for (var i = 0; i < pgnGames.length; i++) {
       _processGame(
@@ -69,6 +58,11 @@ class UnifiedAnalysisBuilder {
         maxDepth: maxDepth,
         strictPlayerMatching: strictPlayerMatching,
       );
+
+      if (onProgress != null &&
+          ((i + 1) % progressInterval == 0 || i == total - 1)) {
+        onProgress(i + 1, total);
+      }
     }
 
     final games = pgnList.map((p) => GameInfo.fromPgn(p)).toList();
@@ -82,29 +76,90 @@ class UnifiedAnalysisBuilder {
   }
 
   /// Run [build] inside a dedicated [Isolate] so the UI thread stays
-  /// responsive.  Serialises the results for transfer, then deserialises
-  /// back on the calling isolate.
+  /// responsive.  Progress updates stream back via [ReceivePort].
+  ///
+  /// [onProgress] is called on the main isolate with (current, total).
   static Future<(PositionAnalysis, OpeningTree)> buildInIsolate({
     required List<String> pgnList,
     required String username,
     required bool isWhite,
     bool strictPlayerMatching = true,
     int maxDepth = 30,
+    void Function(int current, int total)? onProgress,
   }) async {
-    final raw = await Isolate.run(() {
-      return _buildSerialized(
+    final receivePort = ReceivePort();
+    final errorPort = ReceivePort();
+
+    await Isolate.spawn(
+      _isolateEntryPoint,
+      (
+        sendPort: receivePort.sendPort,
         pgnList: pgnList,
         username: username,
         isWhite: isWhite,
         strictPlayerMatching: strictPlayerMatching,
         maxDepth: maxDepth,
-      );
+      ),
+      onError: errorPort.sendPort,
+    );
+
+    final completer = Completer<(PositionAnalysis, OpeningTree)>();
+
+    errorPort.listen((message) {
+      if (!completer.isCompleted) {
+        final desc = message is List ? message.first : message;
+        completer.completeError(Exception('Isolate error: $desc'));
+      }
+      receivePort.close();
+      errorPort.close();
     });
 
-    return (
-      PositionAnalysis.fromJson(raw.$1),
-      OpeningTree.fromTransferJson(raw.$2),
+    receivePort.listen((message) {
+      if (message is List) {
+        onProgress?.call(message[0] as int, message[1] as int);
+      } else if (message is Map) {
+        if (!completer.isCompleted) {
+          final analysis = PositionAnalysis.fromJson(
+              Map<String, dynamic>.from(message['analysis'] as Map));
+          final tree = OpeningTree.fromTransferJson(
+              Map<String, dynamic>.from(message['tree'] as Map));
+          completer.complete((analysis, tree));
+        }
+        receivePort.close();
+        errorPort.close();
+      }
+    });
+
+    return completer.future;
+  }
+
+  // ── Isolate entry point ──────────────────────────────────────────────
+
+  static void _isolateEntryPoint(
+    ({
+      SendPort sendPort,
+      List<String> pgnList,
+      String username,
+      bool isWhite,
+      bool strictPlayerMatching,
+      int maxDepth,
+    }) params,
+  ) {
+    final (analysis, tree) = build(
+      pgnList: params.pgnList,
+      username: params.username,
+      isWhite: params.isWhite,
+      strictPlayerMatching: params.strictPlayerMatching,
+      maxDepth: params.maxDepth,
+      onProgress: (current, total) {
+        params.sendPort.send([current, total]);
+      },
     );
+
+    params.sendPort.send({
+      'analysis': analysis.toJson(fullExport: true),
+      'tree': tree.toTransferJson(),
+    });
   }
 
   // ── Per-game processing ──────────────────────────────────────────────
