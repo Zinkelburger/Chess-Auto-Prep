@@ -101,10 +101,10 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
       return;
     }
 
-    if (_mode == _DownloadMode.months && (_months < 1 || _months > 24)) {
+    if (_mode == _DownloadMode.months && _months < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a valid number of months (1–24)'),
+          content: Text('Please enter a valid number of months (1 or more)'),
         ),
       );
       return;
@@ -241,10 +241,10 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
               child: Column(
                 children: [
                   Slider(
-                    value: _months.toDouble().clamp(1, 24),
+                    value: _months.toDouble().clamp(1, 120),
                     min: 1,
-                    max: 24,
-                    divisions: 23,
+                    max: 120,
+                    divisions: 119,
                     label: '$_months month${_months == 1 ? '' : 's'}',
                     onChanged: (value) {
                       setState(() {
@@ -277,7 +277,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 ),
                 onChanged: (value) {
                   final parsed = int.tryParse(value);
-                  if (parsed != null && parsed >= 1 && parsed <= 24) {
+                  if (parsed != null && parsed >= 1) {
                     setState(() => _months = parsed);
                   }
                 },
@@ -287,7 +287,7 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Fetch all non-bullet games from the last 1–24 months',
+          'Fetch all non-bullet games from the last N months (up to 10 years)',
           style: TextStyle(fontSize: 12, color: Colors.grey[600]),
         ),
       ],

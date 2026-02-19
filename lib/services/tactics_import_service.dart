@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:dartchess_webok/dartchess_webok.dart';
@@ -92,6 +93,21 @@ class TacticsImportService {
     }
   }
 
+  /// Fetch the list of monthly archive URLs from Chess.com.
+  ///
+  /// Returns the URLs in chronological order (oldest first), or an empty
+  /// list if the player has no archives.
+  Future<List<String>> _fetchChesscomArchives(String username) async {
+    final url = Uri.parse(
+      'https://api.chess.com/pub/player/${username.toLowerCase()}'
+      '/games/archives',
+    );
+    final response = await http.get(url);
+    if (response.statusCode != 200) return [];
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return List<String>.from(data['archives'] as List);
+  }
+
   Future<List<TacticsPosition>> importGamesFromChessCom(
     String username, {
     int? maxGames, 
@@ -105,46 +121,41 @@ class TacticsImportService {
       await _database.loadPositions();
     }
     
-    int gamesFound = 0;
     int targetGames = maxGames ?? 10;
     List<String> allGames = [];
     
-    final now = DateTime.now();
-    int currentYear = now.year;
-    int currentMonth = now.month;
+    progressCallback?.call('Fetching Chess.com game archives for $username…');
     
-    // Look back up to 3 months
-    for (int i = 0; i < 3; i++) {
-      if (gamesFound >= targetGames) break;
-      
-      final formattedMonth = currentMonth.toString().padLeft(2, '0');
-      final url = Uri.parse('https://api.chess.com/pub/player/$username/games/$currentYear/$formattedMonth/pgn');
-      
-      progressCallback?.call('Downloading Chess.com games for $formattedMonth/$currentYear...');
+    // Use the archives endpoint to discover which months actually have
+    // games, rather than blindly checking the last N months (which fails
+    // for inactive players).
+    final archives = await _fetchChesscomArchives(username);
+    
+    if (archives.isEmpty) {
+      throw Exception('No game archives found for $username on Chess.com');
+    }
+    
+    // Walk backwards from the most recent archive.
+    for (int i = archives.length - 1;
+        i >= 0 && allGames.length < targetGames;
+        i--) {
+      progressCallback?.call(
+        'Downloading Chess.com games (${allGames.length}/$targetGames)…',
+      );
       
       try {
-        final response = await http.get(url);
-        if (response.statusCode == 200) {
+        final response = await http.get(Uri.parse('${archives[i]}/pgn'));
+        if (response.statusCode == 200 && response.body.isNotEmpty) {
           final games = _splitPgnIntoGames(response.body);
-          // Chess.com API returns games in reverse chronological order (newest first)
-          // so we add them directly without reversing
           allGames.addAll(games);
-          gamesFound += games.length;
         }
       } catch (e) {
         if (kDebugMode) print('Error fetching Chess.com games: $e');
       }
-      
-      // Go to previous month
-      currentMonth--;
-      if (currentMonth == 0) {
-        currentMonth = 12;
-        currentYear--;
-      }
     }
     
     if (allGames.isEmpty) {
-      throw Exception('No games found in the last 3 months');
+      throw Exception('No games found for $username on Chess.com');
     }
     
     // Limit to target games
