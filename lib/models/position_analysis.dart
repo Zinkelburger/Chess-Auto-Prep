@@ -288,13 +288,18 @@ class PositionAnalysis {
     return filtered;
   }
 
-  /// Serialize to JSON (only top 50 positions to save space)
-  Map<String, dynamic> toJson() {
-    // Get top 50 worst positions (lowest win rate)
-    final sortedPositions = getSortedPositions(minGames: 3, sortBy: 'win_rate').take(50).toList();
+  /// Serialize to JSON.
+  ///
+  /// By default only the top 50 worst positions are included (for on-disk
+  /// caching).  Pass [fullExport] = true to include every position — needed
+  /// when transferring across an isolate boundary.
+  Map<String, dynamic> toJson({bool fullExport = false}) {
+    final positions = fullExport
+        ? positionStats.values.toList()
+        : getSortedPositions(minGames: 3, sortBy: 'win_rate').take(50).toList();
 
     return {
-      'positionStats': sortedPositions.map((p) => p.toJson()).toList(),
+      'positionStats': positions.map((p) => p.toJson()).toList(),
       'games': games.map((g) => g.toJson()).toList(),
       'fenToGameIndices': fenToGameIndices.map(
         (key, value) => MapEntry(key, value),

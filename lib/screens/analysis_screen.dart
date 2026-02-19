@@ -41,6 +41,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   bool _isAnalyzing = false;
   bool _playerIsWhite = true;
 
+  // ── Build progress state ──────────────────────────────────────────
+  String _analysisPhase = '';
+  int _analysisCurrent = 0;
+  int _analysisTotal = 0;
+
   // ── Engine eval state ───────────────────────────────────────────────
   List<EngineWeaknessResult> _engineEvals = [];
   EngineWeaknessService? _evalService;
@@ -74,7 +79,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       children: [
         _buildToolbar(context),
         if (_isAnalyzing)
-          const LinearProgressIndicator(minHeight: 2)
+          LinearProgressIndicator(
+            minHeight: 2,
+            value: _analysisTotal > 0
+                ? _analysisCurrent / _analysisTotal
+                : null,
+          )
         else
           const Divider(height: 2, thickness: 2),
         Expanded(child: _buildBody(context)),
@@ -242,7 +252,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final base =
         '${p.gameCount} games · ${p.platformDisplayName} (${p.username})'
         ' · ${p.rangeDescription}';
-    return _isAnalyzing ? '$base · Analyzing…' : base;
+    if (!_isAnalyzing) return base;
+    if (_analysisTotal > 0) {
+      return '$base · $_analysisPhase · $_analysisCurrent / $_analysisTotal games';
+    }
+    if (_analysisPhase.isNotEmpty) return '$base · $_analysisPhase';
+    return '$base · Analyzing…';
   }
 
   Future<void> _showPlayerSelection() async {
@@ -416,14 +431,25 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final player = _currentPlayer;
     if (player == null) return;
 
-    setState(() => _isAnalyzing = true);
+    setState(() {
+      _isAnalyzing = true;
+      _analysisPhase = 'Loading games';
+      _analysisCurrent = 0;
+      _analysisTotal = 0;
+    });
 
     try {
       final pgnList = await _loadPgnList(player);
       if (pgnList == null) return;
 
+      if (mounted) {
+        setState(() => _analysisPhase = 'Analyzing as White');
+      }
+
       // Launch both colours concurrently in separate isolates.
-      final whiteFuture = _buildAnalysis(player, pgnList, true);
+      // Only White reports progress (Black runs silently in background).
+      final whiteFuture = _buildAnalysis(player, pgnList, true,
+          onProgress: _onBuildProgress);
       final blackFuture = _buildAnalysis(player, pgnList, false);
 
       final (whiteAnalysis, whiteTree) = await whiteFuture;
@@ -435,6 +461,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           _whiteTree = whiteTree;
           _playerIsWhite = true;
           _isAnalyzing = false;
+          _analysisPhase = '';
+          _analysisCurrent = 0;
+          _analysisTotal = 0;
         });
       }
 
@@ -448,7 +477,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     } catch (e) {
       if (mounted) {
         _showError('Failed to analyze positions: $e');
-        setState(() => _isAnalyzing = false);
+        setState(() {
+          _isAnalyzing = false;
+          _analysisPhase = '';
+        });
       }
     }
   }
@@ -457,14 +489,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final player = _currentPlayer;
     if (player == null) return;
 
-    setState(() => _isAnalyzing = true);
+    final colorName = _playerIsWhite ? 'White' : 'Black';
+    setState(() {
+      _isAnalyzing = true;
+      _analysisPhase = 'Analyzing as $colorName';
+      _analysisCurrent = 0;
+      _analysisTotal = 0;
+    });
 
     try {
       final pgnList = await _loadPgnList(player);
       if (pgnList == null) return;
 
-      final (analysis, tree) =
-          await _buildAnalysis(player, pgnList, _playerIsWhite);
+      final (analysis, tree) = await _buildAnalysis(
+        player, pgnList, _playerIsWhite,
+        onProgress: _onBuildProgress,
+      );
 
       if (mounted) {
         setState(() {
@@ -476,13 +516,19 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             _blackTree = tree;
           }
           _isAnalyzing = false;
+          _analysisPhase = '';
+          _analysisCurrent = 0;
+          _analysisTotal = 0;
         });
         _mergeEvalsIntoAnalysis();
       }
     } catch (e) {
       if (mounted) {
         _showError('Failed to analyze positions: $e');
-        setState(() => _isAnalyzing = false);
+        setState(() {
+          _isAnalyzing = false;
+          _analysisPhase = '';
+        });
       }
     }
   }
@@ -514,16 +560,26 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return pgnList;
   }
 
+  void _onBuildProgress(int current, int total) {
+    if (mounted) {
+      setState(() {
+        _analysisCurrent = current;
+        _analysisTotal = total;
+      });
+    }
+  }
+
   Future<(PositionAnalysis, OpeningTree)> _buildAnalysis(
     AnalysisPlayerInfo player,
     List<String> pgnList,
-    bool isWhite,
-  ) async {
-    // Single-pass builder running in a dedicated isolate.
+    bool isWhite, {
+    void Function(int current, int total)? onProgress,
+  }) async {
     final (analysis, tree) = await UnifiedAnalysisBuilder.buildInIsolate(
       pgnList: pgnList,
       username: player.username,
       isWhite: isWhite,
+      onProgress: onProgress,
     );
 
     // Cache the FEN-map analysis for fast reload next time.
