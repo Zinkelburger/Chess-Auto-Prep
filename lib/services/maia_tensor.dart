@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 
 class MaiaTensor {
@@ -116,13 +116,22 @@ class MaiaTensor {
 
     // Handle mirroring if it's black's turn
     // The model is trained on White's perspective
-    chess.Chess board = chess.Chess.fromFEN(fen);
+    Position position;
+    try {
+      position = Chess.fromSetup(Setup.parseFen(fen));
+    } catch (_) {
+      throw Exception('Invalid FEN: $fen');
+    }
     bool isBlack = fen.split(' ')[1] == 'b';
-    
+
     String processedFen = fen;
     if (isBlack) {
       processedFen = mirrorFEN(fen);
-      board = chess.Chess.fromFEN(processedFen);
+      try {
+        position = Chess.fromSetup(Setup.parseFen(processedFen));
+      } catch (_) {
+        throw Exception('Invalid mirrored FEN: $processedFen');
+      }
     }
 
     // Convert board to tensor
@@ -136,31 +145,34 @@ class MaiaTensor {
     // Generate legal moves tensor (mask)
     // Size should match the output size of the model (all possible moves)
     final legalMoves = Float32List(_allMoves.length);
-    final moves = board.moves(); // Returns List<dynamic> (strings or Move objects)
-    
-    // We need verbose moves to get from/to/promotion
-    // dart-chess moves() returns simple algebraic san usually, 
-    // but we need to generate legal moves and map them to indices.
-    // Let's re-generate moves with our board object to get details.
-    // Actually chess.dart generate_moves() returns Move objects.
-    // Let's assume board.moves() gives us list of Move objects if we don't ask for SAN.
-    // Checking chess.dart source or usage: board.generate_moves() is internal usually.
-    // board.moves() returns List<Move> if input is not specified? No, usually SAN strings.
-    // We need UCI format: "e2e4".
-    
-    // Workaround: iterate all generated moves
-    for (final move in board.generate_moves()) {
-      final from = move.fromAlgebraic;
-      final to = move.toAlgebraic;
-      final promotion = move.promotion != null ? move.promotion!.name : ''; // p, n, b, r, q? 
-      // chess.dart PieceType.name returns 'p', 'n' etc.
-      
-      // Construct UCI
-      final uci = '$from$to$promotion';
-      
-      if (_allMoves.containsKey(uci)) {
-        final index = _allMoves[uci]!;
-        legalMoves[index] = 1.0;
+
+    // Iterate position.legalMoves: IMap<Square, SquareSet>
+    for (final entry in position.legalMoves.entries) {
+      final fromSq = entry.key;
+      final targets = entry.value;
+      final piece = position.board.pieceAt(fromSq);
+      final fromStr = fromSq.name;
+
+      for (final toSq in targets.squares) {
+        final toStr = toSq.name;
+        final isPromotion = piece?.role == Role.pawn &&
+            ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
+                (piece.color == Side.black && toSq ~/ 8 == 0));
+
+        if (isPromotion) {
+          for (final role in [Role.queen, Role.rook, Role.bishop, Role.knight]) {
+            final promoChar = _roleToUciChar(role);
+            final uci = '$fromStr$toStr$promoChar';
+            if (_allMoves.containsKey(uci)) {
+              legalMoves[_allMoves[uci]!] = 1.0;
+            }
+          }
+        } else {
+          final uci = '$fromStr$toStr';
+          if (_allMoves.containsKey(uci)) {
+            legalMoves[_allMoves[uci]!] = 1.0;
+          }
+        }
       }
     }
 
@@ -172,6 +184,14 @@ class MaiaTensor {
       'isBlack': isBlack, // Pass this along to un-mirror output
     };
   }
+
+  static String _roleToUciChar(Role role) => switch (role) {
+        Role.queen => 'q',
+        Role.rook => 'r',
+        Role.bishop => 'b',
+        Role.knight => 'n',
+        _ => '',
+      };
 
   static Map<String, int> _createEloDict() {
     const interval = 100;

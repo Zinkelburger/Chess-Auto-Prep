@@ -9,7 +9,7 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 
 import '../models/engine_settings.dart';
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
@@ -246,9 +246,8 @@ class RepertoireGenerationService {
         evalForUs >= config.maxEvalCpForUs ||
         evalForUs <= config.minEvalCpForUs;
 
-    final game = chess.Chess.fromFEN(fen);
-    final legalMoves = game.generate_moves();
-    if (reachedStop || legalMoves.isEmpty) {
+    final pos = Chess.fromSetup(Setup.parseFen(fen));
+    if (reachedStop || pos.legalMoves.isEmpty) {
       double metaEase = 0.5;
       if (strategy == GenerationStrategy.metaEval) {
         final nodeEase = await _computeNodeEase(pool, fen, config.easeDepth, maiaElo: config.maiaElo);

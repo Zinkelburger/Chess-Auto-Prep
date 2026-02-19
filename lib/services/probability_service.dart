@@ -4,7 +4,7 @@ library;
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 
 import 'lichess_auth_service.dart';
 
@@ -113,15 +113,17 @@ class ProbabilityService {
     if (moves.isEmpty) {
       return 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     }
-    
-    final game = chess.Chess();
+
+    Position pos = Chess.initial;
     for (final san in moves) {
-      if (!game.move(san)) {
-        print('Invalid starting move: $san');
+      final move = pos.parseSan(san);
+      if (move == null) {
+        if (kDebugMode) print('Invalid starting move: $san');
         break;
       }
+      pos = pos.play(move);
     }
-    return game.fen;
+    return pos.fen;
   }
 
   /// Fetch move probabilities for a position from Lichess Explorer
@@ -243,9 +245,16 @@ class ProbabilityService {
     final startMovesStr = startingMoves ?? _startMoves;
     final startingFen = _getStartingFen(startMovesStr);
     final startMovesList = _parseStartMoves(startMovesStr);
-    
-    final game = chess.Chess.fromFEN(startingFen);
-    
+
+    Position pos;
+    try {
+      pos = Chess.fromSetup(Setup.parseFen(startingFen));
+    } catch (_) {
+      lineBreakdown.value = [];
+      cumulativeProbability.value = 0.0;
+      return 0.0;
+    }
+
     double cumulative = 100.0;
     bool isWhiteTurn = startingFen.contains(' w ');
     final breakdown = <MoveInLineProbability>[];
@@ -283,7 +292,7 @@ class ProbabilityService {
 
       if (isOpponentMove) {
         // Fetch probabilities for this position (without updating currentPosition)
-        final probs = await _fetchProbabilitiesInternal(game.fen);
+        final probs = await _fetchProbabilitiesInternal(pos.fen);
         
         if (probs != null && probs.moves.isNotEmpty) {
           // Find the probability for this move
@@ -324,9 +333,9 @@ class ProbabilityService {
       ));
 
       // Make the move
-      if (!game.move(san)) {
-        break;
-      }
+      final move = pos.parseSan(san);
+      if (move == null) break;
+      pos = pos.play(move);
       isWhiteTurn = !isWhiteTurn;
     }
 

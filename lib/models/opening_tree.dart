@@ -2,7 +2,7 @@
 /// Similar to openingtree.com's move explorer functionality
 library;
 
-import 'package:dartchess_webok/dartchess_webok.dart';
+import 'package:dartchess/dartchess.dart';
 import '../utils/fen_utils.dart';
 
 class OpeningTreeNode {

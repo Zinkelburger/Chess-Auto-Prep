@@ -1,4 +1,4 @@
-import 'package:dartchess_webok/dartchess_webok.dart';
+import 'package:dartchess/dartchess.dart';
 import '../models/opening_tree.dart';
 
 class OpeningTreeBuilder {

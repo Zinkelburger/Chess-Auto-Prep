@@ -5,8 +5,7 @@ library;
 import 'dart:convert';
 import 'dart:io' as io;
 
-import 'package:dartchess_webok/dartchess_webok.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 import '../models/repertoire_line.dart';
 import 'storage/storage_factory.dart';
 

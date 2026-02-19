@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
+
+import '../utils/chess_utils.dart' show roleChar, parseSquare, toAlgebraic;
 
 /// Rich move object that contains complete information about a move
 class CompletedMove {
@@ -27,7 +29,7 @@ class CompletedMove {
 /// A professional chess board widget that properly scales and handles interaction.
 /// Uses a simple, maintainable approach: CustomPainter for board + SVG widgets for pieces
 class ChessBoardWidget extends StatefulWidget {
-  final chess.Chess game;
+  final Position position;
   final Function(CompletedMove)? onMove;
   final bool enableUserMoves;
   final bool flipped;
@@ -37,7 +39,7 @@ class ChessBoardWidget extends StatefulWidget {
 
   const ChessBoardWidget({
     super.key,
-    required this.game,
+    required this.position,
     this.onMove,
     this.enableUserMoves = true,
     this.flipped = false,
@@ -54,14 +56,12 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   String? selectedSquare;
   final Set<String> _internalHighlights = {};
 
-  // Drag and drop state
   String? _dragStartSquare;
   bool _isDragging = false;
   Offset? _dragStartPosition;
   Offset? _currentDragPosition;
-  chess.Piece? _draggedPiece;
+  Piece? _draggedPiece;
 
-  // Colors matching the Python implementation
   static const Color lightSquareColor = Color(0xFFF0D9B5);
   static const Color darkSquareColor = Color(0xFFB58863);
   static const Color selectedSquareColor = Color(0xFFFFFF00);
@@ -94,7 +94,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
             },
             onTapUp: (details) {
               if (!widget.enableUserMoves) return;
-              // Only handle tap if we're not dragging
               if (!_isDragging) {
                 final col = (details.localPosition.dx / squareSize).floor();
                 final row = (details.localPosition.dy / squareSize).floor();
@@ -104,7 +103,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
             },
             child: Stack(
               children: [
-                // Board squares and highlights
                 CustomPaint(
                   painter: _BoardPainter(
                     selectedSquare: selectedSquare,
@@ -114,10 +112,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                   size: Size(boardSize, boardSize),
                 ),
 
-                // SVG Pieces as positioned widgets
                 ..._buildPieceWidgets(boardSize, squareSize),
 
-                // Draw dragged piece at cursor position
                 if (_isDragging && _draggedPiece != null && _currentDragPosition != null)
                   _buildDraggedPiece(squareSize),
               ],
@@ -131,20 +127,19 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   List<Widget> _buildPieceWidgets(double boardSize, double squareSize) {
     final pieces = <Widget>[];
 
-    // Trust the chess library - iterate through all 64 squares correctly
     for (String file in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
       for (int rank = 1; rank <= 8; rank++) {
-        final square = '$file$rank';
-        final piece = widget.game.get(square);
+        final squareName = '$file$rank';
+        final sq = parseSquare(squareName);
+        if (sq == null) continue;
+        final piece = widget.position.board.pieceAt(sq);
 
         if (piece != null) {
-          // Skip drawing if this piece is being dragged
-          if (_isDragging && square == _dragStartSquare) {
+          if (_isDragging && squareName == _dragStartSquare) {
             continue;
           }
 
-          // Convert square name to screen coordinates
-          final (col, row) = _squareToCoords(square);
+          final (col, row) = _squareToCoords(squareName);
           final x = col * squareSize;
           final y = row * squareSize;
 
@@ -154,7 +149,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
               top: y,
               width: squareSize,
               height: squareSize,
-              child: IgnorePointer( // FIX: Let taps pass through to parent GestureDetector
+              child: IgnorePointer(
                 child: _PieceWidget(
                   piece: piece,
                   size: squareSize,
@@ -169,14 +164,11 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     return pieces;
   }
 
-  /// Convert square name (e.g., "e4") to screen coordinates (col, row)
   (int, int) _squareToCoords(String square) {
     return _BoardPainter._squareToCoords(square, widget.flipped);
   }
 
-  /// Convert screen coordinates to square name (e.g., (4,4) -> "e4")
   String _coordsToSquare(int col, int row) {
-    // Reverse the orientation transformation
     final file = widget.flipped ? (7 - col) : col;
     final rank = widget.flipped ? row : (7 - row);
 
@@ -188,11 +180,11 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     final row = (details.localPosition.dy / squareSize).floor();
     final square = _coordsToSquare(col, row);
 
-    final piece = widget.game.get(square);
-    if (piece != null && piece.color == widget.game.turn) {
-      // Check if there are legal moves from this square
-      final allMoves = widget.game.generate_moves();
-      final hasLegalMoves = allMoves.any((move) => move.fromAlgebraic == square);
+    final sq = parseSquare(square);
+    if (sq == null) return;
+    final piece = widget.position.board.pieceAt(sq);
+    if (piece != null && piece.color == widget.position.turn) {
+      final hasLegalMoves = widget.position.legalMoves[sq]?.isNotEmpty ?? false;
 
       if (hasLegalMoves) {
         setState(() {
@@ -211,14 +203,12 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     if (_dragStartSquare != null && _dragStartPosition != null) {
       final distance = (details.localPosition - _dragStartPosition!).distance;
 
-      // Start dragging if moved far enough (3 pixels threshold like Python)
       if (!_isDragging && distance > 3) {
         setState(() {
           _isDragging = true;
         });
       }
 
-      // Update drag position
       if (_isDragging) {
         setState(() {
           _currentDragPosition = details.localPosition;
@@ -229,7 +219,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
   void _onPanEnd(DragEndDetails details, double squareSize) {
     if (_isDragging && _dragStartSquare != null && _currentDragPosition != null) {
-      // Calculate end square from final position
       final col = (_currentDragPosition!.dx / squareSize).floor();
       final row = (_currentDragPosition!.dy / squareSize).floor();
 
@@ -241,7 +230,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       }
     }
 
-    // Reset drag state
     _resetDragState();
   }
 
@@ -261,8 +249,10 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     widget.onSquareClicked?.call(square);
 
     if (selectedSquare == null) {
-      final piece = widget.game.get(square);
-      if (piece != null && piece.color == widget.game.turn) {
+      final sq = parseSquare(square);
+      if (sq == null) return;
+      final piece = widget.position.board.pieceAt(sq);
+      if (piece != null && piece.color == widget.position.turn) {
         setState(() {
           selectedSquare = square;
           _highlightLegalMoves(square);
@@ -284,14 +274,14 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   void _highlightLegalMoves(String fromSquare) {
     _internalHighlights.clear();
 
-    // Get all legal moves for the current position
-    final allMoves = widget.game.generate_moves();
+    final fromSq = parseSquare(fromSquare);
+    if (fromSq == null) return;
 
-    // Filter moves that start from the selected square and add their target squares
-    for (final move in allMoves) {
-      if (move.fromAlgebraic == fromSquare) {
-        _internalHighlights.add(move.toAlgebraic);
-      }
+    final targets = widget.position.legalMoves[fromSq];
+    if (targets == null) return;
+
+    for (final toSq in targets.squares) {
+      _internalHighlights.add(toAlgebraic(toSq));
     }
   }
 
@@ -316,101 +306,71 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   void didUpdateWidget(covariant ChessBoardWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // If the game object changes (e.g., parent updated it) or the board flips,
-    // we must reset the local selection state.
-    if (widget.game != oldWidget.game || widget.flipped != oldWidget.flipped) {
+    if (widget.position != oldWidget.position || widget.flipped != oldWidget.flipped) {
       _resetDragState();
     }
   }
 
   void _tryMakeMove(String from, String to) {
     try {
-      final fenBefore = widget.game.fen;
+      final fenBefore = widget.position.fen;
 
-      // Create a local copy to validate the move WITHOUT mutating parent state
-      final gameCopy = chess.Chess.fromFEN(fenBefore);
-
-      // Find the matching legal move object from the library
-      final legalMoves = gameCopy.generate_moves();
-      final fromSquare = chess.Chess.SQUARES[from];
-      final toSquare = chess.Chess.SQUARES[to];
-
-      // Check for promotion (auto-promote to Queen)
-      final piece = gameCopy.get(from);
-      final isPromotion = piece?.type == chess.PieceType.PAWN &&
-          ((piece!.color == chess.Color.WHITE && to[1] == '8') ||
-           (piece.color == chess.Color.BLACK && to[1] == '1'));
-
-      // Find the exact move object so we can get proper SAN from the library
-      final matchingMove = legalMoves.cast<dynamic>().firstWhere(
-        (move) =>
-            move.from == fromSquare &&
-            move.to == toSquare &&
-            (!isPromotion || move.promotion == chess.PieceType.QUEEN),
-        orElse: () => null,
-      );
-
-      if (matchingMove == null) {
-        setState(() {
-          selectedSquare = null;
-          _internalHighlights.clear();
-        });
+      final fromSq = parseSquare(from);
+      final toSq = parseSquare(to);
+      if (fromSq == null || toSq == null) {
+        _clearSelection();
         return;
       }
 
-      // Use the library to generate correct SAN (handles castling, en passant,
-      // disambiguation, check/checkmate symbols, etc.)
-      final san = gameCopy.move_to_san(matchingMove);
+      // Check if there are legal moves from this square to the target
+      final targets = widget.position.legalMoves[fromSq];
+      if (targets == null || !targets.has(toSq)) {
+        _clearSelection();
+        return;
+      }
 
-      // Build UCI string (include promotion piece if applicable)
+      final piece = widget.position.board.pieceAt(fromSq);
+      final isPromotion = piece?.role == Role.pawn &&
+          ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
+           (piece.color == Side.black && toSq ~/ 8 == 0));
+
+      final move = NormalMove(
+        from: fromSq,
+        to: toSq,
+        promotion: isPromotion ? Role.queen : null,
+      );
+
+      final (newPosition, san) = widget.position.makeSan(move);
+      final fenAfter = newPosition.fen;
       final uci = isPromotion ? '${from}${to}q' : '$from$to';
 
-      // Make the move on the copy to get the resulting FEN
-      final moveMap = <String, String>{'from': from, 'to': to};
-      if (isPromotion) moveMap['promotion'] = 'q';
+      _clearSelection();
 
-      final moveResult = gameCopy.move(moveMap);
-
-      if (moveResult == true) {
-        final fenAfter = gameCopy.fen;
-
-        setState(() {
-          selectedSquare = null;
-          _internalHighlights.clear();
-        });
-
-        // Create rich move object with all the info
-        // IMPORTANT: We do NOT mutate widget.game - the parent controller does that
-        final completedMove = CompletedMove(
-          from: from,
-          to: to,
-          san: san,
-          fenBefore: fenBefore,
-          fenAfter: fenAfter,
-          uci: uci,
-        );
-
-        // Call the callback - parent will update the game state
-        widget.onMove?.call(completedMove);
-      } else {
-        setState(() {
-          selectedSquare = null;
-          _internalHighlights.clear();
-        });
-      }
+      widget.onMove?.call(CompletedMove(
+        from: from,
+        to: to,
+        san: san,
+        fenBefore: fenBefore,
+        fenAfter: fenAfter,
+        uci: uci,
+      ));
     } catch (e) {
-      setState(() {
-        selectedSquare = null;
-        _internalHighlights.clear();
-      });
+      _clearSelection();
     }
+  }
+
+  void _clearSelection() {
+    setState(() {
+      selectedSquare = null;
+      _internalHighlights.clear();
+    });
   }
 }
 
 
 /// Simple piece widget that renders SVG pieces
 class _PieceWidget extends StatelessWidget {
-  final chess.Piece piece;
+  final Piece piece;
   final double size;
 
   const _PieceWidget({
@@ -420,15 +380,14 @@ class _PieceWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = piece.color == chess.Color.WHITE ? 'w' : 'b';
-    // Convert piece type to uppercase character
-    final type = piece.type.toString().toUpperCase();
+    final color = piece.color == Side.white ? 'w' : 'b';
+    final type = roleChar(piece.role);
     final assetPath = 'assets/pieces/$color$type.svg';
 
-    return Center( // FIX: Center the piece within its square
+    return Center(
       child: SvgPicture.asset(
         assetPath,
-        width: size, // Full square size
+        width: size,
         height: size,
         fit: BoxFit.contain,
       ),
@@ -452,20 +411,17 @@ class _BoardPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final squareSize = size.width / 8;
 
-    // Draw board squares and highlights using proper square mapping
     for (String file in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
       for (int rank = 1; rank <= 8; rank++) {
         final square = '$file$rank';
 
-        // Convert to screen coordinates
         final (col, row) = _squareToCoords(square, flipped);
         final x = col * squareSize;
         final y = row * squareSize;
 
-        // Determine square color based on chess square
         final fileIndex = file.codeUnitAt(0) - 97;
-        final rankIndex = rank - 1; // FIX: Use 0-based index
-        final isLightSquare = (fileIndex + rankIndex) % 2 != 0; // FIX: Check for non-zero
+        final rankIndex = rank - 1;
+        final isLightSquare = (fileIndex + rankIndex) % 2 != 0;
 
         final Color color;
         if (square == selectedSquare) {
@@ -476,11 +432,9 @@ class _BoardPainter extends CustomPainter {
               : _ChessBoardWidgetState.darkSquareColor;
         }
 
-        // Draw square
         final rect = Rect.fromLTWH(x, y, squareSize, squareSize);
         canvas.drawRect(rect, Paint()..color = color);
 
-        // Draw highlight overlay if needed
         if (highlightedSquares.contains(square) && square != selectedSquare) {
           canvas.drawRect(rect, Paint()
             ..color = _ChessBoardWidgetState.highlightColor
@@ -489,8 +443,6 @@ class _BoardPainter extends CustomPainter {
       }
     }
 
-    // Draw board border (painted here instead of Container decoration
-    // to avoid border width affecting child layout and piece positioning)
     canvas.drawRect(
       Offset.zero & size,
       Paint()
@@ -500,12 +452,10 @@ class _BoardPainter extends CustomPainter {
     );
   }
 
-  /// Convert square name to screen coordinates (shared logic)
   static (int, int) _squareToCoords(String square, bool flipped) {
-    final file = square.codeUnitAt(0) - 97; // 'a' = 0, 'b' = 1, etc.
-    final rank = int.parse(square[1]) - 1;   // '1' = 0, '2' = 1, etc.
+    final file = square.codeUnitAt(0) - 97;
+    final rank = int.parse(square[1]) - 1;
 
-    // Apply board orientation
     final col = flipped ? (7 - file) : file;
     final row = flipped ? rank : (7 - rank);
 

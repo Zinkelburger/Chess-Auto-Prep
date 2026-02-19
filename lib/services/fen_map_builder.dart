@@ -1,4 +1,4 @@
-import 'package:dartchess_webok/dartchess_webok.dart';
+import 'package:dartchess/dartchess.dart';
 import '../models/position_analysis.dart';
 import '../utils/fen_utils.dart';
 

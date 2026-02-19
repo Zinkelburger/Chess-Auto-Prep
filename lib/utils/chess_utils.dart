@@ -4,29 +4,18 @@
 /// [UnifiedEnginePane] and [RepertoireScreen].
 library;
 
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 
 /// Convert a UCI move string (e.g. `e2e4`) to SAN notation given [fen].
 ///
 /// Returns the original [uci] string if the move cannot be resolved.
 String uciToSan(String fen, String uci) {
   try {
-    final game = chess.Chess.fromFEN(fen);
-    final from = uci.substring(0, 2);
-    final to = uci.substring(2, 4);
-    String? promotion;
-    if (uci.length > 4) promotion = uci.substring(4);
-
-    final legalMoves = game.moves({'verbose': true});
-    final match = legalMoves.firstWhere(
-      (m) =>
-          m['from'] == from &&
-          m['to'] == to &&
-          (promotion == null || m['promotion'] == promotion),
-      orElse: () => <String, dynamic>{},
-    );
-
-    return match.isNotEmpty ? match['san'] as String : uci;
+    final position = Chess.fromSetup(Setup.parseFen(fen));
+    final move = Move.parse(uci);
+    if (move == null) return uci;
+    final (_, san) = position.makeSan(move);
+    return san;
   } catch (_) {
     return uci;
   }
@@ -38,57 +27,79 @@ String uciToSan(String fen, String uci) {
 String formatContinuation(String fen, List<String> fullPv, {int maxMoves = 6}) {
   if (fullPv.length <= 1) return '';
 
-  final game = chess.Chess.fromFEN(fen);
-  final sanMoves = <String>[];
+  try {
+    Position pos = Chess.fromSetup(Setup.parseFen(fen));
+    final sanMoves = <String>[];
 
-  for (int i = 0; i < fullPv.length && sanMoves.length < maxMoves; i++) {
-    final uci = fullPv[i];
-    if (uci.length < 4) continue;
+    for (int i = 0; i < fullPv.length && sanMoves.length < maxMoves; i++) {
+      final uci = fullPv[i];
+      final move = Move.parse(uci);
+      if (move == null) break;
 
-    final from = uci.substring(0, 2);
-    final to = uci.substring(2, 4);
-    String? promotion;
-    if (uci.length > 4) promotion = uci.substring(4);
-
-    final moveMap = <String, String>{'from': from, 'to': to};
-    if (promotion != null) moveMap['promotion'] = promotion;
-
-    final legalMoves = game.moves({'verbose': true});
-    final matchingMove = legalMoves.firstWhere(
-      (m) =>
-          m['from'] == from &&
-          m['to'] == to &&
-          (promotion == null || m['promotion'] == promotion),
-      orElse: () => <String, dynamic>{},
-    );
-
-    if (matchingMove.isNotEmpty && game.move(moveMap)) {
-      if (i >= 1) {
-        sanMoves.add(matchingMove['san'] as String);
+      try {
+        if (i >= 1) {
+          final (_, san) = pos.makeSan(move);
+          sanMoves.add(san);
+        }
+        pos = pos.play(move);
+      } catch (_) {
+        break;
       }
-    } else {
-      break;
     }
-  }
 
-  return sanMoves.join(' ');
+    return sanMoves.join(' ');
+  } catch (_) {
+    return '';
+  }
 }
 
 /// Play a UCI move on [baseFen] and return the resulting FEN, or `null`
 /// if the move is illegal.
 String? playUciMove(String baseFen, String uci) {
   try {
-    final game = chess.Chess.fromFEN(baseFen);
-    final from = uci.substring(0, 2);
-    final to = uci.substring(2, 4);
-    String? promotion;
-    if (uci.length > 4) promotion = uci.substring(4);
-    if (game.move({'from': from, 'to': to, 'promotion': promotion})) {
-      return game.fen;
-    }
-  } catch (_) {}
-  return null;
+    final position = Chess.fromSetup(Setup.parseFen(baseFen));
+    final move = Move.parse(uci);
+    if (move == null) return null;
+    final newPos = position.play(move);
+    return newPos.fen;
+  } catch (_) {
+    return null;
+  }
 }
+
+/// Parse a FEN into a [Position], returning null if invalid.
+Position? tryParseFen(String fen) {
+  try {
+    return Chess.fromSetup(Setup.parseFen(fen));
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Parse an algebraic square name (e.g. 'e4') to a dartchess [Square].
+Square? parseSquare(String name) => Square.parse(name);
+
+/// Convert a dartchess [Square] to algebraic notation (e.g. 'e4').
+String toAlgebraic(Square square) => square.name;
+
+/// Role to uppercase character for SVG asset filenames (e.g. Role.pawn → 'P').
+String roleChar(Role role) => switch (role) {
+  Role.pawn => 'P',
+  Role.knight => 'N',
+  Role.bishop => 'B',
+  Role.rook => 'R',
+  Role.queen => 'Q',
+  Role.king => 'K',
+};
+
+/// Parse a promotion character ('q','r','b','n') into a [Role].
+Role? parsePromotionRole(String char) => switch (char.toLowerCase()) {
+  'q' => Role.queen,
+  'r' => Role.rook,
+  'b' => Role.bishop,
+  'n' => Role.knight,
+  _ => null,
+};
 
 // ── Number formatting helpers ────────────────────────────────────────────
 

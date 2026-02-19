@@ -2,7 +2,7 @@
 /// Represents a single trainable line extracted from PGN mainline
 library;
 
-import 'package:dartchess_webok/dartchess_webok.dart';
+import 'package:dartchess/dartchess.dart';
 
 class RepertoireLine {
   final String id;

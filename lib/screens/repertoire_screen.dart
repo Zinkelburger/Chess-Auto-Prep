@@ -4,7 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 
 import '../core/repertoire_controller.dart';
 import '../models/repertoire_line.dart';
@@ -286,7 +286,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   // Force widget recreation when position changes to prevent race conditions
                   key: ValueKey(_controller.fen),
                   // Read game state from controller
-                  game: _controller.game,
+                  position: _controller.position,
                   flipped: _boardFlipped,
                   onPieceSelected: (square) {
                     // Handle piece selection if needed
@@ -472,7 +472,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       child: UnifiedEnginePane(
         fen: _controller.fen,
         isActive: _tabController.index == 3 && !_isGenerating,
-        isUserTurn: _controller.game.turn == (_controller.isRepertoireWhite ? chess.Color.WHITE : chess.Color.BLACK),
+        isUserTurn: _controller.position.turn == (_controller.isRepertoireWhite ? Side.white : Side.black),
         currentMoveSequence: _controller.currentMoveSequence,
         isWhiteRepertoire: _controller.isRepertoireWhite,
         onMoveSelected: (uciMove) {

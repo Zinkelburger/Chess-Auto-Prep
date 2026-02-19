@@ -9,7 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 
 import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
@@ -60,7 +60,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   // all four of these in a single setState call.
 
   String? _currentFen;
-  chess.Chess? _currentBoard;
+  Position? _currentBoard;
   List<GameInfo> _currentGames = [];
   GameInfo? _selectedGame;
 
@@ -69,7 +69,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   int _lastNavigateGeneration = 0;
 
   /// Starting-position board, shown when no FEN has been selected yet.
-  static final chess.Chess _startingPosition = chess.Chess();
+  static const Position _startingPosition = Chess.initial;
 
   @override
   void initState() {
@@ -120,7 +120,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
                 child: AspectRatio(
                   aspectRatio: 1.0,
                   child: ChessBoardWidget(
-                    game: _currentBoard ?? _startingPosition,
+                    position: _currentBoard ?? _startingPosition,
                     flipped: widget.playerIsWhite != null
                         ? !widget.playerIsWhite!
                         : false,
@@ -305,7 +305,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       pgnText: _selectedGame!.pgnText!,
       controller: _pgnController,
       initialFen: _currentFen,
-      onPositionChanged: (position) => _onPgnPositionChanged(position.fen),
+      onPositionChanged: (game) => _onPgnPositionChanged(game.fen),
     );
   }
 
@@ -405,10 +405,10 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   // Helpers
   // =====================================================================
 
-  /// Parse a (possibly 4-field) FEN into a [chess.Chess] instance.
-  static chess.Chess? _parseFen(String fen) {
+  /// Parse a (possibly 4-field) FEN into a [Position] instance.
+  static Position? _parseFen(String fen) {
     try {
-      return chess.Chess.fromFEN(expandFen(fen));
+      return Chess.fromSetup(Setup.parseFen(expandFen(fen)));
     } catch (_) {
       return null;
     }

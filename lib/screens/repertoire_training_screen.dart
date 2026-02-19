@@ -3,7 +3,7 @@ library;
 
 import 'dart:async';
 
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../core/repertoire_controller.dart';
@@ -46,7 +46,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   int _currentMoveIndex = 0;
   bool _lineHadMistake = false;
 
-  // Unified session/game state shared with the board.
   late final RepertoireController _session;
 
   bool _isLoading = true;
@@ -141,7 +140,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
         existing: currentEntries,
       );
 
-      // Persist merged entries so CSV always mirrors current lines.
       await _reviewService.saveAll([..._otherRepertoireEntries, ...merged]);
 
       setState(() {
@@ -194,7 +192,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       _session.clearMoveHistory();
     });
 
-    // Kick off the first animation/move preparation.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _advanceToNextUserTurn();
     });
@@ -231,8 +228,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   Future<void> _playOpponentMove(int moveIndex) async {
     if (_currentLine == null) return;
     final san = _currentLine!.moves[moveIndex];
-    final result = chess.Chess.fromFEN(_session.game.fen).move(san);
-    if (result == false) {
+
+    // Validate the move can be played
+    final move = _session.position.parseSan(san);
+    if (move == null) {
       setState(() {
         _error = 'Could not play opponent move $san';
       });
@@ -244,7 +243,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       _currentAnnotation = _currentLine!.comments[moveIndex.toString()];
     });
 
-    // Brief pause so the user sees the move land.
     await Future.delayed(const Duration(milliseconds: 500));
   }
 
@@ -279,44 +277,32 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     } else {
       _updateMoveProgress(_currentLine!, _currentMoveIndex, wasCorrect: false);
       _lineHadMistake = true;
-      // Keep the position; do not advance until they play the correct move.
       setState(() {
         _feedback = 'Try again: expected $expectedSan';
       });
     }
   }
 
-  String _uciFromMove(dynamic move) {
-    if (move == null || move is bool) return '';
-    final from = move['from'] as String? ?? '';
-    final to = move['to'] as String? ?? '';
-    final promo = move['promotion'] as String? ?? '';
-    return (from + to + promo).toLowerCase();
-  }
-
   bool _isCorrectUserMove(CompletedMove move, String expectedSan) {
-    // Compute the expected resulting position by applying the PGN move.
-    final expectedGame = chess.Chess.fromFEN(_session.game.fen);
-    final expectedMove = expectedGame.move(expectedSan);
+    // Compute expected resulting position
+    final expectedMove = _session.position.parseSan(expectedSan);
     if (expectedMove == null) return false;
-    final expectedFen = expectedGame.fen;
 
-    // Compute the user resulting position by applying the user's UCI move.
-    final userGame = chess.Chess.fromFEN(_session.game.fen);
-    final userMoveMap = <String, String>{
-      'from': move.from,
-      'to': move.to,
-    };
-    // handle promotion if present in UCI (e.g., e7e8q)
-    if (move.uci.length > 4) {
-      userMoveMap['promotion'] = move.uci.substring(4, 5);
+    try {
+      final expectedPos = _session.position.play(expectedMove);
+      final expectedFen = expectedPos.fen;
+
+      // Compute user resulting position via UCI
+      final userMove = Move.parse(move.uci);
+      if (userMove == null) return false;
+
+      final userPos = _session.position.play(userMove);
+      final userFen = userPos.fen;
+
+      if (userFen == expectedFen) return true;
+    } catch (_) {
+      // Fall through to SAN comparison
     }
-    final userResult = userGame.move(userMoveMap);
-    if (userResult == false) return false;
-    final userFen = userGame.fen;
-
-    // If positions match, accept (handles castling O-O vs Kg8, etc.)
-    if (userFen == expectedFen) return true;
 
     // Fallback: compare normalized SAN strings.
     String normalizeSan(String san) =>
@@ -339,14 +325,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     final updated = _reviewService.applyRating(existing, rating);
     _reviewMap[_currentLine!.id] = updated;
 
-    // Persist merged entries (current + others) to the CSV.
     await _reviewService
         .saveAll([..._otherRepertoireEntries, ..._reviewMap.values]);
 
-    // Save move progress snapshot
     await _reviewService.saveMoveProgress(_moveProgressMap.values.toList());
 
-    // Append review history
     await _reviewService.appendHistory([
       RepertoireReviewHistoryEntry(
         repertoireId: repertoireId,
@@ -373,11 +356,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       return;
     }
 
-    // Continue sequentially: move to the next due line after the current one if possible.
     int nextIndex = 0;
     if (_currentLine != null) {
       final currentOrderIndex = _lines.indexWhere((l) => l.id == _currentLine!.id);
-      // Find the next due line in order
       for (int i = 1; i <= _lines.length; i++) {
         final candidateIndex = (currentOrderIndex + i) % _lines.length;
         final candidate = _lines[candidateIndex];
@@ -483,7 +464,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           Expanded(
             child: ChessBoardWidget(
               key: ValueKey(_session.fen),
-              game: _session.game,
+              position: _session.position,
               flipped: _boardFlipped,
               enableUserMoves: _waitingForUser,
               onMove: _handleUserMove,

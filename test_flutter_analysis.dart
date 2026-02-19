@@ -5,9 +5,10 @@
 // for comparison with the JavaScript version.
 
 import 'dart:io';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:http/http.dart' as http;
-import 'package:chess/chess.dart' as chess;
+import 'package:dartchess/dartchess.dart' hide File;
 
 // Win% formula (same as Flutter and JS)
 double calculateWinChance(int centipawns) {
@@ -20,7 +21,6 @@ class SimpleStockfish {
   bool _ready = false;
   
   Future<void> init() async {
-    // Try to find stockfish
     final stockfishPath = await _findStockfish();
     if (stockfishPath == null) {
       throw Exception('Stockfish not found. Install it with: sudo dnf install stockfish');
@@ -28,10 +28,7 @@ class SimpleStockfish {
     
     _process = await Process.start(stockfishPath, []);
     
-    // Listen for readyok
-    _process.stdout.transform(const SystemEncoding().decoder).listen((line) {
-      // Handle in getEvaluation
-    });
+    _process.stdout.transform(const SystemEncoding().decoder).listen((line) {});
     
     _process.stdin.writeln('uci');
     await Future.delayed(const Duration(milliseconds: 500));
@@ -63,7 +60,6 @@ class SimpleStockfish {
       }
     }
     
-    // Try 'which stockfish'
     try {
       final result = await Process.run('which', ['stockfish']);
       if (result.exitCode == 0) {
@@ -89,17 +85,14 @@ class SimpleStockfish {
     int? scoreMate;
     List<String> pv = [];
     
-    // Read output until bestmove
     await for (final line in _process.stdout.transform(const SystemEncoding().decoder).transform(const LineSplitter())) {
       if (line.startsWith('info depth') && line.contains(' pv ')) {
-        // Parse score
         final cpMatch = RegExp(r'score cp (-?\d+)').firstMatch(line);
         final mateMatch = RegExp(r'score mate (-?\d+)').firstMatch(line);
         final pvMatch = RegExp(r' pv (.+)').firstMatch(line);
         
         if (cpMatch != null) {
           int rawCp = int.parse(cpMatch.group(1)!);
-          // Normalize to White's perspective (like Flutter StockfishService)
           scoreCp = isWhiteTurn ? rawCp : -rawCp;
         } else if (mateMatch != null) {
           int rawMate = int.parse(mateMatch.group(1)!);
@@ -116,7 +109,6 @@ class SimpleStockfish {
       }
     }
     
-    // Calculate effective centipawns
     int effectiveCp;
     if (scoreMate != null) {
       effectiveCp = scoreMate > 0 ? 10000 : -10000;
@@ -149,7 +141,6 @@ Future<void> main() async {
   print('='.padRight(80, '='));
   print('');
   
-  // Download 1 game from Chess.com
   final now = DateTime.now();
   final year = now.year;
   final month = now.month.toString().padLeft(2, '0');
@@ -161,7 +152,6 @@ Future<void> main() async {
   try {
     final response = await http.get(Uri.parse(url));
     if (response.statusCode != 200) {
-      // Try previous month
       final prevMonth = (now.month - 1).toString().padLeft(2, '0');
       final prevYear = now.month == 1 ? now.year - 1 : now.year;
       final url2 = 'https://api.chess.com/pub/player/${username.toLowerCase()}/games/$prevYear/$prevMonth/pgn';
@@ -179,7 +169,6 @@ Future<void> main() async {
     exit(1);
   }
   
-  // Split PGN and get first game
   final games = <String>[];
   final lines = pgn.split('\n');
   String currentGame = '';
@@ -209,7 +198,6 @@ Future<void> main() async {
   print('Found ${games.length} games, analyzing first one...');
   print('');
   
-  // Parse headers
   final headers = <String, String>{};
   for (final match in RegExp(r'\[(\w+)\s+"([^"]*)"\]').allMatches(gameText)) {
     headers[match.group(1)!] = match.group(2)!;
@@ -220,25 +208,23 @@ Future<void> main() async {
   print('Result: ${headers['Result']}');
   print('');
   
-  // Find user color
   final white = (headers['White'] ?? '').toLowerCase();
   final black = (headers['Black'] ?? '').toLowerCase();
   final userLower = username.toLowerCase();
   
-  chess.Color? userColor;
+  Side? userSide;
   if (white.contains(userLower)) {
-    userColor = chess.Color.WHITE;
+    userSide = Side.white;
   } else if (black.contains(userLower)) {
-    userColor = chess.Color.BLACK;
+    userSide = Side.black;
   } else {
     print('User not found in game');
     exit(1);
   }
   
-  print('User plays: ${userColor == chess.Color.WHITE ? "White" : "Black"}');
+  print('User plays: ${userSide == Side.white ? "White" : "Black"}');
   print('');
   
-  // Extract moves
   final movesMatch = RegExp(r'\n\n([\s\S]+)$').firstMatch(gameText);
   if (movesMatch == null) {
     print('No moves found');
@@ -269,14 +255,12 @@ Future<void> main() async {
   print('Total moves: ${moves.length}');
   print('');
   
-  // Initialize Stockfish
   print('Initializing Stockfish...');
   final stockfish = SimpleStockfish();
   await stockfish.init();
   print('');
   
-  // Replay game and analyze user moves
-  final game = chess.Chess();
+  Position pos = Chess.initial;
   
   print('='.padRight(80, '='));
   print('POSITION-BY-POSITION ANALYSIS');
@@ -287,46 +271,36 @@ Future<void> main() async {
     final san = move['san'] as String;
     final moveNum = move['num'] as int;
     final color = move['color'] as String;
-    final isUserMove = (color == 'w' && userColor == chess.Color.WHITE) ||
-                       (color == 'b' && userColor == chess.Color.BLACK);
+    final isUserMove = (color == 'w' && userSide == Side.white) ||
+                       (color == 'b' && userSide == Side.black);
+    
+    final parsedMove = pos.parseSan(san);
+    if (parsedMove == null) {
+      print('ERROR: Failed to parse move: $san');
+      break;
+    }
     
     if (!isUserMove) {
-      // Opponent's move - just play it
-      final result = game.move(san);
-      if (result == null) {
-        print('ERROR: Failed to parse opponent move: $san');
-        break;
-      }
+      pos = pos.play(parsedMove);
       continue;
     }
     
-    // User's move - analyze
-    final fenBefore = game.fen;
+    final fenBefore = pos.fen;
     
     print('--- Move $moveNum. $san (${color == 'w' ? 'White' : 'Black'}) ---');
     print('FEN: $fenBefore');
     
-    // Analyze position BEFORE the move
     final evalBefore = await stockfish.getEvaluation(fenBefore, depth: depth);
     
-    // Make the move
-    final result = game.move(san);
-    if (result == null) {
-      print('ERROR: Failed to parse user move: $san');
-      break;
-    }
+    pos = pos.play(parsedMove);
+    final fenAfter = pos.fen;
     
-    final fenAfter = game.fen;
-    
-    // Analyze position AFTER the move
     final evalAfter = await stockfish.getEvaluation(fenAfter, depth: depth);
     
-    // Get effective centipawns (already normalized to White's perspective by engine)
     int cpBefore = evalBefore['effectiveCp'] as int;
     int cpAfter = evalAfter['effectiveCp'] as int;
     
-    // Normalize to USER's perspective
-    if (userColor == chess.Color.BLACK) {
+    if (userSide == Side.black) {
       cpBefore = -cpBefore;
       cpAfter = -cpAfter;
     }
@@ -352,6 +326,3 @@ Future<void> main() async {
   
   stockfish.dispose();
 }
-
-
-

@@ -5,7 +5,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:dartchess_webok/dartchess_webok.dart';
+import 'package:dartchess/dartchess.dart';
 import '../models/opening_tree.dart';
 import '../utils/fen_utils.dart';
 import 'lichess_auth_service.dart';
