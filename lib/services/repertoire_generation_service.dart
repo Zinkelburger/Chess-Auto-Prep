@@ -164,10 +164,10 @@ class RepertoireGenerationService {
     required bool Function() isCancelled,
     required Future<void> Function(GeneratedLine line) onLine,
     required void Function(GenerationProgress progress) onProgress,
+    int? workerCount,
   }) async {
     final settings = EngineSettings();
-    // Use up to half the available cores for generation, minimum 1.
-    final desiredWorkers = math.max(1, settings.cores ~/ 2);
+    final desiredWorkers = workerCount ?? math.max(1, settings.cores ~/ 2);
     final hashPer = settings.hashPerWorker;
 
     final pool = _EvalPool();
@@ -425,31 +425,20 @@ class RepertoireGenerationService {
     );
     if (oppMoves.isEmpty) return 0.0;
 
-    // FIX: renormalize probabilities to sum to 1.0.
-    final probSum = oppMoves.fold<double>(0.0, (s, m) => s + m.probability);
-    final normalizedMoves = probSum > 0
-        ? oppMoves.map((m) => _ProbMove(
-              uci: m.uci,
-              probability: m.probability / probSum,
-            )).toList()
-        : oppMoves;
-
-    // Compute opponentEase only for metaEval strategy.
     double opponentEase = 0.5;
     if (strategy == GenerationStrategy.metaEval) {
       final nodeEase = await _computeNodeEase(pool, fen, config.easeDepth, maiaElo: config.maiaElo);
       opponentEase = 1.0 - (nodeEase ?? 0.5);
     }
 
-    // Evaluate all opponent child positions in parallel.
     final childFens = <String>[];
     final childSans = <String>[];
     final validIndices = <int>[];
-    for (int i = 0; i < normalizedMoves.length; i++) {
-      final childFen = playUciMove(fen, normalizedMoves[i].uci);
+    for (int i = 0; i < oppMoves.length; i++) {
+      final childFen = playUciMove(fen, oppMoves[i].uci);
       if (childFen == null) continue;
       childFens.add(childFen);
-      childSans.add(uciToSan(fen, normalizedMoves[i].uci));
+      childSans.add(uciToSan(fen, oppMoves[i].uci));
       validIndices.add(i);
     }
 
@@ -458,7 +447,7 @@ class RepertoireGenerationService {
       if (isCancelled()) break;
 
       final idx = validIndices[j];
-      final prob = normalizedMoves[idx].probability;
+      final prob = oppMoves[idx].probability;
 
       final v = await _dfsNode(
         pool: pool,
@@ -469,7 +458,7 @@ class RepertoireGenerationService {
         onProgress: onProgress,
         fen: childFens[j],
         depth: depth + 1,
-        cumulativeProb: cumulativeProb * oppMoves[idx].probability,
+        cumulativeProb: cumulativeProb * prob,
         lineSan: [...lineSan, childSans[j]],
         emitLines: emitLines,
       );
