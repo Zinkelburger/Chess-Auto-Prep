@@ -38,10 +38,11 @@ class RepertoireGenerationConfig {
   final int maxLines;
   final int engineTopK;
   final int maxCandidates;
-  final int evalGuardCp;
+  final int maxEvalLossCp;
   final int minEvalCpForUs;
   final int maxEvalCpForUs;
   final double metaAlpha;
+  final int maiaElo;
 
   const RepertoireGenerationConfig({
     required this.startFen,
@@ -54,10 +55,11 @@ class RepertoireGenerationConfig {
     this.maxLines = 64,
     this.engineTopK = 3,
     this.maxCandidates = 8,
-    this.evalGuardCp = 50,
+    this.maxEvalLossCp = 50,
     this.minEvalCpForUs = 0,
     this.maxEvalCpForUs = 200,
     this.metaAlpha = 0.35,
+    this.maiaElo = 2100,
   });
 }
 
@@ -251,7 +253,7 @@ class RepertoireGenerationService {
     if (reachedStop || legalMoves.isEmpty) {
       double metaEase = 0.5;
       if (strategy == GenerationStrategy.metaEval) {
-        final nodeEase = await _computeNodeEase(pool, fen, config.easeDepth);
+        final nodeEase = await _computeNodeEase(pool, fen, config.easeDepth, maiaElo: config.maiaElo);
         metaEase = 1.0 - (nodeEase ?? 0.5);
       }
       if (emitLines && lineSan.isNotEmpty && _linesGenerated < config.maxLines) {
@@ -323,14 +325,14 @@ class RepertoireGenerationService {
     );
     if (candidates.isEmpty) return 0.0;
 
-    // Eval guard: filter candidates within N cp of best and above floor.
+    // Filter candidates within maxEvalLossCp of best and above floor.
     final bestEvalForUs = candidates
         .map((c) => _toOurPerspective(c.evalWhiteCp, config.isWhiteRepertoire))
         .reduce(math.max);
 
     final valid = candidates.where((c) {
       final childEval = _toOurPerspective(c.evalWhiteCp, config.isWhiteRepertoire);
-      return childEval >= bestEvalForUs - config.evalGuardCp &&
+      return childEval >= bestEvalForUs - config.maxEvalLossCp &&
           childEval >= config.minEvalCpForUs;
     }).toList();
 
@@ -421,6 +423,7 @@ class RepertoireGenerationService {
     final oppMoves = await _getOpponentMoves(
       fen: fen,
       massTarget: config.opponentMassTarget,
+      maiaElo: config.maiaElo,
     );
     if (oppMoves.isEmpty) return 0.0;
 
@@ -436,7 +439,7 @@ class RepertoireGenerationService {
     // Compute opponentEase only for metaEval strategy.
     double opponentEase = 0.5;
     if (strategy == GenerationStrategy.metaEval) {
-      final nodeEase = await _computeNodeEase(pool, fen, config.easeDepth);
+      final nodeEase = await _computeNodeEase(pool, fen, config.easeDepth, maiaElo: config.maiaElo);
       opponentEase = 1.0 - (nodeEase ?? 0.5);
     }
 
@@ -507,7 +510,7 @@ class RepertoireGenerationService {
         .take(config.engineTopK)
         .toList();
 
-    final likely = await _getLikelyMovesForUs(fen);
+    final likely = await _getLikelyMovesForUs(fen, maiaElo: config.maiaElo);
     final merged = <String>{...engineUcis, ...likely};
     final selectedUcis = merged.take(config.maxCandidates).toList();
 
@@ -561,7 +564,7 @@ class RepertoireGenerationService {
 
   // ── Move sources ───────────────────────────────────────────────────────
 
-  Future<List<String>> _getLikelyMovesForUs(String fen) async {
+  Future<List<String>> _getLikelyMovesForUs(String fen, {required int maiaElo}) async {
     final db = await _getDbData(fen);
     if (db != null && db.moves.isNotEmpty) {
       final sorted = db.moves.toList()
@@ -575,7 +578,7 @@ class RepertoireGenerationService {
     if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
       return const [];
     }
-    final maia = await MaiaFactory.instance!.evaluate(fen, 1900);
+    final maia = await MaiaFactory.instance!.evaluate(fen, maiaElo);
     final sorted = maia.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return sorted
@@ -587,6 +590,7 @@ class RepertoireGenerationService {
   Future<List<_ProbMove>> _getOpponentMoves({
     required String fen,
     required double massTarget,
+    required int maiaElo,
   }) async {
     final out = <_ProbMove>[];
     final db = await _getDbData(fen);
@@ -608,7 +612,7 @@ class RepertoireGenerationService {
     if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
       return out;
     }
-    final maia = await MaiaFactory.instance!.evaluate(fen, 1900);
+    final maia = await MaiaFactory.instance!.evaluate(fen, maiaElo);
     if (maia.isEmpty) return out;
     final sorted = maia.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -661,8 +665,9 @@ class RepertoireGenerationService {
   Future<double?> _computeNodeEase(
     _EvalPool pool,
     String fen,
-    int depth,
-  ) async {
+    int depth, {
+    required int maiaElo,
+  }) async {
     final cacheKey = '$fen|$depth';
     if (_easeCache.containsKey(cacheKey)) {
       return _easeCache[cacheKey];
@@ -701,7 +706,7 @@ class RepertoireGenerationService {
         _easeCache[cacheKey] = null;
         return null;
       }
-      final maiaProbs = await MaiaFactory.instance!.evaluate(fen, 1900);
+      final maiaProbs = await MaiaFactory.instance!.evaluate(fen, maiaElo);
       if (maiaProbs.isEmpty) {
         _easeCache[cacheKey] = null;
         return null;

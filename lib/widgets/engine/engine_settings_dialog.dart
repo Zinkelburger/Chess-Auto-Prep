@@ -212,6 +212,39 @@ void showEngineSettingsDialog({
                 const Divider(),
                 const SizedBox(height: 8),
 
+                // ── Maia ──
+                Text('Maia',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey[400])),
+                const SizedBox(height: 4),
+                _buildNumberField(
+                  label: 'Maia Elo',
+                  value: settings.maiaElo,
+                  min: 1100,
+                  max: 2100,
+                  step: 100,
+                  onChanged: (v) {
+                    settings.maiaElo = v;
+                    setDialogState(() {});
+                  },
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 4),
+                  child: Text(
+                    'Human-like move prediction strength (DB fallback)',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic),
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+                const Divider(),
+                const SizedBox(height: 8),
+
                 // ── Probability ──
                 Text('Probability',
                     style: TextStyle(

@@ -59,6 +59,7 @@ class EnginePaneFooter extends StatelessWidget {
                     (isWhiteToMove == isWhiteRepertoire);
                 final ease = rawEase != null
                     ? (isPlayerTurn ? rawEase : 1.0 - rawEase)
+                        * kEaseDisplayScale
                     : null;
                 final isAnalyzing = pool.poolStatus.value.isEvaluating;
                 if (ease == null) {
@@ -91,7 +92,7 @@ class EnginePaneFooter extends StatelessWidget {
 
                 return Tooltip(
                   message:
-                      'Ease from your perspective\n'
+                      'Ease from your perspective (0–5 scale)\n'
                       'Higher = better for you\n'
                       'Raw: ${rawEase?.toStringAsFixed(3) ?? '--'}',
                   child: Row(
@@ -103,7 +104,7 @@ class EnginePaneFooter extends StatelessWidget {
                             TextStyle(fontSize: 15, color: Colors.grey[500]),
                       ),
                       Text(
-                        ease.toStringAsFixed(2),
+                        ease.toStringAsFixed(1),
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
