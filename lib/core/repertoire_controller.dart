@@ -226,7 +226,6 @@ class RepertoireController with ChangeNotifier {
   /// Sets a new repertoire and triggers loading.
   Future<void> setRepertoire(Map<String, dynamic> repertoire) async {
     _currentRepertoire = repertoire;
-    notifyListeners();
     await loadRepertoire();
   }
 
