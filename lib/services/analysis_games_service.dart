@@ -287,6 +287,7 @@ class AnalysisGamesService {
       '.json',
       '_white_analysis.json',
       '_black_analysis.json',
+      '_engine_evals.json',
     ]) {
       final file = File('${directory.path}/$key$suffix');
       if (await file.exists()) await file.delete();
@@ -348,6 +349,44 @@ class AnalysisGamesService {
       final file =
           File('${directory.path}/${key}_${colour}_analysis.json');
       if (await file.exists()) await file.delete();
+    }
+  }
+
+  // ── Engine eval cache ───────────────────────────────────────────────
+
+  /// Persist engine weakness results for a player.
+  Future<void> saveEngineEvals(
+    String platform,
+    String username,
+    List<Map<String, dynamic>> evals,
+  ) async {
+    final directory = await _getAnalysisDirectory();
+    final key = AnalysisPlayerInfo(
+      platform: platform,
+      username: username,
+    ).playerKey;
+
+    await File('${directory.path}/${key}_engine_evals.json')
+        .writeAsString(json.encode(evals));
+  }
+
+  /// Load engine weakness results. Returns `null` on miss.
+  Future<List<dynamic>?> loadEngineEvals(
+    String platform,
+    String username,
+  ) async {
+    try {
+      final directory = await _getAnalysisDirectory();
+      final key = AnalysisPlayerInfo(
+        platform: platform,
+        username: username,
+      ).playerKey;
+      final file = File('${directory.path}/${key}_engine_evals.json');
+
+      if (!await file.exists()) return null;
+      return json.decode(await file.readAsString()) as List<dynamic>;
+    } catch (_) {
+      return null;
     }
   }
 

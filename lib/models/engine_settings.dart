@@ -69,7 +69,7 @@ class EngineSettings with ChangeNotifier {
   /// CPU budget = cores whose load stays below this threshold.
   /// Workers are spawned in parallel; the budget is computed upfront so
   /// the pool never drives the system above this ceiling.
-  int _maxSystemLoad = 90;
+  int _maxSystemLoad = 80;
   int get maxSystemLoad => _maxSystemLoad;
   set maxSystemLoad(int value) {
     if (value != _maxSystemLoad && value >= 50 && value <= 100) {
@@ -168,7 +168,7 @@ class EngineSettings with ChangeNotifier {
     _easeDepth = 18;
     _multiPv = 3;
     _maxAnalysisMoves = 8;
-    _maxSystemLoad = 90;
+    _maxSystemLoad = 80;
     _showStockfish = true;
     _showMaia = true;
     _showEase = true;

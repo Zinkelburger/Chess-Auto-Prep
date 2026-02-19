@@ -27,6 +27,14 @@ class PositionAnalysisWidget extends StatefulWidget {
   final bool isLoading;
   final Function()? onAnalyze;
 
+  /// Whether engine eval data is available for the "Bad Eval" sort.
+  final bool hasEvals;
+
+  /// When set (and [externalNavigateGeneration] changes), the widget
+  /// navigates to this FEN.  Used by the engine-weakness dialog.
+  final String? externalNavigateFen;
+  final int externalNavigateGeneration;
+
   const PositionAnalysisWidget({
     super.key,
     this.analysis,
@@ -34,6 +42,9 @@ class PositionAnalysisWidget extends StatefulWidget {
     this.playerIsWhite,
     this.isLoading = false,
     this.onAnalyze,
+    this.hasEvals = false,
+    this.externalNavigateFen,
+    this.externalNavigateGeneration = 0,
   });
 
   @override
@@ -55,6 +66,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
 
   late TabController _tabController;
   final PgnViewerController _pgnController = PgnViewerController();
+  int _lastNavigateGeneration = 0;
 
   /// Starting-position board, shown when no FEN has been selected yet.
   static final chess.Chess _startingPosition = chess.Chess();
@@ -63,6 +75,18 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void didUpdateWidget(PositionAnalysisWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.externalNavigateFen != null &&
+        widget.externalNavigateGeneration != _lastNavigateGeneration) {
+      _lastNavigateGeneration = widget.externalNavigateGeneration;
+      widget.openingTree?.navigateToFen(widget.externalNavigateFen!);
+      _navigateTo(widget.externalNavigateFen!);
+      _tabController.animateTo(0);
+    }
   }
 
   @override
@@ -159,6 +183,8 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       return FenListWidget(
         analysis: widget.analysis!,
         onFenSelected: _onFenSelected,
+        playerIsWhite: widget.playerIsWhite ?? true,
+        hasEvals: widget.hasEvals,
       );
     }
 

@@ -46,7 +46,7 @@ class MoveAnalysisPool {
   int _nextMoveIndex = 0;
   int _evalDepth = 20;
   int _easeDepth = 12;
-  double _maxLoadPercent = 90.0;
+  double _maxLoadPercent = 80.0;
 
   /// Target worker count for the current generation (scale-up goal).
   int _targetMaxWorkers = 1;

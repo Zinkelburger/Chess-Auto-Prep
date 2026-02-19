@@ -13,10 +13,19 @@ class FenListWidget extends StatefulWidget {
   final PositionAnalysis analysis;
   final Function(String) onFenSelected;
 
+  /// Whether the player is White in this analysis view.
+  /// Determines the eval sort direction for "Bad Eval".
+  final bool playerIsWhite;
+
+  /// Whether engine eval data is available for the "Bad Eval" sort.
+  final bool hasEvals;
+
   const FenListWidget({
     super.key,
     required this.analysis,
     required this.onFenSelected,
+    this.playerIsWhite = true,
+    this.hasEvals = false,
   });
 
   @override
@@ -28,17 +37,20 @@ class _FenListWidgetState extends State<FenListWidget> {
   String _sortBy = 'Lowest Win Rate';
   String? _selectedFen;
 
-  // Min-games text field with debounced validation.
   late final TextEditingController _minGamesController;
   Timer? _minGamesErrorTimer;
   String? _minGamesError;
 
-  static const Map<String, String> _sortMap = {
-    'Lowest Win Rate': 'win_rate',
-    'Highest Win Rate': 'win_rate_desc',
-    'Most Games': 'games',
-    'Most Losses': 'losses',
-  };
+  Map<String, String> get _sortMap => {
+        if (widget.hasEvals) 'Bad Eval': _evalSortKey,
+        'Lowest Win Rate': 'win_rate',
+        'Highest Win Rate': 'win_rate_desc',
+        'Most Games': 'games',
+        'Most Losses': 'losses',
+      };
+
+  String get _evalSortKey =>
+      widget.playerIsWhite ? 'eval_bad_white' : 'eval_bad_black';
 
   @override
   void initState() {
@@ -47,13 +59,22 @@ class _FenListWidgetState extends State<FenListWidget> {
   }
 
   @override
+  void didUpdateWidget(FenListWidget old) {
+    super.didUpdateWidget(old);
+    if (widget.hasEvals && !old.hasEvals && _sortBy == 'Lowest Win Rate') {
+      setState(() => _sortBy = 'Bad Eval');
+    }
+    if (!_sortMap.containsKey(_sortBy)) {
+      setState(() => _sortBy = _sortMap.keys.first);
+    }
+  }
+
+  @override
   void dispose() {
     _minGamesController.dispose();
     _minGamesErrorTimer?.cancel();
     super.dispose();
   }
-
-  // ── Validation ─────────────────────────────────────────────────────
 
   void _validateMinGames(String value) {
     final v = int.tryParse(value);
@@ -66,7 +87,6 @@ class _FenListWidgetState extends State<FenListWidget> {
 
     _minGamesErrorTimer?.cancel();
 
-    // Clear error immediately when the value becomes valid.
     setState(() {
       if (error == null) {
         _minGamesError = null;
@@ -74,7 +94,6 @@ class _FenListWidgetState extends State<FenListWidget> {
       }
     });
 
-    // Debounce showing the red error text so it doesn't flash while typing.
     if (error != null) {
       _minGamesErrorTimer = Timer(const Duration(milliseconds: 500), () {
         if (mounted) setState(() => _minGamesError = error);
@@ -82,13 +101,10 @@ class _FenListWidgetState extends State<FenListWidget> {
     }
   }
 
-  // ── Build ──────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Header
         Container(
           padding: const EdgeInsets.all(8),
           child: const Text(
@@ -98,7 +114,6 @@ class _FenListWidgetState extends State<FenListWidget> {
           ),
         ),
 
-        // ── Min games filter ──
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
@@ -127,7 +142,6 @@ class _FenListWidgetState extends State<FenListWidget> {
           ),
         ),
 
-        // ── Sort selector ──
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
@@ -158,7 +172,6 @@ class _FenListWidgetState extends State<FenListWidget> {
 
         const Divider(height: 1),
 
-        // ── Positions list ──
         Expanded(child: _buildPositionsList()),
       ],
     );
@@ -172,13 +185,16 @@ class _FenListWidgetState extends State<FenListWidget> {
     );
 
     if (positions.isEmpty) {
-      return const Center(
+      final isEvalSort = _sortBy == 'Bad Eval';
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Text(
-            'No positions found.\nTry lowering the minimum games filter.',
+            isEvalSort
+                ? 'No evaluated positions found.\nRun engine weakness analysis first.'
+                : 'No positions found.\nTry lowering the minimum games filter.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
+            style: const TextStyle(color: Colors.grey),
           ),
         ),
       );
@@ -195,14 +211,27 @@ class _FenListWidgetState extends State<FenListWidget> {
 
   Widget _buildPositionItem(int rank, PositionStats stats) {
     final isSelected = _selectedFen == stats.fen;
+    final showingEval = _sortBy == 'Bad Eval';
 
-    // Colour-code by win rate.
     Color? backgroundColor;
-    if (stats.winRate < 0.3) {
-      backgroundColor = Colors.red.withValues(alpha: 0.2);
-    } else if (stats.winRate < 0.4) {
-      backgroundColor = Colors.yellow.withValues(alpha: 0.2);
+    if (showingEval && stats.hasEval) {
+      final bad = widget.playerIsWhite
+          ? (stats.evalCp! < -50)
+          : (stats.evalCp! > 100);
+      if (bad) {
+        backgroundColor = Colors.red.withValues(alpha: 0.15);
+      }
+    } else {
+      if (stats.winRate < 0.3) {
+        backgroundColor = Colors.red.withValues(alpha: 0.2);
+      } else if (stats.winRate < 0.4) {
+        backgroundColor = Colors.yellow.withValues(alpha: 0.2);
+      }
     }
+
+    final evalTag = stats.hasEval
+        ? '  [${stats.evalDisplay}]'
+        : '';
 
     return ListTile(
       selected: isSelected,
@@ -212,8 +241,11 @@ class _FenListWidgetState extends State<FenListWidget> {
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       title: Text(
-        '#$rank: ${stats.winRatePercent.toStringAsFixed(1)}% '
-        '(${stats.wins}-${stats.losses}-${stats.draws} in ${stats.games})',
+        showingEval && stats.hasEval
+            ? '#$rank: ${stats.evalDisplay}  '
+              '(${stats.winRatePercent.toStringAsFixed(0)}% in ${stats.games}g)'
+            : '#$rank: ${stats.winRatePercent.toStringAsFixed(1)}%$evalTag '
+              '(${stats.wins}-${stats.losses}-${stats.draws} in ${stats.games})',
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       ),
       subtitle: Text(
