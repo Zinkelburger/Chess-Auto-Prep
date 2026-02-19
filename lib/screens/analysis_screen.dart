@@ -18,8 +18,7 @@ import '../utils/fen_utils.dart';
 import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
 import '../services/engine_weakness_service.dart';
-import '../services/fen_map_builder.dart';
-import '../services/opening_tree_builder.dart';
+import '../services/unified_analysis_builder.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/position_analysis_widget.dart';
 import 'player_selection_screen.dart';
@@ -423,9 +422,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       final pgnList = await _loadPgnList(player);
       if (pgnList == null) return;
 
-      // ── White first (display immediately) ──
-      final (whiteAnalysis, whiteTree) =
-          await _buildAnalysis(player, pgnList, true);
+      // Launch both colours concurrently in separate isolates.
+      final whiteFuture = _buildAnalysis(player, pgnList, true);
+      final blackFuture = _buildAnalysis(player, pgnList, false);
+
+      final (whiteAnalysis, whiteTree) = await whiteFuture;
 
       if (mounted) {
         setState(() {
@@ -437,11 +438,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         });
       }
 
-      // Load saved engine evals and merge.
+      // Load saved engine evals and merge while Black finishes.
       await _loadEngineEvals();
 
-      // ── Pre-warm Black cache in background ──
-      final (_, blackTree) = await _buildAnalysis(player, pgnList, false);
+      final (_, blackTree) = await blackFuture;
       if (mounted) {
         setState(() => _blackTree = blackTree);
       }
@@ -519,39 +519,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     List<String> pgnList,
     bool isWhite,
   ) async {
-    PositionAnalysis? analysis;
-
-    final cachedData = await _gamesService.loadCachedAnalysis(
-      player.platform,
-      player.username,
-      isWhite,
-    );
-    if (cachedData != null) {
-      try {
-        analysis = PositionAnalysis.fromJson(cachedData);
-      } catch (_) {}
-    }
-
-    if (analysis == null) {
-      final fenBuilder = FenMapBuilder();
-      await fenBuilder.processPgns(pgnList, player.username, isWhite);
-      analysis = await FenMapBuilder.fromFenMapBuilder(fenBuilder, pgnList);
-
-      try {
-        await _gamesService.saveCachedAnalysis(
-          player.platform,
-          player.username,
-          isWhite,
-          analysis.toJson(),
-        );
-      } catch (_) {}
-    }
-
-    final tree = await OpeningTreeBuilder.buildTree(
+    // Single-pass builder running in a dedicated isolate.
+    final (analysis, tree) = await UnifiedAnalysisBuilder.buildInIsolate(
       pgnList: pgnList,
       username: player.username,
-      userIsWhite: isWhite,
+      isWhite: isWhite,
     );
+
+    // Cache the FEN-map analysis for fast reload next time.
+    try {
+      await _gamesService.saveCachedAnalysis(
+        player.platform,
+        player.username,
+        isWhite,
+        analysis.toJson(),
+      );
+    } catch (_) {}
 
     return (analysis, tree);
   }

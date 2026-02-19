@@ -217,4 +217,104 @@ class OpeningTree {
     }
     return true;
   }
+
+  // ── Serialisation for isolate transfer ──────────────────────────────
+  //
+  // OpeningTreeNode has cyclic parent references which Dart's SendPort
+  // cannot transfer.  We flatten the tree into a list of maps keyed by
+  // integer IDs so it can cross the isolate boundary, then reconstruct
+  // parent/child pointers on the receiving side.
+
+  /// Serialise the entire tree into a JSON-compatible map that contains
+  /// no object references (only primitives, lists, and maps).
+  Map<String, dynamic> toTransferJson() {
+    final nodes = <Map<String, dynamic>>[];
+    final nodeToId = <OpeningTreeNode, int>{};
+
+    // BFS to assign IDs and serialise each node.
+    final queue = <OpeningTreeNode>[root];
+    nodeToId[root] = 0;
+
+    while (queue.isNotEmpty) {
+      final node = queue.removeAt(0);
+      final id = nodeToId[node]!;
+
+      final childIds = <String, int>{};
+      for (final entry in node.children.entries) {
+        final childId = nodeToId.length;
+        nodeToId[entry.value] = childId;
+        childIds[entry.key] = childId;
+        queue.add(entry.value);
+      }
+
+      nodes.add({
+        'id': id,
+        'parentId': node.parent != null ? nodeToId[node.parent!] ?? -1 : -1,
+        'move': node.move,
+        'fen': node.fen,
+        'gamesPlayed': node.gamesPlayed,
+        'wins': node.wins,
+        'losses': node.losses,
+        'draws': node.draws,
+        'childIds': childIds,
+      });
+    }
+
+    // Serialise fenToNodes as fen → list of node IDs.
+    final fenIndex = <String, List<int>>{};
+    for (final entry in fenToNodes.entries) {
+      fenIndex[entry.key] =
+          entry.value.map((n) => nodeToId[n] ?? -1).toList();
+    }
+
+    return {'nodes': nodes, 'fenToNodes': fenIndex};
+  }
+
+  /// Reconstruct an [OpeningTree] from the flat map produced by
+  /// [toTransferJson].
+  factory OpeningTree.fromTransferJson(Map<String, dynamic> json) {
+    final rawNodes = json['nodes'] as List<dynamic>;
+    final builtNodes = <int, OpeningTreeNode>{};
+
+    // First pass: create all nodes without parent/child links.
+    for (final raw in rawNodes) {
+      final m = raw as Map<String, dynamic>;
+      builtNodes[m['id'] as int] = OpeningTreeNode(
+        move: m['move'] as String,
+        fen: m['fen'] as String,
+        gamesPlayed: m['gamesPlayed'] as int,
+        wins: m['wins'] as int,
+        losses: m['losses'] as int,
+        draws: m['draws'] as int,
+      );
+    }
+
+    // Second pass: wire up parent + children pointers.
+    for (final raw in rawNodes) {
+      final m = raw as Map<String, dynamic>;
+      final node = builtNodes[m['id'] as int]!;
+      final parentId = m['parentId'] as int;
+      if (parentId >= 0) {
+        node.parent = builtNodes[parentId];
+      }
+      final childIds = m['childIds'] as Map<String, dynamic>;
+      for (final entry in childIds.entries) {
+        node.children[entry.key] = builtNodes[entry.value as int]!;
+      }
+    }
+
+    // Rebuild fenToNodes index.
+    final rawFenIndex = json['fenToNodes'] as Map<String, dynamic>;
+    final fenToNodes = <String, List<OpeningTreeNode>>{};
+    for (final entry in rawFenIndex.entries) {
+      fenToNodes[entry.key] = (entry.value as List<dynamic>)
+          .map((id) => builtNodes[id as int]!)
+          .toList();
+    }
+
+    return OpeningTree(
+      root: builtNodes[0],
+      fenToNodes: fenToNodes,
+    );
+  }
 }
