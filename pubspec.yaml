@@ -53,9 +53,9 @@ flutter:
     - assets/maia_rapid.onnx
     - assets/data/all_moves.json
     - assets/data/all_moves_reversed.json
-    - assets/executables/stockfish-windows.exe
-    - assets/executables/stockfish-macos
-    - assets/executables/stockfish-linux
+    - assets/executables/stockfish-windows.exe.gz
+    - assets/executables/stockfish-macos.gz
+    - assets/executables/stockfish-linux.gz
 
 flutter_launcher_icons:
   android: true

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
+import 'package:path/path.dart' as p;
 import 'engine_connection.dart';
 
 class ProcessConnection implements EngineConnection {
@@ -47,17 +47,20 @@ class ProcessConnection implements EngineConnection {
     }
 
     final dir = await getApplicationSupportDirectory();
-    final file = File(path.join(dir.path, binaryName));
+    final file = File(p.join(dir.path, binaryName));
 
     if (!await file.exists()) {
       print('Extracting Stockfish binary to ${file.path}...');
       await file.parent.create(recursive: true);
 
-      final byteData = await rootBundle.load('assets/executables/$binaryName');
-      await file.writeAsBytes(byteData.buffer.asUint8List(
+      final byteData =
+          await rootBundle.load('assets/executables/$binaryName.gz');
+      final compressed = byteData.buffer.asUint8List(
         byteData.offsetInBytes,
         byteData.lengthInBytes,
-      ));
+      );
+      final decompressed = gzip.decode(compressed);
+      await file.writeAsBytes(decompressed, flush: true);
 
       if (!Platform.isWindows) {
         await Process.run('chmod', ['+x', file.path]);
