@@ -42,7 +42,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   late final TextEditingController _maxEvalCtrl;
   final TextEditingController _alphaCtrl = TextEditingController(text: '0.35');
   final TextEditingController _maiaEloCtrl = TextEditingController(text: '2100');
-  late final TextEditingController _coresCtrl;
   late final TextEditingController _maxLoadCtrl;
 
   GenerationStrategy _strategy = GenerationStrategy.metaEval;
@@ -52,6 +51,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   int _nodes = 0;
   int _lines = 0;
   int _depth = 0;
+  DateTime _lastProgressUpdate = DateTime(0);
 
   @override
   void initState() {
@@ -62,8 +62,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _maxEvalCtrl = TextEditingController(
       text: widget.isWhiteRepertoire ? '200' : '100',
     );
-    final defaultCores = (_engineSettings.cores ~/ 2).clamp(1, _engineSettings.cores);
-    _coresCtrl = TextEditingController(text: '$defaultCores');
     _maxLoadCtrl = TextEditingController(text: '${_engineSettings.maxSystemLoad}');
   }
 
@@ -78,7 +76,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _maxEvalCtrl.dispose();
     _alphaCtrl.dispose();
     _maiaEloCtrl.dispose();
-    _coresCtrl.dispose();
     _maxLoadCtrl.dispose();
     super.dispose();
   }
@@ -123,7 +120,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
     final maxLoad = (int.tryParse(_maxLoadCtrl.text.trim()) ?? 80).clamp(50, 100);
     _engineSettings.maxSystemLoad = maxLoad;
-    final cores = (int.tryParse(_coresCtrl.text.trim()) ?? 1).clamp(1, EngineSettings.systemCores);
 
     setState(() {
       _isGenerating = true;
@@ -139,10 +135,20 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       await _service.generate(
         config: config,
         strategy: _strategy,
-        workerCount: cores,
         isCancelled: () => _cancelRequested,
         onProgress: (p) {
           if (!mounted) return;
+          // Throttle UI updates to avoid event-loop contention that
+          // stalls HTTP responses on the main isolate.
+          final now = DateTime.now();
+          if (now.difference(_lastProgressUpdate).inMilliseconds < 250) {
+            _nodes = p.nodesVisited;
+            _lines = p.linesGenerated;
+            _depth = p.currentDepth;
+            _status = p.message;
+            return;
+          }
+          _lastProgressUpdate = now;
           setState(() {
             _nodes = p.nodesVisited;
             _lines = p.linesGenerated;
@@ -254,7 +260,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _numField(_coresCtrl, 'Cores'),
               _numField(_maxLoadCtrl, 'Max Load %'),
               _numField(_cutoffCtrl, 'Cum Prob Cutoff'),
               _numField(_depthCtrl, 'Max Depth Ply'),
@@ -316,9 +321,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           const SizedBox(height: 8),
           Text(_status, style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 8),
-          const Text(
-            'Our candidates: Top 3 engine moves + likely DB/MAIA moves, capped at 8.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
+          Text(
+            _strategy == GenerationStrategy.winRateOnly
+                ? 'DB-only: picks highest win-rate move per node. No engine analysis.'
+                : 'Our candidates: Top 3 engine moves + likely DB/MAIA moves, capped at 8.',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ],
       ),

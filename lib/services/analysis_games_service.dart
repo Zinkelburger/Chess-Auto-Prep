@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:convert';
 
 import '../models/analysis_player_info.dart';
-import 'lichess_auth_service.dart';
+import 'lichess_api_client.dart';
 
 /// Service for downloading and managing games for position analysis.
 ///
@@ -170,11 +170,14 @@ class AnalysisGamesService {
     final uri = Uri.parse('https://lichess.org/api/games/user/$username')
         .replace(queryParameters: params);
 
-    final headers = await LichessAuthService().getHeaders(
-      {'Accept': 'application/x-chess-pgn'},
+    final response = await LichessApiClient().get(
+      uri,
+      extraHeaders: {'Accept': 'application/x-chess-pgn'},
     );
-    final response = await http.get(uri, headers: headers);
 
+    if (response == null) {
+      throw Exception('Failed to fetch Lichess games (request failed)');
+    }
     if (response.statusCode != 200) {
       throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
     }

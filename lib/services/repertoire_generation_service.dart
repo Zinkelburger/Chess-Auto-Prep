@@ -1,22 +1,27 @@
-/// Automatic repertoire generation via DFS traversal with DB/MAIA/engine.
+/// Automatic repertoire generation via DFS traversal.
 ///
 /// Supports three strategies:
-///   - engineOnly: greedy best-eval move selection
-///   - winRateOnly: greedy best-DB-win-rate move selection
-///   - metaEval: propagated MetaEase (opponentEase) with eval guard
+///   - **winRateOnly** — Pure Lichess Explorer DB lookups.  No engine, no
+///     worker pool, no prefetch.  Each node makes one cached HTTP request.
+///     This should be near-instant for typical opening depths.
+///   - **engineOnly** — Greedy best-eval move selection using Stockfish.
+///   - **metaEval** — Propagated MetaEase (opponentEase) with eval guard.
+///
+/// The engine-backed strategies (engineOnly, metaEval) use the shared
+/// [MoveAnalysisPool] singleton.  winRateOnly never touches the pool.
 library;
 
-import 'dart:async';
+import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart';
 
-import '../models/engine_settings.dart';
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
-import '../utils/ease_utils.dart';
-import 'engine/eval_worker.dart';
-import 'engine/stockfish_connection_factory.dart';
+import 'db_only_generation_isolate.dart';
+import 'lichess_auth_service.dart';
 import 'maia_factory.dart';
+import 'move_analysis_pool.dart';
 import 'probability_service.dart';
 
 // ── Public types ─────────────────────────────────────────────────────────
@@ -89,67 +94,13 @@ class GenerationProgress {
   });
 }
 
-// ── Simple multi-worker pool for parallel eval ──────────────────────────
-
-/// A lightweight pool of [EvalWorker]s that distributes `evaluateFen` calls
-/// across available workers using a round-robin / first-free strategy.
-class _EvalPool {
-  final List<EvalWorker> _workers = [];
-  int _nextWorker = 0;
-
-  Future<void> init({required int workerCount, required int hashPerWorker}) async {
-    for (int i = 0; i < workerCount; i++) {
-      final conn = await StockfishConnectionFactory.create();
-      if (conn == null) break;
-      final w = EvalWorker(conn);
-      await w.init(hashMb: hashPerWorker);
-      _workers.add(w);
-    }
-    if (_workers.isEmpty) {
-      throw Exception('Could not create any Stockfish workers.');
-    }
-  }
-
-  int get workerCount => _workers.length;
-
-  /// The first worker is used for sequential operations like MultiPV
-  /// discovery which must not overlap with other eval calls.
-  EvalWorker get primary => _workers[0];
-
-  /// Get the next worker in round-robin order for parallel eval requests.
-  EvalWorker _nextFree() {
-    final w = _workers[_nextWorker % _workers.length];
-    _nextWorker++;
-    return w;
-  }
-
-  /// Evaluate a single FEN on the next available worker.
-  Future<EvalResult> evaluateFen(String fen, int depth) {
-    return _nextFree().evaluateFen(fen, depth);
-  }
-
-  /// Evaluate multiple FENs in parallel, distributing across all workers.
-  Future<List<EvalResult>> evaluateMany(List<String> fens, int depth) async {
-    if (fens.isEmpty) return const [];
-    // Launch all evals concurrently; the round-robin distributes them.
-    final futures = fens.map((f) => evaluateFen(f, depth)).toList();
-    return Future.wait(futures);
-  }
-
-  void dispose() {
-    for (final w in _workers) {
-      w.dispose();
-    }
-    _workers.clear();
-  }
-}
-
 // ── Generation service ──────────────────────────────────────────────────
 
 class RepertoireGenerationService {
+  final MoveAnalysisPool _pool = MoveAnalysisPool();
   final ProbabilityService _probabilityService = ProbabilityService();
 
-  // Caches keyed by FEN (or FEN|depth).
+  static const int _maxCacheEntries = 100000;
   final Map<String, int> _evalWhiteCache = {};
   final Map<String, double?> _easeCache = {};
   final Map<String, PositionProbabilities?> _dbCache = {};
@@ -157,6 +108,14 @@ class RepertoireGenerationService {
 
   int _nodesVisited = 0;
   int _linesGenerated = 0;
+  int _engineCalls = 0;
+  int _engineCacheHits = 0;
+  int _dbCalls = 0;
+  int _dbCacheHits = 0;
+
+  void _log(String msg) {
+    if (kDebugMode) print('[Gen] $msg');
+  }
 
   Future<void> generate({
     required RepertoireGenerationConfig config,
@@ -164,32 +123,116 @@ class RepertoireGenerationService {
     required bool Function() isCancelled,
     required Future<void> Function(GeneratedLine line) onLine,
     required void Function(GenerationProgress progress) onProgress,
-    int? workerCount,
   }) async {
-    final settings = EngineSettings();
-    final desiredWorkers = workerCount ?? math.max(1, settings.cores ~/ 2);
-    final hashPer = settings.hashPerWorker;
-
-    final pool = _EvalPool();
-    await pool.init(workerCount: desiredWorkers, hashPerWorker: hashPer);
-
     _nodesVisited = 0;
     _linesGenerated = 0;
+    _engineCalls = 0;
+    _engineCacheHits = 0;
+    _dbCalls = 0;
+    _dbCacheHits = 0;
     _evalWhiteCache.clear();
     _easeCache.clear();
     _dbCache.clear();
     _metaEaseCache.clear();
 
+    _log('═══ Generation START ═══');
+    _log('Strategy: ${strategy.name}');
+    _log('Start FEN: ${config.startFen}');
+    _log('White repertoire: ${config.isWhiteRepertoire}');
+    _log('Max depth: ${config.maxDepthPly} ply');
+    _log('Cum prob cutoff: ${config.cumulativeProbabilityCutoff}');
+
+    final sw = Stopwatch()..start();
+
+    if (strategy == GenerationStrategy.winRateOnly) {
+      // ── DB-only: runs in a separate isolate so HTTP responses
+      //    aren't delayed by Flutter's UI event loop. ──
+      _pool.suspendWorkers();
+      _log('DB-only strategy — suspended engine workers to free RAM');
+      _log('Spawning dedicated isolate for DB queries…');
+      onProgress(const GenerationProgress(
+        nodesVisited: 0,
+        linesGenerated: 0,
+        currentDepth: 0,
+        message: 'DB-only mode — isolate starting…',
+      ));
+
+      final authToken = await LichessAuthService().getValidToken();
+      final resultPort = ReceivePort();
+      SendPort? cancelPort;
+
+      await Isolate.spawn(
+        dbOnlyIsolateEntry,
+        DbOnlyIsolateRequest(
+          resultPort: resultPort.sendPort,
+          startFen: config.startFen,
+          isWhiteRepertoire: config.isWhiteRepertoire,
+          cumulativeProbabilityCutoff: config.cumulativeProbabilityCutoff,
+          maxDepthPly: config.maxDepthPly,
+          authToken: authToken,
+        ),
+        debugName: 'db-only-gen',
+      );
+
+      await for (final msg in resultPort) {
+        if (isCancelled() && cancelPort != null) {
+          cancelPort.send(true);
+        }
+        if (msg is DbOnlyCancelPort) {
+          cancelPort = msg.cancelPort;
+          if (isCancelled()) cancelPort.send(true);
+        } else if (msg is DbOnlyProgress) {
+          _nodesVisited = msg.nodesVisited;
+          _linesGenerated = msg.linesGenerated;
+          onProgress(GenerationProgress(
+            nodesVisited: msg.nodesVisited,
+            linesGenerated: msg.linesGenerated,
+            currentDepth: msg.currentDepth,
+            message: msg.message,
+          ));
+        } else if (msg is DbOnlyLine) {
+          await onLine(GeneratedLine(
+            movesSan: msg.movesSan,
+            cumulativeProbability: msg.cumulativeProbability,
+            finalEvalWhiteCp: 0,
+            metaEase: 0.0,
+          ));
+        } else if (msg is DbOnlyLog) {
+          _log(msg.message);
+        } else if (msg is DbOnlyDone) {
+          _nodesVisited = msg.nodesVisited;
+          _linesGenerated = msg.linesGenerated;
+          _dbCalls = msg.dbCalls;
+          _dbCacheHits = msg.dbCacheHits;
+          sw.stop();
+          _log('═══ Generation END ═══');
+          _log('Time: ${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s');
+          _log('Nodes: $_nodesVisited, Lines: $_linesGenerated');
+          _log('DB calls: $_dbCalls (cache hits: $_dbCacheHits)');
+          resultPort.close();
+          break;
+        }
+      }
+      return;
+    }
+
+    // ── Engine-backed strategies (engineOnly, metaEval) ──
+    _log('Engine depth: ${config.engineDepth}');
+    _log('Opponent mass target: ${config.opponentMassTarget}');
+    _log('Eval window: [${config.minEvalCpForUs}, ${config.maxEvalCpForUs}] cp');
+
+    await _pool.beginGeneration();
+    _log('Pool ready: ${_pool.workerCount} workers');
+
     onProgress(GenerationProgress(
       nodesVisited: 0,
       linesGenerated: 0,
       currentDepth: 0,
-      message: 'Spawned ${pool.workerCount} engine workers',
+      message: 'Using ${_pool.workerCount} engine workers (shared pool)',
     ));
 
     try {
       await _dfsNode(
-        pool: pool,
         config: config,
         strategy: strategy,
         isCancelled: isCancelled,
@@ -202,15 +245,43 @@ class RepertoireGenerationService {
         emitLines: true,
       );
     } finally {
-      pool.dispose();
+      _pool.endGeneration();
+      sw.stop();
+      _log('═══ Generation END ═══');
+      _log('Time: ${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s');
+      _log('Nodes: $_nodesVisited, Lines: $_linesGenerated');
+      _log('Engine calls: $_engineCalls (cache hits: $_engineCacheHits)');
+      _log('DB calls: $_dbCalls (cache hits: $_dbCacheHits)');
+      _log('Cache sizes: eval=${_evalWhiteCache.length}, '
+          'ease=${_easeCache.length}, db=${_dbCache.length}, '
+          'meta=${_metaEaseCache.length}');
     }
   }
 
-  // ── Core DFS ────────────────────────────────────────────────────────────
+  // ── Cache management ──────────────────────────────────────────────────
 
-  /// Returns the MetaEase value for this subtree.
+  void _evictCachesIfNeeded() {
+    _evictOldest(_evalWhiteCache);
+    _evictOldest(_easeCache);
+    _evictOldest(_dbCache);
+    _evictOldest(_metaEaseCache);
+  }
+
+  static void _evictOldest(Map<dynamic, dynamic> cache) {
+    if (cache.length <= _maxCacheEntries) return;
+    final excess = cache.length - (_maxCacheEntries * 9 ~/ 10);
+    final keys = cache.keys.take(excess).toList();
+    for (final k in keys) {
+      cache.remove(k);
+    }
+  }
+
+  // ── Engine-backed DFS (engineOnly, metaEval only) ─────────────────────
+  //
+  // Always evaluates positions with Stockfish.  Never called for
+  // winRateOnly — that strategy uses _dfsDbOnly above.
+
   Future<double> _dfsNode({
-    required _EvalPool pool,
     required RepertoireGenerationConfig config,
     required GenerationStrategy strategy,
     required bool Function() isCancelled,
@@ -224,22 +295,39 @@ class RepertoireGenerationService {
   }) async {
     if (isCancelled()) return 0.0;
 
-    // Check MetaEase cache (avoids double-traversal for metaEval).
     if (!emitLines && _metaEaseCache.containsKey(fen)) {
+      _log('  ${"│ " * depth}MetaEase cache hit → ${_metaEaseCache[fen]!.toStringAsFixed(3)}');
       return _metaEaseCache[fen]!;
     }
 
     _nodesVisited++;
+    if (_nodesVisited % 500 == 0) _evictCachesIfNeeded();
+
+    final indent = "│ " * depth;
+    final pass = emitLines ? 'EMIT' : 'EXPLORE';
+    final lastMove = lineSan.isNotEmpty ? lineSan.last : '(root)';
+    _log('$indent┌ Node #$_nodesVisited  d=$depth  $pass  '
+        'move=$lastMove  cumProb=${(cumulativeProb * 100).toStringAsFixed(2)}%');
+
     onProgress(GenerationProgress(
       nodesVisited: _nodesVisited,
       linesGenerated: _linesGenerated,
       currentDepth: depth,
-      message: 'Exploring depth $depth',
+      message: '$pass d=$depth $lastMove  '
+          '(${_nodesVisited}n ${_linesGenerated}L  '
+          'eng=$_engineCalls db=$_dbCalls)',
     ));
 
-    // Evaluate this position.
-    final evalWhiteCp = await _evaluateWhiteCp(pool, fen, config.engineDepth);
+    final nodeSw = Stopwatch()..start();
+
+    final evalWhiteCp = await _evaluateWhiteCp(fen, config.engineDepth);
     final evalForUs = _toOurPerspective(evalWhiteCp, config.isWhiteRepertoire);
+    _log('$indent│ eval=${evalForUs}cp (white=${evalWhiteCp}cp) '
+        '[${nodeSw.elapsedMilliseconds}ms]');
+
+    final isWhiteToMove =
+        fen.split(' ').length >= 2 && fen.split(' ')[1] == 'w';
+    final isOurMove = isWhiteToMove == config.isWhiteRepertoire;
 
     final reachedStop = depth >= config.maxDepthPly ||
         cumulativeProb < config.cumulativeProbabilityCutoff ||
@@ -248,30 +336,72 @@ class RepertoireGenerationService {
 
     final pos = Chess.fromSetup(Setup.parseFen(fen));
     if (reachedStop || pos.legalMoves.isEmpty) {
+      String reason = 'legal moves empty';
+      if (depth >= config.maxDepthPly) reason = 'max depth';
+      if (cumulativeProb < config.cumulativeProbabilityCutoff) {
+        reason = 'cum prob too low';
+      }
+      if (evalForUs >= config.maxEvalCpForUs) {
+        reason = 'eval too high';
+      }
+      if (evalForUs <= config.minEvalCpForUs) {
+        reason = 'eval too low';
+      }
+
       double metaEase = 0.5;
       if (strategy == GenerationStrategy.metaEval) {
-        final nodeEase = await _computeNodeEase(pool, fen, config.easeDepth, maiaElo: config.maiaElo);
+        final nodeEase = await _computeNodeEase(
+            fen, config.easeDepth, maiaElo: config.maiaElo);
         metaEase = 1.0 - (nodeEase ?? 0.5);
       }
       if (emitLines && lineSan.isNotEmpty) {
-        _linesGenerated++;
-        await onLine(GeneratedLine(
-          movesSan: lineSan,
-          cumulativeProbability: cumulativeProb,
-          finalEvalWhiteCp: evalWhiteCp,
-          metaEase: metaEase,
-        ));
+        var finalLine = lineSan;
+        if (isOurMove && pos.legalMoves.isNotEmpty) {
+          final response =
+              await _findOurBestResponse(fen, config, strategy);
+          if (response != null) {
+            finalLine = [...lineSan, response];
+          }
+        }
+        final endsWithOurMove = !isOurMove || finalLine.length > lineSan.length;
+        if (endsWithOurMove) {
+          _linesGenerated++;
+          await onLine(GeneratedLine(
+            movesSan: finalLine,
+            cumulativeProbability: cumulativeProb,
+            finalEvalWhiteCp: evalWhiteCp,
+            metaEase: metaEase,
+          ));
+          _log('$indent│ ★ EMITTED line #$_linesGenerated: '
+              '${finalLine.join(" ")}');
+        } else {
+          _log('$indent│ ✗ Skipped emission (ends on opponent move)');
+        }
       }
+      _log('$indent└ LEAF ($reason) metaEase=${metaEase.toStringAsFixed(3)} '
+          '[${nodeSw.elapsedMilliseconds}ms]');
       _metaEaseCache[fen] = metaEase;
       return metaEase;
     }
 
-    final isWhiteToMove = fen.split(' ').length >= 2 && fen.split(' ')[1] == 'w';
-    final isOurMove = isWhiteToMove == config.isWhiteRepertoire;
-
+    double result;
     if (isOurMove) {
-      return _handleOurMove(
-        pool: pool,
+      _log('$indent│ OUR MOVE (selecting best candidate)');
+      result = await _handleOurMove(
+        config: config,
+        strategy: strategy,
+        isCancelled: isCancelled,
+        onLine: onLine,
+        onProgress: onProgress,
+        fen: fen,
+        depth: depth,
+        cumulativeProb: cumulativeProb,
+        lineSan: lineSan,
+        emitLines: emitLines,
+      );
+    } else {
+      _log('$indent│ OPPONENT MOVE (branching on likely replies)');
+      result = await _handleOpponentMove(
         config: config,
         strategy: strategy,
         isCancelled: isCancelled,
@@ -285,25 +415,14 @@ class RepertoireGenerationService {
       );
     }
 
-    return _handleOpponentMove(
-      pool: pool,
-      config: config,
-      strategy: strategy,
-      isCancelled: isCancelled,
-      onLine: onLine,
-      onProgress: onProgress,
-      fen: fen,
-      depth: depth,
-      cumulativeProb: cumulativeProb,
-      lineSan: lineSan,
-      emitLines: emitLines,
-    );
+    _log('$indent└ Done d=$depth result=${result.toStringAsFixed(3)} '
+        '[${nodeSw.elapsedMilliseconds}ms total]');
+    return result;
   }
 
-  // ── Our move (decision node) ────────────────────────────────────────────
+  // ── Our move — engine-backed (engineOnly, metaEval only) ──────────────
 
   Future<double> _handleOurMove({
-    required _EvalPool pool,
     required RepertoireGenerationConfig config,
     required GenerationStrategy strategy,
     required bool Function() isCancelled,
@@ -315,54 +434,60 @@ class RepertoireGenerationService {
     required List<String> lineSan,
     required bool emitLines,
   }) async {
+    final indent = "│ " * depth;
+    final sw = Stopwatch()..start();
+
     final candidates = await _buildOurCandidates(
-      pool: pool,
       fen: fen,
       config: config,
     );
-    if (candidates.isEmpty) return 0.0;
+    if (candidates.isEmpty) {
+      _log('$indent│ No candidates found');
+      return 0.0;
+    }
 
-    // Filter candidates within maxEvalLossCp of best and above floor.
+    _log('$indent│ ${candidates.length} candidates built [${sw.elapsedMilliseconds}ms]:');
+    for (final c in candidates) {
+      _log('$indent│   ${c.san}  eval=${c.evalWhiteCp}cp  '
+          'winRate=${(c.winRate * 100).toStringAsFixed(1)}%');
+    }
+
     final bestEvalForUs = candidates
         .map((c) => _toOurPerspective(c.evalWhiteCp, config.isWhiteRepertoire))
         .reduce(math.max);
 
     final valid = candidates.where((c) {
-      final childEval = _toOurPerspective(c.evalWhiteCp, config.isWhiteRepertoire);
+      final childEval =
+          _toOurPerspective(c.evalWhiteCp, config.isWhiteRepertoire);
       return childEval >= bestEvalForUs - config.maxEvalLossCp &&
           childEval >= config.minEvalCpForUs;
     }).toList();
 
     final candidatePool = valid.isNotEmpty ? valid : candidates;
+    _log('$indent│ ${candidatePool.length} candidates after eval filter '
+        '(best=${bestEvalForUs}cp, window=${config.maxEvalLossCp}cp)');
 
-    // Select move based on strategy.
     _CandidateMove? selected;
 
     if (strategy == GenerationStrategy.engineOnly) {
-      // FIX: compare in our-perspective, not raw White cp.
       selected = candidatePool.reduce((a, b) {
-        final aEval = _toOurPerspective(a.evalWhiteCp, config.isWhiteRepertoire);
-        final bEval = _toOurPerspective(b.evalWhiteCp, config.isWhiteRepertoire);
+        final aEval =
+            _toOurPerspective(a.evalWhiteCp, config.isWhiteRepertoire);
+        final bEval =
+            _toOurPerspective(b.evalWhiteCp, config.isWhiteRepertoire);
         return aEval >= bEval ? a : b;
       });
-    } else if (strategy == GenerationStrategy.winRateOnly) {
-      selected = candidatePool.reduce((a, b) {
-        if (a.winRate == b.winRate) {
-          // FIX: tie-break in our-perspective.
-          final aEval = _toOurPerspective(a.evalWhiteCp, config.isWhiteRepertoire);
-          final bEval = _toOurPerspective(b.evalWhiteCp, config.isWhiteRepertoire);
-          return aEval >= bEval ? a : b;
-        }
-        return a.winRate >= b.winRate ? a : b;
-      });
+      _log('$indent│ Selected (engineOnly): ${selected.san} '
+          '${selected.evalWhiteCp}cp');
     } else {
-      // metaEval: explore each candidate subtree to get MetaEase,
-      // pick highest. Uses _metaEaseCache to avoid double-traversal.
+      _log('$indent│ MetaEval: exploring ${candidatePool.length} subtrees...');
       double bestMeta = -1e9;
-      for (final c in candidatePool) {
+      for (int ci = 0; ci < candidatePool.length; ci++) {
+        final c = candidatePool[ci];
         if (isCancelled()) break;
+        _log('$indent│ MetaEval candidate ${ci + 1}/${candidatePool.length}: '
+            '${c.san}');
         final v = await _dfsNode(
-          pool: pool,
           config: config,
           strategy: strategy,
           isCancelled: isCancelled,
@@ -372,20 +497,23 @@ class RepertoireGenerationService {
           depth: depth + 1,
           cumulativeProb: cumulativeProb,
           lineSan: [...lineSan, c.san],
-          emitLines: false, // exploration pass
+          emitLines: false,
         );
+        _log('$indent│ MetaEval candidate ${c.san} → ${v.toStringAsFixed(3)}');
         if (v > bestMeta) {
           bestMeta = v;
           selected = c;
         }
       }
+      if (selected != null) {
+        _log('$indent│ Selected (metaEval): ${selected.san} '
+            'meta=${bestMeta.toStringAsFixed(3)}');
+      }
     }
 
     if (selected == null) return 0.0;
 
-    // Final traversal of selected branch to emit lines.
     final result = await _dfsNode(
-      pool: pool,
       config: config,
       strategy: strategy,
       isCancelled: isCancelled,
@@ -402,10 +530,9 @@ class RepertoireGenerationService {
     return result;
   }
 
-  // ── Opponent move (chance node) ─────────────────────────────────────────
+  // ── Opponent move (chance node) — engine strategies only ──────────────
 
   Future<double> _handleOpponentMove({
-    required _EvalPool pool,
     required RepertoireGenerationConfig config,
     required GenerationStrategy strategy,
     required bool Function() isCancelled,
@@ -417,16 +544,26 @@ class RepertoireGenerationService {
     required List<String> lineSan,
     required bool emitLines,
   }) async {
+    final indent = "│ " * depth;
+
     final oppMoves = await _getOpponentMoves(
       fen: fen,
-      massTarget: config.opponentMassTarget,
       maiaElo: config.maiaElo,
     );
-    if (oppMoves.isEmpty) return 0.0;
+    if (oppMoves.isEmpty) {
+      _log('$indent│ No opponent moves found');
+      return 0.0;
+    }
+
+    _log('$indent│ ${oppMoves.length} opponent moves:');
+    for (final m in oppMoves) {
+      _log('$indent│   ${m.uci} p=${(m.probability * 100).toStringAsFixed(1)}%');
+    }
 
     double opponentEase = 0.5;
     if (strategy == GenerationStrategy.metaEval) {
-      final nodeEase = await _computeNodeEase(pool, fen, config.easeDepth, maiaElo: config.maiaElo);
+      final nodeEase = await _computeNodeEase(fen, config.easeDepth,
+          maiaElo: config.maiaElo);
       opponentEase = 1.0 - (nodeEase ?? 0.5);
     }
 
@@ -448,8 +585,10 @@ class RepertoireGenerationService {
       final idx = validIndices[j];
       final prob = oppMoves[idx].probability;
 
+      _log('$indent│ Opponent reply ${j + 1}/${childFens.length}: '
+          '${childSans[j]} (${(prob * 100).toStringAsFixed(1)}%)');
+
       final v = await _dfsNode(
-        pool: pool,
         config: config,
         strategy: strategy,
         isCancelled: isCancelled,
@@ -472,22 +611,24 @@ class RepertoireGenerationService {
     return result;
   }
 
-  // ── Candidate building ─────────────────────────────────────────────────
+  // ── Candidate building (engine strategies) ────────────────────────────
 
   Future<List<_CandidateMove>> _buildOurCandidates({
-    required _EvalPool pool,
     required String fen,
     required RepertoireGenerationConfig config,
   }) async {
     final isWhiteToMove = fen.split(' ')[1] == 'w';
 
-    // MultiPV discovery must run on a single worker (cannot overlap).
-    final discovery = await pool.primary.runDiscovery(
-      fen,
-      config.engineDepth,
-      config.engineTopK,
-      isWhiteToMove,
+    _log('    Building candidates: MultiPV discovery depth=${config.engineDepth}...');
+    final discSw = Stopwatch()..start();
+    final discovery = await _pool.discoverMoves(
+      fen: fen,
+      depth: config.engineDepth,
+      multiPv: config.engineTopK,
+      isWhiteToMove: isWhiteToMove,
     );
+    _log('    Discovery done [${discSw.elapsedMilliseconds}ms]: '
+        '${discovery.lines.length} lines');
 
     final engineUcis = discovery.lines
         .map((l) => l.moveUci)
@@ -499,7 +640,9 @@ class RepertoireGenerationService {
     final merged = <String>{...engineUcis, ...likely};
     final selectedUcis = merged.take(config.maxCandidates).toList();
 
-    // Compute child FENs.
+    _log('    Merged ${engineUcis.length} engine + ${likely.length} DB/Maia '
+        '→ ${selectedUcis.length} candidates');
+
     final childFens = <String>[];
     final validUcis = <String>[];
     for (final uci in selectedUcis) {
@@ -509,8 +652,11 @@ class RepertoireGenerationService {
       validUcis.add(uci);
     }
 
-    // Evaluate all candidates in parallel across workers.
-    final evalResults = await pool.evaluateMany(childFens, config.engineDepth);
+    _log('    Evaluating ${childFens.length} candidates at depth ${config.engineDepth}...');
+    final evalSw = Stopwatch()..start();
+    final evalResults = await _pool.evaluateMany(childFens, config.engineDepth);
+    _log('    Candidate evals done [${evalSw.elapsedMilliseconds}ms]');
+
     final parentIsWhiteToMove = isWhiteToMove;
 
     final dbData = await _getDbData(fen);
@@ -525,16 +671,17 @@ class RepertoireGenerationService {
     for (int i = 0; i < validUcis.length; i++) {
       final uci = validUcis[i];
       final eval = evalResults[i];
-      final evalWhiteCp = parentIsWhiteToMove ? -eval.effectiveCp : eval.effectiveCp;
+      final evalWhiteCp =
+          parentIsWhiteToMove ? -eval.effectiveCp : eval.effectiveCp;
 
-      // Cache for later reuse.
       _evalWhiteCache['${childFens[i]}|${config.engineDepth}'] = evalWhiteCp;
 
       final san = uciToSan(fen, uci);
       final dbMove = byUci[uci];
       final winRate = dbMove == null
           ? 0.5
-          : _dbWinRateForUs(dbMove: dbMove, isWhiteRepertoire: config.isWhiteRepertoire);
+          : _dbWinRateForUs(
+              dbMove: dbMove, isWhiteRepertoire: config.isWhiteRepertoire);
 
       out.add(_CandidateMove(
         uci: uci,
@@ -549,7 +696,8 @@ class RepertoireGenerationService {
 
   // ── Move sources ───────────────────────────────────────────────────────
 
-  Future<List<String>> _getLikelyMovesForUs(String fen, {required int maiaElo}) async {
+  Future<List<String>> _getLikelyMovesForUs(String fen,
+      {required int maiaElo}) async {
     final db = await _getDbData(fen);
     if (db != null && db.moves.isNotEmpty) {
       final sorted = db.moves.toList()
@@ -574,7 +722,6 @@ class RepertoireGenerationService {
 
   Future<List<_ProbMove>> _getOpponentMoves({
     required String fen,
-    required double massTarget,
     required int maiaElo,
   }) async {
     final out = <_ProbMove>[];
@@ -582,14 +729,11 @@ class RepertoireGenerationService {
     if (db != null && db.moves.isNotEmpty) {
       final sorted = db.moves.toList()
         ..sort((a, b) => b.probability.compareTo(a.probability));
-      double acc = 0.0;
       for (final m in sorted) {
         if (m.uci.isEmpty) continue;
         final p = m.probability / 100.0;
         if (p < 0.01) continue;
         out.add(_ProbMove(uci: m.uci, probability: p));
-        acc += p;
-        if (acc >= massTarget) break;
       }
       if (out.isNotEmpty) return out;
     }
@@ -601,12 +745,9 @@ class RepertoireGenerationService {
     if (maia.isEmpty) return out;
     final sorted = maia.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    double acc = 0.0;
     for (final e in sorted) {
       if (e.value < 0.01) continue;
       out.add(_ProbMove(uci: e.key, probability: e.value));
-      acc += e.value;
-      if (acc >= massTarget) break;
     }
     return out;
   }
@@ -614,18 +755,30 @@ class RepertoireGenerationService {
   // ── DB + eval helpers ─────────────────────────────────────────────────
 
   Future<PositionProbabilities?> _getDbData(String fen) async {
-    if (_dbCache.containsKey(fen)) return _dbCache[fen];
+    if (_dbCache.containsKey(fen)) {
+      _dbCacheHits++;
+      return _dbCache[fen];
+    }
+    _dbCalls++;
+    final sw = Stopwatch()..start();
     final data = await _probabilityService.getProbabilitiesForFen(fen);
+    _log('  DB#$_dbCalls ${sw.elapsedMilliseconds}ms  '
+        '${data?.moves.length ?? 0} moves  '
+        '${data?.totalGames ?? 0} games');
     _dbCache[fen] = data;
     return data;
   }
 
-  Future<int> _evaluateWhiteCp(_EvalPool pool, String fen, int depth) async {
+  Future<int> _evaluateWhiteCp(String fen, int depth) async {
     final key = '$fen|$depth';
     final cached = _evalWhiteCache[key];
-    if (cached != null) return cached;
+    if (cached != null) {
+      _engineCacheHits++;
+      return cached;
+    }
 
-    final eval = await pool.evaluateFen(fen, depth);
+    _engineCalls++;
+    final eval = await _pool.evaluateFen(fen, depth);
     final isWhiteToMove = fen.split(' ')[1] == 'w';
     final whiteCp = isWhiteToMove ? eval.effectiveCp : -eval.effectiveCp;
     _evalWhiteCache[key] = whiteCp;
@@ -645,10 +798,38 @@ class RepertoireGenerationService {
     return (ourWins + 0.5 * dbMove.draws) / total;
   }
 
+  // ── Leaf extension: pick our best response to close the line ─────────
+
+  Future<String?> _findOurBestResponse(
+    String fen,
+    RepertoireGenerationConfig config,
+    GenerationStrategy strategy,
+  ) async {
+    final dbData = await _getDbData(fen);
+    if (dbData != null && dbData.moves.isNotEmpty) {
+      final sorted = dbData.moves.toList()
+        ..sort((a, b) => b.probability.compareTo(a.probability));
+      final viable = sorted
+          .where((m) => m.uci.isNotEmpty && m.probability >= 1.0)
+          .toList();
+      if (viable.isNotEmpty) {
+        final best = viable.reduce((a, b) {
+          final aWr = _dbWinRateForUs(
+              dbMove: a, isWhiteRepertoire: config.isWhiteRepertoire);
+          final bWr = _dbWinRateForUs(
+              dbMove: b, isWhiteRepertoire: config.isWhiteRepertoire);
+          if (aWr != bWr) return aWr > bWr ? a : b;
+          return a.probability > b.probability ? a : b;
+        });
+        return best.san;
+      }
+    }
+    return null;
+  }
+
   // ── Ease computation (DB→MAIA fallback, parallel eval) ────────────────
 
   Future<double?> _computeNodeEase(
-    _EvalPool pool,
     String fen,
     int depth, {
     required int maiaElo,
@@ -714,7 +895,6 @@ class RepertoireGenerationService {
       return null;
     }
 
-    // Build child FENs and evaluate in parallel.
     final childFens = <String>[];
     final validCandidates = <MapEntry<String, double>>[];
     for (final entry in candidates) {
@@ -729,7 +909,7 @@ class RepertoireGenerationService {
       return null;
     }
 
-    final evalResults = await pool.evaluateMany(childFens, depth);
+    final evalResults = await _pool.evaluateMany(childFens, depth);
 
     int bestForMover = -100000;
     final evalByIdx = <int, int>{};

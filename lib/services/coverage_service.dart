@@ -4,11 +4,10 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:dartchess/dartchess.dart';
 import '../models/opening_tree.dart';
 import '../utils/fen_utils.dart';
-import 'lichess_auth_service.dart';
+import 'lichess_api_client.dart';
 
 /// Database types for Lichess Explorer
 enum LichessDatabase {
@@ -98,8 +97,6 @@ class CoverageService {
   final String speeds;
   final String? playerName;
   final String? playerColor;
-  final double baseDelay;
-  final int maxRetries;
 
   // Cache for FEN positions
   final Map<String, Map<String, dynamic>> _cache = {};
@@ -107,18 +104,12 @@ class CoverageService {
   int _cacheMisses = 0;
   int _apiCalls = 0;
 
-  // Rate limiting state
-  DateTime? _lastRequestTime;
-  bool _isRateLimited = false;
-
   CoverageService({
     this.database = LichessDatabase.lichess,
-    this.ratings = '2000,2200,2500',  // Default to 2000+
+    this.ratings = '2000,2200,2500',
     this.speeds = 'blitz,rapid,classical',
     this.playerName,
     this.playerColor,
-    this.baseDelay = 0.15,
-    this.maxRetries = 5,
   });
 
   /// Get base URL for current database
@@ -133,18 +124,17 @@ class CoverageService {
     }
   }
 
-  /// Query Lichess Explorer API with caching and rate limiting
+  /// Query Lichess Explorer API with caching.  Rate-limiting, retries,
+  /// and auth are handled by [LichessApiClient].
   Future<Map<String, dynamic>?> getPositionData(String fen) async {
     final cacheKey = normalizeFen(fen);
 
-    // Check cache
     if (_cache.containsKey(cacheKey)) {
       _cacheHits++;
       return _cache[cacheKey];
     }
     _cacheMisses++;
 
-    // Build request parameters
     final params = <String, String>{
       'variant': 'standard',
       'fen': fen,
@@ -163,65 +153,39 @@ class CoverageService {
       }
     }
 
-    // Rate limiting with exponential backoff
-    for (int attempt = 0; attempt < maxRetries; attempt++) {
-      // Polite delay
-      if (_lastRequestTime != null) {
-        final elapsed = DateTime.now().difference(_lastRequestTime!);
-        final delayMs = (baseDelay * 1000).toInt();
-        if (elapsed.inMilliseconds < delayMs) {
-          await Future.delayed(Duration(milliseconds: delayMs - elapsed.inMilliseconds));
-        }
-      }
+    _apiCalls++;
+    final uri = Uri.parse(_baseUrl).replace(queryParameters: params);
+    final response = await LichessApiClient().get(uri);
 
-      _lastRequestTime = DateTime.now();
-      _apiCalls++;
+    if (response == null) return null;
 
-      try {
-        final uri = Uri.parse(_baseUrl).replace(queryParameters: params);
-        final headers = await LichessAuthService().getHeaders();
-        final response = await http.get(uri, headers: headers);
-
-        if (response.statusCode == 429) {
-          // Rate limited - exponential backoff
-          _isRateLimited = true;
-          final waitTime = (1 << attempt) * 30; // 30s, 60s, 120s, ...
-          await Future.delayed(Duration(seconds: waitTime));
-          _isRateLimited = false;
-          continue;
-        }
-
-        if (response.statusCode == 404) {
-          // Position not found
-          final result = <String, dynamic>{
-            'white': 0,
-            'black': 0,
-            'draws': 0,
-            'moves': <dynamic>[],
-          };
-          _cache[cacheKey] = result;
-          return result;
-        }
-
-        if (response.statusCode != 200) {
-          throw Exception('HTTP ${response.statusCode}');
-        }
-
-        final result = jsonDecode(response.body) as Map<String, dynamic>;
-        _cache[cacheKey] = result;
-        return result;
-
-      } catch (e) {
-        if (attempt < maxRetries - 1) {
-          final waitTime = (1 << attempt) * 5;
-          await Future.delayed(Duration(seconds: waitTime));
-        } else {
-          return null;
-        }
-      }
+    if (response.statusCode == 404) {
+      final result = <String, dynamic>{
+        'white': 0,
+        'black': 0,
+        'draws': 0,
+        'moves': <dynamic>[],
+      };
+      _cache[cacheKey] = result;
+      return result;
     }
 
-    return null;
+    if (response.statusCode != 200) return null;
+
+    final result =
+        response.body.isNotEmpty ? _parseJson(response.body) : null;
+    if (result != null) _cache[cacheKey] = result;
+    return result;
+  }
+
+  static Map<String, dynamic>? _parseJson(String body) {
+    try {
+      return Map<String, dynamic>.from(
+        const JsonDecoder().convert(body) as Map,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Get total game count for a position
@@ -520,6 +484,6 @@ class CoverageService {
   }
 
   /// Check if currently rate limited
-  bool get isRateLimited => _isRateLimited;
+  bool get isRateLimited => LichessApiClient().isBackingOff;
 }
 

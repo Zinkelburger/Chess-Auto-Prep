@@ -8,8 +8,8 @@ import '../models/tactics_position.dart';
 import '../models/engine_settings.dart';
 import 'package:chess_auto_prep/models/engine_evaluation.dart';
 import 'engine/stockfish_service.dart';
+import 'lichess_api_client.dart';
 import 'tactics_database.dart';
-import 'lichess_auth_service.dart';
 import 'storage/storage_factory.dart';
 import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart' as parallel;
@@ -74,23 +74,21 @@ class TacticsImportService {
     // If that happens, we'd need a proxy, but for now we try direct.
     final url = Uri.parse('https://lichess.org/api/games/user/$username?max=${maxGames ?? 20}&evals=false&clocks=false&opening=false&moves=true');
     
-    try {
-      progressCallback?.call('Downloading games from Lichess...');
-      final headers = await LichessAuthService().getHeaders(
-        {'Accept': 'application/x-chess-pgn'},
-      );
-      final response = await http.get(url, headers: headers);
-      
-      if (response.statusCode == 200) {
-        // Save the raw PGNs first
-        await _savePgns(response.body);
-        return _processGames(response.body, username, depth, progressCallback, onPositionFound, maxCores: maxCores, maxLoadPercent: maxLoadPercent);
-      } else {
-        throw Exception('Failed to fetch games from Lichess: ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('Error fetching games from Lichess: $e');
+    progressCallback?.call('Downloading games from Lichess...');
+    final response = await LichessApiClient().get(
+      url,
+      extraHeaders: {'Accept': 'application/x-chess-pgn'},
+    );
+
+    if (response == null) {
+      throw Exception('Failed to fetch games from Lichess (request failed)');
     }
+    if (response.statusCode != 200) {
+      throw Exception('Failed to fetch games from Lichess: ${response.statusCode}');
+    }
+
+    await _savePgns(response.body);
+    return _processGames(response.body, username, depth, progressCallback, onPositionFound, maxCores: maxCores, maxLoadPercent: maxLoadPercent);
   }
 
   /// Fetch the list of monthly archive URLs from Chess.com.
