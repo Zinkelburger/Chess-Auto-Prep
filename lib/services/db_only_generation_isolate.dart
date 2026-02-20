@@ -1,16 +1,19 @@
 /// Self-contained DB-only repertoire generation that runs in a Dart isolate.
 ///
 /// Runs the full DFS + Lichess Explorer HTTP calls on its own event loop,
-/// completely independent of Flutter's UI thread.  This avoids the 30-70x
+/// completely independent of Flutter's UI thread.  This avoids the 30-70×
 /// latency penalty caused by Flutter's rendering pipeline blocking async
 /// continuations on the main isolate.
+///
+/// Uses [LichessApiClient.fetchExplorer] for HTTP + parsing, so there is
+/// exactly one JSON parser for Explorer responses across the entire app.
 library;
 
-import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 
+import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
 import 'lichess_api_client.dart';
 
@@ -97,7 +100,6 @@ class DbOnlyCancelPort extends DbOnlyIsolateMsg {
 Future<void> dbOnlyIsolateEntry(DbOnlyIsolateRequest req) async {
   final send = req.resultPort;
 
-  // Set up cancellation channel.
   final cancelPort = ReceivePort();
   send.send(DbOnlyCancelPort(cancelPort.sendPort));
 
@@ -134,9 +136,12 @@ Future<void> dbOnlyIsolateEntry(DbOnlyIsolateRequest req) async {
 
   sw.stop();
   runner._log('═══ Generation END (isolate) ═══');
-  runner._log('Time: ${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s');
-  runner._log('Nodes: ${runner._nodesVisited}, Lines: ${runner._linesGenerated}');
-  runner._log('DB calls: ${runner._dbCalls} (cache hits: ${runner._dbCacheHits})');
+  runner._log(
+      'Time: ${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s');
+  runner._log(
+      'Nodes: ${runner._nodesVisited}, Lines: ${runner._linesGenerated}');
+  runner._log(
+      'DB calls: ${runner._dbCalls} (cache hits: ${runner._dbCacheHits})');
 
   send.send(DbOnlyDone(
     nodesVisited: runner._nodesVisited,
@@ -152,6 +157,12 @@ Future<void> dbOnlyIsolateEntry(DbOnlyIsolateRequest req) async {
 
 // ── Internal runner (owns HTTP client, cache, counters) ─────────────────
 
+/// Minimum play rate (0–100) for a move to be considered as our response.
+const double _kMinOurMovePlayRate = 1.0;
+
+/// Minimum play fraction (0–1) for an opponent reply to be branched on.
+const double _kMinOpponentPlayFraction = 0.01;
+
 class _IsolateRunner {
   final SendPort sendPort;
   final String? authToken;
@@ -161,7 +172,7 @@ class _IsolateRunner {
   final bool Function() isCancelled;
 
   late final LichessApiClient _client;
-  final Map<String, _DbResult?> _dbCache = {};
+  final Map<String, ExplorerResponse?> _dbCache = {};
 
   int _nodesVisited = 0;
   int _linesGenerated = 0;
@@ -257,24 +268,18 @@ class _IsolateRunner {
     }
 
     if (isOurMove) {
-      final viable = dbData.moves
-          .where((m) => m.uci.isNotEmpty && m.probability >= 1.0)
-          .toList();
-      if (viable.isEmpty) {
+      final best = dbData.bestMoveForSide(
+        asWhite: isWhiteRepertoire,
+        minPlayRate: _kMinOurMovePlayRate,
+      );
+      if (best == null) {
         _log('$indent└ LEAF (no viable DB moves)');
         return;
       }
-
-      final best = viable.reduce((a, b) {
-        final aWr = _winRateForUs(a, isWhiteRepertoire);
-        final bWr = _winRateForUs(b, isWhiteRepertoire);
-        if (aWr != bWr) return aWr > bWr ? a : b;
-        return a.probability > b.probability ? a : b;
-      });
-      final bestWr = _winRateForUs(best, isWhiteRepertoire);
+      final bestWr = best.winRateFor(asWhite: isWhiteRepertoire);
       _log('$indent│ OUR: ${best.san} '
           'wr=${(bestWr * 100).toStringAsFixed(1)}% '
-          'p=${best.probability.toStringAsFixed(1)}%');
+          'p=${best.playRate.toStringAsFixed(1)}%');
 
       final childFen = playUciMove(fen, best.uci);
       if (childFen == null) return;
@@ -293,8 +298,8 @@ class _IsolateRunner {
       final replies = <(String uci, String san, double prob)>[];
       for (final move in dbData.moves) {
         if (move.uci.isEmpty) continue;
-        final prob = move.probability / 100.0;
-        if (prob < 0.01) continue;
+        final prob = move.playFraction;
+        if (prob < _kMinOpponentPlayFraction) continue;
         replies.add((move.uci, uciToSan(fen, move.uci), prob));
       }
       _log('$indent│ OPP: ${replies.length} replies');
@@ -327,128 +332,32 @@ class _IsolateRunner {
     bool isWhiteRepertoire,
   ) async {
     final dbData = await _getDbData(fen);
-    if (dbData != null && dbData.moves.isNotEmpty) {
-      final sorted = dbData.moves.toList()
-        ..sort((a, b) => b.probability.compareTo(a.probability));
-      final viable = sorted
-          .where((m) => m.uci.isNotEmpty && m.probability >= 1.0)
-          .toList();
-      if (viable.isNotEmpty) {
-        final best = viable.reduce((a, b) {
-          final aWr = _winRateForUs(a, isWhiteRepertoire);
-          final bWr = _winRateForUs(b, isWhiteRepertoire);
-          if (aWr != bWr) return aWr > bWr ? a : b;
-          return a.probability > b.probability ? a : b;
-        });
-        return best.san;
-      }
-    }
-    return null;
-  }
-
-  double _winRateForUs(_DbMove move, bool isWhiteRepertoire) {
-    final total = move.white + move.draws + move.black;
-    if (total <= 0) return 0.5;
-    final ourWins = isWhiteRepertoire ? move.white : move.black;
-    return (ourWins + 0.5 * move.draws) / total;
+    final best = dbData?.bestMoveForSide(
+      asWhite: isWhiteRepertoire,
+      minPlayRate: _kMinOurMovePlayRate,
+    );
+    return best?.san;
   }
 
   // ── DB fetch (own HTTP client, own cache, own event loop) ─────────────
 
-  Future<_DbResult?> _getDbData(String fen) async {
+  Future<ExplorerResponse?> _getDbData(String fen) async {
     if (_dbCache.containsKey(fen)) {
       _dbCacheHits++;
       return _dbCache[fen];
     }
     _dbCalls++;
     final sw = Stopwatch()..start();
-    final data = await _fetchExplorer(fen);
+    final data = await _client.fetchExplorer(
+      fen,
+      variant: variant,
+      speeds: speeds,
+      ratings: ratings,
+    );
     _log('  DB#$_dbCalls ${sw.elapsedMilliseconds}ms  '
         '${data?.moves.length ?? 0} moves  '
         '${data?.totalGames ?? 0} games');
     _dbCache[fen] = data;
     return data;
   }
-
-  Future<_DbResult?> _fetchExplorer(String fen) async {
-    final encodedFen = Uri.encodeComponent(fen);
-    final url = Uri.parse('https://explorer.lichess.ovh/lichess?'
-        'variant=$variant&'
-        'speeds=$speeds&'
-        'ratings=$ratings&'
-        'fen=$encodedFen');
-
-    final response = await _client.get(url);
-
-    if (response == null) return null;
-
-    if (response.statusCode != 200) {
-      _log('HTTP ${response.statusCode} for FEN: '
-          '${fen.substring(0, fen.indexOf(' '))}…');
-      return null;
-    }
-
-    final data = json.decode(response.body);
-    return _parseExplorerResponse(data);
-  }
-
-  static _DbResult? _parseExplorerResponse(dynamic data) {
-    final moves = <_DbMove>[];
-    int totalGames = 0;
-
-    for (final move in data['moves'] ?? []) {
-      final white = move['white'] as int? ?? 0;
-      final draws = move['draws'] as int? ?? 0;
-      final black = move['black'] as int? ?? 0;
-      totalGames += white + draws + black;
-    }
-
-    for (final move in data['moves'] ?? []) {
-      final white = move['white'] as int? ?? 0;
-      final draws = move['draws'] as int? ?? 0;
-      final black = move['black'] as int? ?? 0;
-      final moveTotal = white + draws + black;
-      final probability =
-          totalGames > 0 ? (moveTotal / totalGames) * 100 : 0.0;
-
-      moves.add(_DbMove(
-        san: move['san'] as String? ?? '',
-        uci: move['uci'] as String? ?? '',
-        white: white,
-        draws: draws,
-        black: black,
-        probability: probability,
-      ));
-    }
-
-    moves.sort((a, b) => b.probability.compareTo(a.probability));
-    return _DbResult(moves: moves, totalGames: totalGames);
-  }
-}
-
-// ── Lightweight data types (isolate-safe, no Flutter deps) ──────────────
-
-class _DbMove {
-  final String san;
-  final String uci;
-  final int white;
-  final int draws;
-  final int black;
-  final double probability;
-
-  const _DbMove({
-    required this.san,
-    required this.uci,
-    required this.white,
-    required this.draws,
-    required this.black,
-    required this.probability,
-  });
-}
-
-class _DbResult {
-  final List<_DbMove> moves;
-  final int totalGames;
-
-  const _DbResult({required this.moves, required this.totalGames});
 }

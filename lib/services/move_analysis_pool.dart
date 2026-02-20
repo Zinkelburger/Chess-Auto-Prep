@@ -7,11 +7,10 @@
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 
+import 'ease_calculator.dart';
 import 'engine/stockfish_connection_factory.dart';
-import 'maia_factory.dart';
 import 'probability_service.dart';
 import 'engine/eval_worker.dart';
 import 'pool_resource_budget.dart';
@@ -19,7 +18,6 @@ import '../models/engine_settings.dart';
 import '../models/analysis/discovery_result.dart';
 import '../models/analysis/move_analysis_result.dart';
 import '../utils/system_info.dart';
-import '../utils/ease_utils.dart';
 import '../utils/chess_utils.dart' show playUciMove;
 
 // Re-export the model types so existing `import 'move_analysis_pool.dart'`
@@ -722,7 +720,7 @@ class MoveAnalysisPool {
     results.value = updated;
   }
 
-  // ── Ease computation ────────────────────────────────────────────────
+  // ── Ease computation (delegated to EaseCalculator) ──────────────────
 
   Future<double?> _computeMoveEase(
     EvalWorker worker,
@@ -731,79 +729,24 @@ class MoveAnalysisPool {
     int depth,
     int generation,
   ) async {
-    final candidates = <MapEntry<String, double>>[];
     final dbData = await _probabilityService.getProbabilitiesForFen(fen);
-    if (dbData != null && dbData.moves.isNotEmpty) {
-      final sortedDb = dbData.moves.toList()
-        ..sort((a, b) => b.probability.compareTo(a.probability));
 
-      double cumulativeProb = 0.0;
-      for (final move in sortedDb) {
-        if (move.uci.isEmpty) continue;
-        final prob = move.probability / 100.0;
-        if (prob < 0.01) continue;
-        candidates.add(MapEntry(move.uci, prob));
-        cumulativeProb += prob;
-        if (cumulativeProb > 0.90) break;
-      }
-
-      // Use DB only when every move in the selected probability mass has
-      // enough support (>50 games). Otherwise, fall back to Maia.
-      final hasReliableDbMass = candidates.isNotEmpty &&
-          candidates.every((entry) {
-            for (final move in sortedDb) {
-              if (move.uci == entry.key) return move.total > 50;
-            }
-            return false;
-          });
-      if (!hasReliableDbMass) {
-        candidates.clear();
-      }
-    }
-
-    if (candidates.isEmpty) {
-      if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
-        return null;
-      }
-      final maiaProbs = await MaiaFactory.instance!.evaluate(fen, 1900);
-      if (maiaProbs.isEmpty) return null;
-
-      final sortedMaia = maiaProbs.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
-
-      double cumulativeProb = 0.0;
-      for (final entry in sortedMaia) {
-        if (entry.value < 0.01) continue;
-        candidates.add(entry);
-        cumulativeProb += entry.value;
-        if (cumulativeProb > 0.90) break;
-      }
-    }
-
-    if (candidates.isEmpty) return null;
-
-    final maxQ = scoreToQ(rootEval.effectiveCp);
-    double sumWeightedRegret = 0.0;
-
-    for (final entry in candidates) {
-      if (_generation != generation) return null;
-
-      final candidateUci = entry.key;
-      final prob = entry.value;
-
-      final nextFen = playUciMove(fen, candidateUci);
-      if (nextFen == null) continue;
-
-      final candidateEval = await worker.evaluateFen(nextFen, depth);
-
-      final score = -candidateEval.effectiveCp;
-      final qVal = scoreToQ(score);
-
-      final regret = math.max(0.0, maxQ - qVal);
-      sumWeightedRegret += math.pow(prob, kEaseBeta) * regret;
-    }
-
-    return 1.0 - math.pow(sumWeightedRegret / 2, kEaseAlpha);
+    return EaseCalculator.compute(
+      fen: fen,
+      evalDepth: depth,
+      maiaElo: 1900,
+      dbData: dbData,
+      evaluateBatch: (fens, d) async {
+        final results = <EvalResult>[];
+        for (final f in fens) {
+          if (_generation != generation) {
+            throw StateError('Generation changed');
+          }
+          results.add(await worker.evaluateFen(f, d));
+        }
+        return results;
+      },
+    );
   }
 
   // ── Generation-mode API (shared pool for generate tab) ──────────────

@@ -6,15 +6,19 @@
 ///   • 429 detection with exponential backoff (60 s, 120 s, 240 s …)
 ///   • Automatic auth-header injection
 ///   • Configurable retry on transient errors
+///   • Centralised Lichess Explorer response parsing via [fetchExplorer]
 ///
 /// Main-thread code uses the singleton: `LichessApiClient()`.
 /// Isolate code creates a disposable instance via
 /// `LichessApiClient.withToken(token)` and calls [close] when finished.
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/explorer_response.dart';
 import 'lichess_auth_service.dart';
 
 class LichessApiClient {
@@ -178,6 +182,41 @@ class LichessApiClient {
       }
     }
     return null;
+  }
+
+  // ── Lichess Explorer convenience ─────────────────────────────────────
+
+  /// Fetch and parse a Lichess Explorer response for [fen].
+  ///
+  /// Returns a fully-parsed [ExplorerResponse] on success, or `null` when
+  /// the request fails or all retries are exhausted.  Rate-limiting,
+  /// retries, and auth are handled by [get].
+  Future<ExplorerResponse?> fetchExplorer(
+    String fen, {
+    String variant = 'standard',
+    String speeds = 'blitz,rapid,classical',
+    String ratings = '1800,2000,2200,2500',
+  }) async {
+    final encodedFen = Uri.encodeComponent(fen);
+    final url = Uri.parse('https://explorer.lichess.ovh/lichess?'
+        'variant=$variant&'
+        'speeds=$speeds&'
+        'ratings=$ratings&'
+        'fen=$encodedFen');
+
+    final response = await get(url);
+
+    if (response == null) return null;
+    if (response.statusCode != 200) {
+      if (kDebugMode) {
+        final short = fen.contains(' ') ? fen.substring(0, fen.indexOf(' ')) : fen;
+        print('[LichessAPI] Explorer HTTP ${response.statusCode} for $short…');
+      }
+      return null;
+    }
+
+    final data = json.decode(response.body) as Map<String, dynamic>;
+    return ExplorerResponse.fromJson(data, fen: fen);
   }
 
   /// Close the underlying HTTP client.
