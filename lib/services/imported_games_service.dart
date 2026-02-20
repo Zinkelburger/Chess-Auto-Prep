@@ -1,8 +1,7 @@
-import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html/dom.dart';
 
-import 'lichess_auth_service.dart';
+import 'lichess_api_client.dart';
 
 class ImportedGamesService {
   static const String _lichessBase = 'https://lichess.org';
@@ -24,9 +23,12 @@ class ImportedGamesService {
       print('Scraping page $page...');
 
       try {
-        final response = await http.get(Uri.parse(url));
-        response.body; // Force evaluation
+        final response = await LichessApiClient().get(Uri.parse(url));
 
+        if (response == null) {
+          print('Request failed for page $page');
+          break;
+        }
         if (response.statusCode != 200) {
           throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
         }
@@ -89,10 +91,10 @@ class ImportedGamesService {
 
     progressCallback?.call('Preparing to download ${gameIds.length} games with evaluations...');
 
-    final Map<String, String> headers = await LichessAuthService().getHeaders({
+    final Map<String, String> extraHeaders = {
       'Content-Type': 'text/plain',
       'Accept': 'application/x-chess-pgn',
-    });
+    };
 
     final StringBuffer allPgns = StringBuffer();
 
@@ -108,12 +110,6 @@ class ImportedGamesService {
       // API expects comma-separated string of IDs
       final String postData = batchIds.join(',');
 
-      print('\nDEBUG - Batch $batchNum:');
-      print('  Game IDs in batch: $batchIds');
-      print('  POST data: ${postData.length > 200 ? '${postData.substring(0, 200)}...' : postData}');
-      print('  API URL: $_apiBase');
-      print('  Headers: $headers');
-
       final Map<String, String> params = {
         'evals': 'true',
         'clocks': 'true',
@@ -122,15 +118,15 @@ class ImportedGamesService {
 
       try {
         final Uri uri = Uri.parse(_apiBase).replace(queryParameters: params);
-        final response = await http.post(
+        final response = await LichessApiClient().post(
           uri,
-          headers: headers,
           body: postData,
+          extraHeaders: extraHeaders,
         );
 
-        print('  Response status: ${response.statusCode}');
-        print('  Response headers: ${response.headers}');
-
+        if (response == null) {
+          throw Exception('Request failed (all retries exhausted)');
+        }
         if (response.statusCode != 200) {
           throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
         }

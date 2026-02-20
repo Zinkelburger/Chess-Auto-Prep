@@ -28,6 +28,7 @@ export '../models/analysis/discovery_result.dart';
 export '../models/analysis/move_analysis_result.dart';
 export '../utils/ease_utils.dart'
     show scoreToQ, kEaseAlpha, kEaseBeta, kEaseDisplayScale;
+export 'engine/eval_worker.dart' show EvalResult;
 
 // ── Worker Pool ──────────────────────────────────────────────────────────
 
@@ -38,6 +39,12 @@ class MoveAnalysisPool {
 
   final List<EvalWorker> _workers = [];
   int _generation = 0;
+
+  // ── Generation-mode state (shared pool used by generate tab) ──
+  bool _isGenerating = false;
+  final Set<EvalWorker> _busyWorkers = {};
+  final Set<EvalWorker> _freeWorkers = {};
+  final List<Completer<EvalWorker>> _workerWaiters = [];
 
   // ── Evaluation state ──
   String? _currentBaseFen;
@@ -61,11 +68,30 @@ class MoveAnalysisPool {
   final ValueNotifier<PoolStatus> poolStatus =
       ValueNotifier(const PoolStatus());
 
+  int get workerCount => _workers.length;
+  bool get isGenerating => _isGenerating;
+
+  /// Kill all Stockfish processes to free RAM.
+  /// Use when the engine isn't needed (e.g. DB-only generation).
+  /// Workers will be re-created automatically the next time
+  /// [warmUp], [beginGeneration], etc. are called.
+  void suspendWorkers() {
+    cancel();
+    _generation++;
+    _disposeAllWorkers();
+    _freeWorkers.clear();
+    _busyWorkers.clear();
+    poolStatus.value = const PoolStatus(phase: 'suspended');
+  }
+
   // ── Worker lifecycle helpers ───────────────────────────────────────────
 
   void _trimWorkersTo(int count) {
     while (_workers.length > count) {
+      final last = _workers.last;
+      if (_busyWorkers.contains(last)) break;
       _workers.removeLast().dispose();
+      _freeWorkers.remove(last);
     }
   }
 
@@ -304,55 +330,74 @@ class MoveAnalysisPool {
         '${maxLoadPercent.round()}% ceiling)');
   }
 
-  // ── Background scale-up loop ────────────────────────────────────────
+  // ── Background resource management loop ─────────────────────────────
+  //
+  // Runs periodically while the pool is active.  Handles three things:
+  //   1. Scale-down — trim excess workers when RAM pressure rises.
+  //   2. Hash rebalance — adjust per-worker hash to current headroom.
+  //   3. Scale-up — spawn additional workers when RAM allows.
 
-  /// Periodically tries to spawn additional workers until [_targetMaxWorkers]
-  /// is reached or RAM runs out.  Runs alongside worker eval loops.
-  void _startScaleUpLoop(int generation) {
-    if (_workers.length >= _targetMaxWorkers) return;
-
+  void _startResourceLoop(int generation) {
     Future.doWhile(() async {
       await Future.delayed(_scaleUpInterval);
       if (_generation != generation) return false;
-      if (_workers.length >= _targetMaxWorkers) return false;
+      if (_workers.isEmpty) return false;
 
-      // Check RAM before spawning
-      if (!_canFitOneMore()) {
+      final budget = _computeBudget(_maxLoadPercent, _targetMaxWorkers);
+
+      // ── Scale down ──
+      if (_workers.length > budget.workerCapacity) {
         if (kDebugMode) {
-          print('[Pool] Scale-up: RAM full at ${_workers.length} workers '
-              '(target $_targetMaxWorkers)');
+          print('[Pool] Resource: trimming ${_workers.length} → '
+              '${budget.workerCapacity} workers');
         }
-        return _generation == generation; // keep polling
-      }
-
-      final worker = await _spawnOneWorker(
-          _workers.length, _lastHashPerWorkerMb);
-      if (_generation != generation) {
-        worker?.dispose();
-        return false;
-      }
-
-      if (worker != null) {
-        _workers.add(worker);
-        if (kDebugMode) {
-          print('[Pool] Scale-up: spawned worker #${_workers.length - 1} '
-              '(${_workers.length}/$_targetMaxWorkers)');
-        }
+        _trimWorkersTo(budget.workerCapacity);
         _emitPoolStatus();
-        // Start a worker loop for the new worker if we're evaluating
-        if (_currentBaseFen != null) {
-          _workerLoop(worker, _workers.length - 1, generation);
+      }
+
+      // ── Rebalance hash ──
+      if (budget.hashPerWorkerMb != _lastHashPerWorkerMb &&
+          _workers.isNotEmpty) {
+        if (kDebugMode) {
+          print('[Pool] Resource: hash $_lastHashPerWorkerMb → '
+              '${budget.hashPerWorkerMb} MB/worker');
+        }
+        _applyHash(budget.hashPerWorkerMb);
+      }
+
+      // ── Scale up ──
+      if (_workers.length < _targetMaxWorkers && _canFitOneMore()) {
+        final worker = await _spawnOneWorker(
+            _workers.length, _lastHashPerWorkerMb);
+        if (_generation != generation) {
+          worker?.dispose();
+          return false;
+        }
+
+        if (worker != null) {
+          _workers.add(worker);
+          if (kDebugMode) {
+            print('[Pool] Resource: spawned worker #${_workers.length - 1} '
+                '(${_workers.length}/$_targetMaxWorkers)');
+          }
+          _emitPoolStatus();
+          if (_isGenerating) {
+            _releaseWorker(worker);
+          } else if (_currentBaseFen != null) {
+            _workerLoop(worker, _workers.length - 1, generation);
+          }
         }
       }
 
-      return _generation == generation &&
-          _workers.length < _targetMaxWorkers;
+      return _generation == generation;
     });
   }
 
   // ── Warm-up ─────────────────────────────────────────────────────────
 
   Future<void> warmUp() async {
+    if (_isGenerating) return;
+
     final settings = EngineSettings();
     final maxWorkers = settings.cores;
     final maxLoadPercent = settings.maxSystemLoad.toDouble();
@@ -367,8 +412,7 @@ class MoveAnalysisPool {
 
     if (_generation != myGen || _workers.isEmpty) return;
 
-    // Start scaling up in the background while we warm up worker #0.
-    _startScaleUpLoop(myGen);
+    _startResourceLoop(myGen);
 
     const startpos =
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -388,6 +432,8 @@ class MoveAnalysisPool {
     required int depth,
     required int multiPv,
   }) async {
+    if (_isGenerating) return const DiscoveryResult();
+
     _generation++;
     final myGen = _generation;
 
@@ -412,8 +458,7 @@ class MoveAnalysisPool {
       return const DiscoveryResult();
     }
 
-    // Scale up in background while discovery runs on worker #0.
-    _startScaleUpLoop(myGen);
+    _startResourceLoop(myGen);
 
     final fenParts = fen.split(' ');
     final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
@@ -472,6 +517,8 @@ class MoveAnalysisPool {
     required int evalDepth,
     required int easeDepth,
   }) async {
+    if (_isGenerating) return;
+
     _generation++;
     final myGen = _generation;
 
@@ -535,11 +582,14 @@ class MoveAnalysisPool {
     }
 
     _startWorkerLoops(myGen);
-    _startScaleUpLoop(myGen);
+    _startResourceLoop(myGen);
   }
 
   /// Cancel all in-progress work. Workers stay alive.
+  /// No-op while a generation session is active (use [endGeneration]).
   void cancel() {
+    if (_isGenerating) return;
+
     _generation++;
     _workerCurrentMoves.clear();
     _currentBaseFen = null;
@@ -756,9 +806,135 @@ class MoveAnalysisPool {
     return 1.0 - math.pow(sumWeightedRegret / 2, kEaseAlpha);
   }
 
+  // ── Generation-mode API (shared pool for generate tab) ──────────────
+  //
+  // The generate tab uses the same worker pool as the engine tab.
+  // [beginGeneration] cancels engine-tab work and makes all workers
+  // available via [evaluateFen] / [evaluateMany] / [discoverMoves].
+  // [endGeneration] releases the pool so the engine tab can resume.
+  //
+  // Workers are acquired exclusively: each evaluateFen gets sole use of
+  // a worker until the eval finishes, preventing UCI protocol conflicts.
+
+  /// Prepare the pool for generation.  Cancels any engine-tab work,
+  /// ensures workers are available, and starts the resource loop.
+  Future<void> beginGeneration() async {
+    // cancel() is safe here — _isGenerating is still false.
+    cancel();
+    _isGenerating = true;
+
+    final settings = EngineSettings();
+    _maxLoadPercent = settings.maxSystemLoad.toDouble();
+    _targetMaxWorkers = settings.cores;
+
+    await _ensureWorkers(
+      maxLoadPercent: _maxLoadPercent,
+      maxWorkers: _targetMaxWorkers,
+    );
+
+    // All workers start as free for generation use.
+    _freeWorkers
+      ..clear()
+      ..addAll(_workers);
+    _workerWaiters.clear();
+    _busyWorkers.clear();
+
+    if (_workers.isNotEmpty) {
+      _startResourceLoop(_generation);
+    }
+  }
+
+  /// End the generation session so the engine tab can reclaim the pool.
+  void endGeneration() {
+    if (!_isGenerating) return;
+    _isGenerating = false;
+
+    for (final w in _workers) {
+      w.stop();
+    }
+    _freeWorkers.clear();
+    _busyWorkers.clear();
+    // Reject any pending acquires with an error.
+    for (final c in _workerWaiters) {
+      if (!c.isCompleted) c.completeError(StateError('Generation ended'));
+    }
+    _workerWaiters.clear();
+  }
+
+  /// Acquire a worker exclusively.  Returns immediately if one is free,
+  /// otherwise waits until a worker is released.
+  Future<EvalWorker> _acquireWorker() {
+    if (_freeWorkers.isNotEmpty) {
+      final w = _freeWorkers.first;
+      _freeWorkers.remove(w);
+      _busyWorkers.add(w);
+      return Future.value(w);
+    }
+    final c = Completer<EvalWorker>();
+    _workerWaiters.add(c);
+    return c.future;
+  }
+
+  /// Release a worker back to the free set (or hand it to the next waiter).
+  void _releaseWorker(EvalWorker worker) {
+    _busyWorkers.remove(worker);
+    if (!_workers.contains(worker)) return; // trimmed while busy
+    if (_workerWaiters.isNotEmpty) {
+      final next = _workerWaiters.removeAt(0);
+      _busyWorkers.add(worker);
+      if (!next.isCompleted) next.complete(worker);
+    } else {
+      _freeWorkers.add(worker);
+    }
+  }
+
+  /// Evaluate a single FEN on an exclusively-acquired worker.
+  Future<EvalResult> evaluateFen(String fen, int depth) async {
+    final worker = await _acquireWorker();
+    try {
+      return await worker.evaluateFen(fen, depth);
+    } finally {
+      _releaseWorker(worker);
+    }
+  }
+
+  /// Evaluate multiple FENs across all available workers.
+  /// Each worker handles one FEN at a time; excess FENs queue.
+  Future<List<EvalResult>> evaluateMany(List<String> fens, int depth) async {
+    if (fens.isEmpty) return const [];
+    final futures = fens.map((f) => evaluateFen(f, depth)).toList();
+    return Future.wait(futures);
+  }
+
+  /// Run MultiPV discovery on an exclusively-acquired worker.
+  Future<DiscoveryResult> discoverMoves({
+    required String fen,
+    required int depth,
+    required int multiPv,
+    required bool isWhiteToMove,
+  }) async {
+    final worker = await _acquireWorker();
+    try {
+      return await worker.runDiscovery(fen, depth, multiPv, isWhiteToMove);
+    } finally {
+      _releaseWorker(worker);
+    }
+  }
+
   /// Dispose all workers and reset.
   void dispose() {
-    cancel();
+    _isGenerating = false;
+    _freeWorkers.clear();
+    _busyWorkers.clear();
+    _workerWaiters.clear();
+    _generation++;
+    _workerCurrentMoves.clear();
+    _currentBaseFen = null;
+    _moveQueue = [];
+    _nextMoveIndex = 0;
+    for (final w in _workers) {
+      w.stop();
+    }
     _disposeAllWorkers();
   }
 }

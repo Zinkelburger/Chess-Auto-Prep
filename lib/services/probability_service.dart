@@ -3,10 +3,9 @@ library;
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:dartchess/dartchess.dart';
 
-import 'lichess_auth_service.dart';
+import 'lichess_api_client.dart';
 
 /// Stores probability data for a single move
 class MoveProbability {
@@ -126,88 +125,36 @@ class ProbabilityService {
     return pos.fen;
   }
 
-  /// Fetch move probabilities for a position from Lichess Explorer
+  /// Fetch move probabilities for a position from Lichess Explorer.
+  ///
+  /// Updates [currentPosition], [isLoading], and [error] notifiers for the UI.
+  /// Delegates to [_fetchProbabilitiesInternal] for the actual HTTP call
+  /// (which handles caching, 429 retry, and error logging).
   Future<PositionProbabilities?> fetchProbabilities(String fen, {
     String variant = 'standard',
-    String speeds = 'rapid,classical',
+    String speeds = 'blitz,rapid,classical',
     String ratings = '1800,2000,2200,2500',
   }) async {
-    // Check cache first
-    final cacheKey = fen;
-    if (_cache.containsKey(cacheKey)) {
-      currentPosition.value = _cache[cacheKey];
-      return _cache[cacheKey];
+    if (_cache.containsKey(fen)) {
+      currentPosition.value = _cache[fen];
+      return _cache[fen];
     }
 
-    // Clear old position data immediately when fetching for a new FEN
-    // This prevents showing stale data from a different position
     currentPosition.value = null;
-    
     isLoading.value = true;
     error.value = null;
 
     try {
-      final encodedFen = Uri.encodeComponent(fen);
-      final url = 'https://explorer.lichess.ovh/lichess?'
-          'variant=$variant&'
-          'speeds=$speeds&'
-          'ratings=$ratings&'
-          'fen=$encodedFen';
-
-      final headers = await LichessAuthService().getHeaders();
-      final response = await http.get(Uri.parse(url), headers: headers);
-
-      if (response.statusCode != 200) {
-        throw Exception('Failed to fetch data: ${response.statusCode}');
-      }
-
-      final data = json.decode(response.body);
-
-      final moves = <MoveProbability>[];
-      int totalGames = 0;
-
-      // Calculate total games across all moves
-      for (final move in data['moves'] ?? []) {
-        final white = move['white'] as int? ?? 0;
-        final draws = move['draws'] as int? ?? 0;
-        final black = move['black'] as int? ?? 0;
-        totalGames += white + draws + black;
-      }
-
-      // Now calculate probability for each move
-      for (final move in data['moves'] ?? []) {
-        final white = move['white'] as int? ?? 0;
-        final draws = move['draws'] as int? ?? 0;
-        final black = move['black'] as int? ?? 0;
-        final moveTotal = white + draws + black;
-
-        final probability = totalGames > 0 ? (moveTotal / totalGames) * 100 : 0.0;
-
-        moves.add(MoveProbability(
-          san: move['san'] as String? ?? '',
-          uci: move['uci'] as String? ?? '',
-          white: white,
-          draws: draws,
-          black: black,
-          probability: probability,
-        ));
-      }
-
-      // Sort by probability descending
-      moves.sort((a, b) => b.probability.compareTo(a.probability));
-
-      final result = PositionProbabilities(
-        fen: fen,
-        moves: moves,
-        totalGames: totalGames,
+      final result = await _fetchProbabilitiesInternal(
+        fen,
+        variant: variant,
+        speeds: speeds,
+        ratings: ratings,
       );
 
-      _cache[cacheKey] = result;
       currentPosition.value = result;
       isLoading.value = false;
-
       return result;
-
     } catch (e) {
       error.value = e.toString();
       isLoading.value = false;
@@ -223,7 +170,7 @@ class ProbabilityService {
   Future<PositionProbabilities?> getProbabilitiesForFen(
     String fen, {
     String variant = 'standard',
-    String speeds = 'rapid,classical',
+    String speeds = 'blitz,rapid,classical',
     String ratings = '1800,2000,2200,2500',
   }) {
     return _fetchProbabilitiesInternal(
@@ -344,77 +291,86 @@ class ProbabilityService {
     return cumulative;
   }
 
-  /// Internal fetch that doesn't update currentPosition (for cumulative calculations)
+  /// Internal fetch with caching.  Rate-limiting, retries, and auth are
+  /// handled by [LichessApiClient].
   Future<PositionProbabilities?> _fetchProbabilitiesInternal(String fen, {
     String variant = 'standard',
-    String speeds = 'rapid,classical',
+    String speeds = 'blitz,rapid,classical',
     String ratings = '1800,2000,2200,2500',
   }) async {
-    // Check cache first
-    final cacheKey = fen;
-    if (_cache.containsKey(cacheKey)) {
-      return _cache[cacheKey];
+    if (_cache.containsKey(fen)) {
+      return _cache[fen];
     }
 
-    try {
-      final encodedFen = Uri.encodeComponent(fen);
-      final url = 'https://explorer.lichess.ovh/lichess?'
-          'variant=$variant&'
-          'speeds=$speeds&'
-          'ratings=$ratings&'
-          'fen=$encodedFen';
+    final encodedFen = Uri.encodeComponent(fen);
+    final url = Uri.parse('https://explorer.lichess.ovh/lichess?'
+        'variant=$variant&'
+        'speeds=$speeds&'
+        'ratings=$ratings&'
+        'fen=$encodedFen');
 
-      final headers = await LichessAuthService().getHeaders();
-      final response = await http.get(Uri.parse(url), headers: headers);
+    final sw = Stopwatch()..start();
+    final response = await LichessApiClient().get(url);
+    final httpMs = sw.elapsedMilliseconds;
 
-      if (response.statusCode != 200) {
-        return null;
+    if (response == null) return null;
+
+    if (response.statusCode != 200) {
+      if (kDebugMode) {
+        print('[ProbService] HTTP ${response.statusCode} for FEN: '
+            '${fen.substring(0, fen.indexOf(' '))}…');
       }
-
-      final data = json.decode(response.body);
-
-      final moves = <MoveProbability>[];
-      int totalGames = 0;
-
-      for (final move in data['moves'] ?? []) {
-        final white = move['white'] as int? ?? 0;
-        final draws = move['draws'] as int? ?? 0;
-        final black = move['black'] as int? ?? 0;
-        totalGames += white + draws + black;
-      }
-
-      for (final move in data['moves'] ?? []) {
-        final white = move['white'] as int? ?? 0;
-        final draws = move['draws'] as int? ?? 0;
-        final black = move['black'] as int? ?? 0;
-        final moveTotal = white + draws + black;
-
-        final probability = totalGames > 0 ? (moveTotal / totalGames) * 100 : 0.0;
-
-        moves.add(MoveProbability(
-          san: move['san'] as String? ?? '',
-          uci: move['uci'] as String? ?? '',
-          white: white,
-          draws: draws,
-          black: black,
-          probability: probability,
-        ));
-      }
-
-      moves.sort((a, b) => b.probability.compareTo(a.probability));
-
-      final result = PositionProbabilities(
-        fen: fen,
-        moves: moves,
-        totalGames: totalGames,
-      );
-
-      _cache[cacheKey] = result;
-      return result;
-
-    } catch (e) {
       return null;
     }
+
+    sw.reset();
+    final data = json.decode(response.body);
+
+    final moves = <MoveProbability>[];
+    int totalGames = 0;
+
+    for (final move in data['moves'] ?? []) {
+      final white = move['white'] as int? ?? 0;
+      final draws = move['draws'] as int? ?? 0;
+      final black = move['black'] as int? ?? 0;
+      totalGames += white + draws + black;
+    }
+
+    for (final move in data['moves'] ?? []) {
+      final white = move['white'] as int? ?? 0;
+      final draws = move['draws'] as int? ?? 0;
+      final black = move['black'] as int? ?? 0;
+      final moveTotal = white + draws + black;
+
+      final probability =
+          totalGames > 0 ? (moveTotal / totalGames) * 100 : 0.0;
+
+      moves.add(MoveProbability(
+        san: move['san'] as String? ?? '',
+        uci: move['uci'] as String? ?? '',
+        white: white,
+        draws: draws,
+        black: black,
+        probability: probability,
+      ));
+    }
+
+    moves.sort((a, b) => b.probability.compareTo(a.probability));
+    final parseMs = sw.elapsedMilliseconds;
+
+    if (kDebugMode) {
+      print('[ProbService] http=${httpMs}ms  parse=${parseMs}ms  '
+          '${moves.length} moves');
+    }
+
+    final result = PositionProbabilities(
+      fen: fen,
+      moves: moves,
+      totalGames: totalGames,
+    );
+
+    _cache[fen] = result;
+    return result;
   }
 
   /// Get probability for a specific move from the current position
