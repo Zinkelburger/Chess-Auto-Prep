@@ -271,7 +271,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   List<String> _filterCandidates(
     List<String> sfUcis,
     Map<String, double> maiaProbs,
-    PositionProbabilities? dbData,
+    ExplorerResponse? dbData,
   ) {
     final sfSet = sfUcis.toSet();
     final candidates = <String>[...sfUcis];
@@ -299,7 +299,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       if (dbData != null) {
         for (final m in dbData.moves) {
           if (m.uci == uci) {
-            dbP = m.probability;
+            dbP = m.playRate;
             break;
           }
         }
@@ -874,7 +874,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         double? found;
         for (final dbm in dbData.moves) {
           if (dbm.uci == m.uci) {
-            found = dbm.probability;
+            found = dbm.playRate;
             if (m.san.isEmpty) m.san = dbm.san;
             break;
           }

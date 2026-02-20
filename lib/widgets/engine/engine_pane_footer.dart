@@ -151,7 +151,7 @@ class EnginePaneFooter extends StatelessWidget {
           const Spacer(),
 
           if (settings.showProbability)
-            ValueListenableBuilder<PositionProbabilities?>(
+            ValueListenableBuilder<ExplorerResponse?>(
               valueListenable: probabilityService.currentPosition,
               builder: (_, posData, __) {
                 if (posData == null || posData.totalGames == 0) {
