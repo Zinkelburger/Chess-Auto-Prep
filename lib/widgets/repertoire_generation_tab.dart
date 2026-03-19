@@ -95,9 +95,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     if (!_isGenerating) return;
     _cancelRequested = true;
     if (mounted && reason != null && reason.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(reason)),
-      );
+      setState(() => _status = reason);
     }
   }
 
@@ -105,9 +103,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     if (_isGenerating) return;
     final filePath = widget.currentRepertoire?['filePath'] as String?;
     if (filePath == null || filePath.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a repertoire before generating.')),
-      );
+      setState(() => _status = 'Select a repertoire first.');
       return;
     }
 

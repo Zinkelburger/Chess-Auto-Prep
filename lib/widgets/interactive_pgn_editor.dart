@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/utils/app_messages.dart';
 
 // Simple counter for unique move IDs
 int _pgnMoveIdCounter = 0;
@@ -594,9 +595,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       _writeNodes(buffer, [path.last], moveNumber, isWhite);
       
       Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PGN copied to clipboard')),
-      );
+      showAppSnackBar(context, AppMessages.pgnCopied);
     }
     _hideContextMenu();
   }
@@ -678,16 +677,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       final title = _titleController.text.trim();
       widget.onLineSaved?.call(moves, title, _workingPgn);
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Line added to repertoire')),
-        );
-      }
     } catch (e) {
+      debugPrint('Save to repertoire failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving to repertoire: $e')),
-        );
+        showAppSnackBar(context, AppMessages.saveToRepertoireFailed, isError: true);
       }
     }
   }

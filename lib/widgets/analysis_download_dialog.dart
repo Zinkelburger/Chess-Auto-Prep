@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/analysis_player_info.dart';
+import '../utils/app_messages.dart';
 
 /// How the download range is specified.
 enum _DownloadMode { months, games }
@@ -39,6 +40,9 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
 
   int _maxGames = 100;
   late final TextEditingController _maxGamesController;
+
+  String? _usernameError;
+  String? _rangeError;
 
   @override
   void initState() {
@@ -84,29 +88,27 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
 
   void _onDownload() {
     final username = _usernameController.text.trim();
+    bool hasError = false;
 
     if (username.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a username')),
-      );
-      return;
+      _usernameError = AppMessages.enterUsername;
+      hasError = true;
+    } else {
+      _usernameError = null;
     }
 
     if (_mode == _DownloadMode.games && (_maxGames < 1 || _maxGames > 500)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid number of games (1–500)'),
-        ),
-      );
-      return;
+      _rangeError = AppMessages.invalidGameCount;
+      hasError = true;
+    } else if (_mode == _DownloadMode.months && _months < 1) {
+      _rangeError = AppMessages.invalidMonths;
+      hasError = true;
+    } else {
+      _rangeError = null;
     }
 
-    if (_mode == _DownloadMode.months && _months < 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid number of months (1 or more)'),
-        ),
-      );
+    if (hasError) {
+      setState(() {});
       return;
     }
 
@@ -171,7 +173,13 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                       ? 'Your Chess.com username'
                       : 'Your Lichess username',
                   border: const OutlineInputBorder(),
+                  errorText: _usernameError,
                 ),
+                onChanged: (_) {
+                  if (_usernameError != null) {
+                    setState(() => _usernameError = null);
+                  }
+                },
               ),
 
               const SizedBox(height: 24),
@@ -269,16 +277,20 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 controller: _monthsController,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Months',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                   contentPadding:
-                      EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  errorText: _mode == _DownloadMode.months ? _rangeError : null,
                 ),
                 onChanged: (value) {
                   final parsed = int.tryParse(value);
                   if (parsed != null && parsed >= 1) {
-                    setState(() => _months = parsed);
+                    setState(() {
+                      _months = parsed;
+                      _rangeError = null;
+                    });
                   }
                 },
               ),
@@ -334,16 +346,20 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
                 controller: _maxGamesController,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Games',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                   contentPadding:
-                      EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  errorText: _mode == _DownloadMode.games ? _rangeError : null,
                 ),
                 onChanged: (value) {
                   final parsed = int.tryParse(value);
                   if (parsed != null && parsed >= 1 && parsed <= 500) {
-                    setState(() => _maxGames = parsed);
+                    setState(() {
+                      _maxGames = parsed;
+                      _rangeError = null;
+                    });
                   }
                 },
               ),
