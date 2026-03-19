@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../models/engine_settings.dart';
 import '../services/repertoire_generation_service.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
@@ -32,7 +31,6 @@ class RepertoireGenerationTab extends StatefulWidget {
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final RepertoireGenerationService _service = RepertoireGenerationService();
-  final EngineSettings _engineSettings = EngineSettings();
   static const int _pgnFlushEveryLines = 10;
   static const double _defaultCumProbCutoffPercent = 0.1;
 
@@ -50,7 +48,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final TextEditingController _alphaCtrl = TextEditingController(text: '0.35');
   final TextEditingController _maiaEloCtrl =
       TextEditingController(text: '2100');
-  late final TextEditingController _maxLoadCtrl;
+  // Max Load removed — workers field on EngineSettings is the control now.
 
   GenerationStrategy _strategy = GenerationStrategy.metaEval;
   bool _isGenerating = false;
@@ -75,8 +73,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _maxEvalCtrl = TextEditingController(
       text: widget.isWhiteRepertoire ? '200' : '100',
     );
-    _maxLoadCtrl =
-        TextEditingController(text: '${_engineSettings.maxSystemLoad}');
+    // Max Load removed — workers are configured in EngineSettings.
   }
 
   @override
@@ -90,7 +87,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _maxEvalCtrl.dispose();
     _alphaCtrl.dispose();
     _maiaEloCtrl.dispose();
-    _maxLoadCtrl.dispose();
+    // Max Load controller removed.
     super.dispose();
   }
 
@@ -135,10 +132,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       engineTopK: 3,
       maxCandidates: 8,
     );
-
-    final maxLoad =
-        (int.tryParse(_maxLoadCtrl.text.trim()) ?? 80).clamp(50, 100);
-    _engineSettings.maxSystemLoad = maxLoad;
 
     setState(() {
       _isGenerating = true;
@@ -351,7 +344,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _numField(_maxLoadCtrl, 'Max Load %'),
               _numField(_cutoffCtrl, 'Cum Prob Cutoff (%)'),
               _numField(_depthCtrl, 'Max Depth Ply'),
               _numField(_opponentMassCtrl, 'Opp Mass'),

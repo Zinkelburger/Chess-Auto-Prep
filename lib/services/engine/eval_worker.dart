@@ -1,4 +1,4 @@
-/// A single persistent Stockfish worker used by [MoveAnalysisPool].
+/// A single persistent Stockfish worker used by [StockfishPool].
 ///
 /// Handles UCI protocol for both MultiPV discovery and single-position
 /// evaluation. Parses engine output and converts scores.
@@ -62,17 +62,13 @@ class EvalWorker {
     _sub = engine.stdout.listen(_onOutput);
   }
 
-  Future<void> init({int hashMb = 16}) async {
+  Future<void> init({int hashMb = 128}) async {
     await engine.waitForReady();
     engine.sendCommand('setoption name Threads value 1');
     engine.sendCommand('setoption name Hash value $hashMb');
     _readyCompleter = Completer<void>();
     engine.sendCommand('isready');
     await _readyCompleter!.future;
-  }
-
-  void updateHash(int hashMb) {
-    engine.sendCommand('setoption name Hash value $hashMb');
   }
 
   /// Run MultiPV analysis on a position. Returns when bestmove arrives.

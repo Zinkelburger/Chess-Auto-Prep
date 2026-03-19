@@ -7,13 +7,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
-import '../../services/move_analysis_pool.dart';
+import '../../services/analysis_service.dart';
 import '../../services/probability_service.dart';
 import '../../utils/chess_utils.dart' show formatCount;
 
 class EnginePaneFooter extends StatelessWidget {
   final EngineSettings settings;
-  final MoveAnalysisPool pool;
+  final AnalysisService analysis;
   final ProbabilityService probabilityService;
   final String fen;
   final Map<String, double>? maiaProbs;
@@ -22,7 +22,7 @@ class EnginePaneFooter extends StatelessWidget {
   const EnginePaneFooter({
     super.key,
     required this.settings,
-    required this.pool,
+    required this.analysis,
     required this.probabilityService,
     required this.fen,
     required this.maiaProbs,
@@ -43,15 +43,12 @@ class EnginePaneFooter extends StatelessWidget {
           if (settings.showEase) ...[
             ListenableBuilder(
               listenable: Listenable.merge([
-                pool.results,
-                pool.discoveryResult,
-                pool.poolStatus,
+                analysis.results,
+                analysis.discoveryResult,
+                analysis.poolStatus,
               ]),
               builder: (_, __) {
                 final rawEase = _computeOverallEase();
-                // Normalise to the player's perspective.
-                // Raw ease = navigability for the side to move.
-                // Player's turn → show as-is.  Opponent's turn → invert.
                 final fenParts = fen.split(' ');
                 final isWhiteToMove =
                     fenParts.length >= 2 && fenParts[1] == 'w';
@@ -61,7 +58,7 @@ class EnginePaneFooter extends StatelessWidget {
                     ? (isPlayerTurn ? rawEase : 1.0 - rawEase)
                         * kEaseDisplayScale
                     : null;
-                final isAnalyzing = pool.poolStatus.value.isEvaluating;
+                final isAnalyzing = analysis.poolStatus.value.isEvaluating;
                 if (ease == null) {
                   return Row(
                     mainAxisSize: MainAxisSize.min,
@@ -176,7 +173,7 @@ class EnginePaneFooter extends StatelessWidget {
     final fenParts = fen.split(' ');
     final isWhiteTurn = fenParts.length >= 2 && fenParts[1] == 'w';
 
-    final discoveryLines = pool.discoveryResult.value.lines;
+    final discoveryLines = analysis.discoveryResult.value.lines;
     if (discoveryLines.isEmpty) return null;
 
     final topCp = discoveryLines.first.effectiveCp;
@@ -186,7 +183,7 @@ class EnginePaneFooter extends StatelessWidget {
     final sorted = maiaProbs!.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    final poolResults = pool.results.value;
+    final poolResults = analysis.results.value;
     double sumWeightedRegret = 0.0;
     double cumulativeProb = 0.0;
     int found = 0;
@@ -197,14 +194,12 @@ class EnginePaneFooter extends StatelessWidget {
 
       int? whiteCp;
 
-      // Check discovery lines first
       for (final line in discoveryLines) {
         if (line.pv.isNotEmpty && line.pv.first == entry.key) {
           whiteCp = line.effectiveCp;
           break;
         }
       }
-      // Check pool results
       if (whiteCp == null) {
         final pr = poolResults[entry.key];
         if (pr != null && pr.hasEval) {
@@ -228,7 +223,7 @@ class EnginePaneFooter extends StatelessWidget {
     }
 
     if (found == 0) {
-      if (kDebugMode && pool.poolStatus.value.isComplete) {
+      if (kDebugMode && analysis.poolStatus.value.isComplete) {
         print('[Engine] Overall ease: null — '
             'found=0, skippedNoEval=$skippedNoEval, '
             'maiaProbs=${maiaProbs!.length}, '

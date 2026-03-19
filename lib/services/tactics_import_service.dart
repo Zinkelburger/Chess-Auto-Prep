@@ -6,8 +6,8 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/tactics_position.dart';
 import '../models/engine_settings.dart';
-import 'package:chess_auto_prep/models/engine_evaluation.dart';
-import 'engine/stockfish_service.dart';
+import 'engine/eval_worker.dart';
+import 'engine/stockfish_pool.dart';
 import 'lichess_api_client.dart';
 import 'tactics_database.dart';
 import 'storage/storage_factory.dart';
@@ -21,14 +21,22 @@ typedef OnPositionFoundCallback = void Function(TacticsPosition position);
 typedef ProgressCallback = void Function(String message);
 
 class TacticsImportService {
-  final StockfishService _stockfish = StockfishService();
   final TacticsDatabase _database = TacticsDatabase();
   
   /// Whether to skip games that have already been analyzed
   bool skipAnalyzedGames = true;
+
+  bool _cancelled = false;
+
+  /// Signal the current import to stop after the current game finishes.
+  void cancel() {
+    _cancelled = true;
+    StockfishPool().stopAll();
+  }
   
   /// Check if engine-based analysis is available on this platform
-  bool get isAnalysisAvailable => _stockfish.isAvailable.value;
+  bool get isAnalysisAvailable =>
+      StockfishPool().workerCount > 0 || parallel.isParallelAnalysisAvailable;
 
   /// Whether parallel multi-core analysis is available (desktop only).
   static bool get isParallelAvailable => parallel.isParallelAnalysisAvailable;
@@ -61,17 +69,13 @@ class TacticsImportService {
     int? maxGames, 
     int depth = 15,
     int? maxCores,
-    int? maxLoadPercent,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
-    // Ensure database is loaded to check for already-analyzed games
     if (_database.analyzedGameIds.isEmpty) {
       await _database.loadPositions();
     }
     
-    // On web, we might run into CORS issues with direct Lichess API calls.
-    // If that happens, we'd need a proxy, but for now we try direct.
     final url = Uri.parse('https://lichess.org/api/games/user/$username?max=${maxGames ?? 20}&evals=false&clocks=false&opening=false&moves=true');
     
     progressCallback?.call('Downloading games from Lichess...');
@@ -88,7 +92,7 @@ class TacticsImportService {
     }
 
     await _savePgns(response.body);
-    return _processGames(response.body, username, depth, progressCallback, onPositionFound, maxCores: maxCores, maxLoadPercent: maxLoadPercent);
+    return _processGames(response.body, username, depth, progressCallback, onPositionFound, maxCores: maxCores);
   }
 
   /// Fetch the list of monthly archive URLs from Chess.com.
@@ -111,7 +115,6 @@ class TacticsImportService {
     int? maxGames, 
     int depth = 15,
     int? maxCores,
-    int? maxLoadPercent,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
@@ -163,7 +166,7 @@ class TacticsImportService {
     // Save the raw PGNs first
     await _savePgns(gamesToProcess);
     
-    return _processGames(gamesToProcess, username, depth, progressCallback, onPositionFound, maxCores: maxCores, maxLoadPercent: maxLoadPercent);
+    return _processGames(gamesToProcess, username, depth, progressCallback, onPositionFound, maxCores: maxCores);
   }
 
   /// Save raw PGNs to storage with GameId headers injected.
@@ -338,8 +341,8 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound, {
     int? maxCores,
-    int? maxLoadPercent,
   }) async {
+    _cancelled = false;
     final games = _splitPgnIntoGames(pgnContent);
     final usernameLower = username.toLowerCase();
 
@@ -371,54 +374,15 @@ class TacticsImportService {
       return [];
     }
 
-    // ── PARALLEL PATH (desktop — works fine with 1 game / 1 core) ──
-    if (parallel.isParallelAnalysisAvailable) {
-      try {
-        final settings = EngineSettings();
-        final loadPct = maxLoadPercent ?? settings.maxSystemLoad;
-        final hashBudget =
-            (EngineSettings.systemRamMb * loadPct ~/ 100)
-                .clamp(64, EngineSettings.systemRamMb);
-        final hashPerWorker =
-            hashBudget ~/ (math.max(1, maxCores ?? settings.cores) + 1);
+    // ── Ensure the shared pool has enough workers ─────────────
+    final pool = StockfishPool();
+    final targetWorkers = maxCores ?? EngineSettings().workers;
+    await pool.ensureWorkers(targetWorkers);
 
-        final positions = await parallel.analyzeGamesParallel(
-          gameTasks: gameTasks,
-          username: usernameLower,
-          depth: depth,
-          totalGames: games.length,
-          maxCores: maxCores,
-          hashPerWorkerMb: hashPerWorker.clamp(16, hashBudget),
-          progressCallback: progressCallback,
-          onPositionFound: onPositionFound,
-          onGameComplete: (gameId) => _database.markGameAnalyzed(gameId),
-        );
-        progressCallback?.call(
-          'Done! Analyzed ${gameTasks.length} games'
-          '${skippedCount > 0 ? ', skipped $skippedCount' : ''}. '
-          'Found ${positions.length} tactics positions.',
-        );
-        return positions;
-      } catch (e) {
-        if (kDebugMode) {
-          print('Parallel analysis failed, falling back to sequential: $e');
-        }
-        progressCallback?.call('Parallel analysis unavailable, using sequential...');
-        // Fall through to sequential path.
-      }
-    }
-
-    // ── SEQUENTIAL PATH (web, mobile, or parallel-fallback) ──────
-    // Wait for the singleton Stockfish to initialise.
-    int waited = 0;
-    while (!_stockfish.isAvailable.value && waited < 50) {
-      await Future.delayed(const Duration(milliseconds: 100));
-      waited++;
-    }
-
-    if (!_stockfish.isAvailable.value) {
+    if (pool.workerCount == 0) {
       throw Exception(
-        'Tactics analysis requires Stockfish, which is not available on this platform (web).\n\n'
+        'Tactics analysis requires Stockfish, which is not available '
+        'on this platform.\n\n'
         'You can:\n'
         '• Import tactics from a CSV file (exported from desktop)\n'
         '• Use the desktop app to generate tactics\n'
@@ -426,76 +390,128 @@ class TacticsImportService {
       );
     }
 
-    final positions = <TacticsPosition>[];
+    final numWorkers = math.min(pool.workerCount, gameTasks.length);
 
-    for (final task in gameTasks) {
-      final gameText = task['gameText'] as String;
-      final globalIndex = task['globalIndex'] as int;
-      final gameId = task['gameId'] as String;
-
-      try {
-        final game = PgnGame.parsePgn(gameText);
-
-        final progressMsg =
-            'Analyzing game $globalIndex/${games.length} (depth $depth)... '
-            '${skippedCount > 0 ? "($skippedCount skipped)" : ""}';
-        progressCallback?.call(progressMsg);
-        if (kDebugMode) print(progressMsg);
-
-        final white = game.headers['White']?.toLowerCase() ?? '';
-        final black = game.headers['Black']?.toLowerCase() ?? '';
-
-        Side? userColor;
-        if (white == usernameLower) {
-          userColor = Side.white;
-        } else if (black == usernameLower) {
-          userColor = Side.black;
-        } else if (white.contains(usernameLower)) {
-          userColor = Side.white;
-        } else if (black.contains(usernameLower)) {
-          userColor = Side.black;
-        } else {
-          await _database.markGameAnalyzed(gameId);
-          continue;
-        }
-
-        final gamePositions = <TacticsPosition>[];
-        await _analyzeGame(game, userColor, depth, gamePositions, onPositionFound, gameId);
-        positions.addAll(gamePositions);
-
-        // Flush all positions from this game atomically so training
-        // encounters them as a coherent block.
-        if (onPositionFound != null) {
-          for (final pos in gamePositions) {
-            onPositionFound(pos);
-          }
-        }
-
-        await _database.markGameAnalyzed(gameId);
-      } catch (e) {
-        if (kDebugMode) print('Error parsing game $globalIndex: $e');
-        continue;
-      }
+    // Distribute games round-robin across workers.
+    final workerBatches =
+        List.generate(numWorkers, (_) => <Map<String, dynamic>>[]);
+    for (int i = 0; i < gameTasks.length; i++) {
+      workerBatches[i % numWorkers].add(gameTasks[i]);
     }
 
-    if (skippedCount > 0) {
+    progressCallback?.call(
+      'Starting analysis: ${gameTasks.length} games '
+      'across $numWorkers workers...',
+    );
+
+    // ── Build lookup for original game order ─────────────────
+    final gameOrder = <String, int>{};
+    for (int i = 0; i < gameTasks.length; i++) {
+      gameOrder[gameTasks[i]['gameId'] as String] = i;
+    }
+
+    // ── Process each batch in parallel ───────────────────────
+    final gamePositions = <String, List<TacticsPosition>>{};
+    int completedGames = 0;
+    int totalPositionsFound = 0;
+
+    final futures = <Future<void>>[];
+    for (final batch in workerBatches) {
+      if (batch.isEmpty) continue;
+      futures.add(() async {
+        final worker = await pool.acquire();
+        try {
+          for (final task in batch) {
+            if (_cancelled) break;
+
+            final gameText = task['gameText'] as String;
+            final gameId = task['gameId'] as String;
+
+            try {
+              final positions = await _analyzeGameWithWorker(
+                worker: worker,
+                gameText: gameText,
+                username: usernameLower,
+                depth: depth,
+                gameId: gameId,
+              );
+              if (_cancelled) break;
+              gamePositions[gameId] = positions;
+              totalPositionsFound += positions.length;
+            } catch (e) {
+              if (_cancelled) break;
+              if (kDebugMode) print('Error analyzing game $gameId: $e');
+            }
+
+            completedGames++;
+            await _database.markGameAnalyzed(gameId);
+
+            final gameTactics = gamePositions[gameId];
+            if (gameTactics != null && onPositionFound != null) {
+              for (final pos in gameTactics) {
+                onPositionFound(pos);
+              }
+            }
+
+            progressCallback?.call(
+              'Analyzed $completedGames/${gameTasks.length} games '
+              '($totalPositionsFound tactics found)...',
+            );
+          }
+        } finally {
+          pool.release(worker);
+        }
+      }());
+    }
+
+    await Future.wait(futures);
+
+    // ── Assemble results in original game order ──────────────
+    final sortedGameIds = gamePositions.keys.toList()
+      ..sort((a, b) => (gameOrder[a] ?? 999).compareTo(gameOrder[b] ?? 999));
+
+    final positions = <TacticsPosition>[];
+    for (final gameId in sortedGameIds) {
+      positions.addAll(gamePositions[gameId]!);
+    }
+
+    if (_cancelled) {
+      // UI clears itself on cancel — no message needed.
+    } else {
       progressCallback?.call(
-        'Done! Analyzed ${gameTasks.length} new games, skipped $skippedCount already-analyzed games.',
+        'Done! Analyzed ${gameTasks.length} games'
+        '${skippedCount > 0 ? ', skipped $skippedCount' : ''}. '
+        'Found ${positions.length} tactics positions.',
       );
     }
-
     return positions;
   }
 
-  Future<void> _analyzeGame(
-    PgnGame game, 
-    Side userColor, 
-    int depth, 
-    List<TacticsPosition> positions,
-    OnPositionFoundCallback? onPositionFound,
-    String gameId,
-  ) async {
-    // Linearize moves from the game (SAN strings)
+  /// Analyze a single game using a pool worker. Returns discovered tactics.
+  Future<List<TacticsPosition>> _analyzeGameWithWorker({
+    required EvalWorker worker,
+    required String gameText,
+    required String username,
+    required int depth,
+    required String gameId,
+  }) async {
+    final game = PgnGame.parsePgn(gameText);
+
+    final white = (game.headers['White'] ?? '').toLowerCase();
+    final black = (game.headers['Black'] ?? '').toLowerCase();
+
+    Side? userColor;
+    if (white == username) {
+      userColor = Side.white;
+    } else if (black == username) {
+      userColor = Side.black;
+    } else if (white.contains(username)) {
+      userColor = Side.white;
+    } else if (black.contains(username)) {
+      userColor = Side.black;
+    }
+    if (userColor == null) return [];
+
     final moves = <String>[];
     var node = game.moves;
     while (node.children.isNotEmpty) {
@@ -504,181 +520,121 @@ class TacticsImportService {
       node = child;
     }
 
-    // Use dartchess for game state management (immutable positions)
+    final positions = <TacticsPosition>[];
     Position pos = Chess.initial;
     int moveNumber = 1;
-    
+
     for (final san in moves) {
       final isUserTurn = pos.turn == userColor;
-      
+
       if (isUserTurn) {
-        // 1. Analyze Position A (Before Move)
-        final evalA = await _stockfish.getEvaluation(pos.fen, depth: depth);
-        
-        // 2. Make the move
+        final evalA = await worker.evaluateFen(pos.fen, depth);
+
         final fenBefore = pos.fen;
         final move = pos.parseSan(san);
-        if (move == null) break; // Invalid move?
+        if (move == null) break;
         pos = pos.play(move);
-        final fenAfter = pos.fen;
-        
-        // Skip analysis if position after move is terminal (checkmate, stalemate, etc.)
-        // These positions can't be properly evaluated by Stockfish and would produce
-        // misleading delta values (e.g., user delivering checkmate flagged as "blunder")
+
         if (pos.isGameOver) {
-          if (kDebugMode) {
-            print('Move $moveNumber. $san | Skipping: Game over after this move');
-          }
-          // Update move number and continue
-          if (pos.turn == Side.white) {
-            moveNumber++;
-          }
+          if (pos.turn == Side.white) moveNumber++;
           continue;
         }
-        
-        // 3. Analyze Position B (After Move)
-        final evalB = await _stockfish.getEvaluation(fenAfter, depth: depth);
-        
-        // 4. Calculate Win Chances
-        int cpA = evalA.effectiveCp;
-        int cpB = evalB.effectiveCp;
-        
-        // Normalize to User perspective
-        if (userColor == Side.black) {
-          cpA = -cpA;
-          cpB = -cpB;
-        }
-        
-        // Use Lichess [-1, +1] scale for classification
+
+        final evalB = await worker.evaluateFen(pos.fen, depth);
+        final fenAfter = pos.fen;
+
+        // EvalWorker returns side-to-move perspective:
+        //   evalA: user's turn  → already user's perspective
+        //   evalB: opponent's turn → negate for user's perspective
+        final cpA = evalA.effectiveCp;
+        final cpB = -evalB.effectiveCp;
+
         final wcBefore = _winningChances(cpA);
         final wcAfter = _winningChances(cpB);
-        
         final delta = wcBefore - wcAfter;
-        
-        // Lichess thresholds (from lila/modules/tree/src/main/Advice.scala)
-        // Blunder: >= 0.3, Mistake: >= 0.2, Inaccuracy: >= 0.1
+
         final isBlunder = delta >= 0.3;
         final isMistake = delta >= 0.2 && delta < 0.3;
-        
-        // Use winPercent for display
-        final wpBefore = _winPercent(cpA);
-        final wpAfter = _winPercent(cpB);
-        
-        // Debug output for every move
-        if (kDebugMode) {
-          final status = isBlunder ? '⚠️ BLUNDER' : (isMistake ? '⚠ MISTAKE' : '✓');
-          print('Move $moveNumber. $san | Before: ${cpA}cp (${wpBefore.toStringAsFixed(1)}%) → After: ${cpB}cp (${wpAfter.toStringAsFixed(1)}%) | Δ${delta.toStringAsFixed(3)} | $status');
-        }
-        
-        if (isBlunder || isMistake) {
-          // Found Blunder or Mistake!
-          if (kDebugMode) {
-            print('  → PV from Stockfish: ${evalA.pv}');
+
+        if ((isBlunder || isMistake) && evalA.pv.isNotEmpty) {
+          final bestMoveUci = evalA.pv.first;
+
+          final allPvSan = <String>[];
+          Position tempPos = Chess.fromSetup(Setup.parseFen(fenBefore));
+          for (final uci in evalA.pv) {
+            final (sanMove, newPos) = _makeUciMoveAndGetSan(tempPos, uci);
+            if (sanMove == null) break;
+            allPvSan.add(sanMove);
+            tempPos = newPos;
           }
-          if (evalA.pv.isNotEmpty) {
-            final bestMoveUci = evalA.pv.first;
-            
-            // Generate correct line from PV, extending for tactical sequences.
-            // Convert all PV moves to SAN first, then build the line by
-            // peeking ahead: only extend if the NEXT user move is also a
-            // check (+), capture (x), or checkmate (#). Max 5 user moves.
-            final allPvSan = <String>[];
-            Position tempPos = Chess.fromSetup(Setup.parseFen(fenBefore));
-            
-            for (final uci in evalA.pv) {
-              final (sanMove, newPos) = _makeUciMoveAndGetSan(tempPos, uci);
-              if (kDebugMode) {
-                print('  → UCI: $uci → SAN: $sanMove');
-              }
-              if (sanMove == null) break;
-              allPvSan.add(sanMove);
-              tempPos = newPos;
-            }
-            
-            final correctLine = <String>[];
-            const maxUserMoves = 5;
-            
-            if (allPvSan.isNotEmpty) {
-              // Always include the first user move
-              correctLine.add(allPvSan[0]);
-              int userMoveCount = 1;
-              
-              // Extend while: current user move is tactical AND next
-              // user move (2 ahead) is also tactical.
-              int i = 0; // index of the last added user move
-              while (userMoveCount < maxUserMoves) {
-                final currentUserSan = allPvSan[i];
-                final currentIsTactical = currentUserSan.contains('x') ||
-                    currentUserSan.contains('+') ||
-                    currentUserSan.contains('#');
-                
-                if (!currentIsTactical) break; // current move is quiet, stop
-                
-                // Need opponent response (i+1) and next user move (i+2)
-                if (i + 2 >= allPvSan.length) break;
-                
-                final nextUserSan = allPvSan[i + 2];
-                final nextIsTactical = nextUserSan.contains('x') ||
-                    nextUserSan.contains('+') ||
-                    nextUserSan.contains('#');
-                
-                if (!nextIsTactical) break; // next user move is quiet, stop
-                
-                // Both are tactical — extend the line
-                correctLine.add(allPvSan[i + 1]); // opponent response
-                correctLine.add(nextUserSan);      // next user move
-                userMoveCount++;
-                i += 2;
-              }
-            }
-            
-            if (kDebugMode) {
-              print('  → correctLine: $correctLine');
-            }
-            
-            // Format best move SAN for display
-            final bestMoveSan = _formatUciToSan(fenBefore, bestMoveUci);
 
-            // Opponent's best response after the user's bad move
-            final opponentResponse = evalB.pv.isNotEmpty
-                ? _formatUciToSan(fenAfter, evalB.pv.first)
-                : '';
+          final correctLine = <String>[];
+          const maxUserMoves = 5;
 
-            final chanceA = wpBefore.toStringAsFixed(1);
-            final chanceB = wpAfter.toStringAsFixed(1);
-            final mistakeType = isBlunder ? '??' : '?';
-            final label = isBlunder ? 'Blunder' : 'Mistake';
-            final analysis = '$label. Win chance dropped from $chanceA% to $chanceB% (${delta.toStringAsFixed(1)}%). Best was $bestMoveSan.';
-
-            final tacticsPosition = TacticsPosition(
-              fen: fenBefore,
-              userMove: san,
-              correctLine: correctLine,
-              mistakeType: mistakeType,
-              mistakeAnalysis: analysis,
-              opponentBestResponse: opponentResponse,
-              positionContext: 'Move $moveNumber, ${userColor == Side.white ? 'White' : 'Black'} to play',
-              gameWhite: game.headers['White'] ?? '',
-              gameBlack: game.headers['Black'] ?? '',
-              gameResult: game.headers['Result'] ?? '*',
-              gameDate: game.headers['Date'] ?? '',
-              gameId: gameId, // Use the same ID we used for skip-detection
-            );
-            
-            positions.add(tacticsPosition);
+          if (allPvSan.isNotEmpty) {
+            correctLine.add(allPvSan[0]);
+            int userMoveCount = 1;
+            int i = 0;
+            while (userMoveCount < maxUserMoves) {
+              final currentUserSan = allPvSan[i];
+              final currentIsTactical = currentUserSan.contains('x') ||
+                  currentUserSan.contains('+') ||
+                  currentUserSan.contains('#');
+              if (!currentIsTactical) break;
+              if (i + 2 >= allPvSan.length) break;
+              final nextUserSan = allPvSan[i + 2];
+              final nextIsTactical = nextUserSan.contains('x') ||
+                  nextUserSan.contains('+') ||
+                  nextUserSan.contains('#');
+              if (!nextIsTactical) break;
+              correctLine.add(allPvSan[i + 1]);
+              correctLine.add(nextUserSan);
+              userMoveCount++;
+              i += 2;
+            }
           }
+
+          final bestMoveSan = _formatUciToSan(fenBefore, bestMoveUci);
+          final opponentResponse = evalB.pv.isNotEmpty
+              ? _formatUciToSan(fenAfter, evalB.pv.first)
+              : '';
+
+          final wpBefore = _winPercent(cpA);
+          final wpAfter = _winPercent(cpB);
+          final mistakeType = isBlunder ? '??' : '?';
+          final label = isBlunder ? 'Blunder' : 'Mistake';
+          final analysis =
+              '$label. Win chance dropped from '
+              '${wpBefore.toStringAsFixed(1)}% to '
+              '${wpAfter.toStringAsFixed(1)}% '
+              '(${delta.toStringAsFixed(1)}%). Best was $bestMoveSan.';
+
+          positions.add(TacticsPosition(
+            fen: fenBefore,
+            userMove: san,
+            correctLine: correctLine,
+            mistakeType: mistakeType,
+            mistakeAnalysis: analysis,
+            opponentBestResponse: opponentResponse,
+            positionContext:
+                'Move $moveNumber, '
+                '${userColor == Side.white ? 'White' : 'Black'} to play',
+            gameWhite: game.headers['White'] ?? '',
+            gameBlack: game.headers['Black'] ?? '',
+            gameResult: game.headers['Result'] ?? '*',
+            gameDate: game.headers['Date'] ?? '',
+            gameId: gameId,
+          ));
         }
       } else {
-        // Opponent's move
         final move = pos.parseSan(san);
         if (move != null) pos = pos.play(move);
       }
-      
-      // Update move number
-      if (pos.turn == Side.white) {
-        moveNumber++;
-      }
+
+      if (pos.turn == Side.white) moveNumber++;
     }
+
+    return positions;
   }
 
   (String? san, Position newPos) _makeUciMoveAndGetSan(Position pos, String uci) {

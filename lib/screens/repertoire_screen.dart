@@ -8,7 +8,8 @@ import 'package:dartchess/dartchess.dart';
 
 import '../core/repertoire_controller.dart';
 import '../models/repertoire_line.dart';
-import '../services/move_analysis_pool.dart';
+import '../services/analysis_service.dart';
+import '../services/engine/stockfish_pool.dart';
 import '../services/repertoire_service.dart';
 import '../utils/chess_utils.dart' show uciToSan;
 import '../widgets/chess_board_widget.dart';
@@ -64,9 +65,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         );
       }
 
-      // Leaving engine tab -> hard-cancel engine pool to avoid overlap.
+      // Leaving engine tab -> hard-cancel analysis to avoid overlap.
       if (_tabController.index != 3) {
-        MoveAnalysisPool().cancel();
+        AnalysisService().cancel();
       }
 
       setState(() {});
@@ -145,7 +146,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     // Tear down pool workers — they persist for the repertoire session
     // and are only killed when leaving the repertoire builder.
-    MoveAnalysisPool().dispose();
+    AnalysisService().dispose();
+    StockfishPool().dispose();
 
     super.dispose();
   }

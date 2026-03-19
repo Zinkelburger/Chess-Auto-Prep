@@ -1,4 +1,4 @@
-/// Public result types emitted by [MoveAnalysisPool].
+/// Public result types emitted by [AnalysisService].
 library;
 
 /// Per-move analysis result combining eval and ease.

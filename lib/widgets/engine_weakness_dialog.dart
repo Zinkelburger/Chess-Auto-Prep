@@ -9,7 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../models/engine_settings.dart';
 import '../models/opening_tree.dart';
-import '../utils/chess_utils.dart' show formatRam;
+import '../services/engine/stockfish_pool.dart';
 
 /// Settings returned by the config dialog.
 class EngineWeaknessConfig {
@@ -18,7 +18,6 @@ class EngineWeaknessConfig {
   final int whiteCp;
   final int blackCp;
   final int workers;
-  final int maxLoadPercent;
 
   const EngineWeaknessConfig({
     required this.depth,
@@ -26,7 +25,6 @@ class EngineWeaknessConfig {
     required this.whiteCp,
     required this.blackCp,
     required this.workers,
-    required this.maxLoadPercent,
   });
 }
 
@@ -52,7 +50,6 @@ class _EngineWeaknessConfigDialogState
   late final TextEditingController _whiteCpCtrl;
   late final TextEditingController _blackCpCtrl;
   late final TextEditingController _workersCtrl;
-  late final TextEditingController _maxLoadCtrl;
 
   @override
   void initState() {
@@ -62,8 +59,7 @@ class _EngineWeaknessConfigDialogState
     _minGamesCtrl = TextEditingController(text: '3');
     _whiteCpCtrl = TextEditingController(text: '-50');
     _blackCpCtrl = TextEditingController(text: '100');
-    _workersCtrl = TextEditingController(text: '${settings.cores}');
-    _maxLoadCtrl = TextEditingController(text: '${settings.maxSystemLoad}');
+    _workersCtrl = TextEditingController(text: '${settings.workers}');
   }
 
   @override
@@ -73,7 +69,6 @@ class _EngineWeaknessConfigDialogState
     _whiteCpCtrl.dispose();
     _blackCpCtrl.dispose();
     _workersCtrl.dispose();
-    _maxLoadCtrl.dispose();
     super.dispose();
   }
 
@@ -93,16 +88,9 @@ class _EngineWeaknessConfigDialogState
   }
 
   String get _resourceSummary {
-    final workers = int.tryParse(_workersCtrl.text) ?? EngineSettings().cores;
-    final load =
-        int.tryParse(_maxLoadCtrl.text) ?? EngineSettings().maxSystemLoad;
-    final ramMb = EngineSettings.systemRamMb;
-    final hashBudget = (ramMb * load ~/ 100).clamp(64, ramMb);
-    final hashPer = workers > 0
-        ? (hashBudget / (workers + 1)).floor().clamp(16, hashBudget)
-        : hashBudget;
-    return 'Up to $workers workers, $hashPer MB hash/worker '
-        '(${formatRam(ramMb)} system RAM)';
+    final workers = int.tryParse(_workersCtrl.text) ?? EngineSettings().workers;
+    return '$workers workers × $kPoolHashPerWorkerMb MB hash each = '
+        '${workers * kPoolHashPerWorkerMb} MB total';
   }
 
   void _submit() {
@@ -111,9 +99,7 @@ class _EngineWeaknessConfigDialogState
       minGames: int.tryParse(_minGamesCtrl.text) ?? 3,
       whiteCp: int.tryParse(_whiteCpCtrl.text) ?? -50,
       blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
-      workers: int.tryParse(_workersCtrl.text) ?? EngineSettings().cores,
-      maxLoadPercent:
-          int.tryParse(_maxLoadCtrl.text) ?? EngineSettings().maxSystemLoad,
+      workers: int.tryParse(_workersCtrl.text) ?? EngineSettings().workers,
     ));
   }
 
@@ -146,7 +132,6 @@ class _EngineWeaknessConfigDialogState
                 runSpacing: 12,
                 children: [
                   _field('Workers', _workersCtrl, 80),
-                  _field('Max load %', _maxLoadCtrl, 80),
                 ],
               ),
               const SizedBox(height: 8),

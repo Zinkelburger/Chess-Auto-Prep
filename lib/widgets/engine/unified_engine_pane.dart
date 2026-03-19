@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
-import '../../services/move_analysis_pool.dart';
+import '../../services/analysis_service.dart';
 import '../../services/maia_factory.dart';
 import '../../services/probability_service.dart';
 import '../../utils/chess_utils.dart';
@@ -101,7 +101,7 @@ class _PositionSnapshot {
 
 class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   final EngineSettings _settings = EngineSettings();
-  final MoveAnalysisPool _pool = MoveAnalysisPool();
+  final AnalysisService _analysis = AnalysisService();
   final ProbabilityService _probabilityService = ProbabilityService();
 
   // ── Per-FEN analysis cache (static — survives widget rebuilds) ──
@@ -130,7 +130,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   void initState() {
     super.initState();
     _settings.addListener(_onSettingsChanged);
-    _pool.poolStatus.addListener(_onPoolStatusChanged);
+    _analysis.poolStatus.addListener(_onPoolStatusChanged);
 
     if (_isActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -151,8 +151,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   @override
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
-    _pool.poolStatus.removeListener(_onPoolStatusChanged);
-    _pool.cancel();
+    _analysis.poolStatus.removeListener(_onPoolStatusChanged);
+    _analysis.cancel();
     super.dispose();
   }
 
@@ -210,7 +210,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
     // ── Fire all sources in parallel ──
     final discoveryFuture = useStockfish
-        ? _pool.runDiscovery(
+        ? _analysis.runDiscovery(
             fen: widget.fen,
             depth: _settings.depth,
             multiPv: _settings.multiPv,
@@ -255,7 +255,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     if (useDb) _calculateCumulativeProbability();
 
     // ── Start evaluation phase ──
-    _pool.startEvaluation(
+    _analysis.startEvaluation(
       baseFen: widget.fen,
       moveUcis: candidates,
       evalDepth: _settings.depth,
@@ -277,7 +277,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     final candidates = <String>[...sfUcis];
     final seen = Set<String>.from(sfUcis);
 
-    // Collect non-SF candidates from Maia and DB
     final nonSfCandidates = <String>{};
     for (final uci in maiaProbs.keys) {
       if (!sfSet.contains(uci)) nonSfCandidates.add(uci);
@@ -290,7 +289,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       }
     }
 
-    // Score and sort non-SF candidates by max(maia, db) descending
     final scored = <MapEntry<String, double>>[];
     for (final uci in nonSfCandidates) {
       if (seen.contains(uci)) continue;
@@ -305,7 +303,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         }
       }
 
-      // Both Maia AND DB < 2% → skip
       if (maiaP < 0.02 && dbP < 2.0) continue;
 
       final score = math.max(maiaP * 100, dbP);
@@ -371,10 +368,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   void _restoreFromCache(_PositionSnapshot cached) {
     _selectedMoveUcis = List.from(cached.selectedMoveUcis);
     _maiaProbs = Map.from(cached.maiaProbs);
-    _pool.results.value = Map.from(cached.poolResults);
-    _pool.discoveryResult.value = cached.discoveryResult;
+    _analysis.results.value = Map.from(cached.poolResults);
+    _analysis.discoveryResult.value = cached.discoveryResult;
 
-    _pool.poolStatus.value = PoolStatus(
+    _analysis.poolStatus.value = PoolStatus(
       phase: 'complete',
       totalMoves: cached.selectedMoveUcis.length,
       completedMoves: cached.poolResults.length,
@@ -389,15 +386,15 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
   void _trySaveCurrentToCache() {
     if (_selectedMoveUcis.isEmpty || _maiaProbs == null) return;
-    if (!_pool.poolStatus.value.isComplete) return;
+    if (!_analysis.poolStatus.value.isComplete) return;
 
     final fen = _currentAnalysisFen;
     if (fen == null) return;
     _analysisCache[fen] = _PositionSnapshot(
       selectedMoveUcis: List.from(_selectedMoveUcis),
       maiaProbs: Map.from(_maiaProbs!),
-      poolResults: Map.from(_pool.results.value),
-      discoveryResult: _pool.discoveryResult.value,
+      poolResults: Map.from(_analysis.results.value),
+      discoveryResult: _analysis.discoveryResult.value,
     );
 
     while (_analysisCache.length > _maxCacheSize) {
@@ -406,9 +403,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   }
 
   void _onPoolStatusChanged() {
-    final ps = _pool.poolStatus.value;
+    final ps = _analysis.poolStatus.value;
     if (ps.isComplete) {
-      final res = _pool.results.value;
+      final res = _analysis.results.value;
       final withEase = res.values.where((r) => r.moveEase != null).length;
       _perfLog('Evaluation COMPLETE — ${res.length} evals, '
           '$withEase with ease — FULL PIPELINE DONE');
@@ -434,11 +431,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       _engineEnabled = value;
     });
     if (_isActive) {
-      // Turning on — kick off analysis for the current position.
       _runAnalysis();
     } else {
-      // Turning off — cancel any in-progress work.
-      _pool.cancel();
+      _analysis.cancel();
     }
   }
 
@@ -456,7 +451,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           Expanded(child: _buildUnifiedMoveTable()),
           EnginePaneFooter(
             settings: _settings,
-            pool: _pool,
+            analysis: _analysis,
             probabilityService: _probabilityService,
             fen: widget.fen,
             maiaProbs: _maiaProbs,
@@ -496,9 +491,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           Expanded(
             child: _engineEnabled
                 ? ListenableBuilder(
-                    listenable: _pool.poolStatus,
+                    listenable: _analysis.poolStatus,
                     builder: (context, _) {
-                      final ps = _pool.poolStatus.value;
+                      final ps = _analysis.poolStatus.value;
 
                       if (ps.isDiscovering) {
                         return Text(
@@ -515,13 +510,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                         final sans = ps.evaluatingUcis
                             .map((u) => uciToSan(widget.fen, u))
                             .join(', ');
-                        final totalRam =
-                            ps.hashPerWorkerMb * ps.activeWorkers;
                         return Text(
                           'Evaluating ${ps.completedMoves}/${ps.totalMoves}: '
                           '$sans  |  '
-                          'Workers: ${ps.activeWorkers}  |  '
-                          '${formatRam(totalRam)}',
+                          'Workers: ${ps.activeWorkers}',
                           style:
                               TextStyle(fontSize: 12, color: Colors.grey[400]),
                           overflow: TextOverflow.ellipsis,
@@ -574,9 +566,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   Widget _buildUnifiedMoveTable() {
     return ListenableBuilder(
       listenable: Listenable.merge([
-        _pool.discoveryResult,
-        _pool.results,
-        _pool.poolStatus,
+        _analysis.discoveryResult,
+        _analysis.results,
+        _analysis.poolStatus,
         _probabilityService.currentPosition,
       ]),
       builder: (context, _) {
@@ -686,11 +678,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
     final continuation = formatContinuation(widget.fen, move.fullPv);
 
-    // Ease from the player's perspective (higher = better for the player).
-    // When the player moves, resulting position has the *opponent* to move,
-    // so invert: 1 − ease (opponent difficulty).
-    // When the opponent moves, resulting position has the *player* to move,
-    // so use ease directly (player navigability).
     final fenParts = widget.fen.split(' ');
     final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
     final isPlayerTurn = (isWhiteToMove == widget.isWhiteRepertoire);
@@ -815,10 +802,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
   List<_MergedMove> _mergeMoves() {
     final byUci = <String, _MergedMove>{};
-    final discovery = _pool.discoveryResult.value;
+    final discovery = _analysis.discoveryResult.value;
 
     if (_selectedMoveUcis.isEmpty) {
-      // Discovery phase — show progressive SF lines
       for (final line in discovery.lines) {
         if (line.pv.isEmpty) continue;
         final uci = line.pv.first;
@@ -829,11 +815,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         m.stockfishRank = line.pvNumber;
       }
     } else {
-      // Post-filtering — show curated selection
       for (final uci in _selectedMoveUcis) {
         byUci[uci] = _MergedMove(uci: uci);
       }
-      // Fill discovery data for SF-ranked moves
       for (final line in discovery.lines) {
         if (line.pv.isEmpty) continue;
         final m = byUci[line.pv.first];
@@ -846,12 +830,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       }
     }
 
-    // ── Fill ALL columns from ALL sources ──
-    final poolResults = _pool.results.value;
+    final poolResults = _analysis.results.value;
     final dbData = _probabilityService.currentPosition.value;
 
     for (final m in byUci.values) {
-      // Pool results: eval + ease (overrides discovery eval with deeper per-move eval)
       final poolResult = poolResults[m.uci];
       if (poolResult != null) {
         if (poolResult.hasEval) {
@@ -864,12 +846,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         }
       }
 
-      // Maia
       if (m.maiaProb == null && _maiaProbs != null) {
         m.maiaProb = _maiaProbs![m.uci] ?? 0.0;
       }
 
-      // DB
       if (m.dbProb == null && dbData != null) {
         double? found;
         for (final dbm in dbData.moves) {
@@ -887,7 +867,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       }
     }
 
-    // ── Sort: SF-ranked first (by rank), then others by eval ──
     final sfMoves = byUci.values.where((m) => m.stockfishRank != null).toList()
       ..sort((a, b) => a.stockfishRank!.compareTo(b.stockfishRank!));
     final sfUcis = sfMoves.map((m) => m.uci).toSet();

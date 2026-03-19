@@ -7,7 +7,7 @@
 ///   - **metaEval** — Propagated MetaEase (opponentEase) with eval guard.
 ///
 /// The engine-backed strategies (engineOnly, metaEval) use the shared
-/// [MoveAnalysisPool] singleton.  winRateOnly never touches the pool.
+/// [StockfishPool] singleton.  winRateOnly never touches the pool.
 ///
 /// Strategy-specific selection and aggregation logic lives in
 /// [MoveSelectionPolicy] implementations, keeping this file focused on
@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
 import 'db_only_generation_isolate.dart';
 import 'ease_calculator.dart';
+import 'engine/stockfish_pool.dart';
 import 'generation/candidate_move.dart';
 import 'generation/db_move_filters.dart';
 import 'generation/engine_only_policy.dart';
@@ -32,7 +33,6 @@ import 'generation/meta_eval_policy.dart';
 import 'generation/move_selection_policy.dart';
 import 'lichess_auth_service.dart';
 import 'maia_factory.dart';
-import 'move_analysis_pool.dart';
 import 'probability_service.dart';
 
 export 'generation/candidate_move.dart';
@@ -52,7 +52,7 @@ const double _kMinLikelyPlayRate = 2.0;
 // ── Generation service ──────────────────────────────────────────────────
 
 class RepertoireGenerationService {
-  final MoveAnalysisPool _pool = MoveAnalysisPool();
+  final StockfishPool _pool = StockfishPool();
   final ProbabilityService _probabilityService = ProbabilityService();
 
   static const int _maxCacheEntries = 100000;
@@ -123,7 +123,7 @@ class RepertoireGenerationService {
     _log(
         'Eval window: [${config.minEvalCpForUs}, ${config.maxEvalCpForUs}] cp');
 
-    await _pool.beginGeneration();
+    await _pool.ensureWorkers();
     _log('Pool ready: ${_pool.workerCount} workers');
     if (_pool.workerCount == 0) {
       throw StateError(
@@ -153,7 +153,7 @@ class RepertoireGenerationService {
         emitLines: true,
       );
     } finally {
-      _pool.endGeneration();
+      _pool.stopAll();
       sw.stop();
       _log('═══ Generation END ═══');
       _log('Time: ${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s');
@@ -174,7 +174,7 @@ class RepertoireGenerationService {
     void Function(GenerationProgress progress) onProgress,
     Stopwatch sw,
   ) async {
-    _pool.suspendWorkers();
+    _pool.suspend();
     _log('DB-only strategy — suspended engine workers to free RAM');
     _log('Spawning dedicated isolate for DB queries…');
     onProgress(const GenerationProgress(

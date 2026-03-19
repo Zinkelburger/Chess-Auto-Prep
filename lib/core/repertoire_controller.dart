@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
-import '../services/move_analysis_pool.dart';
+import '../services/engine/stockfish_pool.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
@@ -277,7 +277,7 @@ class RepertoireController with ChangeNotifier {
     } finally {
       _setLoading(false);
 
-      MoveAnalysisPool().warmUp();
+      StockfishPool().warmUp();
     }
   }
 
