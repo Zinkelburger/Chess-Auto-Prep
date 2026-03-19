@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/engine_settings.dart';
 import '../../services/lichess_auth_service.dart';
-import '../../utils/chess_utils.dart' show formatRam;
+import '../../services/engine/stockfish_pool.dart';
 
 /// Show the engine settings dialog.
 ///
@@ -114,8 +114,7 @@ void showEngineSettingsDialog({
                         color: Colors.grey[400])),
                 const SizedBox(height: 4),
                 Text(
-                  'System: ${EngineSettings.systemCores} cores, '
-                  '${formatRam(EngineSettings.systemRamMb)} RAM',
+                  'System: ${EngineSettings.systemCores} cores',
                   style: TextStyle(
                       fontSize: 11,
                       color: Colors.grey[600],
@@ -123,22 +122,21 @@ void showEngineSettingsDialog({
                 ),
                 const SizedBox(height: 8),
                 _buildNumberField(
-                  label: 'Max System Load (%)',
-                  value: settings.maxSystemLoad,
-                  min: 50,
-                  max: 100,
-                  step: 5,
+                  label: 'Workers',
+                  value: settings.workers,
+                  min: 1,
+                  max: EngineSettings.systemCores,
                   onChanged: (v) {
-                    settings.maxSystemLoad = v;
+                    settings.workers = v;
                     setDialogState(() {});
                   },
                 ),
                 Padding(
                   padding: const EdgeInsets.only(left: 4, bottom: 4),
                   child: Text(
-                    'Up to ${settings.cores} workers, '
-                    '${formatRam(settings.hashMb)} hash budget '
-                    '(${settings.hashPerWorker} MB/worker)',
+                    '${settings.workers} workers × '
+                    '$kPoolHashPerWorkerMb MB hash each = '
+                    '${settings.workers * kPoolHashPerWorkerMb} MB total',
                     style: TextStyle(
                         fontSize: 11,
                         color: Colors.grey[600],

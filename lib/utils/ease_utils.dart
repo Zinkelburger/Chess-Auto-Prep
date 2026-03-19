@@ -1,6 +1,6 @@
 /// Ease formula constants and helpers shared across the analysis pipeline.
 ///
-/// Used by [MoveAnalysisPool] (per-move ease) and [UnifiedEnginePane]
+/// Used by [AnalysisService] (per-move ease) and [UnifiedEnginePane]
 /// (overall position ease).
 library;
 

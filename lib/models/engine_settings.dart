@@ -7,30 +7,16 @@ import '../utils/system_info.dart';
 class EngineSettings with ChangeNotifier {
   // ── Stockfish settings ────────────────────────────────────────────────
 
-  /// Maximum number of parallel Stockfish workers (each uses 1 thread).
-  ///
-  /// Always reserves 2 cores: 1 for the host OS and 1 for the Flutter
-  /// UI / main isolate.  The pool further constrains the *actual* count
-  /// from live RAM headroom at spawn time, so this is a **ceiling**.
-  int get cores => (systemCores - 2).clamp(1, systemCores);
-
-  /// Maximum Stockfish hash budget in MB, derived from [maxSystemLoad]%
-  /// of total system RAM.
-  ///
-  /// The pool computes a dynamic hash per worker from actual free RAM;
-  /// this value acts as an absolute **ceiling**.
-  int get hashMb =>
-      ((systemRamMb * _maxSystemLoad) ~/ 100).clamp(64, systemRamMb);
-
-  /// Per-worker hash ceiling = total budget / (workers + 1).
-  ///
-  /// The extra +1 reserves a share for the interactive analysis engine
-  /// that runs alongside the pool.  The pool may assign *less* based on
-  /// live RAM headroom.
-  int get hashPerWorker {
-    final c = cores;
-    if (c <= 0) return hashMb;
-    return (hashMb / (c + 1)).floor().clamp(16, hashMb);
+  /// Number of parallel Stockfish workers (each: 1 thread, 64 MB hash).
+  /// Defaults to half the logical cores, minimum 1.
+  int _workers = (getLogicalCores() ~/ 2).clamp(1, getLogicalCores());
+  int get workers => _workers;
+  set workers(int value) {
+    final clamped = value.clamp(1, systemCores);
+    if (clamped != _workers) {
+      _workers = clamped;
+      notifyListeners();
+    }
   }
 
   int _depth = 20;
@@ -59,21 +45,6 @@ class EngineSettings with ChangeNotifier {
   set multiPv(int value) {
     if (value != _multiPv && value >= 1 && value <= 10) {
       _multiPv = value;
-      notifyListeners();
-    }
-  }
-
-  /// Load ceiling (%) used by the dynamic resource allocator.
-  ///
-  /// RAM headroom = `maxSystemLoad% × totalRam − usedRam`.
-  /// CPU budget = cores whose load stays below this threshold.
-  /// Workers are spawned in parallel; the budget is computed upfront so
-  /// the pool never drives the system above this ceiling.
-  int _maxSystemLoad = 80;
-  int get maxSystemLoad => _maxSystemLoad;
-  set maxSystemLoad(int value) {
-    if (value != _maxSystemLoad && value >= 50 && value <= 100) {
-      _maxSystemLoad = value;
       notifyListeners();
     }
   }
@@ -164,11 +135,11 @@ class EngineSettings with ChangeNotifier {
 
   /// Reset all settings to defaults
   void resetToDefaults() {
+    _workers = (systemCores ~/ 2).clamp(1, systemCores);
     _depth = 20;
     _easeDepth = 18;
     _multiPv = 3;
     _maxAnalysisMoves = 8;
-    _maxSystemLoad = 80;
     _showStockfish = true;
     _showMaia = true;
     _showEase = true;

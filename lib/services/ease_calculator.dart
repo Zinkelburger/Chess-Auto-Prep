@@ -4,7 +4,7 @@
 /// relative to the best available move.  Higher ease means the opponent
 /// is unlikely to blunder — every popular reply is close to optimal.
 ///
-/// Used by both [MoveAnalysisPool] (per-move ease in the engine pane) and
+/// Used by both [AnalysisService] (per-move ease in the engine pane) and
 /// [RepertoireGenerationService] (propagated MetaEase during generation).
 library;
 

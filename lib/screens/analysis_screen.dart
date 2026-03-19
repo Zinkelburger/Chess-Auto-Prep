@@ -314,8 +314,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         blackTree: _blackTree,
         minOccurrences: config.minGames,
         depth: config.depth,
-        maxWorkers: config.workers,
-        maxLoadPercent: config.maxLoadPercent,
+        
         onProgress: (c, t) {
           if (mounted) setState(() { _evalCompleted = c; _evalTotal = t; });
         },
