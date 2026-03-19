@@ -807,6 +807,11 @@ class MoveAnalysisPool {
   /// Acquire a worker exclusively.  Returns immediately if one is free,
   /// otherwise waits until a worker is released.
   Future<EvalWorker> _acquireWorker() {
+    if (_workers.isEmpty) {
+      return Future.error(
+        StateError('No engine workers are available in the pool'),
+      );
+    }
     if (_freeWorkers.isNotEmpty) {
       final w = _freeWorkers.first;
       _freeWorkers.remove(w);

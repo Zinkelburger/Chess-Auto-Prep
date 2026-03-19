@@ -14,7 +14,9 @@ import 'dart:isolate';
 import 'package:dartchess/dartchess.dart';
 
 import '../models/explorer_response.dart';
-import '../utils/chess_utils.dart' show playUciMove, uciToSan;
+import '../utils/chess_utils.dart' show playUciMove;
+import 'generation/db_move_filters.dart';
+import 'generation/line_finalizer.dart';
 import 'lichess_api_client.dart';
 
 // ── Messages sent TO the isolate ────────────────────────────────────────
@@ -51,12 +53,18 @@ class DbOnlyProgress extends DbOnlyIsolateMsg {
   final int nodesVisited;
   final int linesGenerated;
   final int currentDepth;
+  final int dbCalls;
+  final int dbCacheHits;
+  final int elapsedMs;
   final String message;
 
   DbOnlyProgress({
     required this.nodesVisited,
     required this.linesGenerated,
     required this.currentDepth,
+    required this.dbCalls,
+    required this.dbCacheHits,
+    required this.elapsedMs,
     required this.message,
   });
 }
@@ -136,10 +144,9 @@ Future<void> dbOnlyIsolateEntry(DbOnlyIsolateRequest req) async {
 
   sw.stop();
   runner._log('═══ Generation END (isolate) ═══');
-  runner._log(
-      'Time: ${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s');
-  runner._log(
-      'Nodes: ${runner._nodesVisited}, Lines: ${runner._linesGenerated}');
+  runner._log('Time: ${(sw.elapsedMilliseconds / 1000).toStringAsFixed(1)}s');
+  runner
+      ._log('Nodes: ${runner._nodesVisited}, Lines: ${runner._linesGenerated}');
   runner._log(
       'DB calls: ${runner._dbCalls} (cache hits: ${runner._dbCacheHits})');
 
@@ -157,12 +164,6 @@ Future<void> dbOnlyIsolateEntry(DbOnlyIsolateRequest req) async {
 
 // ── Internal runner (owns HTTP client, cache, counters) ─────────────────
 
-/// Minimum play rate (0–100) for a move to be considered as our response.
-const double _kMinOurMovePlayRate = 1.0;
-
-/// Minimum play fraction (0–1) for an opponent reply to be branched on.
-const double _kMinOpponentPlayFraction = 0.01;
-
 class _IsolateRunner {
   final SendPort sendPort;
   final String? authToken;
@@ -178,6 +179,7 @@ class _IsolateRunner {
   int _linesGenerated = 0;
   int _dbCalls = 0;
   int _dbCacheHits = 0;
+  late final Stopwatch _elapsed;
 
   _IsolateRunner({
     required this.sendPort,
@@ -188,19 +190,32 @@ class _IsolateRunner {
     required this.isCancelled,
   }) {
     _client = LichessApiClient.withToken(authToken);
+    _client.configureProfiling(
+      enabled: true,
+      logger: _log,
+    );
+    _elapsed = Stopwatch()..start();
   }
 
   void _log(String msg) {
     sendPort.send(DbOnlyLog('[Gen] $msg'));
   }
 
-  void _sendProgress(int depth) {
+  void _sendProgress(int depth, {String? lastMove}) {
+    final secs = _elapsed.elapsedMilliseconds / 1000.0;
+    final rate =
+        secs > 0 ? (_dbCalls / secs).toStringAsFixed(1) : '—';
     sendPort.send(DbOnlyProgress(
       nodesVisited: _nodesVisited,
       linesGenerated: _linesGenerated,
       currentDepth: depth,
-      message: 'd=$depth  '
-          '(${_nodesVisited}n ${_linesGenerated}L  db=$_dbCalls)',
+      dbCalls: _dbCalls,
+      dbCacheHits: _dbCacheHits,
+      elapsedMs: _elapsed.elapsedMilliseconds,
+      message: 'API #$_dbCalls  '
+          '${_nodesVisited}n ${_linesGenerated}L  '
+          'd=$depth  $rate req/s'
+          '${lastMove != null ? '  $lastMove' : ''}',
     ));
   }
 
@@ -224,15 +239,11 @@ class _IsolateRunner {
     _log('$indent┌ DB#$_nodesVisited  d=$depth  $lastMove  '
         'cumProb=${(cumulativeProb * 100).toStringAsFixed(2)}%');
 
-    _sendProgress(depth);
-
     final pos = Chess.fromSetup(Setup.parseFen(fen));
-    final isWhiteToMove =
-        fen.split(' ').length >= 2 && fen.split(' ')[1] == 'w';
-    final isOurMove = isWhiteToMove == isWhiteRepertoire;
+    final isOurMove = (pos.turn == Side.white) == isWhiteRepertoire;
 
-    final reachedStop = depth >= maxDepthPly ||
-        cumulativeProb < cumulativeProbabilityCutoff;
+    final reachedStop =
+        depth >= maxDepthPly || cumulativeProb < cumulativeProbabilityCutoff;
 
     if (reachedStop || pos.legalMoves.isEmpty) {
       String reason = 'legal moves empty';
@@ -240,37 +251,36 @@ class _IsolateRunner {
       if (cumulativeProb < cumulativeProbabilityCutoff) {
         reason = 'cum prob too low';
       }
-      if (lineSan.isNotEmpty) {
-        var finalLine = lineSan;
-        if (isOurMove && pos.legalMoves.isNotEmpty) {
-          final response = await _findOurBestResponse(fen, isWhiteRepertoire);
-          if (response != null) finalLine = [...lineSan, response];
-        }
-        final endsWithOurMove =
-            !isOurMove || finalLine.length > lineSan.length;
-        if (endsWithOurMove) {
-          _linesGenerated++;
-          sendPort.send(DbOnlyLine(
-            movesSan: finalLine,
-            cumulativeProbability: cumulativeProb,
-          ));
-          _log('$indent│ ★ LINE #$_linesGenerated: ${finalLine.join(" ")}');
-        }
+      final finalLine = await LineFinalizer.finalize(
+        lineSan: lineSan,
+        isOurMove: isOurMove,
+        hasLegalMoves: pos.legalMoves.isNotEmpty,
+        findOurBestResponse: () =>
+            _findOurBestResponse(fen, isWhiteRepertoire, depth: depth),
+      );
+      if (finalLine != null) {
+        _linesGenerated++;
+        sendPort.send(DbOnlyLine(
+          movesSan: finalLine,
+          cumulativeProbability: cumulativeProb,
+        ));
+        _sendProgress(depth, lastMove: finalLine.last);
+        _log('$indent│ ★ LINE #$_linesGenerated: ${finalLine.join(" ")}');
       }
       _log('$indent└ LEAF ($reason)');
       return;
     }
 
-    final dbData = await _getDbData(fen);
+    final dbData = await _getDbData(fen, depth: depth);
     if (dbData == null || dbData.moves.isEmpty) {
       _log('$indent└ LEAF (no DB data)');
       return;
     }
 
     if (isOurMove) {
-      final best = dbData.bestMoveForSide(
-        asWhite: isWhiteRepertoire,
-        minPlayRate: _kMinOurMovePlayRate,
+      final best = DbMoveFilters.bestMoveForUs(
+        dbData,
+        isWhiteRepertoire: isWhiteRepertoire,
       );
       if (best == null) {
         _log('$indent└ LEAF (no viable DB moves)');
@@ -295,19 +305,13 @@ class _IsolateRunner {
         lineSan: [...lineSan, best.san],
       );
     } else {
-      final replies = <(String uci, String san, double prob)>[];
-      for (final move in dbData.moves) {
-        if (move.uci.isEmpty) continue;
-        final prob = move.playFraction;
-        if (prob < _kMinOpponentPlayFraction) continue;
-        replies.add((move.uci, uciToSan(fen, move.uci), prob));
-      }
+      final replies = DbMoveFilters.opponentReplies(dbData);
       _log('$indent│ OPP: ${replies.length} replies');
 
-      for (final (uci, san, prob) in replies) {
+      for (final reply in replies) {
         if (isCancelled()) break;
 
-        final childFen = playUciMove(fen, uci);
+        final childFen = playUciMove(fen, reply.uci);
         if (childFen == null) continue;
 
         await _dfs(
@@ -317,8 +321,8 @@ class _IsolateRunner {
           maxDepthPly: maxDepthPly,
           fen: childFen,
           depth: depth + 1,
-          cumulativeProb: cumulativeProb * prob,
-          lineSan: [...lineSan, san],
+          cumulativeProb: cumulativeProb * reply.probability,
+          lineSan: [...lineSan, reply.san],
         );
       }
     }
@@ -329,19 +333,20 @@ class _IsolateRunner {
 
   Future<String?> _findOurBestResponse(
     String fen,
-    bool isWhiteRepertoire,
-  ) async {
-    final dbData = await _getDbData(fen);
-    final best = dbData?.bestMoveForSide(
-      asWhite: isWhiteRepertoire,
-      minPlayRate: _kMinOurMovePlayRate,
+    bool isWhiteRepertoire, {
+    int depth = 0,
+  }) async {
+    final dbData = await _getDbData(fen, depth: depth);
+    final best = DbMoveFilters.bestMoveForUs(
+      dbData,
+      isWhiteRepertoire: isWhiteRepertoire,
     );
     return best?.san;
   }
 
   // ── DB fetch (own HTTP client, own cache, own event loop) ─────────────
 
-  Future<ExplorerResponse?> _getDbData(String fen) async {
+  Future<ExplorerResponse?> _getDbData(String fen, {int depth = 0}) async {
     if (_dbCache.containsKey(fen)) {
       _dbCacheHits++;
       return _dbCache[fen];
@@ -358,6 +363,8 @@ class _IsolateRunner {
         '${data?.moves.length ?? 0} moves  '
         '${data?.totalGames ?? 0} games');
     _dbCache[fen] = data;
+
+    _sendProgress(depth);
     return data;
   }
 }

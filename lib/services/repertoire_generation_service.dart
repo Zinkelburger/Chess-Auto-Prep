@@ -24,8 +24,10 @@ import '../utils/chess_utils.dart' show playUciMove, uciToSan;
 import 'db_only_generation_isolate.dart';
 import 'ease_calculator.dart';
 import 'generation/candidate_move.dart';
+import 'generation/db_move_filters.dart';
 import 'generation/engine_only_policy.dart';
 import 'generation/generation_config.dart';
+import 'generation/line_finalizer.dart';
 import 'generation/meta_eval_policy.dart';
 import 'generation/move_selection_policy.dart';
 import 'lichess_auth_service.dart';
@@ -43,16 +45,9 @@ export 'generation/generation_config.dart';
 // (percentage, 0–100) unless noted otherwise.
 
 /// Minimum play rate for a DB move to be merged into our engine candidate
-/// set.  Higher than [_kMinOurMovePlayRate] because engine candidates are
+/// set.  Higher than [kMinOurMovePlayRate] because engine candidates are
 /// already high-quality; DB suggestions are supplementary.
 const double _kMinLikelyPlayRate = 2.0;
-
-/// Minimum play rate for a DB move to be considered as our response in
-/// leaf-extension scenarios.
-const double _kMinOurMovePlayRate = 1.0;
-
-/// Minimum play fraction (0–1) for an opponent reply to be branched on.
-const double _kMinOpponentPlayFraction = 0.01;
 
 // ── Generation service ──────────────────────────────────────────────────
 
@@ -71,6 +66,7 @@ class RepertoireGenerationService {
   int _engineCacheHits = 0;
   int _dbCalls = 0;
   int _dbCacheHits = 0;
+  int _lastProgressNode = 0;
 
   void _log(String msg) {
     if (kDebugMode) print('[Gen] $msg');
@@ -100,6 +96,7 @@ class RepertoireGenerationService {
     _engineCacheHits = 0;
     _dbCalls = 0;
     _dbCacheHits = 0;
+    _lastProgressNode = 0;
     _evalWhiteCache.clear();
     _dbCache.clear();
     _metaEaseCache.clear();
@@ -123,10 +120,17 @@ class RepertoireGenerationService {
 
     _log('Engine depth: ${config.engineDepth}');
     _log('Opponent mass target: ${config.opponentMassTarget}');
-    _log('Eval window: [${config.minEvalCpForUs}, ${config.maxEvalCpForUs}] cp');
+    _log(
+        'Eval window: [${config.minEvalCpForUs}, ${config.maxEvalCpForUs}] cp');
 
     await _pool.beginGeneration();
     _log('Pool ready: ${_pool.workerCount} workers');
+    if (_pool.workerCount == 0) {
+      throw StateError(
+        'No engine workers available. Install/configure Stockfish or use '
+        'Win rate only strategy.',
+      );
+    }
 
     onProgress(GenerationProgress(
       nodesVisited: 0,
@@ -207,10 +211,15 @@ class RepertoireGenerationService {
       } else if (msg is DbOnlyProgress) {
         _nodesVisited = msg.nodesVisited;
         _linesGenerated = msg.linesGenerated;
+        _dbCalls = msg.dbCalls;
+        _dbCacheHits = msg.dbCacheHits;
         onProgress(GenerationProgress(
           nodesVisited: msg.nodesVisited,
           linesGenerated: msg.linesGenerated,
           currentDepth: msg.currentDepth,
+          dbCalls: msg.dbCalls,
+          dbCacheHits: msg.dbCacheHits,
+          elapsedMs: msg.elapsedMs,
           message: msg.message,
         ));
       } else if (msg is DbOnlyLine) {
@@ -280,21 +289,28 @@ class RepertoireGenerationService {
     _nodesVisited++;
     if (_nodesVisited % 500 == 0) _evictCachesIfNeeded();
 
-    final indent = "│ " * depth;
+    final indent = kDebugMode ? "│ " * depth : '';
     final pass = emitLines ? 'EMIT' : 'EXPLORE';
     final lastMove = lineSan.isNotEmpty ? lineSan.last : '(root)';
-    _log('$indent┌ Node #$_nodesVisited  d=$depth  $pass  '
-        'move=$lastMove  '
-        'cumProb=${(cumulativeProb * 100).toStringAsFixed(2)}%');
+    if (kDebugMode) {
+      _log('$indent┌ Node #$_nodesVisited  d=$depth  $pass  '
+          'move=$lastMove  '
+          'cumProb=${(cumulativeProb * 100).toStringAsFixed(2)}%');
+    }
 
-    onProgress(GenerationProgress(
-      nodesVisited: _nodesVisited,
-      linesGenerated: _linesGenerated,
-      currentDepth: depth,
-      message: '$pass d=$depth $lastMove  '
-          '(${_nodesVisited}n ${_linesGenerated}L  '
-          'eng=$_engineCalls db=$_dbCalls)',
-    ));
+    if (_nodesVisited - _lastProgressNode >= 5 || _nodesVisited <= 2) {
+      _lastProgressNode = _nodesVisited;
+      onProgress(GenerationProgress(
+        nodesVisited: _nodesVisited,
+        linesGenerated: _linesGenerated,
+        currentDepth: depth,
+        dbCalls: _dbCalls,
+        dbCacheHits: _dbCacheHits,
+        message: '$pass d=$depth $lastMove  '
+            '(${_nodesVisited}n ${_linesGenerated}L  '
+            'eng=$_engineCalls db=$_dbCalls)',
+      ));
+    }
 
     final nodeSw = Stopwatch()..start();
 
@@ -303,16 +319,13 @@ class RepertoireGenerationService {
     _log('$indent│ eval=${evalForUs}cp (white=${evalWhiteCp}cp) '
         '[${nodeSw.elapsedMilliseconds}ms]');
 
-    final isWhiteToMove =
-        fen.split(' ').length >= 2 && fen.split(' ')[1] == 'w';
-    final isOurMove = isWhiteToMove == config.isWhiteRepertoire;
+    final pos = Chess.fromSetup(Setup.parseFen(fen));
+    final isOurMove = (pos.turn == Side.white) == config.isWhiteRepertoire;
 
     final reachedStop = depth >= config.maxDepthPly ||
         cumulativeProb < config.cumulativeProbabilityCutoff ||
         evalForUs >= config.maxEvalCpForUs ||
         evalForUs <= config.minEvalCpForUs;
-
-    final pos = Chess.fromSetup(Setup.parseFen(fen));
     if (reachedStop || pos.legalMoves.isEmpty) {
       return _handleLeaf(
         config: config,
@@ -406,15 +419,14 @@ class RepertoireGenerationService {
       metaEase = 1.0 - (nodeEase ?? 0.5);
     }
 
-    if (emitLines && lineSan.isNotEmpty) {
-      var finalLine = lineSan;
-      if (isOurMove && pos.legalMoves.isNotEmpty) {
-        final response = await _findOurBestResponse(fen, config);
-        if (response != null) finalLine = [...lineSan, response];
-      }
-      final endsWithOurMove =
-          !isOurMove || finalLine.length > lineSan.length;
-      if (endsWithOurMove) {
+    if (emitLines) {
+      final finalLine = await LineFinalizer.finalize(
+        lineSan: lineSan,
+        isOurMove: isOurMove,
+        hasLegalMoves: pos.legalMoves.isNotEmpty,
+        findOurBestResponse: () => _findOurBestResponse(fen, config),
+      );
+      if (finalLine != null) {
         _linesGenerated++;
         await onLine(GeneratedLine(
           movesSan: finalLine,
@@ -424,7 +436,7 @@ class RepertoireGenerationService {
         ));
         _log('$indent│ ★ EMITTED line #$_linesGenerated: '
             '${finalLine.join(" ")}');
-      } else {
+      } else if (lineSan.isNotEmpty) {
         _log('$indent│ ✗ Skipped emission (ends on opponent move)');
       }
     }
@@ -569,7 +581,7 @@ class RepertoireGenerationService {
       final childFen = playUciMove(fen, oppMoves[i].uci);
       if (childFen == null) continue;
       childFens.add(childFen);
-      childSans.add(uciToSan(fen, oppMoves[i].uci));
+      childSans.add(oppMoves[i].san);
       validIndices.add(i);
     }
 
@@ -634,8 +646,7 @@ class RepertoireGenerationService {
         .take(config.engineTopK)
         .toList();
 
-    final likely =
-        await _getLikelyMovesForUs(fen, maiaElo: config.maiaElo);
+    final likely = await _getLikelyMovesForUs(fen, maiaElo: config.maiaElo);
     final merged = <String>{...engineUcis, ...likely};
     final selectedUcis = merged.take(config.maxCandidates).toList();
 
@@ -654,8 +665,7 @@ class RepertoireGenerationService {
     _log('    Evaluating ${childFens.length} candidates at '
         'depth ${config.engineDepth}...');
     final evalSw = Stopwatch()..start();
-    final evalResults =
-        await _pool.evaluateMany(childFens, config.engineDepth);
+    final evalResults = await _pool.evaluateMany(childFens, config.engineDepth);
     _log('    Candidate evals done [${evalSw.elapsedMilliseconds}ms]');
 
     final parentIsWhiteToMove = isWhiteToMove;
@@ -675,13 +685,12 @@ class RepertoireGenerationService {
       final evalWhiteCp =
           parentIsWhiteToMove ? -eval.effectiveCp : eval.effectiveCp;
 
-      _evalWhiteCache['${childFens[i]}|${config.engineDepth}'] =
-          evalWhiteCp;
+      _evalWhiteCache['${childFens[i]}|${config.engineDepth}'] = evalWhiteCp;
 
-      final san = uciToSan(fen, uci);
       final dbMove = byUci[uci];
-      final winRate = dbMove?.winRateFor(asWhite: config.isWhiteRepertoire)
-          ?? 0.5;
+      final san = dbMove?.san ?? uciToSan(fen, uci);
+      final winRate =
+          dbMove?.winRateFor(asWhite: config.isWhiteRepertoire) ?? 0.5;
 
       out.add(CandidateMove(
         uci: uci,
@@ -729,13 +738,9 @@ class RepertoireGenerationService {
     final out = <_ProbMove>[];
     final db = await _getDbData(fen);
     if (db != null && db.moves.isNotEmpty) {
-      final sorted = db.moves.toList()
-        ..sort((a, b) => b.playRate.compareTo(a.playRate));
-      for (final m in sorted) {
-        if (m.uci.isEmpty) continue;
-        final p = m.playFraction;
-        if (p < _kMinOpponentPlayFraction) continue;
-        out.add(_ProbMove(uci: m.uci, probability: p));
+      final replies = DbMoveFilters.opponentReplies(db);
+      for (final r in replies) {
+        out.add(_ProbMove(uci: r.uci, san: r.san, probability: r.probability));
       }
       if (out.isNotEmpty) return out;
     }
@@ -748,8 +753,9 @@ class RepertoireGenerationService {
     final sorted = maia.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     for (final e in sorted) {
-      if (e.value < _kMinOpponentPlayFraction) continue;
-      out.add(_ProbMove(uci: e.key, probability: e.value));
+      if (e.value < kMinOpponentPlayFraction) continue;
+      out.add(_ProbMove(
+          uci: e.key, san: uciToSan(fen, e.key), probability: e.value));
     }
     return out;
   }
@@ -793,12 +799,10 @@ class RepertoireGenerationService {
     RepertoireGenerationConfig config,
   ) async {
     final dbData = await _getDbData(fen);
-    return dbData
-        ?.bestMoveForSide(
-          asWhite: config.isWhiteRepertoire,
-          minPlayRate: _kMinOurMovePlayRate,
-        )
-        ?.san;
+    return DbMoveFilters.bestMoveForUs(
+      dbData,
+      isWhiteRepertoire: config.isWhiteRepertoire,
+    )?.san;
   }
 }
 
@@ -806,7 +810,9 @@ class RepertoireGenerationService {
 
 class _ProbMove {
   final String uci;
+  final String san;
   final double probability;
 
-  const _ProbMove({required this.uci, required this.probability});
+  const _ProbMove(
+      {required this.uci, required this.san, required this.probability});
 }

@@ -26,22 +26,30 @@ class RepertoireGenerationTab extends StatefulWidget {
   });
 
   @override
-  State<RepertoireGenerationTab> createState() => RepertoireGenerationTabState();
+  State<RepertoireGenerationTab> createState() =>
+      RepertoireGenerationTabState();
 }
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final RepertoireGenerationService _service = RepertoireGenerationService();
   final EngineSettings _engineSettings = EngineSettings();
+  static const int _pgnFlushEveryLines = 10;
+  static const double _defaultCumProbCutoffPercent = 0.1;
 
-  final TextEditingController _cutoffCtrl = TextEditingController(text: '0.001');
+  final TextEditingController _cutoffCtrl =
+      TextEditingController(text: '0.1');
   final TextEditingController _depthCtrl = TextEditingController(text: '15');
-  final TextEditingController _opponentMassCtrl = TextEditingController(text: '0.80');
-  final TextEditingController _engineDepthCtrl = TextEditingController(text: '20');
-  final TextEditingController _evalGuardCtrl = TextEditingController(text: '50');
+  final TextEditingController _opponentMassCtrl =
+      TextEditingController(text: '0.80');
+  final TextEditingController _engineDepthCtrl =
+      TextEditingController(text: '20');
+  final TextEditingController _evalGuardCtrl =
+      TextEditingController(text: '50');
   late final TextEditingController _minEvalCtrl;
   late final TextEditingController _maxEvalCtrl;
   final TextEditingController _alphaCtrl = TextEditingController(text: '0.35');
-  final TextEditingController _maiaEloCtrl = TextEditingController(text: '2100');
+  final TextEditingController _maiaEloCtrl =
+      TextEditingController(text: '2100');
   late final TextEditingController _maxLoadCtrl;
 
   GenerationStrategy _strategy = GenerationStrategy.metaEval;
@@ -51,7 +59,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   int _nodes = 0;
   int _lines = 0;
   int _depth = 0;
+  int _dbCalls = 0;
+  int _dbCacheHits = 0;
+  int _elapsedMs = 0;
   DateTime _lastProgressUpdate = DateTime(0);
+  final StringBuffer _pendingPgnBuffer = StringBuffer();
+  int _pendingPgnLines = 0;
 
   @override
   void initState() {
@@ -62,7 +75,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _maxEvalCtrl = TextEditingController(
       text: widget.isWhiteRepertoire ? '200' : '100',
     );
-    _maxLoadCtrl = TextEditingController(text: '${_engineSettings.maxSystemLoad}');
+    _maxLoadCtrl =
+        TextEditingController(text: '${_engineSettings.maxSystemLoad}');
   }
 
   @override
@@ -103,9 +117,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final config = RepertoireGenerationConfig(
       startFen: widget.fen,
       isWhiteRepertoire: widget.isWhiteRepertoire,
-      cumulativeProbabilityCutoff: double.tryParse(_cutoffCtrl.text.trim()) ?? 0.001,
+      cumulativeProbabilityCutoff: _parsePercentToFraction(
+        _cutoffCtrl.text,
+        fallbackPercent: _defaultCumProbCutoffPercent,
+      ),
       maxDepthPly: int.tryParse(_depthCtrl.text.trim()) ?? 15,
-      opponentMassTarget: double.tryParse(_opponentMassCtrl.text.trim()) ?? 0.80,
+      opponentMassTarget:
+          double.tryParse(_opponentMassCtrl.text.trim()) ?? 0.80,
       engineDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
       maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 50,
       minEvalCpForUs: int.tryParse(_minEvalCtrl.text.trim()) ??
@@ -118,7 +136,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       maxCandidates: 8,
     );
 
-    final maxLoad = (int.tryParse(_maxLoadCtrl.text.trim()) ?? 80).clamp(50, 100);
+    final maxLoad =
+        (int.tryParse(_maxLoadCtrl.text.trim()) ?? 80).clamp(50, 100);
     _engineSettings.maxSystemLoad = maxLoad;
 
     setState(() {
@@ -128,7 +147,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       _nodes = 0;
       _lines = 0;
       _depth = 0;
+      _dbCalls = 0;
+      _dbCacheHits = 0;
+      _elapsedMs = 0;
     });
+    _pendingPgnBuffer.clear();
+    _pendingPgnLines = 0;
     widget.onGeneratingChanged(true);
 
     try {
@@ -138,23 +162,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         isCancelled: () => _cancelRequested,
         onProgress: (p) {
           if (!mounted) return;
-          // Throttle UI updates to avoid event-loop contention that
-          // stalls HTTP responses on the main isolate.
+          _nodes = p.nodesVisited;
+          _lines = p.linesGenerated;
+          _depth = p.currentDepth;
+          _dbCalls = p.dbCalls;
+          _dbCacheHits = p.dbCacheHits;
+          _elapsedMs = p.elapsedMs;
+          _status = p.message;
+
           final now = DateTime.now();
-          if (now.difference(_lastProgressUpdate).inMilliseconds < 250) {
-            _nodes = p.nodesVisited;
-            _lines = p.linesGenerated;
-            _depth = p.currentDepth;
-            _status = p.message;
-            return;
-          }
+          if (now.difference(_lastProgressUpdate).inMilliseconds < 150) return;
           _lastProgressUpdate = now;
-          setState(() {
-            _nodes = p.nodesVisited;
-            _lines = p.linesGenerated;
-            _depth = p.currentDepth;
-            _status = p.message;
-          });
+          setState(() {});
         },
         onLine: (line) async {
           final idx = _lines + 1;
@@ -168,11 +187,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             metaEase: line.metaEase,
           );
 
-          await File(filePath).writeAsString(
-            '\n$pgn\n',
-            mode: FileMode.append,
-            flush: true,
-          );
+          _queuePgnEntry(pgn);
+          if (_pendingPgnLines >= _pgnFlushEveryLines) {
+            await _flushPendingPgnWrites(filePath);
+          }
 
           widget.onLineSaved(fullMoves, title, pgn);
           if (!mounted) return;
@@ -182,6 +200,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         },
       );
 
+      await _flushPendingPgnWrites(filePath);
+
       if (!mounted) return;
       setState(() {
         _status = _cancelRequested
@@ -189,6 +209,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             : 'Generation complete. Saved $_lines lines.';
       });
     } catch (e) {
+      final fp = widget.currentRepertoire?['filePath'] as String?;
+      if (fp != null && fp.isNotEmpty) {
+        await _flushPendingPgnWrites(fp);
+      }
       if (!mounted) return;
       setState(() {
         _status = 'Generation failed: $e';
@@ -201,6 +225,24 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       }
       widget.onGeneratingChanged(false);
     }
+  }
+
+  void _queuePgnEntry(String pgn) {
+    _pendingPgnBuffer.writeln();
+    _pendingPgnBuffer.writeln(pgn);
+    _pendingPgnLines++;
+  }
+
+  Future<void> _flushPendingPgnWrites(String filePath) async {
+    if (_pendingPgnLines == 0) return;
+    final payload = _pendingPgnBuffer.toString();
+    _pendingPgnBuffer.clear();
+    _pendingPgnLines = 0;
+    await File(filePath).writeAsString(
+      payload,
+      mode: FileMode.append,
+      flush: true,
+    );
   }
 
   String _buildPgnEntry({
@@ -241,6 +283,55 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     return sb.toString().trim();
   }
 
+  Widget _buildProgressDisplay() {
+    final secs = _elapsedMs / 1000.0;
+    final rate = secs > 0.5 ? (_dbCalls / secs).toStringAsFixed(1) : '—';
+    final elapsed = secs >= 60
+        ? '${(secs / 60).floor()}m ${(secs % 60).toStringAsFixed(0)}s'
+        : '${secs.toStringAsFixed(1)}s';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          if (_isGenerating)
+            const Padding(
+              padding: EdgeInsets.only(right: 10),
+              child: SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          Text(
+            'API: $_dbCalls',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+          const SizedBox(width: 12),
+          Text('Cached: $_dbCacheHits', style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 12),
+          Text('Nodes: $_nodes', style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 12),
+          Text('Lines: $_lines', style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 12),
+          Text('d=$_depth', style: const TextStyle(fontSize: 13)),
+          const Spacer(),
+          Text(
+            '$rate req/s  ·  $elapsed',
+            style: TextStyle(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -261,7 +352,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             runSpacing: 8,
             children: [
               _numField(_maxLoadCtrl, 'Max Load %'),
-              _numField(_cutoffCtrl, 'Cum Prob Cutoff'),
+              _numField(_cutoffCtrl, 'Cum Prob Cutoff (%)'),
               _numField(_depthCtrl, 'Max Depth Ply'),
               _numField(_opponentMassCtrl, 'Opp Mass'),
               _numField(_engineDepthCtrl, 'Engine Depth'),
@@ -314,10 +405,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 icon: const Icon(Icons.stop),
                 label: const Text('Cancel'),
               ),
-              const SizedBox(width: 16),
-              Text('Nodes: $_nodes  Lines: $_lines  Depth: $_depth'),
             ],
           ),
+          if (_isGenerating || _nodes > 0) ...[
+            const SizedBox(height: 8),
+            _buildProgressDisplay(),
+          ],
           const SizedBox(height: 8),
           Text(_status, style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 8),
@@ -346,5 +439,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         ),
       ),
     );
+  }
+
+  double _parsePercentToFraction(
+    String raw, {
+    required double fallbackPercent,
+  }) {
+    final parsed = double.tryParse(raw.replaceAll('%', '').trim());
+    final safePercent = (parsed ?? fallbackPercent).clamp(0.0, 100.0);
+    return safePercent / 100.0;
   }
 }

@@ -69,12 +69,18 @@ class GenerationProgress {
   final int nodesVisited;
   final int linesGenerated;
   final int currentDepth;
+  final int dbCalls;
+  final int dbCacheHits;
+  final int elapsedMs;
   final String message;
 
   const GenerationProgress({
     required this.nodesVisited,
     required this.linesGenerated,
     required this.currentDepth,
+    this.dbCalls = 0,
+    this.dbCacheHits = 0,
+    this.elapsedMs = 0,
     required this.message,
   });
 }
