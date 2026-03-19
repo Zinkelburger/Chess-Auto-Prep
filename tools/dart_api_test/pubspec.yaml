@@ -1,0 +1,8 @@
+name: dart_api_test
+description: CLI test for Lichess Explorer API latency (pure Dart, no Flutter)
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  http: ^1.1.2

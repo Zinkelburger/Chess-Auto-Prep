@@ -41,6 +41,15 @@ class ProbabilityService {
 
   final Map<String, ExplorerResponse> _cache = {};
 
+  String _cacheKey(
+    String fen, {
+    required String variant,
+    required String speeds,
+    required String ratings,
+  }) {
+    return '$variant|$speeds|$ratings|$fen';
+  }
+
   final ValueNotifier<double> cumulativeProbability = ValueNotifier(100.0);
   final ValueNotifier<List<MoveInLineProbability>> lineBreakdown =
       ValueNotifier([]);
@@ -87,9 +96,15 @@ class ProbabilityService {
     String speeds = 'blitz,rapid,classical',
     String ratings = '1800,2000,2200,2500',
   }) async {
-    if (_cache.containsKey(fen)) {
-      currentPosition.value = _cache[fen];
-      return _cache[fen];
+    final key = _cacheKey(
+      fen,
+      variant: variant,
+      speeds: speeds,
+      ratings: ratings,
+    );
+    if (_cache.containsKey(key)) {
+      currentPosition.value = _cache[key];
+      return _cache[key];
     }
 
     currentPosition.value = null;
@@ -231,7 +246,13 @@ class ProbabilityService {
     String speeds = 'blitz,rapid,classical',
     String ratings = '1800,2000,2200,2500',
   }) async {
-    if (_cache.containsKey(fen)) return _cache[fen];
+    final key = _cacheKey(
+      fen,
+      variant: variant,
+      speeds: speeds,
+      ratings: ratings,
+    );
+    if (_cache.containsKey(key)) return _cache[key];
 
     final sw = Stopwatch()..start();
     final result = await LichessApiClient().fetchExplorer(
@@ -246,7 +267,7 @@ class ProbabilityService {
       print('[ProbService] ${ms}ms  ${result.moves.length} moves');
     }
 
-    if (result != null) _cache[fen] = result;
+    if (result != null) _cache[key] = result;
     return result;
   }
 
@@ -280,8 +301,7 @@ class ProbabilityService {
         final move = entry.key;
         final prob = entry.value;
         final cumulative = cumulativeProbabilities[move] ?? 100.0;
-        final comment =
-            '{MoveProb: ${prob.toStringAsFixed(1)}% '
+        final comment = '{MoveProb: ${prob.toStringAsFixed(1)}% '
             'Cumulative: ${cumulative.toStringAsFixed(1)}%}';
         processedLine = processedLine.replaceFirst(move, '$move $comment');
       }
