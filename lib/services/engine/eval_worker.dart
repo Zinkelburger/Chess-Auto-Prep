@@ -114,14 +114,22 @@ class EvalWorker {
     if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
       _evalCompleter!.completeError('Cancelled');
     }
+    _evalCompleter = null;
 
+    // Drain any stale output (bestmove) from a previous stop/search.
+    // readyok is guaranteed to arrive AFTER all pending output.
+    engine.sendCommand('stop');
+    _readyCompleter = Completer<void>();
+    engine.sendCommand('isready');
+    await _readyCompleter!.future;
+
+    // Pipeline is clean — safe to set up the new eval.
     _evalCompleter = Completer<EvalResult>();
     _scoreCp = null;
     _scoreMate = null;
     _pv = [];
     _depth = 0;
 
-    engine.sendCommand('stop');
     engine.sendCommand('position fen $fen');
     engine.sendCommand('go depth $depth');
 
