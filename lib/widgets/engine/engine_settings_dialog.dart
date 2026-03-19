@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/engine_settings.dart';
 import '../../services/lichess_auth_service.dart';
+import '../../utils/app_messages.dart';
 import '../../services/engine/stockfish_pool.dart';
 
 /// Show the engine settings dialog.
@@ -408,12 +409,7 @@ Widget _buildLichessSection({
             child: OutlinedButton.icon(
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: oauthUrl!));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Link copied to clipboard'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
+                showAppSnackBar(context, AppMessages.linkCopied);
               },
               icon: const Icon(Icons.copy, size: 14),
               label: const Text('Copy link', style: TextStyle(fontSize: 12)),

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
+import '../utils/app_messages.dart';
+
 class RepertoireSelectionScreen extends StatefulWidget {
   const RepertoireSelectionScreen({super.key});
 
@@ -248,6 +250,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
   Future<void> _showCreateDialog() async {
     final nameController = TextEditingController();
     String selectedColor = 'White';
+    String? nameError;
 
     final result = await showDialog<Map<String, String>>(
       context: context,
@@ -261,11 +264,15 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: nameController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Repertoire Name',
                   hintText: 'Enter repertoire name',
+                  errorText: nameError,
                 ),
                 autofocus: true,
+                onChanged: (_) {
+                  if (nameError != null) setState(() => nameError = null);
+                },
               ),
               const SizedBox(height: 16),
               const Text('Choose your color:'),
@@ -300,12 +307,14 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
             TextButton(
               onPressed: () {
                 final name = nameController.text.trim();
-                if (name.isNotEmpty) {
-                  Navigator.of(context).pop({
-                    'name': name,
-                    'color': selectedColor,
-                  });
+                if (name.isEmpty) {
+                  setState(() => nameError = 'Please enter a name');
+                  return;
                 }
+                Navigator.of(context).pop({
+                  'name': name,
+                  'color': selectedColor,
+                });
               },
               child: const Text('Create'),
             ),
@@ -333,9 +342,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
       if (await file.exists()) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Repertoire "$name" already exists')),
-          );
+          showAppSnackBar(context, AppMessages.repertoireExists(name));
         }
         return;
       }
@@ -351,10 +358,9 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
       await _loadRepertoires();
     } catch (e) {
+      debugPrint('Create repertoire failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating repertoire: $e')),
-        );
+        showAppSnackBar(context, AppMessages.createRepertoireFailed, isError: true);
       }
     }
   }
@@ -391,10 +397,9 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
         await _loadRepertoires();
       } catch (e) {
+        debugPrint('Delete repertoire failed: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error deleting repertoire: $e')),
-          );
+          showAppSnackBar(context, AppMessages.deleteRepertoireFailed, isError: true);
         }
       }
     }
@@ -450,9 +455,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
         if (await newFile.exists()) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Repertoire "$result" already exists')),
-            );
+            showAppSnackBar(context, AppMessages.repertoireExists(result));
           }
           return;
         }
@@ -460,10 +463,9 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
         await oldFile.rename(newFile.path);
         await _loadRepertoires();
       } catch (e) {
+        debugPrint('Rename repertoire failed: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error renaming repertoire: $e')),
-          );
+          showAppSnackBar(context, AppMessages.renameRepertoireFailed, isError: true);
         }
       }
     }

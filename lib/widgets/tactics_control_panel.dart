@@ -12,6 +12,7 @@ import '../services/tactics_database.dart';
 import '../services/tactics_engine.dart';
 import '../services/tactics_import_service.dart';
 import '../services/storage/storage_factory.dart';
+import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import 'pgn_viewer_widget.dart';
 
@@ -290,8 +291,14 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                 children: [
                   Row(
                     children: [
-                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      const SizedBox(width: 12),
+                      if (_isImporting)
+                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      if (_isImporting)
+                        const SizedBox(width: 12),
+                      if (!_isImporting)
+                        Icon(Icons.check_circle_outline, size: 16, color: Colors.green[400]),
+                      if (!_isImporting)
+                        const SizedBox(width: 8),
                       Expanded(child: Text(_importStatus!)),
                       if (_activeImport != null)
                         IconButton(
@@ -306,6 +313,14 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                               _isImporting = false;
                             });
                           },
+                        ),
+                      if (!_isImporting)
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16),
+                          tooltip: 'Dismiss',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => setState(() => _importStatus = null),
                         ),
                     ],
                   ),
@@ -998,10 +1013,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
       setState(() {}); // refresh highlight
     } catch (e) {
+      debugPrint('Load position failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading position: $e')),
-        );
+        showAppSnackBar(context, AppMessages.loadPositionFailed, isError: true);
       }
     }
   }
@@ -1325,18 +1339,14 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
       await _handleImportResults(positions);
     } catch (e) {
+      debugPrint('Lichess import failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to import: $e')),
-        );
+        showAppSnackBar(context, AppMessages.importFailed, isError: true);
       }
     } finally {
       _activeImport = null;
       if (mounted) {
-        setState(() {
-          _importStatus = null;
-          _isImporting = false;
-        });
+        setState(() => _isImporting = false);
       }
     }
   }
@@ -1384,18 +1394,14 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
       await _handleImportResults(positions);
     } catch (e) {
+      debugPrint('Chess.com import failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to import: $e')),
-        );
+        showAppSnackBar(context, AppMessages.importFailed, isError: true);
       }
     } finally {
       _activeImport = null;
       if (mounted) {
-        setState(() {
-          _importStatus = null;
-          _isImporting = false;
-        });
+        setState(() => _isImporting = false);
       }
     }
   }
@@ -1404,16 +1410,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     await _loadPositions();
     
     if (mounted) {
-      if (_newPositionsFound == 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No new blunders found. Games may have already been analyzed.')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Added $_newPositionsFound new tactics positions')),
-        );
-      }
-      setState(() {});
+      setState(() {
+        _importStatus = _newPositionsFound == 0
+            ? AppMessages.noNewBlunders
+            : AppMessages.addedTactics(_newPositionsFound);
+      });
     }
   }
 
@@ -1514,15 +1515,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       try {
         await Clipboard.setData(ClipboardData(text: _currentPosition!.fen));
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('FEN copied to clipboard')),
-          );
+          showAppSnackBar(context, AppMessages.fenCopied);
         }
       } catch (e) {
+        debugPrint('Copy FEN failed: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to copy FEN')),
-          );
+          showAppSnackBar(context, AppMessages.clipboardWriteFailed, isError: true);
         }
       }
     }

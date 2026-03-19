@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 import '../models/analysis_player_info.dart';
 import '../services/analysis_games_service.dart';
+import '../utils/app_messages.dart';
 import '../widgets/analysis_download_dialog.dart';
 
 class PlayerSelectionScreen extends StatefulWidget {
@@ -237,12 +238,6 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         player.username,
       );
       await _loadCachedPlayers();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Deleted games for ${player.username}')),
-        );
-      }
     }
   }
 
@@ -339,11 +334,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
       if (pgns.isEmpty) {
         if (mounted) {
           Navigator.of(context).pop(); // close progress dialog
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('No games found for ${config.username}'),
-            ),
-          );
+          showAppSnackBar(context, AppMessages.noGamesFound(config.username));
         }
         return;
       }
@@ -363,18 +354,12 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
 
       if (mounted) {
         Navigator.of(context).pop(); // close progress dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Downloaded games for ${config.username}'),
-          ),
-        );
       }
     } catch (e) {
+      debugPrint('Download failed: $e');
       if (mounted) {
         Navigator.of(context).pop(); // close progress dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        showAppSnackBar(context, AppMessages.genericError, isError: true);
       }
     }
   }

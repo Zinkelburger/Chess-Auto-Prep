@@ -11,6 +11,7 @@ import '../models/repertoire_line.dart';
 import '../services/analysis_service.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/repertoire_service.dart';
+import '../utils/app_messages.dart';
 import '../utils/chess_utils.dart' show uciToSan;
 import '../widgets/chess_board_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
@@ -646,18 +647,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     final success = await service.updateLineTitle(filePath, line.id, newTitle);
 
     if (success) {
-      // Reload repertoire to pick up the change
       await _controller.loadRepertoire();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Renamed to "$newTitle"')),
-        );
-      }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to rename line')),
-        );
+        showAppSnackBar(context, AppMessages.renameLineFailed, isError: true);
       }
     }
   }
@@ -774,12 +767,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
       if (clipboardData == null || clipboardData.text == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Clipboard is empty'),
-              duration: Duration(seconds: 2),
-            ),
-          );
+          showAppSnackBar(context, AppMessages.clipboardEmpty);
         }
         return;
       }
@@ -787,37 +775,19 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       final fen = clipboardData.text!.trim();
       if (fen.isEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Clipboard is empty'),
-              duration: Duration(seconds: 2),
-            ),
-          );
+          showAppSnackBar(context, AppMessages.clipboardEmpty);
         }
         return;
       }
 
       final success = _controller.setPositionFromFen(fen);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success
-                ? 'Position loaded from FEN'
-                : 'Invalid FEN: $fen'),
-            duration: const Duration(seconds: 2),
-            backgroundColor: success ? Colors.green : Colors.red,
-          ),
-        );
+      if (!success && mounted) {
+        showAppSnackBar(context, AppMessages.invalidFen);
       }
     } catch (e) {
+      debugPrint('Clipboard read failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to read clipboard: $e'),
-            duration: const Duration(seconds: 2),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showAppSnackBar(context, AppMessages.clipboardReadFailed, isError: true);
       }
     }
   }
