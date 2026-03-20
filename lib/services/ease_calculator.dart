@@ -16,6 +16,14 @@ import '../utils/ease_utils.dart';
 import 'engine/eval_worker.dart';
 import 'maia_factory.dart';
 
+class EaseResult {
+  final double ease;
+  final String? topCandidateUci;
+  final double? topCandidateProb;
+
+  const EaseResult(this.ease, {this.topCandidateUci, this.topCandidateProb});
+}
+
 class EaseCalculator {
   /// Minimum play fraction (0–1) for a candidate move.  Moves played in
   /// fewer than 1 % of games at this position are ignored.
@@ -41,7 +49,7 @@ class EaseCalculator {
   /// games per move), Maia is used as a fallback.
   ///
   /// Returns `null` when no candidate data is available from either source.
-  static Future<double?> compute({
+  static Future<EaseResult?> compute({
     required String fen,
     required int evalDepth,
     required int maiaElo,
@@ -81,7 +89,14 @@ class EaseCalculator {
       sumWeightedRegret += math.pow(prob, kEaseBeta) * regret;
     }
 
-    return 1.0 - math.pow(sumWeightedRegret / 2, kEaseAlpha);
+    final ease = 1.0 - math.pow(sumWeightedRegret / 2, kEaseAlpha);
+
+    final top = validCandidates.first;
+    return EaseResult(
+      ease,
+      topCandidateUci: top.key,
+      topCandidateProb: top.value,
+    );
   }
 
   /// Collect candidate moves with their probabilities.

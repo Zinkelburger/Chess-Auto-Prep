@@ -28,9 +28,9 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
-  /// Depth used for ease sub-evaluations (each Maia candidate move).
-  /// Lower than [depth] because ease evaluates multiple positions per move,
-  /// so the cost multiplies quickly.
+  /// Depth used for difficulty sub-evaluations (each Maia candidate move).
+  /// Lower than [depth] because difficulty evaluates multiple positions per
+  /// move, so the cost multiplies quickly.
   int _easeDepth = 18;
   int get easeDepth => _easeDepth;
   set easeDepth(int value) {
@@ -81,11 +81,11 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
-  bool _showEase = true;
-  bool get showEase => _showEase;
-  set showEase(bool value) {
-    if (value != _showEase) {
-      _showEase = value;
+  bool _showDifficulty = true;
+  bool get showDifficulty => _showDifficulty;
+  set showDifficulty(bool value) {
+    if (value != _showDifficulty) {
+      _showDifficulty = value;
       notifyListeners();
     }
   }
@@ -142,7 +142,7 @@ class EngineSettings with ChangeNotifier {
     _maxAnalysisMoves = 8;
     _showStockfish = true;
     _showMaia = true;
-    _showEase = true;
+    _showDifficulty = true;
     _showProbability = true;
     _probabilityStartMoves = '';
     _maiaElo = 2100;

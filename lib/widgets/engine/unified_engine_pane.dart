@@ -1,4 +1,4 @@
-/// Unified Engine Pane - Single table combining Stockfish, Maia, Ease, and Probability
+/// Unified Engine Pane - Single table combining Stockfish, Maia, Difficulty, and Probability
 library;
 
 import 'dart:math' as math;
@@ -35,6 +35,8 @@ class _MergedMove {
   double? maiaProb;    // 0.0 – 1.0
   double? dbProb;      // 0 – 100 (percentage)
   double? moveEase;    // 0.0 – 1.0 (ease of resulting position)
+  String? topResponseUci;   // Most likely opponent reply (UCI)
+  double? topResponseProb;  // Probability of that reply (0–1)
   int? stockfishRank;  // 1-based rank from Stockfish MultiPV
 
   _MergedMove({required this.uci});
@@ -432,18 +434,18 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     final ps = _analysis.poolStatus.value;
     if (ps.isComplete) {
       final res = _analysis.results.value;
-      final withEase = res.values.where((r) => r.moveEase != null).length;
+      final withDiff = res.values.where((r) => r.moveEase != null).length;
       _perfLog('Evaluation COMPLETE — ${res.length} evals, '
-          '$withEase with ease — FULL PIPELINE DONE');
+          '$withDiff with difficulty — FULL PIPELINE DONE');
       if (kDebugMode) {
         for (final e in res.entries) {
           final r = e.value;
-          final easeStr = r.moveEase != null
-              ? r.moveEase!.toStringAsFixed(3)
+          final diffStr = r.moveEase != null
+              ? (1.0 - r.moveEase!).toStringAsFixed(3)
               : 'null';
           print('[Engine]   ${uciToSan(widget.fen, e.key)}: '
               'cp=${r.scoreCp}, mate=${r.scoreMate}, '
-              'ease=$easeStr');
+              'difficulty=$diffStr');
         }
       }
       _trySaveCurrentToCache();
@@ -680,14 +682,14 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                     style: headerStyle, textAlign: TextAlign.right),
               ),
             ),
-          if (_settings.showEase)
+          if (_settings.showDifficulty)
             SizedBox(
-              width: 46,
+              width: 76,
               child: Tooltip(
                 message:
-                    'Ease from your perspective (0–5 scale)\n'
-                    'Higher = better for you',
-                child: Text('EASE',
+                    'How hard the next move is after playing this (0–5)\n'
+                    'Higher = opponent struggles to find good replies',
+                child: Text('DIFFICULTY',
                     style: headerStyle, textAlign: TextAlign.right),
               ),
             ),
@@ -705,15 +707,34 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
     final continuation = formatContinuation(widget.fen, move.fullPv);
 
+    final displayDifficulty = move.moveEase != null
+        ? (1.0 - move.moveEase!) * kEaseDisplayScale
+        : null;
+
     final fenParts = widget.fen.split(' ');
     final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
-    final isPlayerTurn = (isWhiteToMove == widget.isWhiteRepertoire);
-    final rawDisplayEase = move.moveEase != null
-        ? (isPlayerTurn ? 1.0 - move.moveEase! : move.moveEase!)
+    final resultingSide = isWhiteToMove ? "Black's" : "White's";
+    final diffSingular = displayDifficulty != null && displayDifficulty < 0.01;
+    final diffDesc = displayDifficulty != null
+        ? diffSingular
+            ? 'move is not difficult'
+            : displayDifficulty < 1.5
+                ? 'moves are not very difficult'
+                : displayDifficulty < 3.0
+                    ? 'moves are moderately difficult'
+                    : 'moves are very difficult'
         : null;
-    final displayEase = rawDisplayEase != null
-        ? rawDisplayEase * kEaseDisplayScale
-        : null;
+    String diffExtra = '';
+    if (displayDifficulty != null && move.topResponseUci != null) {
+      final resultingFen = playUciMove(widget.fen, move.uci);
+      final topSan = resultingFen != null
+          ? uciToSan(resultingFen, move.topResponseUci!)
+          : move.topResponseUci!;
+      final pctStr = move.topResponseProb != null
+          ? ', ${(move.topResponseProb! * 100).toStringAsFixed(0)}% chance'
+          : '';
+      diffExtra = '\n$topSan$pctStr';
+    }
 
     return InkWell(
       onTap: () => widget.onMoveSelected?.call(move.uci),
@@ -800,22 +821,27 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                   ),
                 ),
               ),
-            if (_settings.showEase)
+            if (_settings.showDifficulty)
               SizedBox(
-                width: 46,
-                child: Text(
-                  displayEase != null
-                      ? displayEase.toStringAsFixed(1)
-                      : '--',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight:
-                        displayEase != null ? FontWeight.w500 : FontWeight.normal,
-                    color: displayEase != null
-                        ? Colors.amber[300]
-                        : Colors.grey[700],
-                    fontFamily: 'monospace',
+                width: 76,
+                child: Tooltip(
+                  message: diffDesc != null
+                      ? "$resultingSide $diffDesc (${displayDifficulty!.toStringAsFixed(1)}/5)$diffExtra"
+                      : '',
+                  child: Text(
+                    displayDifficulty != null
+                        ? displayDifficulty.toStringAsFixed(1)
+                        : '--',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight:
+                          displayDifficulty != null ? FontWeight.w500 : FontWeight.normal,
+                      color: displayDifficulty != null
+                          ? Colors.amber[300]
+                          : Colors.grey[700],
+                      fontFamily: 'monospace',
+                    ),
                   ),
                 ),
               ),
@@ -870,6 +896,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         }
         if (poolResult.moveEase != null) {
           m.moveEase = poolResult.moveEase;
+          m.topResponseUci = poolResult.topResponseUci;
+          m.topResponseProb = poolResult.topResponseProb;
         }
       }
 

@@ -1,6 +1,6 @@
 /// Engine analysis settings dialog extracted from [UnifiedEnginePane].
 ///
-/// Shows toggle switches for analysis sources (Stockfish, Maia, Ease,
+/// Shows toggle switches for analysis sources (Stockfish, Maia, Difficulty,
 /// Probability) and numeric controls for engine parameters.
 library;
 
@@ -96,8 +96,8 @@ void showEngineSettingsDialog({
                       settings.showMaia = v;
                       setDialogState(() {});
                     }),
-                    _buildCompactToggle('Ease', settings.showEase, (v) {
-                      settings.showEase = v;
+                    _buildCompactToggle('Difficulty', settings.showDifficulty, (v) {
+                      settings.showDifficulty = v;
                       setDialogState(() {});
                     }),
                     _buildCompactToggle('Probability', settings.showProbability, (v) {
@@ -157,7 +157,7 @@ void showEngineSettingsDialog({
                   },
                 ),
                 _buildNumberField(
-                  label: 'Ease Depth',
+                  label: 'Difficulty Depth',
                   value: settings.easeDepth,
                   min: 1,
                   max: 99,

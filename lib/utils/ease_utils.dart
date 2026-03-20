@@ -1,7 +1,7 @@
-/// Ease formula constants and helpers shared across the analysis pipeline.
+/// Difficulty formula constants and helpers shared across the analysis pipeline.
 ///
-/// Used by [AnalysisService] (per-move ease) and [UnifiedEnginePane]
-/// (overall position ease).
+/// Used by [AnalysisService] (per-move difficulty) and [UnifiedEnginePane]
+/// (overall position difficulty).
 library;
 
 import 'dart:math' as math;
@@ -11,7 +11,7 @@ import 'dart:math' as math;
 const double kEaseAlpha = 1 / 3;
 const double kEaseBeta = 1.5;
 
-/// Display multiplier so the 0–1 ease value maps to a 0–5 scale.
+/// Display multiplier so the 0–1 difficulty value maps to a 0–5 scale.
 const double kEaseDisplayScale = 5.0;
 
 /// Convert a centipawn score to a Q value in the range [-1, 1].

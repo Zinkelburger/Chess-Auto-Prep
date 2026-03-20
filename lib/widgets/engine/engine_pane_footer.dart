@@ -1,4 +1,4 @@
-/// Compact footer for the unified engine pane showing overall ease and
+/// Compact footer for the unified engine pane showing overall difficulty and
 /// cumulative probability.
 library;
 
@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/probability_service.dart';
-import '../../utils/chess_utils.dart' show formatCount;
+import '../../utils/chess_utils.dart' show formatCount, uciToSan;
 
 class EnginePaneFooter extends StatelessWidget {
   final EngineSettings settings;
@@ -42,7 +42,7 @@ class EnginePaneFooter extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (settings.showEase) ...[
+          if (settings.showDifficulty) ...[
             ListenableBuilder(
               listenable: Listenable.merge([
                 analysis.results,
@@ -51,22 +51,16 @@ class EnginePaneFooter extends StatelessWidget {
               ]),
               builder: (_, __) {
                 final rawEase = _computeOverallEase();
-                final fenParts = fen.split(' ');
-                final isWhiteToMove =
-                    fenParts.length >= 2 && fenParts[1] == 'w';
-                final isPlayerTurn =
-                    (isWhiteToMove == isWhiteRepertoire);
-                final ease = rawEase != null
-                    ? (isPlayerTurn ? rawEase : 1.0 - rawEase)
-                        * kEaseDisplayScale
+                final difficulty = rawEase != null
+                    ? (1.0 - rawEase) * kEaseDisplayScale
                     : null;
                 final isAnalyzing = analysis.poolStatus.value.isEvaluating;
-                if (ease == null) {
+                if (difficulty == null) {
                   return Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Ease ',
+                        'Difficulty ',
                         style: TextStyle(
                             fontSize: 15, color: Colors.grey[500]),
                       ),
@@ -89,21 +83,35 @@ class EnginePaneFooter extends StatelessWidget {
                   );
                 }
 
+                final fenParts = fen.split(' ');
+                final isWhiteToMove =
+                    fenParts.length >= 2 && fenParts[1] == 'w';
+                final side = isWhiteToMove ? "White's" : "Black's";
+
+                String topMoveExtra = '';
+                if (maiaProbs != null && maiaProbs!.isNotEmpty) {
+                  final sorted = maiaProbs!.entries.toList()
+                    ..sort((a, b) => b.value.compareTo(a.value));
+                  final top = sorted.first;
+                  final topSan = uciToSan(fen, top.key);
+                  topMoveExtra = '\n$topSan, ${(top.value * 100).toStringAsFixed(0)}% chance';
+                }
+
                 return Tooltip(
                   message:
-                      'Ease from your perspective (0–5 scale)\n'
-                      'Higher = better for you\n'
-                      'Raw: ${rawEase?.toStringAsFixed(3) ?? '--'}',
+                      "$side ${difficulty < 0.01 ? 'move is not' : difficulty < 1.5 ? 'moves are not very' : difficulty < 3.0 ? 'moves are moderately' : 'moves are very'} "
+                      "difficult (${difficulty.toStringAsFixed(1)}/5)"
+                      "$topMoveExtra",
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Ease ',
+                        'Difficulty ',
                         style:
                             TextStyle(fontSize: 15, color: Colors.grey[500]),
                       ),
                       Text(
-                        ease.toStringAsFixed(1),
+                        difficulty.toStringAsFixed(1),
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -243,7 +251,7 @@ class EnginePaneFooter extends StatelessWidget {
 
     if (found == 0) {
       if (kDebugMode && analysis.poolStatus.value.isComplete) {
-        print('[Engine] Overall ease: null — '
+        print('[Engine] Overall difficulty: null — '
             'found=0, skippedNoEval=$skippedNoEval, '
             'maiaProbs=${maiaProbs!.length}, '
             'discovery=${discoveryLines.length}, '
