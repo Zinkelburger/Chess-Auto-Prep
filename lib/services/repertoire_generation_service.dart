@@ -409,14 +409,14 @@ class RepertoireGenerationService {
 
     double metaEase = 0.5;
     if (policy.requiresEase) {
-      final nodeEase = await EaseCalculator.compute(
+      final nodeResult = await EaseCalculator.compute(
         fen: fen,
         evalDepth: config.easeDepth,
         maiaElo: config.maiaElo,
         evaluateBatch: _pool.evaluateMany,
         dbData: await _getDbData(fen),
       );
-      metaEase = 1.0 - (nodeEase ?? 0.5);
+      metaEase = 1.0 - (nodeResult?.ease ?? 0.5);
     }
 
     if (emitLines) {
@@ -565,13 +565,14 @@ class RepertoireGenerationService {
     // ── Ease (only if the policy requires it) ──
     double? localEase;
     if (policy.requiresEase) {
-      localEase = await EaseCalculator.compute(
+      final localResult = await EaseCalculator.compute(
         fen: fen,
         evalDepth: config.easeDepth,
         maiaElo: config.maiaElo,
         evaluateBatch: _pool.evaluateMany,
         dbData: await _getDbData(fen),
       );
+      localEase = localResult?.ease;
     }
 
     final childFens = <String>[];

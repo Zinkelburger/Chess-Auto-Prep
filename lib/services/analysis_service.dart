@@ -286,9 +286,9 @@ class AnalysisService {
         _emitPoolStatus();
 
         // ── Ease ──
-        double? ease;
+        EaseResult? easeResult;
         try {
-          ease = await _computeMoveEase(
+          easeResult = await _computeMoveEase(
               worker, resultingFen, eval, _easeDepth, generation);
         } catch (_) {}
         if (_generation != generation) return;
@@ -300,7 +300,9 @@ class AnalysisService {
             scoreMate: whiteMate,
             pv: fullPv,
             depth: eval.depth,
-            moveEase: ease,
+            moveEase: easeResult?.ease,
+            topResponseUci: easeResult?.topCandidateUci,
+            topResponseProb: easeResult?.topCandidateProb,
           ),
         );
       } catch (_) {
@@ -321,7 +323,7 @@ class AnalysisService {
 
   // ── Ease computation ──────────────────────────────────────────────────
 
-  Future<double?> _computeMoveEase(
+  Future<EaseResult?> _computeMoveEase(
     EvalWorker worker,
     String fen,
     EvalResult rootEval,

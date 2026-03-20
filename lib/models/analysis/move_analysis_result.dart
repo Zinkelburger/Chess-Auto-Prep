@@ -8,6 +8,8 @@ class MoveAnalysisResult {
   final List<String> pv;  // Full PV (move + continuation)
   final double? moveEase; // Ease of resulting position
   final int depth;
+  final String? topResponseUci;   // Most likely opponent reply (UCI)
+  final double? topResponseProb;  // Probability of that reply (0–1)
 
   MoveAnalysisResult({
     this.scoreCp,
@@ -15,6 +17,8 @@ class MoveAnalysisResult {
     this.pv = const [],
     this.moveEase,
     this.depth = 0,
+    this.topResponseUci,
+    this.topResponseProb,
   });
 
   int get effectiveCp {
