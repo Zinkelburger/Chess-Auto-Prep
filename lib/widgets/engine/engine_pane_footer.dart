@@ -18,6 +18,7 @@ class EnginePaneFooter extends StatelessWidget {
   final String fen;
   final Map<String, double>? maiaProbs;
   final bool isWhiteRepertoire;
+  final VoidCallback? onSetRoot;
 
   const EnginePaneFooter({
     super.key,
@@ -27,6 +28,7 @@ class EnginePaneFooter extends StatelessWidget {
     required this.fen,
     required this.maiaProbs,
     this.isWhiteRepertoire = true,
+    this.onSetRoot,
   });
 
   @override
@@ -143,6 +145,23 @@ class EnginePaneFooter extends StatelessWidget {
                 );
               },
             ),
+            if (onSetRoot != null) ...[
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 26,
+                child: TextButton.icon(
+                  onPressed: onSetRoot,
+                  icon: const Icon(Icons.my_location, size: 14),
+                  label: const Text('Set as root',
+                      style: TextStyle(fontSize: 11)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ),
+            ],
           ],
 
           const Spacer(),

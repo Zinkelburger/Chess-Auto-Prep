@@ -190,7 +190,8 @@ class ProbabilityService {
       moveNumber++;
 
       if (i < skipCount) {
-        isWhiteTurn = !isWhiteTurn;
+        // pos already starts at the position after the starting moves,
+        // so don't toggle isWhiteTurn or advance pos for skipped moves.
         continue;
       }
 
