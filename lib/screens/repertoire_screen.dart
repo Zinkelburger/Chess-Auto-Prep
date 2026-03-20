@@ -797,8 +797,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     if (_controller.selectedPgnLine != null) {
       return _controller.selectedPgnLine!.fullPgn;
     }
-    // Otherwise return the full repertoire PGN
-    return _controller.repertoirePgn;
+    // No line selected — let the editor build from moveHistory instead of
+    // dumping the entire multi-game repertoire file into the parser.
+    return null;
   }
 
   // --- METHODS (Now simple calls to the controller) ---
