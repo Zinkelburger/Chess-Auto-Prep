@@ -132,8 +132,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   List<String> get _currentLineSan => _currentPath.map((m) => m.san).toList();
   int get _currentMoveIndex => _currentPath.isEmpty ? -1 : _currentPath.length - 1;
 
-  // UI state
-  int? _selectedMoveId;
+  // UI state — derived from _currentPath so it can never go stale
+  int? get _selectedMoveId => _currentPath.isNotEmpty ? _currentPath.last.id : null;
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   bool _showingContextMenu = false;
@@ -346,6 +346,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       
       _updatePositionWithoutCallback();
       _generateWorkingPgn();
+      
+      _commentController.text = _currentPath.isNotEmpty
+          ? (_currentPath.last.comment ?? '')
+          : '';
     });
     
     _isSyncingFromExternal = false;
@@ -454,12 +458,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (_findPathRecursive(_roots, moveId, path)) {
       setState(() {
         _currentPath = path;
-        _selectedMoveId = moveId;
         _updatePosition();
         
-        // Update comment
-        final move = path.last;
-        _commentController.text = move.comment ?? '';
+        _commentController.text = path.last.comment ?? '';
       });
     }
   }
@@ -483,10 +484,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       setState(() {
         _currentPath.removeLast();
         if (_currentPath.isNotEmpty) {
-          _selectedMoveId = _currentPath.last.id;
           _commentController.text = _currentPath.last.comment ?? '';
         } else {
-          _selectedMoveId = null;
           _commentController.text = '';
         }
         _updatePosition();
@@ -727,7 +726,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       setState(() {
         _roots.clear();
         _currentPath.clear();
-        _selectedMoveId = null;
         _workingPgn = '';
         _updatePosition();
       });
