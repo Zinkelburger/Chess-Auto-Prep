@@ -57,9 +57,7 @@ void showEngineSettingsDialog({
                       oauthUrl = url;
                       oauthWaiting = true;
                     });
-                    // Open in browser automatically
                     LichessAuthService.openUrl(url);
-                    // Wait for the callback in background
                     final success = await lichess.waitForCallback();
                     setDialogState(() {
                       oauthWaiting = false;
@@ -75,9 +73,9 @@ void showEngineSettingsDialog({
                   },
                 ),
 
-                const SizedBox(height: 12),
-                const Divider(),
                 const SizedBox(height: 8),
+                const Divider(height: 1),
+                const SizedBox(height: 6),
 
                 // ── Sources ──
                 Text('Sources',
@@ -85,43 +83,50 @@ void showEngineSettingsDialog({
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey[400])),
-                _buildToggleTile('Stockfish', settings.showStockfish, (v) {
-                  settings.showStockfish = v;
-                  setDialogState(() {});
-                }),
-                _buildToggleTile('Maia', settings.showMaia, (v) {
-                  settings.showMaia = v;
-                  setDialogState(() {});
-                }),
-                _buildToggleTile('Ease', settings.showEase, (v) {
-                  settings.showEase = v;
-                  setDialogState(() {});
-                }),
-                _buildToggleTile('Probability', settings.showProbability,
-                    (v) {
-                  settings.showProbability = v;
-                  setDialogState(() {});
-                }),
+                const SizedBox(height: 2),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 0,
+                  children: [
+                    _buildCompactToggle('Stockfish', settings.showStockfish, (v) {
+                      settings.showStockfish = v;
+                      setDialogState(() {});
+                    }),
+                    _buildCompactToggle('Maia', settings.showMaia, (v) {
+                      settings.showMaia = v;
+                      setDialogState(() {});
+                    }),
+                    _buildCompactToggle('Ease', settings.showEase, (v) {
+                      settings.showEase = v;
+                      setDialogState(() {});
+                    }),
+                    _buildCompactToggle('Probability', settings.showProbability, (v) {
+                      settings.showProbability = v;
+                      setDialogState(() {});
+                    }),
+                  ],
+                ),
 
-                const SizedBox(height: 12),
-                const Divider(),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
+                const Divider(height: 1),
+                const SizedBox(height: 6),
 
                 // ── Stockfish Engine ──
-                Text('Stockfish Engine',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[400])),
-                const SizedBox(height: 4),
-                Text(
-                  'System: ${EngineSettings.systemCores} cores',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[600],
-                      fontStyle: FontStyle.italic),
+                Row(
+                  children: [
+                    Text('Stockfish Engine',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[400])),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${EngineSettings.systemCores} cores',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 _buildNumberField(
                   label: 'Workers',
                   value: settings.workers,
@@ -133,15 +138,12 @@ void showEngineSettingsDialog({
                   },
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 4),
+                  padding: const EdgeInsets.only(left: 4, bottom: 2),
                   child: Text(
-                    '${settings.workers} workers × '
-                    '$kPoolHashPerWorkerMb MB hash each = '
-                    '${settings.workers * kPoolHashPerWorkerMb} MB total',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[600],
-                        fontStyle: FontStyle.italic),
+                    '${settings.workers} × '
+                    '$kPoolHashPerWorkerMb MB = '
+                    '${settings.workers * kPoolHashPerWorkerMb} MB hash',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
                 ),
                 _buildNumberField(
@@ -164,18 +166,8 @@ void showEngineSettingsDialog({
                     setDialogState(() {});
                   },
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 4),
-                  child: Text(
-                    'Lower = faster ease (runs per Maia candidate)',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[600],
-                        fontStyle: FontStyle.italic),
-                  ),
-                ),
                 _buildNumberField(
-                  label: 'MultiPV (Lines)',
+                  label: 'MultiPV',
                   value: settings.multiPv,
                   min: 1,
                   max: 10,
@@ -194,22 +186,10 @@ void showEngineSettingsDialog({
                     setDialogState(() {});
                   },
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 4),
-                  child: Text(
-                    'MultiPV lines + top Maia/DB candidates '
-                    '(${settings.maxAnalysisMoves - settings.multiPv} '
-                    'extra slots)',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[600],
-                        fontStyle: FontStyle.italic),
-                  ),
-                ),
 
-                const SizedBox(height: 12),
-                const Divider(),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
+                const Divider(height: 1),
+                const SizedBox(height: 6),
 
                 // ── Maia ──
                 Text('Maia',
@@ -217,7 +197,7 @@ void showEngineSettingsDialog({
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey[400])),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 _buildNumberField(
                   label: 'Maia Elo',
                   value: settings.maiaElo,
@@ -229,33 +209,17 @@ void showEngineSettingsDialog({
                     setDialogState(() {});
                   },
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 4),
-                  child: Text(
-                    'Human-like move prediction strength (DB fallback)',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[600],
-                        fontStyle: FontStyle.italic),
-                  ),
-                ),
 
-                const SizedBox(height: 12),
-                const Divider(),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
+                const Divider(height: 1),
+                const SizedBox(height: 6),
 
-                // ── Probability ──
-                Text('Probability',
+                // ── Root Position ──
+                Text('Root position (starting moves)',
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey[400])),
-                const SizedBox(height: 8),
-                Text(
-                  'Starting Moves',
-                  style: TextStyle(
-                      fontSize: 13, color: Colors.grey[300]),
-                ),
                 const SizedBox(height: 4),
                 TextField(
                   controller: probController,
@@ -270,13 +234,10 @@ void showEngineSettingsDialog({
                       fontFamily: 'monospace', fontSize: 13),
                   maxLines: 2,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   'Leave empty for initial position',
-                  style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 11,
-                      fontStyle: FontStyle.italic),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
                 ),
               ],
             ),
@@ -459,14 +420,20 @@ Widget _buildLichessSection({
   );
 }
 
-Widget _buildToggleTile(
+Widget _buildCompactToggle(
     String label, bool value, ValueChanged<bool> onChanged) {
-  return SwitchListTile(
-    title: Text(label),
-    value: value,
-    onChanged: onChanged,
-    contentPadding: EdgeInsets.zero,
-    dense: true,
+  return Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      SizedBox(
+        height: 28,
+        child: FittedBox(
+          child: Switch(value: value, onChanged: onChanged),
+        ),
+      ),
+      const SizedBox(width: 2),
+      Text(label, style: const TextStyle(fontSize: 13)),
+    ],
   );
 }
 

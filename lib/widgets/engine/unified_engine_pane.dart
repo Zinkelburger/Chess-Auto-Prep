@@ -69,6 +69,7 @@ class UnifiedEnginePane extends StatefulWidget {
   final Function(String uciMove)? onMoveSelected;
   final List<String> currentMoveSequence;
   final bool isWhiteRepertoire;
+  final VoidCallback? onSetRoot;
 
   const UnifiedEnginePane({
     super.key,
@@ -78,6 +79,7 @@ class UnifiedEnginePane extends StatefulWidget {
     this.onMoveSelected,
     this.currentMoveSequence = const [],
     this.isWhiteRepertoire = true,
+    this.onSetRoot,
   });
 
   @override
@@ -85,17 +87,22 @@ class UnifiedEnginePane extends StatefulWidget {
 }
 
 /// Cached snapshot of a completed analysis for a single FEN.
+///
+/// Bundles ALL per-position data atomically so restoring from cache
+/// never leaves any source stale (Stockfish, Maia, DB, cumulative).
 class _PositionSnapshot {
   final List<String> selectedMoveUcis;
   final Map<String, double> maiaProbs;
   final Map<String, MoveAnalysisResult> poolResults;
   final DiscoveryResult discoveryResult;
+  final ExplorerResponse? dbResponse;
 
   _PositionSnapshot({
     required this.selectedMoveUcis,
     required this.maiaProbs,
     required this.poolResults,
     required this.discoveryResult,
+    required this.dbResponse,
   });
 }
 
@@ -142,10 +149,26 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   @override
   void didUpdateWidget(UnifiedEnginePane oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_isActive &&
-        (widget.fen != oldWidget.fen || !oldWidget.isActive)) {
+    if (!_isActive) return;
+
+    final fenChanged = widget.fen != oldWidget.fen;
+    final becameActive = !oldWidget.isActive;
+    final moveSeqChanged = !_listEquals(
+        widget.currentMoveSequence, oldWidget.currentMoveSequence);
+
+    if (fenChanged || becameActive) {
       _runAnalysis();
+    } else if (moveSeqChanged && _settings.showProbability) {
+      _calculateCumulativeProbability();
     }
+  }
+
+  static bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   @override
@@ -171,7 +194,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     }
 
     _trySaveCurrentToCache();
-    _analysisGeneration++;
     _initialAnalysisStarted = false;
     _startInitialAnalysis();
   }
@@ -371,6 +393,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     _analysis.results.value = Map.from(cached.poolResults);
     _analysis.discoveryResult.value = cached.discoveryResult;
 
+    // Restore DB data so the merge table shows correct play rates.
+    _probabilityService.currentPosition.value = cached.dbResponse;
+
     _analysis.poolStatus.value = PoolStatus(
       phase: 'complete',
       totalMoves: cached.selectedMoveUcis.length,
@@ -395,6 +420,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       maiaProbs: Map.from(_maiaProbs!),
       poolResults: Map.from(_analysis.results.value),
       discoveryResult: _analysis.discoveryResult.value,
+      dbResponse: _probabilityService.currentPosition.value,
     );
 
     while (_analysisCache.length > _maxCacheSize) {
@@ -456,6 +482,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
             fen: widget.fen,
             maiaProbs: _maiaProbs,
             isWhiteRepertoire: widget.isWhiteRepertoire,
+            onSetRoot: widget.onSetRoot,
           ),
         ] else
           const Expanded(

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../core/repertoire_controller.dart';
+import '../models/engine_settings.dart';
 import '../models/repertoire_line.dart';
 import '../services/analysis_service.dart';
 import '../services/engine/stockfish_pool.dart';
@@ -60,14 +61,14 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       if (!settled) return;
 
       // Engine tab selected while generating -> stop generation first.
-      if (_tabController.index == 3 && _isGenerating) {
+      if (_tabController.index == 1 && _isGenerating) {
         _generationTabKey.currentState?.cancelGeneration(
           reason: 'Generation paused because Engine tab was opened.',
         );
       }
 
       // Leaving engine tab -> hard-cancel analysis to avoid overlap.
-      if (_tabController.index != 3) {
+      if (_tabController.index != 1) {
         AnalysisService().cancel();
       }
 
@@ -91,13 +92,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   // 3. The listener that calls setState
   void _onRepertoireChanged() {
     setState(() {
-      // Update board orientation when a new repertoire finishes loading
-      // We check !isLoading to ensure the color has been determined from the PGN
       if (_controller.currentRepertoire != null && !_controller.isLoading) {
         final currentId = _controller.currentRepertoire!['filePath'] as String?;
         if (currentId != null && currentId != _lastRepertoireId) {
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
+          EngineSettings().probabilityStartMoves = _controller.rootMoves;
         }
 
         if (_controller.needsColorSelection) {
@@ -255,8 +255,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               return KeyEventResult.handled;
             }
           }
-          // Tree Tab (Index 0) or Lines Tab (Index 1) - Main controller handles navigation
-          else if (_tabController.index == 0 || _tabController.index == 1) {
+          // Tree Tab (Index 0) or Lines Tab (Index 3) - Main controller handles navigation
+          else if (_tabController.index == 0 || _tabController.index == 3) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               _controller.goBack();
               return KeyEventResult.handled;
@@ -265,8 +265,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               return KeyEventResult.handled;
             }
           }
-          // Engine Tab (Index 3) - Main controller handles navigation
-          else if (_tabController.index == 3) {
+          // Engine Tab (Index 1) - Main controller handles navigation
+          else if (_tabController.index == 1) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               _controller.goBack();
               return KeyEventResult.handled;
@@ -319,9 +319,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                       tabAlignment: TabAlignment.start,
                       tabs: const [
                         Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
-                        Tab(text: 'Lines', icon: Icon(Icons.library_books, size: 16)),
-                        Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
                         Tab(text: 'Engine', icon: Icon(Icons.developer_board, size: 16)),
+                        Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
+                        Tab(text: 'Lines', icon: Icon(Icons.library_books, size: 16)),
                         Tab(text: 'Generate', icon: Icon(Icons.auto_awesome, size: 16)),
                         Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
                       ],
@@ -332,9 +332,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                         controller: _tabController,
                         children: [
                           _buildOpeningTreeTab(),
-                          _buildLinesTab(),
-                          _buildPgnTab(),
                           _KeepAliveTab(child: _buildEngineTab()),
+                          _buildPgnTab(),
+                          _buildLinesTab(),
                           _KeepAliveTab(child: _buildGenerateTab()),
                           _buildActionsTab(),
                         ],
@@ -396,7 +396,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       isExpanded: true,
       onLineSelected: (line) {
         _controller.loadPgnLine(line);
-        // Switch to PGN tab (now at index 2)
         _tabController.animateTo(2);
       },
       onLineRenamed: _renameLine,
@@ -474,17 +473,24 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       padding: const EdgeInsets.all(8.0),
       child: UnifiedEnginePane(
         fen: _controller.fen,
-        isActive: _tabController.index == 3 && !_isGenerating,
+        isActive: _tabController.index == 1 && !_isGenerating,
         isUserTurn: _controller.position.turn == (_controller.isRepertoireWhite ? Side.white : Side.black),
         currentMoveSequence: _controller.currentMoveSequence,
         isWhiteRepertoire: _controller.isRepertoireWhite,
         onMoveSelected: (uciMove) {
-          // Convert UCI (e2e4) to SAN using shared utility
           final san = uciToSan(_controller.fen, uciMove);
           if (san != uciMove) {
             _controller.userPlayedMove(san);
           }
         },
+        onSetRoot: _controller.rootMoves.isEmpty
+            ? () async {
+                await _controller.setRootPosition();
+                EngineSettings().probabilityStartMoves =
+                    _controller.rootMoves;
+                if (mounted) setState(() {});
+              }
+            : null,
       ),
     );
   }
@@ -633,9 +639,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
   
   void _selectLine(RepertoireLine line) {
-    // Load the selected PGN line - this updates move history
     _controller.loadPgnLine(line);
-    // Switch to PGN tab (index 2 after adding Lines tab)
     _tabController.animateTo(2);
   }
 

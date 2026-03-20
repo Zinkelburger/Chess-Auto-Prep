@@ -38,6 +38,11 @@ class RepertoireController with ChangeNotifier {
   bool _needsColorSelection = false;
   bool get needsColorSelection => _needsColorSelection;
 
+  /// Root position move string (e.g. "1. d4 d5 2. c4") persisted in the PGN.
+  /// Used as the starting point for cumulative probability calculations.
+  String _rootMoves = '';
+  String get rootMoves => _rootMoves;
+
   /// The canonical move history - source of truth for position.
   List<String> _moveHistory = [];
   List<String> get moveHistory => List.unmodifiable(_moveHistory);
@@ -237,6 +242,76 @@ class RepertoireController with ChangeNotifier {
     await loadRepertoire();
   }
 
+  /// Parses a PGN move text string (e.g. "1. d4 d5 2. c4") into SAN moves.
+  List<String> _parsePgnMoveText(String movesStr) {
+    if (movesStr.trim().isEmpty) return [];
+    final cleaned = movesStr
+        .replaceAll(RegExp(r'\d+\.+\s*'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (cleaned.isEmpty) return [];
+    return cleaned.split(' ').where((m) => m.isNotEmpty).toList();
+  }
+
+  /// If a root position is set, navigate to it so the tree starts there.
+  void _navigateToRootPosition() {
+    if (_rootMoves.isEmpty) return;
+    final sanMoves = _parsePgnMoveText(_rootMoves);
+    if (sanMoves.isEmpty) return;
+
+    Position pos = Chess.initial;
+    final validMoves = <String>[];
+    for (final san in sanMoves) {
+      final move = pos.parseSan(san);
+      if (move == null) break;
+      pos = pos.play(move);
+      validMoves.add(san);
+    }
+
+    if (validMoves.isNotEmpty) {
+      _moveHistory = validMoves;
+      _currentMoveIndex = validMoves.length - 1;
+      _position = pos;
+      _syncOpeningTree();
+    }
+  }
+
+  /// Converts a SAN move list to PGN move text (e.g. "1. d4 d5 2. c4").
+  String _movesToPgnMoveText(List<String> moves) {
+    if (moves.isEmpty) return '';
+    final sb = StringBuffer();
+    for (int i = 0; i < moves.length; i++) {
+      if (i.isEven) sb.write('${(i ~/ 2) + 1}. ');
+      sb.write(moves[i]);
+      if (i < moves.length - 1) sb.write(' ');
+    }
+    return sb.toString();
+  }
+
+  /// Sets the current move sequence as the root position and persists it.
+  Future<void> setRootPosition() async {
+    if (_currentRepertoire == null) return;
+    final filePath = _currentRepertoire!['filePath'] as String;
+    final file = io.File(filePath);
+    if (!await file.exists()) return;
+
+    final moveText = _movesToPgnMoveText(currentMoveSequence);
+    _rootMoves = moveText;
+
+    final existing = await file.readAsString();
+    final lines = existing.split('\n');
+    final rootIndex = lines.indexWhere((l) => l.trim().startsWith('// Root:'));
+
+    if (rootIndex >= 0) {
+      lines[rootIndex] = '// Root: $moveText';
+    } else {
+      lines.insert(0, '// Root: $moveText');
+    }
+
+    await file.writeAsString(lines.join('\n'));
+    notifyListeners();
+  }
+
   /// (Re)loads the PGN content for the current repertoire.
   Future<void> loadRepertoire() async {
     if (_currentRepertoire == null) return;
@@ -256,6 +331,7 @@ class RepertoireController with ChangeNotifier {
 
         await _buildOpeningTree();
         await _parseRepertoireLines();
+        _navigateToRootPosition();
       } else {
         _repertoirePgn = null;
         _openingTree = null;
@@ -307,15 +383,19 @@ class RepertoireController with ChangeNotifier {
 
     try {
       String? repertoireColor;
+      String? rootMoves;
       final lines = _repertoirePgn!.split('\n');
 
       for (final line in lines) {
         final trimmedLine = line.trim();
         if (trimmedLine.startsWith('// Color:')) {
           repertoireColor = trimmedLine.substring(9).trim();
-          break;
+        } else if (trimmedLine.startsWith('// Root:')) {
+          rootMoves = trimmedLine.substring(8).trim();
         }
       }
+
+      _rootMoves = rootMoves ?? '';
 
       _needsColorSelection = repertoireColor == null;
       final isWhiteRepertoire = repertoireColor != 'Black';
