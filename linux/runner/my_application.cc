@@ -43,6 +43,15 @@ static void my_application_activate(GApplication* application) {
     }
   }
 #endif
+  // On Wayland, prefer server-side title bars except on GNOME.
+  // KDE/Plasma commonly uses traditional title bars with app icons.
+  const gchar* current_desktop = g_getenv("XDG_CURRENT_DESKTOP");
+  if (current_desktop != nullptr) {
+    g_autofree gchar* desktop_lower = g_ascii_strdown(current_desktop, -1);
+    if (g_strrstr(desktop_lower, "gnome") == nullptr) {
+      use_header_bar = FALSE;
+    }
+  }
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
@@ -55,11 +64,18 @@ static void my_application_activate(GApplication* application) {
 
   gtk_window_set_default_size(window, 1280, 720);
 
-  // Set window icon
-  g_autoptr(GError) icon_error = nullptr;
-  gtk_window_set_icon_from_file(window, "assets/images/knook.png", &icon_error);
-  if (icon_error != nullptr) {
-    g_warning("Failed to load window icon: %s", icon_error->message);
+  // Set window icon relative to the executable location so it works
+  // regardless of the process's current working directory.
+  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", nullptr);
+  if (exe_path != nullptr) {
+    g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
+    g_autofree gchar* icon_path = g_build_filename(
+        exe_dir, "data", "flutter_assets", "assets", "images", "knook.png", nullptr);
+    g_autoptr(GError) icon_error = nullptr;
+    gtk_window_set_icon_from_file(window, icon_path, &icon_error);
+    if (icon_error != nullptr) {
+      g_warning("Failed to load window icon: %s", icon_error->message);
+    }
   }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

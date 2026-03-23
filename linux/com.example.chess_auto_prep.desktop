@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Chess Auto Prep
+Comment=Chess repertoire and tactics trainer
+Exec=chess_auto_prep
+Icon=chess_auto_prep
+StartupWMClass=com.example.chess_auto_prep
+Type=Application
+Categories=Game;Education;

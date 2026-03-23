@@ -277,7 +277,7 @@ class LichessApiClient {
     String fen, {
     String variant = 'standard',
     String speeds = 'blitz,rapid,classical',
-    String ratings = '1800,2000,2200,2500',
+    String ratings = '2000,2200,2500',
   }) async {
     final totalSw = Stopwatch()..start();
     final fenShort =

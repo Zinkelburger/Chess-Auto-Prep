@@ -41,6 +41,16 @@ flutter run
 - **Web**: `flutter build web`
 - **Desktop**: `flutter build windows/macos/linux`
 
+### Linux (KDE Wayland) app icon
+
+On KDE Wayland, the window/taskbar icon comes from a `.desktop` file, not GTK. To show the knook icon in the title bar and taskbar, run once:
+
+```bash
+./install_linux_desktop.sh
+```
+
+Then restart the app (`flutter run -d linux`).
+
 ## Deploying to Cloudflare Pages
 
 Cloudflare Pages can serve the Flutter web build without a separate host. Two options are available:

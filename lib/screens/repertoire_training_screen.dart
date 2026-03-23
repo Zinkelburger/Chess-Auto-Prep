@@ -55,7 +55,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   String? _feedback;
   String? _currentAnnotation;
 
-  late final TabController _tabController = TabController(length: 2, vsync: this);
+  late final TabController _tabController;
 
   bool get _isWhiteLine => _currentLine?.color.toLowerCase() != 'black';
   bool get _boardFlipped => !_isWhiteLine;
@@ -63,6 +63,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _session = RepertoireController();
     _session.addListener(_onSessionChanged);
     _repertoire = widget.repertoire;
