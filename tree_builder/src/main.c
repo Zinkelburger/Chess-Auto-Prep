@@ -1,0 +1,631 @@
+/**
+ * main.c - Repertoire Builder CLI
+ * 
+ * Full pipeline for automatic chess repertoire generation:
+ * 
+ *   1. BUILD   - Build opening tree from Lichess explorer data
+ *   2. EVAL    - Evaluate all positions with Stockfish (multithreaded)
+ *   3. EASE    - Calculate ease scores (opponent mistake potential)
+ *   4. SELECT  - Score and select optimal repertoire moves
+ *   5. EXPORT  - Export to JSON, PGN, and SQLite
+ * 
+ * Usage:
+ *   tree_builder [options] <output_file>
+ * 
+ * Options:
+ *   -f, --fen <FEN>        Starting position (default: standard)
+ *   -c, --color <w|b>      Play as white or black (default: white)
+ *   -p, --probability <P>  Minimum probability threshold (default: 0.0001)
+ *   -d, --depth <N>        Maximum depth in ply (default: 30)
+ *   -e, --eval-depth <N>   Stockfish search depth (default: 25)
+ *   -t, --threads <N>      Number of Stockfish engines (default: 4)
+ *   -r, --ratings <R>      Rating range (default: "2000,2200,2500")
+ *   -s, --speeds <S>       Time controls (default: "blitz,rapid,classical")
+ *   -g, --min-games <N>    Minimum games per move (default: 10)
+ *   -S, --stockfish <path> Path to Stockfish binary
+ *   -D, --database <path>  Path to SQLite database (default: repertoire.db)
+ *   -L, --load <file>      Load existing tree JSON instead of building
+ *   -m, --masters          Use masters database
+ *   --skip-build           Skip tree building (use cached data)
+ *   --skip-eval            Skip engine evaluation
+ *   --skip-ease            Skip ease calculation
+ *   --traps                Find and print opponent trap positions
+ *   --pgn <file>           Also export as PGN
+ *   -v, --verbose          Verbose output
+ *   -h, --help             Show help
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <getopt.h>
+#include <signal.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/sysinfo.h>
+
+#include "tree.h"
+#include "lichess_api.h"
+#include "serialization.h"
+#include "database.h"
+#include "engine_pool.h"
+#include "repertoire.h"
+#include "chess_logic.h"
+
+
+/* Default starting position */
+#define DEFAULT_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
+/* Default Stockfish paths to search */
+static const char *STOCKFISH_SEARCH_PATHS[] = {
+    "./stockfish",
+    "../assets/executables/stockfish-linux",
+    "/usr/bin/stockfish",
+    "/usr/local/bin/stockfish",
+    "/usr/games/stockfish",
+    NULL
+};
+
+/* Global tree pointer for signal handling */
+static Tree *g_tree = NULL;
+static volatile int g_interrupted = 0;
+
+
+static void print_usage(const char *prog_name) {
+    printf("\n");
+    printf("╔══════════════════════════════════════════════════════════╗\n");
+    printf("║        Chess Repertoire Builder - tree_builder           ║\n");
+    printf("╚══════════════════════════════════════════════════════════╝\n\n");
+    printf("Usage: %s [options] <output.json>\n\n", prog_name);
+    printf("Builds an opening repertoire by traversing the Lichess database,\n");
+    printf("evaluating positions with Stockfish, calculating ease scores,\n");
+    printf("and selecting moves that maximize opponent mistakes.\n\n");
+    printf("Options:\n");
+    printf("  -f, --fen <FEN>        Starting position FEN\n");
+    printf("  -c, --color <w|b>      Play as white (w) or black (b) [default: w]\n");
+    printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
+    printf("  -d, --depth <N>        Max tree depth in ply [default: 30]\n");
+    printf("  -e, --eval-depth <N>   Stockfish search depth [default: 25]\n");
+    printf("  -t, --threads <N>      Parallel Stockfish engines [default: 4]\n");
+    printf("  -r, --ratings <R>      Rating buckets [default: 2000,2200,2500]\n");
+    printf("  -s, --speeds <S>       Time controls [default: blitz,rapid,classical]\n");
+    printf("  -g, --min-games <N>    Min games per move [default: 10]\n");
+    printf("  -S, --stockfish <path> Stockfish binary path\n");
+    printf("  -D, --database <path>  SQLite database path [default: repertoire.db]\n");
+    printf("  -L, --load <file>      Load tree from JSON file\n");
+    printf("  -m, --masters          Use masters database\n");
+    printf("  --skip-build           Skip tree building (use cached DB data)\n");
+    printf("  --skip-eval            Skip engine evaluation step\n");
+    printf("  --skip-ease            Skip ease calculation step\n");
+    printf("  --token <token>        Lichess API auth token (required)\n");
+    printf("  --eval-weight <0-1>    Eval vs trickiness blend (0=pure trickiness, 1=pure eval) [default: 0.40]\n");
+    printf("  --eval-guard <0-1>     Min win probability to consider a move [default: 0.35]\n");
+    printf("  --depth-decay <0-1>    How fast deeper positions matter less for ECA [default: 0.90]\n");
+    printf("  --max-children <N>     Max moves to explore per position (0=unlimited) [default: 0]\n");
+    printf("  --mass-cutoff <0-1>    Stop adding moves after this fraction of prob mass [default: 0=off]\n");
+    printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: -50]\n");
+    printf("  --max-eval <cp>        Stop DFS if our eval exceeds this (already won) [default: 300]\n");
+    printf("  --max-eval-loss <cp>   Skip our-move candidates more than N cp worse than best [default: 50]\n");
+    printf("  --traps                Find opponent trap positions\n");
+    printf("  --pgn <file>           Also export repertoire as PGN\n");
+    printf("  -v, --verbose          Verbose progress output\n");
+    printf("  -h, --help             Show this help\n\n");
+    printf("Examples:\n");
+    printf("  %s -c w -v repertoire.json\n", prog_name);
+    printf("  %s -c b -e 20 -t 8 --pgn rep.pgn rep.json\n", prog_name);
+    printf("  %s -L existing_tree.json --skip-build rep.json\n", prog_name);
+    printf("  %s --traps -D my_data.db traps.json\n", prog_name);
+    printf("\n");
+}
+
+
+static void progress_callback(int nodes_built, int current_depth, const char *current_fen) {
+    static int last_printed = 0;
+    if (nodes_built - last_printed >= 50) {
+        printf("\r  [Build] Nodes: %d | Depth: %d | %.40s...    ", 
+               nodes_built, current_depth, current_fen ? current_fen : "");
+        fflush(stdout);
+        last_printed = nodes_built;
+    }
+}
+
+static void pipeline_progress(const char *stage, int current, int total) {
+    if (total > 0) {
+        double pct = 100.0 * current / total;
+        printf("\r  [%s] %d/%d (%.1f%%)    ", stage, current, total, pct);
+    } else {
+        printf("\r  [%s] %d...    ", stage, current);
+    }
+    fflush(stdout);
+}
+
+
+static void signal_handler(int sig) {
+    (void)sig;
+    g_interrupted = 1;
+    printf("\n\n  [INTERRUPTED] Stopping gracefully...\n");
+    if (g_tree) {
+        tree_stop_build(g_tree);
+    }
+}
+
+
+/**
+ * Find Stockfish binary
+ */
+static const char* find_stockfish(const char *user_path) {
+    if (user_path && access(user_path, X_OK) == 0) {
+        return user_path;
+    }
+    
+    for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++) {
+        if (access(STOCKFISH_SEARCH_PATHS[i], X_OK) == 0) {
+            return STOCKFISH_SEARCH_PATHS[i];
+        }
+    }
+    
+    return NULL;
+}
+
+
+int main(int argc, char *argv[]) {
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
+
+    /* Configuration with defaults */
+    const char *start_fen = DEFAULT_FEN;
+    const char *output_file = NULL;
+    const char *db_path = "repertoire.db";
+    const char *stockfish_path = NULL;
+    const char *load_tree_file = NULL;
+    const char *pgn_output = NULL;
+    double min_probability = 0.0001;
+    int max_depth = 30;
+    int eval_depth = 25;
+    int num_threads = 4;
+    const char *ratings = "2000,2200,2500";
+    const char *speeds = "blitz,rapid,classical";
+    int min_games = 10;
+    bool play_as_white = true;
+    bool verbose = false;
+    bool use_masters = false;
+    bool skip_build = false;
+    bool skip_eval = false;
+    bool find_traps = false;
+    const char *lichess_token = NULL;
+    double eval_weight_arg = -1.0;
+    double eval_guard_arg = -1.0;
+    double depth_decay_arg = -1.0;
+    int max_children_arg = -1;
+    double mass_cutoff_arg = -1.0;
+    int min_eval_arg = -99999;
+    int max_eval_arg = -99999;
+    int max_eval_loss_arg = -1;
+    
+    /* Parse command line */
+    static struct option long_options[] = {
+        {"fen",         required_argument, 0, 'f'},
+        {"color",       required_argument, 0, 'c'},
+        {"probability", required_argument, 0, 'p'},
+        {"depth",       required_argument, 0, 'd'},
+        {"eval-depth",  required_argument, 0, 'e'},
+        {"threads",     required_argument, 0, 't'},
+        {"ratings",     required_argument, 0, 'r'},
+        {"speeds",      required_argument, 0, 's'},
+        {"min-games",   required_argument, 0, 'g'},
+        {"stockfish",   required_argument, 0, 'S'},
+        {"database",    required_argument, 0, 'D'},
+        {"load",        required_argument, 0, 'L'},
+        {"masters",     no_argument,       0, 'm'},
+        {"skip-build",  no_argument,       0, 1001},
+        {"skip-eval",   no_argument,       0, 1002},
+        {"skip-ease",   no_argument,       0, 1003},
+        {"traps",       no_argument,       0, 1004},
+        {"pgn",         required_argument, 0, 1005},
+        {"token",       required_argument, 0, 1006},
+        {"eval-weight",   required_argument, 0, 1007},
+        {"eval-guard",    required_argument, 0, 1008},
+        {"depth-decay",   required_argument, 0, 1009},
+        {"max-children",  required_argument, 0, 1010},
+        {"mass-cutoff",   required_argument, 0, 1011},
+        {"min-eval",      required_argument, 0, 1012},
+        {"max-eval",      required_argument, 0, 1013},
+        {"max-eval-loss", required_argument, 0, 1014},
+        {"verbose",     no_argument,       0, 'v'},
+        {"help",        no_argument,       0, 'h'},
+        {0, 0, 0, 0}
+    };
+    
+    int opt, option_index = 0;
+    while ((opt = getopt_long(argc, argv, "f:c:p:d:e:t:r:s:g:S:D:L:mvh", 
+                              long_options, &option_index)) != -1) {
+        switch (opt) {
+            case 'f': start_fen = optarg; break;
+            case 'c':
+                play_as_white = (optarg[0] == 'w' || optarg[0] == 'W');
+                break;
+            case 'p':
+                min_probability = atof(optarg);
+                if (min_probability <= 0 || min_probability > 1) {
+                    fprintf(stderr, "Error: probability must be in (0, 1]\n");
+                    return 1;
+                }
+                break;
+            case 'd':
+                max_depth = atoi(optarg);
+                if (max_depth <= 0) { fprintf(stderr, "Error: depth must be > 0\n"); return 1; }
+                break;
+            case 'e':
+                eval_depth = atoi(optarg);
+                if (eval_depth <= 0) { fprintf(stderr, "Error: eval-depth must be > 0\n"); return 1; }
+                break;
+            case 't':
+                num_threads = atoi(optarg);
+                if (num_threads <= 0) { fprintf(stderr, "Error: threads must be > 0\n"); return 1; }
+                break;
+            case 'r': ratings = optarg; break;
+            case 's': speeds = optarg; break;
+            case 'g':
+                min_games = atoi(optarg);
+                if (min_games < 1) { fprintf(stderr, "Error: min-games must be >= 1\n"); return 1; }
+                break;
+            case 'S': stockfish_path = optarg; break;
+            case 'D': db_path = optarg; break;
+            case 'L': load_tree_file = optarg; break;
+            case 'm': use_masters = true; break;
+            case 'v': verbose = true; break;
+            case 'h': print_usage(argv[0]); return 0;
+            case 1001: skip_build = true; break;
+            case 1002: skip_eval = true; break;
+            case 1003: /* skip_ease - reserved for future use */ break;
+            case 1004: find_traps = true; break;
+            case 1005: pgn_output = optarg; break;
+            case 1006: lichess_token = optarg; break;
+            case 1007: eval_weight_arg = atof(optarg); break;
+            case 1008: eval_guard_arg = atof(optarg); break;
+            case 1009: depth_decay_arg = atof(optarg); break;
+            case 1010: max_children_arg = atoi(optarg); break;
+            case 1011: mass_cutoff_arg = atof(optarg); break;
+            case 1012: min_eval_arg = atoi(optarg); break;
+            case 1013: max_eval_arg = atoi(optarg); break;
+            case 1014: max_eval_loss_arg = atoi(optarg); break;
+            default: print_usage(argv[0]); return 1;
+        }
+    }
+    
+    if (optind < argc) {
+        output_file = argv[optind];
+    } else {
+        fprintf(stderr, "Error: output file required\n");
+        print_usage(argv[0]);
+        return 1;
+    }
+    
+    /* Setup signal handler */
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    
+    /* Print banner */
+    printf("\n");
+    printf("╔══════════════════════════════════════════════════════════╗\n");
+    printf("║            Chess Repertoire Builder v2.0                 ║\n");
+    printf("║                                                          ║\n");
+    printf("║   Lichess Database + Stockfish + Ease Metric             ║\n");
+    printf("║   Automatic repertoire with opponent mistake detection   ║\n");
+    printf("╚══════════════════════════════════════════════════════════╝\n\n");
+    
+    printf("Configuration:\n");
+    printf("  Playing as:       %s\n", play_as_white ? "White" : "Black");
+    printf("  Starting FEN:     %.60s%s\n", start_fen, strlen(start_fen) > 60 ? "..." : "");
+    printf("  Min probability:  %.4f%% (%.6f)\n", min_probability * 100.0, min_probability);
+    printf("  Max depth:        %d ply (%d moves each)\n", max_depth, max_depth / 2);
+    printf("  Eval depth:       %d\n", eval_depth);
+    printf("  Engines:          %d (of %d cores)\n", num_threads, get_nprocs());
+    printf("  Ratings:          %s\n", ratings);
+    printf("  Speeds:           %s\n", speeds);
+    printf("  Min games:        %d\n", min_games);
+    printf("  Database:         %s\n", db_path);
+    printf("  Database source:  %s\n", use_masters ? "Masters" : "Lichess");
+    printf("  Output:           %s\n", output_file);
+    if (pgn_output) printf("  PGN output:       %s\n", pgn_output);
+    if (load_tree_file) printf("  Loading tree:     %s\n", load_tree_file);
+    printf("\n");
+    
+    struct timespec pipeline_start, pipeline_end;
+    clock_gettime(CLOCK_MONOTONIC, &pipeline_start);
+    
+    /* ================================================================
+     *  STAGE 0: Initialize Database
+     * ================================================================ */
+    printf("[0/5] Opening database: %s\n", db_path);
+    RepertoireDB *db = rdb_open(db_path);
+    if (!db) {
+        fprintf(stderr, "Error: Failed to open database\n");
+        return 1;
+    }
+    
+    int cached_explorer, cached_evals, cached_ease;
+    rdb_get_stats(db, &cached_explorer, &cached_evals, &cached_ease);
+    printf("  Cached: %d explorer | %d evals | %d ease scores\n\n",
+           cached_explorer, cached_evals, cached_ease);
+    
+    /* ================================================================
+     *  STAGE 1: Build Opening Tree
+     * ================================================================ */
+    Tree *tree = NULL;
+    
+    if (load_tree_file) {
+        printf("[1/5] Loading tree from %s...\n", load_tree_file);
+        tree = tree_load(load_tree_file);
+        if (!tree) {
+            fprintf(stderr, "Error: Failed to load tree from %s\n", load_tree_file);
+            rdb_close(db);
+            return 1;
+        }
+        tree->config.play_as_white = play_as_white;
+        tree_recalculate_probabilities(tree);
+        printf("  Loaded %zu nodes (max depth %d)\n\n", tree->total_nodes, tree->max_depth_reached);
+    }
+    else if (!skip_build) {
+        printf("[1/5] Building opening tree from Lichess...\n");
+        
+        LichessExplorer *explorer = lichess_explorer_create();
+        if (!explorer) {
+            fprintf(stderr, "Error: Failed to create Lichess explorer\n");
+            rdb_close(db);
+            return 1;
+        }
+        
+        lichess_explorer_set_ratings(explorer, ratings);
+        lichess_explorer_set_speeds(explorer, speeds);
+        lichess_explorer_set_delay(explorer, 500);
+        if (lichess_token) {
+            lichess_explorer_set_token(explorer, lichess_token);
+            printf("  Using Lichess auth token\n");
+        } else {
+            printf("  Warning: No --token provided, API may return 401\n");
+        }
+        
+        tree = tree_create();
+        if (!tree) {
+            fprintf(stderr, "Error: Failed to create tree\n");
+            lichess_explorer_destroy(explorer);
+            rdb_close(db);
+            return 1;
+        }
+        
+        g_tree = tree;
+        
+        TreeConfig config = tree_config_default();
+        config.play_as_white = play_as_white;
+        config.min_probability = min_probability;
+        config.max_depth = max_depth;
+        config.rating_range = ratings;
+        config.speeds = speeds;
+        config.min_games = min_games;
+        if (max_children_arg >= 0) config.max_children = max_children_arg;
+        if (mass_cutoff_arg >= 0.0) config.opponent_mass_target = mass_cutoff_arg;
+        if (verbose) config.progress_callback = progress_callback;
+        
+        struct timespec build_start, build_end;
+        clock_gettime(CLOCK_MONOTONIC, &build_start);
+        
+        bool success = tree_build(tree, start_fen, &config, explorer);
+        
+        clock_gettime(CLOCK_MONOTONIC, &build_end);
+        double build_time = (build_end.tv_sec - build_start.tv_sec) + 
+                            (build_end.tv_nsec - build_start.tv_nsec) / 1e9;
+        
+        if (verbose) printf("\r%80s\r", ""); /* Clear progress line */
+        
+        if (!success && !g_interrupted) {
+            fprintf(stderr, "Error: Tree building failed\n");
+            tree_destroy(tree);
+            lichess_explorer_destroy(explorer);
+            rdb_close(db);
+            return 1;
+        }
+        
+        printf("  Built %zu nodes in %.1fs (max depth %d)\n", 
+               tree->total_nodes, build_time, tree->max_depth_reached);
+        
+        lichess_explorer_print_stats(explorer);
+        lichess_explorer_destroy(explorer);
+        
+        /* Save intermediate tree */
+        printf("  Saving tree to %s...\n", output_file);
+        SerializationOptions opts = serialization_options_default();
+        opts.format = FORMAT_JSON;
+        opts.json_indent = 2;
+        tree_save(tree, output_file, &opts);
+        
+        printf("\n");
+    } else {
+        printf("[1/5] Skipped tree building (--skip-build)\n\n");
+        /* Load from output file if it exists */
+        tree = tree_load(output_file);
+        if (!tree) {
+            fprintf(stderr, "Error: No tree available. Build first or use --load\n");
+            rdb_close(db);
+            return 1;
+        }
+        tree->config.play_as_white = play_as_white;
+        printf("  Loaded existing tree: %zu nodes\n\n", tree->total_nodes);
+    }
+    
+    if (g_interrupted) goto cleanup;
+    
+    /* Initialize result pointers for cleanup safety */
+    RepertoireResult *result = NULL;
+    
+    /* ================================================================
+     *  STAGE 2: Engine Evaluation (Multithreaded Stockfish)
+     * ================================================================ */
+    EnginePool *engine_pool = NULL;
+    
+    if (!skip_eval) {
+        printf("[2/5] Initializing Stockfish engine pool...\n");
+        
+        const char *sf_path = find_stockfish(stockfish_path);
+        if (!sf_path) {
+            fprintf(stderr, "  Warning: Stockfish not found. Skipping evaluation.\n");
+            fprintf(stderr, "  Searched: ");
+            for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++) {
+                fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
+            }
+            fprintf(stderr, "\n  Use -S <path> to specify Stockfish location.\n\n");
+        } else {
+            printf("  Stockfish: %s\n", sf_path);
+            printf("  Engines: %d | Depth: %d | Hash: 64MB each\n", num_threads, eval_depth);
+            
+            engine_pool = engine_pool_create(sf_path, num_threads, eval_depth);
+            
+            if (!engine_pool) {
+                fprintf(stderr, "  Warning: Failed to create engine pool\n\n");
+            } else {
+                printf("\n");
+            }
+        }
+    } else {
+        printf("[2/5] Skipped engine evaluation (--skip-eval)\n\n");
+    }
+    
+    if (g_interrupted) goto cleanup;
+    
+    /* ================================================================
+     *  STAGE 3: Generate Repertoire (Eval + Ease + Selection)
+     * ================================================================ */
+    printf("[3/5] Generating repertoire...\n");
+    printf("  Playing as: %s\n", play_as_white ? "White" : "Black");
+    
+    RepertoireConfig rep_config = repertoire_config_default();
+    rep_config.play_as_white = play_as_white;
+    rep_config.max_depth = max_depth;
+    rep_config.min_probability = min_probability;
+    rep_config.min_games = min_games;
+    rep_config.eval_depth = eval_depth;
+    rep_config.quick_eval_depth = eval_depth > 15 ? 15 : eval_depth;
+    rep_config.verbose_search = verbose;
+    if (eval_weight_arg >= 0.0)  rep_config.eval_weight = eval_weight_arg;
+    if (eval_guard_arg >= 0.0)  rep_config.eval_guard_threshold = eval_guard_arg;
+    if (depth_decay_arg >= 0.0) rep_config.depth_discount = depth_decay_arg;
+    if (min_eval_arg != -99999) rep_config.min_eval_cp = min_eval_arg;
+    if (max_eval_arg != -99999) rep_config.max_eval_cp = max_eval_arg;
+    if (max_eval_loss_arg >= 0) rep_config.max_eval_loss_cp = max_eval_loss_arg;
+    if (max_children_arg >= 0)  rep_config.max_candidates_per_position = max_children_arg;
+    
+    result = generate_repertoire(
+        tree, db, engine_pool, &rep_config,
+        verbose ? pipeline_progress : NULL
+    );
+    
+    if (verbose) printf("\r%80s\r", "");
+    
+    if (result) {
+        repertoire_print_summary(result);
+    } else {
+        fprintf(stderr, "  Warning: Repertoire generation returned no results\n");
+    }
+    
+    printf("\n");
+    
+    if (g_interrupted) goto cleanup;
+    
+    /* ================================================================
+     *  STAGE 4: Find Trap Lines (Optional)
+     * ================================================================ */
+    if (find_traps) {
+        printf("[4/5] Finding opponent mistake-prone lines...\n");
+        
+        RepertoireLine trap_lines[50];
+        int num_traps = find_mistake_prone_lines(tree, db, play_as_white,
+                                                  trap_lines, 50);
+        
+        if (num_traps > 0) {
+            printf("\n  Top %d trap lines (opponent likely to err):\n\n", 
+                   num_traps > 20 ? 20 : num_traps);
+            
+            for (int i = 0; i < num_traps && i < 20; i++) {
+                printf("  %2d. [trap=%.1f%% prob=%.2f%%] ", 
+                       i + 1,
+                       trap_lines[i].mistake_potential * 100,
+                       trap_lines[i].probability * 100);
+                
+                for (int j = 0; j < trap_lines[i].num_moves && j < 16; j++) {
+                    if (j % 2 == 0) printf("%d.", (j / 2) + 1);
+                    printf("%s ", trap_lines[i].moves_san[j]);
+                }
+                printf("\n");
+            }
+        } else {
+            printf("  No significant trap lines found.\n");
+        }
+        printf("\n");
+    } else {
+        printf("[4/5] Skipped trap detection (use --traps to enable)\n\n");
+    }
+    
+    /* ================================================================
+     *  STAGE 5: Export Results
+     * ================================================================ */
+    printf("[5/5] Exporting results...\n");
+    
+    /* Save tree with all data to JSON */
+    SerializationOptions opts = serialization_options_default();
+    opts.format = FORMAT_JSON;
+    opts.json_indent = 2;
+    opts.include_engine_eval = true;
+    opts.include_ease = true;
+    
+    if (tree_save(tree, output_file, &opts)) {
+        printf("  Tree saved: %s (%zu nodes)\n", output_file, tree->total_nodes);
+    }
+    
+    /* Export repertoire JSON */
+    if (result) {
+        char rep_json[512];
+        snprintf(rep_json, sizeof(rep_json), "%s.repertoire.json", output_file);
+        if (repertoire_export_json(result, rep_json)) {
+            printf("  Repertoire JSON: %s (%d moves, %d lines)\n", 
+                   rep_json, result->num_moves, result->num_lines);
+        }
+    }
+    
+    /* Export PGN */
+    if (pgn_output && result) {
+        if (repertoire_export_pgn(result, pgn_output, &rep_config)) {
+            printf("  PGN saved: %s\n", pgn_output);
+        }
+    }
+    
+    /* Database stats */
+    rdb_get_stats(db, &cached_explorer, &cached_evals, &cached_ease);
+    printf("  Database: %d explorer | %d evals | %d ease scores\n",
+           cached_explorer, cached_evals, cached_ease);
+    
+    /* Engine stats */
+    if (engine_pool) {
+        EnginePoolStats eng_stats;
+        engine_pool_get_stats(engine_pool, &eng_stats);
+        printf("  Engine: %d evals (%.1f avg ms, %d failed)\n",
+               eng_stats.total_evaluations, eng_stats.avg_eval_time_ms,
+               eng_stats.failed_evaluations);
+    }
+    
+    /* Total time */
+    clock_gettime(CLOCK_MONOTONIC, &pipeline_end);
+    double total_time = (pipeline_end.tv_sec - pipeline_start.tv_sec) + 
+                        (pipeline_end.tv_nsec - pipeline_start.tv_nsec) / 1e9;
+    
+    printf("\n  Total time: %.1f seconds (%.1f minutes)\n", total_time, total_time / 60.0);
+    printf("\nDone! Repertoire saved to %s\n\n", output_file);
+    
+cleanup:
+    /* Cleanup */
+    if (result) repertoire_result_free(result);
+    if (engine_pool) engine_pool_destroy(engine_pool);
+    if (tree) tree_destroy(tree);
+    if (db) rdb_close(db);
+    
+    return g_interrupted ? 130 : 0;
+}

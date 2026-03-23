@@ -1,0 +1,811 @@
+/**
+ * tree.c - Opening Tree Implementation
+ */
+
+#include "tree.h"
+#include "lichess_api.h"
+#include "chess_logic.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <math.h>
+
+
+/* Ease calculation constants (matching the Flutter/Python implementation) */
+#define EASE_ALPHA (1.0/3.0)
+#define EASE_BETA  1.5
+
+
+TreeConfig tree_config_default(void) {
+    TreeConfig config = {
+        .play_as_white = true,
+        .min_probability = 0.0001,          /* 0.01% */
+        .max_depth = 30,                    /* 30 ply = 15 moves each */
+        .max_nodes = 0,                     /* Unlimited */
+        .max_children = 0,                  /* Unlimited moves per position */
+        .opponent_mass_target = 0.0,        /* 0 = disabled; 0.80 = cover 80% of prob mass */
+        .rating_range = "2000,2200,2500",
+        .speeds = "blitz,rapid,classical",
+        .min_games = 10,
+        .progress_callback = NULL
+    };
+    return config;
+}
+
+
+Tree* tree_create(void) {
+    Tree *tree = (Tree *)calloc(1, sizeof(Tree));
+    if (!tree) {
+        return NULL;
+    }
+    
+    tree->root = NULL;
+    tree->config = tree_config_default();
+    tree->total_nodes = 0;
+    tree->max_depth_reached = 0;
+    tree->is_building = false;
+    tree->next_node_id = 1;
+    
+    return tree;
+}
+
+
+void tree_destroy(Tree *tree) {
+    if (!tree) return;
+    
+    if (tree->root) {
+        node_destroy(tree->root);
+    }
+    
+    free(tree);
+}
+
+
+/**
+ * Internal recursive build function
+ */
+static void build_recursive(Tree *tree, TreeNode *node, 
+                            const TreeConfig *config, 
+                            LichessExplorer *explorer) {
+    /* Check stop conditions */
+    if (!tree->is_building) return;
+    
+    if (node->depth >= config->max_depth) return;
+    
+    if (node->cumulative_probability < config->min_probability) return;
+    
+    if (config->max_nodes > 0 && tree->total_nodes >= (size_t)config->max_nodes) return;
+    
+    /* Query Lichess explorer for this position */
+    ExplorerResponse response;
+    if (!lichess_explorer_query(explorer, node->fen, &response)) {
+        fprintf(stderr, "Warning: Explorer query failed for %s\n", node->fen);
+        return;
+    }
+    
+    if (!response.success || response.move_count == 0) {
+        return;
+    }
+    
+    /* Update node with total stats */
+    node_set_lichess_stats(node, 
+                           response.total_white_wins,
+                           response.total_black_wins, 
+                           response.total_draws);
+    
+    /* Store opening name if available */
+    if (response.has_opening) {
+        strncpy(node->opening_name, response.opening_name, sizeof(node->opening_name) - 1);
+        strncpy(node->opening_eco, response.opening_eco, sizeof(node->opening_eco) - 1);
+    }
+    
+    /* Calculate total games for probability calculation */
+    uint64_t total = response.total_games;
+    if (total < (uint64_t)config->min_games) {
+        return;
+    }
+    
+    /*
+     * Cumulative probability: only opponent moves reduce it.
+     * Our moves are played with 100% certainty (it's our repertoire).
+     */
+    bool is_our_move = (node->is_white_to_move == config->play_as_white);
+
+    /* Process each move (explorer returns them sorted by popularity) */
+    int children_added = 0;
+    double mass_covered = 0.0;
+
+    for (size_t i = 0; i < response.move_count; i++) {
+        ExplorerMove *move = &response.moves[i];
+        
+        /* Calculate move probability */
+        uint64_t move_games = move->white_wins + move->draws + move->black_wins;
+        double prob = (double)move_games / (double)total;
+        
+        /* Max children cap */
+        if (config->max_children > 0 && children_added >= config->max_children) {
+            break;
+        }
+
+        /* Mass cutoff: stop once we've covered enough probability */
+        if (config->opponent_mass_target > 0.0 && mass_covered >= config->opponent_mass_target) {
+            break;
+        }
+
+        /*
+         * Our moves: cumP stays the same (we play with 100% certainty).
+         * Opponent moves: cumP = parent × moveProb (they choose randomly).
+         */
+        double new_cumul = is_our_move
+            ? node->cumulative_probability
+            : node->cumulative_probability * prob;
+
+        if (new_cumul < config->min_probability) {
+            continue;
+        }
+        
+        /* Skip moves with too few games */
+        if (move_games < (uint64_t)config->min_games) {
+            continue;
+        }
+        
+        /* Generate child FEN by applying the UCI move to the current position */
+        ChessPosition chess_pos;
+        if (!position_from_fen(&chess_pos, node->fen)) {
+            fprintf(stderr, "Warning: Failed to parse FEN: %s\n", node->fen);
+            continue;
+        }
+        if (!position_apply_uci(&chess_pos, move->uci)) {
+            fprintf(stderr, "Warning: Failed to apply move %s to %s\n", move->uci, node->fen);
+            continue;
+        }
+        char child_fen[MAX_FEN_LENGTH];
+        position_to_fen(&chess_pos, child_fen, MAX_FEN_LENGTH);
+        
+        /* Create child node */
+        TreeNode *child = node_create(child_fen, move->san, move->uci, node);
+        if (!child) {
+            fprintf(stderr, "Error: Failed to allocate child node\n");
+            continue;
+        }
+        
+        /* Set child properties */
+        child->move_probability = prob;
+        child->cumulative_probability = new_cumul;
+        node_set_lichess_stats(child, move->white_wins, move->black_wins, move->draws);
+        
+        /* Add to parent */
+        if (!node_add_child(node, child)) {
+            node_destroy_single(child);
+            continue;
+        }
+        
+        tree->total_nodes++;
+        children_added++;
+        mass_covered += prob;
+        
+        if (child->depth > tree->max_depth_reached) {
+            tree->max_depth_reached = child->depth;
+        }
+        
+        /* Progress callback */
+        if (config->progress_callback) {
+            config->progress_callback(tree->total_nodes, child->depth, child->fen);
+        }
+        
+        /* Recurse */
+        build_recursive(tree, child, config, explorer);
+    }
+}
+
+
+bool tree_build(Tree *tree, const char *start_fen, 
+                const TreeConfig *config, LichessExplorer *explorer) {
+    if (!tree || !start_fen || !explorer) {
+        return false;
+    }
+    
+    /* Clean up existing tree */
+    if (tree->root) {
+        node_destroy(tree->root);
+        tree->root = NULL;
+    }
+    
+    /* Create root node */
+    tree->root = node_create(start_fen, NULL, NULL, NULL);
+    if (!tree->root) {
+        return false;
+    }
+    
+    /* Store config */
+    tree->config = *config;
+    tree->total_nodes = 1;
+    tree->max_depth_reached = 0;
+    tree->is_building = true;
+    
+    /* Build recursively */
+    build_recursive(tree, tree->root, config, explorer);
+    
+    tree->is_building = false;
+    
+    return true;
+}
+
+
+void tree_stop_build(Tree *tree) {
+    if (tree) {
+        tree->is_building = false;
+    }
+}
+
+
+/**
+ * Internal recursive search by FEN
+ */
+static TreeNode* find_by_fen_recursive(TreeNode *node, const char *fen) {
+    if (!node) return NULL;
+    
+    if (strcmp(node->fen, fen) == 0) {
+        return node;
+    }
+    
+    for (size_t i = 0; i < node->children_count; i++) {
+        TreeNode *found = find_by_fen_recursive(node->children[i], fen);
+        if (found) return found;
+    }
+    
+    return NULL;
+}
+
+
+TreeNode* tree_find_by_fen(const Tree *tree, const char *fen) {
+    if (!tree || !tree->root || !fen) return NULL;
+    return find_by_fen_recursive(tree->root, fen);
+}
+
+
+TreeNode* tree_find_by_moves(const Tree *tree, const char **moves, size_t num_moves) {
+    if (!tree || !tree->root || !moves) return NULL;
+    
+    TreeNode *current = tree->root;
+    
+    for (size_t m = 0; m < num_moves; m++) {
+        TreeNode *next = NULL;
+        
+        for (size_t i = 0; i < current->children_count; i++) {
+            if (strcmp(current->children[i]->move_san, moves[m]) == 0) {
+                next = current->children[i];
+                break;
+            }
+        }
+        
+        if (!next) return NULL;
+        current = next;
+    }
+    
+    return current;
+}
+
+
+/**
+ * Internal recursive leaf collection
+ */
+static void collect_leaves(TreeNode *node, TreeNode **leaves, 
+                           size_t *count, size_t max_count) {
+    if (!node || *count >= max_count) return;
+    
+    if (node->children_count == 0) {
+        leaves[*count] = node;
+        (*count)++;
+        return;
+    }
+    
+    for (size_t i = 0; i < node->children_count; i++) {
+        collect_leaves(node->children[i], leaves, count, max_count);
+    }
+}
+
+
+size_t tree_get_leaves(const Tree *tree, TreeNode **out_leaves, size_t max_leaves) {
+    if (!tree || !tree->root || !out_leaves) return 0;
+    
+    size_t count = 0;
+    collect_leaves(tree->root, out_leaves, &count, max_leaves);
+    return count;
+}
+
+
+/**
+ * Internal recursive depth collection
+ */
+static void collect_at_depth(TreeNode *node, int target_depth,
+                              TreeNode **nodes, size_t *count, size_t max_count) {
+    if (!node || *count >= max_count) return;
+    
+    if (node->depth == target_depth) {
+        nodes[*count] = node;
+        (*count)++;
+        return;
+    }
+    
+    if (node->depth > target_depth) return;
+    
+    for (size_t i = 0; i < node->children_count; i++) {
+        collect_at_depth(node->children[i], target_depth, nodes, count, max_count);
+    }
+}
+
+
+size_t tree_get_nodes_at_depth(const Tree *tree, int depth, 
+                                TreeNode **out_nodes, size_t max_nodes) {
+    if (!tree || !tree->root || !out_nodes) return 0;
+    
+    size_t count = 0;
+    collect_at_depth(tree->root, depth, out_nodes, &count, max_nodes);
+    return count;
+}
+
+
+/**
+ * Calculate ease for a single node based on children evaluations
+ * 
+ * Ease = 1 - (weighted_regret)^ALPHA
+ * weighted_regret = Σ(prob^BETA × normalized_regret)
+ */
+static void calculate_node_ease(TreeNode *node) {
+    if (!node || node->children_count == 0) {
+        return;
+    }
+    
+    /* Find best evaluation among children */
+    int best_eval = -10000;
+    bool has_evals = false;
+    
+    for (size_t i = 0; i < node->children_count; i++) {
+        if (node->children[i]->has_engine_eval) {
+            if (node->children[i]->engine_eval_cp > best_eval) {
+                best_eval = node->children[i]->engine_eval_cp;
+            }
+            has_evals = true;
+        }
+    }
+    
+    if (!has_evals) {
+        return;
+    }
+    
+    /* Calculate weighted regret */
+    double weighted_regret = 0.0;
+    
+    for (size_t i = 0; i < node->children_count; i++) {
+        TreeNode *child = node->children[i];
+        if (!child->has_engine_eval) continue;
+        
+        /* Regret = difference from best move */
+        double regret_cp = (double)(best_eval - child->engine_eval_cp);
+        if (regret_cp < 0) regret_cp = 0;
+        
+        /* Normalize regret (200cp = full regret) */
+        double regret_norm = regret_cp / 200.0;
+        if (regret_norm > 1.0) regret_norm = 1.0;
+        
+        /* Weight by probability^BETA */
+        double prob_weight = pow(child->move_probability, EASE_BETA);
+        weighted_regret += prob_weight * regret_norm;
+    }
+    
+    /* Calculate ease */
+    double normalized_regret = weighted_regret / 2.0;
+    if (normalized_regret > 1.0) normalized_regret = 1.0;
+    
+    double ease = 1.0 - pow(normalized_regret, EASE_ALPHA);
+    
+    /* Clamp to [0, 1] */
+    if (ease < 0.0) ease = 0.0;
+    if (ease > 1.0) ease = 1.0;
+    
+    node_set_ease(node, ease);
+}
+
+
+/**
+ * Internal recursive ease calculation
+ */
+static size_t calculate_ease_recursive(TreeNode *node) {
+    if (!node) return 0;
+    
+    size_t count = 0;
+    
+    /* Calculate ease for this node */
+    if (node->children_count > 0) {
+        calculate_node_ease(node);
+        if (node->has_ease) count++;
+    }
+    
+    /* Recurse into children */
+    for (size_t i = 0; i < node->children_count; i++) {
+        count += calculate_ease_recursive(node->children[i]);
+    }
+    
+    return count;
+}
+
+
+size_t tree_calculate_ease(Tree *tree) {
+    if (!tree || !tree->root) return 0;
+    return calculate_ease_recursive(tree->root);
+}
+
+
+/* ========== ECA (Expected Centipawn Advantage) ========== */
+
+/* Q-value sigmoid — maps centipawns to [-1, 1] with diminishing returns */
+static double eca_cp_to_q(int cp) {
+    if (abs(cp) > 9000) return cp > 0 ? 1.0 : -1.0;
+    double wp = 1.0 / (1.0 + exp(-0.004 * cp));
+    return 2.0 * wp - 1.0;
+}
+
+
+/**
+ * Compute local CPL and Q-loss for a single node from its children.
+ *
+ * Children's evals are from the NEXT side-to-move's perspective (opposite to
+ * the player choosing at this node).  The current player's best move is the
+ * child with the MINIMUM eval (worst for the opponent / next STM).
+ *
+ * local_cpl  = Σ(prob_i × max(0, cp_i - best_cp))        [raw centipawns]
+ * local_q    = Σ(prob_i × max(0, Q(cp_i) - Q(best)))     [Q-values]
+ *
+ * A high local_cpl means the current-node player often picks moves that are
+ * worse than their best option — i.e. they blunder centipawns.
+ */
+static void compute_local_eca(TreeNode *node) {
+    if (!node || node->children_count == 0) return;
+
+    int best_cp = 100000;
+    bool has_any_eval = false;
+
+    for (size_t i = 0; i < node->children_count; i++) {
+        if (!node->children[i]->has_engine_eval) continue;
+        int cp = node->children[i]->engine_eval_cp;
+        if (cp < best_cp) best_cp = cp;
+        has_any_eval = true;
+    }
+    if (!has_any_eval) return;
+
+    double q_best = eca_cp_to_q(best_cp);
+    double sum_cpl = 0.0;
+    double sum_q   = 0.0;
+
+    for (size_t i = 0; i < node->children_count; i++) {
+        TreeNode *child = node->children[i];
+        if (!child->has_engine_eval) continue;
+        if (child->move_probability < 0.01) continue;
+
+        double prob = child->move_probability;
+        int cp = child->engine_eval_cp;
+
+        double cp_loss = (double)(cp - best_cp);
+        if (cp_loss < 0) cp_loss = 0;
+        sum_cpl += prob * cp_loss;
+
+        double q_loss = eca_cp_to_q(cp) - q_best;
+        if (q_loss < 0) q_loss = 0;
+        sum_q += prob * q_loss;
+    }
+
+    node->local_cpl   = sum_cpl;
+    node->local_q_loss = sum_q;
+}
+
+
+/**
+ * Post-order DFS: compute local values, then accumulate bottom-up.
+ */
+static size_t calculate_eca_recursive(TreeNode *node, bool play_as_white,
+                                       double depth_discount) {
+    if (!node) return 0;
+
+    size_t count = 0;
+
+    /* Recurse into children first (post-order) */
+    for (size_t i = 0; i < node->children_count; i++) {
+        count += calculate_eca_recursive(node->children[i], play_as_white,
+                                          depth_discount);
+    }
+
+    /* Compute local CPL / Q-loss from this node's children */
+    compute_local_eca(node);
+
+    /* Accumulate ECA bottom-up */
+    double gamma_d = pow(depth_discount, (double)node->depth);
+    bool is_our_move = (node->is_white_to_move == play_as_white);
+
+    if (node->children_count == 0) {
+        /* Leaf: only local contribution */
+        node->accumulated_eca   = gamma_d * node->local_cpl;
+        node->accumulated_q_eca = gamma_d * node->local_q_loss;
+    } else if (is_our_move) {
+        /* Our move: pick the child whose subtree has the best accumulated ECA */
+        double best_eca  = -1e9;
+        double best_qeca = -1e9;
+        for (size_t i = 0; i < node->children_count; i++) {
+            TreeNode *child = node->children[i];
+            if (!child->has_eca) continue;
+            if (child->accumulated_eca > best_eca) {
+                best_eca  = child->accumulated_eca;
+                best_qeca = child->accumulated_q_eca;
+            }
+        }
+        node->accumulated_eca   = best_eca > -1e9  ? best_eca  : 0.0;
+        node->accumulated_q_eca = best_qeca > -1e9 ? best_qeca : 0.0;
+    } else {
+        /* Opponent move: local contribution + probability-weighted children */
+        double future_eca  = 0.0;
+        double future_qeca = 0.0;
+        for (size_t i = 0; i < node->children_count; i++) {
+            TreeNode *child = node->children[i];
+            if (!child->has_eca) continue;
+            double prob = child->move_probability;
+            future_eca  += prob * child->accumulated_eca;
+            future_qeca += prob * child->accumulated_q_eca;
+        }
+        node->accumulated_eca   = gamma_d * node->local_cpl   + future_eca;
+        node->accumulated_q_eca = gamma_d * node->local_q_loss + future_qeca;
+    }
+
+    node->has_eca = true;
+    count++;
+
+    return count;
+}
+
+
+size_t tree_calculate_eca(Tree *tree, bool play_as_white, double depth_discount) {
+    if (!tree || !tree->root) return 0;
+    return calculate_eca_recursive(tree->root, play_as_white, depth_discount);
+}
+
+
+/**
+ * Internal recursive probability recalculation.
+ * Only opponent moves reduce cumulative probability — our moves are 100% certain.
+ */
+static void recalc_prob_recursive(TreeNode *node, double parent_cumul, bool play_as_white) {
+    if (!node) return;
+
+    /* The parent chose this move. If it was OUR move, cumP doesn't decrease.
+     * If it was the OPPONENT's move, cumP = parent × moveProb. */
+    bool parent_was_our_move = (node->parent &&
+                                node->parent->is_white_to_move == play_as_white);
+    node->cumulative_probability = parent_was_our_move
+        ? parent_cumul
+        : parent_cumul * node->move_probability;
+
+    for (size_t i = 0; i < node->children_count; i++) {
+        recalc_prob_recursive(node->children[i], node->cumulative_probability, play_as_white);
+    }
+}
+
+
+void tree_recalculate_probabilities(Tree *tree) {
+    if (!tree || !tree->root) return;
+    
+    tree->root->cumulative_probability = 1.0;
+    
+    for (size_t i = 0; i < tree->root->children_count; i++) {
+        recalc_prob_recursive(tree->root->children[i], 1.0, tree->config.play_as_white);
+    }
+}
+
+
+size_t tree_get_line_to_node(const TreeNode *node, char (*out_moves)[MAX_MOVE_LENGTH], 
+                              size_t max_moves) {
+    if (!node || !out_moves) return 0;
+    
+    /* Count depth to root */
+    size_t depth = 0;
+    const TreeNode *temp = node;
+    while (temp->parent) {
+        depth++;
+        temp = temp->parent;
+    }
+    
+    if (depth == 0) return 0;
+    if (depth > max_moves) depth = max_moves;
+    
+    /* Walk back from node, filling in moves from end */
+    size_t idx = depth - 1;
+    temp = node;
+    while (temp->parent && idx < depth) {
+        /* Use snprintf for safer string copy */
+        snprintf(out_moves[idx], MAX_MOVE_LENGTH, "%s", temp->move_san);
+        idx--;
+        temp = temp->parent;
+    }
+    
+    return depth;
+}
+
+
+void tree_print_stats(const Tree *tree) {
+    if (!tree) {
+        printf("Tree: (null)\n");
+        return;
+    }
+    
+    printf("\n=== Tree Statistics ===\n");
+    printf("Total nodes: %zu\n", tree->total_nodes);
+    printf("Max depth reached: %d ply\n", tree->max_depth_reached);
+    
+    if (tree->root) {
+        printf("Root FEN: %s\n", tree->root->fen);
+        printf("Actual node count: %zu\n", node_count_subtree(tree->root));
+        
+        if (tree->root->total_games > 0) {
+            printf("Root position games: %lu\n", (unsigned long)tree->root->total_games);
+        }
+    }
+    
+    printf("\nConfiguration:\n");
+    printf("  Min probability: %.4f%%\n", tree->config.min_probability * 100.0);
+    printf("  Max depth: %d ply\n", tree->config.max_depth);
+    printf("  Rating range: %s\n", tree->config.rating_range ? tree->config.rating_range : "(default)");
+    printf("  Speeds: %s\n", tree->config.speeds ? tree->config.speeds : "(default)");
+    printf("========================\n\n");
+}
+
+
+/**
+ * Internal recursive print
+ */
+static void print_recursive(TreeNode *node, int max_depth) {
+    if (!node) return;
+    
+    if (max_depth >= 0 && node->depth > max_depth) return;
+    
+    node_print(node, node->depth);
+    
+    for (size_t i = 0; i < node->children_count; i++) {
+        print_recursive(node->children[i], max_depth);
+    }
+}
+
+
+void tree_print(const Tree *tree, int max_depth) {
+    if (!tree || !tree->root) {
+        printf("Tree: (empty)\n");
+        return;
+    }
+    
+    printf("\n=== Tree Structure ===\n");
+    print_recursive(tree->root, max_depth);
+    printf("======================\n\n");
+}
+
+
+/**
+ * Internal DFS traversal
+ */
+static void traverse_dfs_recursive(TreeNode *node,
+                                    void (*callback)(TreeNode *, void *),
+                                    void *user_data) {
+    if (!node) return;
+    
+    callback(node, user_data);
+    
+    for (size_t i = 0; i < node->children_count; i++) {
+        traverse_dfs_recursive(node->children[i], callback, user_data);
+    }
+}
+
+
+void tree_traverse_dfs(const Tree *tree, 
+                       void (*callback)(TreeNode *node, void *user_data),
+                       void *user_data) {
+    if (!tree || !tree->root || !callback) return;
+    traverse_dfs_recursive(tree->root, callback, user_data);
+}
+
+
+/**
+ * Simple queue for BFS
+ */
+typedef struct {
+    TreeNode **nodes;
+    size_t capacity;
+    size_t head;
+    size_t tail;
+    size_t count;
+} NodeQueue;
+
+
+static NodeQueue* queue_create(size_t capacity) {
+    NodeQueue *q = (NodeQueue *)malloc(sizeof(NodeQueue));
+    if (!q) return NULL;
+    
+    q->nodes = (TreeNode **)malloc(capacity * sizeof(TreeNode *));
+    if (!q->nodes) {
+        free(q);
+        return NULL;
+    }
+    
+    q->capacity = capacity;
+    q->head = 0;
+    q->tail = 0;
+    q->count = 0;
+    
+    return q;
+}
+
+
+static void queue_destroy(NodeQueue *q) {
+    if (q) {
+        free(q->nodes);
+        free(q);
+    }
+}
+
+
+static bool queue_push(NodeQueue *q, TreeNode *node) {
+    if (q->count >= q->capacity) {
+        /* Grow queue */
+        size_t new_cap = q->capacity * 2;
+        TreeNode **new_nodes = (TreeNode **)realloc(q->nodes, new_cap * sizeof(TreeNode *));
+        if (!new_nodes) return false;
+        
+        /* Reorder if wrapped */
+        if (q->head > q->tail) {
+            memmove(new_nodes + q->head + (new_cap - q->capacity), 
+                    new_nodes + q->head,
+                    (q->capacity - q->head) * sizeof(TreeNode *));
+            q->head += (new_cap - q->capacity);
+        }
+        
+        q->nodes = new_nodes;
+        q->capacity = new_cap;
+    }
+    
+    q->nodes[q->tail] = node;
+    q->tail = (q->tail + 1) % q->capacity;
+    q->count++;
+    
+    return true;
+}
+
+
+static TreeNode* queue_pop(NodeQueue *q) {
+    if (q->count == 0) return NULL;
+    
+    TreeNode *node = q->nodes[q->head];
+    q->head = (q->head + 1) % q->capacity;
+    q->count--;
+    
+    return node;
+}
+
+
+void tree_traverse_bfs(const Tree *tree,
+                       void (*callback)(TreeNode *node, void *user_data),
+                       void *user_data) {
+    if (!tree || !tree->root || !callback) return;
+    
+    NodeQueue *queue = queue_create(256);
+    if (!queue) return;
+    
+    queue_push(queue, tree->root);
+    
+    while (queue->count > 0) {
+        TreeNode *node = queue_pop(queue);
+        
+        callback(node, user_data);
+        
+        for (size_t i = 0; i < node->children_count; i++) {
+            queue_push(queue, node->children[i]);
+        }
+    }
+    
+    queue_destroy(queue);
+}
+

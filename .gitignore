@@ -74,3 +74,12 @@ pubspec.lock
 maia2_models/
 lichess_output.txt
 *.tmp
+output.txt
+
+# tree_builder
+tree_builder/bin/
+tree_builder/*.db
+tree_builder/*.db-shm
+tree_builder/*.db-wal
+tree_builder/local_lib/
+tree_builder/*.o
