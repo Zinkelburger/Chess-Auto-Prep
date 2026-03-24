@@ -27,6 +27,7 @@ TreeConfig tree_config_default(void) {
         .rating_range = "2000,2200,2500",
         .speeds = "blitz,rapid,classical",
         .min_games = 10,
+        .use_masters = false,
         .progress_callback = NULL
     };
     return config;
@@ -75,10 +76,26 @@ static void build_recursive(Tree *tree, TreeNode *node,
     if (node->cumulative_probability < config->min_probability) return;
     
     if (config->max_nodes > 0 && tree->total_nodes >= (size_t)config->max_nodes) return;
+
+    /* Resume support: skip nodes that were already explored.
+       A node with children was explored and had valid moves.
+       A childless node with total_games > 0 was queried but yielded nothing. */
+    if (node->children_count > 0) {
+        for (size_t i = 0; i < node->children_count; i++) {
+            build_recursive(tree, node->children[i], config, explorer);
+        }
+        return;
+    }
+    if (node->total_games > 0) {
+        return;
+    }
     
     /* Query Lichess explorer for this position */
     ExplorerResponse response;
-    if (!lichess_explorer_query(explorer, node->fen, &response)) {
+    bool query_ok = config->use_masters
+        ? lichess_explorer_query_masters(explorer, node->fen, &response)
+        : lichess_explorer_query(explorer, node->fen, &response);
+    if (!query_ok) {
         fprintf(stderr, "Warning: Explorer query failed for %s\n", node->fen);
         return;
     }
@@ -205,27 +222,26 @@ bool tree_build(Tree *tree, const char *start_fen,
         return false;
     }
     
-    /* Clean up existing tree */
-    if (tree->root) {
-        node_destroy(tree->root);
-        tree->root = NULL;
-    }
-    
-    /* Create root node */
-    tree->root = node_create(start_fen, NULL, NULL, NULL);
-    if (!tree->root) {
-        return false;
-    }
-    
     /* Store config */
     tree->config = *config;
-    tree->total_nodes = 1;
-    tree->max_depth_reached = 0;
+
+    /* Reuse existing root if present (resume), otherwise create new */
+    if (tree->root) {
+        /* Resuming — keep existing tree intact */
+    } else {
+        tree->root = node_create(start_fen, NULL, NULL, NULL);
+        if (!tree->root) {
+            return false;
+        }
+        tree->total_nodes = 1;
+    }
+    if (tree->total_nodes <= 1) tree->max_depth_reached = 0;
     tree->is_building = true;
     
     /* Build recursively */
     build_recursive(tree, tree->root, config, explorer);
     
+    tree->build_complete = tree->is_building; /* true only if not interrupted */
     tree->is_building = false;
     
     return true;
@@ -346,64 +362,61 @@ size_t tree_get_nodes_at_depth(const Tree *tree, int depth,
 }
 
 
+/* Q-value conversion: maps centipawns to [-1, 1] with diminishing returns */
+static double ease_cp_to_q(int cp) {
+    if (abs(cp) > 9000) return cp > 0 ? 1.0 : -1.0;
+    double wp = 1.0 / (1.0 + exp(-0.004 * cp));
+    return 2.0 * wp - 1.0;
+}
+
 /**
- * Calculate ease for a single node based on children evaluations
- * 
- * Ease = 1 - (weighted_regret)^ALPHA
- * weighted_regret = Σ(prob^BETA × normalized_regret)
+ * Calculate ease for a single node based on children evaluations.
+ * Uses Q-value regret (matching the Flutter/Python implementation):
+ *   ease = 1 - (Σ(prob^β × max(0, Q_best - Q_move)) / 2)^α
  */
 static void calculate_node_ease(TreeNode *node) {
     if (!node || node->children_count == 0) {
         return;
     }
-    
-    /* Find best evaluation among children */
-    int best_eval = -10000;
+
+    /* Find best evaluation among children (from parent's side-to-move perspective) */
+    int best_eval = -100000;
     bool has_evals = false;
-    
+
     for (size_t i = 0; i < node->children_count; i++) {
         if (node->children[i]->has_engine_eval) {
-            if (node->children[i]->engine_eval_cp > best_eval) {
-                best_eval = node->children[i]->engine_eval_cp;
+            int eval_for_us = -node->children[i]->engine_eval_cp;
+            if (eval_for_us > best_eval) {
+                best_eval = eval_for_us;
             }
             has_evals = true;
         }
     }
-    
+
     if (!has_evals) {
         return;
     }
-    
-    /* Calculate weighted regret */
-    double weighted_regret = 0.0;
-    
+
+    double q_max = ease_cp_to_q(best_eval);
+
+    double sum_weighted_regret = 0.0;
+
     for (size_t i = 0; i < node->children_count; i++) {
         TreeNode *child = node->children[i];
         if (!child->has_engine_eval) continue;
-        
-        /* Regret = difference from best move */
-        double regret_cp = (double)(best_eval - child->engine_eval_cp);
-        if (regret_cp < 0) regret_cp = 0;
-        
-        /* Normalize regret (200cp = full regret) */
-        double regret_norm = regret_cp / 200.0;
-        if (regret_norm > 1.0) regret_norm = 1.0;
-        
-        /* Weight by probability^BETA */
-        double prob_weight = pow(child->move_probability, EASE_BETA);
-        weighted_regret += prob_weight * regret_norm;
+        if (child->move_probability < 0.01) continue;
+
+        int child_eval = -child->engine_eval_cp;
+        double q_val = ease_cp_to_q(child_eval);
+        double regret = fmax(0.0, q_max - q_val);
+        sum_weighted_regret += pow(child->move_probability, EASE_BETA) * regret;
     }
-    
-    /* Calculate ease */
-    double normalized_regret = weighted_regret / 2.0;
-    if (normalized_regret > 1.0) normalized_regret = 1.0;
-    
-    double ease = 1.0 - pow(normalized_regret, EASE_ALPHA);
-    
-    /* Clamp to [0, 1] */
+
+    double ease = 1.0 - pow(sum_weighted_regret / 2.0, EASE_ALPHA);
+
     if (ease < 0.0) ease = 0.0;
     if (ease > 1.0) ease = 1.0;
-    
+
     node_set_ease(node, ease);
 }
 
@@ -716,7 +729,6 @@ typedef struct {
     TreeNode **nodes;
     size_t capacity;
     size_t head;
-    size_t tail;
     size_t count;
 } NodeQueue;
 
@@ -733,7 +745,6 @@ static NodeQueue* queue_create(size_t capacity) {
     
     q->capacity = capacity;
     q->head = 0;
-    q->tail = 0;
     q->count = 0;
     
     return q;
@@ -749,26 +760,20 @@ static void queue_destroy(NodeQueue *q) {
 
 
 static bool queue_push(NodeQueue *q, TreeNode *node) {
-    if (q->count >= q->capacity) {
-        /* Grow queue */
-        size_t new_cap = q->capacity * 2;
-        TreeNode **new_nodes = (TreeNode **)realloc(q->nodes, new_cap * sizeof(TreeNode *));
-        if (!new_nodes) return false;
-        
-        /* Reorder if wrapped */
-        if (q->head > q->tail) {
-            memmove(new_nodes + q->head + (new_cap - q->capacity), 
-                    new_nodes + q->head,
-                    (q->capacity - q->head) * sizeof(TreeNode *));
-            q->head += (new_cap - q->capacity);
+    if (q->head + q->count >= q->capacity) {
+        if (q->head > 0) {
+            memmove(q->nodes, q->nodes + q->head, q->count * sizeof(TreeNode *));
+            q->head = 0;
+        } else {
+            size_t new_cap = q->capacity * 2;
+            TreeNode **new_nodes = (TreeNode **)realloc(q->nodes, new_cap * sizeof(TreeNode *));
+            if (!new_nodes) return false;
+            q->nodes = new_nodes;
+            q->capacity = new_cap;
         }
-        
-        q->nodes = new_nodes;
-        q->capacity = new_cap;
     }
     
-    q->nodes[q->tail] = node;
-    q->tail = (q->tail + 1) % q->capacity;
+    q->nodes[q->head + q->count] = node;
     q->count++;
     
     return true;
@@ -779,7 +784,7 @@ static TreeNode* queue_pop(NodeQueue *q) {
     if (q->count == 0) return NULL;
     
     TreeNode *node = q->nodes[q->head];
-    q->head = (q->head + 1) % q->capacity;
+    q->head++;
     q->count--;
     
     return node;
@@ -798,11 +803,15 @@ void tree_traverse_bfs(const Tree *tree,
     
     while (queue->count > 0) {
         TreeNode *node = queue_pop(queue);
+        if (!node) continue;
         
         callback(node, user_data);
         
-        for (size_t i = 0; i < node->children_count; i++) {
-            queue_push(queue, node->children[i]);
+        if (node->children) {
+            for (size_t i = 0; i < node->children_count; i++) {
+                if (node->children[i])
+                    queue_push(queue, node->children[i]);
+            }
         }
     }
     

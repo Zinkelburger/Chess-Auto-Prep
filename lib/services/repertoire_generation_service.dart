@@ -4,9 +4,11 @@
 ///   - **winRateOnly** — Pure Lichess Explorer DB lookups.  No engine, no
 ///     worker pool.  Runs entirely in a dedicated isolate.
 ///   - **engineOnly** — Greedy best-eval move selection using Stockfish.
-///   - **metaEval** — Propagated MetaEase (opponentEase) with eval guard.
+///   - **eca** — ECA (Expected Centipawn Advantage): propagates expected
+///     opponent centipawn loss bottom-up through the tree.  Picks the line
+///     where the opponent is expected to blunder the most centipawns.
 ///
-/// The engine-backed strategies (engineOnly, metaEval) use the shared
+/// The engine-backed strategies (engineOnly, eca) use the shared
 /// [StockfishPool] singleton.  winRateOnly never touches the pool.
 ///
 /// Strategy-specific selection and aggregation logic lives in
@@ -29,15 +31,15 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
+import '../utils/ease_utils.dart' show scoreToQ;
 import 'db_only_generation_isolate.dart';
-import 'ease_calculator.dart';
 import 'engine/stockfish_pool.dart';
 import 'generation/candidate_move.dart';
 import 'generation/db_move_filters.dart';
+import 'generation/eca_policy.dart';
 import 'generation/engine_only_policy.dart';
 import 'generation/generation_config.dart';
 import 'generation/line_finalizer.dart';
-import 'generation/meta_eval_policy.dart';
 import 'generation/move_selection_policy.dart';
 import 'lichess_auth_service.dart';
 import 'maia_factory.dart';
@@ -66,7 +68,7 @@ class RepertoireGenerationService {
   static const int _maxCacheEntries = 100000;
   final Map<String, int> _evalWhiteCache = {};
   final Map<String, ExplorerResponse?> _dbCache = {};
-  final Map<String, double> _metaEaseCache = {};
+  final Map<String, double> _ecaCache = {};
 
   int _nodesVisited = 0;
   int _linesGenerated = 0;
@@ -84,8 +86,8 @@ class RepertoireGenerationService {
     switch (strategy) {
       case GenerationStrategy.engineOnly:
         return const EngineOnlyPolicy();
-      case GenerationStrategy.metaEval:
-        return const MetaEvalPolicy();
+      case GenerationStrategy.eca:
+        return const EcaPolicy();
       case GenerationStrategy.winRateOnly:
         throw StateError('winRateOnly uses isolate-based generation');
     }
@@ -107,7 +109,7 @@ class RepertoireGenerationService {
     _lastProgressNode = 0;
     _evalWhiteCache.clear();
     _dbCache.clear();
-    _metaEaseCache.clear();
+    _ecaCache.clear();
 
     _log('═══ Generation START ═══');
     _log('Strategy: ${strategy.name}');
@@ -169,7 +171,7 @@ class RepertoireGenerationService {
       _log('Engine calls: $_engineCalls (cache hits: $_engineCacheHits)');
       _log('DB calls: $_dbCalls (cache hits: $_dbCacheHits)');
       _log('Cache sizes: eval=${_evalWhiteCache.length}, '
-          'db=${_dbCache.length}, meta=${_metaEaseCache.length}');
+          'db=${_dbCache.length}, eca=${_ecaCache.length}');
     }
   }
 
@@ -235,7 +237,6 @@ class RepertoireGenerationService {
           movesSan: msg.movesSan,
           cumulativeProbability: msg.cumulativeProbability,
           finalEvalWhiteCp: 0,
-          metaEase: 0.0,
         ));
       } else if (msg is DbOnlyLog) {
         _log(msg.message);
@@ -260,7 +261,7 @@ class RepertoireGenerationService {
   void _evictCachesIfNeeded() {
     _evictOldest(_evalWhiteCache);
     _evictOldest(_dbCache);
-    _evictOldest(_metaEaseCache);
+    _evictOldest(_ecaCache);
   }
 
   static void _evictOldest(Map<dynamic, dynamic> cache) {
@@ -272,7 +273,7 @@ class RepertoireGenerationService {
     }
   }
 
-  // ── Engine-backed DFS (engineOnly, metaEval) ──────────────────────────
+  // ── Engine-backed DFS (engineOnly, eca) ──────────────────────────
 
   Future<double> _dfsNode({
     required RepertoireGenerationConfig config,
@@ -288,10 +289,10 @@ class RepertoireGenerationService {
   }) async {
     if (isCancelled()) return 0.0;
 
-    if (!emitLines && _metaEaseCache.containsKey(fen)) {
-      _log('  ${"│ " * depth}MetaEase cache hit → '
-          '${_metaEaseCache[fen]!.toStringAsFixed(3)}');
-      return _metaEaseCache[fen]!;
+    if (!emitLines && _ecaCache.containsKey(fen)) {
+      _log('  ${"│ " * depth}ECA cache hit → '
+          '${_ecaCache[fen]!.toStringAsFixed(3)}');
+      return _ecaCache[fen]!;
     }
 
     _nodesVisited++;
@@ -415,18 +416,6 @@ class RepertoireGenerationService {
     if (evalForUs >= config.maxEvalCpForUs) reason = 'eval too high';
     if (evalForUs <= config.minEvalCpForUs) reason = 'eval too low';
 
-    double metaEase = 0.5;
-    if (policy.requiresEase) {
-      final nodeResult = await EaseCalculator.compute(
-        fen: fen,
-        evalDepth: config.easeDepth,
-        maiaElo: config.maiaElo,
-        evaluateBatch: _pool.evaluateMany,
-        dbData: await _getDbData(fen),
-      );
-      metaEase = 1.0 - (nodeResult?.ease ?? 0.5);
-    }
-
     if (emitLines) {
       final finalLine = await LineFinalizer.finalize(
         lineSan: lineSan,
@@ -440,7 +429,6 @@ class RepertoireGenerationService {
           movesSan: finalLine,
           cumulativeProbability: cumulativeProb,
           finalEvalWhiteCp: evalWhiteCp,
-          metaEase: metaEase,
         ));
         _log('$indent│ ★ EMITTED line #$_linesGenerated: '
             '${finalLine.join(" ")}');
@@ -449,10 +437,9 @@ class RepertoireGenerationService {
       }
     }
 
-    _log('$indent└ LEAF ($reason) metaEase=${metaEase.toStringAsFixed(3)} '
-        '[${nodeSw.elapsedMilliseconds}ms]');
-    _metaEaseCache[fen] = metaEase;
-    return metaEase;
+    _log('$indent└ LEAF ($reason) [${nodeSw.elapsedMilliseconds}ms]');
+    _ecaCache[fen] = 0.0;
+    return 0.0;
   }
 
   // ── Our move — delegates selection to MoveSelectionPolicy ─────────────
@@ -535,7 +522,7 @@ class RepertoireGenerationService {
       emitLines: emitLines,
     );
 
-    _metaEaseCache[fen] = result;
+    _ecaCache[fen] = result;
     return result;
   }
 
@@ -570,19 +557,6 @@ class RepertoireGenerationService {
           'p=${(m.probability * 100).toStringAsFixed(1)}%');
     }
 
-    // ── Ease (only if the policy requires it) ──
-    double? localEase;
-    if (policy.requiresEase) {
-      final localResult = await EaseCalculator.compute(
-        fen: fen,
-        evalDepth: config.easeDepth,
-        maiaElo: config.maiaElo,
-        evaluateBatch: _pool.evaluateMany,
-        dbData: await _getDbData(fen),
-      );
-      localEase = localResult?.ease;
-    }
-
     final childFens = <String>[];
     final childSans = <String>[];
     final validIndices = <int>[];
@@ -594,7 +568,44 @@ class RepertoireGenerationService {
       validIndices.add(i);
     }
 
-    double future = 0.0;
+    // ── Compute local CPL (opponent's expected centipawn loss) ──
+    //
+    // Evaluate each child FEN.  Child evals are from the NEXT
+    // side-to-move's perspective — the opponent's best move is the
+    // one with the MINIMUM eval (worst for us / next STM).
+    double localCpl = 0.0;
+    if (childFens.isNotEmpty) {
+      final childEvals =
+          await _pool.evaluateMany(childFens, config.engineDepth);
+
+      int bestCpForOpponent = 100000;
+      final childCps = <int>[];
+      for (final eval in childEvals) {
+        final cp = eval.effectiveCp;
+        childCps.add(cp);
+        if (cp < bestCpForOpponent) bestCpForOpponent = cp;
+      }
+
+      final qBest = scoreToQ(bestCpForOpponent);
+      for (int j = 0; j < childCps.length; j++) {
+        final idx = validIndices[j];
+        final prob = oppMoves[idx].probability;
+        if (prob < 0.01) continue;
+        final qLoss = scoreToQ(childCps[j]) - qBest;
+        if (qLoss > 0) localCpl += prob * qLoss;
+      }
+
+      // Cache child evals as white-cp for future lookups
+      final isWhiteToMove = fen.split(' ')[1] == 'w';
+      for (int j = 0; j < childFens.length; j++) {
+        final whiteCp =
+            isWhiteToMove ? -childCps[j] : childCps[j];
+        _evalWhiteCache['${childFens[j]}|${config.engineDepth}'] = whiteCp;
+      }
+    }
+
+    // ── Recurse into children and accumulate future ECA ──
+    double futureEca = 0.0;
     for (int j = 0; j < childFens.length; j++) {
       if (isCancelled()) break;
 
@@ -604,7 +615,7 @@ class RepertoireGenerationService {
       _log('$indent│ Opponent reply ${j + 1}/${childFens.length}: '
           '${childSans[j]} (${(prob * 100).toStringAsFixed(1)}%)');
 
-      final v = await _dfsNode(
+      final childEca = await _dfsNode(
         config: config,
         policy: policy,
         isCancelled: isCancelled,
@@ -616,16 +627,18 @@ class RepertoireGenerationService {
         lineSan: [...lineSan, childSans[j]],
         emitLines: emitLines,
       );
-      future += prob * v;
+      futureEca += prob * childEca;
     }
 
-    final result = policy.computeOpponentNodeValue(
-      weightedFuture: future,
-      localEase: localEase,
-      config: config,
-    );
+    // ── Accumulated ECA = depth-discounted local CPL + future ──
+    final gammaD = math.pow(config.ecaDepthDiscount, depth);
+    final result = gammaD * localCpl + futureEca;
 
-    _metaEaseCache[fen] = result;
+    _log('$indent│ localCpl=${localCpl.toStringAsFixed(4)} '
+        'futureEca=${futureEca.toStringAsFixed(2)} '
+        'accumulated=${result.toStringAsFixed(2)}');
+
+    _ecaCache[fen] = result;
     return result;
   }
 

@@ -6,7 +6,7 @@ library;
 enum GenerationStrategy {
   engineOnly,
   winRateOnly,
-  metaEval,
+  eca,
 }
 
 // ── Configuration ────────────────────────────────────────────────────────
@@ -24,8 +24,18 @@ class RepertoireGenerationConfig {
   final int maxEvalLossCp;
   final int minEvalCpForUs;
   final int maxEvalCpForUs;
-  final double metaAlpha;
   final int maiaElo;
+
+  /// ECA depth-discount factor γ.  Each ply deeper is worth γ× less.
+  /// 0.90 is typical: centipawn losses 10 ply deep count ~35% as much.
+  final double ecaDepthDiscount;
+
+  /// ECA-vs-eval blend weight α for our-move scoring (0 = pure ECA,
+  /// 1 = pure eval, 0.4 = balanced).
+  final double ecaEvalWeight;
+
+  /// Minimum win probability to consider a candidate (eval guard).
+  final double ecaEvalGuardThreshold;
 
   const RepertoireGenerationConfig({
     required this.startFen,
@@ -40,8 +50,10 @@ class RepertoireGenerationConfig {
     this.maxEvalLossCp = 50,
     this.minEvalCpForUs = 0,
     this.maxEvalCpForUs = 200,
-    this.metaAlpha = 0.35,
     this.maiaElo = 2100,
+    this.ecaDepthDiscount = 0.90,
+    this.ecaEvalWeight = 0.40,
+    this.ecaEvalGuardThreshold = 0.35,
   });
 
   /// Convert a white-perspective centipawn score to "our" perspective.
@@ -55,13 +67,11 @@ class GeneratedLine {
   final List<String> movesSan;
   final double cumulativeProbability;
   final int finalEvalWhiteCp;
-  final double metaEase;
 
   const GeneratedLine({
     required this.movesSan,
     required this.cumulativeProbability,
     required this.finalEvalWhiteCp,
-    required this.metaEase,
   });
 }
 
