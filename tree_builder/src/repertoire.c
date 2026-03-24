@@ -83,25 +83,14 @@ static double normalize_eval(int eval_cp, bool play_as_white) {
 }
 
 /**
- * Normalize win rate from database
+ * Normalize win rate from database.
+ * 'wins' is always white wins from Lichess data.
  */
-static double normalize_winrate(uint64_t wins, uint64_t draws, uint64_t total, 
-                                 bool play_as_white, bool is_white_to_move) {
+static double normalize_winrate(uint64_t wins, uint64_t draws, uint64_t total,
+                                 bool play_as_white) {
     if (total == 0) return 0.5;
-    
-    /* Calculate win rate for our side */
-    double wr;
-    if ((play_as_white && is_white_to_move) || (!play_as_white && !is_white_to_move)) {
-        /* We are the side to move */
-        uint64_t our_wins = play_as_white ? wins : (total - wins - draws);
-        wr = ((double)our_wins + 0.5 * (double)draws) / (double)total;
-    } else {
-        /* Opponent is the side to move */
-        uint64_t our_wins = play_as_white ? wins : (total - wins - draws);
-        wr = ((double)our_wins + 0.5 * (double)draws) / (double)total;
-    }
-    
-    return wr;
+    uint64_t our_wins = play_as_white ? wins : (total - wins - draws);
+    return ((double)our_wins + 0.5 * (double)draws) / (double)total;
 }
 
 
@@ -133,6 +122,8 @@ RepertoireConfig repertoire_config_default(void) {
         .max_candidates_per_position = 8,
         .candidate_min_prob = 0.01,     /* 1% minimum for candidates */
         .verbose_search = false,
+        .start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        .name = "",
     };
     return config;
 }
@@ -505,8 +496,7 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
                 if (child->total_games > 0)
                     win_rate = normalize_winrate(child->white_wins, child->draws,
                                                  child->total_games,
-                                                 config->play_as_white,
-                                                 child->is_white_to_move);
+                                                 config->play_as_white);
                 score = score_position(eval_cp, ease, opp_ease, win_rate,
                                        child->cumulative_probability,
                                        child->total_games, config, true);
@@ -599,6 +589,11 @@ static void collect_fens_callback(TreeNode *node, void *user_data) {
 }
 
 
+static void eval_progress_wrapper(int completed, int total, void *ud) {
+    void (*prog)(const char *, int, int) = (void (*)(const char *, int, int))ud;
+    if (prog) prog("Evaluating positions", completed, total);
+}
+
 /**
  * Batch evaluate all positions in the tree that need evaluation
  */
@@ -654,14 +649,8 @@ static int batch_evaluate_tree(Tree *tree, RepertoireDB *db, EnginePool *engine_
     }
     
     /* Batch evaluate */
-    void progress_wrapper(int completed, int total, void *ud) {
-        void (**prog)(const char *, int, int) = (void (**)(const char *, int, int))ud;
-        if (*prog) (*prog)("Evaluating positions", completed, total);
-    }
-    
-    void (*prog_ptr)(const char *, int, int) = progress;
     engine_pool_evaluate_batch(engine_pool, jobs, job_count, 
-                                progress_wrapper, &prog_ptr);
+                                eval_progress_wrapper, (void *)progress);
     
     /* Store results in database */
     rdb_begin_transaction(db);
@@ -836,11 +825,28 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
 
     record_line:
         {
+            int depth = current.depth;
+
+            /* Lines should end with our move, not the opponent's.
+               Trim trailing opponent move if present. */
+            if (depth > 0 && current.node) {
+                bool last_is_our_move;
+                if (config->play_as_white)
+                    last_is_our_move = !current.node->is_white_to_move;
+                else
+                    last_is_our_move = current.node->is_white_to_move;
+                if (!last_is_our_move)
+                    depth--;
+            }
+
+            if (depth <= 0) continue;
+
             RepertoireLine *line = &out_lines[num_lines];
             memcpy(line->moves_san, current.moves_san, sizeof(current.moves_san));
             memcpy(line->moves_uci, current.moves_uci, sizeof(current.moves_uci));
-            line->num_moves = current.depth;
-            line->probability = node ? node->cumulative_probability : 0;
+            line->num_moves = depth;
+            line->probability = current.node
+                ? current.node->cumulative_probability : 0;
             line->line_score = 0;
             line->avg_ease_for_us = 0;
             line->avg_ease_for_opponent = 0;
@@ -1055,25 +1061,42 @@ bool repertoire_export_pgn(const RepertoireResult *result,
     FILE *f = fopen(filename, "w");
     if (!f) return false;
     
-    fprintf(f, "[Event \"Auto-Generated Repertoire\"]\n");
-    fprintf(f, "[Site \"tree_builder\"]\n");
-    fprintf(f, "[Date \"????.??.??\"]\n");
-    fprintf(f, "[White \"%s\"]\n", config && config->play_as_white ? "Repertoire" : "Opponent");
-    fprintf(f, "[Black \"%s\"]\n", config && config->play_as_white ? "Opponent" : "Repertoire");
-    fprintf(f, "[Result \"*\"]\n\n");
-    
+    /* Determine side to move from the starting FEN */
+    bool root_white_to_move = true;
+    if (config && config->start_fen[0]) {
+        const char *sp = strchr(config->start_fen, ' ');
+        if (sp && *(sp + 1) == 'b') root_white_to_move = false;
+    }
+
+    bool has_name = config && config->name[0];
+
     /* Write each line as a separate game */
     for (int i = 0; i < result->num_lines; i++) {
         const RepertoireLine *line = &result->lines[i];
-        
-        if (i > 0) {
-            fprintf(f, "\n[Event \"Repertoire Line %d\"]\n", i + 1);
-            fprintf(f, "[Result \"*\"]\n\n");
+
+        if (has_name)
+            fprintf(f, "[Event \"%s Line #%d\"]\n", config->name, i + 1);
+        else
+            fprintf(f, "[Event \"Repertoire Line #%d\"]\n", i + 1);
+        if (i == 0) {
+            fprintf(f, "[Site \"tree_builder\"]\n");
+            fprintf(f, "[Date \"????.??.??\"]\n");
+            fprintf(f, "[White \"%s\"]\n", config->play_as_white ? "Repertoire" : "Opponent");
+            fprintf(f, "[Black \"%s\"]\n", config->play_as_white ? "Opponent" : "Repertoire");
         }
+        if (config && config->start_fen[0] &&
+            strcmp(config->start_fen, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1") != 0) {
+            fprintf(f, "[FEN \"%s\"]\n", config->start_fen);
+            fprintf(f, "[SetUp \"1\"]\n");
+        }
+        fprintf(f, "[Result \"*\"]\n\n");
         
         for (int j = 0; j < line->num_moves; j++) {
-            if (j % 2 == 0) {
-                fprintf(f, "%d. ", (j / 2) + 1);
+            int ply = j + (root_white_to_move ? 0 : 1);
+            if (ply % 2 == 0) {
+                fprintf(f, "%d. ", (ply / 2) + 1);
+            } else if (j == 0 && !root_white_to_move) {
+                fprintf(f, "%d... ", (ply / 2) + 1);
             }
             fprintf(f, "%s ", line->moves_san[j]);
         }

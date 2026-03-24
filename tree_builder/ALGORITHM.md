@@ -71,6 +71,12 @@ Follow the selected repertoire moves through the tree. At our-move nodes, only
 the selected move is followed. At opponent-move nodes, all likely responses are
 followed. Each root-to-leaf path becomes a repertoire line.
 
+**Lines always end with the repertoire side's move.** If a line would end on
+the opponent's move (because the tree leaf happens to be at an our-move node
+with no selected response), the trailing opponent move is trimmed. This way
+every line shows exactly what we play in response to the opponent — lines never
+leave you wondering "but what do I play here?"
+
 ---
 
 ## ECA: Expected Centipawn Advantage
@@ -310,6 +316,7 @@ Lichess Explorer API
         ▼
    extract_lines() ──→ RepertoireLine[] (complete root-to-leaf paths)
         │                - Follows only selected moves at our nodes
+        │                - Trims lines that end on the opponent's move
         ▼
    JSON / PGN export
 ```

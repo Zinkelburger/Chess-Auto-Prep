@@ -12,6 +12,14 @@
 /// Strategy-specific selection and aggregation logic lives in
 /// [MoveSelectionPolicy] implementations, keeping this file focused on
 /// the DFS traversal and candidate building.
+///
+// TODO: Find perpetuals in opponent's repertoire.
+//   Given an opponent's repertoire (or a generic Explorer-based tree for the
+//   opposite color), scan for forced draws — perpetual checks, repetition
+//   sequences, and dead-draw endgames — that arise within their lines.
+//   Everyone has these lurking somewhere in their repertoire; the question is
+//   where. Useful both offensively (bail-out resource when worse) and for
+//   defensive prep (know where *your* repertoire allows them).
 library;
 
 import 'dart:isolate';
