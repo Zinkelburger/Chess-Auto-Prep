@@ -17,7 +17,7 @@
  *   -c, --color <w|b>      Play as white or black (default: white)
  *   -p, --probability <P>  Minimum probability threshold (default: 0.0001)
  *   -d, --depth <N>        Maximum depth in ply (default: 30)
- *   -e, --eval-depth <N>   Stockfish search depth (default: 25)
+ *   -e, --eval-depth <N>   Stockfish search depth (default: 20)
  *   -t, --threads <N>      Number of Stockfish engines (default: 4)
  *   -r, --ratings <R>      Rating range (default: "2000,2200,2500")
  *   -s, --speeds <S>       Time controls (default: "blitz,rapid,classical")
@@ -30,6 +30,7 @@
  *   --skip-eval            Skip engine evaluation
  *   --skip-ease            Skip ease calculation
  *   --traps                Find and print opponent trap positions
+ *   -n, --name <name>      Repertoire name (e.g. "Three Knights Petrov")
  *   --pgn <file>           Also export as PGN
  *   -v, --verbose          Verbose output
  *   -h, --help             Show help
@@ -66,8 +67,9 @@ static const char *STOCKFISH_SEARCH_PATHS[] = {
     NULL
 };
 
-/* Global tree pointer for signal handling */
+/* Global state for signal handling */
 static Tree *g_tree = NULL;
+static const char *g_output_file = NULL;
 static volatile int g_interrupted = 0;
 
 
@@ -85,7 +87,7 @@ static void print_usage(const char *prog_name) {
     printf("  -c, --color <w|b>      Play as white (w) or black (b) [default: w]\n");
     printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
     printf("  -d, --depth <N>        Max tree depth in ply [default: 30]\n");
-    printf("  -e, --eval-depth <N>   Stockfish search depth [default: 25]\n");
+    printf("  -e, --eval-depth <N>   Stockfish search depth [default: 20]\n");
     printf("  -t, --threads <N>      Parallel Stockfish engines [default: 4]\n");
     printf("  -r, --ratings <R>      Rating buckets [default: 2000,2200,2500]\n");
     printf("  -s, --speeds <S>       Time controls [default: blitz,rapid,classical]\n");
@@ -106,6 +108,7 @@ static void print_usage(const char *prog_name) {
     printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: -50]\n");
     printf("  --max-eval <cp>        Stop DFS if our eval exceeds this (already won) [default: 300]\n");
     printf("  --max-eval-loss <cp>   Skip our-move candidates more than N cp worse than best [default: 50]\n");
+    printf("  -n, --name <name>      Repertoire name (shown in output/PGN headers)\n");
     printf("  --traps                Find opponent trap positions\n");
     printf("  --pgn <file>           Also export repertoire as PGN\n");
     printf("  -v, --verbose          Verbose progress output\n");
@@ -146,6 +149,15 @@ static void signal_handler(int sig) {
     printf("\n\n  [INTERRUPTED] Stopping gracefully...\n");
     if (g_tree) {
         tree_stop_build(g_tree);
+        if (g_output_file) {
+            printf("  Saving partial tree to %s...\n", g_output_file);
+            SerializationOptions opts = serialization_options_default();
+            opts.format = FORMAT_JSON;
+            opts.json_indent = 2;
+            tree_save(g_tree, g_output_file, &opts);
+            printf("  Partial tree saved (%zu nodes). Re-run to resume.\n",
+                   g_tree->total_nodes);
+        }
     }
 }
 
@@ -175,13 +187,14 @@ int main(int argc, char *argv[]) {
     /* Configuration with defaults */
     const char *start_fen = DEFAULT_FEN;
     const char *output_file = NULL;
-    const char *db_path = "repertoire.db";
+    const char *db_path = NULL;
+    char db_path_buf[256] = {0};
     const char *stockfish_path = NULL;
     const char *load_tree_file = NULL;
     const char *pgn_output = NULL;
     double min_probability = 0.0001;
     int max_depth = 30;
-    int eval_depth = 25;
+    int eval_depth = 20;
     int num_threads = 4;
     const char *ratings = "2000,2200,2500";
     const char *speeds = "blitz,rapid,classical";
@@ -193,6 +206,7 @@ int main(int argc, char *argv[]) {
     bool skip_eval = false;
     bool find_traps = false;
     const char *lichess_token = NULL;
+    const char *repertoire_name = NULL;
     double eval_weight_arg = -1.0;
     double eval_guard_arg = -1.0;
     double depth_decay_arg = -1.0;
@@ -216,6 +230,7 @@ int main(int argc, char *argv[]) {
         {"stockfish",   required_argument, 0, 'S'},
         {"database",    required_argument, 0, 'D'},
         {"load",        required_argument, 0, 'L'},
+        {"name",        required_argument, 0, 'n'},
         {"masters",     no_argument,       0, 'm'},
         {"skip-build",  no_argument,       0, 1001},
         {"skip-eval",   no_argument,       0, 1002},
@@ -237,7 +252,7 @@ int main(int argc, char *argv[]) {
     };
     
     int opt, option_index = 0;
-    while ((opt = getopt_long(argc, argv, "f:c:p:d:e:t:r:s:g:S:D:L:mvh", 
+    while ((opt = getopt_long(argc, argv, "f:c:p:d:e:t:r:s:g:S:D:L:n:mvh", 
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'f': start_fen = optarg; break;
@@ -272,6 +287,7 @@ int main(int argc, char *argv[]) {
             case 'S': stockfish_path = optarg; break;
             case 'D': db_path = optarg; break;
             case 'L': load_tree_file = optarg; break;
+            case 'n': repertoire_name = optarg; break;
             case 'm': use_masters = true; break;
             case 'v': verbose = true; break;
             case 'h': print_usage(argv[0]); return 0;
@@ -301,6 +317,25 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
+    /* Auto-derive DB name from --name if no explicit --database given */
+    if (!db_path) {
+        if (repertoire_name) {
+            size_t j = 0;
+            for (size_t i = 0; repertoire_name[i] && j < sizeof(db_path_buf) - 4; i++) {
+                char c = repertoire_name[i];
+                if (c == ' ') db_path_buf[j++] = '_';
+                else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                         (c >= '0' && c <= '9') || c == '-' || c == '_')
+                    db_path_buf[j++] = c >= 'A' && c <= 'Z' ? c + 32 : c;
+            }
+            db_path_buf[j] = '\0';
+            strncat(db_path_buf, ".db", sizeof(db_path_buf) - j - 1);
+            db_path = db_path_buf;
+        } else {
+            db_path = "repertoire.db";
+        }
+    }
+
     /* Setup signal handler */
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
@@ -315,6 +350,7 @@ int main(int argc, char *argv[]) {
     printf("╚══════════════════════════════════════════════════════════╝\n\n");
     
     printf("Configuration:\n");
+    if (repertoire_name) printf("  Repertoire:       %s\n", repertoire_name);
     printf("  Playing as:       %s\n", play_as_white ? "White" : "Black");
     printf("  Starting FEN:     %.60s%s\n", start_fen, strlen(start_fen) > 60 ? "..." : "");
     printf("  Min probability:  %.4f%% (%.6f)\n", min_probability * 100.0, min_probability);
@@ -333,6 +369,10 @@ int main(int argc, char *argv[]) {
     
     struct timespec pipeline_start, pipeline_end;
     clock_gettime(CLOCK_MONOTONIC, &pipeline_start);
+
+    /* Declare early so goto cleanup is safe regardless of jump point */
+    RepertoireResult *result = NULL;
+    EnginePool *engine_pool = NULL;
     
     /* ================================================================
      *  STAGE 0: Initialize Database
@@ -353,29 +393,52 @@ int main(int argc, char *argv[]) {
      *  STAGE 1: Build Opening Tree
      * ================================================================ */
     Tree *tree = NULL;
-    
-    if (load_tree_file) {
-        printf("[1/5] Loading tree from %s...\n", load_tree_file);
-        tree = tree_load(load_tree_file);
-        if (!tree) {
+    bool needs_build = !skip_build;
+
+    /* Try to load an existing tree: explicit --load, or auto-detect output file */
+    const char *tree_source = load_tree_file ? load_tree_file : output_file;
+
+    if (load_tree_file || (!skip_build && access(output_file, F_OK) == 0)) {
+        tree = tree_load(tree_source);
+        if (tree) {
+            tree->config.play_as_white = play_as_white;
+            tree_recalculate_probabilities(tree);
+
+            if (tree->build_complete) {
+                printf("[1/5] Tree loaded from %s (%zu nodes, complete)\n",
+                       tree_source, tree->total_nodes);
+                printf("  Build already complete — skipping Lichess queries.\n\n");
+                needs_build = false;
+            } else {
+                printf("[1/5] Resuming tree build from %s (%zu nodes, incomplete)\n",
+                       tree_source, tree->total_nodes);
+                printf("  Continuing from unexplored leaves...\n");
+            }
+        } else if (load_tree_file) {
             fprintf(stderr, "Error: Failed to load tree from %s\n", load_tree_file);
             rdb_close(db);
             return 1;
         }
-        tree->config.play_as_white = play_as_white;
-        tree_recalculate_probabilities(tree);
-        printf("  Loaded %zu nodes (max depth %d)\n\n", tree->total_nodes, tree->max_depth_reached);
     }
-    else if (!skip_build) {
-        printf("[1/5] Building opening tree from Lichess...\n");
-        
+
+    if (skip_build && !tree) {
+        printf("[1/5] Skipped tree building (--skip-build)\n");
+        fprintf(stderr, "Error: No tree available. Build first or provide a tree file.\n");
+        rdb_close(db);
+        return 1;
+    }
+
+    if (needs_build) {
+        if (!tree) printf("[1/5] Building opening tree from Lichess...\n");
+
         LichessExplorer *explorer = lichess_explorer_create();
         if (!explorer) {
             fprintf(stderr, "Error: Failed to create Lichess explorer\n");
+            if (tree) tree_destroy(tree);
             rdb_close(db);
             return 1;
         }
-        
+
         lichess_explorer_set_ratings(explorer, ratings);
         lichess_explorer_set_speeds(explorer, speeds);
         lichess_explorer_set_delay(explorer, 500);
@@ -385,17 +448,20 @@ int main(int argc, char *argv[]) {
         } else {
             printf("  Warning: No --token provided, API may return 401\n");
         }
-        
-        tree = tree_create();
+
         if (!tree) {
-            fprintf(stderr, "Error: Failed to create tree\n");
-            lichess_explorer_destroy(explorer);
-            rdb_close(db);
-            return 1;
+            tree = tree_create();
+            if (!tree) {
+                fprintf(stderr, "Error: Failed to create tree\n");
+                lichess_explorer_destroy(explorer);
+                rdb_close(db);
+                return 1;
+            }
         }
-        
+
         g_tree = tree;
-        
+        g_output_file = output_file;
+
         TreeConfig config = tree_config_default();
         config.play_as_white = play_as_white;
         config.min_probability = min_probability;
@@ -403,21 +469,23 @@ int main(int argc, char *argv[]) {
         config.rating_range = ratings;
         config.speeds = speeds;
         config.min_games = min_games;
+        config.use_masters = use_masters;
         if (max_children_arg >= 0) config.max_children = max_children_arg;
         if (mass_cutoff_arg >= 0.0) config.opponent_mass_target = mass_cutoff_arg;
         if (verbose) config.progress_callback = progress_callback;
-        
+
         struct timespec build_start, build_end;
         clock_gettime(CLOCK_MONOTONIC, &build_start);
-        
+
+        size_t nodes_before = tree->total_nodes;
         bool success = tree_build(tree, start_fen, &config, explorer);
-        
+
         clock_gettime(CLOCK_MONOTONIC, &build_end);
-        double build_time = (build_end.tv_sec - build_start.tv_sec) + 
+        double build_time = (build_end.tv_sec - build_start.tv_sec) +
                             (build_end.tv_nsec - build_start.tv_nsec) / 1e9;
-        
-        if (verbose) printf("\r%80s\r", ""); /* Clear progress line */
-        
+
+        if (verbose) printf("\r%80s\r", "");
+
         if (!success && !g_interrupted) {
             fprintf(stderr, "Error: Tree building failed\n");
             tree_destroy(tree);
@@ -425,43 +493,34 @@ int main(int argc, char *argv[]) {
             rdb_close(db);
             return 1;
         }
-        
-        printf("  Built %zu nodes in %.1fs (max depth %d)\n", 
-               tree->total_nodes, build_time, tree->max_depth_reached);
-        
+
+        size_t new_nodes = tree->total_nodes - nodes_before;
+        if (nodes_before > 1) {
+            printf("  Resumed: %zu new nodes (total %zu) in %.1fs (max depth %d)\n",
+                   new_nodes, tree->total_nodes, build_time, tree->max_depth_reached);
+        } else {
+            printf("  Built %zu nodes in %.1fs (max depth %d)\n",
+                   tree->total_nodes, build_time, tree->max_depth_reached);
+        }
+
         lichess_explorer_print_stats(explorer);
         lichess_explorer_destroy(explorer);
-        
-        /* Save intermediate tree */
+
+        /* Save tree */
         printf("  Saving tree to %s...\n", output_file);
         SerializationOptions opts = serialization_options_default();
         opts.format = FORMAT_JSON;
         opts.json_indent = 2;
         tree_save(tree, output_file, &opts);
-        
+
         printf("\n");
-    } else {
-        printf("[1/5] Skipped tree building (--skip-build)\n\n");
-        /* Load from output file if it exists */
-        tree = tree_load(output_file);
-        if (!tree) {
-            fprintf(stderr, "Error: No tree available. Build first or use --load\n");
-            rdb_close(db);
-            return 1;
-        }
-        tree->config.play_as_white = play_as_white;
-        printf("  Loaded existing tree: %zu nodes\n\n", tree->total_nodes);
     }
     
     if (g_interrupted) goto cleanup;
     
-    /* Initialize result pointers for cleanup safety */
-    RepertoireResult *result = NULL;
-    
     /* ================================================================
      *  STAGE 2: Engine Evaluation (Multithreaded Stockfish)
      * ================================================================ */
-    EnginePool *engine_pool = NULL;
     
     if (!skip_eval) {
         printf("[2/5] Initializing Stockfish engine pool...\n");
@@ -500,6 +559,7 @@ int main(int argc, char *argv[]) {
     
     RepertoireConfig rep_config = repertoire_config_default();
     rep_config.play_as_white = play_as_white;
+    strncpy(rep_config.start_fen, start_fen, sizeof(rep_config.start_fen) - 1);
     rep_config.max_depth = max_depth;
     rep_config.min_probability = min_probability;
     rep_config.min_games = min_games;
@@ -513,6 +573,9 @@ int main(int argc, char *argv[]) {
     if (max_eval_arg != -99999) rep_config.max_eval_cp = max_eval_arg;
     if (max_eval_loss_arg >= 0) rep_config.max_eval_loss_cp = max_eval_loss_arg;
     if (max_children_arg >= 0)  rep_config.max_candidates_per_position = max_children_arg;
+    if (repertoire_name) {
+        strncpy(rep_config.name, repertoire_name, sizeof(rep_config.name) - 1);
+    }
     
     result = generate_repertoire(
         tree, db, engine_pool, &rep_config,

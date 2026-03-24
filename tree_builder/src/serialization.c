@@ -114,6 +114,7 @@ static char* tree_to_json_internal(const Tree *tree, const SerializationOptions 
     cJSON_AddNumberToObject(root, "version", 1.0);
     cJSON_AddNumberToObject(root, "total_nodes", (double)tree->total_nodes);
     cJSON_AddNumberToObject(root, "max_depth", tree->max_depth_reached);
+    cJSON_AddBoolToObject(root, "build_complete", tree->build_complete);
     
     /* Config */
     cJSON *config = cJSON_CreateObject();
@@ -379,6 +380,10 @@ Tree* tree_load_from_buffer(const char *buffer, size_t size) {
         tree->max_depth_reached = (int)max_d->valuedouble;
     }
     
+    cJSON *bc = cJSON_GetObjectItem(root, "build_complete");
+    /* Trees from older versions lack this field — assume complete */
+    tree->build_complete = bc ? cJSON_IsTrue(bc) : true;
+
     /* Parse config */
     cJSON *config = cJSON_GetObjectItem(root, "config");
     if (config) {

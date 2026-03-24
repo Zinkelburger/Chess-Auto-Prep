@@ -1,0 +1,332 @@
+{
+  "type": "auto_repertoire",
+  "total_moves": 23,
+  "total_lines": 23,
+  "positions_analyzed": 954,
+  "avg_eval": -55.5652,
+  "avg_ease": 0,
+  "moves": [{
+    "fen": "rnbq1rk1/pppp1ppp/8/8/4n3/2PN4/PPP2PPP/R1BQKB1R w KQ - 0 7",
+    "move_san": "Be3",
+    "move_uci": "c1e3",
+    "score": 0.769379,
+    "eval_cp": -31,
+    "probability": 0.943603,
+    "total_games": 1144,
+    "depth": 1
+  }, {
+    "fen": "rnbq1rk1/ppp2ppp/8/3p4/4n3/2PNB3/PPP2PPP/R2QKB1R w KQ d6 0 8",
+    "move_san": "f3",
+    "move_uci": "f2f3",
+    "score": 0.801473,
+    "eval_cp": -4,
+    "probability": 0.534489,
+    "total_games": 40,
+    "depth": 3
+  }, {
+    "fen": "rnbq1rk1/ppp2ppp/5n2/3p4/8/2PNBP2/PPP3PP/R2QKB1R w KQ - 1 9",
+    "move_san": "Qd2",
+    "move_uci": "d1d2",
+    "score": 0.252157,
+    "eval_cp": -145,
+    "probability": 0.200433,
+    "total_games": 13,
+    "depth": 5
+  }, {
+    "fen": "rnbqr1k1/pppp1ppp/8/8/4n3/2PNB3/PPP2PPP/R2QKB1R w KQ - 2 8",
+    "move_san": "Nf4",
+    "move_uci": "d3f4",
+    "score": 0.813969,
+    "eval_cp": -38,
+    "probability": 0.164141,
+    "total_games": 168,
+    "depth": 3
+  }, {
+    "fen": "rnbqr1k1/pp1p1ppp/2p5/8/4nN2/2P1B3/PPP2PPP/R2QKB1R w KQ - 0 9",
+    "move_san": "c4",
+    "move_uci": "c3c4",
+    "score": 0.818724,
+    "eval_cp": -51,
+    "probability": 0.0556906,
+    "total_games": 67,
+    "depth": 5
+  }, {
+    "fen": "rnbqr1k1/pp3ppp/2pp4/8/2P1nN2/4B3/PPP2PPP/R2QKB1R w KQ - 0 10",
+    "move_san": "Bd3",
+    "move_uci": "f1d3",
+    "score": 0.216166,
+    "eval_cp": -44,
+    "probability": 0.0191177,
+    "total_games": 21,
+    "depth": 7
+  }, {
+    "fen": "rnb1r1k1/pp1p1ppp/2p5/q7/2P1nN2/4B3/PPP2PPP/R2QKB1R w KQ - 1 10",
+    "move_san": "c3",
+    "move_uci": "c2c3",
+    "score": 0.215434,
+    "eval_cp": -42,
+    "probability": 0.00997442,
+    "total_games": 12,
+    "depth": 7
+  }, {
+    "fen": "rnbqr1k1/ppp2ppp/3p4/8/4nN2/2P1B3/PPP2PPP/R2QKB1R w KQ - 0 9",
+    "move_san": "Bd3",
+    "move_uci": "f1d3",
+    "score": 0.214335,
+    "eval_cp": -39,
+    "probability": 0.0498284,
+    "total_games": 41,
+    "depth": 5
+  }, {
+    "fen": "r1bqr1k1/pppp1ppp/2n5/8/4nN2/2P1B3/PPP2PPP/R2QKB1R w KQ - 4 9",
+    "move_san": "Bd3",
+    "move_uci": "f1d3",
+    "score": 0.211402,
+    "eval_cp": -31,
+    "probability": 0.0263797,
+    "total_games": 22,
+    "depth": 5
+  }, {
+    "fen": "rnbq1rk1/ppp2ppp/3p4/8/4n3/2PNB3/PPP2PPP/R2QKB1R w KQ - 0 8",
+    "move_san": "Be2",
+    "move_uci": "f1e2",
+    "score": 0.814702,
+    "eval_cp": -40,
+    "probability": 0.151768,
+    "total_games": 265,
+    "depth": 3
+  }, {
+    "fen": "r1bq1rk1/ppp2ppp/2np4/8/4n3/2PNB3/PPP1BPPP/R2QK2R w KQ - 2 9",
+    "move_san": "f3",
+    "move_uci": "f2f3",
+    "score": 0.224183,
+    "eval_cp": -66,
+    "probability": 0.0675798,
+    "total_games": 13,
+    "depth": 5
+  }, {
+    "fen": "rnbqr1k1/ppp2ppp/3p4/8/4n3/2PNB3/PPP1BPPP/R2QK2R w KQ - 2 9",
+    "move_san": "Bf3",
+    "move_uci": "e2f3",
+    "score": 0.20405,
+    "eval_cp": -11,
+    "probability": 0.0206176,
+    "total_games": 11,
+    "depth": 5
+  }, {
+    "fen": "r1bq1rk1/pppp1ppp/2n5/8/4n3/2PNB3/PPP2PPP/R2QKB1R w KQ - 2 8",
+    "move_san": "Be2",
+    "move_uci": "f1e2",
+    "score": 0.814702,
+    "eval_cp": -40,
+    "probability": 0.0602124,
+    "total_games": 45,
+    "depth": 3
+  }, {
+    "fen": "r1bq1rk1/ppp2ppp/2np4/8/4n3/2PNB3/PPP1BPPP/R2QK2R w KQ - 0 9",
+    "move_san": "f3",
+    "move_uci": "f2f3",
+    "score": 0.224183,
+    "eval_cp": -66,
+    "probability": 0.0334514,
+    "total_games": 13,
+    "depth": 5
+  }, {
+    "fen": "r1bq1rk1/ppp2ppp/2n5/3p4/4n3/2PNB3/PPP1BPPP/R2QK2R w KQ d6 0 9",
+    "move_san": "Nf4",
+    "move_uci": "d3f4",
+    "score": 0.214702,
+    "eval_cp": -40,
+    "probability": 0.0214089,
+    "total_games": 18,
+    "depth": 5
+  }, {
+    "fen": "rnbq1rk1/p1pp1ppp/1p6/8/4n3/2PNB3/PPP2PPP/R2QKB1R w KQ - 0 8",
+    "move_san": "Be2",
+    "move_uci": "f1e2",
+    "score": 0.214702,
+    "eval_cp": -40,
+    "probability": 0.0197958,
+    "total_games": 11,
+    "depth": 3
+  }, {
+    "fen": "rnbqr1k1/pppp1ppp/5n2/8/4P3/2PN4/PPP2PPP/R1BQKB1R w KQ - 1 7",
+    "move_san": "f3",
+    "move_uci": "f2f3",
+    "score": 0.824183,
+    "eval_cp": -66,
+    "probability": 0.0538726,
+    "total_games": 342,
+    "depth": 1
+  }, {
+    "fen": "rnbqr1k1/ppp2ppp/5n2/3p4/4P3/2PN1P2/PPP3PP/R1BQKB1R w KQ d6 0 8",
+    "move_san": "e5",
+    "move_uci": "e4e5",
+    "score": 0.394892,
+    "eval_cp": -81,
+    "probability": 0.0442637,
+    "total_games": 232,
+    "depth": 3
+  }, {
+    "fen": "r1bqr1k1/ppp2ppp/2n2n2/3pP3/8/2PN1P2/PPP3PP/R1BQKB1R w KQ - 1 9",
+    "move_san": "f4",
+    "move_uci": "f3f4",
+    "score": 0.23641,
+    "eval_cp": -100,
+    "probability": 0.0291912,
+    "total_games": 125,
+    "depth": 5
+  }, {
+    "fen": "r1bqr1k1/ppp2ppp/2n5/3pP3/4nP2/2PN4/PPP3PP/R1BQKB1R w KQ - 1 10",
+    "move_san": "g3",
+    "move_uci": "g2g3",
+    "score": 0.213969,
+    "eval_cp": -38,
+    "probability": 0.0242871,
+    "total_games": 28,
+    "depth": 7
+  }, {
+    "fen": "r1bqr1k1/ppp3pp/2n2p2/3pP3/4nP2/2PN2P1/PPP4P/R1BQKB1R w KQ - 0 11",
+    "move_san": "Bg2",
+    "move_uci": "f1g2",
+    "score": 0.213603,
+    "eval_cp": -37,
+    "probability": 0.0216849,
+    "total_games": 19,
+    "depth": 9
+  }, {
+    "fen": "rnbqr1k1/pppn1ppp/8/3pP3/8/2PN1P2/PPP3PP/R1BQKB1R w KQ - 1 9",
+    "move_san": "f4",
+    "move_uci": "f3f4",
+    "score": 0.238896,
+    "eval_cp": -107,
+    "probability": 0.00476981,
+    "total_games": 19,
+    "depth": 5
+  }, {
+    "fen": "rn1qr1k1/ppp2ppp/5n2/3pPb2/8/2PN1P2/PPP3PP/R1BQKB1R w KQ - 1 9",
+    "move_san": "f4",
+    "move_uci": "f3f4",
+    "score": 0.243831,
+    "eval_cp": -121,
+    "probability": 0.00400663,
+    "total_games": 13,
+    "depth": 5
+  }],
+  "lines": [{
+    "moves": ["Re8", "f3"],
+    "score": 0,
+    "probability": 0.00236283,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Re8", "f3"],
+    "score": 0,
+    "probability": 0.00598584,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Re8", "f3", "d5", "e5"],
+    "score": 0,
+    "probability": 0.00362505,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Re8", "f3", "d5", "e5", "Bf5", "f4"],
+    "score": 0,
+    "probability": 0.00339022,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Re8", "f3", "d5", "e5", "Nfd7", "f4"],
+    "score": 0,
+    "probability": 0.00401668,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Re8", "f3", "d5", "e5", "Nc6", "f4", "Ne4", "g3", "f6", "Bg2"],
+    "score": 0,
+    "probability": 0.0216849,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "b6", "Be2"],
+    "score": 0,
+    "probability": 0.0197958,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "Nc6", "Be2", "d5", "Nf4"],
+    "score": 0,
+    "probability": 0.0214089,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "Nc6", "Be2", "d6", "f3"],
+    "score": 0,
+    "probability": 0.028305,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "d6", "Be2"],
+    "score": 0,
+    "probability": 0.00801794,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "d6", "Be2"],
+    "score": 0,
+    "probability": 0.00916337,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "d6", "Be2", "Re8", "Bf3"],
+    "score": 0,
+    "probability": 0.0206176,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "d6", "Be2"],
+    "score": 0,
+    "probability": 0.0309264,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "d6", "Be2", "Nc6", "f3"],
+    "score": 0,
+    "probability": 0.0571829,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "Re8", "Nf4"],
+    "score": 0,
+    "probability": 0.0117243,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "Re8", "Nf4", "Nc6", "Bd3"],
+    "score": 0,
+    "probability": 0.0143889,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "Re8", "Nf4", "d6", "Bd3"],
+    "score": 0,
+    "probability": 0.0170145,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "Re8", "Nf4", "c6", "c4", "Qa5+", "c3"],
+    "score": 0,
+    "probability": 0.00831201,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "Re8", "Nf4", "c6", "c4"],
+    "score": 0,
+    "probability": 0.0157929,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "Re8", "Nf4", "c6", "c4", "d6", "Bd3"],
+    "score": 0,
+    "probability": 0.010014,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "d5", "f3"],
+    "score": 0,
+    "probability": 0.133622,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "d5", "f3"],
+    "score": 0,
+    "probability": 0.187071,
+    "mistake_potential": 0
+  }, {
+    "moves": ["Nxe4", "Be3", "d5", "f3", "Nf6", "Qd2"],
+    "score": 0,
+    "probability": 0.200433,
+    "mistake_potential": 0
+  }]
+}

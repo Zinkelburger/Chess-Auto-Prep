@@ -59,6 +59,12 @@ typedef struct {
     
     /* Logging */
     bool verbose_search;             /* Log each decision point during traversal */
+
+    /* Starting FEN (for PGN export side-to-move detection) */
+    char start_fen[128];
+
+    /* Human-readable name for this repertoire */
+    char name[128];
     
 } RepertoireConfig;
 

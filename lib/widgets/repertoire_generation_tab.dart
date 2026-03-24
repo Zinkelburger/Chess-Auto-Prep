@@ -45,12 +45,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       TextEditingController(text: '50');
   late final TextEditingController _minEvalCtrl;
   late final TextEditingController _maxEvalCtrl;
-  final TextEditingController _alphaCtrl = TextEditingController(text: '0.35');
+  final TextEditingController _ecaEvalWeightCtrl =
+      TextEditingController(text: '0.40');
   final TextEditingController _maiaEloCtrl =
       TextEditingController(text: '2100');
   // Max Load removed — workers field on EngineSettings is the control now.
 
-  GenerationStrategy _strategy = GenerationStrategy.metaEval;
+  GenerationStrategy _strategy = GenerationStrategy.eca;
   bool _isGenerating = false;
   bool _cancelRequested = false;
   String _status = 'Idle';
@@ -85,7 +86,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _evalGuardCtrl.dispose();
     _minEvalCtrl.dispose();
     _maxEvalCtrl.dispose();
-    _alphaCtrl.dispose();
+    _ecaEvalWeightCtrl.dispose();
     _maiaEloCtrl.dispose();
     // Max Load controller removed.
     super.dispose();
@@ -123,7 +124,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           (widget.isWhiteRepertoire ? 0 : -200),
       maxEvalCpForUs: int.tryParse(_maxEvalCtrl.text.trim()) ??
           (widget.isWhiteRepertoire ? 200 : 100),
-      metaAlpha: double.tryParse(_alphaCtrl.text.trim()) ?? 0.35,
+      ecaDepthDiscount: 0.90,
+      ecaEvalWeight:
+          double.tryParse(_ecaEvalWeightCtrl.text.trim()) ?? 0.40,
+      ecaEvalGuardThreshold: 0.35,
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2100,
       engineTopK: 3,
       maxCandidates: 8,
@@ -173,7 +177,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             title: title,
             cumulativeProb: line.cumulativeProbability,
             finalEvalWhiteCp: line.finalEvalWhiteCp,
-            metaEase: line.metaEase,
           );
 
           _queuePgnEntry(pgn);
@@ -239,7 +242,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     required String title,
     required double cumulativeProb,
     required int finalEvalWhiteCp,
-    required double metaEase,
   }) {
     final date = DateTime.now().toIso8601String().split('T').first;
     final whiteName = widget.isWhiteRepertoire ? 'Repertoire' : 'Opponent';
@@ -254,7 +256,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       '[Result "*"]',
       '[Annotator "AutoGenerate"]',
       '',
-      '{CumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%, EvalW $finalEvalWhiteCp cp, MetaEase ${metaEase.toStringAsFixed(3)}}',
+      '{CumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%, EvalW $finalEvalWhiteCp cp}',
       '$line *',
     ].join('\n');
   }
@@ -347,7 +349,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               _numField(_evalGuardCtrl, 'Max Eval Loss (cp)'),
               _numField(_minEvalCtrl, 'Min Eval For Us (cp)'),
               _numField(_maxEvalCtrl, 'Max Eval For Us (cp)'),
-              _numField(_alphaCtrl, 'Meta Alpha'),
+              _numField(_ecaEvalWeightCtrl, 'ECA Eval Weight'),
               _numField(_maiaEloCtrl, 'Maia Elo'),
             ],
           ),
@@ -369,8 +371,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 child: Text('Win rate only (greedy DB)'),
               ),
               DropdownMenuItem(
-                value: GenerationStrategy.metaEval,
-                child: Text('MetaEval (propagated opponentEase)'),
+                value: GenerationStrategy.eca,
+                child: Text('ECA (expected centipawn advantage)'),
               ),
             ],
             onChanged: _isGenerating

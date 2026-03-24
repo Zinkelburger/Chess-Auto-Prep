@@ -32,6 +32,7 @@ typedef struct TreeConfig {
     const char *rating_range;       /* Rating range, e.g., "1600,1800,2000,2200" */
     const char *speeds;             /* Time controls, e.g., "rapid,classical" */
     int min_games;                  /* Minimum games to consider a move */
+    bool use_masters;               /* Use masters database instead of Lichess */
 
     /* Progress callback */
     void (*progress_callback)(int nodes_built, int current_depth, const char *current_fen);
@@ -51,6 +52,7 @@ typedef struct Tree {
     
     /* Building state */
     bool is_building;               /* Currently building? */
+    bool build_complete;            /* Did the build finish without interruption? */
     uint64_t next_node_id;          /* Counter for node IDs */
     
 } Tree;
