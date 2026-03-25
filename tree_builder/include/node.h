@@ -59,6 +59,7 @@ typedef struct TreeNode {
     uint64_t black_wins;                /* Number of black wins from this position */
     uint64_t draws;                     /* Number of draws from this position */
     uint64_t total_games;               /* Total games in Lichess database */
+    bool explored;                      /* This FEN was queried via the explorer API */
     
     /* Metadata */
     int depth;                          /* Depth in tree (root = 0) */

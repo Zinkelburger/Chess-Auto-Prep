@@ -93,7 +93,7 @@ static void build_recursive(Tree *tree, TreeNode *node,
         }
         return;
     }
-    if (node->total_games > 0) {
+    if (node->explored) {
         return;
     }
     
@@ -128,6 +128,7 @@ static void build_recursive(Tree *tree, TreeNode *node,
 
         if (!use_maia) {
             /* Mark as explored-but-empty so resume skips it */
+            node->explored = true;
             if (response.success && response.total_games > 0)
                 node_set_lichess_stats(node,
                     response.total_white_wins,
@@ -138,6 +139,7 @@ static void build_recursive(Tree *tree, TreeNode *node,
     }
 
     /* Update node with total stats (explorer path only) */
+    node->explored = true;
     if (!use_maia) {
         node_set_lichess_stats(node, 
                                response.total_white_wins,

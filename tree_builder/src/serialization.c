@@ -81,7 +81,10 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
     }
     
     cJSON_AddBoolToObject(obj, "is_white_to_move", node->is_white_to_move);
-    
+    if (node->explored) {
+        cJSON_AddBoolToObject(obj, "explored", true);
+    }
+
     /* Children */
     if (node->children_count > 0) {
         cJSON *children = cJSON_CreateArray();
@@ -290,7 +293,15 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent) {
     if (wtm) {
         node->is_white_to_move = cJSON_IsTrue(wtm);
     }
-    
+
+    /* Parse explored flag (backward compat: infer from children) */
+    cJSON *expl = cJSON_GetObjectItem(obj, "explored");
+    if (expl) {
+        node->explored = cJSON_IsTrue(expl);
+    } else {
+        node->explored = (node->children_count > 0);
+    }
+
     /* Parse node ID */
     cJSON *id = cJSON_GetObjectItem(obj, "id");
     if (id && cJSON_IsNumber(id)) {
