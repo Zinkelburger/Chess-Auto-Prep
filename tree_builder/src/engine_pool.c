@@ -476,6 +476,99 @@ static bool evaluate_on_engine(StockfishEngine *eng, const char *fen,
 }
 
 
+/**
+ * Evaluate a position with MultiPV on a specific engine.
+ * Sets MultiPV before the search and resets it to 1 afterward.
+ */
+static bool evaluate_multipv_on_engine(StockfishEngine *eng, const char *fen,
+                                        int depth, int num_pvs, MultiPVJob *job) {
+    char buf[MAX_ENGINE_LINE];
+    char cmd[512];
+
+    if (num_pvs < 1) num_pvs = 1;
+    if (num_pvs > MAX_MULTIPV) num_pvs = MAX_MULTIPV;
+
+    pthread_mutex_lock(&eng->lock);
+
+    snprintf(cmd, sizeof(cmd), "setoption name MultiPV value %d", num_pvs);
+    engine_send(eng, cmd);
+
+    engine_send(eng, "ucinewgame");
+    engine_send(eng, "isready");
+    while (engine_readline(eng, buf, sizeof(buf))) {
+        if (strstr(buf, "readyok")) break;
+    }
+
+    snprintf(cmd, sizeof(cmd), "position fen %s", fen);
+    engine_send(eng, cmd);
+
+    snprintf(cmd, sizeof(cmd), "go depth %d", depth);
+    engine_send(eng, cmd);
+
+    memset(job->lines, 0, sizeof(job->lines));
+    job->num_lines = 0;
+    job->success = false;
+
+    while (engine_readline(eng, buf, sizeof(buf))) {
+        if (strncmp(buf, "info ", 5) == 0 && strstr(buf, "score ")) {
+            int pv_idx = 0;
+            const char *mpv = strstr(buf, "multipv ");
+            if (mpv) pv_idx = atoi(mpv + 8) - 1;
+
+            if (pv_idx >= 0 && pv_idx < num_pvs) {
+                MultiPVLine *line = &job->lines[pv_idx];
+                const char *p;
+
+                p = strstr(buf, "depth ");
+                if (p) line->depth_reached = atoi(p + 6);
+
+                p = strstr(buf, "score ");
+                if (p) {
+                    p += 6;
+                    if (strncmp(p, "cp ", 3) == 0) {
+                        line->eval_cp = atoi(p + 3);
+                        line->is_mate = false;
+                    } else if (strncmp(p, "mate ", 5) == 0) {
+                        line->mate_in = atoi(p + 5);
+                        line->is_mate = true;
+                        line->eval_cp = line->mate_in > 0
+                            ? (10000 - line->mate_in)
+                            : (-10000 - line->mate_in);
+                    }
+                }
+
+                p = strstr(buf, " pv ");
+                if (p) {
+                    p += 4;
+                    const char *space = strchr(p, ' ');
+                    size_t len = space ? (size_t)(space - p) : strlen(p);
+                    if (len < sizeof(line->move_uci)) {
+                        memcpy(line->move_uci, p, len);
+                        line->move_uci[len] = '\0';
+                    }
+                }
+
+                if (pv_idx >= job->num_lines)
+                    job->num_lines = pv_idx + 1;
+            }
+        } else if (strncmp(buf, "bestmove ", 9) == 0) {
+            job->success = true;
+            break;
+        }
+    }
+
+    /* Reset MultiPV to 1 */
+    engine_send(eng, "setoption name MultiPV value 1");
+    engine_send(eng, "isready");
+    while (engine_readline(eng, buf, sizeof(buf))) {
+        if (strstr(buf, "readyok")) break;
+    }
+
+    pthread_mutex_unlock(&eng->lock);
+    return job->success;
+}
+
+
 /* ========== Public API ========== */
 
 bool engine_pool_evaluate(EnginePool *pool, const char *fen, int *eval_cp) {
@@ -518,6 +611,28 @@ bool engine_pool_evaluate_full(EnginePool *pool, const char *fen, EvalJob *job) 
     pool->total_eval_time_ms += elapsed_ms;
     pthread_mutex_unlock(&pool->stats_lock);
     
+    return success;
+}
+
+
+bool engine_pool_evaluate_multipv(EnginePool *pool, const char *fen,
+                                   int depth, int num_pvs, MultiPVJob *job) {
+    if (!pool || !fen || !job || num_pvs < 1) return false;
+    if (num_pvs > MAX_MULTIPV) num_pvs = MAX_MULTIPV;
+
+    memset(job, 0, sizeof(MultiPVJob));
+    strncpy(job->fen, fen, MAX_EVAL_FEN_LENGTH - 1);
+
+    int eng_idx = acquire_engine(pool);
+    bool success = evaluate_multipv_on_engine(&pool->engines[eng_idx], fen,
+                                               depth, num_pvs, job);
+    release_engine(pool, eng_idx);
+
+    pthread_mutex_lock(&pool->stats_lock);
+    pool->total_evaluations++;
+    if (!success) pool->failed_evaluations++;
+    pthread_mutex_unlock(&pool->stats_lock);
+
     return success;
 }
 

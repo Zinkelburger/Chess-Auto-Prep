@@ -47,6 +47,26 @@ typedef struct EvalJob {
 } EvalJob;
 
 /**
+ * MultiPV evaluation results
+ */
+#define MAX_MULTIPV 16
+
+typedef struct {
+    char move_uci[16];              /* Move in UCI notation */
+    int eval_cp;                     /* Centipawn evaluation (from root STM) */
+    bool is_mate;
+    int mate_in;
+    int depth_reached;
+} MultiPVLine;
+
+typedef struct {
+    char fen[MAX_EVAL_FEN_LENGTH];   /* Input: position evaluated */
+    MultiPVLine lines[MAX_MULTIPV];  /* Output: top N lines */
+    int num_lines;                   /* Output: actual lines returned */
+    bool success;
+} MultiPVJob;
+
+/**
  * Engine pool statistics
  */
 typedef struct {
@@ -100,6 +120,22 @@ bool engine_pool_evaluate(EnginePool *pool, const char *fen, int *eval_cp);
  * @return true on success
  */
 bool engine_pool_evaluate_full(EnginePool *pool, const char *fen, EvalJob *job);
+
+/**
+ * Evaluate a position with MultiPV (multiple best moves)
+ * 
+ * Returns the top num_pvs moves with their evaluations.
+ * Evals are from the side-to-move's perspective.
+ * 
+ * @param pool The engine pool
+ * @param fen Position FEN
+ * @param depth Search depth
+ * @param num_pvs Number of principal variations (1-16)
+ * @param job Output: MultiPV results
+ * @return true on success
+ */
+bool engine_pool_evaluate_multipv(EnginePool *pool, const char *fen,
+                                   int depth, int num_pvs, MultiPVJob *job);
 
 /**
  * Evaluate a batch of positions in parallel

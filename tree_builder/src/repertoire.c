@@ -156,6 +156,17 @@ RepertoireConfig repertoire_config_default(void) {
 }
 
 
+void repertoire_config_set_color_defaults(RepertoireConfig *config) {
+    if (config->play_as_white) {
+        config->min_eval_cp = 0;
+        config->max_eval_cp = 200;
+    } else {
+        config->min_eval_cp = -200;
+        config->max_eval_cp = 100;
+    }
+}
+
+
 /* ========== Ease Calculation ========== */
 
 /**
