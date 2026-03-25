@@ -36,6 +36,33 @@
 /* Q-value conversion constant */
 #define Q_SIGMOID_K 0.004
 
+/* Shared context types for tree traversal callbacks */
+typedef struct {
+    char **fens;
+    int *count;
+    int max;
+} FenCollector;
+
+typedef struct {
+    RepertoireDB *db;
+    int *calc;
+    int total;
+    void (*prog)(const char *, int, int);
+} EaseCtx;
+
+typedef struct {
+    TreeNode *node;
+    double trap_score;
+} TrapCandidate;
+
+typedef struct {
+    TrapCandidate *cands;
+    int *count;
+    int max;
+    RepertoireDB *db;
+    bool as_white;
+} TrapCtx;
+
 /**
  * Get centipawn eval from our perspective for a node.
  * Returns eval_cp in "our" centipawns, or 0 if unavailable.
@@ -108,7 +135,7 @@ RepertoireConfig repertoire_config_default(void) {
         .weight_winrate = 0.25,         /* 25% database win rate */
         .weight_sharpness = 0.20,       /* 20% position sharpness */
         
-        .eval_depth = 25,               /* Full depth for repertoire candidates */
+        .eval_depth = 20,               /* Stockfish search depth (matches CLI default) */
         .quick_eval_depth = 15,         /* Quick depth for filtering */
         
         .depth_discount = 0.90,
@@ -579,7 +606,6 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
  * Collect all unique FENs in the tree for batch evaluation
  */
 static void collect_fens_callback(TreeNode *node, void *user_data) {
-    typedef struct { char **fens; int *count; int max; } FenCollector;
     FenCollector *fc = (FenCollector *)user_data;
     
     if (*fc->count < fc->max && node->fen[0]) {
@@ -606,7 +632,6 @@ static int batch_evaluate_tree(Tree *tree, RepertoireDB *db, EnginePool *engine_
     char **fens = (char **)calloc(total_nodes, sizeof(char *));
     int fen_count = 0;
     
-    typedef struct { char **fens; int *count; int max; } FenCollector;
     FenCollector fc = { fens, &fen_count, total_nodes };
     
     tree_traverse_bfs(tree, collect_fens_callback, &fc);
@@ -672,50 +697,40 @@ static int batch_evaluate_tree(Tree *tree, RepertoireDB *db, EnginePool *engine_
 /**
  * Calculate ease scores for all positions in tree
  */
+static void ease_callback(TreeNode *node, void *user_data) {
+    EaseCtx *ctx = (EaseCtx *)user_data;
+
+    double existing;
+    if (rdb_get_ease(ctx->db, node->fen, &existing)) {
+        (*ctx->calc)++;
+        return;
+    }
+
+    double ease = calculate_ease_for_node(node, ctx->db);
+    if (ease >= 0) {
+        rdb_put_ease(ctx->db, node->fen, ease);
+        node_set_ease(node, ease);
+    }
+
+    (*ctx->calc)++;
+
+    if (ctx->prog && (*ctx->calc % 100 == 0)) {
+        ctx->prog("Calculating ease", *ctx->calc, ctx->total);
+    }
+}
+
 static int calculate_all_ease(Tree *tree, RepertoireDB *db,
                                void (*progress)(const char *, int, int)) {
     if (!tree || !tree->root || !db) return 0;
-    
+
     int calculated = 0;
     int total = (int)tree->total_nodes;
-    
-    /* Use BFS to process nodes (children need evals first, but we're reading from DB) */
-    /* Actually, ease depends on children's evals, which we've already computed */
-    
-    typedef struct { RepertoireDB *db; int *calc; int total; 
-                     void (*prog)(const char *, int, int); } EaseCtx;
-    
-    void ease_callback(TreeNode *node, void *user_data) {
-        EaseCtx *ctx = (EaseCtx *)user_data;
-        
-        /* Skip if already cached */
-        double existing;
-        if (rdb_get_ease(ctx->db, node->fen, &existing)) {
-            (*ctx->calc)++;
-            return;
-        }
-        
-        /* Calculate ease */
-        double ease = calculate_ease_for_node(node, ctx->db);
-        
-        if (ease >= 0) {
-            rdb_put_ease(ctx->db, node->fen, ease);
-            node_set_ease(node, ease);
-        }
-        
-        (*ctx->calc)++;
-        
-        if (ctx->prog && (*ctx->calc % 100 == 0)) {
-            ctx->prog("Calculating ease", *ctx->calc, ctx->total);
-        }
-    }
-    
     EaseCtx ctx = { db, &calculated, total, progress };
-    
+
     rdb_begin_transaction(db);
     tree_traverse_bfs(tree, ease_callback, &ctx);
     rdb_commit_transaction(db);
-    
+
     return calculated;
 }
 
@@ -862,6 +877,15 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
 
 /* ========== Main Entry Point ========== */
 
+static void load_evals_callback(TreeNode *node, void *user_data) {
+    RepertoireDB *d = (RepertoireDB *)user_data;
+    if (node->has_engine_eval) return;
+    int eval_cp, depth;
+    if (rdb_get_eval(d, node->fen, &eval_cp, &depth)) {
+        node_set_eval(node, eval_cp);
+    }
+}
+
 RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
                                        EnginePool *engine_pool,
                                        const RepertoireConfig *config,
@@ -893,15 +917,6 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
         printf("  Evaluated %d new positions\n", result->positions_evaluated);
     }
     
-    /* Populate tree nodes with evals from DB (batch_evaluate stores in DB only) */
-    void load_evals_callback(TreeNode *node, void *user_data) {
-        RepertoireDB *d = (RepertoireDB *)user_data;
-        if (node->has_engine_eval) return;
-        int eval_cp, depth;
-        if (rdb_get_eval(d, node->fen, &eval_cp, &depth)) {
-            node_set_eval(node, eval_cp);
-        }
-    }
     tree_traverse_bfs(tree, load_evals_callback, db);
     
     /* === Stage 2: Calculate ease scores === */
@@ -973,58 +988,41 @@ void repertoire_result_free(RepertoireResult *result) {
 
 /* ========== Mistake-Prone Lines ========== */
 
+static int trap_score_cmp_desc(const void *a, const void *b) {
+    double sa = ((const TrapCandidate *)a)->trap_score;
+    double sb = ((const TrapCandidate *)b)->trap_score;
+    return (sa < sb) - (sa > sb);
+}
+
+static void find_traps_callback(TreeNode *node, void *user_data) {
+    TrapCtx *ctx = (TrapCtx *)user_data;
+
+    bool is_opponent_move = ctx->as_white ? !node->is_white_to_move : node->is_white_to_move;
+    if (!is_opponent_move) return;
+    if (node->children_count < 2) return;
+
+    double trap = calculate_trap_score(node, ctx->db);
+    if (trap > 0.05 && *ctx->count < ctx->max) {
+        ctx->cands[*ctx->count].node = node;
+        ctx->cands[*ctx->count].trap_score = trap;
+        (*ctx->count)++;
+    }
+}
+
 int find_mistake_prone_lines(const Tree *tree, RepertoireDB *db,
                               bool play_as_white,
                               RepertoireLine *out_lines, int max_lines) {
     if (!tree || !tree->root || !db || !out_lines) return 0;
     
-    /* Collect all opponent positions with trap scores */
-    typedef struct {
-        TreeNode *node;
-        double trap_score;
-    } TrapCandidate;
-    
     int max_candidates = (int)tree->total_nodes;
     TrapCandidate *candidates = (TrapCandidate *)calloc(max_candidates, sizeof(TrapCandidate));
     if (!candidates) return 0;
-    
+
     int num_candidates = 0;
-    
-    /* Find all opponent positions (where THEY choose) */
-    void find_traps_callback(TreeNode *node, void *user_data) {
-        typedef struct { TrapCandidate *cands; int *count; int max; 
-                         RepertoireDB *db; bool as_white; } Ctx;
-        Ctx *ctx = (Ctx *)user_data;
-        
-        /* Only opponent's moves */
-        bool is_opponent_move = ctx->as_white ? !node->is_white_to_move : node->is_white_to_move;
-        if (!is_opponent_move) return;
-        if (node->children_count < 2) return;
-        
-        double trap = calculate_trap_score(node, ctx->db);
-        if (trap > 0.05 && *ctx->count < ctx->max) { /* Minimum 5% trap score */
-            ctx->cands[*ctx->count].node = node;
-            ctx->cands[*ctx->count].trap_score = trap;
-            (*ctx->count)++;
-        }
-    }
-    
-    typedef struct { TrapCandidate *cands; int *count; int max; 
-                     RepertoireDB *db; bool as_white; } TrapCtx;
     TrapCtx ctx = { candidates, &num_candidates, max_candidates, db, play_as_white };
-    
     tree_traverse_dfs(tree, find_traps_callback, &ctx);
     
-    /* Sort by trap score descending */
-    for (int i = 0; i < num_candidates - 1; i++) {
-        for (int j = i + 1; j < num_candidates; j++) {
-            if (candidates[j].trap_score > candidates[i].trap_score) {
-                TrapCandidate tmp = candidates[i];
-                candidates[i] = candidates[j];
-                candidates[j] = tmp;
-            }
-        }
-    }
+    qsort(candidates, num_candidates, sizeof(TrapCandidate), trap_score_cmp_desc);
     
     /* Extract lines for top trap positions */
     int num_lines = 0;
@@ -1078,12 +1076,11 @@ bool repertoire_export_pgn(const RepertoireResult *result,
             fprintf(f, "[Event \"%s Line #%d\"]\n", config->name, i + 1);
         else
             fprintf(f, "[Event \"Repertoire Line #%d\"]\n", i + 1);
-        if (i == 0) {
-            fprintf(f, "[Site \"tree_builder\"]\n");
-            fprintf(f, "[Date \"????.??.??\"]\n");
-            fprintf(f, "[White \"%s\"]\n", config->play_as_white ? "Repertoire" : "Opponent");
-            fprintf(f, "[Black \"%s\"]\n", config->play_as_white ? "Opponent" : "Repertoire");
-        }
+        fprintf(f, "[Site \"tree_builder\"]\n");
+        fprintf(f, "[Date \"????.??.??\"]\n");
+        fprintf(f, "[Round \"-\"]\n");
+        fprintf(f, "[White \"%s\"]\n", config->play_as_white ? "Repertoire" : "Opponent");
+        fprintf(f, "[Black \"%s\"]\n", config->play_as_white ? "Opponent" : "Repertoire");
         if (config && config->start_fen[0] &&
             strcmp(config->start_fen, "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1") != 0) {
             fprintf(f, "[FEN \"%s\"]\n", config->start_fen);
