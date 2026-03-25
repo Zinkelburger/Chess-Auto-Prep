@@ -107,7 +107,7 @@ static void print_usage(const char *prog_name) {
     printf("                         Also reads: $LICHESS_TOKEN, ~/.config/tree_builder/token, .lichess_token\n");
     printf("  --eval-weight <0-1>    Eval vs trickiness blend (0=pure trickiness, 1=pure eval) [default: 0.40]\n");
     printf("  --eval-guard <0-1>     Min win probability to consider a move [default: 0.35]\n");
-    printf("  --depth-decay <0-1>    How fast deeper positions matter less for ECA [default: 0.90]\n");
+    printf("  --depth-decay <0-1>    Depth discount for ECA (1.0=none, lower=prefer early blunders) [default: 1.0]\n");
     printf("  --max-children <N>     Max moves to explore per position (0=unlimited) [default: 0]\n");
     printf("  --mass-cutoff <0-1>    Stop adding moves after this fraction of prob mass [default: 0=off]\n");
     printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: W=0, B=-200]\n");
