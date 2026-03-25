@@ -28,6 +28,10 @@
 /* Default rate limit delay (1 second) */
 #define DEFAULT_DELAY_MS 1000
 
+/* 429 retry: base wait 60s, doubles each attempt, max 3 retries */
+#define RETRY_BASE_SECONDS 60
+#define RETRY_MAX_ATTEMPTS 3
+
 
 /**
  * Buffer for CURL response
@@ -234,207 +238,173 @@ static bool parse_explorer_response(const char *json_str, ExplorerResponse *resp
 }
 
 
-bool lichess_explorer_query(LichessExplorer *explorer, const char *fen,
-                            ExplorerResponse *response) {
-    if (!explorer || !fen || !response) {
-        return false;
-    }
-    
-    memset(response, 0, sizeof(ExplorerResponse));
-    
-    /* Rate limiting */
+/**
+ * Perform a single HTTP GET with rate-limiting.
+ * Returns the HTTP status code, or -1 on CURL error.
+ * On success (any status), *out_body / *out_body_size hold the response.
+ * Caller must free(*out_body) when non-NULL.
+ */
+static long perform_request(LichessExplorer *explorer, const char *url,
+                            char **out_body, size_t *out_body_size) {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     uint64_t now_ms = now.tv_sec * 1000 + now.tv_nsec / 1000000;
-    
+
     if (explorer->last_request_time > 0) {
         uint64_t elapsed = now_ms - explorer->last_request_time;
         if (elapsed < (uint64_t)explorer->request_delay_ms) {
             usleep((explorer->request_delay_ms - elapsed) * 1000);
         }
     }
-    
+
     CURL *curl = (CURL *)explorer->curl_handle;
-    
-    /* Build URL */
+
+    ResponseBuffer buf = {
+        .data = (char *)malloc(4096),
+        .size = 0,
+        .capacity = 4096
+    };
+    if (!buf.data) { *out_body = NULL; return -1; }
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "tree_builder/1.0");
+
+    struct curl_slist *headers = NULL;
+    if (explorer->auth_token) {
+        char auth_header[512];
+        snprintf(auth_header, sizeof(auth_header),
+                 "Authorization: Bearer %s", explorer->auth_token);
+        headers = curl_slist_append(headers, auth_header);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    }
+
+    CURLcode res = curl_easy_perform(curl);
+
+    curl_slist_free_all(headers);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, NULL);
+
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    explorer->last_request_time = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    explorer->total_requests++;
+
+    if (res != CURLE_OK) {
+        explorer->failed_requests++;
+        free(buf.data);
+        *out_body = NULL;
+        return -1;
+    }
+
+    long http_code;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+    *out_body = buf.data;
+    *out_body_size = buf.size;
+    return http_code;
+}
+
+
+/**
+ * Perform an explorer request with 429 retry + exponential backoff.
+ * Waits 60s, 120s, 240s on successive 429s (up to RETRY_MAX_ATTEMPTS).
+ */
+static bool explorer_request_with_retry(LichessExplorer *explorer,
+                                        const char *url,
+                                        ExplorerResponse *response) {
+    for (int attempt = 0; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+        char *body = NULL;
+        size_t body_size = 0;
+        long http_code = perform_request(explorer, url, &body, &body_size);
+
+        if (http_code == -1) {
+            snprintf(response->error_message, sizeof(response->error_message),
+                     "CURL error (attempt %d/%d)", attempt + 1,
+                     RETRY_MAX_ATTEMPTS + 1);
+            return false;
+        }
+
+        if (http_code == 429) {
+            free(body);
+            int backoff = RETRY_BASE_SECONDS * (1 << attempt);
+            if (attempt < RETRY_MAX_ATTEMPTS) {
+                fprintf(stderr,
+                    "  [API] 429 rate-limited — waiting %ds before retry "
+                    "(attempt %d/%d)\n",
+                    backoff, attempt + 1, RETRY_MAX_ATTEMPTS + 1);
+                sleep(backoff);
+                continue;
+            }
+            fprintf(stderr,
+                "  [API] 429 rate-limited — all %d retries exhausted\n",
+                RETRY_MAX_ATTEMPTS + 1);
+            snprintf(response->error_message, sizeof(response->error_message),
+                     "429 rate-limited after %d retries", RETRY_MAX_ATTEMPTS + 1);
+            explorer->failed_requests++;
+            return false;
+        }
+
+        if (http_code != 200) {
+            snprintf(response->error_message, sizeof(response->error_message),
+                     "HTTP error: %ld", http_code);
+            explorer->failed_requests++;
+            free(body);
+            return false;
+        }
+
+        bool success = parse_explorer_response(body, response);
+        free(body);
+        if (!success) explorer->failed_requests++;
+        return success;
+    }
+    return false;
+}
+
+
+bool lichess_explorer_query(LichessExplorer *explorer, const char *fen,
+                            ExplorerResponse *response) {
+    if (!explorer || !fen || !response) return false;
+
+    memset(response, 0, sizeof(ExplorerResponse));
+
+    CURL *curl = (CURL *)explorer->curl_handle;
     char *encoded_fen = url_encode_fen(curl, fen);
     if (!encoded_fen) {
         snprintf(response->error_message, sizeof(response->error_message),
                  "Failed to encode FEN");
         return false;
     }
-    
+
     char url[1024];
-    snprintf(url, sizeof(url), 
+    snprintf(url, sizeof(url),
              "%s?variant=%s&speeds=%s&ratings=%s&fen=%s",
              LICHESS_EXPLORER_URL,
              explorer->variant,
              explorer->speeds,
              explorer->rating_range,
              encoded_fen);
-    
     curl_free(encoded_fen);
-    
-    /* Setup response buffer */
-    ResponseBuffer buf = {
-        .data = (char *)malloc(4096),
-        .size = 0,
-        .capacity = 4096
-    };
-    if (!buf.data) {
-        return false;
-    }
-    
-    /* Setup CURL request */
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "tree_builder/1.0");
-    
-    /* Add auth header if token is set */
-    struct curl_slist *headers = NULL;
-    if (explorer->auth_token) {
-        char auth_header[512];
-        snprintf(auth_header, sizeof(auth_header),
-                 "Authorization: Bearer %s", explorer->auth_token);
-        headers = curl_slist_append(headers, auth_header);
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    }
-    
-    /* Perform request */
-    CURLcode res = curl_easy_perform(curl);
-    
-    curl_slist_free_all(headers);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, NULL);
-    
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    explorer->last_request_time = now.tv_sec * 1000 + now.tv_nsec / 1000000;
-    explorer->total_requests++;
-    
-    if (res != CURLE_OK) {
-        snprintf(response->error_message, sizeof(response->error_message),
-                 "CURL error: %s", curl_easy_strerror(res));
-        explorer->failed_requests++;
-        free(buf.data);
-        return false;
-    }
-    
-    /* Check HTTP response code */
-    long http_code;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    
-    if (http_code != 200) {
-        snprintf(response->error_message, sizeof(response->error_message),
-                 "HTTP error: %ld", http_code);
-        explorer->failed_requests++;
-        free(buf.data);
-        return false;
-    }
-    
-    /* Parse response */
-    bool success = parse_explorer_response(buf.data, response);
-    
-    free(buf.data);
-    
-    if (!success) {
-        explorer->failed_requests++;
-    }
-    
-    return success;
+
+    return explorer_request_with_retry(explorer, url, response);
 }
 
 
 bool lichess_explorer_query_masters(LichessExplorer *explorer, const char *fen,
                                     ExplorerResponse *response) {
-    if (!explorer || !fen || !response) {
-        return false;
-    }
-    
+    if (!explorer || !fen || !response) return false;
+
     memset(response, 0, sizeof(ExplorerResponse));
-    
-    /* Rate limiting */
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    uint64_t now_ms = now.tv_sec * 1000 + now.tv_nsec / 1000000;
-    
-    if (explorer->last_request_time > 0) {
-        uint64_t elapsed = now_ms - explorer->last_request_time;
-        if (elapsed < (uint64_t)explorer->request_delay_ms) {
-            usleep((explorer->request_delay_ms - elapsed) * 1000);
-        }
-    }
-    
+
     CURL *curl = (CURL *)explorer->curl_handle;
-    
-    /* Build URL */
     char *encoded_fen = url_encode_fen(curl, fen);
-    if (!encoded_fen) {
-        return false;
-    }
-    
+    if (!encoded_fen) return false;
+
     char url[1024];
     snprintf(url, sizeof(url), "%s?fen=%s", LICHESS_MASTERS_URL, encoded_fen);
     curl_free(encoded_fen);
-    
-    /* Setup response buffer */
-    ResponseBuffer buf = {
-        .data = (char *)malloc(4096),
-        .size = 0,
-        .capacity = 4096
-    };
-    if (!buf.data) {
-        return false;
-    }
-    
-    /* Setup and perform request */
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "tree_builder/1.0");
-    
-    struct curl_slist *headers = NULL;
-    if (explorer->auth_token) {
-        char auth_header[512];
-        snprintf(auth_header, sizeof(auth_header),
-                 "Authorization: Bearer %s", explorer->auth_token);
-        headers = curl_slist_append(headers, auth_header);
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    }
-    
-    CURLcode res = curl_easy_perform(curl);
-    
-    curl_slist_free_all(headers);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, NULL);
-    
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    explorer->last_request_time = now.tv_sec * 1000 + now.tv_nsec / 1000000;
-    explorer->total_requests++;
-    
-    if (res != CURLE_OK) {
-        explorer->failed_requests++;
-        free(buf.data);
-        return false;
-    }
-    
-    long http_code;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    
-    if (http_code != 200) {
-        explorer->failed_requests++;
-        free(buf.data);
-        return false;
-    }
-    
-    bool success = parse_explorer_response(buf.data, response);
-    free(buf.data);
-    
-    if (!success) {
-        explorer->failed_requests++;
-    }
-    
-    return success;
+
+    return explorer_request_with_retry(explorer, url, response);
 }
 
 
