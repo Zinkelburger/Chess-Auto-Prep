@@ -28,7 +28,6 @@
  *   -m, --masters          Use masters database
  *   --skip-build           Skip tree building (use cached data)
  *   --skip-eval            Skip engine evaluation
- *   --skip-ease            Skip ease calculation
  *   --traps                Find and print opponent trap positions
  *   -n, --name <name>      Repertoire name (e.g. "Three Knights Petrov")
  *   --pgn <file>           Also export as PGN
@@ -43,6 +42,8 @@
 #include <signal.h>
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
+#include <limits.h>
 #include <sys/sysinfo.h>
 
 #include "tree.h"
@@ -69,7 +70,6 @@ static const char *STOCKFISH_SEARCH_PATHS[] = {
 
 /* Global state for signal handling */
 static Tree *g_tree = NULL;
-static const char *g_output_file = NULL;
 static volatile int g_interrupted = 0;
 
 
@@ -98,7 +98,6 @@ static void print_usage(const char *prog_name) {
     printf("  -m, --masters          Use masters database\n");
     printf("  --skip-build           Skip tree building (use cached DB data)\n");
     printf("  --skip-eval            Skip engine evaluation step\n");
-    printf("  --skip-ease            Skip ease calculation step\n");
     printf("  --token <token>        Lichess API auth token (required)\n");
     printf("  --eval-weight <0-1>    Eval vs trickiness blend (0=pure trickiness, 1=pure eval) [default: 0.40]\n");
     printf("  --eval-guard <0-1>     Min win probability to consider a move [default: 0.35]\n");
@@ -146,19 +145,7 @@ static void pipeline_progress(const char *stage, int current, int total) {
 static void signal_handler(int sig) {
     (void)sig;
     g_interrupted = 1;
-    printf("\n\n  [INTERRUPTED] Stopping gracefully...\n");
-    if (g_tree) {
-        tree_stop_build(g_tree);
-        if (g_output_file) {
-            printf("  Saving partial tree to %s...\n", g_output_file);
-            SerializationOptions opts = serialization_options_default();
-            opts.format = FORMAT_JSON;
-            opts.json_indent = 2;
-            tree_save(g_tree, g_output_file, &opts);
-            printf("  Partial tree saved (%zu nodes). Re-run to resume.\n",
-                   g_tree->total_nodes);
-        }
-    }
+    if (g_tree) tree_stop_build(g_tree);
 }
 
 
@@ -177,6 +164,39 @@ static const char* find_stockfish(const char *user_path) {
     }
     
     return NULL;
+}
+
+
+static bool parse_int(const char *s, const char *name, int *out) {
+    char *end;
+    errno = 0;
+    long val = strtol(s, &end, 10);
+    if (end == s || *end != '\0') {
+        fprintf(stderr, "Error: --%s requires an integer, got '%s'\n", name, s);
+        return false;
+    }
+    if (errno == ERANGE || val < INT_MIN || val > INT_MAX) {
+        fprintf(stderr, "Error: --%s value '%s' out of range\n", name, s);
+        return false;
+    }
+    *out = (int)val;
+    return true;
+}
+
+static bool parse_double(const char *s, const char *name, double *out) {
+    char *end;
+    errno = 0;
+    double val = strtod(s, &end);
+    if (end == s || *end != '\0') {
+        fprintf(stderr, "Error: --%s requires a number, got '%s'\n", name, s);
+        return false;
+    }
+    if (errno == ERANGE) {
+        fprintf(stderr, "Error: --%s value '%s' out of range\n", name, s);
+        return false;
+    }
+    *out = val;
+    return true;
 }
 
 
@@ -234,7 +254,6 @@ int main(int argc, char *argv[]) {
         {"masters",     no_argument,       0, 'm'},
         {"skip-build",  no_argument,       0, 1001},
         {"skip-eval",   no_argument,       0, 1002},
-        {"skip-ease",   no_argument,       0, 1003},
         {"traps",       no_argument,       0, 1004},
         {"pgn",         required_argument, 0, 1005},
         {"token",       required_argument, 0, 1006},
@@ -260,28 +279,28 @@ int main(int argc, char *argv[]) {
                 play_as_white = (optarg[0] == 'w' || optarg[0] == 'W');
                 break;
             case 'p':
-                min_probability = atof(optarg);
+                if (!parse_double(optarg, "probability", &min_probability)) return 1;
                 if (min_probability <= 0 || min_probability > 1) {
                     fprintf(stderr, "Error: probability must be in (0, 1]\n");
                     return 1;
                 }
                 break;
             case 'd':
-                max_depth = atoi(optarg);
+                if (!parse_int(optarg, "depth", &max_depth)) return 1;
                 if (max_depth <= 0) { fprintf(stderr, "Error: depth must be > 0\n"); return 1; }
                 break;
             case 'e':
-                eval_depth = atoi(optarg);
+                if (!parse_int(optarg, "eval-depth", &eval_depth)) return 1;
                 if (eval_depth <= 0) { fprintf(stderr, "Error: eval-depth must be > 0\n"); return 1; }
                 break;
             case 't':
-                num_threads = atoi(optarg);
+                if (!parse_int(optarg, "threads", &num_threads)) return 1;
                 if (num_threads <= 0) { fprintf(stderr, "Error: threads must be > 0\n"); return 1; }
                 break;
             case 'r': ratings = optarg; break;
             case 's': speeds = optarg; break;
             case 'g':
-                min_games = atoi(optarg);
+                if (!parse_int(optarg, "min-games", &min_games)) return 1;
                 if (min_games < 1) { fprintf(stderr, "Error: min-games must be >= 1\n"); return 1; }
                 break;
             case 'S': stockfish_path = optarg; break;
@@ -293,18 +312,17 @@ int main(int argc, char *argv[]) {
             case 'h': print_usage(argv[0]); return 0;
             case 1001: skip_build = true; break;
             case 1002: skip_eval = true; break;
-            case 1003: /* skip_ease - reserved for future use */ break;
             case 1004: find_traps = true; break;
             case 1005: pgn_output = optarg; break;
             case 1006: lichess_token = optarg; break;
-            case 1007: eval_weight_arg = atof(optarg); break;
-            case 1008: eval_guard_arg = atof(optarg); break;
-            case 1009: depth_decay_arg = atof(optarg); break;
-            case 1010: max_children_arg = atoi(optarg); break;
-            case 1011: mass_cutoff_arg = atof(optarg); break;
-            case 1012: min_eval_arg = atoi(optarg); break;
-            case 1013: max_eval_arg = atoi(optarg); break;
-            case 1014: max_eval_loss_arg = atoi(optarg); break;
+            case 1007: if (!parse_double(optarg, "eval-weight", &eval_weight_arg)) return 1; break;
+            case 1008: if (!parse_double(optarg, "eval-guard", &eval_guard_arg)) return 1; break;
+            case 1009: if (!parse_double(optarg, "depth-decay", &depth_decay_arg)) return 1; break;
+            case 1010: if (!parse_int(optarg, "max-children", &max_children_arg)) return 1; break;
+            case 1011: if (!parse_double(optarg, "mass-cutoff", &mass_cutoff_arg)) return 1; break;
+            case 1012: if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1; break;
+            case 1013: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
+            case 1014: if (!parse_int(optarg, "max-eval-loss", &max_eval_loss_arg)) return 1; break;
             default: print_usage(argv[0]); return 1;
         }
     }
@@ -460,7 +478,6 @@ int main(int argc, char *argv[]) {
         }
 
         g_tree = tree;
-        g_output_file = output_file;
 
         TreeConfig config = tree_config_default();
         config.play_as_white = play_as_white;
@@ -684,6 +701,15 @@ int main(int argc, char *argv[]) {
     printf("\nDone! Repertoire saved to %s\n\n", output_file);
     
 cleanup:
+    if (g_interrupted && tree && output_file) {
+        printf("\n  [INTERRUPTED] Saving partial tree to %s...\n", output_file);
+        SerializationOptions interrupt_opts = serialization_options_default();
+        interrupt_opts.format = FORMAT_JSON;
+        interrupt_opts.json_indent = 2;
+        tree_save(tree, output_file, &interrupt_opts);
+        printf("  Partial tree saved (%zu nodes). Re-run to resume.\n",
+               tree->total_nodes);
+    }
     /* Cleanup */
     if (result) repertoire_result_free(result);
     if (engine_pool) engine_pool_destroy(engine_pool);
