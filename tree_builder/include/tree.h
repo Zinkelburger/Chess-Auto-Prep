@@ -13,6 +13,10 @@
 
 /* Forward declarations */
 struct LichessExplorer;
+struct EnginePool;
+struct MaiaContext;
+struct RepertoireDB;
+struct MaiaContext;
 
 /**
  * TreeConfig - Configuration for tree building
@@ -33,6 +37,14 @@ typedef struct TreeConfig {
     const char *speeds;             /* Time controls, e.g., "rapid,classical" */
     int min_games;                  /* Minimum games to consider a move */
     bool use_masters;               /* Use masters database instead of Lichess */
+
+    /* Maia fallback: when the explorer is exhausted but cumulative
+       probability is still above maia_threshold, use Maia to predict
+       likely human moves and continue expanding. */
+    struct MaiaContext *maia;       /* NULL = disabled */
+    int    maia_elo;                /* Elo for Maia predictions (1100-2100) */
+    double maia_threshold;          /* Min cumProb to trigger Maia fallback */
+    double maia_min_prob;           /* Skip Maia moves below this probability */
 
     /* Progress callback */
     void (*progress_callback)(int nodes_built, int current_depth, const char *current_fen);
@@ -225,6 +237,52 @@ void tree_traverse_dfs(const Tree *tree,
 void tree_traverse_bfs(const Tree *tree,
                        void (*callback)(TreeNode *node, void *user_data),
                        void *user_data);
+
+/**
+ * DiscoveryConfig - Configuration for Stockfish discovery pass
+ * 
+ * Runs MultiPV on all our-move nodes to find strong engine moves
+ * that aren't in the Lichess database. New branches are expanded
+ * with Maia (opponent responses) + Stockfish (our follow-ups).
+ */
+typedef struct {
+    bool play_as_white;
+    int multipv;                    /* Top-N engine moves to check (default: 3) */
+    int search_depth;               /* Stockfish depth for MultiPV (default: 20) */
+    int max_eval_loss_cp;           /* Only add moves within this of best (default: 50) */
+    int expansion_depth;            /* Ply to expand new branches (default: 4) */
+    double min_probability;         /* Min cumProb to scan a node */
+    int maia_elo;                   /* Maia Elo for opponent expansion */
+    double maia_min_prob;           /* Min Maia probability for opponent moves */
+    int max_maia_responses;         /* Max Maia moves per opponent node (default: 3) */
+} DiscoveryConfig;
+
+/**
+ * Create default discovery configuration
+ */
+DiscoveryConfig discovery_config_default(void);
+
+/**
+ * Run Stockfish discovery pass on the tree
+ * 
+ * For every our-move node, runs MultiPV to find strong moves not already
+ * in the tree. New branches are expanded with Maia + Stockfish.
+ * 
+ * @param tree The tree to augment
+ * @param engine_pool Stockfish engine pool
+ * @param maia Maia context for opponent expansion (can be NULL)
+ * @param db Database for caching evals (can be NULL)
+ * @param config Discovery configuration
+ * @param progress Optional progress callback(discovered, scanned, info)
+ * @return Number of new moves discovered
+ */
+int tree_discover_engine_moves(Tree *tree,
+                                struct EnginePool *engine_pool,
+                                struct MaiaContext *maia,
+                                struct RepertoireDB *db,
+                                const DiscoveryConfig *config,
+                                void (*progress)(int discovered, int scanned,
+                                                  const char *info));
 
 #endif /* TREE_H */
 

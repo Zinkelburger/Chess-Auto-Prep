@@ -6,6 +6,9 @@
 #   - pthreads (multithreaded engine pool)
 #   - cJSON    (included in src/)
 #
+# Optional (for Maia neural-network fallback):
+#   - ONNX Runtime C API  (build with: make MAIA=1)
+#
 # Install dependencies (Fedora):
 #   sudo dnf install libcurl-devel sqlite-devel
 #
@@ -36,6 +39,15 @@ endif
 # This means no external sqlite3-devel dependency needed.
 CFLAGS += -DSQLITE_THREADSAFE=1 -DSQLITE_OMIT_LOAD_EXTENSION
 
+# chesslib (third-party, BSD-2-Clause) — used by Maia for legal move generation
+CHESSLIB_DIR = third_party/chesslib
+
+# Optional: Maia neural-network fallback (make MAIA=1)
+ifdef MAIA
+    CFLAGS += -DHAVE_ONNXRUNTIME
+    LDFLAGS += -lonnxruntime
+endif
+
 # Directories
 SRC_DIR = src
 INC_DIR = include
@@ -52,12 +64,24 @@ SRCS = $(SRC_DIR)/node.c \
        $(SRC_DIR)/database.c \
        $(SRC_DIR)/engine_pool.c \
        $(SRC_DIR)/repertoire.c \
+       $(SRC_DIR)/maia.c \
        $(SRC_DIR)/sqlite3_amalg.c \
        $(SRC_DIR)/cJSON.c \
        $(SRC_DIR)/main.c
 
+# chesslib sources (third-party)
+CHESSLIB_SRCS = $(CHESSLIB_DIR)/chess.c \
+                $(CHESSLIB_DIR)/move.c \
+                $(CHESSLIB_DIR)/unmove.c \
+                $(CHESSLIB_DIR)/position.c \
+                $(CHESSLIB_DIR)/fen.c \
+                $(CHESSLIB_DIR)/generate.c \
+                $(CHESSLIB_DIR)/carray.c \
+                $(CHESSLIB_DIR)/calloc.c
+
 # Object files
-OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
+OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS)) \
+       $(patsubst $(CHESSLIB_DIR)/%.c,$(BUILD_DIR)/chesslib_%.o,$(CHESSLIB_SRCS))
 
 # Target executable
 TARGET = $(BIN_DIR)/tree_builder
@@ -84,13 +108,17 @@ $(TARGET): $(OBJS)
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
+# chesslib (third-party): suppress warnings
+$(BUILD_DIR)/chesslib_%.o: $(CHESSLIB_DIR)/%.c
+	$(CC) -std=gnu11 -O2 -g -w -I$(CHESSLIB_DIR) -c $< -o $@
+
 # SQLite3 amalgamation: suppress all warnings (third-party code)
 $(BUILD_DIR)/sqlite3_amalg.o: $(SRC_DIR)/sqlite3_amalg.c
 	$(CC) -std=gnu11 -O2 -g -w $(INCLUDES) -DSQLITE_THREADSAFE=1 -DSQLITE_OMIT_LOAD_EXTENSION -c $< -o $@
 
 # Header dependencies
 $(BUILD_DIR)/node.o: $(INC_DIR)/node.h
-$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h
+$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h
 $(BUILD_DIR)/lichess_api.o: $(INC_DIR)/lichess_api.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/serialization.o: $(INC_DIR)/serialization.h $(INC_DIR)/tree.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/chess_logic.o: $(INC_DIR)/chess_logic.h
@@ -98,7 +126,8 @@ $(BUILD_DIR)/thread_pool.o: $(INC_DIR)/thread_pool.h
 $(BUILD_DIR)/database.o: $(INC_DIR)/database.h
 $(BUILD_DIR)/engine_pool.o: $(INC_DIR)/engine_pool.h $(INC_DIR)/thread_pool.h
 $(BUILD_DIR)/repertoire.o: $(INC_DIR)/repertoire.h $(INC_DIR)/tree.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/chess_logic.h $(SRC_DIR)/cJSON.h
-$(BUILD_DIR)/main.o: $(INC_DIR)/tree.h $(INC_DIR)/lichess_api.h $(INC_DIR)/serialization.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/repertoire.h $(INC_DIR)/chess_logic.h
+$(BUILD_DIR)/maia.o: $(INC_DIR)/maia.h $(INC_DIR)/chess_logic.h $(SRC_DIR)/maia_vocab.inc
+$(BUILD_DIR)/main.o: $(INC_DIR)/tree.h $(INC_DIR)/lichess_api.h $(INC_DIR)/serialization.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/repertoire.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
