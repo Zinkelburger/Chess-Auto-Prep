@@ -27,7 +27,7 @@
 /**
  * Configuration for repertoire generation
  */
-typedef struct {
+typedef struct RepertoireConfig {
     bool play_as_white;             /* Are we building for White or Black? */
     int max_depth;                  /* Maximum depth to explore (ply) */
     double min_probability;         /* Stop exploring below this cumul. probability */

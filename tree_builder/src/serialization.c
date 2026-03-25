@@ -64,12 +64,10 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
         cJSON_AddNumberToObject(obj, "ease", node->ease);
     }
     
-    /* Optional ECA (Expected Centipawn Advantage) */
+    /* Optional ECA (win-probability-delta units) */
     if (opts->include_eca && node->has_eca) {
         cJSON_AddNumberToObject(obj, "local_cpl", node->local_cpl);
-        cJSON_AddNumberToObject(obj, "local_q_loss", node->local_q_loss);
         cJSON_AddNumberToObject(obj, "accumulated_eca", node->accumulated_eca);
-        cJSON_AddNumberToObject(obj, "accumulated_q_eca", node->accumulated_q_eca);
     }
     
     /* Optional Lichess stats */
@@ -114,7 +112,8 @@ static char* tree_to_json_internal(const Tree *tree, const SerializationOptions 
     
     /* Tree metadata */
     cJSON_AddStringToObject(root, "format", "opening_tree");
-    cJSON_AddNumberToObject(root, "version", 1.0);
+    cJSON_AddNumberToObject(root, "version", 2.0);
+    cJSON_AddStringToObject(root, "eca_units", "wp_delta");
     cJSON_AddNumberToObject(root, "total_nodes", (double)tree->total_nodes);
     cJSON_AddNumberToObject(root, "max_depth", tree->max_depth_reached);
     cJSON_AddBoolToObject(root, "build_complete", tree->build_complete);
@@ -265,15 +264,11 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent) {
         node_set_ease(node, ease->valuedouble);
     }
     
-    /* Parse ECA fields */
+    /* Parse ECA fields (v2: wp-delta only; v1 backward compat: ignore Q-loss) */
     cJSON *lcpl = cJSON_GetObjectItem(obj, "local_cpl");
-    cJSON *lqloss = cJSON_GetObjectItem(obj, "local_q_loss");
     cJSON *aeca = cJSON_GetObjectItem(obj, "accumulated_eca");
-    cJSON *aqeca = cJSON_GetObjectItem(obj, "accumulated_q_eca");
-    if (lcpl && lqloss && aeca && aqeca) {
-        node_set_eca(node,
-                     lcpl->valuedouble, lqloss->valuedouble,
-                     aeca->valuedouble, aqeca->valuedouble);
+    if (lcpl && aeca) {
+        node_set_eca(node, lcpl->valuedouble, aeca->valuedouble);
     }
     
     /* Parse Lichess stats */

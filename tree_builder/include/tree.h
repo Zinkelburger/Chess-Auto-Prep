@@ -16,7 +16,7 @@ struct LichessExplorer;
 struct EnginePool;
 struct MaiaContext;
 struct RepertoireDB;
-struct MaiaContext;
+struct RepertoireConfig;
 
 /**
  * TreeConfig - Configuration for tree building
@@ -167,21 +167,52 @@ size_t tree_calculate_ease(Tree *tree);
 /**
  * Compute ECA (Expected Centipawn Advantage) for the entire tree.
  *
- * Two passes in one post-order DFS:
- *   1. local_cpl / local_q_loss at each node (from children's evals)
- *   2. accumulated_eca / accumulated_q_eca (depth-discounted sum)
+ * Uses win-probability-delta units throughout.  Post-order DFS:
+ *   1. local_cpl (wp-delta) at each node from children's evals
+ *   2. accumulated_eca (wp-delta sum) bottom-up
  *
  * At opponent nodes:
- *   accumulated = γ^depth × local_cpl + Σ(prob_i × child_accumulated)
+ *   accumulated = local_cpl + Σ(prob_i × child.accumulated_eca)
  * At our-move nodes:
- *   accumulated = max(child_accumulated)   [we pick the best line]
+ *   Select the child using the blended score
+ *   (α × wp_us + (1-α) × child.accumulated_eca) with the same filters
+ *   as the selection phase, then propagate that child's accumulated_eca.
  *
  * @param tree The tree to annotate
- * @param play_as_white Whether the repertoire is for White
- * @param depth_discount Depth discount factor γ (1.0 = no decay, <1.0 prefers early blunders)
+ * @param config RepertoireConfig (provides eval_weight, eval_guard, max_eval_loss,
+ *               play_as_white, depth_discount)
  * @return Number of nodes annotated
  */
-size_t tree_calculate_eca(Tree *tree, bool play_as_white, double depth_discount);
+size_t tree_calculate_eca(Tree *tree, const struct RepertoireConfig *config);
+
+/**
+ * Result of scoring children at an our-move node.
+ */
+typedef struct {
+    TreeNode *child;
+    double score;
+    double accumulated_eca;
+} ScoredChild;
+
+/**
+ * Score all children at an our-move node using the blended formula with
+ * eval-guard and max-eval-loss filters.  Both the ECA accumulation pass
+ * and the selection pass call this to guarantee consistency.
+ *
+ * @param node         The our-move parent node
+ * @param config       RepertoireConfig with eval_weight, eval_guard, max_eval_loss, play_as_white
+ * @param best_out     Output: the winning child (highest blended score)
+ * @return Number of children that passed filters (0 triggers fallback internally)
+ */
+int score_our_move_children(TreeNode *node,
+                            const struct RepertoireConfig *config,
+                            ScoredChild *best_out);
+
+/**
+ * Win probability from centipawns (Lichess-calibrated sigmoid).
+ * Maps centipawns to [0, 1] from White's perspective.
+ */
+double win_probability(int cp);
 
 /**
  * Recalculate cumulative probabilities from root
