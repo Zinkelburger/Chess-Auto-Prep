@@ -899,11 +899,15 @@ static void load_evals_callback(TreeNode *node, void *user_data) {
 
 RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
                                        EnginePool *engine_pool,
-                                       const RepertoireConfig *config,
+                                       const RepertoireConfig *config_in,
                                        void (*progress)(const char *stage, 
                                                          int current, int total)) {
-    if (!tree || !tree->root || !db || !config) return NULL;
+    if (!tree || !tree->root || !db || !config_in) return NULL;
     
+    /* Mutable copy so we can resolve --relative thresholds after eval */
+    RepertoireConfig cfg_local = *config_in;
+    const RepertoireConfig *config = &cfg_local;
+
     RepertoireResult *result = (RepertoireResult *)calloc(1, sizeof(RepertoireResult));
     if (!result) return NULL;
     
@@ -929,6 +933,18 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     }
     
     tree_traverse_bfs(tree, load_evals_callback, db);
+
+    /* Resolve --relative: offset min/max_eval_cp by the root position's eval */
+    if (cfg_local.relative_eval) {
+        int root_eval = get_eval_for_us(tree->root, db, cfg_local.play_as_white);
+        printf("  Root eval (our perspective): %+dcp\n", root_eval);
+        printf("  Relative thresholds: min=%+d, max=%+d → ",
+               cfg_local.min_eval_cp, cfg_local.max_eval_cp);
+        cfg_local.min_eval_cp += root_eval;
+        cfg_local.max_eval_cp += root_eval;
+        printf("absolute min=%+d, max=%+d\n",
+               cfg_local.min_eval_cp, cfg_local.max_eval_cp);
+    }
     
     /* === Stage 2: Calculate ease scores === */
     if (progress) progress("Stage 2: Ease calculation", 0, (int)tree->total_nodes);

@@ -83,3 +83,5 @@ tree_builder/*.db-shm
 tree_builder/*.db-wal
 tree_builder/local_lib/
 tree_builder/*.o
+tree_builder/*.json
+.lichess_token
