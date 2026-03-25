@@ -5,6 +5,9 @@
 #include "tree.h"
 #include "lichess_api.h"
 #include "chess_logic.h"
+#include "maia.h"
+#include "engine_pool.h"
+#include "database.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -28,6 +31,10 @@ TreeConfig tree_config_default(void) {
         .speeds = "blitz,rapid,classical",
         .min_games = 10,
         .use_masters = false,
+        .maia = NULL,
+        .maia_elo = 2000,
+        .maia_threshold = 0.01,             /* Fall back to Maia above 1% cumProb */
+        .maia_min_prob = 0.02,              /* Skip Maia moves below 2% */
         .progress_callback = NULL
     };
     return config;
@@ -99,99 +106,117 @@ static void build_recursive(Tree *tree, TreeNode *node,
         fprintf(stderr, "Warning: Explorer query failed for %s\n", node->fen);
         return;
     }
-    
-    if (!response.success || response.move_count == 0) {
-        return;
-    }
-    
-    /* Update node with total stats */
-    node_set_lichess_stats(node, 
-                           response.total_white_wins,
-                           response.total_black_wins, 
-                           response.total_draws);
-    
-    /* Store opening name if available */
-    if (response.has_opening) {
-        strncpy(node->opening_name, response.opening_name, sizeof(node->opening_name) - 1);
-        strncpy(node->opening_eco, response.opening_eco, sizeof(node->opening_eco) - 1);
-    }
-    
-    /* Calculate total games for probability calculation */
-    uint64_t total = response.total_games;
-    if (total < (uint64_t)config->min_games) {
-        return;
-    }
-    
-    /*
-     * Cumulative probability: only opponent moves reduce it.
-     * Our moves are played with 100% certainty (it's our repertoire).
-     */
-    bool is_our_move = (node->is_white_to_move == config->play_as_white);
 
-    /* Process each move (explorer returns them sorted by popularity) */
+    bool use_maia = false;
+    MaiaResponse maia_resp;
+    memset(&maia_resp, 0, sizeof(maia_resp));
+
+    if (!response.success || response.move_count == 0 ||
+        response.total_games < (uint64_t)config->min_games) {
+        /*
+         * Explorer exhausted or insufficient data.
+         * Fall back to Maia if the line is likely enough.
+         */
+        if (config->maia &&
+            node->cumulative_probability >= config->maia_threshold) {
+            if (maia_evaluate(config->maia, node->fen,
+                              config->maia_elo, &maia_resp) &&
+                maia_resp.success && maia_resp.move_count > 0) {
+                use_maia = true;
+            }
+        }
+
+        if (!use_maia) {
+            /* Mark as explored-but-empty so resume skips it */
+            if (response.success && response.total_games > 0)
+                node_set_lichess_stats(node,
+                    response.total_white_wins,
+                    response.total_black_wins,
+                    response.total_draws);
+            return;
+        }
+    }
+
+    /* Update node with total stats (explorer path only) */
+    if (!use_maia) {
+        node_set_lichess_stats(node, 
+                               response.total_white_wins,
+                               response.total_black_wins, 
+                               response.total_draws);
+
+        if (response.has_opening) {
+            strncpy(node->opening_name, response.opening_name, sizeof(node->opening_name) - 1);
+            strncpy(node->opening_eco, response.opening_eco, sizeof(node->opening_eco) - 1);
+        }
+    }
+
+    uint64_t total = use_maia ? 0 : response.total_games;
+
+    bool is_our_move = (node->is_white_to_move == config->play_as_white);
     int children_added = 0;
     double mass_covered = 0.0;
+    size_t move_count = use_maia ? (size_t)maia_resp.move_count
+                                 : response.move_count;
 
-    for (size_t i = 0; i < response.move_count; i++) {
-        ExplorerMove *move = &response.moves[i];
-        
-        /* Calculate move probability */
-        uint64_t move_games = move->white_wins + move->draws + move->black_wins;
-        double prob = (double)move_games / (double)total;
-        
-        /* Max children cap */
-        if (config->max_children > 0 && children_added >= config->max_children) {
-            break;
+    for (size_t i = 0; i < move_count; i++) {
+        /* Extract move data from either source */
+        const char *uci;
+        const char *san;
+        double prob;
+        uint64_t mw = 0, mb = 0, md = 0;
+
+        if (use_maia) {
+            uci  = maia_resp.moves[i].uci;
+            san  = maia_resp.moves[i].uci;   /* UCI as SAN placeholder */
+            prob = maia_resp.moves[i].probability;
+            if (prob < config->maia_min_prob) continue;
+        } else {
+            ExplorerMove *move = &response.moves[i];
+            uci = move->uci;
+            san = move->san;
+            uint64_t move_games = move->white_wins + move->draws + move->black_wins;
+            prob = (double)move_games / (double)total;
+            mw = move->white_wins;
+            mb = move->black_wins;
+            md = move->draws;
+            if (move_games < (uint64_t)config->min_games) continue;
         }
 
-        /* Mass cutoff: stop once we've covered enough probability */
-        if (config->opponent_mass_target > 0.0 && mass_covered >= config->opponent_mass_target) {
+        if (config->max_children > 0 && children_added >= config->max_children)
             break;
-        }
+        if (config->opponent_mass_target > 0.0 && mass_covered >= config->opponent_mass_target)
+            break;
 
-        /*
-         * Our moves: cumP stays the same (we play with 100% certainty).
-         * Opponent moves: cumP = parent × moveProb (they choose randomly).
-         */
         double new_cumul = is_our_move
             ? node->cumulative_probability
             : node->cumulative_probability * prob;
 
-        if (new_cumul < config->min_probability) {
+        if (new_cumul < config->min_probability)
             continue;
-        }
         
-        /* Skip moves with too few games */
-        if (move_games < (uint64_t)config->min_games) {
-            continue;
-        }
-        
-        /* Generate child FEN by applying the UCI move to the current position */
+        /* Generate child FEN */
         ChessPosition chess_pos;
         if (!position_from_fen(&chess_pos, node->fen)) {
             fprintf(stderr, "Warning: Failed to parse FEN: %s\n", node->fen);
             continue;
         }
-        if (!position_apply_uci(&chess_pos, move->uci)) {
-            fprintf(stderr, "Warning: Failed to apply move %s to %s\n", move->uci, node->fen);
+        if (!position_apply_uci(&chess_pos, uci)) {
+            fprintf(stderr, "Warning: Failed to apply move %s to %s\n", uci, node->fen);
             continue;
         }
         char child_fen[MAX_FEN_LENGTH];
         position_to_fen(&chess_pos, child_fen, MAX_FEN_LENGTH);
         
-        /* Create child node */
-        TreeNode *child = node_create(child_fen, move->san, move->uci, node);
+        TreeNode *child = node_create(child_fen, san, uci, node);
         if (!child) {
             fprintf(stderr, "Error: Failed to allocate child node\n");
             continue;
         }
         
-        /* Set child properties */
         child->move_probability = prob;
         child->cumulative_probability = new_cumul;
-        node_set_lichess_stats(child, move->white_wins, move->black_wins, move->draws);
+        if (!use_maia) node_set_lichess_stats(child, mw, mb, md);
         
-        /* Add to parent */
         if (!node_add_child(node, child)) {
             node_destroy_single(child);
             continue;
@@ -201,16 +226,12 @@ static void build_recursive(Tree *tree, TreeNode *node,
         children_added++;
         mass_covered += prob;
         
-        if (child->depth > tree->max_depth_reached) {
+        if (child->depth > tree->max_depth_reached)
             tree->max_depth_reached = child->depth;
-        }
         
-        /* Progress callback */
-        if (config->progress_callback) {
+        if (config->progress_callback)
             config->progress_callback(tree->total_nodes, child->depth, child->fen);
-        }
         
-        /* Recurse */
         build_recursive(tree, child, config, explorer);
     }
 }
@@ -816,5 +837,280 @@ void tree_traverse_bfs(const Tree *tree,
     }
     
     queue_destroy(queue);
+}
+
+
+/* ========== Stockfish Discovery Pass ========== */
+
+DiscoveryConfig discovery_config_default(void) {
+    DiscoveryConfig config = {
+        .play_as_white = true,
+        .multipv = 3,
+        .search_depth = 20,
+        .max_eval_loss_cp = 50,
+        .expansion_depth = 4,
+        .min_probability = 0.0001,
+        .maia_elo = 2000,
+        .maia_min_prob = 0.02,
+        .max_maia_responses = 3,
+    };
+    return config;
+}
+
+
+/**
+ * Create a child node by applying a UCI move.
+ * Returns the new node (already added to parent), or NULL on failure.
+ */
+static TreeNode *add_child_from_uci(TreeNode *parent, const char *uci,
+                                     Tree *tree) {
+    ChessPosition pos;
+    if (!position_from_fen(&pos, parent->fen)) return NULL;
+    if (!position_apply_uci(&pos, uci)) return NULL;
+
+    char child_fen[MAX_FEN_LENGTH];
+    position_to_fen(&pos, child_fen, MAX_FEN_LENGTH);
+
+    TreeNode *child = node_create(child_fen, uci, uci, parent);
+    if (!child) return NULL;
+
+    if (!node_add_child(parent, child)) {
+        node_destroy_single(child);
+        return NULL;
+    }
+
+    tree->total_nodes++;
+    if (child->depth > tree->max_depth_reached)
+        tree->max_depth_reached = child->depth;
+
+    return child;
+}
+
+
+/**
+ * Expand a newly discovered branch with opponent responses.
+ *
+ * At our-move nodes:       Stockfish top-1 → single child
+ * At opponent-move nodes:  Maia top-N + Stockfish top-1 (deduplicated)
+ */
+static void expand_new_branch(TreeNode *node, int remaining_ply,
+                               Tree *tree, EnginePool *engine_pool,
+                               MaiaContext *maia, RepertoireDB *db,
+                               const DiscoveryConfig *config) {
+    if (!node || remaining_ply <= 0 || !tree->is_building) return;
+
+    bool is_our_move = (node->is_white_to_move == config->play_as_white);
+
+    if (is_our_move) {
+        EvalJob job;
+        if (!engine_pool_evaluate_full(engine_pool, node->fen, &job)) return;
+        if (!job.success || job.bestmove[0] == '\0') return;
+
+        TreeNode *child = add_child_from_uci(node, job.bestmove, tree);
+        if (!child) return;
+
+        child->move_probability = 1.0;
+        child->cumulative_probability = node->cumulative_probability;
+        node_set_eval(child, -job.eval_cp);
+        if (db) rdb_put_eval(db, child->fen, -job.eval_cp, job.depth_reached);
+
+        expand_new_branch(child, remaining_ply - 1,
+                          tree, engine_pool, maia, db, config);
+    } else {
+        /* Opponent: Maia for likely human responses */
+        int children_added = 0;
+
+        if (maia) {
+            MaiaResponse maia_resp;
+            if (maia_evaluate(maia, node->fen, config->maia_elo, &maia_resp) &&
+                maia_resp.success) {
+                for (int m = 0; m < maia_resp.move_count &&
+                                children_added < config->max_maia_responses; m++) {
+                    if (maia_resp.moves[m].probability < config->maia_min_prob)
+                        continue;
+
+                    TreeNode *child = add_child_from_uci(
+                        node, maia_resp.moves[m].uci, tree);
+                    if (!child) continue;
+
+                    child->move_probability = maia_resp.moves[m].probability;
+                    child->cumulative_probability =
+                        node->cumulative_probability * maia_resp.moves[m].probability;
+                    children_added++;
+                }
+            }
+        }
+
+        /* Opponent: Stockfish top-1 (deduplicate against Maia) */
+        EvalJob job;
+        if (engine_pool_evaluate_full(engine_pool, node->fen, &job) &&
+            job.success && job.bestmove[0]) {
+            bool found = false;
+            for (size_t c = 0; c < node->children_count; c++) {
+                if (strcmp(node->children[c]->move_uci, job.bestmove) == 0) {
+                    if (!node->children[c]->has_engine_eval)
+                        node_set_eval(node->children[c], -job.eval_cp);
+                    if (db) rdb_put_eval(db, node->children[c]->fen,
+                                          -job.eval_cp, job.depth_reached);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                TreeNode *child = add_child_from_uci(node, job.bestmove, tree);
+                if (child) {
+                    child->move_probability = 0.01;
+                    child->cumulative_probability =
+                        node->cumulative_probability * 0.01;
+                    node_set_eval(child, -job.eval_cp);
+                    if (db) rdb_put_eval(db, child->fen,
+                                          -job.eval_cp, job.depth_reached);
+                }
+            }
+        }
+
+        /* Recurse into all children of this opponent node */
+        size_t n = node->children_count;
+        for (size_t c = 0; c < n; c++) {
+            expand_new_branch(node->children[c], remaining_ply - 1,
+                              tree, engine_pool, maia, db, config);
+        }
+    }
+}
+
+
+int tree_discover_engine_moves(Tree *tree,
+                                EnginePool *engine_pool,
+                                MaiaContext *maia,
+                                RepertoireDB *db,
+                                const DiscoveryConfig *config,
+                                void (*progress)(int discovered, int scanned,
+                                                  const char *info)) {
+    if (!tree || !tree->root || !engine_pool || !config) return 0;
+
+    /* Phase 1: Collect our-move nodes that were explored by Lichess */
+    size_t max_nodes = tree->total_nodes;
+    TreeNode **our_nodes = (TreeNode **)calloc(max_nodes, sizeof(TreeNode *));
+    if (!our_nodes) return 0;
+
+    size_t num_our_nodes = 0;
+    TreeNode **stack = (TreeNode **)malloc(max_nodes * sizeof(TreeNode *));
+    if (!stack) { free(our_nodes); return 0; }
+
+    int stack_top = 0;
+    stack[stack_top++] = tree->root;
+
+    while (stack_top > 0) {
+        TreeNode *node = stack[--stack_top];
+        if (!node) continue;
+
+        bool is_our_move = (node->is_white_to_move == config->play_as_white);
+        if (is_our_move &&
+            node->children_count > 0 &&
+            node->cumulative_probability >= config->min_probability) {
+            our_nodes[num_our_nodes++] = node;
+        }
+
+        for (size_t i = 0; i < node->children_count; i++) {
+            if (stack_top < (int)max_nodes)
+                stack[stack_top++] = node->children[i];
+        }
+    }
+    free(stack);
+
+    printf("  Scanning %zu our-move positions (MultiPV %d, depth %d)...\n",
+           num_our_nodes, config->multipv, config->search_depth);
+
+    /* Phase 2: Run MultiPV on each our-move node */
+    int total_discovered = 0;
+    tree->is_building = true;
+
+    size_t new_branch_cap = 256;
+    TreeNode **new_branches = (TreeNode **)malloc(new_branch_cap * sizeof(TreeNode *));
+    size_t num_new = 0;
+
+    for (size_t i = 0; i < num_our_nodes; i++) {
+        if (!tree->is_building) break;
+
+        TreeNode *node = our_nodes[i];
+        MultiPVJob mpv;
+        if (!engine_pool_evaluate_multipv(engine_pool, node->fen,
+                                           config->search_depth,
+                                           config->multipv, &mpv))
+            continue;
+        if (!mpv.success || mpv.num_lines == 0) continue;
+
+        int best_cp = mpv.lines[0].eval_cp;
+
+        for (int pv = 0; pv < mpv.num_lines; pv++) {
+            MultiPVLine *line = &mpv.lines[pv];
+            if (line->move_uci[0] == '\0') continue;
+            if (best_cp - line->eval_cp > config->max_eval_loss_cp) continue;
+
+            /* Check if already a child */
+            bool exists = false;
+            for (size_t c = 0; c < node->children_count; c++) {
+                if (strcmp(node->children[c]->move_uci, line->move_uci) == 0) {
+                    if (!node->children[c]->has_engine_eval) {
+                        node_set_eval(node->children[c], -line->eval_cp);
+                        if (db) rdb_put_eval(db, node->children[c]->fen,
+                                              -line->eval_cp, line->depth_reached);
+                    }
+                    exists = true;
+                    break;
+                }
+            }
+            if (exists) continue;
+
+            /* New move: create child node */
+            TreeNode *child = add_child_from_uci(node, line->move_uci, tree);
+            if (!child) continue;
+
+            child->move_probability = 0.0;
+            child->cumulative_probability = node->cumulative_probability;
+            node_set_eval(child, -line->eval_cp);
+            if (db) rdb_put_eval(db, child->fen,
+                                  -line->eval_cp, line->depth_reached);
+
+            total_discovered++;
+
+            /* Track for expansion */
+            if (num_new >= new_branch_cap) {
+                new_branch_cap *= 2;
+                TreeNode **tmp = (TreeNode **)realloc(
+                    new_branches, new_branch_cap * sizeof(TreeNode *));
+                if (tmp) new_branches = tmp;
+                else break;
+            }
+            new_branches[num_new++] = child;
+
+            if (progress) {
+                char info[128];
+                snprintf(info, sizeof(info), "ply %d: %s (%+d cp)",
+                         node->depth, line->move_uci, line->eval_cp);
+                progress(total_discovered, (int)(i + 1), info);
+            }
+        }
+    }
+
+    printf("  Discovered %d new engine moves\n", total_discovered);
+
+    /* Phase 3: Expand new branches */
+    if (config->expansion_depth > 0 && num_new > 0) {
+        printf("  Expanding %zu new branches (%d ply deep)...\n",
+               num_new, config->expansion_depth);
+        for (size_t i = 0; i < num_new; i++) {
+            if (!tree->is_building) break;
+            expand_new_branch(new_branches[i], config->expansion_depth,
+                              tree, engine_pool, maia, db, config);
+        }
+        printf("  Tree now has %zu nodes (max depth %d)\n",
+               tree->total_nodes, tree->max_depth_reached);
+    }
+
+    tree->is_building = false;
+    free(our_nodes);
+    free(new_branches);
+    return total_discovered;
 }
 

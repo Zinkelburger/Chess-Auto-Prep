@@ -53,6 +53,7 @@
 #include "engine_pool.h"
 #include "repertoire.h"
 #include "chess_logic.h"
+#include "maia.h"
 
 
 /* Default starting position */
@@ -107,6 +108,12 @@ static void print_usage(const char *prog_name) {
     printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: -50]\n");
     printf("  --max-eval <cp>        Stop DFS if our eval exceeds this (already won) [default: 300]\n");
     printf("  --max-eval-loss <cp>   Skip our-move candidates more than N cp worse than best [default: 50]\n");
+    printf("\n");
+    printf("Maia fallback (extends tree with NN when explorer is exhausted):\n");
+    printf("  --maia-model <path>    Path to maia_rapid.onnx (enables Maia fallback)\n");
+    printf("  --maia-elo <N>         Elo for Maia predictions [default: 2000]\n");
+    printf("  --maia-threshold <P>   Min cumProb to trigger Maia fallback [default: 0.01]\n");
+    printf("  --maia-min-prob <P>    Skip Maia moves below this probability [default: 0.02]\n");
     printf("  -n, --name <name>      Repertoire name (shown in output/PGN headers)\n");
     printf("  --traps                Find opponent trap positions\n");
     printf("  --pgn <file>           Also export repertoire as PGN\n");
@@ -235,7 +242,11 @@ int main(int argc, char *argv[]) {
     int min_eval_arg = -99999;
     int max_eval_arg = -99999;
     int max_eval_loss_arg = -1;
-    
+    const char *maia_model_path = NULL;
+    int maia_elo = 2000;
+    double maia_threshold = 0.01;
+    double maia_min_prob = 0.02;
+
     /* Parse command line */
     static struct option long_options[] = {
         {"fen",         required_argument, 0, 'f'},
@@ -265,6 +276,10 @@ int main(int argc, char *argv[]) {
         {"min-eval",      required_argument, 0, 1012},
         {"max-eval",      required_argument, 0, 1013},
         {"max-eval-loss", required_argument, 0, 1014},
+        {"maia-model",    required_argument, 0, 1015},
+        {"maia-elo",      required_argument, 0, 1016},
+        {"maia-threshold",required_argument, 0, 1017},
+        {"maia-min-prob", required_argument, 0, 1018},
         {"verbose",     no_argument,       0, 'v'},
         {"help",        no_argument,       0, 'h'},
         {0, 0, 0, 0}
@@ -323,6 +338,10 @@ int main(int argc, char *argv[]) {
             case 1012: if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1; break;
             case 1013: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
             case 1014: if (!parse_int(optarg, "max-eval-loss", &max_eval_loss_arg)) return 1; break;
+            case 1015: maia_model_path = optarg; break;
+            case 1016: if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1; break;
+            case 1017: maia_threshold = atof(optarg); break;
+            case 1018: maia_min_prob = atof(optarg); break;
             default: print_usage(argv[0]); return 1;
         }
     }
@@ -491,6 +510,23 @@ int main(int argc, char *argv[]) {
         if (mass_cutoff_arg >= 0.0) config.opponent_mass_target = mass_cutoff_arg;
         if (verbose) config.progress_callback = progress_callback;
 
+        /* Maia fallback */
+        MaiaContext *maia = NULL;
+        if (maia_model_path) {
+            maia = maia_create(maia_model_path);
+            if (maia) {
+                config.maia = maia;
+                config.maia_elo = maia_elo;
+                config.maia_threshold = maia_threshold;
+                config.maia_min_prob = maia_min_prob;
+                printf("Maia fallback enabled (elo=%d, threshold=%.4f)\n",
+                       maia_elo, maia_threshold);
+            } else {
+                fprintf(stderr, "Warning: Could not load Maia model, "
+                                "fallback disabled\n");
+            }
+        }
+
         struct timespec build_start, build_end;
         clock_gettime(CLOCK_MONOTONIC, &build_start);
 
@@ -522,6 +558,7 @@ int main(int argc, char *argv[]) {
 
         lichess_explorer_print_stats(explorer);
         lichess_explorer_destroy(explorer);
+        if (maia) maia_destroy(maia);
 
         /* Save tree */
         printf("  Saving tree to %s...\n", output_file);
