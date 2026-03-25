@@ -3,11 +3,12 @@
  * 
  * Full pipeline for automatic chess repertoire generation:
  * 
- *   1. BUILD   - Build opening tree from Lichess explorer data
- *   2. EVAL    - Evaluate all positions with Stockfish (multithreaded)
- *   3. EASE    - Calculate ease scores (opponent mistake potential)
- *   4. SELECT  - Score and select optimal repertoire moves
- *   5. EXPORT  - Export to JSON, PGN, and SQLite
+ *   1. BUILD     - Build opening tree from Lichess explorer data
+ *   2. DISCOVER  - Find strong engine moves not in Lichess (MultiPV)
+ *      EVAL      - Evaluate all positions with Stockfish (multithreaded)
+ *   3. EASE      - Calculate ease scores (opponent mistake potential)
+ *   4. SELECT    - Score and select optimal repertoire moves
+ *   5. EXPORT    - Export to JSON, PGN, and SQLite
  * 
  * Usage:
  *   tree_builder [options] <output_file>
@@ -25,6 +26,9 @@
  *   -S, --stockfish <path> Path to Stockfish binary
  *   -D, --database <path>  Path to SQLite database (default: repertoire.db)
  *   -L, --load <file>      Load existing tree JSON instead of building
+ *   --discovery             Enable Stockfish discovery pass
+ *   --discovery-multipv <N> Top-N engine moves to check (default: 3)
+ *   --discovery-expand <N>  Expansion depth for new branches (default: 4)
  *   -m, --masters          Use masters database
  *   --skip-build           Skip tree building (use cached data)
  *   --skip-eval            Skip engine evaluation
@@ -105,8 +109,8 @@ static void print_usage(const char *prog_name) {
     printf("  --depth-decay <0-1>    How fast deeper positions matter less for ECA [default: 0.90]\n");
     printf("  --max-children <N>     Max moves to explore per position (0=unlimited) [default: 0]\n");
     printf("  --mass-cutoff <0-1>    Stop adding moves after this fraction of prob mass [default: 0=off]\n");
-    printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: -50]\n");
-    printf("  --max-eval <cp>        Stop DFS if our eval exceeds this (already won) [default: 300]\n");
+    printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: W=0, B=-200]\n");
+    printf("  --max-eval <cp>        Stop DFS if our eval exceeds this (already won) [default: W=200, B=100]\n");
     printf("  --max-eval-loss <cp>   Skip our-move candidates more than N cp worse than best [default: 50]\n");
     printf("\n");
     printf("Maia fallback (extends tree with NN when explorer is exhausted):\n");
@@ -114,6 +118,11 @@ static void print_usage(const char *prog_name) {
     printf("  --maia-elo <N>         Elo for Maia predictions [default: 2000]\n");
     printf("  --maia-threshold <P>   Min cumProb to trigger Maia fallback [default: 0.01]\n");
     printf("  --maia-min-prob <P>    Skip Maia moves below this probability [default: 0.02]\n");
+    printf("\n");
+    printf("Discovery (find strong engine moves not in Lichess database):\n");
+    printf("  --discovery            Enable Stockfish discovery pass after tree build\n");
+    printf("  --discovery-multipv <N>  Top-N engine moves to check per position [default: 3]\n");
+    printf("  --discovery-expand <N>   Expansion depth for new branches in ply [default: 4]\n");
     printf("  -n, --name <name>      Repertoire name (shown in output/PGN headers)\n");
     printf("  --traps                Find opponent trap positions\n");
     printf("  --pgn <file>           Also export repertoire as PGN\n");
@@ -246,6 +255,9 @@ int main(int argc, char *argv[]) {
     int maia_elo = 2000;
     double maia_threshold = 0.01;
     double maia_min_prob = 0.02;
+    bool discovery_enabled = false;
+    int discovery_multipv = -1;
+    int discovery_expand = -1;
 
     /* Parse command line */
     static struct option long_options[] = {
@@ -280,6 +292,9 @@ int main(int argc, char *argv[]) {
         {"maia-elo",      required_argument, 0, 1016},
         {"maia-threshold",required_argument, 0, 1017},
         {"maia-min-prob", required_argument, 0, 1018},
+        {"discovery",         no_argument,       0, 1019},
+        {"discovery-multipv", required_argument, 0, 1020},
+        {"discovery-expand",  required_argument, 0, 1021},
         {"verbose",     no_argument,       0, 'v'},
         {"help",        no_argument,       0, 'h'},
         {0, 0, 0, 0}
@@ -342,6 +357,9 @@ int main(int argc, char *argv[]) {
             case 1016: if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1; break;
             case 1017: maia_threshold = atof(optarg); break;
             case 1018: maia_min_prob = atof(optarg); break;
+            case 1019: discovery_enabled = true; break;
+            case 1020: if (!parse_int(optarg, "discovery-multipv", &discovery_multipv)) return 1; break;
+            case 1021: if (!parse_int(optarg, "discovery-expand", &discovery_expand)) return 1; break;
             default: print_usage(argv[0]); return 1;
         }
     }
@@ -410,6 +428,17 @@ int main(int argc, char *argv[]) {
     /* Declare early so goto cleanup is safe regardless of jump point */
     RepertoireResult *result = NULL;
     EnginePool *engine_pool = NULL;
+    MaiaContext *maia = NULL;
+
+    /* Create Maia context if model provided (used for build and/or discovery) */
+    if (maia_model_path) {
+        maia = maia_create(maia_model_path);
+        if (maia) {
+            printf("  Maia model loaded (elo=%d)\n", maia_elo);
+        } else {
+            fprintf(stderr, "  Warning: Could not load Maia model, fallback disabled\n");
+        }
+    }
     
     /* ================================================================
      *  STAGE 0: Initialize Database
@@ -418,6 +447,7 @@ int main(int argc, char *argv[]) {
     RepertoireDB *db = rdb_open(db_path);
     if (!db) {
         fprintf(stderr, "Error: Failed to open database\n");
+        if (maia) maia_destroy(maia);
         return 1;
     }
     
@@ -453,6 +483,7 @@ int main(int argc, char *argv[]) {
             }
         } else if (load_tree_file) {
             fprintf(stderr, "Error: Failed to load tree from %s\n", load_tree_file);
+            if (maia) maia_destroy(maia);
             rdb_close(db);
             return 1;
         }
@@ -461,6 +492,7 @@ int main(int argc, char *argv[]) {
     if (skip_build && !tree) {
         printf("[1/5] Skipped tree building (--skip-build)\n");
         fprintf(stderr, "Error: No tree available. Build first or provide a tree file.\n");
+        if (maia) maia_destroy(maia);
         rdb_close(db);
         return 1;
     }
@@ -471,6 +503,7 @@ int main(int argc, char *argv[]) {
         LichessExplorer *explorer = lichess_explorer_create();
         if (!explorer) {
             fprintf(stderr, "Error: Failed to create Lichess explorer\n");
+            if (maia) maia_destroy(maia);
             if (tree) tree_destroy(tree);
             rdb_close(db);
             return 1;
@@ -491,6 +524,7 @@ int main(int argc, char *argv[]) {
             if (!tree) {
                 fprintf(stderr, "Error: Failed to create tree\n");
                 lichess_explorer_destroy(explorer);
+                if (maia) maia_destroy(maia);
                 rdb_close(db);
                 return 1;
             }
@@ -510,21 +544,14 @@ int main(int argc, char *argv[]) {
         if (mass_cutoff_arg >= 0.0) config.opponent_mass_target = mass_cutoff_arg;
         if (verbose) config.progress_callback = progress_callback;
 
-        /* Maia fallback */
-        MaiaContext *maia = NULL;
-        if (maia_model_path) {
-            maia = maia_create(maia_model_path);
-            if (maia) {
-                config.maia = maia;
-                config.maia_elo = maia_elo;
-                config.maia_threshold = maia_threshold;
-                config.maia_min_prob = maia_min_prob;
-                printf("Maia fallback enabled (elo=%d, threshold=%.4f)\n",
-                       maia_elo, maia_threshold);
-            } else {
-                fprintf(stderr, "Warning: Could not load Maia model, "
-                                "fallback disabled\n");
-            }
+        /* Maia fallback (context created earlier, just configure) */
+        if (maia) {
+            config.maia = maia;
+            config.maia_elo = maia_elo;
+            config.maia_threshold = maia_threshold;
+            config.maia_min_prob = maia_min_prob;
+            printf("  Maia fallback enabled (elo=%d, threshold=%.4f)\n",
+                   maia_elo, maia_threshold);
         }
 
         struct timespec build_start, build_end;
@@ -543,6 +570,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Error: Tree building failed\n");
             tree_destroy(tree);
             lichess_explorer_destroy(explorer);
+            if (maia) maia_destroy(maia);
             rdb_close(db);
             return 1;
         }
@@ -558,7 +586,6 @@ int main(int argc, char *argv[]) {
 
         lichess_explorer_print_stats(explorer);
         lichess_explorer_destroy(explorer);
-        if (maia) maia_destroy(maia);
 
         /* Save tree */
         printf("  Saving tree to %s...\n", output_file);
@@ -573,15 +600,15 @@ int main(int argc, char *argv[]) {
     if (g_interrupted) goto cleanup;
     
     /* ================================================================
-     *  STAGE 2: Engine Evaluation (Multithreaded Stockfish)
+     *  STAGE 2: Engine Initialization + Discovery + Evaluation
      * ================================================================ */
     
-    if (!skip_eval) {
+    if (!skip_eval || discovery_enabled) {
         printf("[2/5] Initializing Stockfish engine pool...\n");
         
         const char *sf_path = find_stockfish(stockfish_path);
         if (!sf_path) {
-            fprintf(stderr, "  Warning: Stockfish not found. Skipping evaluation.\n");
+            fprintf(stderr, "  Warning: Stockfish not found.\n");
             fprintf(stderr, "  Searched: ");
             for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++) {
                 fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
@@ -605,6 +632,37 @@ int main(int argc, char *argv[]) {
     
     if (g_interrupted) goto cleanup;
     
+    /* Discovery pass: find strong engine moves not in Lichess database */
+    if (discovery_enabled && engine_pool && tree) {
+        printf("  [Discovery] Running Stockfish MultiPV pass...\n");
+        
+        DiscoveryConfig disc_config = discovery_config_default();
+        disc_config.play_as_white = play_as_white;
+        disc_config.search_depth = eval_depth;
+        disc_config.min_probability = min_probability;
+        disc_config.maia_elo = maia_elo;
+        disc_config.maia_min_prob = maia_min_prob;
+        if (discovery_multipv > 0) disc_config.multipv = discovery_multipv;
+        if (discovery_expand >= 0) disc_config.expansion_depth = discovery_expand;
+        if (max_eval_loss_arg >= 0) disc_config.max_eval_loss_cp = max_eval_loss_arg;
+        
+        int discovered = tree_discover_engine_moves(
+            tree, engine_pool, maia, db, &disc_config, NULL);
+        
+        if (discovered > 0) {
+            printf("  [Discovery] Saving updated tree to %s...\n", output_file);
+            SerializationOptions disc_opts = serialization_options_default();
+            disc_opts.format = FORMAT_JSON;
+            disc_opts.json_indent = 2;
+            tree_save(tree, output_file, &disc_opts);
+        }
+        printf("\n");
+    } else if (discovery_enabled && !engine_pool) {
+        fprintf(stderr, "  Warning: --discovery requires Stockfish, skipping.\n\n");
+    }
+    
+    if (g_interrupted) goto cleanup;
+    
     /* ================================================================
      *  STAGE 3: Generate Repertoire (Eval + Ease + Selection)
      * ================================================================ */
@@ -613,6 +671,7 @@ int main(int argc, char *argv[]) {
     
     RepertoireConfig rep_config = repertoire_config_default();
     rep_config.play_as_white = play_as_white;
+    repertoire_config_set_color_defaults(&rep_config);
     strncpy(rep_config.start_fen, start_fen, sizeof(rep_config.start_fen) - 1);
     rep_config.max_depth = max_depth;
     rep_config.min_probability = min_probability;
@@ -750,6 +809,7 @@ cleanup:
     /* Cleanup */
     if (result) repertoire_result_free(result);
     if (engine_pool) engine_pool_destroy(engine_pool);
+    if (maia) maia_destroy(maia);
     if (tree) tree_destroy(tree);
     if (db) rdb_close(db);
     

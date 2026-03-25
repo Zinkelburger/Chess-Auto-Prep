@@ -143,6 +143,17 @@ typedef struct {
 RepertoireConfig repertoire_config_default(void);
 
 /**
+ * Apply color-specific eval-window defaults
+ * 
+ * Must be called after setting config->play_as_white.
+ * White: min_eval=0, max_eval=200 (never accept worse than equal)
+ * Black: min_eval=-200, max_eval=100 (accept being slightly worse)
+ * 
+ * @param config Config to modify (play_as_white must already be set)
+ */
+void repertoire_config_set_color_defaults(RepertoireConfig *config);
+
+/**
  * Generate a complete repertoire from a tree
  * 
  * This is the main entry point. It:
