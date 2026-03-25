@@ -3,6 +3,7 @@
  */
 
 #include "tree.h"
+#include "repertoire.h"
 #include "lichess_api.h"
 #include "chess_logic.h"
 #include "maia.h"
@@ -473,134 +474,201 @@ size_t tree_calculate_ease(Tree *tree) {
 }
 
 
-/* ========== ECA (Expected Centipawn Advantage) ========== */
+/* ========== ECA (Expected Centipawn Advantage — win-probability-delta) ========== */
 
-/* Q-value sigmoid — maps centipawns to [-1, 1] with diminishing returns */
-static double eca_cp_to_q(int cp) {
-    if (abs(cp) > 9000) return cp > 0 ? 1.0 : -1.0;
-    double wp = 1.0 / (1.0 + exp(-0.004 * cp));
-    return 2.0 * wp - 1.0;
+/**
+ * Win probability from centipawns (Lichess-calibrated sigmoid).
+ * Maps centipawns to [0, 1] from White's perspective.
+ */
+double win_probability(int cp) {
+    if (abs(cp) > 9000) return cp > 0 ? 1.0 : 0.0;
+    return 1.0 / (1.0 + exp(-0.00368208 * cp));
+}
+
+/**
+ * Centipawn eval from our perspective.
+ * child->engine_eval_cp is from the child's STM perspective.
+ */
+static int eval_for_us(const TreeNode *child, bool play_as_white) {
+    if (!child->has_engine_eval) return 0;
+    int cp = child->engine_eval_cp;
+    int eval_white = child->is_white_to_move ? cp : -cp;
+    return play_as_white ? eval_white : -eval_white;
+}
+
+/**
+ * Win probability from our perspective for a child node.
+ */
+static double wp_us(const TreeNode *child, bool play_as_white) {
+    if (!child->has_engine_eval) return 0.5;
+    int cp = child->engine_eval_cp;
+    int eval_white = child->is_white_to_move ? cp : -cp;
+    double wp_white = win_probability(eval_white);
+    return play_as_white ? wp_white : (1.0 - wp_white);
 }
 
 
 /**
- * Compute local CPL and Q-loss for a single node from its children.
+ * Compute local trickiness (wp-delta) for a single node from its children.
  *
- * Children's evals are from the NEXT side-to-move's perspective (opposite to
- * the player choosing at this node).  The current player's best move is the
- * child with the MINIMUM eval (worst for the opponent / next STM).
+ * Measures how much win probability the side-to-move hands the other side
+ * by playing database moves instead of the best move.
  *
- * local_cpl  = Σ(prob_i × max(0, cp_i - best_cp))        [raw centipawns]
- * local_q    = Σ(prob_i × max(0, Q(cp_i) - Q(best)))     [Q-values]
+ * wp_for_mover(child) = 1 - wp(child.engine_eval_cp), since the child eval
+ * is from the next-STM perspective (the mover's opponent).
  *
- * A high local_cpl means the current-node player often picks moves that are
- * worse than their best option — i.e. they blunder centipawns.
+ * best_wp   = max(wp_for_mover(child)) over all children with evals
+ * local_cpl = Σ(prob_i × max(0, best_wp - wp_for_mover(child_i)))
+ *             for children with prob >= 0.01
  */
 static void compute_local_eca(TreeNode *node) {
     if (!node || node->children_count == 0) return;
 
-    int best_cp = 100000;
-    bool has_any_eval = false;
+    double best_wp = -1.0;
+    bool has_any = false;
 
     for (size_t i = 0; i < node->children_count; i++) {
         if (!node->children[i]->has_engine_eval) continue;
-        int cp = node->children[i]->engine_eval_cp;
-        if (cp < best_cp) best_cp = cp;
-        has_any_eval = true;
+        double mover_wp = 1.0 - win_probability(node->children[i]->engine_eval_cp);
+        if (mover_wp > best_wp) best_wp = mover_wp;
+        has_any = true;
     }
-    if (!has_any_eval) return;
+    if (!has_any) return;
 
-    double q_best = eca_cp_to_q(best_cp);
-    double sum_cpl = 0.0;
-    double sum_q   = 0.0;
-
+    double sum = 0.0;
     for (size_t i = 0; i < node->children_count; i++) {
         TreeNode *child = node->children[i];
         if (!child->has_engine_eval) continue;
         if (child->move_probability < 0.01) continue;
 
-        double prob = child->move_probability;
-        int cp = child->engine_eval_cp;
-
-        double cp_loss = (double)(cp - best_cp);
-        if (cp_loss < 0) cp_loss = 0;
-        sum_cpl += prob * cp_loss;
-
-        double q_loss = eca_cp_to_q(cp) - q_best;
-        if (q_loss < 0) q_loss = 0;
-        sum_q += prob * q_loss;
+        double mover_wp = 1.0 - win_probability(child->engine_eval_cp);
+        double delta = best_wp - mover_wp;
+        if (delta < 0) delta = 0;
+        sum += child->move_probability * delta;
     }
-
-    node->local_cpl   = sum_cpl;
-    node->local_q_loss = sum_q;
+    node->local_cpl = sum;
 }
 
 
 /**
- * Post-order DFS: compute local values, then accumulate bottom-up.
+ * Score all children at an our-move node with the blended formula.
+ * Applies eval-guard and max-eval-loss filters; falls back to
+ * scoring all children (no filters) when every child is excluded.
+ *
+ * Both the accumulation DFS and the selection DFS call this, so the
+ * chosen child is guaranteed to be the same in both phases.
  */
-static size_t calculate_eca_recursive(TreeNode *node, bool play_as_white,
-                                       double depth_discount) {
+int score_our_move_children(TreeNode *node,
+                            const struct RepertoireConfig *config,
+                            ScoredChild *best_out) {
+    if (!node || !config || !best_out) return 0;
+
+    best_out->child = NULL;
+    best_out->score = -1e9;
+    best_out->accumulated_eca = 0.0;
+
+    /* Find best child eval (our perspective) for the max-eval-loss filter */
+    int best_child_cp = -100000;
+    for (size_t i = 0; i < node->children_count; i++) {
+        TreeNode *child = node->children[i];
+        if (!child->has_engine_eval) continue;
+        int cp_us = eval_for_us(child, config->play_as_white);
+        if (cp_us > best_child_cp) best_child_cp = cp_us;
+    }
+
+    int passing = 0;
+    double best_score = -1e9;
+    TreeNode *best_child = NULL;
+    double best_eca = 0.0;
+
+    for (size_t i = 0; i < node->children_count; i++) {
+        TreeNode *child = node->children[i];
+        if (!child->has_eca) continue;
+
+        int cp_us = eval_for_us(child, config->play_as_white);
+        if (cp_us < best_child_cp - config->max_eval_loss_cp) continue;
+
+        double eval_us_wp = wp_us(child, config->play_as_white);
+        if (eval_us_wp < config->eval_guard_threshold) continue;
+
+        passing++;
+        double score = config->eval_weight * eval_us_wp
+                     + (1.0 - config->eval_weight) * child->accumulated_eca;
+        if (score > best_score) {
+            best_score = score;
+            best_child = child;
+            best_eca = child->accumulated_eca;
+        }
+    }
+
+    /* Fallback: all filtered out → re-score all with blended (no filters) */
+    if (passing == 0) {
+        best_score = -1e9;
+        for (size_t i = 0; i < node->children_count; i++) {
+            TreeNode *child = node->children[i];
+            if (!child->has_eca) continue;
+            double eval_us_wp = wp_us(child, config->play_as_white);
+            double score = config->eval_weight * eval_us_wp
+                         + (1.0 - config->eval_weight) * child->accumulated_eca;
+            if (score > best_score) {
+                best_score = score;
+                best_child = child;
+                best_eca = child->accumulated_eca;
+            }
+        }
+    }
+
+    best_out->child = best_child;
+    best_out->score = best_score;
+    best_out->accumulated_eca = best_eca;
+    return passing;
+}
+
+
+/**
+ * Post-order DFS: compute local wp-delta values, then accumulate bottom-up.
+ */
+static size_t calculate_eca_recursive(TreeNode *node,
+                                       const RepertoireConfig *config) {
     if (!node) return 0;
 
     size_t count = 0;
 
-    /* Recurse into children first (post-order) */
-    for (size_t i = 0; i < node->children_count; i++) {
-        count += calculate_eca_recursive(node->children[i], play_as_white,
-                                          depth_discount);
-    }
+    for (size_t i = 0; i < node->children_count; i++)
+        count += calculate_eca_recursive(node->children[i], config);
 
-    /* Compute local CPL / Q-loss from this node's children */
     compute_local_eca(node);
 
-    /* Accumulate ECA bottom-up */
-    double gamma_d = pow(depth_discount, (double)node->depth);
-    bool is_our_move = (node->is_white_to_move == play_as_white);
+    double gamma_d = pow(config->depth_discount, (double)node->depth);
+    bool is_our_move = (node->is_white_to_move == config->play_as_white);
 
     if (node->children_count == 0) {
-        /* Leaf: only local contribution */
-        node->accumulated_eca   = gamma_d * node->local_cpl;
-        node->accumulated_q_eca = gamma_d * node->local_q_loss;
+        node->accumulated_eca = gamma_d * node->local_cpl;
+
     } else if (is_our_move) {
-        /* Our move: pick the child whose subtree has the best accumulated ECA */
-        double best_eca  = -1e9;
-        double best_qeca = -1e9;
-        for (size_t i = 0; i < node->children_count; i++) {
-            TreeNode *child = node->children[i];
-            if (!child->has_eca) continue;
-            if (child->accumulated_eca > best_eca) {
-                best_eca  = child->accumulated_eca;
-                best_qeca = child->accumulated_q_eca;
-            }
-        }
-        node->accumulated_eca   = best_eca > -1e9  ? best_eca  : 0.0;
-        node->accumulated_q_eca = best_qeca > -1e9 ? best_qeca : 0.0;
+        ScoredChild best;
+        score_our_move_children(node, config, &best);
+        node->accumulated_eca = best.child ? best.accumulated_eca : 0.0;
+
     } else {
-        /* Opponent move: local contribution + probability-weighted children */
-        double future_eca  = 0.0;
-        double future_qeca = 0.0;
+        double future = 0.0;
         for (size_t i = 0; i < node->children_count; i++) {
             TreeNode *child = node->children[i];
             if (!child->has_eca) continue;
-            double prob = child->move_probability;
-            future_eca  += prob * child->accumulated_eca;
-            future_qeca += prob * child->accumulated_q_eca;
+            future += child->move_probability * child->accumulated_eca;
         }
-        node->accumulated_eca   = gamma_d * node->local_cpl   + future_eca;
-        node->accumulated_q_eca = gamma_d * node->local_q_loss + future_qeca;
+        node->accumulated_eca = gamma_d * node->local_cpl + future;
     }
 
     node->has_eca = true;
     count++;
-
     return count;
 }
 
 
-size_t tree_calculate_eca(Tree *tree, bool play_as_white, double depth_discount) {
-    if (!tree || !tree->root) return 0;
-    return calculate_eca_recursive(tree->root, play_as_white, depth_discount);
+size_t tree_calculate_eca(Tree *tree, const struct RepertoireConfig *config) {
+    if (!tree || !tree->root || !config) return 0;
+    return calculate_eca_recursive(tree->root, config);
 }
 
 

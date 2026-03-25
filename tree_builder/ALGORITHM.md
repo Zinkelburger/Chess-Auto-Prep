@@ -9,10 +9,12 @@ The tree builder generates chess opening repertoires by:
 2. Optionally discovering strong engine moves not in the Lichess database
    (Stockfish MultiPV discovery pass)
 3. Evaluating every position with Stockfish
-4. Computing **ECA (Expected Centipawn Advantage)** — a metric that estimates
-   how many centipawns opponents will lose on average in each line
-5. Selecting repertoire moves that maximize ECA (subject to an eval guard),
-   with a fallback scoring path when ECA data is unavailable
+4. Computing **ECA (Expected Centipawn Advantage)** — a metric measured in
+   win-probability-delta units that estimates how much win probability
+   opponents will hand us on average in each line
+5. Selecting repertoire moves using a blended score of eval and ECA
+   (subject to eval guard and max-eval-loss filters), with the same formula
+   used in both accumulation and selection for consistency
 6. Extracting complete lines and exporting to JSON/PGN
 
 ---
@@ -118,8 +120,9 @@ the database at the configured depth.
 **Sub-stage 2 — Ease calculation:** Compute ease scores (see below) for every
 node and cache in the database.
 
-**Sub-stage 3 — ECA calculation:** Compute local CPL and accumulated ECA for
-the entire tree (see detailed description below).
+**Sub-stage 3 — ECA calculation:** Compute local trickiness (wp-delta) and
+accumulated ECA for the entire tree.  Takes the full `RepertoireConfig` so
+that our-move filtering matches the selection phase exactly.
 
 **Sub-stage 4 — Move selection:** Traverse the tree and select repertoire moves
 (see Move Selection below).
@@ -159,74 +162,124 @@ matches the Flutter/Python implementation exactly.
 
 ---
 
-## ECA: Expected Centipawn Advantage
+## ECA: Expected Centipawn Advantage (Win-Probability-Delta Units)
 
 ### Concept
 
-ECA measures: "If I play this line, how many centipawns will my opponent lose
-on average due to suboptimal play?"
+ECA measures: "If I play this line, how much win probability will my opponent
+hand me on average due to suboptimal play?"
+
+Everything is measured in win-probability-delta units [0, ~0.5] from the bottom
+of the tree to the top.  One number per node, one formula, no normalization.
+
+The names `local_cpl`, `accumulated_eca`, and `has_eca` are kept for backward
+compatibility — the concept is the same, just measured in win-probability space
+instead of raw centipawns.
 
 It combines two ideas:
-- **Local CPL (Centipawn Loss)**: at a single node, how much does the player
-  lose by playing popular moves instead of the best move?
-- **Accumulation**: sum local CPL contributions from opponent nodes down the
-  tree, discounted by depth.
+- **Local trickiness (local_cpl)**: at a single node, how much win probability
+  does the side-to-move hand the other side by playing database moves instead
+  of the best move?
+- **Accumulation**: sum local trickiness from opponent nodes down the tree,
+  with our-move nodes selecting via the blended score that matches the
+  selection phase.
 
-### Local CPL Calculation
+### Win Probability Function
 
-At each node, `compute_local_eca()` looks at all children (moves available)
-and computes how much the side-to-move loses on average:
+The Lichess-calibrated sigmoid:
 
 ```
-best_cp = min(child.engine_eval_cp for all children)
-
-local_cpl = Σ(child.move_probability × max(0, child.eval_cp - best_cp))
+wp(cp) = 1 / (1 + e^(-0.00368208 × cp))
 ```
 
-**Key detail — sign convention:** Children's evals are from the *next* STM's
-perspective (opposite to the player choosing). The player's best move is the
-child with the **minimum** eval (worst for the opponent). Loss for choosing
-child `i` is `eval_i - min_eval` (positive = the player gave away centipawns).
+Maps centipawns to [0, 1] from White's perspective.  A 50cp blunder near
+equality (0.50 → 0.55 wp) contributes ~0.046 wp-delta.  The same 50cp blunder
+when already up 300cp (0.75 → 0.77 wp) contributes only ~0.016.  The sigmoid
+makes blunders in critical positions worth more than blunders in already-decided
+positions.
 
-Children with `move_probability < 0.01` (1%) are excluded.
+### Local Trickiness (local_cpl)
 
-A Q-value version (`local_q_loss`) is also computed using a sigmoid transform
-that provides diminishing returns for large eval differences.
+At each node, `compute_local_eca()` computes how much win probability the
+side-to-move gives away by playing database moves instead of the best move:
+
+```
+wp_for_mover(child) = 1 - wp(child.engine_eval_cp)
+
+best_wp   = max(wp_for_mover(child) for all children with evals)
+local_cpl = Σ(prob_i × max(0, best_wp - wp_for_mover(child_i)))
+            for children with move_probability >= 0.01
+```
+
+**Sign convention:** `child.engine_eval_cp` is from the next-STM perspective
+(the mover's opponent).  `wp(child_eval)` gives the opponent's win probability.
+`1 - wp(child_eval)` gives the mover's win probability.  The mover wants to
+maximize this, so the best move has the highest `wp_for_mover`.
+
+Children with `move_probability < 0.01` are excluded from the delta sum but
+NOT from the `best_wp` computation — rare strong moves set the baseline that
+common moves are measured against.
+
+`local_cpl` is in [0, 1] and typically ranges 0.00–0.10 (0–10 percentage
+points of win probability).
 
 ### Bottom-Up Accumulation
 
-`calculate_eca_recursive()` runs a post-order DFS:
+`calculate_eca_recursive()` runs a post-order DFS.  The accumulation pass
+receives the full `RepertoireConfig` so that our-move filtering matches the
+selection phase exactly.
 
 - **Leaf nodes**: `accumulated_eca = depth_decay^depth × local_cpl`
-- **Our-move nodes**: `accumulated_eca = max(child.accumulated_eca)` — we pick
-  the trickiest line
 - **Opponent-move nodes**:
   `accumulated_eca = depth_decay^depth × local_cpl + Σ(prob_i × child_i.accumulated_eca)`
-  — local blunder potential plus probability-weighted future blunders
+  — local trickiness plus probability-weighted future trickiness
+- **Our-move nodes**: Select the child using the blended score
+  `α × wp_us(child.eval) + (1-α) × child.accumulated_eca`, with eval-guard
+  and max-eval-loss filters applied (same filters as selection).  Propagate
+  the selected child's `accumulated_eca` upward.
 
-### Move Selection (composite scoring)
+The our-move formula is the key difference from the old system (which used
+`max(child_eca)`).  Now the accumulated value reflects the trickiness of the
+move we'd actually play under the current scoring policy — not the trickiest
+move that might never be selected.
 
-At our-move nodes, each candidate move receives a **composite score** that
-blends objective evaluation with trickiness:
+A shared helper function `score_our_move_children()` is called by both the
+accumulation DFS and the selection DFS to guarantee they pick the same child.
+
+### Move Selection (blended scoring, no normalization)
+
+At our-move nodes during the top-down traversal:
 
 ```
-norm_eca = child.accumulated_eca / max(sibling accumulated_eca values)
-eval_us  = win_probability(child eval, from our perspective)
+for each child (after eval-guard and max-eval-loss filtering,
+                with "if all fail, re-score all" fallback):
+    score = α × wp_us(child.eval) + (1-α) × child.accumulated_eca
 
-score = eval_weight × eval_us + (1 - eval_weight) × norm_eca
+select argmax(score)
 ```
 
-- `eval_weight` (`--eval-weight`): controls the eval-vs-trickiness tradeoff.
-  At 0, pure trickiness. At 1, pure objective strength. Default 0.40.
-- `norm_eca`: ECA normalized to [0, 1] relative to the best sibling, so eval
-  and ECA contribute on comparable scales.
-- `eval_us`: win probability from our perspective, naturally in [0, 1].
+This is **identical** to what the accumulation phase computed.  No
+normalization step is needed because `accumulated_eca` is in
+win-probability-delta units — the same unit space as `wp_us`.  Both derive
+from the same sigmoid, making them naturally comparable without rescaling.
+
+**Eval source consistency:** Selection reads evals from
+`child->engine_eval_cp` (TreeNode fields), not from the database via
+`rdb_get_eval()`.  The accumulation pass also reads from TreeNode, so both
+phases use the same source, guaranteeing they pick the same child.
+
+The `α` parameter (`--eval-weight`) controls the tradeoff:
+- `α = 1.0`: pure objective eval (pick the best engine move)
+- `α = 0.0`: pure trickiness (pick the line where opponents blunder most)
+- `α = 0.4` (default): blend
 
 Before scoring, two filters reject candidates:
 1. **Max-eval-loss filter**: candidates more than `max_eval_loss_cp` worse
    than the best sibling are skipped.
 2. **Eval guard**: moves where our win probability falls below
    `eval_guard_threshold` (default 0.35) are rejected regardless of trickiness.
+3. **Fallback**: if ALL children are filtered out, re-score all children with
+   the blended formula (no filters) and pick the best.
 
 #### Fallback Scoring (when ECA is unavailable)
 
@@ -266,55 +319,38 @@ leave you wondering "but what do I play here?"
 
 ---
 
-## Known Issue: ECA Ignores Absolute Evaluation
+## Resolved: ECA Now Accounts for Absolute Evaluation
 
-**This is the most significant design flaw.**
+The win-probability-delta metric naturally handles the absolute-evaluation
+problem that was the most significant flaw in the old centipawn-based ECA.
 
-ECA measures *relative* opponent error within a subtree — how much worse
-opponents play compared to their best option *in that position*. It does NOT
-account for the absolute evaluation baseline.
+### How the sigmoid solves it
 
-### Example (1.e4 Nf6 — Alekhine's Defense)
+A 50cp blunder near equality (0.50 → 0.55 wp) contributes ~0.046 wp-delta.
+A 50cp blunder when already winning (+300cp, 0.75 → 0.77 wp) contributes only
+~0.016.  The sigmoid makes blunders in critical positions worth more than
+blunders in already-decided positions.
 
-| Move | White's Eval | Black's "blunder" | Black's eval after blunder |
-|------|-------------|-------------------|---------------------------|
-| 2.e5 | +64 cp | Nd5 (93.7%, loss=0) | -62 cp (still bad for Black) |
-| 2.Nc3 | +26 cp | d5 (42.5%, loss=24) | -45 cp (better for Black than e5 line!) |
+### Alekhine Example (1.e4 Nf6)
 
-ECA prefers Nc3 (local_cpl=18.1) over e5 (local_cpl=3.8) because opponents
-"blunder" more after Nc3. But these "blunders" leave Black in a better position
-than perfect play in the e5 line! The 24 cp "blunder" after Nc3 gives Black
--45 cp, while the e5 mainline gives Black -62 cp even with perfect play.
+| Move | White's Eval | Blunder delta (old cp) | Blunder delta (new wp) |
+|------|-------------|------------------------|------------------------|
+| 2.e5 | +64 cp | 3.8 cp | ~0.004 wp |
+| 2.Nc3 | +26 cp | 18.1 cp | ~0.017 wp |
 
-**In other words: ECA rewards lines where opponents make small inaccuracies
-in already-comfortable positions, rather than lines where opponents face
-genuinely difficult problems from an already-worse starting position.**
+The new metric still shows higher local trickiness for Nc3, but the gap is
+compressed.  Combined with the blended score (α × eval_us + (1-α) × acc_eca),
+the stronger position after e5 (higher wp_us) can now outweigh the trickiness
+advantage of Nc3 — especially since the accumulation pass also factors in
+eval when selecting our moves deeper in the tree.
 
-### Current Mitigation: Composite Scoring
+### Accumulation/Selection Consistency
 
-The move selection blends eval with ECA via `--eval-weight`:
-
-```
-score = eval_weight × eval_for_us + (1 - eval_weight) × normalized_eca
-```
-
-At eval_weight=0.40 (default), a move needs to be both objectively decent AND tricky to
-score well. This helps but doesn't fully solve the problem at shallow depths
-because the ECA gap between "tricky-but-weak" and "strong-but-obvious" lines
-can still dominate.
-
-### Further Improvements to Explore
-
-1. **Deeper trees**: The most impactful fix. At depth 8, the e5 line hasn't had
-   time to accumulate ECA from deeper opponent errors (moves 5-10). With deeper
-   trees, objectively critical lines naturally accumulate more ECA.
-
-2. **Minimum loss threshold**: Only count losses above N centipawns (e.g., 50 cp)
-   as real mistakes, filtering out inaccuracies between equally reasonable moves.
-
-3. **Absolute-floor CPL**: Only count opponent losses that push their eval below
-   some threshold. A "blunder" that still leaves the opponent comfortable
-   shouldn't count.
+The old system had a second problem: accumulation used `max(child_eca)` but
+selection used a blended score, so they could pick different children.  The
+new system uses `score_our_move_children()` in both phases, guaranteeing they
+agree.  A parent node's ECA now reflects the trickiness of the line we'd
+actually play.
 
 ---
 
@@ -338,10 +374,10 @@ aggressive filtering (`--mass-cutoff 0.80` or `--max-children 3`), where the
 lower ECA honestly reflects reduced coverage.
 
 The un-renormalized version has a defensible interpretation: "expected opponent
-CPL across *all* games from this position, treating unanalyzed lines as
-contributing nothing." Renormalizing would instead assume the opponent always
-plays an analyzed move — slightly optimistic but arguably better for comparing
-subtrees with different coverage levels.
+win-probability loss across *all* games from this position, treating unanalyzed
+lines as contributing nothing."  This effect is arguably correct: positions
+where the opponent has many diffuse responses genuinely have less exploitable
+structure than positions with one dominant line.
 
 ---
 
@@ -387,7 +423,7 @@ subtrees with different coverage levels.
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| `depth_discount` | `--depth-decay` | 1.0 (no decay) | Depth discount for ECA. At 1.0, all depths contribute equally (probability weighting handles importance). Lower values prefer early blunders over deep ones |
+| `depth_discount` | `--depth-decay` | 1.0 (no decay) | Depth discount for ECA. At 1.0, all depths contribute equally (the sigmoid + probability weighting handle importance). Lower values prefer early blunders over deep ones. Less necessary with wp-delta units since the sigmoid already compresses extreme evals |
 | `eval_weight` | `--eval-weight` | 0.40 | Blend ratio. 0 = pure trickiness. 1 = pure objective eval. 0.4 = 40% eval, 60% trickiness |
 | `eval_guard_threshold` | `--eval-guard` | 0.35 | Minimum win probability to consider a move. Moves below this are rejected regardless of trickiness |
 | `min_eval_cp` | `--min-eval` | W: 0, B: -200 | Stop DFS if our eval drops below this (losing position). Color-dependent defaults applied automatically |
@@ -406,10 +442,11 @@ subtrees with different coverage levels.
   Higher = more reliable probabilities but might miss newer lines.
 
 - **`depth_discount`** (`--depth-decay`): "Should early blunders count more than
-  deep ones?" At 1.0 (default), all blunders contribute equally — the
-  probability weighting already handles depth naturally. Set below 1.0 if you
-  want to prefer lines where opponents blunder early (e.g., 0.90 means a
-  depth-6 blunder is worth 0.90^6 = 53% of its face value).
+  deep ones?" At 1.0 (default), all blunders contribute equally — the sigmoid
+  compression and probability weighting already handle depth naturally.  Less
+  necessary with wp-delta units since the sigmoid compresses extreme evals.
+  Set below 1.0 for deep forcing-line repertoires where you want to prevent
+  deep opponent nodes from dominating the signal.
 
 - **`ratings`**: "Whose mistakes are we exploiting?" Using 2000+ means the
   probabilities reflect what strong players actually do. Using 1200+ would show
@@ -450,7 +487,7 @@ subtrees with different coverage levels.
 ```
 tree_builder/
 ├── include/
-│   ├── node.h          # TreeNode struct (eval, ECA fields, probabilities)
+│   ├── node.h          # TreeNode struct (eval, ECA wp-delta fields, probabilities)
 │   ├── tree.h          # Tree operations, ECA calculation, discovery config
 │   ├── repertoire.h    # RepertoireConfig, move selection, line extraction
 │   ├── lichess_api.h   # Lichess Explorer API client
@@ -461,7 +498,7 @@ tree_builder/
 │   ├── maia.h          # Maia neural network integration (ONNX Runtime)
 │   └── thread_pool.h   # Generic thread pool
 ├── src/
-│   ├── tree.c          # Tree building, ease, ECA, discovery pass, Maia fallback
+│   ├── tree.c          # Tree building, ease, ECA (wp-delta), scoring helper, discovery, Maia
 │   ├── repertoire.c    # generate_repertoire pipeline, scoring, line extraction
 │   ├── node.c          # Node creation, node_set_eca, node_set_eval
 │   ├── lichess_api.c   # HTTP requests to Lichess Explorer (with auth)
@@ -504,14 +541,14 @@ Lichess Explorer API ───────────────────�
    calculate_ease_for_node() ──→ ease score [0, 1]
         │                        (fallback scoring component)
         ▼
-   compute_local_eca() ──→ TreeNode.local_cpl (probability-weighted CPL)
-        │                   TreeNode.local_q_loss
+   compute_local_eca() ──→ TreeNode.local_cpl (wp-delta trickiness)
         ▼
    calculate_eca_recursive() ──→ TreeNode.accumulated_eca (bottom-up DFS)
-        │                         TreeNode.accumulated_q_eca
+        │                         (win-probability-delta units)
         ▼
    build_repertoire_recursive() ──→ RepertoireMove[] (our selected moves)
-        │                            - At our nodes: composite score (eval + ECA blend)
+        │                            - At our nodes: α × eval + (1-α) × acc_eca
+        │                            - Uses score_our_move_children() (same as accumulation)
         │                            - Fallback: 4-weight formula when no ECA
         │                            - Filtered by max-eval-loss and eval guard
         │                            - At opponent nodes: recurse all likely responses

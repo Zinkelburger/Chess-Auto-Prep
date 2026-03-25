@@ -65,17 +65,12 @@ typedef struct {
 
 /**
  * Get centipawn eval from our perspective for a node.
- * Returns eval_cp in "our" centipawns, or 0 if unavailable.
+ * Reads from TreeNode fields (not DB) for consistency with ECA accumulation.
  */
-static int get_eval_for_us(const TreeNode *node, RepertoireDB *db,
-                           bool play_as_white) {
-    int eval_cp = 0;
-    int edepth = 0;
-    if (!rdb_get_eval(db, node->fen, &eval_cp, &edepth)) {
-        if (node->has_engine_eval) eval_cp = node->engine_eval_cp;
-        else return 0;
-    }
-    int eval_white = node->is_white_to_move ? eval_cp : -eval_cp;
+static int get_eval_for_us(const TreeNode *node, bool play_as_white) {
+    if (!node->has_engine_eval) return 0;
+    int cp = node->engine_eval_cp;
+    int eval_white = node->is_white_to_move ? cp : -cp;
     return play_as_white ? eval_white : -eval_white;
 }
 
@@ -379,7 +374,7 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
     
     /* Eval-window pruning: stop exploring if position is too winning or too losing */
     if (node->depth > 0) {
-        int eval_us = get_eval_for_us(node, db, config->play_as_white);
+        int eval_us = get_eval_for_us(node, config->play_as_white);
         if (eval_us <= config->min_eval_cp) {
             if (config->verbose_search) {
                 printf("  [prune] eval %+dcp <= %+dcp min — stopping DFS at depth %d\n",
@@ -408,49 +403,9 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
         double best_score = -DBL_MAX;
         TreeNode *best_child = NULL;
         bool using_eca = false;
-        
+
         for (size_t i = 0; i < node->children_count; i++) {
             if (node->children[i]->has_eca) { using_eca = true; break; }
-        }
-
-        /* Pre-compute eval and ECA for all children so we can normalize */
-        double max_eca = 0.0;
-        double child_eval_for_us[256];
-        int child_our_cp[256];
-        bool child_passes_eval_loss[256];
-        int best_child_cp = -100000;
-
-        for (size_t i = 0; i < node->children_count && i < 256; i++) {
-            TreeNode *child = node->children[i];
-            int eval_cp = 0;
-            int edepth = 0;
-            if (!rdb_get_eval(db, child->fen, &eval_cp, &edepth)) {
-                if (child->has_engine_eval) eval_cp = child->engine_eval_cp;
-            }
-            int eval_white = child->is_white_to_move ? eval_cp : -eval_cp;
-            child_our_cp[i] = config->play_as_white ? eval_white : -eval_white;
-            child_eval_for_us[i] = config->play_as_white
-                ? cp_to_win_prob(eval_white)
-                : 1.0 - cp_to_win_prob(eval_white);
-
-            if (child_our_cp[i] > best_child_cp)
-                best_child_cp = child_our_cp[i];
-
-            if (using_eca && child->has_eca && child->accumulated_eca > max_eca)
-                max_eca = child->accumulated_eca;
-        }
-
-        /* Mark children that pass the max-eval-loss filter */
-        int passing_count = 0;
-        for (size_t i = 0; i < node->children_count && i < 256; i++) {
-            child_passes_eval_loss[i] =
-                (child_our_cp[i] >= best_child_cp - config->max_eval_loss_cp) &&
-                (child_our_cp[i] >= config->min_eval_cp);
-            if (child_passes_eval_loss[i]) passing_count++;
-        }
-        if (passing_count == 0) {
-            for (size_t i = 0; i < node->children_count && i < 256; i++)
-                child_passes_eval_loss[i] = true;
         }
 
         if (config->verbose_search) {
@@ -467,63 +422,69 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
                    config->eval_weight * 100.0,
                    (1.0 - config->eval_weight) * 100.0);
             printf("  %-8s %7s %7s %8s %8s  %s\n",
-                   "Move", "Eval", "WinPr", "ECA", "Score", "");
+                   "Move", "Eval", "WinPr", "WP_ECA", "Score", "");
             printf("  %-8s %7s %7s %8s %8s  %s\n",
                    "────────", "───────", "───────", "────────", "────────", "──────");
         }
 
-        for (size_t i = 0; i < node->children_count && i < 256; i++) {
-            TreeNode *child = node->children[i];
-            double score;
+        if (using_eca) {
+            /* Use the shared scoring helper — identical to ECA accumulation */
+            ScoredChild winner;
+            score_our_move_children(node, config, &winner);
+            best_child = winner.child;
+            best_score = winner.score;
 
-            /* Skip candidates too far from the best eval */
-            if (!child_passes_eval_loss[i]) {
-                if (config->verbose_search) {
-                    printf("  %-8s %+6dcp %6s  %8s %8s  SKIP (>%dcp from best %+dcp)\n",
-                           child->move_san, child_our_cp[i], "",
-                           "", "",
-                           config->max_eval_loss_cp, best_child_cp);
+            if (config->verbose_search) {
+                /* Print details for each child */
+                int best_child_cp = -100000;
+                for (size_t i = 0; i < node->children_count; i++) {
+                    if (!node->children[i]->has_engine_eval) continue;
+                    int cp_us = get_eval_for_us(node->children[i], config->play_as_white);
+                    if (cp_us > best_child_cp) best_child_cp = cp_us;
                 }
-                continue;
-            }
+                for (size_t i = 0; i < node->children_count; i++) {
+                    TreeNode *child = node->children[i];
+                    int cp_us = get_eval_for_us(child, config->play_as_white);
+                    double eval_us_wp = child->has_engine_eval
+                        ? (config->play_as_white
+                            ? win_probability(child->is_white_to_move ? child->engine_eval_cp : -child->engine_eval_cp)
+                            : 1.0 - win_probability(child->is_white_to_move ? child->engine_eval_cp : -child->engine_eval_cp))
+                        : 0.5;
 
-            if (using_eca && child->has_eca) {
-                double eval_us = child_eval_for_us[i];
-
-                if (eval_us < config->eval_guard_threshold) {
-                    if (config->verbose_search) {
-                        printf("  %-8s %+6dcp %6.1f%% %7.1fcp %8s  SKIP (eval guard <%.0f%%)\n",
-                               child->move_san, child_our_cp[i],
-                               eval_us * 100.0,
-                               child->accumulated_eca,
-                               "—",
-                               config->eval_guard_threshold * 100.0);
+                    if (!child->has_eca) {
+                        printf("  %-8s %+6dcp %6.1f%%  (no ECA)\n",
+                               child->move_san, cp_us, eval_us_wp * 100.0);
+                        continue;
                     }
-                    continue;
-                }
 
-                /* Normalize ECA to [0, 1] relative to best sibling */
-                double norm_eca = max_eca > 0.0
-                    ? child->accumulated_eca / max_eca
-                    : 0.0;
-
-                /* Blend: α × eval + (1-α) × ECA */
-                double w = config->eval_weight;
-                score = w * eval_us + (1.0 - w) * norm_eca;
-
-                if (config->verbose_search) {
-                    printf("  %-8s %+6dcp %6.1f%% %7.1fcp %7.3f",
-                           child->move_san, child_our_cp[i],
-                           eval_us * 100.0,
-                           child->accumulated_eca,
-                           score);
+                    if (cp_us < best_child_cp - config->max_eval_loss_cp) {
+                        printf("  %-8s %+6dcp %6.1f%% %7.4f %8s  SKIP (>%dcp from best %+dcp)\n",
+                               child->move_san, cp_us, eval_us_wp * 100.0,
+                               child->accumulated_eca, "",
+                               config->max_eval_loss_cp, best_child_cp);
+                        continue;
+                    }
+                    if (eval_us_wp < config->eval_guard_threshold) {
+                        printf("  %-8s %+6dcp %6.1f%% %7.4f %8s  SKIP (eval guard <%.0f%%)\n",
+                               child->move_san, cp_us, eval_us_wp * 100.0,
+                               child->accumulated_eca, "—",
+                               config->eval_guard_threshold * 100.0);
+                        continue;
+                    }
+                    double score = config->eval_weight * eval_us_wp
+                                 + (1.0 - config->eval_weight) * child->accumulated_eca;
+                    printf("  %-8s %+6dcp %6.1f%% %7.4f %7.3f",
+                           child->move_san, cp_us, eval_us_wp * 100.0,
+                           child->accumulated_eca, score);
+                    if (child == best_child) printf("  ◄ best");
+                    printf("\n");
                 }
-            } else {
-                int eval_cp = 0;
-                int depth = 0;
-                if (!rdb_get_eval(db, child->fen, &eval_cp, &depth)) {
-                    if (child->has_engine_eval) eval_cp = child->engine_eval_cp;
-                }
+            }
+        } else {
+            /* Fallback: no ECA data — use 4-weight formula */
+            for (size_t i = 0; i < node->children_count; i++) {
+                TreeNode *child = node->children[i];
+                int eval_cp = child->has_engine_eval ? child->engine_eval_cp : 0;
                 double ease = -1.0;
                 rdb_get_ease(db, child->fen, &ease);
                 if (ease < 0 && child->has_ease) ease = child->ease;
@@ -535,29 +496,26 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
                     win_rate = normalize_winrate(child->white_wins, child->draws,
                                                  child->total_games,
                                                  config->play_as_white);
-                score = score_position(eval_cp, ease, opp_ease, win_rate,
-                                       child->cumulative_probability,
-                                       child->total_games, config, true);
-
+                double score = score_position(eval_cp, ease, opp_ease, win_rate,
+                                              child->cumulative_probability,
+                                              child->total_games, config, true);
                 if (config->verbose_search) {
                     printf("  %-8s  score=%.4f", child->move_san, score);
+                    if (score > best_score) printf("  ◄ best");
+                    printf("\n");
+                }
+                if (score > best_score) {
+                    best_score = score;
+                    best_child = child;
                 }
             }
-
-            if (score > best_score) {
-                best_score = score;
-                best_child = child;
-                if (config->verbose_search) printf("  ◄ best");
-            }
-            if (config->verbose_search) printf("\n");
         }
-        
+
         if (config->verbose_search && best_child) {
             printf("  ═══> Selected: %s (score=%.3f)\n", best_child->move_san, best_score);
         }
 
         if (best_child && *num_moves < max_moves) {
-            /* Record this repertoire move */
             RepertoireMove *rm = &out_moves[*num_moves];
             strncpy(rm->fen, node->fen, sizeof(rm->fen) - 1);
             strncpy(rm->move_san, best_child->move_san, sizeof(rm->move_san) - 1);
@@ -565,20 +523,14 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
             rm->composite_score = best_score;
             rm->depth = node->depth;
             rm->probability = node->cumulative_probability;
-            
-            int eval_cp = 0;
-            int depth = 0;
-            rdb_get_eval(db, best_child->fen, &eval_cp, &depth);
-            rm->eval_cp = eval_cp;
+            rm->eval_cp = best_child->has_engine_eval ? best_child->engine_eval_cp : 0;
             rm->total_games = best_child->total_games;
-            
+
             (*num_moves)++;
-            
-            /* Save to database */
+
             rdb_save_repertoire_move(db, node->fen, best_child->move_san,
                                       best_child->move_uci, best_score);
-            
-            /* Continue down this line only */
+
             build_repertoire_recursive(best_child, tree, db, engine_pool,
                                         config, out_moves, num_moves, max_moves,
                                         progress);
@@ -936,7 +888,7 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
 
     /* Resolve --relative: offset min/max_eval_cp by the root position's eval */
     if (cfg_local.relative_eval) {
-        int root_eval = get_eval_for_us(tree->root, db, cfg_local.play_as_white);
+        int root_eval = get_eval_for_us(tree->root, cfg_local.play_as_white);
         printf("  Root eval (our perspective): %+dcp\n", root_eval);
         printf("  Relative thresholds: min=%+d, max=%+d → ",
                cfg_local.min_eval_cp, cfg_local.max_eval_cp);
@@ -952,15 +904,15 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     int ease_count = calculate_all_ease(tree, db, progress);
     printf("  Calculated %d ease scores\n", ease_count);
     
-    /* === Stage 3: Calculate ECA (Expected Centipawn Advantage) === */
+    /* === Stage 3: Calculate ECA (win-probability-delta) === */
     if (progress) progress("Stage 3: ECA calculation", 0, (int)tree->total_nodes);
-    
-    size_t eca_count = tree_calculate_eca(tree, config->play_as_white,
-                                           config->depth_discount);
-    printf("  Computed ECA for %zu nodes (depth-decay=%.2f)\n", eca_count, config->depth_discount);
+
+    size_t eca_count = tree_calculate_eca(tree, config);
+    printf("  Computed ECA for %zu nodes (depth-decay=%.2f, eval-weight=%.2f)\n",
+           eca_count, config->depth_discount, config->eval_weight);
     if (tree->root && tree->root->has_eca) {
-        printf("  Root accumulated ECA: %.1f cp (Q: %.4f)\n",
-               tree->root->accumulated_eca, tree->root->accumulated_q_eca);
+        printf("  Root accumulated ECA: %.4f wp-delta\n",
+               tree->root->accumulated_eca);
     }
     
     /* === Stage 4: Select repertoire moves === */

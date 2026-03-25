@@ -169,13 +169,10 @@ void node_set_lichess_stats(TreeNode *node, uint64_t white_wins,
 }
 
 
-void node_set_eca(TreeNode *node, double local_cpl, double local_q_loss,
-                  double accumulated_eca, double accumulated_q_eca) {
+void node_set_eca(TreeNode *node, double local_cpl, double accumulated_eca) {
     if (!node) return;
     node->local_cpl = local_cpl;
-    node->local_q_loss = local_q_loss;
     node->accumulated_eca = accumulated_eca;
-    node->accumulated_q_eca = accumulated_q_eca;
     node->has_eca = true;
 }
 
@@ -244,9 +241,8 @@ void node_print(const TreeNode *node, int indent) {
     }
     
     if (node->has_eca) {
-        printf(" [cpl=%.1f q_loss=%.3f eca=%.1f q_eca=%.3f]",
-               node->local_cpl, node->local_q_loss,
-               node->accumulated_eca, node->accumulated_q_eca);
+        printf(" [local_wp=%.4f acc_wp=%.4f]",
+               node->local_cpl, node->accumulated_eca);
     }
     
     printf("\n");

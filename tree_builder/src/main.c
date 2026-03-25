@@ -140,7 +140,8 @@ static void print_usage(const char *prog_name) {
 
 
 static void progress_callback(int nodes_built, int current_depth, const char *current_fen) {
-    static int last_printed = 0;
+    static int last_printed = -1;
+    if (nodes_built == 0) last_printed = -1;
     if (nodes_built - last_printed >= 50) {
         printf("\r  [Build] Nodes: %d | Depth: %d | %.40s...    ", 
                nodes_built, current_depth, current_fen ? current_fen : "");
@@ -391,18 +392,38 @@ int main(int argc, char *argv[]) {
             case 1004: find_traps = true; break;
             case 1005: pgn_output = optarg; break;
             case 1006: lichess_token = optarg; break;
-            case 1007: if (!parse_double(optarg, "eval-weight", &eval_weight_arg)) return 1; break;
-            case 1008: if (!parse_double(optarg, "eval-guard", &eval_guard_arg)) return 1; break;
-            case 1009: if (!parse_double(optarg, "depth-decay", &depth_decay_arg)) return 1; break;
+            case 1007:
+                if (!parse_double(optarg, "eval-weight", &eval_weight_arg)) return 1;
+                if (eval_weight_arg < 0.0 || eval_weight_arg > 1.0) {
+                    fprintf(stderr, "Error: --eval-weight must be in [0, 1]\n"); return 1;
+                }
+                break;
+            case 1008:
+                if (!parse_double(optarg, "eval-guard", &eval_guard_arg)) return 1;
+                if (eval_guard_arg < 0.0 || eval_guard_arg > 1.0) {
+                    fprintf(stderr, "Error: --eval-guard must be in [0, 1]\n"); return 1;
+                }
+                break;
+            case 1009:
+                if (!parse_double(optarg, "depth-decay", &depth_decay_arg)) return 1;
+                if (depth_decay_arg < 0.0 || depth_decay_arg > 1.0) {
+                    fprintf(stderr, "Error: --depth-decay must be in [0, 1]\n"); return 1;
+                }
+                break;
             case 1010: if (!parse_int(optarg, "max-children", &max_children_arg)) return 1; break;
-            case 1011: if (!parse_double(optarg, "mass-cutoff", &mass_cutoff_arg)) return 1; break;
+            case 1011:
+                if (!parse_double(optarg, "mass-cutoff", &mass_cutoff_arg)) return 1;
+                if (mass_cutoff_arg < 0.0 || mass_cutoff_arg > 1.0) {
+                    fprintf(stderr, "Error: --mass-cutoff must be in [0, 1]\n"); return 1;
+                }
+                break;
             case 1012: if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1; break;
             case 1013: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
             case 1014: if (!parse_int(optarg, "max-eval-loss", &max_eval_loss_arg)) return 1; break;
             case 1015: maia_model_path = optarg; break;
             case 1016: if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1; break;
-            case 1017: maia_threshold = atof(optarg); break;
-            case 1018: maia_min_prob = atof(optarg); break;
+            case 1017: if (!parse_double(optarg, "maia-threshold", &maia_threshold)) return 1; break;
+            case 1018: if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1; break;
             case 1019: discovery_enabled = true; break;
             case 1022: relative_eval = true; break;
             case 1020: if (!parse_int(optarg, "discovery-multipv", &discovery_multipv)) return 1; break;
@@ -436,24 +457,29 @@ int main(int argc, char *argv[]) {
     if (!db_path) {
         if (repertoire_name) {
             size_t j = 0;
-            for (size_t i = 0; repertoire_name[i] && j < sizeof(db_path_buf) - 4; i++) {
+            size_t max_stem = sizeof(db_path_buf) - 4; /* reserve room for ".db\0" */
+            for (size_t i = 0; repertoire_name[i] && j < max_stem; i++) {
                 char c = repertoire_name[i];
                 if (c == ' ') db_path_buf[j++] = '_';
                 else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
                          (c >= '0' && c <= '9') || c == '-' || c == '_')
-                    db_path_buf[j++] = c >= 'A' && c <= 'Z' ? c + 32 : c;
+                    db_path_buf[j++] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
             }
-            db_path_buf[j] = '\0';
-            strncat(db_path_buf, ".db", sizeof(db_path_buf) - j - 1);
+            memcpy(db_path_buf + j, ".db", 4); /* includes '\0' */
             db_path = db_path_buf;
         } else {
             db_path = "repertoire.db";
         }
     }
 
-    /* Setup signal handler */
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
+    /* Setup signal handlers via sigaction (portable, no auto-reset) */
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
     
     /* Print banner */
     printf("\n");

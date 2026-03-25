@@ -78,26 +78,24 @@ typedef struct TreeNode {
     double opponent_ease;               /* Ease score from opponent's perspective */
     double trap_score;                  /* How often opponents play suboptimal here */
     
-    /* ECA (Expected Centipawn Advantage) — per-node and accumulated.
+    /* ECA (Expected Centipawn Advantage) — win-probability-delta units.
      *
-     * local_cpl:  expected centipawn loss by the side to move at THIS node,
-     *             = Σ(prob_i × max(0, best_cp - cp_i)) over children.
-     *             Only meaningful when children_count > 0 and evals exist.
+     * local_cpl:  expected win-probability loss by the side to move at THIS
+     *             node = Σ(prob_i × max(0, best_wp - wp_i)) over children.
+     *             Measured in [0, 1] (typically 0.00-0.10).  The name "cpl"
+     *             is kept for backward compatibility; the unit is now
+     *             win-probability delta, not centipawns.
      *
-     * local_q_loss:  same idea but in Q-value space [-1,1] instead of raw cp.
-     *                Captures diminishing returns of large blunders.
-     *
-     * accumulated_eca:  total depth-discounted CPL in the subtree rooted here.
-     *                   = γ^depth × local_cpl + Σ(prob_i × child_accumulated_eca)
-     *                   at opponent nodes, and max(child_accumulated_eca) at our
-     *                   nodes (we pick the best line).
-     *
-     * accumulated_q_eca:  same but using Q-loss instead of raw cp.
+     * accumulated_eca:  total expected win-probability delta in the subtree.
+     *                   At opponent nodes:
+     *                     local_cpl + Σ(prob_i × child.accumulated_eca)
+     *                   At our-move nodes:
+     *                     accumulated_eca of the child selected by the
+     *                     blended score (α × eval_us + (1-α) × acc_eca),
+     *                     mirroring the selection-phase formula.
      */
     double local_cpl;
-    double local_q_loss;
     double accumulated_eca;
-    double accumulated_q_eca;
     bool   has_eca;                     /* Whether ECA values have been computed */
     
 } TreeNode;
@@ -201,13 +199,10 @@ size_t node_count_subtree(const TreeNode *node);
  * Set ECA (Expected Centipawn Advantage) values
  *
  * @param node The node to update
- * @param local_cpl Local expected centipawn loss
- * @param local_q_loss Local expected Q-value loss
- * @param accumulated_eca Subtree accumulated ECA (raw cp)
- * @param accumulated_q_eca Subtree accumulated ECA (Q-values)
+ * @param local_cpl Local expected win-probability loss at this node
+ * @param accumulated_eca Subtree accumulated ECA (win-probability deltas)
  */
-void node_set_eca(TreeNode *node, double local_cpl, double local_q_loss,
-                  double accumulated_eca, double accumulated_q_eca);
+void node_set_eca(TreeNode *node, double local_cpl, double accumulated_eca);
 
 /**
  * Print node info to stdout (for debugging)
