@@ -52,6 +52,7 @@ typedef struct {
     int min_eval_cp;                 /* Stop DFS if our eval drops below this (default: -50) */
     int max_eval_cp;                 /* Stop DFS if our eval exceeds this (default: 300, already winning) */
     int max_eval_loss_cp;            /* Our-move candidates must be within this of best (default: 50) */
+    bool relative_eval;              /* If true, min/max_eval_cp are relative to root position eval */
 
     /* Candidate selection */
     int max_candidates_per_position; /* Max moves to consider at each position */

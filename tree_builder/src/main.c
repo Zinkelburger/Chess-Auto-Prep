@@ -103,7 +103,8 @@ static void print_usage(const char *prog_name) {
     printf("  -m, --masters          Use masters database\n");
     printf("  --skip-build           Skip tree building (use cached DB data)\n");
     printf("  --skip-eval            Skip engine evaluation step\n");
-    printf("  --token <token>        Lichess API auth token (required)\n");
+    printf("  --token <token>        Lichess API auth token\n");
+    printf("                         Also reads: $LICHESS_TOKEN, ~/.config/tree_builder/token, .lichess_token\n");
     printf("  --eval-weight <0-1>    Eval vs trickiness blend (0=pure trickiness, 1=pure eval) [default: 0.40]\n");
     printf("  --eval-guard <0-1>     Min win probability to consider a move [default: 0.35]\n");
     printf("  --depth-decay <0-1>    How fast deeper positions matter less for ECA [default: 0.90]\n");
@@ -112,6 +113,7 @@ static void print_usage(const char *prog_name) {
     printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: W=0, B=-200]\n");
     printf("  --max-eval <cp>        Stop DFS if our eval exceeds this (already won) [default: W=200, B=100]\n");
     printf("  --max-eval-loss <cp>   Skip our-move candidates more than N cp worse than best [default: 50]\n");
+    printf("  --relative             Make --min-eval/--max-eval relative to starting position eval\n");
     printf("\n");
     printf("Maia fallback (extends tree with NN when explorer is exhausted):\n");
     printf("  --maia-model <path>    Path to maia_rapid.onnx (enables Maia fallback)\n");
@@ -162,6 +164,48 @@ static void signal_handler(int sig) {
     (void)sig;
     g_interrupted = 1;
     if (g_tree) tree_stop_build(g_tree);
+}
+
+
+/**
+ * Read Lichess API token from config file.
+ * Checks (in order): ~/.config/tree_builder/token, then ./.lichess_token
+ * Returns heap-allocated string (caller frees) or NULL.
+ */
+static char* read_token_from_config(void) {
+    static const char *config_paths[] = {
+        NULL,  /* placeholder for ~/.config/tree_builder/token */
+        ".lichess_token",
+        NULL
+    };
+
+    char xdg_path[PATH_MAX];
+    const char *home = getenv("HOME");
+    if (home) {
+        snprintf(xdg_path, sizeof(xdg_path), "%s/.config/tree_builder/token", home);
+        config_paths[0] = xdg_path;
+    }
+
+    for (int i = 0; config_paths[i]; i++) {
+        FILE *f = fopen(config_paths[i], "r");
+        if (!f) continue;
+
+        char buf[256];
+        if (fgets(buf, sizeof(buf), f)) {
+            fclose(f);
+            /* Strip trailing whitespace/newline */
+            size_t len = strlen(buf);
+            while (len > 0 && (buf[len-1] == '\n' || buf[len-1] == '\r' ||
+                               buf[len-1] == ' '  || buf[len-1] == '\t'))
+                buf[--len] = '\0';
+            if (len > 0) {
+                fprintf(stderr, "  Token loaded from %s\n", config_paths[i]);
+                return strdup(buf);
+            }
+        }
+        fclose(f);
+    }
+    return NULL;
 }
 
 
@@ -255,6 +299,7 @@ int main(int argc, char *argv[]) {
     int maia_elo = 2000;
     double maia_threshold = 0.01;
     double maia_min_prob = 0.02;
+    bool relative_eval = false;
     bool discovery_enabled = false;
     int discovery_multipv = -1;
     int discovery_expand = -1;
@@ -292,6 +337,7 @@ int main(int argc, char *argv[]) {
         {"maia-elo",      required_argument, 0, 1016},
         {"maia-threshold",required_argument, 0, 1017},
         {"maia-min-prob", required_argument, 0, 1018},
+        {"relative",          no_argument,       0, 1022},
         {"discovery",         no_argument,       0, 1019},
         {"discovery-multipv", required_argument, 0, 1020},
         {"discovery-expand",  required_argument, 0, 1021},
@@ -358,6 +404,7 @@ int main(int argc, char *argv[]) {
             case 1017: maia_threshold = atof(optarg); break;
             case 1018: maia_min_prob = atof(optarg); break;
             case 1019: discovery_enabled = true; break;
+            case 1022: relative_eval = true; break;
             case 1020: if (!parse_int(optarg, "discovery-multipv", &discovery_multipv)) return 1; break;
             case 1021: if (!parse_int(optarg, "discovery-expand", &discovery_expand)) return 1; break;
             default: print_usage(argv[0]); return 1;
@@ -372,6 +419,19 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
+    /* Resolve Lichess token: --token flag > $LICHESS_TOKEN env > config file */
+    char *token_buf = NULL;
+    if (!lichess_token) {
+        const char *env_token = getenv("LICHESS_TOKEN");
+        if (env_token && env_token[0]) {
+            lichess_token = env_token;
+            fprintf(stderr, "  Token loaded from $LICHESS_TOKEN\n");
+        } else {
+            token_buf = read_token_from_config();
+            if (token_buf) lichess_token = token_buf;
+        }
+    }
+
     /* Auto-derive DB name from --name if no explicit --database given */
     if (!db_path) {
         if (repertoire_name) {
@@ -686,6 +746,7 @@ int main(int argc, char *argv[]) {
     if (max_eval_arg != -99999) rep_config.max_eval_cp = max_eval_arg;
     if (max_eval_loss_arg >= 0) rep_config.max_eval_loss_cp = max_eval_loss_arg;
     if (max_children_arg >= 0)  rep_config.max_candidates_per_position = max_children_arg;
+    rep_config.relative_eval = relative_eval;
     if (repertoire_name) {
         strncpy(rep_config.name, repertoire_name, sizeof(rep_config.name) - 1);
     }
@@ -812,6 +873,7 @@ cleanup:
     if (maia) maia_destroy(maia);
     if (tree) tree_destroy(tree);
     if (db) rdb_close(db);
+    free(token_buf);
     
     return g_interrupted ? 130 : 0;
 }
