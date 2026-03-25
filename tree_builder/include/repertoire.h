@@ -44,7 +44,7 @@ typedef struct {
     int quick_eval_depth;           /* Depth for quick/filtering evaluation */
     
     /* ECA (Expected Centipawn Advantage) settings */
-    double depth_discount;          /* γ: depth discount factor (0.85-0.95 typical) */
+    double depth_discount;          /* γ: depth discount factor (1.0=none, <1.0 prefers early blunders) */
     double eval_weight;             /* α: blend eval vs ECA (0=pure ECA, 1=pure eval, 0.5=balanced) */
     double eval_guard_threshold;    /* Minimum win probability to consider a move (0.35 typical) */
     

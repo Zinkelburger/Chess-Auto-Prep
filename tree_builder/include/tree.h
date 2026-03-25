@@ -178,7 +178,7 @@ size_t tree_calculate_ease(Tree *tree);
  *
  * @param tree The tree to annotate
  * @param play_as_white Whether the repertoire is for White
- * @param depth_discount Depth discount factor γ (e.g. 0.90)
+ * @param depth_discount Depth discount factor γ (1.0 = no decay, <1.0 prefers early blunders)
  * @return Number of nodes annotated
  */
 size_t tree_calculate_eca(Tree *tree, bool play_as_white, double depth_discount);

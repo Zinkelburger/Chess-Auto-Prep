@@ -318,6 +318,33 @@ can still dominate.
 
 ---
 
+## Minor Issue: Unrenormalized Probabilities in ECA Accumulation
+
+At opponent nodes, accumulated ECA sums `prob_i × child_eca` over all children.
+The `prob_i` values are raw Lichess fractions (e.g., Nc6 = 0.60, Nf6 = 0.20,
+d6 = 0.10). But tree building filters out moves below `min_games`,
+`min_probability`, `max_children`, or `mass_cutoff`, so the remaining
+probabilities typically sum to 0.85–0.95 rather than 1.0.
+
+The missing mass implicitly contributes ECA = 0 — as if unanalyzed lines have
+no trickiness. This creates a small bias: positions where opponent moves are
+concentrated in a few popular choices get higher ECA than positions where the
+probability is spread across many rare moves, even if the explored lines are
+equally tricky.
+
+**In practice this is minor.** The top 4–5 moves cover 90%+ of games in most
+positions, so the gap is typically 5–10%. It only becomes significant with
+aggressive filtering (`--mass-cutoff 0.80` or `--max-children 3`), where the
+lower ECA honestly reflects reduced coverage.
+
+The un-renormalized version has a defensible interpretation: "expected opponent
+CPL across *all* games from this position, treating unanalyzed lines as
+contributing nothing." Renormalizing would instead assume the opponent always
+plays an analyzed move — slightly optimistic but arguably better for comparing
+subtrees with different coverage levels.
+
+---
+
 ## Parameters
 
 ### Tree Building
@@ -360,7 +387,7 @@ can still dominate.
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| `depth_discount` | `--depth-decay` | 0.90 | How fast deeper positions matter less. Lower = focus on immediate blunders. Higher = value deep traps more. Range: 0.80–0.98 |
+| `depth_discount` | `--depth-decay` | 1.0 (no decay) | Depth discount for ECA. At 1.0, all depths contribute equally (probability weighting handles importance). Lower values prefer early blunders over deep ones |
 | `eval_weight` | `--eval-weight` | 0.40 | Blend ratio. 0 = pure trickiness. 1 = pure objective eval. 0.4 = 40% eval, 60% trickiness |
 | `eval_guard_threshold` | `--eval-guard` | 0.35 | Minimum win probability to consider a move. Moves below this are rejected regardless of trickiness |
 | `min_eval_cp` | `--min-eval` | W: 0, B: -200 | Stop DFS if our eval drops below this (losing position). Color-dependent defaults applied automatically |
@@ -378,9 +405,11 @@ can still dominate.
 - **`min_games`**: "How many games do we need to trust the statistics?"
   Higher = more reliable probabilities but might miss newer lines.
 
-- **`depth_discount`** (`--depth-decay`): "How much do we care about deep traps
-  vs immediate mistakes?" At 0.85, a blunder 6 moves deep is worth only
-  0.85^6 = 38% of its face value. At 0.95, it's worth 0.95^6 = 74%.
+- **`depth_discount`** (`--depth-decay`): "Should early blunders count more than
+  deep ones?" At 1.0 (default), all blunders contribute equally — the
+  probability weighting already handles depth naturally. Set below 1.0 if you
+  want to prefer lines where opponents blunder early (e.g., 0.90 means a
+  depth-6 blunder is worth 0.90^6 = 53% of its face value).
 
 - **`ratings`**: "Whose mistakes are we exploiting?" Using 2000+ means the
   probabilities reflect what strong players actually do. Using 1200+ would show

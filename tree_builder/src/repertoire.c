@@ -138,7 +138,7 @@ RepertoireConfig repertoire_config_default(void) {
         .eval_depth = 20,               /* Stockfish search depth (matches CLI default) */
         .quick_eval_depth = 15,         /* Quick depth for filtering */
         
-        .depth_discount = 0.90,
+        .depth_discount = 1.0,
         .eval_weight = 0.40,
         .eval_guard_threshold = 0.35,
 
