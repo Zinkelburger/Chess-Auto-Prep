@@ -2,28 +2,31 @@
 #
 # Dependencies:
 #   - libcurl  (HTTP requests to Lichess API)
-#   - sqlite3  (persistent caching database)
+#   - sqlite3  (bundled amalgamation — no external package needed)
 #   - pthreads (multithreaded engine pool)
-#   - cJSON    (included in src/)
+#   - cJSON    (bundled in src/)
 #
 # Optional (for Maia neural-network fallback):
 #   - ONNX Runtime C API  (build with: make MAIA=1)
 #
 # Install dependencies (Fedora):
-#   sudo dnf install libcurl-devel sqlite-devel
+#   sudo dnf install libcurl-devel gcc make
 #
 # Install dependencies (Ubuntu/Debian):
-#   sudo apt install libcurl4-openssl-dev libsqlite3-dev
+#   sudo apt install libcurl4-openssl-dev gcc make
 
 CC = gcc
 CFLAGS = -Wall -Wextra -std=gnu11 -O2 -g
 LDFLAGS = -lm -lpthread -ldl
 
 # Local includes for headers that may not be system-installed
-# curl headers: downloaded to local_includes/curl/
-# sqlite3: using amalgamation in src/
+#   curl headers      → local_includes/curl/
+#   onnxruntime header → local_includes/onnxruntime_c_api.h
+#   sqlite3           → amalgamation in src/
 LOCAL_INC = -Ilocal_includes
-LOCAL_LIB = -Llocal_lib
+
+# Only add -Llocal_lib if the directory exists (for local overrides)
+LOCAL_LIB = $(if $(wildcard local_lib),-Llocal_lib)
 
 # Check for libcurl via pkg-config; fall back to direct link
 CURL_CHECK := $(shell pkg-config --exists libcurl 2>/dev/null && echo yes || echo no)
@@ -31,21 +34,30 @@ ifeq ($(CURL_CHECK),yes)
     CFLAGS += $(shell pkg-config --cflags libcurl)
     LDFLAGS += $(shell pkg-config --libs libcurl)
 else
-    # Try libcurl-minimal (common on Fedora)
     LDFLAGS += -lcurl
 endif
 
 # SQLite3: use amalgamation (compiled into the binary directly)
-# This means no external sqlite3-devel dependency needed.
 CFLAGS += -DSQLITE_THREADSAFE=1 -DSQLITE_OMIT_LOAD_EXTENSION
 
 # chesslib (third-party, BSD-2-Clause) — used by Maia for legal move generation
 CHESSLIB_DIR = third_party/chesslib
 
 # Optional: Maia neural-network fallback (make MAIA=1)
+# Requires ONNX Runtime: the header is bundled in local_includes/,
+# but the shared library must be installed on the system.
+#   Fedora:  sudo dnf install onnxruntime-devel
+#   Ubuntu:  see https://github.com/microsoft/onnxruntime
+#   pip:     pip install onnxruntime  (then set LD_LIBRARY_PATH)
 ifdef MAIA
     CFLAGS += -DHAVE_ONNXRUNTIME
-    LDFLAGS += -lonnxruntime
+    ORT_CHECK := $(shell pkg-config --exists libonnxruntime 2>/dev/null && echo yes || echo no)
+    ifeq ($(ORT_CHECK),yes)
+        CFLAGS += $(shell pkg-config --cflags libonnxruntime)
+        LDFLAGS += $(shell pkg-config --libs libonnxruntime)
+    else
+        LDFLAGS += -lonnxruntime
+    endif
 endif
 
 # Directories
@@ -139,11 +151,6 @@ check-deps:
 ifeq ($(CURL_CHECK),no)
 	@echo "  WARNING: libcurl not found via pkg-config, trying direct link"
 endif
-ifeq ($(SQLITE_CHECK),no)
-	@echo "  WARNING: sqlite3 not found via pkg-config, trying direct link"
-	@echo "  Install with: sudo dnf install sqlite-devel (Fedora)"
-	@echo "            or: sudo apt install libsqlite3-dev (Debian/Ubuntu)"
-endif
 	@echo "  Dependencies OK"
 
 # Install to /usr/local/bin
@@ -184,8 +191,14 @@ help:
 	@echo "  help       - Show this help"
 	@echo ""
 	@echo "Dependencies (install first):"
-	@echo "  Fedora:  sudo dnf install libcurl-devel sqlite-devel gcc"
-	@echo "  Ubuntu:  sudo apt install libcurl4-openssl-dev libsqlite3-dev gcc"
+	@echo "  Fedora:  sudo dnf install libcurl-devel gcc make"
+	@echo "  Ubuntu:  sudo apt install libcurl4-openssl-dev gcc make"
+	@echo ""
+	@echo "Optional (Maia neural-network support):"
+	@echo "  make MAIA=1"
+	@echo "  Requires ONNX Runtime shared library:"
+	@echo "    Fedora:  sudo dnf install onnxruntime-devel"
+	@echo "    pip:     pip install onnxruntime (set LD_LIBRARY_PATH)"
 	@echo ""
 	@echo "After building:"
 	@echo "  ./bin/tree_builder -h      (show usage)"
