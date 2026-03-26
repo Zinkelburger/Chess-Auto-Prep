@@ -1,0 +1,289 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Dashboard">
+  <div id="auth-gate" style="text-align:center; padding:60px 0;">
+    <h1>Loading dashboard...</h1>
+    <p class="subtitle">Authenticating...</p>
+  </div>
+
+  <div id="dashboard" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:32px;">
+      <div>
+        <h1>Your Subscriptions</h1>
+        <p class="subtitle" style="margin-bottom:0;" id="user-email"></p>
+      </div>
+      <button class="btn btn-primary" id="show-add-form">+ New Subscription</button>
+    </div>
+
+    <!-- Add subscription form (hidden by default) -->
+    <div id="add-form" class="card" style="display:none; margin-bottom:24px;">
+      <h2>New Subscription</h2>
+      <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:16px;">
+        Add at least one filter: a FEN position, player name, or ECO code.
+      </p>
+      <div id="add-alert" style="display:none;"></div>
+      <form id="sub-form">
+        <div class="form-row">
+          <label for="sub-label">Label (optional)</label>
+          <input type="text" id="sub-label" placeholder='e.g. "Najdorf games above 2600"' />
+        </div>
+        <div class="form-row">
+          <label for="sub-fen">FEN</label>
+          <input type="text" id="sub-fen" class="mono"
+            placeholder="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" />
+          <div id="dash-fen-board" class="board-preview"></div>
+          <div id="dash-fen-error" class="board-invalid"></div>
+        </div>
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="sub-player">Player name</label>
+            <input type="text" id="sub-player" placeholder="Magnus Carlsen" />
+          </div>
+          <div class="form-row">
+            <label for="sub-eco">ECO Code</label>
+            <input type="text" id="sub-eco" placeholder="B90" />
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="sub-min-elo">Minimum Elo</label>
+            <input type="text" id="sub-min-elo" inputmode="numeric" pattern="[0-9]*" placeholder="2400" />
+          </div>
+          <div class="form-row" style="display:flex; align-items:end; padding-bottom:2px;">
+            <label class="checkbox-label">
+              <input type="checkbox" id="sub-exclude-chess-com" />
+              <span>Exclude online games (i.e. chess.com)</span>
+            </label>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:8px;">
+          <button type="submit" class="btn btn-primary">Create Subscription</button>
+          <button type="button" class="btn btn-outline" id="cancel-add">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Subscription list -->
+    <div id="subs-list"></div>
+
+    <div id="empty-state" class="card" style="display:none; text-align:center; padding:48px;">
+      <p style="font-size:1.2rem; margin-bottom:8px;">No subscriptions yet</p>
+      <p style="color:var(--text-dim); font-size:0.9rem;">
+        Click "+ New Subscription" to start tracking positions, players, or openings.
+      </p>
+    </div>
+  </div>
+</Base>
+
+<script>
+  const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
+  let authToken: string | null = null;
+
+  function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    return { 'Authorization': `Bearer ${authToken}`, ...extra };
+  }
+
+  async function init() {
+    const gate = document.getElementById('auth-gate')!;
+    const dash = document.getElementById('dashboard')!;
+    const params = new URLSearchParams(window.location.search);
+    const urlToken = params.get('token');
+
+    if (urlToken) {
+      try {
+        const res = await fetch(`${API}/api/exchange-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: urlToken }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          localStorage.setItem('twic_auth_token', data.auth_token);
+          authToken = data.auth_token;
+          window.history.replaceState({}, '', '/dashboard');
+        } else {
+          window.history.replaceState({}, '', '/dashboard');
+          localStorage.removeItem('twic_auth_token');
+          gate.innerHTML = `
+            <h1>Link expired</h1>
+            <p class="subtitle">This login link has already been used or has expired.</p>
+            <a href="/" class="btn btn-primary">Request a new login link</a>`;
+          return;
+        }
+      } catch {
+        gate.innerHTML = `
+          <div class="alert alert-error">Could not reach the server. Try refreshing the page.</div>`;
+        return;
+      }
+    } else {
+      authToken = localStorage.getItem('twic_auth_token');
+    }
+
+    if (!authToken) {
+      gate.innerHTML = `
+        <h1>Not logged in</h1>
+        <p class="subtitle">You need a login link to access the dashboard.</p>
+        <a href="/" class="btn btn-primary">Go to Home</a>`;
+      return;
+    }
+
+    try {
+      const [subsRes, meRes] = await Promise.all([
+        fetch(`${API}/api/subscriptions`, { headers: authHeaders() }),
+        fetch(`${API}/api/me`, { headers: authHeaders() }),
+      ]);
+      if (!subsRes.ok) {
+        localStorage.removeItem('twic_auth_token');
+        gate.innerHTML = `
+          <h1>Session expired</h1>
+          <p class="subtitle">Your session has expired.</p>
+          <a href="/" class="btn btn-primary">Get a new login link</a>`;
+        return;
+      }
+
+      gate.style.display = 'none';
+      dash.style.display = 'block';
+
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        document.getElementById('user-email')!.textContent = meData.email;
+      }
+
+      const data = await subsRes.json();
+      renderSubscriptions(data.subscriptions);
+    } catch {
+      gate.innerHTML = `
+        <div class="alert alert-error">Could not reach the server.</div>
+        <a href="/" class="btn btn-primary">Go Home</a>`;
+    }
+  }
+
+  function renderSubscriptions(subs: any[]) {
+    const list = document.getElementById('subs-list')!;
+    const empty = document.getElementById('empty-state')!;
+
+    if (subs.length === 0) {
+      list.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+
+    empty.style.display = 'none';
+    list.innerHTML = '';
+
+    for (const sub of subs) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'display:flex; justify-content:space-between; align-items:start;';
+
+      const info = document.createElement('div');
+      const h3 = document.createElement('h3');
+      h3.style.marginBottom = '8px';
+      h3.textContent = sub.label || 'Untitled subscription';
+      info.appendChild(h3);
+
+      const tagsDiv = document.createElement('div');
+      tagsDiv.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px;';
+      const tagEntries: [string, string][] = [];
+      if (sub.fen) tagEntries.push(['FEN', sub.fen.length > 30 ? sub.fen.substring(0, 30) + '...' : sub.fen]);
+      if (sub.player) tagEntries.push(['Player', sub.player]);
+      if (sub.white) tagEntries.push(['White', sub.white]);
+      if (sub.black) tagEntries.push(['Black', sub.black]);
+      if (sub.eco) tagEntries.push(['ECO', sub.eco]);
+      if (sub.min_elo) tagEntries.push(['Min Elo', String(sub.min_elo)]);
+      if (sub.exclude_site) tagEntries.push(['Excl', sub.exclude_site]);
+      if (sub.site) tagEntries.push(['Site', sub.site]);
+      for (const [label, val] of tagEntries) {
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = `${label}: ${val}`;
+        tagsDiv.appendChild(tag);
+      }
+      info.appendChild(tagsDiv);
+
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-danger btn-sm';
+      btn.textContent = 'Delete';
+      btn.addEventListener('click', () => deleteSub(sub.id));
+
+      card.appendChild(info);
+      card.appendChild(btn);
+      list.appendChild(card);
+    }
+  }
+
+  async function deleteSub(id: number) {
+    if (!confirm('Delete this subscription?')) return;
+    try {
+      await fetch(`${API}/api/subscriptions/${id}`, { method: 'DELETE', headers: authHeaders() });
+      const res = await fetch(`${API}/api/subscriptions`, { headers: authHeaders() });
+      const data = await res.json();
+      renderSubscriptions(data.subscriptions);
+    } catch {
+      alert('Failed to delete subscription.');
+    }
+  }
+
+  const dashFenInput = document.getElementById('sub-fen') as HTMLInputElement;
+  const dashFenBoard = document.getElementById('dash-fen-board')!;
+  const dashFenError = document.getElementById('dash-fen-error')!;
+  dashFenInput.addEventListener('input', () => renderBoardPreview(dashFenInput.value, dashFenBoard, dashFenError));
+
+  document.getElementById('show-add-form')!.addEventListener('click', () => {
+    document.getElementById('add-form')!.style.display = 'block';
+  });
+
+  document.getElementById('cancel-add')!.addEventListener('click', () => {
+    document.getElementById('add-form')!.style.display = 'none';
+  });
+
+  document.getElementById('sub-form')!.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const alertEl = document.getElementById('add-alert')!;
+    const val = (id: string) => (document.getElementById(id) as HTMLInputElement).value.trim() || undefined;
+    const numVal = (id: string) => {
+      const v = (document.getElementById(id) as HTMLInputElement).value.trim();
+      return v ? parseInt(v) : undefined;
+    };
+
+    const excludeChessCom = (document.getElementById('sub-exclude-chess-com') as HTMLInputElement).checked;
+
+    const body: any = {
+      label: val('sub-label') || '',
+      fen: val('sub-fen'),
+      player: val('sub-player'),
+      eco: val('sub-eco'),
+      min_elo: numVal('sub-min-elo'),
+      exclude_site: excludeChessCom ? 'chess.com' : undefined,
+    };
+
+    try {
+      const res = await fetch(`${API}/api/subscriptions`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      alertEl.style.display = 'block';
+      if (res.ok) {
+        alertEl.className = 'alert alert-success';
+        alertEl.textContent = 'Subscription created!';
+        (document.getElementById('sub-form') as HTMLFormElement).reset();
+        setTimeout(() => { document.getElementById('add-form')!.style.display = 'none'; alertEl.style.display = 'none'; }, 1200);
+        const subsRes = await fetch(`${API}/api/subscriptions`, { headers: authHeaders() });
+        const subsData = await subsRes.json();
+        renderSubscriptions(subsData.subscriptions);
+      } else {
+        alertEl.className = 'alert alert-error';
+        alertEl.textContent = data.detail || 'Failed to create subscription.';
+      }
+    } catch {
+      alertEl.style.display = 'block';
+      alertEl.className = 'alert alert-error';
+      alertEl.textContent = 'Could not reach the server.';
+    }
+  });
+
+  init();
+</script>

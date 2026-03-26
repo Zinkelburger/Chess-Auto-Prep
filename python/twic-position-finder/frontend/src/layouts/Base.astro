@@ -1,0 +1,283 @@
+---
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <title>{title} — TWIC Position Finder</title>
+</head>
+<body>
+  <main>
+    <slot />
+  </main>
+</body>
+</html>
+
+<style is:global>
+  :root {
+    --bg: #0f1117;
+    --bg-card: #181b25;
+    --bg-input: #12141e;
+    --border: #2d3248;
+    --text: #e4e6ed;
+    --text-dim: #9da3b5;
+    --accent: #4e7a1e;
+    --accent-hover: #629924;
+    --danger: #e05252;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Outfit', system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { font-size: 16px; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.6;
+  }
+
+  main {
+    flex: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px;
+    width: 100%;
+  }
+
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.02em; }
+  h2 { font-size: 1.4rem; font-weight: 600; margin-bottom: 12px; }
+  h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; }
+
+  .subtitle { color: var(--text-dim); font-size: 1.05rem; margin-bottom: 32px; }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  input, select {
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 6px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  input::placeholder { color: #5a6078; }
+
+  label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    font-weight: 400;
+  }
+
+  .form-row { margin-bottom: 16px; }
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    user-select: none;
+  }
+  .checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  button, .btn {
+    font-family: var(--sans);
+    font-size: 0.95rem;
+    font-weight: 600;
+    padding: 10px 24px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .btn-outline:hover {
+    border-color: var(--text-dim);
+    color: var(--text);
+  }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    font-size: 0.8rem;
+    padding: 6px 14px;
+  }
+  .btn-danger:hover { background: var(--danger); color: #fff; }
+
+  .btn-sm { font-size: 0.8rem; padding: 6px 14px; }
+
+  .alert {
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+  }
+  .alert-success { background: #172613; border: 1px solid #2d5a1a; color: #a0d870; }
+  .alert-error { background: #2a1318; border: 1px solid #5a1a2a; color: #f09090; }
+  .alert-info { background: #131a2a; border: 1px solid #1a2a5a; color: #7db4d8; }
+
+  code, .mono { font-family: var(--mono); font-size: 0.85em; }
+
+  .tag {
+    display: inline-block;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+
+  .board-preview {
+    display: none;
+    grid-template-columns: repeat(8, 1fr);
+    width: 264px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  .board-sq {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    position: relative;
+  }
+  .board-sq img {
+    width: 100%;
+    height: 100%;
+  }
+  .board-sq.light { background: #f0d9b5; }
+  .board-sq.dark { background: #b58863; }
+  .board-invalid {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--danger);
+    margin-top: 6px;
+    display: none;
+  }
+</style>
+
+<script is:inline>
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  var PIECE_URLS = {
+    K: '/piece/wK.svg', Q: '/piece/wQ.svg', R: '/piece/wR.svg',
+    B: '/piece/wB.svg', N: '/piece/wN.svg', P: '/piece/wP.svg',
+    k: '/piece/bK.svg', q: '/piece/bQ.svg', r: '/piece/bR.svg',
+    b: '/piece/bB.svg', n: '/piece/bN.svg', p: '/piece/bP.svg',
+  };
+
+  function renderBoardPreview(fen, boardEl, errorEl) {
+    if (!fen || !fen.trim()) {
+      boardEl.style.display = 'none';
+      if (errorEl) errorEl.style.display = 'none';
+      return;
+    }
+    var placement = fen.trim().split(/\s+/)[0];
+    var ranks = placement.split('/');
+    if (ranks.length !== 8) {
+      boardEl.style.display = 'none';
+      if (errorEl) { errorEl.style.display = 'block'; errorEl.textContent = 'Invalid FEN — need 8 ranks separated by /'; }
+      return;
+    }
+    boardEl.innerHTML = '';
+    for (var rank = 0; rank < 8; rank++) {
+      var file = 0;
+      for (var ci = 0; ci < ranks[rank].length; ci++) {
+        var ch = ranks[rank][ci];
+        if (ch >= '1' && ch <= '8') {
+          for (var e = 0; e < parseInt(ch); e++) {
+            var sq = document.createElement('div');
+            sq.className = 'board-sq ' + ((rank + file) % 2 === 0 ? 'light' : 'dark');
+            boardEl.appendChild(sq);
+            file++;
+          }
+        } else if (PIECE_URLS[ch]) {
+          var sq = document.createElement('div');
+          sq.className = 'board-sq ' + ((rank + file) % 2 === 0 ? 'light' : 'dark');
+          var img = document.createElement('img');
+          img.src = PIECE_URLS[ch];
+          img.alt = ch;
+          img.draggable = false;
+          sq.appendChild(img);
+          boardEl.appendChild(sq);
+          file++;
+        } else {
+          boardEl.style.display = 'none';
+          if (errorEl) { errorEl.style.display = 'block'; errorEl.textContent = 'Invalid FEN — unexpected character: ' + ch; }
+          return;
+        }
+      }
+      if (file !== 8) {
+        boardEl.style.display = 'none';
+        if (errorEl) { errorEl.style.display = 'block'; errorEl.textContent = 'Invalid FEN — rank ' + (rank + 1) + ' has ' + file + ' files (need 8)'; }
+        return;
+      }
+    }
+    boardEl.style.display = 'grid';
+    if (errorEl) errorEl.style.display = 'none';
+  }
+</script>

@@ -1,0 +1,66 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Unsubscribe">
+  <section style="text-align:center; padding:60px 0;">
+    <div id="loading">
+      <h1>Unsubscribing...</h1>
+      <p class="subtitle">Please wait.</p>
+    </div>
+    <div id="result" style="display:none;"></div>
+  </section>
+</Base>
+
+<script>
+  const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
+
+  async function unsubscribe() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const sub = params.get('sub');
+
+    const loadingEl = document.getElementById('loading')!;
+    const resultEl = document.getElementById('result')!;
+
+    if (!token || !sub) {
+      loadingEl.style.display = 'none';
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `
+        <div class="alert alert-error">Missing token or subscription ID.</div>
+        <a href="/" class="btn btn-primary">Go Home</a>`;
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API}/api/unsubscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, sub: parseInt(sub) }),
+      });
+      const data = await res.json();
+      loadingEl.style.display = 'none';
+      resultEl.style.display = 'block';
+      window.history.replaceState({}, '', '/unsubscribe');
+
+      if (res.ok) {
+        resultEl.innerHTML = `
+          <h1 style="color:var(--accent);">Unsubscribed</h1>
+          <p class="subtitle">You've been unsubscribed from this alert. You will no longer receive emails for it.</p>
+          <div style="display:flex; gap:12px; justify-content:center; margin-top:24px;">
+            <a href="/" class="btn btn-primary">Go Home</a>
+          </div>`;
+      } else {
+        resultEl.innerHTML = `
+          <div class="alert alert-error">${escapeHtml(data.detail || 'Unsubscribe failed.')}</div>
+          <a href="/" class="btn btn-primary">Go Home</a>`;
+      }
+    } catch {
+      loadingEl.style.display = 'none';
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `
+        <div class="alert alert-error">Could not reach the server. Try refreshing the page.</div>`;
+    }
+  }
+
+  unsubscribe();
+</script>

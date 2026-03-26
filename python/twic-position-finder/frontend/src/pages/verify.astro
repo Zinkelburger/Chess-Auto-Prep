@@ -1,0 +1,65 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Verify Email">
+  <section style="text-align:center; padding:60px 0;">
+    <div id="loading">
+      <h1>Verifying your email...</h1>
+      <p class="subtitle">Please wait.</p>
+    </div>
+    <div id="result" style="display:none;"></div>
+  </section>
+</Base>
+
+<script>
+  const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
+
+  async function verify() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const loadingEl = document.getElementById('loading')!;
+    const resultEl = document.getElementById('result')!;
+
+    if (!token) {
+      loadingEl.style.display = 'none';
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `
+        <div class="alert alert-error">No verification token provided.</div>
+        <a href="/" class="btn btn-primary">Go Home</a>`;
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API}/api/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      loadingEl.style.display = 'none';
+      resultEl.style.display = 'block';
+      window.history.replaceState({}, '', '/verify');
+
+      if (res.ok) {
+        resultEl.innerHTML = `
+          <h1 style="color:var(--accent);">Email Verified!</h1>
+          <p class="subtitle">${escapeHtml(data.message)}</p>
+          <p style="color:var(--text-dim); margin-bottom:24px;">
+            Check your inbox for a login link to set up your position alerts.
+          </p>
+          <a href="/" class="btn btn-primary">Go Home</a>`;
+      } else {
+        resultEl.innerHTML = `
+          <div class="alert alert-error">${escapeHtml(data.detail || 'Verification failed.')}</div>
+          <a href="/" class="btn btn-primary">Go Home</a>`;
+      }
+    } catch {
+      loadingEl.style.display = 'none';
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `
+        <div class="alert alert-error">Could not reach the server. Try refreshing the page.</div>`;
+    }
+  }
+
+  verify();
+</script>
