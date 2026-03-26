@@ -1,166 +1,111 @@
 ---
 import Base from '../layouts/Base.astro';
 ---
-<Base title="TWIC Position Finder">
-  <section class="card">
-    <p style="color:var(--text-dim); margin-bottom:20px; font-size:0.95rem;">
-      Get notified when games from
-      <a href="https://theweekinchess.com/" target="_blank" style="color:var(--accent); text-decoration:none;">The Week in Chess</a>
-      reach certain positions. Filter by player, Elo, or ECO code.
-    </p>
-    <div id="subscribe-alert" style="display:none;"></div>
-    <form id="subscribe-form">
-      <div class="form-row">
-        <label for="sub-email">Email address</label>
-        <input type="email" id="sub-email" name="email" placeholder="you@example.com" required />
-      </div>
-      <div class="form-row">
-        <label for="sub-label">Label (optional)</label>
-        <input type="text" id="sub-label" placeholder='e.g. "Najdorf games above 2600"' />
-      </div>
-      <div class="form-row">
-        <label for="sub-fen">FEN</label>
-        <input type="text" id="sub-fen" class="mono"
-          placeholder="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" />
-        <div id="fen-board" class="board-preview"></div>
-        <div id="fen-error" class="board-invalid"></div>
-      </div>
-      <div class="form-grid">
-        <div class="form-row">
-          <label for="sub-player">Player name</label>
-          <input type="text" id="sub-player" placeholder="Magnus Carlsen" />
-        </div>
-        <div class="form-row">
-          <label for="sub-eco">ECO Code</label>
-          <input type="text" id="sub-eco" placeholder="B90" />
-        </div>
-      </div>
-      <div class="form-grid">
-        <div class="form-row">
-          <label for="sub-min-elo">Minimum Elo</label>
-          <input type="text" id="sub-min-elo" inputmode="numeric" pattern="[0-9]*" placeholder="2400" />
-        </div>
-        <div class="form-row" style="display:flex; align-items:end; padding-bottom:2px;">
-          <label class="checkbox-label">
-            <input type="checkbox" id="sub-exclude-chess-com" />
-            <span>Exclude online games (i.e. chess.com)</span>
-          </label>
-        </div>
-      </div>
+<Base title="Home">
+  <div class="hero">
+    <h1>Chess Auto Prep</h1>
+    <p class="subtitle">Tools to sharpen your chess preparation.</p>
+  </div>
 
-      {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && (
-        <div class="cf-turnstile" data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY} style="margin-bottom:16px;"></div>
-      )}
+  <div class="features">
+    <a href="/twic-notifications" class="feature-card">
+      <div class="feature-icon">
+        <img src="/piece/wN.svg" alt="" width="48" height="48" />
+      </div>
+      <h2>TWIC Notifications</h2>
+      <p>Get email notifications when games from <strong>The Week in Chess</strong> reach positions you care about. Filter by player, Elo, or ECO code.</p>
+      <span class="feature-cta">Set up notifications &rarr;</span>
+    </a>
 
-      <button type="submit" class="btn btn-primary" id="submit-btn">Subscribe</button>
-    </form>
-
-    <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
-      <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:10px;">
-        Already subscribed? Get a link to manage your subscriptions.
-      </p>
-      <form id="login-form" style="display:flex; gap:10px; align-items:end;">
-        <div style="flex:1;">
-          <input type="email" id="login-email" placeholder="you@example.com" required />
-        </div>
-        <button type="submit" class="btn btn-outline btn-sm">Send Login Link</button>
-      </form>
-      <div id="login-alert" style="display:none; margin-top:10px;"></div>
-    </div>
-  </section>
+    <a href="/tactics" class="feature-card">
+      <div class="feature-icon">
+        <img src="/piece/bQ.svg" alt="" width="48" height="48" />
+      </div>
+      <h2>Tactics Trainer</h2>
+      <p>Generate puzzles from your own <strong>Lichess</strong> and <strong>Chess.com</strong> games. Stockfish runs in your browser to find the moves you missed.</p>
+      <span class="feature-cta">Start training &rarr;</span>
+    </a>
+  </div>
 </Base>
 
-{import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && (
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
-)}
+<style>
+  .hero {
+    text-align: center;
+    padding: 48px 0 40px;
+  }
 
-<script>
-  const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
+  .hero h1 {
+    font-size: 2.6rem;
+    letter-spacing: -0.03em;
+    margin-bottom: 12px;
+  }
 
-  const fenInput = document.getElementById('sub-fen') as HTMLInputElement;
-  const fenBoard = document.getElementById('fen-board')!;
-  const fenError = document.getElementById('fen-error')!;
-  fenInput.addEventListener('input', () => renderBoardPreview(fenInput.value, fenBoard, fenError));
+  .hero .subtitle {
+    font-size: 1.15rem;
+    margin-bottom: 0;
+  }
 
-  document.getElementById('subscribe-form')!.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const alertEl = document.getElementById('subscribe-alert')!;
-    const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
-    const val = (id: string) => (document.getElementById(id) as HTMLInputElement).value.trim() || undefined;
-    const numVal = (id: string) => {
-      const v = (document.getElementById(id) as HTMLInputElement).value.trim();
-      return v ? parseInt(v) : undefined;
-    };
+  .features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 760px;
+    margin: 0 auto;
+  }
 
-    const turnstileResponse = (window as any).turnstile?.getResponse() || '';
+  @media (max-width: 640px) {
+    .features { grid-template-columns: 1fr; }
+    .hero { padding: 32px 0 28px; }
+    .hero h1 { font-size: 2rem; }
+  }
 
-    const excludeChessCom = (document.getElementById('sub-exclude-chess-com') as HTMLInputElement).checked;
+  .feature-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 24px;
+    text-decoration: none;
+    color: var(--text);
+    transition: border-color 0.2s, transform 0.15s;
+  }
 
-    const body: Record<string, unknown> = {
-      email: (document.getElementById('sub-email') as HTMLInputElement).value.trim(),
-      cf_turnstile_token: turnstileResponse,
-      label: val('sub-label') || '',
-      fen: val('sub-fen'),
-      player: val('sub-player'),
-      eco: val('sub-eco'),
-      min_elo: numVal('sub-min-elo'),
-      exclude_site: excludeChessCom ? 'chess.com' : undefined,
-    };
+  .feature-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Submitting...';
+  .feature-icon {
+    margin-bottom: 16px;
+  }
 
-    try {
-      const res = await fetch(`${API}/api/subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      alertEl.style.display = 'block';
-      if (res.ok) {
-        alertEl.className = 'alert alert-success';
-        alertEl.textContent = data.message;
-        (document.getElementById('subscribe-form') as HTMLFormElement).reset();
-        if ((window as any).turnstile) (window as any).turnstile.reset();
-      } else {
-        alertEl.className = 'alert alert-error';
-        alertEl.textContent = data.detail || 'Something went wrong';
-        if ((window as any).turnstile) (window as any).turnstile.reset();
-      }
-    } catch {
-      alertEl.style.display = 'block';
-      alertEl.className = 'alert alert-error';
-      alertEl.textContent = 'Could not reach the server.';
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Subscribe';
-    }
-  });
+  .feature-card h2 {
+    font-size: 1.25rem;
+    margin-bottom: 10px;
+  }
 
-  document.getElementById('login-form')!.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = (document.getElementById('login-email') as HTMLInputElement).value;
-    const alertEl = document.getElementById('login-alert')!;
-    try {
-      const res = await fetch(`${API}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      alertEl.style.display = 'block';
-      if (res.ok) {
-        alertEl.className = 'alert alert-success';
-        alertEl.textContent = data.message;
-      } else {
-        alertEl.className = 'alert alert-error';
-        alertEl.textContent = data.detail || 'Something went wrong';
-      }
-    } catch {
-      alertEl.style.display = 'block';
-      alertEl.className = 'alert alert-error';
-      alertEl.textContent = 'Could not reach the server.';
-    }
-  });
-</script>
+  .feature-card p {
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    line-height: 1.55;
+    flex: 1;
+  }
+
+  .feature-card strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .feature-cta {
+    display: inline-block;
+    margin-top: 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .feature-card:hover .feature-cta {
+    color: var(--accent-hover);
+  }
+</style>
