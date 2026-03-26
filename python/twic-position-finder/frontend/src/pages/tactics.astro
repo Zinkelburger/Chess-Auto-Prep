@@ -1,0 +1,390 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Tactics Trainer">
+  <div id="tactics-app" x-data="tacticsApp()" x-init="init()">
+    <!-- Setup panel -->
+    <div class="tactics-panel" x-show="!training">
+      <div class="tactics-header">
+        <div>
+          <h1>Tactics Trainer</h1>
+          <p class="subtitle" style="margin-bottom:0;">Generate puzzles from your own games.</p>
+        </div>
+        <button class="icon-btn" @click="settingsOpen = true" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="card" style="margin-top:24px;">
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="lichess-user">Lichess username</label>
+            <input type="text" id="lichess-user"
+                   x-model="lichessUser"
+                   placeholder="username" />
+          </div>
+          <div class="form-row">
+            <label for="chesscom-user">Chess.com username</label>
+            <input type="text" id="chesscom-user"
+                   x-model="chesscomUser"
+                   placeholder="username" />
+          </div>
+        </div>
+        <div class="form-row" style="max-width:200px;">
+          <label for="num-games">Number of games</label>
+          <input type="number" id="num-games"
+                 x-model.number="numGames"
+                 min="1" max="100" />
+        </div>
+
+        <button class="btn btn-primary" style="width:100%; margin-top:8px;"
+                @click="loadTactics()"
+                :disabled="loading">
+          <span x-text="loading ? 'Loading...' : 'Load Tactics'"></span>
+        </button>
+
+        <div class="engine-note" x-show="engineLoading">
+          Engine loading in background...
+        </div>
+
+        <div class="status-line"
+             :class="{ 'status-error': statusType === 'error', 'status-success': statusType === 'success' }">
+          <div class="spinner" x-show="loading"></div>
+          <span x-text="status"></span>
+        </div>
+
+        <div class="tactics-found" x-show="loading && tacticsFound > 0">
+          Found: <strong x-text="tacticsFound"></strong> tactics
+        </div>
+      </div>
+    </div>
+
+    <!-- Training panel -->
+    <div x-show="training" x-cloak>
+      <div class="training-bar">
+        <button class="btn btn-outline btn-sm" @click="backToSetup()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" style="vertical-align:-3px;">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          Back
+        </button>
+        <span class="training-counter" x-text="`${currentIndex + 1} / ${tactics.length}`"></span>
+      </div>
+
+      <div class="training-layout">
+        <div class="board-col">
+          <div id="board" class="tactics-board"></div>
+        </div>
+
+        <div class="info-col">
+          <div class="card tactic-meta">
+            <div class="game-players" x-text="`${currentTactic?.game_white} vs ${currentTactic?.game_black}`"></div>
+            <div class="you-played" x-show="currentTactic?.user_move">
+              You played: <span x-text="currentTactic?.user_move + currentTactic?.mistake_type"></span>
+            </div>
+          </div>
+
+          <div class="feedback-area">
+            <span x-show="message && !solved" x-text="message"></span>
+            <span x-show="solved && !solutionShown" style="color:var(--accent);">Correct!</span>
+            <span x-show="solutionShown" x-text="'Best: ' + getSolutionSan()"></span>
+            <span x-show="!message && !solved && !solutionShown">Find the best move.</span>
+          </div>
+
+          <div class="controls-grid">
+            <button class="btn btn-secondary"
+                    @click="prevTactic()"
+                    :disabled="currentIndex === 0">Prev</button>
+            <button class="btn btn-secondary"
+                    @click="showSolution()">Solution</button>
+            <button class="btn btn-primary"
+                    @click="nextTactic()">Next</button>
+          </div>
+
+          <div class="controls-extra">
+            <label class="checkbox-label" style="font-size:0.85rem;">
+              <input type="checkbox" x-model="autoNext" style="width:16px; height:16px;" />
+              <span>Auto-next</span>
+            </label>
+            <div class="link-row">
+              <a class="link-btn"
+                 :href="currentTactic?.game_url"
+                 target="_blank"
+                 x-show="currentTactic?.game_url">
+                Original Game
+              </a>
+              <button class="link-btn"
+                      @click="openAnalysis()"
+                      x-show="currentTactic?.game_url">
+                Analyze on Lichess
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings modal -->
+    <div class="modal-overlay" x-show="settingsOpen" x-transition.opacity x-cloak @click.self="settingsOpen = false">
+      <div class="card modal-card" @click.stop>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h2 style="margin-bottom:0;">Settings</h2>
+          <button class="icon-btn" @click="settingsOpen = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="form-row" style="max-width:180px;">
+          <label>Analysis Depth</label>
+          <input type="number" x-model.number="analysisDepth" min="1" max="25" style="text-align:center;" />
+        </div>
+        <div>
+          <label style="margin-bottom:10px;">Time Controls</label>
+          <div class="chip-row">
+            <template x-for="tc in timeControls" :key="tc.id">
+              <label class="chip" :class="{ 'chip-active': tc.enabled }">
+                <input type="checkbox" x-model="tc.enabled" style="display:none;" />
+                <span x-text="tc.name"></span>
+              </label>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</Base>
+
+<style>
+  [x-cloak] { display: none !important; }
+
+  .tactics-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .icon-btn:hover { color: var(--text); border-color: var(--text-dim); }
+
+  .engine-note {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  .status-line {
+    text-align: center;
+    margin-top: 12px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    min-height: 1.5em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .status-error { color: var(--danger); }
+  .status-success { color: var(--accent); }
+
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .tactics-found {
+    text-align: center;
+    margin-top: 6px;
+    font-size: 0.9rem;
+    color: var(--accent);
+  }
+
+  /* ── Training ──────────────────────────────────── */
+
+  .training-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .training-counter {
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    color: var(--text-dim);
+  }
+
+  .training-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 440px) 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media (max-width: 720px) {
+    .training-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .board-col {
+    width: 100%;
+  }
+
+  .tactics-board {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+
+  .info-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .tactic-meta {
+    margin-bottom: 0;
+    padding: 16px 20px;
+  }
+
+  .game-players {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .you-played {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+  }
+
+  .feedback-area {
+    text-align: center;
+    padding: 10px;
+    font-size: 0.95rem;
+    color: var(--text-dim);
+    min-height: 2em;
+  }
+
+  .controls-grid {
+    display: flex;
+    gap: 8px;
+  }
+  .controls-grid button { flex: 1; }
+
+  .controls-extra {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 8px;
+  }
+
+  .link-row {
+    display: flex;
+    gap: 12px;
+  }
+
+  .link-btn {
+    background: none;
+    border: none;
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .link-btn:hover { color: var(--text); }
+
+  /* ── Settings modal ──────────────────────────────────── */
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 100;
+  }
+
+  .modal-card {
+    width: auto;
+    min-width: 280px;
+    max-width: 360px;
+  }
+
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .chip {
+    cursor: pointer;
+  }
+
+  .chip span {
+    display: inline-block;
+    padding: 5px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    transition: all 0.15s;
+  }
+
+  .chip:hover span {
+    border-color: var(--text-dim);
+  }
+
+  .chip-active span {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+</style>
+
+<script>
+  import Alpine from 'alpinejs';
+  import { tacticsApp } from '../tactics/app.js';
+  import { Chess } from '../tactics/chess.js';
+
+  import 'chessground/assets/chessground.base.css';
+  import 'chessground/assets/chessground.brown.css';
+  import 'chessground/assets/chessground.cburnett.css';
+
+  (window as any).Chess = Chess;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    (window as any).Alpine = Alpine;
+    Alpine.data('tacticsApp', tacticsApp);
+    Alpine.start();
+  });
+</script>

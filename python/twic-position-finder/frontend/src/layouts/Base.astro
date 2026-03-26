@@ -1,8 +1,10 @@
 ---
 interface Props {
   title: string;
+  wide?: boolean;
 }
-const { title } = Astro.props;
+const { title, wide = false } = Astro.props;
+const currentPath = Astro.url.pathname;
 ---
 <!doctype html>
 <html lang="en">
@@ -10,13 +12,24 @@ const { title } = Astro.props;
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♟</text></svg>" />
+  <link rel="preconnect" href="https://challenges.cloudflare.com" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet" />
-  <title>{title} — TWIC Position Finder</title>
+  <title>{title} — Chess Auto Prep</title>
 </head>
 <body>
-  <main>
+  <nav class="site-nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo">♟ Chess Auto Prep</a>
+      <div class="nav-links">
+        <a href="/twic-notifications" class:list={[{ active: currentPath === '/twic-notifications' || currentPath === '/twic-notifications/' }]}>TWIC Notifications</a>
+        <a href="/tactics" class:list={[{ active: currentPath === '/tactics' || currentPath === '/tactics/' }]}>Tactics Trainer</a>
+        <a href="/dashboard" class:list={[{ active: currentPath.startsWith('/dashboard') }]}>Dashboard</a>
+      </div>
+    </div>
+  </nav>
+  <main class:list={[{ wide }]}>
     <slot />
   </main>
 </body>
@@ -51,6 +64,64 @@ const { title } = Astro.props;
     line-height: 1.6;
   }
 
+  /* ── Navigation ──────────────────────────────────── */
+
+  .site-nav {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+  }
+
+  .nav-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+  }
+
+  .nav-logo {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+    letter-spacing: -0.02em;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 4px;
+  }
+
+  .nav-links a {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-decoration: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .nav-links a:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.04);
+  }
+
+  .nav-links a.active {
+    color: var(--accent);
+    background: rgba(78, 122, 30, 0.1);
+  }
+
+  @media (max-width: 520px) {
+    .nav-inner { flex-direction: column; height: auto; padding: 12px 16px; gap: 8px; }
+    .nav-links { gap: 2px; }
+    .nav-links a { font-size: 0.8rem; padding: 5px 10px; }
+  }
+
+  /* ── Main ──────────────────────────────────── */
+
   main {
     flex: 1;
     max-width: 900px;
@@ -59,11 +130,19 @@ const { title } = Astro.props;
     width: 100%;
   }
 
+  main.wide {
+    max-width: 1100px;
+  }
+
+  /* ── Typography ──────────────────────────────────── */
+
   h1 { font-size: 2rem; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.02em; }
   h2 { font-size: 1.4rem; font-weight: 600; margin-bottom: 12px; }
   h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 8px; }
 
   .subtitle { color: var(--text-dim); font-size: 1.05rem; margin-bottom: 32px; }
+
+  /* ── Card ──────────────────────────────────── */
 
   .card {
     background: var(--bg-card);
@@ -72,6 +151,8 @@ const { title } = Astro.props;
     padding: 24px;
     margin-bottom: 16px;
   }
+
+  /* ── Forms ──────────────────────────────────── */
 
   input, select {
     font-family: var(--mono);
@@ -121,6 +202,8 @@ const { title } = Astro.props;
     cursor: pointer;
   }
 
+  /* ── Buttons ──────────────────────────────────── */
+
   button, .btn {
     font-family: var(--sans);
     font-size: 0.95rem;
@@ -161,6 +244,22 @@ const { title } = Astro.props;
 
   .btn-sm { font-size: 0.8rem; padding: 6px 14px; }
 
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ── Alerts ──────────────────────────────────── */
+
   .alert {
     padding: 14px 18px;
     border-radius: 8px;
@@ -170,6 +269,8 @@ const { title } = Astro.props;
   .alert-success { background: #172613; border: 1px solid #2d5a1a; color: #a0d870; }
   .alert-error { background: #2a1318; border: 1px solid #5a1a2a; color: #f09090; }
   .alert-info { background: #131a2a; border: 1px solid #1a2a5a; color: #7db4d8; }
+
+  /* ── Misc ──────────────────────────────────── */
 
   code, .mono { font-family: var(--mono); font-size: 0.85em; }
 
@@ -183,6 +284,8 @@ const { title } = Astro.props;
     color: var(--text-dim);
     font-family: var(--mono);
   }
+
+  /* ── Board preview (FEN input) ──────────────────────────────────── */
 
   .board-preview {
     display: none;
