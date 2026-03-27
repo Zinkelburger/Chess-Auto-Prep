@@ -1,7 +1,8 @@
 /// Pure Stockfish worker pool — spawns workers, provides acquire/release.
 ///
 /// No analysis orchestration, no UI concerns, no dynamic RAM budgeting.
-/// Workers use a fixed 64 MB hash and a single thread each.
+/// Workers use a fixed [kPoolHashPerWorkerMb] MB hash and a single thread
+/// each.
 ///
 /// Used by [AnalysisService] for interactive analysis and by
 /// [RepertoireGenerationService] for generation-mode evaluation.
@@ -85,7 +86,12 @@ class StockfishPool {
   // ── Acquire / release ───────────────────────────────────────────────────
 
   /// Acquire exclusive use of a worker.  Queues if all are busy.
-  Future<EvalWorker> acquire() {
+  ///
+  /// Times out after [timeout] (default 60 s) to prevent deadlocks when a
+  /// worker hangs.
+  Future<EvalWorker> acquire({
+    Duration timeout = const Duration(seconds: 60),
+  }) {
     if (_workers.isEmpty) {
       return Future.error(StateError('No workers available'));
     }
@@ -97,7 +103,10 @@ class StockfishPool {
     }
     final c = Completer<EvalWorker>();
     _waiters.add(c);
-    return c.future;
+    return c.future.timeout(timeout, onTimeout: () {
+      _waiters.remove(c);
+      throw TimeoutException('Timed out waiting for a free worker', timeout);
+    });
   }
 
   /// Return a worker to the free set (or hand it to the next waiter).

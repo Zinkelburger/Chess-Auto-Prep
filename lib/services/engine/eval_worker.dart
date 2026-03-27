@@ -1,15 +1,24 @@
 /// A single persistent Stockfish worker used by [StockfishPool].
 ///
 /// Handles UCI protocol for both MultiPV discovery and single-position
-/// evaluation. Parses engine output and converts scores.
+/// evaluation.  Parses engine output and converts scores.
+///
+/// **Score conventions:**
+/// - [evaluateFen] returns scores in **side-to-move** perspective (raw from
+///   the engine).  Callers must negate when the side to move is not the
+///   perspective they need.
+/// - [runDiscovery] returns scores **White-normalized** — the caller passes
+///   [isWhiteToMove] and the worker flips Black-to-move scores internally.
 library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'engine_connection.dart';
 import '../../models/analysis/discovery_result.dart';
 
-// ── Internal: raw eval result (side-to-move perspective) ──────────────────
+// ── Eval result (side-to-move perspective) ────────────────────────────────
 
 class EvalResult {
   final int? scoreCp;
@@ -24,6 +33,8 @@ class EvalResult {
     required this.depth,
   });
 
+  /// Collapse mate / cp into a single comparable centipawn value.
+  /// Positive = good for side-to-move, negative = bad.
   int get effectiveCp {
     if (scoreMate != null) {
       return scoreMate! > 0
@@ -59,7 +70,16 @@ class EvalWorker {
   void Function(DiscoveryResult)? _discoveryOnProgress;
 
   EvalWorker(this.engine) {
-    _sub = engine.stdout.listen(_onOutput);
+    _sub = engine.stdout.listen(
+      _onOutput,
+      onError: (Object error) {
+        if (kDebugMode) print('[EvalWorker] Engine stream error: $error');
+        _evalCompleter?.completeError(error);
+        _evalCompleter = null;
+        _discoveryCompleter?.completeError(error);
+        _discoveryCompleter = null;
+      },
+    );
   }
 
   Future<void> init({int hashMb = 128}) async {
@@ -109,10 +129,12 @@ class EvalWorker {
     return result;
   }
 
-  /// Evaluate a position at the given depth. Returns raw side-to-move scores.
+  /// Evaluate [fen] at [depth].  Returns scores in **side-to-move**
+  /// perspective — negate when converting to White's viewpoint on a
+  /// Black-to-move position.
   Future<EvalResult> evaluateFen(String fen, int depth) async {
     if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
-      _evalCompleter!.completeError('Cancelled');
+      _evalCompleter!.completeError(StateError('Cancelled by new eval'));
     }
     _evalCompleter = null;
 
@@ -139,11 +161,11 @@ class EvalWorker {
   void stop() {
     engine.sendCommand('stop');
     if (_evalCompleter != null && !_evalCompleter!.isCompleted) {
-      _evalCompleter!.completeError('Cancelled');
+      _evalCompleter!.completeError(StateError('Eval stopped'));
       _evalCompleter = null;
     }
     if (_discoveryCompleter != null && !_discoveryCompleter!.isCompleted) {
-      _discoveryCompleter!.completeError('Cancelled');
+      _discoveryCompleter!.completeError(StateError('Discovery stopped'));
       _discoveryCompleter = null;
     }
     _discoveryOnProgress = null;

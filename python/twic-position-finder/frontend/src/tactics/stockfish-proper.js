@@ -1,6 +1,10 @@
 /**
- * Proper Stockfish.js wrapper using Chess.com's official package
- * This should have correct NNUE evaluations
+ * Stockfish.js wrapper with multi-threaded → single-threaded fallback.
+ *
+ * Multi-threaded (stockfish-mt.js) requires SharedArrayBuffer, which
+ * needs Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy
+ * headers. If those aren't present or the browser doesn't support it,
+ * falls back to the single-threaded build (stockfish.js).
  */
 
 export class ProperStockfishEngine {
@@ -9,129 +13,180 @@ export class ProperStockfishEngine {
     this.ready = false;
     this.analyzing = false;
     this.resolve = null;
+    this.reject = null;
+    this.analysisTimeout = null;
     this.currentEval = null;
     this.bestMove = null;
     this.pv = [];
     this.initPromise = null;
-    this.engineName = 'Stockfish 17.1';
+    this.engineName = 'Stockfish';
   }
 
-  async init() {
+  async init(threads = 1) {
     if (this.ready) return;
     if (this.initPromise) return this.initPromise;
 
-    this.initPromise = new Promise((resolve, reject) => {
-      try {
-        // Use the multi-threaded version with NNUE
-        const workerPath = '/stockfish/stockfish-17.1-8e4d048.js';
-        console.log('Loading Stockfish.js from:', workerPath);
+    threads = Math.max(1, threads);
+    const wantMultiThreaded = threads > 1 && crossOriginIsolated;
 
-        this.worker = new Worker(workerPath);
-
-        this.worker.onerror = (e) => {
-          console.error('Stockfish worker error:', e);
-          reject(new Error('Failed to load Stockfish engine'));
-        };
-
-        this.worker.onmessage = (e) => {
-          const msg = e.data;
-          console.log('Stockfish:', msg);
-
-          // Check for NNUE loading
-          if (msg.includes('info string NNUE evaluation')) {
-            console.log('✅ NNUE evaluation confirmed active!');
-          }
-
-          if (msg.includes('uciok')) {
-            console.log('UCI ready, configuring engine...');
-
-            // Configure for strong multithreaded play
-            const cores = navigator.hardwareConcurrency || 4;
-            // Use most cores but leave some for the browser
-            const threads = Math.max(1, Math.min(cores - 1, 8));
-
-            console.log(`System has ${cores} cores, using ${threads} threads for Stockfish`);
-
-            this.worker.postMessage('setoption name Hash value 256');  // More hash for better analysis
-            this.worker.postMessage(`setoption name Threads value ${threads}`);
-            this.worker.postMessage('setoption name MultiPV value 1');
-
-            // Enable CORS-required features for multithreading
-            console.log('Note: Multithreading requires proper CORS headers (Cross-Origin-Embedder-Policy and Cross-Origin-Opener-Policy)');
-
-            // Verify NNUE is active
-            this.worker.postMessage('d');
-
-            this.worker.postMessage('isready');
-          }
-
-          if (msg.includes('readyok') && !this.analyzing) {
-            this.ready = true;
-            console.log('✅ Stockfish.js ready for analysis');
-            resolve();
-          }
-
-          // Parse evaluation during analysis
-          if (msg.startsWith('info') && msg.includes(' pv ')) {
-            const depthMatch = msg.match(/depth (\d+)/);
-            const cpMatch = msg.match(/score cp (-?\d+)/);
-            const mateMatch = msg.match(/score mate (-?\d+)/);
-            const pvMatch = msg.match(/ pv (.+)/);
-
-            if (cpMatch) {
-              const rawCp = parseFloat(cpMatch[1]);
-              this.currentEval = rawCp / 100;
-              console.log(`Depth ${depthMatch ? depthMatch[1] : '?'}: ${this.currentEval} pawns`);
-            } else if (mateMatch) {
-              const mateIn = parseInt(mateMatch[1]);
-              this.currentEval = mateIn > 0 ? 100 : -100;
-              console.log(`Depth ${depthMatch ? depthMatch[1] : '?'}: Mate in ${mateIn}`);
-            }
-
-            if (pvMatch) {
-              this.pv = pvMatch[1].split(' ');
-            }
-          }
-
-          if (msg.startsWith('bestmove')) {
-            const match = msg.match(/bestmove (\S+)/);
-            if (match) {
-              this.bestMove = match[1];
-            }
-
-            this.analyzing = false;
-            console.log(`Analysis complete: ${this.currentEval} pawns, best: ${this.bestMove}`);
-
-            if (this.resolve) {
-              this.resolve({
-                eval: this.currentEval || 0,
-                bestMove: this.bestMove,
-                pv: [...this.pv],
-                engine: this.engineName
-              });
-              this.resolve = null;
-            }
-          }
-        };
-
-        // Start UCI
-        console.log('Sending UCI command...');
-        this.worker.postMessage('uci');
-
-        // Timeout protection
-        setTimeout(() => {
-          if (!this.ready) {
-            reject(new Error('Stockfish initialization timeout'));
-          }
-        }, 15000);
-
-      } catch (error) {
-        console.error('Failed to initialize Stockfish:', error);
-        reject(error);
+    this.initPromise = (async () => {
+      if (wantMultiThreaded) {
+        try {
+          await this._startWorker('/stockfish/stockfish-mt.js');
+          console.log(`Multi-threaded mode: ${threads} threads`);
+          this.worker.postMessage(`setoption name Threads value ${threads}`);
+          this.worker.postMessage('setoption name Hash value 256');
+          this.worker.postMessage('setoption name MultiPV value 1');
+          this.worker.postMessage('isready');
+          await this._waitReady();
+          return;
+        } catch (e) {
+          console.warn('Multi-threaded engine failed, falling back to single-threaded:', e.message);
+          this._cleanup();
+        }
+      } else if (threads > 1) {
+        console.log('crossOriginIsolated is false — falling back to single-threaded engine');
       }
-    });
+
+      await this._startWorker('/stockfish/stockfish.js');
+      console.log('Single-threaded mode');
+      this.worker.postMessage('setoption name Hash value 128');
+      this.worker.postMessage('setoption name MultiPV value 1');
+      this.worker.postMessage('isready');
+      await this._waitReady();
+    })();
 
     return this.initPromise;
+  }
+
+  _startWorker(path) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Worker load timeout')), 10000);
+
+      console.log('Loading Stockfish.js from:', path);
+      this.worker = new Worker(path);
+
+      this.worker.onerror = (e) => {
+        clearTimeout(timeout);
+        console.error('Stockfish worker error:', e);
+        reject(new Error('Failed to load Stockfish engine'));
+      };
+
+      this.worker.onmessage = (e) => {
+        const msg = e.data;
+        if (msg.includes('uciok')) {
+          clearTimeout(timeout);
+          console.log('UCI protocol ready');
+          resolve();
+        }
+      };
+
+      this.worker.postMessage('uci');
+    });
+  }
+
+  _waitReady() {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Engine readyok timeout')), 10000);
+
+      const prev = this.worker.onmessage;
+      this.worker.onmessage = (e) => {
+        const msg = e.data;
+        if (msg.includes('readyok')) {
+          clearTimeout(timeout);
+          this.ready = true;
+          this.worker.onmessage = this._analysisHandler.bind(this);
+          console.log('Stockfish.js ready for analysis');
+          resolve();
+          return;
+        }
+        if (prev) prev(e);
+      };
+    });
+  }
+
+  _analysisHandler(e) {
+    const msg = e.data;
+
+    if (msg.startsWith('info') && msg.includes(' pv ')) {
+      const cpMatch = msg.match(/score cp (-?\d+)/);
+      const mateMatch = msg.match(/score mate (-?\d+)/);
+      const pvMatch = msg.match(/ pv (.+)/);
+
+      if (cpMatch) {
+        this.currentEval = parseFloat(cpMatch[1]) / 100;
+      } else if (mateMatch) {
+        const mateIn = parseInt(mateMatch[1]);
+        this.currentEval = mateIn > 0 ? 100 : -100;
+      }
+
+      if (pvMatch) {
+        this.pv = pvMatch[1].split(' ');
+      }
+    }
+
+    if (msg.startsWith('bestmove')) {
+      const match = msg.match(/bestmove (\S+)/);
+      if (match) this.bestMove = match[1];
+
+      this._settleAnalysis({
+        eval: this.currentEval || 0,
+        bestMove: this.bestMove,
+        pv: [...this.pv],
+        engine: this.engineName
+      });
+    }
+  }
+
+  _settleAnalysis(result) {
+    if (this.analysisTimeout) {
+      clearTimeout(this.analysisTimeout);
+      this.analysisTimeout = null;
+    }
+    this.analyzing = false;
+
+    if (result instanceof Error) {
+      console.error('Analysis failed:', result.message);
+      if (this.reject) {
+        this.reject(result);
+      }
+    } else {
+      console.log(`Analysis complete: ${result.eval} pawns, best: ${result.bestMove}`);
+      if (this.resolve) {
+        this.resolve(result);
+      }
+    }
+    this.resolve = null;
+    this.reject = null;
+  }
+
+  _cleanup() {
+    if (this.worker) {
+      try { this.worker.terminate(); } catch (_) {}
+      this.worker = null;
+    }
+    this.ready = false;
+  }
+
+  newGame() {
+    if (!this.ready) return;
+    this.worker.postMessage('ucinewgame');
+    this.worker.postMessage('isready');
+    return this._waitSync();
+  }
+
+  _waitSync() {
+    return new Promise((resolve) => {
+      const prev = this.worker.onmessage;
+      this.worker.onmessage = (e) => {
+        if (e.data.includes('readyok')) {
+          this.worker.onmessage = prev;
+          resolve();
+          return;
+        }
+        if (prev) prev(e);
+      };
+    });
   }
 
   async analyze(fen, depth = 15) {
@@ -139,39 +194,25 @@ export class ProperStockfishEngine {
       await this.init();
     }
 
-    console.log(`Analyzing position: ${fen} at depth ${depth}`);
+    if (this.analyzing) {
+      this.worker.postMessage('stop');
+      this._settleAnalysis(new Error('Aborted by new analyze() call'));
+    }
 
     return new Promise((resolve, reject) => {
       this.resolve = resolve;
+      this.reject = reject;
       this.analyzing = true;
       this.currentEval = null;
       this.bestMove = null;
       this.pv = [];
 
-      // New game for clean analysis
-      this.worker.postMessage('ucinewgame');
+      this.worker.postMessage(`position fen ${fen}`);
+      this.worker.postMessage(`go depth ${depth}`);
 
-      // Wait a bit for engine to reset
-      setTimeout(() => {
-        // Set position
-        this.worker.postMessage(`position fen ${fen}`);
-
-        // Debug to verify position
-        this.worker.postMessage('d');
-
-        // Start analysis
-        setTimeout(() => {
-          this.worker.postMessage(`go depth ${depth}`);
-        }, 50);
-      }, 100);
-
-      // Timeout protection
-      setTimeout(() => {
-        if (this.analyzing) {
-          console.error('Analysis timeout');
-          this.analyzing = false;
-          reject(new Error('Analysis timeout'));
-        }
+      this.analysisTimeout = setTimeout(() => {
+        this.worker.postMessage('stop');
+        this._settleAnalysis(new Error('Analysis timeout'));
       }, 30000);
     });
   }
@@ -183,6 +224,10 @@ export class ProperStockfishEngine {
   }
 
   destroy() {
+    if (this.analysisTimeout) {
+      clearTimeout(this.analysisTimeout);
+      this.analysisTimeout = null;
+    }
     if (this.worker) {
       this.worker.postMessage('quit');
       this.worker.terminate();

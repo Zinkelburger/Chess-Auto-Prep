@@ -152,7 +152,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   Future<void> _loadPositions() async {
-    final count = await _database.loadPositions();
+    await _database.loadPositions();
     if (mounted) {
       setState(() {});
     }

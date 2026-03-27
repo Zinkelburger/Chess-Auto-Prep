@@ -5,7 +5,7 @@ import 'core/app_state.dart';
 import 'screens/main_screen.dart';
 import 'services/tactics_service.dart';
 import 'services/pgn_service.dart';
-import 'services/imported_games_service.dart';
+
 import 'services/browser_extension_server/browser_extension_server_factory.dart';
 
 void main() {
@@ -42,7 +42,7 @@ class ChessAutoPrepApp extends StatelessWidget {
       providers: [
         Provider(create: (_) => TacticsService()),
         Provider(create: (_) => PgnService()),
-        Provider(create: (_) => ImportedGamesService()),
+
         ChangeNotifierProvider(
           create: (_) {
             final appState = AppState();

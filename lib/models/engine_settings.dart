@@ -7,7 +7,7 @@ import '../utils/system_info.dart';
 class EngineSettings with ChangeNotifier {
   // ── Stockfish settings ────────────────────────────────────────────────
 
-  /// Number of parallel Stockfish workers (each: 1 thread, 64 MB hash).
+  /// Number of parallel Stockfish workers (each: 1 thread, 128 MB hash).
   /// Defaults to half the logical cores, minimum 1.
   int _workers = (getLogicalCores() ~/ 2).clamp(1, getLogicalCores());
   int get workers => _workers;

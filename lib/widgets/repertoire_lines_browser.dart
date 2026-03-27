@@ -548,7 +548,6 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     final currentMoves = widget.currentMoveSequence;
     final matchDepth = _getPositionMatchDepth(line, currentMoves);
     final isExactMatch = matchDepth == currentMoves.length && currentMoves.isNotEmpty;
-    final isPrefixMatch = matchDepth > 0 && matchDepth < currentMoves.length;
     
     return InkWell(
       onTap: () => widget.onLineSelected?.call(line),
