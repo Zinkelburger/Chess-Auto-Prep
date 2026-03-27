@@ -92,15 +92,15 @@ static void print_usage(const char *prog_name) {
     printf("                         Also reads: $LICHESS_TOKEN, ~/.config/tree_builder/token, .lichess_token\n");
     printf("\n");
     printf("Our-move candidates (engine-driven):\n");
-    printf("  --our-multipv <N>      MultiPV lines to evaluate [default: 5]\n");
-    printf("  --our-max-early <N>    Max candidates at depth < taper [default: 8]\n");
-    printf("  --our-max-late <N>     Max candidates at depth >= taper [default: 2]\n");
-    printf("  --taper-depth <N>      Ply at which candidate cap shrinks [default: 8]\n");
+    printf("  --our-multipv-root <N> MultiPV at root (explore broadly) [default: 10]\n");
+    printf("  --our-multipv-floor <N> MultiPV floor (deep positions) [default: 2]\n");
+    printf("  --taper-depth <N>      Ply at which MultiPV bottoms out [default: 8]\n");
     printf("  --max-eval-loss <cp>   Skip candidates more than N cp worse than best [default: 50]\n");
     printf("\n");
     printf("Opponent-move selection (Lichess-driven):\n");
     printf("  --opp-max-children <N> Max opponent responses per position [default: 6]\n");
-    printf("  --opp-mass <0-1>       Stop after this fraction of prob mass [default: 0.80]\n");
+    printf("  --opp-mass-root <0-1>  Mass target at root (explore broadly) [default: 0.95]\n");
+    printf("  --opp-mass-floor <0-1> Mass target floor (deep positions) [default: 0.50]\n");
     printf("\n");
     printf("Eval window pruning:\n");
     printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: color-dependent]\n");
@@ -286,15 +286,15 @@ int main(int argc, char *argv[]) {
     bool relative_eval = false;
 
     /* Our-move overrides (-1 = use default) */
-    int our_multipv_arg = -1;
-    int our_max_early_arg = -1;
-    int our_max_late_arg = -1;
+    int our_multipv_root_arg = -1;
+    int our_multipv_floor_arg = -1;
     int taper_depth_arg = -1;
     int max_eval_loss_arg = -1;
 
     /* Opponent-move overrides */
     int opp_max_children_arg = -1;
-    double opp_mass_arg = -1.0;
+    double opp_mass_root_arg = -1.0;
+    double opp_mass_floor_arg = -1.0;
 
     /* Eval window overrides */
     int min_eval_arg = -99999;
@@ -325,14 +325,14 @@ int main(int argc, char *argv[]) {
         {"pgn",              required_argument, 0, 1005},
         {"token",            required_argument, 0, 1006},
         /* Our-move */
-        {"our-multipv",      required_argument, 0, 2001},
-        {"our-max-early",    required_argument, 0, 2002},
-        {"our-max-late",     required_argument, 0, 2003},
+        {"our-multipv-root", required_argument, 0, 2001},
+        {"our-multipv-floor",required_argument, 0, 2002},
         {"taper-depth",      required_argument, 0, 2004},
         {"max-eval-loss",    required_argument, 0, 2005},
         /* Opponent-move */
         {"opp-max-children", required_argument, 0, 2010},
-        {"opp-mass",         required_argument, 0, 2011},
+        {"opp-mass-root",    required_argument, 0, 2011},
+        {"opp-mass-floor",   required_argument, 0, 2012},
         /* Eval window */
         {"min-eval",         required_argument, 0, 2020},
         {"max-eval",         required_argument, 0, 2021},
@@ -392,14 +392,14 @@ int main(int argc, char *argv[]) {
             case 1005: pgn_output = optarg; break;
             case 1006: lichess_token = optarg; break;
             /* Our-move */
-            case 2001: if (!parse_int(optarg, "our-multipv", &our_multipv_arg)) return 1; break;
-            case 2002: if (!parse_int(optarg, "our-max-early", &our_max_early_arg)) return 1; break;
-            case 2003: if (!parse_int(optarg, "our-max-late", &our_max_late_arg)) return 1; break;
+            case 2001: if (!parse_int(optarg, "our-multipv-root", &our_multipv_root_arg)) return 1; break;
+            case 2002: if (!parse_int(optarg, "our-multipv-floor", &our_multipv_floor_arg)) return 1; break;
             case 2004: if (!parse_int(optarg, "taper-depth", &taper_depth_arg)) return 1; break;
             case 2005: if (!parse_int(optarg, "max-eval-loss", &max_eval_loss_arg)) return 1; break;
             /* Opponent-move */
             case 2010: if (!parse_int(optarg, "opp-max-children", &opp_max_children_arg)) return 1; break;
-            case 2011: if (!parse_double(optarg, "opp-mass", &opp_mass_arg)) return 1; break;
+            case 2011: if (!parse_double(optarg, "opp-mass-root", &opp_mass_root_arg)) return 1; break;
+            case 2012: if (!parse_double(optarg, "opp-mass-floor", &opp_mass_floor_arg)) return 1; break;
             /* Eval window */
             case 2020: if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1; break;
             case 2021: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
@@ -652,15 +652,16 @@ int main(int argc, char *argv[]) {
         config.use_masters = use_masters;
 
         /* Apply CLI overrides */
-        if (our_multipv_arg > 0) config.our_multipv = our_multipv_arg;
-        if (our_max_early_arg >= 0) config.our_max_candidates_early = our_max_early_arg;
-        if (our_max_late_arg >= 0) config.our_max_candidates_late = our_max_late_arg;
+        if (our_multipv_root_arg > 0) config.our_multipv_root = our_multipv_root_arg;
+        if (our_multipv_floor_arg > 0) config.our_multipv_floor = our_multipv_floor_arg;
         if (taper_depth_arg >= 0) config.taper_depth = taper_depth_arg;
         if (max_eval_loss_arg >= 0) config.max_eval_loss_cp = max_eval_loss_arg;
         if (opp_max_children_arg >= 0) config.opp_max_children = opp_max_children_arg;
-        if (opp_mass_arg >= 0.0) config.opp_mass_target = opp_mass_arg;
+        if (opp_mass_root_arg >= 0.0) config.opp_mass_root = opp_mass_root_arg;
+        if (opp_mass_floor_arg >= 0.0) config.opp_mass_floor = opp_mass_floor_arg;
         if (min_eval_arg != -99999) config.min_eval_cp = min_eval_arg;
         if (max_eval_arg != -99999) config.max_eval_cp = max_eval_arg;
+        config.relative_eval = relative_eval;
 
         if (maia) {
             config.maia = maia;
@@ -671,12 +672,12 @@ int main(int argc, char *argv[]) {
 
         if (verbose) config.progress_callback = progress_callback;
 
-        printf("  Our moves:  MultiPV %d, early %d / late %d candidates (taper at %d), %dcp loss max\n",
-               config.our_multipv, config.our_max_candidates_early,
-               config.our_max_candidates_late, config.taper_depth,
-               config.max_eval_loss_cp);
-        printf("  Opponent:   max %d children, %.0f%% mass target\n",
-               config.opp_max_children, config.opp_mass_target * 100.0);
+        printf("  Our moves:  MultiPV %d → %d (taper over %d ply), %dcp loss max\n",
+               config.our_multipv_root, config.our_multipv_floor,
+               config.taper_depth, config.max_eval_loss_cp);
+        printf("  Opponent:   max %d children, mass %.0f%% → %.0f%%\n",
+               config.opp_max_children,
+               config.opp_mass_root * 100.0, config.opp_mass_floor * 100.0);
         printf("  Eval window: [%+d, %+d] cp%s\n",
                config.min_eval_cp, config.max_eval_cp,
                relative_eval ? " (relative)" : "");
