@@ -124,20 +124,11 @@ probability do opponents lose by not finding the best move?" If a strong
 move exists but is hard to find, that makes the position tricky — exactly
 what we want to measure. This behavior is preserved from the current code.
 
-**Discovery moves:** `--discovery` adds engine-only moves with
-`move_probability = 0.0`. These are excluded from the delta sum (prob < 0.01)
-but included in the best_wp baseline. This means discovery moves can set a
-superhuman baseline, inflating local_cpl at every position with a discovery
-move. In the old system, sibling normalization partially compensated (all
-siblings inflated → relative ranking preserved). In the new system, the
-inflation is absolute.
-
-This is a pre-existing behavior, not introduced by this proposal. If it
-proves problematic, the fix is to also exclude discovery moves (prob = 0.0)
-from the best_wp computation. This would change local_cpl from "how much
-do opponents lose relative to the best available move" to "how much do
-opponents lose relative to the best move humans actually play" — arguably
-more appropriate for a metric about human blunder tendency.
+**Engine-only moves** (e.g. the engine top-1 added at opponent nodes)
+have low `move_probability` (0.01). These are excluded from the delta sum
+(prob < 0.01) but included in the best_wp baseline. This means the engine's
+best move can set a superhuman baseline, measuring how much humans lose by
+not finding the objectively best reply.
 
 **Note:** `compute_local_eca()` runs on every node, but `local_cpl` is only
 consumed at opponent-move nodes (where it's added to `accumulated_eca`) and
@@ -591,23 +582,21 @@ different depth, or from a quick-eval vs full-eval pass — accumulation and
 selection use different values and may pick different moves, defeating the
 consistency guarantee.
 
-### The fix
+### The fix (implemented)
 
-Selection should read evals from `TreeNode.engine_eval_cp` exclusively.
-The pipeline already syncs DB evals to TreeNode fields via
-`load_evals_callback` (BFS traversal) before ECA runs:
+Selection reads evals from `TreeNode.engine_eval_cp` exclusively. The
+interleaved build writes evals to both TreeNode fields and the DB during
+construction. When loading from JSON, `load_evals_callback` syncs DB →
+TreeNode before ECA + selection. Both phases use the same source.
 
 ```
-Stage 1: Batch engine eval → writes to DB + TreeNode
-          load_evals_callback → copies DB → TreeNode for any misses
-Stage 2: Ease calculation
-Stage 3: ECA calculation    → reads TreeNode.engine_eval_cp
-Stage 4: Move selection     → should also read TreeNode.engine_eval_cp
+Stage 0: Init DB + Engine Pool
+Stage 1: Interleaved build → writes evals to TreeNode + DB simultaneously
+Stage 2: load_evals_callback → DB → TreeNode (for JSON-loaded trees)
+         Ease calculation
+         ECA calculation    → reads TreeNode.engine_eval_cp
+         Move selection     → reads TreeNode.engine_eval_cp
 ```
-
-The `rdb_get_eval` calls in `build_repertoire_recursive` should be replaced
-with direct reads from `child->engine_eval_cp`. This is a small change to
-`repertoire.c` (~6 call sites) and eliminates the divergence risk entirely.
 
 ### DFS eval-window pruning
 
@@ -629,26 +618,15 @@ repertoire lines for the deepest positions.
 
 ### DB update workflow
 
-The current code reads from DB first deliberately — the DB may have newer,
-deeper evaluations from a subsequent Stockfish run. By switching to
-TreeNode-only reads, you lose the ability to update evals in the database
-and see their effect without re-running the full pipeline.
-
-This is trivially mitigated: re-run `load_evals_callback` (a BFS traversal
-that copies DB → TreeNode) before ECA + selection. It takes milliseconds.
-The pipeline should call `tree_traverse_bfs(tree, load_evals_callback, db)`
-before ECA whenever DB evals may have changed. This is already the pipeline's
-behavior — the only change is that selection no longer independently reads
-from the DB, which is the source of the consistency bug.
+The interleaved build writes evals to both TreeNode fields and the DB
+simultaneously, so they are always in sync. When loading trees from JSON
+for re-scoring, `load_evals_callback` (a BFS traversal) copies DB evals
+into TreeNode fields before ECA + selection. Both phases read from
+TreeNode exclusively, guaranteeing consistency.
 
 ---
 
 ## What Doesn't Change
-
-- **Tree building**: Completely unchanged. Lichess explorer queries, Maia
-  fallback, discovery pass — all the same.
-
-- **Engine evaluation**: Still batch-evaluate with Stockfish, same caching.
 
 - **Ease metric**: Still computed separately for backward compatibility
   with the Flutter app.
@@ -666,6 +644,13 @@ from the DB, which is the source of the consistency bug.
 - **Field names**: `local_cpl`, `accumulated_eca`, `has_eca` keep their
   names for backward compatibility. The units change from centipawns to
   win-probability deltas. See the Naming Caveat section.
+
+**Note (post-implementation):** The tree building pipeline has been
+rewritten to interleave Lichess queries with Stockfish evaluation in a
+single DFS pass. The separate discovery and batch-evaluation stages no
+longer exist. Engine evals are computed inline during the build and cached
+in the DB. This simplifies the pipeline but does not affect the ECA math
+described in this document.
 
 ---
 

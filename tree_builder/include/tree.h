@@ -1,8 +1,12 @@
 /**
  * tree.h - Opening Tree Builder
- * 
+ *
  * Builds and manages the complete opening tree structure.
- * Handles tree traversal, building from Lichess data, and statistics.
+ * Tree building interleaves Lichess explorer queries with Stockfish
+ * evaluation so branches can be pruned immediately by eval window.
+ *
+ * At OUR-move nodes:   Stockfish MultiPV → filter by eval → recurse
+ * At OPPONENT nodes:   Lichess DB (+ Maia fallback) + engine top-1 → recurse
  */
 
 #ifndef TREE_H
@@ -20,21 +24,43 @@ struct RepertoireConfig;
 
 /**
  * TreeConfig - Configuration for tree building
+ *
+ * The build is a single DFS pass that queries Lichess and Stockfish
+ * together, creating nodes with evaluations inline and pruning
+ * immediately when positions leave the eval window.
  */
 typedef struct TreeConfig {
     /* Side to play */
-    bool play_as_white;             /* Which side is our repertoire? */
+    bool play_as_white;
 
     /* Traversal limits */
     double min_probability;         /* Stop exploring below this cumul. probability */
     int max_depth;                  /* Maximum depth in ply */
     int max_nodes;                  /* Maximum total nodes (0 = unlimited) */
-    int max_children;               /* Max moves to explore per position (0 = unlimited) */
-    double opponent_mass_target;    /* Stop adding opponent moves after this fraction of prob mass (0 = unlimited) */
+
+    /* Engine (required for build) */
+    struct EnginePool *engine_pool; /* Stockfish pool — must be non-NULL */
+    struct RepertoireDB *db;        /* SQLite cache for evals (optional but recommended) */
+    int eval_depth;                 /* Stockfish search depth */
+
+    /* Our-move candidate selection (engine-driven) */
+    int our_multipv;                /* MultiPV lines to evaluate per position */
+    int our_max_candidates_early;   /* Max candidates at depth < taper_depth */
+    int our_max_candidates_late;    /* Max candidates at depth >= taper_depth */
+    int taper_depth;                /* Ply at which candidate cap shrinks */
+    int max_eval_loss_cp;           /* Candidates must be within this of best */
+
+    /* Opponent-move selection (Lichess-driven) */
+    int opp_max_children;           /* Max opponent responses per position (0 = unlimited) */
+    double opp_mass_target;         /* Stop adding after this fraction of prob mass (0 = disabled) */
+
+    /* Eval window pruning — stop exploring outside this range */
+    int min_eval_cp;                /* Prune if our eval drops below this */
+    int max_eval_cp;                /* Prune if our eval exceeds this (already won) */
 
     /* Lichess API settings */
-    const char *rating_range;       /* Rating range, e.g., "1600,1800,2000,2200" */
-    const char *speeds;             /* Time controls, e.g., "rapid,classical" */
+    const char *rating_range;       /* e.g. "2000,2200,2500" */
+    const char *speeds;             /* e.g. "blitz,rapid,classical" */
     int min_games;                  /* Minimum games to consider a move */
     bool use_masters;               /* Use masters database instead of Lichess */
 
@@ -55,265 +81,100 @@ typedef struct TreeConfig {
  * Tree - The complete opening tree
  */
 typedef struct Tree {
-    TreeNode *root;                 /* Root node */
-    TreeConfig config;              /* Configuration used to build */
-    
-    /* Statistics */
-    size_t total_nodes;             /* Total nodes in tree */
-    int max_depth_reached;          /* Deepest node depth */
-    
-    /* Building state */
-    bool is_building;               /* Currently building? */
-    bool build_complete;            /* Did the build finish without interruption? */
-    uint64_t next_node_id;          /* Counter for node IDs */
-    
+    TreeNode *root;
+    TreeConfig config;
+
+    size_t total_nodes;
+    int max_depth_reached;
+
+    bool is_building;
+    bool build_complete;
+    uint64_t next_node_id;
+
 } Tree;
 
 
 /**
- * Create default tree configuration
- * 
- * @return TreeConfig with sensible defaults
+ * Create default tree configuration.
+ * Caller must still set engine_pool before calling tree_build().
  */
 TreeConfig tree_config_default(void);
 
 /**
- * Create a new empty tree
- * 
- * @return Newly allocated Tree, or NULL on failure
+ * Apply color-specific eval-window defaults.
+ * Must be called after setting config->play_as_white.
+ *   White: min_eval=0, max_eval=200
+ *   Black: min_eval=-200, max_eval=100
  */
-Tree* tree_create(void);
+void tree_config_set_color_defaults(TreeConfig *config);
 
-/**
- * Free tree and all its nodes
- * 
- * @param tree The tree to free
- */
+Tree* tree_create(void);
 void tree_destroy(Tree *tree);
 
 /**
- * Build the tree from a starting FEN
- * 
- * Uses the Lichess explorer API to traverse all positions
- * until probability drops below threshold.
- * 
- * @param tree The tree to build into
- * @param start_fen Starting FEN position
- * @param config Build configuration
- * @param explorer Lichess explorer instance
+ * Build the opening tree from a starting FEN.
+ *
+ * Interleaves Lichess explorer queries with Stockfish evaluation:
+ *   - Our moves:      Stockfish MultiPV → eval filter → recurse
+ *   - Opponent moves:  Lichess DB + engine top-1 → batch eval → recurse
+ *
+ * Requires config->engine_pool to be non-NULL.
+ *
  * @return true on success, false on failure
  */
-bool tree_build(Tree *tree, const char *start_fen, 
+bool tree_build(Tree *tree, const char *start_fen,
                 const TreeConfig *config, struct LichessExplorer *explorer);
 
-/**
- * Stop an in-progress build
- * 
- * @param tree The tree being built
- */
 void tree_stop_build(Tree *tree);
 
-/**
- * Find a node by FEN
- * 
- * @param tree The tree to search
- * @param fen The FEN to find
- * @return Pointer to node, or NULL if not found
- */
 TreeNode* tree_find_by_fen(const Tree *tree, const char *fen);
-
-/**
- * Find a node by following a move sequence from root
- * 
- * @param tree The tree to search
- * @param moves Array of SAN moves
- * @param num_moves Number of moves
- * @return Pointer to node, or NULL if path doesn't exist
- */
 TreeNode* tree_find_by_moves(const Tree *tree, const char **moves, size_t num_moves);
-
-/**
- * Get all leaf nodes (nodes with no children)
- * 
- * @param tree The tree to search
- * @param out_leaves Output array (caller allocates)
- * @param max_leaves Maximum number of leaves to return
- * @return Number of leaves found
- */
 size_t tree_get_leaves(const Tree *tree, TreeNode **out_leaves, size_t max_leaves);
-
-/**
- * Get nodes at a specific depth
- * 
- * @param tree The tree to search
- * @param depth Target depth
- * @param out_nodes Output array (caller allocates)
- * @param max_nodes Maximum number of nodes to return
- * @return Number of nodes found
- */
-size_t tree_get_nodes_at_depth(const Tree *tree, int depth, 
+size_t tree_get_nodes_at_depth(const Tree *tree, int depth,
                                 TreeNode **out_nodes, size_t max_nodes);
 
-/**
- * Calculate and populate ease scores for all nodes
- * 
- * Requires engine evaluations to be set on nodes.
- * 
- * @param tree The tree to update
- * @return Number of nodes updated
- */
 size_t tree_calculate_ease(Tree *tree);
 
 /**
  * Compute ECA (Expected Centipawn Advantage) for the entire tree.
  *
- * Uses win-probability-delta units throughout.  Post-order DFS:
- *   1. local_cpl (wp-delta) at each node from children's evals
- *   2. accumulated_eca (wp-delta sum) bottom-up
+ * Uses win-probability-delta units.  Post-order DFS:
+ *   - local_cpl at each node from children's evals
+ *   - accumulated_eca bottom-up
  *
  * At opponent nodes:
- *   accumulated = local_cpl + Σ(prob_i × child.accumulated_eca)
+ *   accumulated = γ^d × local_cpl + Σ(prob_i × child.accumulated_eca)
  * At our-move nodes:
  *   Select the child using the blended score
- *   (α × wp_us + (1-α) × child.accumulated_eca) with the same filters
- *   as the selection phase, then propagate that child's accumulated_eca.
- *
- * @param tree The tree to annotate
- * @param config RepertoireConfig (provides eval_weight, eval_guard, max_eval_loss,
- *               play_as_white, depth_discount)
- * @return Number of nodes annotated
+ *   (α × wp_us + (1-α) × child.accumulated_eca), propagate its eca.
  */
 size_t tree_calculate_eca(Tree *tree, const struct RepertoireConfig *config);
 
-/**
- * Result of scoring children at an our-move node.
- */
 typedef struct {
     TreeNode *child;
     double score;
     double accumulated_eca;
 } ScoredChild;
 
-/**
- * Score all children at an our-move node using the blended formula with
- * eval-guard and max-eval-loss filters.  Both the ECA accumulation pass
- * and the selection pass call this to guarantee consistency.
- *
- * @param node         The our-move parent node
- * @param config       RepertoireConfig with eval_weight, eval_guard, max_eval_loss, play_as_white
- * @param best_out     Output: the winning child (highest blended score)
- * @return Number of children that passed filters (0 triggers fallback internally)
- */
 int score_our_move_children(TreeNode *node,
                             const struct RepertoireConfig *config,
                             ScoredChild *best_out);
 
-/**
- * Win probability from centipawns (Lichess-calibrated sigmoid).
- * Maps centipawns to [0, 1] from White's perspective.
- */
 double win_probability(int cp);
 
-/**
- * Recalculate cumulative probabilities from root
- * 
- * @param tree The tree to update
- */
 void tree_recalculate_probabilities(Tree *tree);
 
-/**
- * Get the move sequence (line) from root to a node
- * 
- * @param node The target node
- * @param out_moves Output array for moves (caller allocates)
- * @param max_moves Maximum moves to return
- * @return Number of moves in path
- */
-size_t tree_get_line_to_node(const TreeNode *node, char (*out_moves)[MAX_MOVE_LENGTH], 
+size_t tree_get_line_to_node(const TreeNode *node, char (*out_moves)[MAX_MOVE_LENGTH],
                               size_t max_moves);
 
-/**
- * Print tree statistics
- * 
- * @param tree The tree to summarize
- */
 void tree_print_stats(const Tree *tree);
-
-/**
- * Print tree structure (for debugging)
- * 
- * @param tree The tree to print
- * @param max_depth Maximum depth to print (-1 for all)
- */
 void tree_print(const Tree *tree, int max_depth);
 
-/**
- * Traverse tree depth-first, calling callback for each node
- * 
- * @param tree The tree to traverse
- * @param callback Function to call for each node
- * @param user_data User data passed to callback
- */
-void tree_traverse_dfs(const Tree *tree, 
+void tree_traverse_dfs(const Tree *tree,
                        void (*callback)(TreeNode *node, void *user_data),
                        void *user_data);
-
-/**
- * Traverse tree breadth-first, calling callback for each node
- * 
- * @param tree The tree to traverse
- * @param callback Function to call for each node
- * @param user_data User data passed to callback
- */
 void tree_traverse_bfs(const Tree *tree,
                        void (*callback)(TreeNode *node, void *user_data),
                        void *user_data);
 
-/**
- * DiscoveryConfig - Configuration for Stockfish discovery pass
- * 
- * Runs MultiPV on all our-move nodes to find strong engine moves
- * that aren't in the Lichess database. New branches are expanded
- * with Maia (opponent responses) + Stockfish (our follow-ups).
- */
-typedef struct {
-    bool play_as_white;
-    int multipv;                    /* Top-N engine moves to check (default: 3) */
-    int search_depth;               /* Stockfish depth for MultiPV (default: 20) */
-    int max_eval_loss_cp;           /* Only add moves within this of best (default: 50) */
-    int expansion_depth;            /* Ply to expand new branches (default: 4) */
-    double min_probability;         /* Min cumProb to scan a node */
-    int maia_elo;                   /* Maia Elo for opponent expansion */
-    double maia_min_prob;           /* Min Maia probability for opponent moves */
-    int max_maia_responses;         /* Max Maia moves per opponent node (default: 3) */
-} DiscoveryConfig;
-
-/**
- * Create default discovery configuration
- */
-DiscoveryConfig discovery_config_default(void);
-
-/**
- * Run Stockfish discovery pass on the tree
- * 
- * For every our-move node, runs MultiPV to find strong moves not already
- * in the tree. New branches are expanded with Maia + Stockfish.
- * 
- * @param tree The tree to augment
- * @param engine_pool Stockfish engine pool
- * @param maia Maia context for opponent expansion (can be NULL)
- * @param db Database for caching evals (can be NULL)
- * @param config Discovery configuration
- * @param progress Optional progress callback(discovered, scanned, info)
- * @return Number of new moves discovered
- */
-int tree_discover_engine_moves(Tree *tree,
-                                struct EnginePool *engine_pool,
-                                struct MaiaContext *maia,
-                                struct RepertoireDB *db,
-                                const DiscoveryConfig *config,
-                                void (*progress)(int discovered, int scanned,
-                                                  const char *info));
-
 #endif /* TREE_H */
-
