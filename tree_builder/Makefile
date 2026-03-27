@@ -17,7 +17,7 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -std=gnu11 -O2 -g
-LDFLAGS = -lm -lpthread -ldl
+LDFLAGS = -lm -lpthread -ldl -Wl,-rpath,'$$ORIGIN'
 
 # Local includes for headers that may not be system-installed
 #   curl headers      → local_includes/curl/
@@ -43,13 +43,14 @@ CFLAGS += -DSQLITE_THREADSAFE=1 -DSQLITE_OMIT_LOAD_EXTENSION
 # chesslib (third-party, BSD-2-Clause) — used by Maia for legal move generation
 CHESSLIB_DIR = third_party/chesslib
 
-# Optional: Maia neural-network fallback (make MAIA=1)
+# Maia neural-network fallback (enabled by default).
 # Requires ONNX Runtime: the header is bundled in local_includes/,
 # but the shared library must be installed on the system.
 #   Fedora:  sudo dnf install onnxruntime-devel
 #   Ubuntu:  see https://github.com/microsoft/onnxruntime
 #   pip:     pip install onnxruntime  (then set LD_LIBRARY_PATH)
-ifdef MAIA
+# To disable: make NO_MAIA=1
+ifndef NO_MAIA
     CFLAGS += -DHAVE_ONNXRUNTIME
     ORT_CHECK := $(shell pkg-config --exists libonnxruntime 2>/dev/null && echo yes || echo no)
     ifeq ($(ORT_CHECK),yes)
@@ -101,7 +102,7 @@ TARGET = $(BIN_DIR)/tree_builder
 # Include paths
 INCLUDES = -I$(INC_DIR) -I$(SRC_DIR) $(LOCAL_INC)
 
-.PHONY: all clean install test help check-deps
+.PHONY: all clean install test help check-deps dist
 
 all: check-deps directories $(TARGET)
 
@@ -176,6 +177,49 @@ test-full: $(TARGET)
 	@echo ""
 	@rm -f test_output.json test_output.json.repertoire.json test.pgn repertoire.db
 
+# Portable distribution: bundles binary + shared libs + maia model + stockfish
+DIST_DIR = dist/tree_builder
+MAIA_MODEL = ../assets/maia_rapid.onnx
+dist: $(TARGET)
+	@echo "Creating portable distribution..."
+	@rm -rf $(DIST_DIR)
+	@mkdir -p $(DIST_DIR)
+	@cp $(TARGET) $(DIST_DIR)/
+	@# Bundle shared libraries the binary actually needs
+	@ldd $(TARGET) | grep -E 'libonnxruntime|libcurl' | awk '{print $$3}' | while read lib; do \
+		if [ -n "$$lib" ] && [ -f "$$lib" ]; then \
+			cp -L "$$lib" $(DIST_DIR)/; \
+			echo "  Bundled $$lib"; \
+		fi; \
+	done
+	@# Bundle Maia model
+	@if [ -f "$(MAIA_MODEL)" ]; then \
+		cp "$(MAIA_MODEL)" $(DIST_DIR)/maia_rapid.onnx; \
+		echo "  Bundled maia_rapid.onnx"; \
+	else \
+		echo "  WARNING: Maia model not found at $(MAIA_MODEL)"; \
+	fi
+	@# Bundle Stockfish if found
+	@SF=$$(which stockfish 2>/dev/null); \
+	if [ -n "$$SF" ]; then \
+		cp "$$SF" $(DIST_DIR)/stockfish; \
+		echo "  Bundled stockfish from $$SF"; \
+	else \
+		echo "  WARNING: stockfish not found, not bundled"; \
+	fi
+	@# Create tarball
+	@cd dist && tar czf tree_builder-$$(uname -m).tar.gz tree_builder/
+	@echo ""
+	@echo "══════════════════════════════════════════"
+	@echo "  Distribution: dist/tree_builder-$$(uname -m).tar.gz"
+	@echo ""
+	@echo "  Extract and run:"
+	@echo "    tar xzf tree_builder-$$(uname -m).tar.gz"
+	@echo "    cd tree_builder"
+	@echo "    ./tree_builder -c w -v repertoire.json"
+	@echo "══════════════════════════════════════════"
+	@echo ""
+
 # Help
 help:
 	@echo ""
@@ -183,6 +227,7 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  all        - Build the tree_builder executable (default)"
+	@echo "  dist       - Build portable tarball (binary + libs + maia + stockfish)"
 	@echo "  clean      - Remove build artifacts"
 	@echo "  install    - Install to /usr/local/bin"
 	@echo "  test       - Quick test (no engine)"
@@ -194,11 +239,11 @@ help:
 	@echo "  Fedora:  sudo dnf install libcurl-devel gcc make"
 	@echo "  Ubuntu:  sudo apt install libcurl4-openssl-dev gcc make"
 	@echo ""
-	@echo "Optional (Maia neural-network support):"
-	@echo "  make MAIA=1"
+	@echo "Maia neural-network support (enabled by default):"
 	@echo "  Requires ONNX Runtime shared library:"
 	@echo "    Fedora:  sudo dnf install onnxruntime-devel"
 	@echo "    pip:     pip install onnxruntime (set LD_LIBRARY_PATH)"
+	@echo "  To disable:  make NO_MAIA=1"
 	@echo ""
 	@echo "After building:"
 	@echo "  ./bin/tree_builder -h      (show usage)"

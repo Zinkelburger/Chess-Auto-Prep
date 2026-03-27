@@ -12,11 +12,9 @@
     "astro": "astro"
   },
   "dependencies": {
-    "@lichess-org/stockfish-web": "^0.2.3",
     "alpinejs": "^3.15.8",
     "astro": "^6.1.0",
     "chess.js": "^1.4.0",
-    "chessground": "^9.2.1",
-    "stockfish": "^18.0.5"
+    "chessground": "^9.2.1"
   }
 }
