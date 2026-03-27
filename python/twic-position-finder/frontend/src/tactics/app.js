@@ -19,7 +19,6 @@ export function tacticsApp() {
   return {
     // UI State
     training: false,
-    settingsOpen: false,
     loading: false,
     hasStarted: false,  // true only after Load Tactics clicked
     status: '',
@@ -57,6 +56,7 @@ export function tacticsApp() {
     stockfish: null,
     engineLoading: false,
     engineReady: false,
+    settingsOpen: false,
 
     // Auth (placeholder)
     user: null,
@@ -130,7 +130,6 @@ export function tacticsApp() {
       localStorage.setItem('numGames', this.numGames.toString());
       localStorage.setItem('analysisDepth', this.analysisDepth.toString());
       
-      this.settingsOpen = false;
       this.loading = true;
       this.tactics = [];
       this.tacticsFound = 0;

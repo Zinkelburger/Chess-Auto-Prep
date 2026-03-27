@@ -5,20 +5,10 @@ import Base from '../layouts/Base.astro';
   <div id="tactics-app" x-data="tacticsApp()" x-init="init()">
     <!-- Setup panel -->
     <div class="tactics-panel" x-show="!training">
-      <div class="tactics-header">
-        <div>
-          <h1>Tactics Trainer</h1>
-          <p class="subtitle" style="margin-bottom:0;">Generate puzzles from your own games.</p>
-        </div>
-        <button class="icon-btn" @click="settingsOpen = true" title="Settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-        </button>
-      </div>
+      <h1>Tactics Trainer</h1>
+      <p class="subtitle" style="margin-bottom:0;">Generate puzzles from your own games.</p>
 
-      <div class="card" style="margin-top:24px;">
+      <div class="card card-form" style="margin-top:24px;">
         <div class="form-grid">
           <div class="form-row">
             <label for="lichess-user">Lichess username</label>
@@ -33,11 +23,13 @@ import Base from '../layouts/Base.astro';
                    placeholder="username" />
           </div>
         </div>
-        <div class="form-row" style="max-width:200px;">
-          <label for="num-games">Number of games</label>
-          <input type="number" id="num-games"
-                 x-model.number="numGames"
-                 min="1" max="100" />
+        <div class="num-games-row">
+          <div class="form-row" style="margin-bottom:0; max-width:200px;">
+            <label for="num-games">Number of games</label>
+            <input type="text" inputmode="numeric" id="num-games"
+                   x-model.number="numGames" />
+          </div>
+          <button class="settings-btn" @click="settingsOpen = true" title="Settings">⚙</button>
         </div>
 
         <button class="btn btn-primary" style="width:100%; margin-top:8px;"
@@ -100,28 +92,26 @@ import Base from '../layouts/Base.astro';
                     :disabled="currentIndex === 0">Prev</button>
             <button class="btn btn-secondary"
                     @click="showSolution()">Solution</button>
-            <button class="btn btn-primary"
+            <button class="btn btn-secondary"
                     @click="nextTactic()">Next</button>
           </div>
 
           <div class="controls-extra">
-            <label class="checkbox-label" style="font-size:0.85rem;">
+            <label class="checkbox-label auto-next-label">
               <input type="checkbox" x-model="autoNext" style="width:16px; height:16px;" />
               <span>Auto-next</span>
             </label>
-            <div class="link-row">
-              <a class="link-btn"
-                 :href="currentTactic?.game_url"
-                 target="_blank"
-                 x-show="currentTactic?.game_url">
-                Original Game
-              </a>
-              <button class="link-btn"
-                      @click="openAnalysis()"
-                      x-show="currentTactic?.game_url">
-                Analyze on Lichess
-              </button>
-            </div>
+            <a class="link-btn"
+               :href="currentTactic?.game_url"
+               target="_blank"
+               x-show="currentTactic?.game_url">
+              Original Game
+            </a>
+            <button class="link-btn"
+                    @click="openAnalysis()"
+                    x-show="currentTactic?.game_url">
+              Analyze on Lichess
+            </button>
           </div>
         </div>
       </div>
@@ -132,15 +122,17 @@ import Base from '../layouts/Base.astro';
       <div class="card modal-card" @click.stop>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
           <h2 style="margin-bottom:0;">Settings</h2>
-          <button class="icon-btn" @click="settingsOpen = false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-              <path d="M18 6L6 18M6 6l12 12"/>
-            </svg>
-          </button>
+          <button class="settings-btn" @click="settingsOpen = false" style="font-size:1.2rem;">✕</button>
         </div>
-        <div class="form-row" style="max-width:180px;">
-          <label>Analysis Depth</label>
-          <input type="number" x-model.number="analysisDepth" min="1" max="25" style="text-align:center;" />
+        <div class="form-grid">
+          <div class="form-row">
+            <label>Analysis Depth</label>
+            <input type="number" x-model.number="analysisDepth" min="1" max="25" style="text-align:center;" />
+          </div>
+          <div class="form-row">
+            <label x-text="`Threads (${maxThreads} available)`">Threads</label>
+            <input type="number" x-model.number="threads" min="1" :max="maxThreads" style="text-align:center;" />
+          </div>
         </div>
         <div>
           <label style="margin-bottom:10px;">Time Controls</label>
@@ -155,32 +147,51 @@ import Base from '../layouts/Base.astro';
         </div>
       </div>
     </div>
+
   </div>
 </Base>
 
 <style>
   [x-cloak] { display: none !important; }
 
-  .tactics-header {
+  .num-games-row {
     display: flex;
+    align-items: flex-end;
     justify-content: space-between;
-    align-items: flex-start;
   }
 
-  .icon-btn {
+  .settings-btn {
+    font-size: 1.4rem;
+    line-height: 1;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 6px;
+    margin-bottom: 2px;
+    border-radius: 4px;
+    transition: color 0.15s;
+  }
+  .settings-btn:hover { color: var(--text); }
+
+  /* ── Settings modal ──────────────────────────── */
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    cursor: pointer;
-    border-radius: 6px;
-    transition: color 0.15s, border-color 0.15s;
+    padding: 1rem;
+    z-index: 100;
   }
-  .icon-btn:hover { color: var(--text); border-color: var(--text-dim); }
+
+  .modal-card {
+    width: auto;
+    min-width: 280px;
+    max-width: 360px;
+  }
 
   .engine-note {
     font-size: 0.82rem;
@@ -299,13 +310,17 @@ import Base from '../layouts/Base.astro';
   .controls-extra {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    gap: 16px;
     padding-top: 8px;
   }
 
-  .link-row {
-    display: flex;
-    gap: 12px;
+  .auto-next-label {
+    font-size: 0.82rem !important;
+    color: #6b7189;
+  }
+  .auto-next-label input[type="checkbox"] {
+    accent-color: #6b7189;
   }
 
   .link-btn {
@@ -319,25 +334,6 @@ import Base from '../layouts/Base.astro';
     transition: color 0.15s;
   }
   .link-btn:hover { color: var(--text); }
-
-  /* ── Settings modal ──────────────────────────────────── */
-
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.65);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1rem;
-    z-index: 100;
-  }
-
-  .modal-card {
-    width: auto;
-    min-width: 280px;
-    max-width: 360px;
-  }
 
   .chip-row {
     display: flex;
