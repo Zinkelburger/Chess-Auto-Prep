@@ -95,7 +95,7 @@ already-evaluated positions. The DB also caches Lichess explorer responses.
 #### Maia Neural Network Fallback
 
 When the Lichess explorer returns no data at an opponent-move node:
-- `--maia-model <path>` was provided (loads `maia_rapid.onnx`)
+- Maia model was found (auto-detected from `./maia_rapid.onnx` or `../assets/maia_rapid.onnx`, or explicit `--maia-model <path>`)
 - `node.cumulative_probability >= maia_threshold` (default 0.01 = 1%)
 - Maia moves below `maia_min_prob` (default 0.02 = 2%) are discarded
 
@@ -261,7 +261,7 @@ are followed. Lines always end with the repertoire side's move.
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| `maia_model` | `--maia-model` | (disabled) | Path to `maia_rapid.onnx` |
+| `maia_model` | `--maia-model` | auto-detect | Path to `maia_rapid.onnx` |
 | `maia_elo` | `--maia-elo` | 2000 | Elo for predictions (1100–2100) |
 | `maia_threshold` | `--maia-threshold` | 0.01 (1%) | Min cumProb to trigger fallback |
 | `maia_min_prob` | `--maia-min-prob` | 0.02 (2%) | Skip moves below this probability |

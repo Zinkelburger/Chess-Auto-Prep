@@ -229,6 +229,8 @@ export function tacticsApp() {
       
       // Use only 'max' parameter to get last N games regardless of date
       // (removed 'since' filter which excluded games older than 90 days)
+      // TODO: pass evals=true to get Lichess server-side analysis when available,
+      // then parse [%eval ...] PGN comments to skip local Stockfish for those positions.
       const params = new URLSearchParams({
         perfType: perfTypes.join(','),
         moves: 'true',

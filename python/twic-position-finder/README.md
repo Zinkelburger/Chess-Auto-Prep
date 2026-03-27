@@ -66,8 +66,8 @@ python query.py "..." --player "Nakamura" --json
 
 ```bash
 # Set environment variables
-export TWIC_FROM_EMAIL="alerts@yourdomain.com"
-export TWIC_SITE_URL="https://yourdomain.com"
+export TWIC_FROM_EMAIL="alerts@chessautoprep.com"
+export TWIC_SITE_URL="https://chessautoprep.com"
 export AWS_SES_REGION="us-east-1"
 export LICHESS_API_TOKEN="lip_..."    # optional, for game import
 
@@ -96,7 +96,7 @@ npm run dev     # dev server at localhost:4321
 npm run build   # static build to dist/
 ```
 
-Deploy `dist/` to Cloudflare Pages. Set `PUBLIC_API_URL` to your backend URL.
+Deploy `dist/` to Cloudflare Pages. Set `PUBLIC_API_URL` to `https://api.chessautoprep.com`.
 
 ### Weekly Cron Job
 

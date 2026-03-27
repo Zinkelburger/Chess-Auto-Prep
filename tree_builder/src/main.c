@@ -35,12 +35,29 @@
 
 #define DEFAULT_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
+static char g_exe_dir[PATH_MAX] = {0};
+
+static void resolve_exe_dir(void) {
+    ssize_t len = readlink("/proc/self/exe", g_exe_dir, sizeof(g_exe_dir) - 1);
+    if (len <= 0) { g_exe_dir[0] = '.'; g_exe_dir[1] = '\0'; return; }
+    g_exe_dir[len] = '\0';
+    char *slash = strrchr(g_exe_dir, '/');
+    if (slash) *slash = '\0';
+    else { g_exe_dir[0] = '.'; g_exe_dir[1] = '\0'; }
+}
+
 static const char *STOCKFISH_SEARCH_PATHS[] = {
     "./stockfish",
     "../assets/executables/stockfish-linux",
     "/usr/bin/stockfish",
     "/usr/local/bin/stockfish",
     "/usr/games/stockfish",
+    NULL
+};
+
+static const char *MAIA_SEARCH_PATHS[] = {
+    "./maia_rapid.onnx",
+    "../assets/maia_rapid.onnx",
     NULL
 };
 
@@ -96,7 +113,7 @@ static void print_usage(const char *prog_name) {
     printf("  --depth-decay <0-1>    Depth discount for ECA [default: 1.0]\n");
     printf("\n");
     printf("Maia fallback (extends tree when explorer is exhausted):\n");
-    printf("  --maia-model <path>    Path to maia_rapid.onnx (enables Maia)\n");
+    printf("  --maia-model <path>    Path to maia_rapid.onnx [default: auto-detect]\n");
     printf("  --maia-elo <N>         Elo for Maia predictions [default: 2000]\n");
     printf("  --maia-threshold <P>   Min cumProb to trigger Maia [default: 0.01]\n");
     printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.02]\n");
@@ -176,10 +193,27 @@ static char* read_token_from_config(void) {
 
 
 static const char* find_stockfish(const char *user_path) {
+    static char buf[PATH_MAX];
     if (user_path && access(user_path, X_OK) == 0) return user_path;
+    /* Check next to binary first */
+    snprintf(buf, sizeof(buf), "%s/stockfish", g_exe_dir);
+    if (access(buf, X_OK) == 0) return buf;
     for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++) {
         if (access(STOCKFISH_SEARCH_PATHS[i], X_OK) == 0)
             return STOCKFISH_SEARCH_PATHS[i];
+    }
+    return NULL;
+}
+
+static const char* find_maia_model(const char *user_path) {
+    static char buf[PATH_MAX];
+    if (user_path && access(user_path, R_OK) == 0) return user_path;
+    /* Check next to binary first */
+    snprintf(buf, sizeof(buf), "%s/maia_rapid.onnx", g_exe_dir);
+    if (access(buf, R_OK) == 0) return buf;
+    for (int i = 0; MAIA_SEARCH_PATHS[i]; i++) {
+        if (access(MAIA_SEARCH_PATHS[i], R_OK) == 0)
+            return MAIA_SEARCH_PATHS[i];
     }
     return NULL;
 }
@@ -221,6 +255,7 @@ static bool parse_double(const char *s, const char *name, double *out) {
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
+    resolve_exe_dir();
 
     /* Configuration with defaults */
     const char *start_fen = DEFAULT_FEN;
@@ -467,13 +502,18 @@ int main(int argc, char *argv[]) {
     EnginePool *engine_pool = NULL;
     MaiaContext *maia = NULL;
 
-    /* Create Maia context if model provided */
-    if (maia_model_path) {
-        maia = maia_create(maia_model_path);
+    /* Auto-detect or use explicit Maia model path */
+    const char *resolved_maia = find_maia_model(maia_model_path);
+    if (resolved_maia) {
+        maia = maia_create(resolved_maia);
         if (maia)
-            printf("  Maia model loaded (elo=%d)\n", maia_elo);
+            printf("  Maia model: %s (elo=%d)\n", resolved_maia, maia_elo);
         else
-            fprintf(stderr, "  Warning: Could not load Maia model\n");
+            fprintf(stderr, "  Warning: Could not load Maia model from %s\n",
+                    resolved_maia);
+    } else if (maia_model_path) {
+        fprintf(stderr, "  Warning: Maia model not found at %s\n",
+                maia_model_path);
     }
 
     /* ================================================================

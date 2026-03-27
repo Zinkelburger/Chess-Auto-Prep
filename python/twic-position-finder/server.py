@@ -29,7 +29,7 @@ from email_sender import send_verification_email, send_login_email, build_email_
 log = logging.getLogger(__name__)
 
 DB_PATH = Path(os.getenv("TWIC_DB_PATH", Path(__file__).parent / "positions.db"))
-FRONTEND_ORIGIN = os.getenv("TWIC_FRONTEND_ORIGIN", "http://localhost:4321")
+FRONTEND_ORIGIN = os.getenv("TWIC_FRONTEND_ORIGIN", "https://chessautoprep.com")
 TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET_KEY", "")
 DEBUG = os.getenv("TWIC_DEBUG", "").lower() in ("1", "true", "yes")
 MAX_SUBSCRIPTIONS = 20
@@ -77,18 +77,37 @@ def auth_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
 # ── Turnstile ─────────────────────────────────────────────────────────
 
 
+def _client_ip(request: Request) -> str | None:
+    """Extract the real client IP, preferring proxy headers."""
+    return (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else None)
+    ) or None
+
+
 def verify_turnstile(token: str, ip: str | None = None) -> bool:
     """Verify a Cloudflare Turnstile response token. Skips if no secret configured."""
     if not TURNSTILE_SECRET:
         return True
+    if not token:
+        log.warning("Turnstile token missing from request")
+        return False
     try:
+        payload: dict = {"secret": TURNSTILE_SECRET, "response": token}
+        if ip:
+            payload["remoteip"] = ip
         resp = http_requests.post(
             "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-            data={"secret": TURNSTILE_SECRET, "response": token, "remoteip": ip or ""},
-            timeout=5,
+            data=payload,
+            timeout=10,
         )
-        return resp.json().get("success", False)
-    except Exception:
+        result = resp.json()
+        if not result.get("success"):
+            log.warning("Turnstile validation failed: %s", result.get("error-codes", []))
+        return result.get("success", False)
+    except Exception as e:
+        log.error("Turnstile siteverify request failed: %s", e)
         return False
 
 
@@ -121,7 +140,7 @@ class SubscribeRequest(BaseModel):
 @app.post("/api/subscribe")
 @limiter.limit("5/minute")
 def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
-    if TURNSTILE_SECRET and not verify_turnstile(req.cf_turnstile_token, request.client.host if request.client else None):
+    if TURNSTILE_SECRET and not verify_turnstile(req.cf_turnstile_token, _client_ip(request)):
         raise HTTPException(400, "CAPTCHA verification failed. Please try again.")
 
     if not req.fen and not req.player and not req.white and not req.black and not req.eco:
@@ -159,7 +178,7 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
 @limiter.limit("5/minute")
 def register(req: RegisterRequest, request: Request, conn=Depends(db)):
     if TURNSTILE_SECRET and not verify_turnstile(
-        req.cf_turnstile_token, request.client.host if request.client else None
+        req.cf_turnstile_token, _client_ip(request)
     ):
         raise HTTPException(400, "CAPTCHA verification failed. Please try again.")
     user = create_user(conn, req.email)

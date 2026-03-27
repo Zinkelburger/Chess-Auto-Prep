@@ -9,8 +9,8 @@ from botocore.exceptions import ClientError
 from lichess import analysis_url_from_fen
 
 SES_REGION = os.getenv("AWS_SES_REGION", "us-east-1")
-FROM_EMAIL = os.getenv("TWIC_FROM_EMAIL", "twic-alerts@example.com")
-SITE_URL = os.getenv("TWIC_SITE_URL", "http://localhost:4321")
+FROM_EMAIL = os.getenv("TWIC_FROM_EMAIL", "alerts@chessautoprep.com")
+SITE_URL = os.getenv("TWIC_SITE_URL", "https://chessautoprep.com")
 
 _ses_client = None
 
