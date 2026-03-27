@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/app_state.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/tactics_control_panel.dart';
-import '../services/imported_games_service.dart';
+
 import '../services/analysis_service.dart';
 import '../services/engine/stockfish_pool.dart';
 import 'analysis_screen.dart';
@@ -188,53 +188,4 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showSettings(BuildContext context) {
-    final appState = context.read<AppState>();
-    final lichessController = TextEditingController(text: appState.lichessUsername ?? '');
-    final chesscomController = TextEditingController(text: appState.chesscomUsername ?? '');
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Settings'),
-        content: SizedBox(
-          width: 300,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: lichessController,
-                decoration: const InputDecoration(
-                  labelText: 'Lichess Username',
-                  hintText: 'Enter your Lichess username',
-                  helperText: 'Used for importing games from Lichess',
-                ),
-                onChanged: (value) {
-                  appState.setLichessUsername(value.isEmpty ? null : value);
-                },
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: chesscomController,
-                decoration: const InputDecoration(
-                  labelText: 'Chess.com Username',
-                  hintText: 'Enter your Chess.com username',
-                  helperText: 'Used for filtering tactics from imported games',
-                ),
-                onChanged: (value) {
-                  appState.setChesscomUsername(value.isEmpty ? null : value);
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
 }

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'tactics_database.dart';
-import '../models/tactics_position.dart';
 import 'storage/storage_factory.dart';
 
 // Conditional imports for platform-specific features

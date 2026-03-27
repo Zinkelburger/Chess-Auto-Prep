@@ -115,19 +115,6 @@ class PgnService {
            gameText.contains('*');
   }
 
-  Future<String> saveGamesToFile(List<ChessGameModel> games, String filename) async {
-    // This was saving to AppDocumentsDirectory.
-    // Now we use StorageService.
-    final pgnContent = games.map((game) => game.pgn).join('\n\n');
-    
-    // We don't have arbitrary filename save in StorageService for generic files,
-    // only specific keys. But maybe we can map it.
-    // For now, this functionality might be broken/limited on Web.
-    // But PgnService is mostly for "Imported Games".
-    
-    return 'Saved via StorageService (path unknown)'; 
-  }
-
   Future<void> saveImportedGames(List<ChessGameModel> games) async {
     if (games.isEmpty) return;
 

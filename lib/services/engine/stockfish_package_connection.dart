@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:stockfish/stockfish.dart';
 import 'engine_connection.dart';
 
@@ -18,11 +17,7 @@ class StockfishPackageConnection implements EngineConnection {
   Stream<String> get stdout => _stdoutController.stream;
 
   @override
-  Future<void> waitForReady() {
-    return _waitReadyAndHandshake();
-  }
-
-  Future<void> _waitReadyAndHandshake() async {
+  Future<void> waitForReady() async {
     if (_engine.state.value != StockfishState.ready) {
       final completer = Completer<void>();
       void listener() {
@@ -35,7 +30,6 @@ class StockfishPackageConnection implements EngineConnection {
       await completer.future;
     }
 
-    // Perform UCI handshake on stdout
     final uciOk = Completer<void>();
     final readyOk = Completer<void>();
     late StreamSubscription sub;
@@ -54,11 +48,7 @@ class StockfishPackageConnection implements EngineConnection {
     await readyOk.future.timeout(const Duration(seconds: 10));
 
     await sub.cancel();
-
-    // Tune threads/hash for mobile (conservative to avoid OOM)
-    final threads = Platform.numberOfProcessors.clamp(2, 4);
-    sendCommand('setoption name Threads value $threads');
-    sendCommand('setoption name Hash value 128');
+    // Threads / Hash are configured by EvalWorker.init() after this returns.
   }
 
   @override

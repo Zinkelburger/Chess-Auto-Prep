@@ -32,6 +32,8 @@ export function tacticsApp() {
     chesscomUser: localStorage.getItem('chesscomUser') || '',
     numGames: parseInt(localStorage.getItem('numGames')) || 20,
     analysisDepth: parseInt(localStorage.getItem('analysisDepth')) || 14,
+    maxThreads: navigator.hardwareConcurrency || 1,
+    threads: parseInt(localStorage.getItem('threads')) || Math.max(1, Math.floor((navigator.hardwareConcurrency || 1) / 2)),
     tacticsFound: 0,
     
     // Time Controls
@@ -82,6 +84,7 @@ export function tacticsApp() {
       }
       this.$watch('timeControls', () => this.saveTimeControls(), { deep: true });
       this.$watch('autoNext', (val) => localStorage.setItem('autoNext', val.toString()));
+      this.$watch('threads', (val) => localStorage.setItem('threads', Math.max(1, Math.min(val, this.maxThreads)).toString()));
 
       // Start loading engine immediately on page load (silently in background)
       this.preloadEngine();
@@ -95,12 +98,11 @@ export function tacticsApp() {
 
       try {
         this.stockfish = new ProperStockfishEngine();
-        await this.stockfish.init();
+        await this.stockfish.init(this.threads);
         this.engineReady = true;
         console.log('Engine preloaded and ready!');
       } catch (error) {
         console.error('Engine preload failed:', error);
-        // Don't show error to user - will retry when they click Load Tactics
         this.stockfish = null;
       } finally {
         this.engineLoading = false;
@@ -145,7 +147,7 @@ export function tacticsApp() {
             console.log('Engine not preloaded, loading now...');
             try {
               this.stockfish = new ProperStockfishEngine();
-              await this.stockfish.init();
+              await this.stockfish.init(this.threads);
               this.engineReady = true;
             } catch (error) {
               console.error('Engine loading failed:', error);
@@ -375,7 +377,9 @@ export function tacticsApp() {
       
       const tactics = [];
       const game = new window.Chess.Game();
-      const depth = Math.min(this.analysisDepth || 14, 25); // User-configurable, max 25
+      const depth = Math.min(this.analysisDepth || 14, 25);
+      
+      await this.stockfish.newGame();
       
       console.log(`Total moves: ${moves.length}, analyzing at depth ${depth}`);
       console.log('');
@@ -384,7 +388,6 @@ export function tacticsApp() {
         const isUserMove = move.color === userColor;
         
         if (!isUserMove) {
-          // Opponent's move - just play it using SAN directly
           const result = game.moveSan(move.san);
           if (!result) {
             console.warn(`Failed to play opponent move: ${move.san}`);
@@ -396,39 +399,37 @@ export function tacticsApp() {
         const isWhiteTurnBefore = fenBefore.split(' ')[1] === 'w';
         const evalBefore = await this.stockfish.analyze(fenBefore, depth);
         
-        // Play the user's move using SAN directly - library handles parsing
         const moveResult = game.moveSan(move.san);
         if (!moveResult) {
           console.warn(`Failed to play user move: ${move.san}`);
           continue;
         }
         
-        // moveResult contains: { from, to, san, lan (UCI), before, after, ... }
         const uci = moveResult.lan || (moveResult.from + moveResult.to + (moveResult.promotion || ''));
+
+        // If user played the engine's best move, skip the second eval — no mistake possible
+        if (evalBefore.bestMove && uci === evalBefore.bestMove) {
+          console.log(`--- Move ${move.num}. ${move.san} | Best move played, skipping ---`);
+          console.log('');
+          continue;
+        }
         
-        const fenAfter = game.getFen();
-        
-        // Skip analysis if position after move is terminal (checkmate, stalemate, etc.)
-        // These positions can't be properly evaluated by Stockfish and would produce
-        // misleading delta values (e.g., user delivering checkmate flagged as "blunder")
         if (game.isGameOver()) {
           console.log(`--- Move ${move.num}. ${move.san} | Skipping: Game over after this move ---`);
           console.log('');
           continue;
         }
         
+        const fenAfter = game.getFen();
         const isWhiteTurnAfter = fenAfter.split(' ')[1] === 'w';
         const evalAfter = await this.stockfish.analyze(fenAfter, depth);
         
-        // Raw evals from engine (in pawns, need to multiply by 100 for centipawns)
         const rawCpBefore = (evalBefore.eval || 0) * 100;
         const rawCpAfter = (evalAfter.eval || 0) * 100;
         
-        // Normalize to White's perspective first (like Flutter's StockfishService does)
         let cpBeforeWhitePerspective = isWhiteTurnBefore ? rawCpBefore : -rawCpBefore;
         let cpAfterWhitePerspective = isWhiteTurnAfter ? rawCpAfter : -rawCpAfter;
         
-        // Now normalize to USER's perspective
         let cpBefore = cpBeforeWhitePerspective;
         let cpAfter = cpAfterWhitePerspective;
         if (userColor === 'b') {
@@ -436,22 +437,18 @@ export function tacticsApp() {
           cpAfter = -cpAfterWhitePerspective;
         }
         
-        // Use Lichess [-1, +1] scale for classification
         const wcBefore = winningChances(cpBefore);
         const wcAfter = winningChances(cpAfter);
         const delta = wcBefore - wcAfter;
         
         // Lichess thresholds (from lila/modules/tree/src/main/Advice.scala)
-        // Blunder: >= 0.3, Mistake: >= 0.2, Inaccuracy: >= 0.1
         const isBlunder = delta >= 0.3;
         const isMistake = delta >= 0.2 && delta < 0.3;
-        const status = isBlunder ? '⚠️ BLUNDER' : (isMistake ? '⚠ MISTAKE' : '✓ OK');
+        const status = isBlunder ? 'BLUNDER' : (isMistake ? 'MISTAKE' : 'OK');
         
-        // Use winPercent for display
         const wpBefore = winPercent(cpBefore);
         const wpAfter = winPercent(cpAfter);
         
-        // Log like Flutter does
         console.log(`--- Move ${move.num}. ${move.san} (${move.color === 'w' ? 'White' : 'Black'}) ---`);
         console.log(`FEN: ${fenBefore}`);
         console.log(`Raw eval before: ${rawCpBefore.toFixed(0)}cp, after: ${rawCpAfter.toFixed(0)}cp`);

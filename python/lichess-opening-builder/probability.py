@@ -53,6 +53,10 @@ class LichessProvider(ProbabilityProvider):
 
     BASE_URL = "https://explorer.lichess.ovh/lichess"
 
+    _MAX_RETRIES = 3
+    _BASE_BACKOFF_SECONDS = 60
+    _POLITENESS_DELAY = 0.1
+
     def __init__(
         self,
         ratings: str = "1800,2000,2200,2500",
@@ -70,33 +74,62 @@ class LichessProvider(ProbabilityProvider):
         self.ratings = ratings
         self.speeds = speeds
         self.min_games = min_games
-        
+        self._last_request_time: float = 0.0
+
         token = os.getenv("LICHESS_API_TOKEN") or os.getenv("LICHESS")
         self.headers = {"Authorization": f"Bearer {token}"} if token else {}
 
+    def _wait_for_slot(self) -> None:
+        """Enforce a minimum gap between requests."""
+        elapsed = time.monotonic() - self._last_request_time
+        if elapsed < self._POLITENESS_DELAY:
+            time.sleep(self._POLITENESS_DELAY - elapsed)
+
     def query_api(self, fen: str) -> Optional[Dict[str, Any]]:
-        """Query the Lichess Explorer API for a position."""
+        """Query the Lichess Explorer API for a position.
+
+        Uses a bounded retry loop with exponential backoff on 429.
+        """
         params = {
             "variant": "standard",
             "fen": fen,
             "ratings": self.ratings,
             "speeds": self.speeds
         }
-        
-        try:
-            time.sleep(0.1)  # Rate limiting
-            response = requests.get(self.BASE_URL, params=params, headers=self.headers)
 
-            if response.status_code == 429:
-                print("    [!] Rate limited (429). Waiting 61 seconds...")
-                time.sleep(61)
-                return self.query_api(fen)
+        for attempt in range(self._MAX_RETRIES + 1):
+            self._wait_for_slot()
+            try:
+                response = requests.get(
+                    self.BASE_URL, params=params,
+                    headers=self.headers, timeout=30,
+                )
+                self._last_request_time = time.monotonic()
 
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"    [!] Lichess API request failed: {e}")
-            return None
+                if response.status_code == 429:
+                    backoff = self._BASE_BACKOFF_SECONDS * (1 << attempt)
+                    if attempt < self._MAX_RETRIES:
+                        print(f"    [!] Rate limited (429). Waiting {backoff}s "
+                              f"(attempt {attempt + 1}/{self._MAX_RETRIES + 1})...")
+                        time.sleep(backoff)
+                        continue
+                    print(f"    [!] Rate limited — all {self._MAX_RETRIES + 1} "
+                          f"retries exhausted")
+                    return None
+
+                response.raise_for_status()
+                return response.json()
+            except requests.exceptions.RequestException as e:
+                if attempt < self._MAX_RETRIES:
+                    wait = 2 * (attempt + 1)
+                    print(f"    [!] Request failed: {e}. Retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
+                print(f"    [!] Lichess API request failed after "
+                      f"{self._MAX_RETRIES + 1} attempts: {e}")
+                return None
+
+        return None
 
     def get_move_probabilities(
         self,

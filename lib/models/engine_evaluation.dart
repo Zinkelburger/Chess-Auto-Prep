@@ -20,10 +20,12 @@ class EngineEvaluation {
   /// Get the best move from the principal variation (first move in PV)
   String? get bestMove => pv.isNotEmpty ? pv.first : null;
 
-  /// Get effective centipawn score (converts mate to large cp value)
+  /// Collapse mate / cp into a single comparable centipawn value.
   int get effectiveCp {
     if (scoreMate != null) {
-      return scoreMate! > 0 ? 10000 - scoreMate! : -10000 - scoreMate!;
+      return scoreMate! > 0
+          ? 10000 - scoreMate!.abs()
+          : -(10000 - scoreMate!.abs());
     }
     return scoreCp ?? 0;
   }
