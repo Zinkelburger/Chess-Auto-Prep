@@ -12,6 +12,7 @@
 #include "repertoire.h"
 #include "lichess_api.h"
 #include "chess_logic.h"
+#include "san_convert.h"
 #include "engine_pool.h"
 #include "database.h"
 #include "maia.h"
@@ -37,17 +38,18 @@ TreeConfig tree_config_default(void) {
         .db = NULL,
         .eval_depth = 20,
 
-        .our_multipv = 5,
-        .our_max_candidates_early = 8,
-        .our_max_candidates_late = 2,
+        .our_multipv_root = 10,
+        .our_multipv_floor = 2,
         .taper_depth = 8,
         .max_eval_loss_cp = 50,
 
         .opp_max_children = 6,
-        .opp_mass_target = 0.80,
+        .opp_mass_root = 0.95,
+        .opp_mass_floor = 0.50,
 
         .min_eval_cp = -50,
         .max_eval_cp = 300,
+        .relative_eval = false,
 
         .rating_range = "2000,2200,2500",
         .speeds = "blitz,rapid,classical",
@@ -212,6 +214,87 @@ static void batch_eval_children(TreeNode *node, const TreeConfig *config) {
 }
 
 
+/* ========== Lichess query with DB caching ========== */
+
+static bool query_lichess_cached(RepertoireDB *db, LichessExplorer *explorer,
+                                  const char *fen, bool use_masters,
+                                  ExplorerResponse *response) {
+    memset(response, 0, sizeof(*response));
+
+    if (db) {
+        CachedExplorerResponse cached;
+        if (rdb_get_explorer_cache(db, fen, &cached) && cached.found) {
+            response->success = true;
+            response->move_count = cached.move_count;
+            response->total_games = cached.total_games;
+            strncpy(response->opening_eco, cached.opening_eco,
+                    sizeof(response->opening_eco) - 1);
+            strncpy(response->opening_name, cached.opening_name,
+                    sizeof(response->opening_name) - 1);
+            response->has_opening = (cached.opening_eco[0] != '\0');
+
+            uint64_t tw = 0, tb = 0, td = 0;
+            for (size_t i = 0; i < cached.move_count; i++) {
+                ExplorerMove *m = &response->moves[i];
+                strncpy(m->uci, cached.moves[i].uci, sizeof(m->uci) - 1);
+                strncpy(m->san, cached.moves[i].san, sizeof(m->san) - 1);
+                m->white_wins = cached.moves[i].white_wins;
+                m->black_wins = cached.moves[i].black_wins;
+                m->draws      = cached.moves[i].draws;
+                m->probability = cached.moves[i].probability;
+                tw += m->white_wins;
+                tb += m->black_wins;
+                td += m->draws;
+            }
+            response->total_white_wins = tw;
+            response->total_black_wins = tb;
+            response->total_draws      = td;
+            return true;
+        }
+    }
+
+    bool ok = use_masters
+        ? lichess_explorer_query_masters(explorer, fen, response)
+        : lichess_explorer_query(explorer, fen, response);
+
+    if (ok && response->success && db) {
+        CachedExplorerMove cmoves[MAX_EXPLORER_MOVES];
+        for (size_t i = 0; i < response->move_count; i++) {
+            memset(&cmoves[i], 0, sizeof(cmoves[i]));
+            strncpy(cmoves[i].uci, response->moves[i].uci, sizeof(cmoves[i].uci) - 1);
+            strncpy(cmoves[i].san, response->moves[i].san, sizeof(cmoves[i].san) - 1);
+            cmoves[i].white_wins  = response->moves[i].white_wins;
+            cmoves[i].black_wins  = response->moves[i].black_wins;
+            cmoves[i].draws       = response->moves[i].draws;
+            cmoves[i].probability = response->moves[i].probability;
+        }
+        rdb_put_explorer_cache(db, fen, cmoves, response->move_count,
+                               response->total_games,
+                               response->has_opening ? response->opening_eco : NULL,
+                               response->has_opening ? response->opening_name : NULL);
+    }
+
+    return ok;
+}
+
+
+/** MultiPV tapers linearly from root value to floor over taper_depth plies. */
+static int multipv_for_depth(const TreeConfig *config, int depth) {
+    if (depth >= config->taper_depth)
+        return config->our_multipv_floor;
+    int span = config->our_multipv_root - config->our_multipv_floor;
+    return config->our_multipv_root - span * depth / config->taper_depth;
+}
+
+/** Opponent mass target tapers linearly from root to floor over taper_depth. */
+static double opp_mass_for_depth(const TreeConfig *config, int depth) {
+    if (depth >= config->taper_depth)
+        return config->opp_mass_floor;
+    double span = config->opp_mass_root - config->opp_mass_floor;
+    return config->opp_mass_root - span * depth / config->taper_depth;
+}
+
+
 /* ========== Interleaved build ========== */
 
 static void build_recursive(Tree *tree, TreeNode *node,
@@ -226,11 +309,12 @@ static void build_recursive(Tree *tree, TreeNode *node,
 static void build_our_move(Tree *tree, TreeNode *node,
                             const TreeConfig *config,
                             LichessExplorer *explorer) {
-    /* 1. Run Stockfish MultiPV */
+    /* 1. Run Stockfish MultiPV (tapers with depth) */
+    int mpv_count = multipv_for_depth(config, node->depth);
     MultiPVJob mpv;
     if (!engine_pool_evaluate_multipv(config->engine_pool, node->fen,
                                       config->eval_depth,
-                                      config->our_multipv, &mpv))
+                                      mpv_count, &mpv))
         return;
     if (!mpv.success || mpv.num_lines == 0) return;
 
@@ -244,10 +328,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
 
     /* 2. Query Lichess for SAN notation and win rates (enrichment only) */
     ExplorerResponse lichess;
-    memset(&lichess, 0, sizeof(lichess));
-    bool has_lichess = config->use_masters
-        ? lichess_explorer_query_masters(explorer, node->fen, &lichess)
-        : lichess_explorer_query(explorer, node->fen, &lichess);
+    bool has_lichess = query_lichess_cached(config->db, explorer, node->fen,
+                                            config->use_masters, &lichess);
 
     if (has_lichess && lichess.success) {
         node_set_lichess_stats(node, lichess.total_white_wins,
@@ -260,14 +342,13 @@ static void build_our_move(Tree *tree, TreeNode *node,
         }
     }
 
-    /* 3. Filter candidates by eval threshold, depth-dependent cap */
+    char our_san_buf[MAX_MOVE_LENGTH];
+
+    /* 3. Filter candidates by eval threshold */
     int best_cp = mpv.lines[0].eval_cp;
-    int max_cands = (node->depth < config->taper_depth)
-                  ? config->our_max_candidates_early
-                  : config->our_max_candidates_late;
 
     int added = 0;
-    for (int pv = 0; pv < mpv.num_lines && added < max_cands; pv++) {
+    for (int pv = 0; pv < mpv.num_lines; pv++) {
         MultiPVLine *line = &mpv.lines[pv];
         if (line->move_uci[0] == '\0') continue;
         if (best_cp - line->eval_cp > config->max_eval_loss_cp) continue;
@@ -276,7 +357,7 @@ static void build_our_move(Tree *tree, TreeNode *node,
         if (!apply_uci(node->fen, line->move_uci, child_fen, MAX_FEN_LENGTH))
             continue;
 
-        /* Look up SAN from Lichess data; fall back to UCI */
+        /* Look up SAN from Lichess data; fall back to computed SAN */
         const char *san = line->move_uci;
         if (has_lichess && lichess.success) {
             for (size_t j = 0; j < lichess.move_count; j++) {
@@ -286,6 +367,10 @@ static void build_our_move(Tree *tree, TreeNode *node,
                 }
             }
         }
+        if (san == line->move_uci &&
+            uci_to_san(node->fen, line->move_uci,
+                        our_san_buf, sizeof(our_san_buf)))
+            san = our_san_buf;
 
         TreeNode *child = make_child(node, child_fen, san, line->move_uci, tree);
         if (!child) continue;
@@ -332,12 +417,10 @@ static void build_our_move(Tree *tree, TreeNode *node,
 static void build_opponent_move(Tree *tree, TreeNode *node,
                                  const TreeConfig *config,
                                  LichessExplorer *explorer) {
-    /* 1. Query Lichess explorer */
+    /* 1. Query Lichess explorer (with DB cache) */
     ExplorerResponse response;
-    memset(&response, 0, sizeof(response));
-    bool query_ok = config->use_masters
-        ? lichess_explorer_query_masters(explorer, node->fen, &response)
-        : lichess_explorer_query(explorer, node->fen, &response);
+    bool query_ok = query_lichess_cached(config->db, explorer, node->fen,
+                                          config->use_masters, &response);
 
     bool use_maia = false;
     MaiaResponse maia_resp;
@@ -377,11 +460,14 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
         }
     }
 
+    char san_buf[MAX_MOVE_LENGTH];
+
     uint64_t total = use_maia ? 0 : response.total_games;
     size_t move_count = use_maia ? (size_t)maia_resp.move_count
                                  : response.move_count;
 
     /* 2. Add Lichess/Maia children (capped by mass and count) */
+    double mass_target = opp_mass_for_depth(config, node->depth);
     int children_added = 0;
     double mass_covered = 0.0;
 
@@ -392,7 +478,10 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
 
         if (use_maia) {
             uci = maia_resp.moves[i].uci;
-            san = maia_resp.moves[i].uci;
+            if (uci_to_san(node->fen, uci, san_buf, sizeof(san_buf)))
+                san = san_buf;
+            else
+                san = uci;
             prob = maia_resp.moves[i].probability;
             if (prob < config->maia_min_prob) continue;
         } else {
@@ -410,8 +499,7 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
         if (config->opp_max_children > 0 &&
             children_added >= config->opp_max_children)
             break;
-        if (config->opp_mass_target > 0.0 &&
-            mass_covered >= config->opp_mass_target)
+        if (mass_target > 0.0 && mass_covered >= mass_target)
             break;
 
         double new_cumul = node->cumulative_probability * prob;
@@ -466,8 +554,12 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
                 char child_fen[MAX_FEN_LENGTH];
                 if (apply_uci(node->fen, best_job.bestmove,
                               child_fen, MAX_FEN_LENGTH)) {
+                    const char *eng_san = best_job.bestmove;
+                    if (uci_to_san(node->fen, best_job.bestmove,
+                                   san_buf, sizeof(san_buf)))
+                        eng_san = san_buf;
                     TreeNode *child = make_child(node, child_fen,
-                                                  best_job.bestmove,
+                                                  eng_san,
                                                   best_job.bestmove, tree);
                     if (child) {
                         child->move_probability = 0.01;
@@ -528,8 +620,8 @@ static void build_recursive(Tree *tree, TreeNode *node,
     /* Eval-window pruning */
     if (node->has_engine_eval) {
         int eval_us = our_eval(node, config->play_as_white);
-        if (eval_us <= config->min_eval_cp ||
-            eval_us >= config->max_eval_cp) {
+        if (eval_us < config->min_eval_cp ||
+            eval_us > config->max_eval_cp) {
             node->explored = true;
             return;
         }
@@ -565,7 +657,16 @@ bool tree_build(Tree *tree, const char *start_fen,
     if (tree->total_nodes <= 1) tree->max_depth_reached = 0;
     tree->is_building = true;
 
-    build_recursive(tree, tree->root, config, explorer);
+    if (tree->config.relative_eval) {
+        ensure_eval(tree->root, &tree->config);
+        if (tree->root->has_engine_eval) {
+            int root_eval = our_eval(tree->root, tree->config.play_as_white);
+            tree->config.min_eval_cp += root_eval;
+            tree->config.max_eval_cp += root_eval;
+        }
+    }
+
+    build_recursive(tree, tree->root, &tree->config, explorer);
 
     tree->build_complete = tree->is_building;
     tree->is_building = false;
@@ -716,13 +817,6 @@ double win_probability(int cp) {
     return 1.0 / (1.0 + exp(-0.00368208 * cp));
 }
 
-static int eca_eval_for_us(const TreeNode *child, bool play_as_white) {
-    if (!child->has_engine_eval) return 0;
-    int eval_white = child->is_white_to_move ? child->engine_eval_cp
-                                             : -child->engine_eval_cp;
-    return play_as_white ? eval_white : -eval_white;
-}
-
 static double eca_wp_us(const TreeNode *child, bool play_as_white) {
     if (!child->has_engine_eval) return 0.5;
     int eval_white = child->is_white_to_move ? child->engine_eval_cp
@@ -770,7 +864,7 @@ int score_our_move_children(TreeNode *node,
     int best_child_cp = -100000;
     for (size_t i = 0; i < node->children_count; i++) {
         if (!node->children[i]->has_engine_eval) continue;
-        int cp_us = eca_eval_for_us(node->children[i], config->play_as_white);
+        int cp_us = our_eval(node->children[i], config->play_as_white);
         if (cp_us > best_child_cp) best_child_cp = cp_us;
     }
 
@@ -782,7 +876,7 @@ int score_our_move_children(TreeNode *node,
     for (size_t i = 0; i < node->children_count; i++) {
         TreeNode *child = node->children[i];
         if (!child->has_eca) continue;
-        int cp_us = eca_eval_for_us(child, config->play_as_white);
+        int cp_us = our_eval(child, config->play_as_white);
         if (cp_us < best_child_cp - config->max_eval_loss_cp) continue;
         double eval_us_wp = eca_wp_us(child, config->play_as_white);
         if (eval_us_wp < config->eval_guard_threshold) continue;
@@ -894,11 +988,9 @@ size_t tree_get_line_to_node(const TreeNode *node,
     if (depth == 0) return 0;
     if (depth > max_moves) depth = max_moves;
 
-    size_t idx = depth - 1;
     temp = node;
-    while (temp->parent && idx < depth) {
-        snprintf(out_moves[idx], MAX_MOVE_LENGTH, "%s", temp->move_san);
-        idx--;
+    for (int i = (int)depth - 1; i >= 0 && temp->parent; i--) {
+        snprintf(out_moves[i], MAX_MOVE_LENGTH, "%s", temp->move_san);
         temp = temp->parent;
     }
     return depth;
@@ -920,14 +1012,15 @@ void tree_print_stats(const Tree *tree) {
     printf("\nConfiguration:\n");
     printf("  Min probability: %.4f%%\n", tree->config.min_probability * 100.0);
     printf("  Max depth: %d ply\n", tree->config.max_depth);
-    printf("  Our MultiPV: %d (early %d / late %d, taper at %d)\n",
-           tree->config.our_multipv,
-           tree->config.our_max_candidates_early,
-           tree->config.our_max_candidates_late,
+    printf("  Our MultiPV: %d → %d (taper over %d ply)\n",
+           tree->config.our_multipv_root,
+           tree->config.our_multipv_floor,
            tree->config.taper_depth);
-    printf("  Opponent: max %d children, %.0f%% mass target\n",
+    printf("  Opponent: max %d children, mass %.0f%% → %.0f%% (taper over %d ply)\n",
            tree->config.opp_max_children,
-           tree->config.opp_mass_target * 100.0);
+           tree->config.opp_mass_root * 100.0,
+           tree->config.opp_mass_floor * 100.0,
+           tree->config.taper_depth);
     printf("  Eval window: [%+d, %+d] cp\n",
            tree->config.min_eval_cp, tree->config.max_eval_cp);
     printf("========================\n\n");

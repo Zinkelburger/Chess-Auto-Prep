@@ -73,6 +73,7 @@ SRCS = $(SRC_DIR)/node.c \
        $(SRC_DIR)/lichess_api.c \
        $(SRC_DIR)/serialization.c \
        $(SRC_DIR)/chess_logic.c \
+       $(SRC_DIR)/san_convert.c \
        $(SRC_DIR)/thread_pool.c \
        $(SRC_DIR)/database.c \
        $(SRC_DIR)/engine_pool.c \
@@ -131,10 +132,13 @@ $(BUILD_DIR)/sqlite3_amalg.o: $(SRC_DIR)/sqlite3_amalg.c
 
 # Header dependencies
 $(BUILD_DIR)/node.o: $(INC_DIR)/node.h
-$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h $(INC_DIR)/engine_pool.h $(INC_DIR)/database.h $(INC_DIR)/repertoire.h
+$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/san_convert.h $(INC_DIR)/maia.h $(INC_DIR)/engine_pool.h $(INC_DIR)/database.h $(INC_DIR)/repertoire.h
 $(BUILD_DIR)/lichess_api.o: $(INC_DIR)/lichess_api.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/serialization.o: $(INC_DIR)/serialization.h $(INC_DIR)/tree.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/chess_logic.o: $(INC_DIR)/chess_logic.h
+# san_convert uses chesslib types (separate TU to avoid ChessPosition name clash)
+$(BUILD_DIR)/san_convert.o: $(SRC_DIR)/san_convert.c $(INC_DIR)/san_convert.h
+	$(CC) $(CFLAGS) $(INCLUDES) -I$(CHESSLIB_DIR) -c $< -o $@
 $(BUILD_DIR)/thread_pool.o: $(INC_DIR)/thread_pool.h
 $(BUILD_DIR)/database.o: $(INC_DIR)/database.h
 $(BUILD_DIR)/engine_pool.o: $(INC_DIR)/engine_pool.h $(INC_DIR)/thread_pool.h

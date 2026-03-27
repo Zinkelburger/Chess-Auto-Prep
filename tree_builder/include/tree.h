@@ -43,20 +43,30 @@ typedef struct TreeConfig {
     struct RepertoireDB *db;        /* SQLite cache for evals (optional but recommended) */
     int eval_depth;                 /* Stockfish search depth */
 
-    /* Our-move candidate selection (engine-driven) */
-    int our_multipv;                /* MultiPV lines to evaluate per position */
-    int our_max_candidates_early;   /* Max candidates at depth < taper_depth */
-    int our_max_candidates_late;    /* Max candidates at depth >= taper_depth */
-    int taper_depth;                /* Ply at which candidate cap shrinks */
+    /* Our-move candidate selection (engine-driven)
+     *
+     * MultiPV tapers linearly from our_multipv_root (at the root) down to
+     * our_multipv_floor (at taper_depth and beyond).  All lines within
+     * max_eval_loss_cp of the best are added — no separate candidate cap. */
+    int our_multipv_root;           /* MultiPV at depth 0 (explore broadly) */
+    int our_multipv_floor;          /* MultiPV at depth >= taper_depth */
+    int taper_depth;                /* Ply at which MultiPV bottoms out */
     int max_eval_loss_cp;           /* Candidates must be within this of best */
 
-    /* Opponent-move selection (Lichess-driven) */
+    /* Opponent-move selection (Lichess-driven)
+     *
+     * Mass target tapers linearly from opp_mass_root (at the root) down
+     * to opp_mass_floor (at taper_depth and beyond).  Combined with
+     * cumulative-probability pruning this focuses deep branches on the
+     * most popular replies only. */
     int opp_max_children;           /* Max opponent responses per position (0 = unlimited) */
-    double opp_mass_target;         /* Stop adding after this fraction of prob mass (0 = disabled) */
+    double opp_mass_root;           /* Mass target at depth 0 (explore broadly) */
+    double opp_mass_floor;          /* Mass target at depth >= taper_depth */
 
     /* Eval window pruning — stop exploring outside this range */
     int min_eval_cp;                /* Prune if our eval drops below this */
     int max_eval_cp;                /* Prune if our eval exceeds this (already won) */
+    bool relative_eval;             /* Make eval window relative to root eval */
 
     /* Lichess API settings */
     const char *rating_range;       /* e.g. "2000,2200,2500" */

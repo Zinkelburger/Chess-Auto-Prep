@@ -34,20 +34,29 @@ move it is:
 
 #### Our-Move Nodes (Engine-Driven)
 
-1. **Stockfish MultiPV** — evaluate the position with `our_multipv` lines
-   (default 5). This gives us candidate moves and their evaluations.
+1. **Stockfish MultiPV (tapering)** — evaluate the position with a
+   depth-dependent number of lines. At the root, `our_multipv_root`
+   (default 10) lines cast a wide net to discover every viable opening
+   move. This tapers linearly to `our_multipv_floor` (default 2) by
+   `taper_depth` (default 8 ply), where only the top engine moves matter.
 2. **Eval filter** — discard candidates more than `max_eval_loss_cp` (default
-   50) worse than the best line.
-3. **Depth-dependent cap** — keep at most `our_max_candidates_early` (default
-   8) candidates at depth < `taper_depth` (default 8 ply), or
-   `our_max_candidates_late` (default 2) deeper in the tree. Early in the
-   opening, we branch broadly to explore ideas. Deeper, we narrow to the
-   top engine lines.
-4. **Lichess enrichment** — query the Lichess explorer for this position to
+   50) worse than the best line. All surviving lines become children — no
+   separate candidate cap. The MultiPV count *is* the exploration budget.
+3. **Lichess enrichment** — query the Lichess explorer for this position to
    get SAN notation, win rates, and game counts (enrichment only — Stockfish
    drives the branching decision).
-5. **Create children** with evaluations set inline, cached to the DB.
-6. **Recurse** into each child.
+4. **Create children** with evaluations set inline, cached to the DB.
+5. **Recurse** into each child.
+
+The MultiPV taper at each depth:
+
+| Depth (ply) | MultiPV | Typical surviving candidates |
+|-------------|---------|----------------------------|
+| 0 (root)    | 10      | 4–7 (many near-equal moves) |
+| 2           | 8       | 3–5                         |
+| 4           | 6       | 2–4                         |
+| 6           | 4       | 2–3                         |
+| 8+          | 2       | 1–2                         |
 
 #### Opponent-Move Nodes (Lichess-Driven)
 
@@ -55,9 +64,13 @@ move it is:
 2. **Maia fallback** — if the explorer returns no data and cumulative
    probability is above `maia_threshold`, predict human moves with the Maia
    neural network.
-3. **Branching caps** — add children until either `opp_max_children` (default
-   6) moves are added, or `opp_mass_target` (default 80%) of probability mass
-   is covered.
+3. **Branching caps (tapering)** — add children until either
+   `opp_max_children` (default 6) moves are added, or the depth-dependent
+   mass target is reached. The mass target tapers linearly from
+   `opp_mass_root` (default 95%) at the root to `opp_mass_floor` (default
+   50%) at `taper_depth` and beyond. Near the root this covers almost every
+   played response (including 2–5% sidelines worth preparing against); deeper
+   in the tree it focuses on only the most popular replies.
 4. **Engine top-1** — run Stockfish on this position. If the engine's best
    move is not already a child, add it (as a low-probability entry). This
    ensures the tree accounts for the opponent's objectively best play, not
@@ -65,6 +78,16 @@ move it is:
 5. **Batch evaluate** all children that lack evaluations (checks DB cache
    first, then Stockfish). Evals are cached to DB.
 6. **Recurse** into each child.
+
+The mass target taper at each depth:
+
+| Depth (ply) | Mass target | Typical opponent children |
+|-------------|-------------|--------------------------|
+| 0           | 95%         | 5–6                      |
+| 2           | 84%         | 4                        |
+| 4           | 73%         | 3                        |
+| 6           | 61%         | 2–3                      |
+| 8+          | 50%         | 1–2                      |
 
 #### Eval-Window Pruning
 
@@ -224,10 +247,9 @@ are followed. Lines always end with the repertoire side's move.
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| `our_multipv` | `--our-multipv` | 5 | Stockfish MultiPV lines per position |
-| `our_max_candidates_early` | `--our-max-early` | 8 | Max candidates at depth < taper_depth |
-| `our_max_candidates_late` | `--our-max-late` | 2 | Max candidates at depth >= taper_depth |
-| `taper_depth` | `--taper-depth` | 8 | Ply at which candidate cap shrinks |
+| `our_multipv_root` | `--our-multipv-root` | 10 | MultiPV at root (explore broadly) |
+| `our_multipv_floor` | `--our-multipv-floor` | 2 | MultiPV floor (deep positions) |
+| `taper_depth` | `--taper-depth` | 8 | Ply at which both tapers bottom out |
 | `max_eval_loss_cp` | `--max-eval-loss` | 50 | Candidates must be within this of best |
 
 ### Tree Building — Opponent Moves (Lichess-Driven)
@@ -235,7 +257,8 @@ are followed. Lines always end with the repertoire side's move.
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
 | `opp_max_children` | `--opp-max-children` | 6 | Max opponent responses per position |
-| `opp_mass_target` | `--opp-mass` | 0.80 | Stop after covering this probability mass |
+| `opp_mass_root` | `--opp-mass-root` | 0.95 | Mass target at root (explore broadly) |
+| `opp_mass_floor` | `--opp-mass-floor` | 0.50 | Mass target floor (deep positions) |
 | `min_games` | `-g` | 10 | Minimum Lichess games to include a move |
 | `ratings` | `-r` | 2000,2200,2500 | Lichess rating buckets |
 | `speeds` | `-s` | blitz,rapid,classical | Time controls |
@@ -276,21 +299,25 @@ are followed. Lines always end with the repertoire side's move.
 
 ### What Each Parameter Does Intuitively
 
-- **`our_multipv`**: "How many engine moves to consider at each position?"
-  Higher = more candidates but slower. The eval filter and depth cap narrow
-  the actual children created.
+- **`our_multipv_root / our_multipv_floor`**: "How many engine moves to
+  consider?" At the root, cast a wide net (10 lines) to discover every
+  viable opening move. Deep in the tree, only ask for the top 2. The eval
+  filter further narrows actual children — MultiPV is the exploration
+  budget, and `max_eval_loss_cp` decides who survives.
 
-- **`our_max_candidates_early/late`**: "How broadly should we branch for our
-  moves?" Early in the opening (before `taper_depth`), branch broadly to
-  explore different ideas. Deeper, narrow to the top 2 engine lines.
+- **`opp_mass_root / opp_mass_floor`**: "How much of the opponent's
+  probability mass to cover?" At the root, cover 95% — prepare for almost
+  everything, including 2–5% sidelines. Deep in the tree, 50% means only
+  the top 1–2 replies. Combined with cumulative-probability pruning, this
+  focuses deep branches naturally.
 
-- **`opp_max_children`**: "How many opponent responses to prepare for?"
-  6 covers ~80-90% of practical games. Raise to 8-10 for more thorough
-  preparation.
+- **`taper_depth`**: "When does the tree shift from broad exploration to
+  focused depth?" Both the MultiPV taper and mass target taper reach their
+  floor values at this depth. Default 8 ply = 4 moves each side.
 
-- **`opp_mass_target`**: "What fraction of opponent probability mass to
-  cover?" 0.80 means stop after the moves covering 80% of games. Ensures
-  we prepare for likely responses without drowning in rare sidelines.
+- **`opp_max_children`**: "Hard cap on opponent responses per position?"
+  Safety net — rarely hit when the mass target is doing its job. Raise to
+  8-10 for more thorough preparation.
 
 - **`eval_weight`**: "How much do I trust objective eval vs trickiness?"
   At 0.40, a move needs both good eval AND high ECA. Raise toward 1.0 for
@@ -354,10 +381,10 @@ tree_builder/
    │               │                      │                  │
    │  Stockfish    │                      │  Lichess Explorer│
    │  MultiPV      │                      │  (+ Maia fallback)
-   │  → eval filter│                      │  + engine top-1  │
-   │  → depth cap  │                      │  → batch eval    │
-   │  → Lichess    │                      │  → mass cutoff   │
-   │    enrichment │                      │  → child cap     │
+   │  (10 → 2)     │                      │  + engine top-1  │
+   │  → eval filter│                      │  → batch eval    │
+   │  → Lichess    │                      │  → mass target   │
+   │    enrichment │                      │    (95% → 50%)   │
    └──────┬────────┘                      └────────┬─────────┘
           │                                        │
           │   Eval-window pruning at every node    │
