@@ -130,7 +130,7 @@ $(BUILD_DIR)/sqlite3_amalg.o: $(SRC_DIR)/sqlite3_amalg.c
 
 # Header dependencies
 $(BUILD_DIR)/node.o: $(INC_DIR)/node.h
-$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h
+$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h $(INC_DIR)/engine_pool.h $(INC_DIR)/database.h $(INC_DIR)/repertoire.h
 $(BUILD_DIR)/lichess_api.o: $(INC_DIR)/lichess_api.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/serialization.o: $(INC_DIR)/serialization.h $(INC_DIR)/tree.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/chess_logic.o: $(INC_DIR)/chess_logic.h
