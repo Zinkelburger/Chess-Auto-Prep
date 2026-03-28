@@ -6,10 +6,10 @@
  *   1. BUILD     - Interleaved Lichess + Stockfish tree construction
  *   2. SELECT    - Ease + ECA calculation → repertoire move selection
  *   3. TRAPS     - (optional) find opponent trap positions
- *   4. EXPORT    - Save JSON, PGN, and database
+ *   4. EXPORT    - Save PGN, tree (for resume), and database
  *
  * Usage:
- *   tree_builder [options] <output_file>
+ *   tree_builder [options] <name>
  */
 
 #include <stdio.h>
@@ -70,9 +70,13 @@ static void print_usage(const char *prog_name) {
     printf("╔══════════════════════════════════════════════════════════╗\n");
     printf("║        Chess Repertoire Builder - tree_builder           ║\n");
     printf("╚══════════════════════════════════════════════════════════╝\n\n");
-    printf("Usage: %s [options] <output.json>\n\n", prog_name);
+    printf("Usage: %s [options] <name>\n\n", prog_name);
     printf("Builds an opening repertoire by interleaving Lichess database\n");
     printf("queries with Stockfish evaluation, pruning immediately by eval.\n\n");
+    printf("The <name> argument is the base name for all output files:\n");
+    printf("  <name>.pgn        Repertoire lines (primary output)\n");
+    printf("  <name>.tree.json  Tree state (for resumption)\n");
+    printf("  <name>.db         Cached evals and explorer data\n\n");
     printf("Options:\n");
     printf("  -f, --fen <FEN>        Starting position FEN\n");
     printf("  -c, --color <w|b>      Play as white (w) or black (b) [default: w]\n");
@@ -84,10 +88,10 @@ static void print_usage(const char *prog_name) {
     printf("  -s, --speeds <S>       Time controls [default: blitz,rapid,classical]\n");
     printf("  -g, --min-games <N>    Min games per move [default: 10]\n");
     printf("  -S, --stockfish <path> Stockfish binary path\n");
-    printf("  -D, --database <path>  SQLite database path [default: auto from --name]\n");
-    printf("  -L, --load <file>      Load tree from JSON file\n");
+    printf("  -D, --database <path>  SQLite database path [default: <name>.db]\n");
+    printf("  -L, --load <file>      Load tree from a different JSON file\n");
     printf("  -m, --masters          Use masters database\n");
-    printf("  --skip-build           Skip tree building (use cached DB data)\n");
+    printf("  --skip-build           Skip tree building (use existing tree)\n");
     printf("  --token <token>        Lichess API auth token\n");
     printf("                         Also reads: $LICHESS_TOKEN, ~/.config/tree_builder/token, .lichess_token\n");
     printf("\n");
@@ -117,17 +121,17 @@ static void print_usage(const char *prog_name) {
     printf("  --maia-elo <N>         Elo for Maia predictions [default: 2000]\n");
     printf("  --maia-threshold <P>   Min cumProb to trigger Maia [default: 0.01]\n");
     printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.02]\n");
+    printf("  --maia-only            Use Maia exclusively for opponent moves (no Lichess API)\n");
     printf("\n");
     printf("Output:\n");
-    printf("  -n, --name <name>      Repertoire name (shown in output/PGN headers)\n");
+    printf("  -n, --name <name>      Repertoire name (shown in PGN headers)\n");
     printf("  --traps                Find opponent trap positions\n");
-    printf("  --pgn <file>           Also export repertoire as PGN\n");
     printf("  -v, --verbose          Verbose progress output\n");
     printf("  -h, --help             Show this help\n\n");
     printf("Examples:\n");
-    printf("  %s -c w -e 20 -t 4 -v repertoire.json\n", prog_name);
-    printf("  %s -c b --opp-max-children 8 --our-max-late 3 rep.json\n", prog_name);
-    printf("  %s -L existing.json --skip-build rep.json\n", prog_name);
+    printf("  %s -c w -e 20 -t 4 -v repertoire\n", prog_name);
+    printf("  %s -c b -f \"FEN\" -n \"Modern Benoni\" modern_benoni\n", prog_name);
+    printf("  %s -c b -v modern_benoni   # resumes from modern_benoni.tree.json\n", prog_name);
     printf("\n");
 }
 
@@ -259,12 +263,13 @@ int main(int argc, char *argv[]) {
 
     /* Configuration with defaults */
     const char *start_fen = DEFAULT_FEN;
-    const char *output_file = NULL;
+    const char *base_name = NULL;
+    char pgn_path[PATH_MAX] = {0};
+    char tree_path[PATH_MAX] = {0};
     const char *db_path = NULL;
-    char db_path_buf[256] = {0};
+    char db_path_buf[PATH_MAX] = {0};
     const char *stockfish_path = NULL;
     const char *load_tree_file = NULL;
-    const char *pgn_output = NULL;
     double min_probability = 0.0001;
     int max_depth = 30;
     int eval_depth = 20;
@@ -283,6 +288,7 @@ int main(int argc, char *argv[]) {
     int maia_elo = 2000;
     double maia_threshold = 0.01;
     double maia_min_prob = 0.02;
+    bool maia_only = false;
     bool relative_eval = false;
 
     /* Our-move overrides (-1 = use default) */
@@ -322,7 +328,6 @@ int main(int argc, char *argv[]) {
         {"masters",          no_argument,       0, 'm'},
         {"skip-build",       no_argument,       0, 1001},
         {"traps",            no_argument,       0, 1004},
-        {"pgn",              required_argument, 0, 1005},
         {"token",            required_argument, 0, 1006},
         /* Our-move */
         {"our-multipv-root", required_argument, 0, 2001},
@@ -346,6 +351,7 @@ int main(int argc, char *argv[]) {
         {"maia-elo",         required_argument, 0, 3002},
         {"maia-threshold",   required_argument, 0, 3003},
         {"maia-min-prob",    required_argument, 0, 3004},
+        {"maia-only",        no_argument,       0, 3005},
         /* General */
         {"verbose",          no_argument,       0, 'v'},
         {"help",             no_argument,       0, 'h'},
@@ -389,7 +395,6 @@ int main(int argc, char *argv[]) {
             case 'h': print_usage(argv[0]); return 0;
             case 1001: skip_build = true; break;
             case 1004: find_traps = true; break;
-            case 1005: pgn_output = optarg; break;
             case 1006: lichess_token = optarg; break;
             /* Our-move */
             case 2001: if (!parse_int(optarg, "our-multipv-root", &our_multipv_root_arg)) return 1; break;
@@ -413,17 +418,37 @@ int main(int argc, char *argv[]) {
             case 3002: if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1; break;
             case 3003: if (!parse_double(optarg, "maia-threshold", &maia_threshold)) return 1; break;
             case 3004: if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1; break;
+            case 3005: maia_only = true; break;
             default: print_usage(argv[0]); return 1;
         }
     }
 
     if (optind < argc) {
-        output_file = argv[optind];
+        base_name = argv[optind];
     } else {
-        fprintf(stderr, "Error: output file required\n");
+        fprintf(stderr, "Error: base name required\n");
         print_usage(argv[0]);
         return 1;
     }
+
+    /* Strip common extensions if the user passed e.g. "foo.json" or "foo.pgn" */
+    static char base_buf[512];
+    {
+        size_t len = strlen(base_name);
+        const char *exts[] = { ".tree.json", ".json", ".pgn", ".db", NULL };
+        for (int i = 0; exts[i]; i++) {
+            size_t elen = strlen(exts[i]);
+            if (len > elen && strcmp(base_name + len - elen, exts[i]) == 0) {
+                memcpy(base_buf, base_name, len - elen);
+                base_buf[len - elen] = '\0';
+                base_name = base_buf;
+                break;
+            }
+        }
+    }
+
+    snprintf(pgn_path, sizeof(pgn_path), "%s.pgn", base_name);
+    snprintf(tree_path, sizeof(tree_path), "%s.tree.json", base_name);
 
     /* Resolve Lichess token */
     char *token_buf = NULL;
@@ -438,23 +463,10 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /* Auto-derive DB name from --name */
+    /* Auto-derive DB path from base name */
     if (!db_path) {
-        if (repertoire_name) {
-            size_t j = 0;
-            size_t max_stem = sizeof(db_path_buf) - 4;
-            for (size_t i = 0; repertoire_name[i] && j < max_stem; i++) {
-                char c = repertoire_name[i];
-                if (c == ' ') db_path_buf[j++] = '_';
-                else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                         (c >= '0' && c <= '9') || c == '-' || c == '_')
-                    db_path_buf[j++] = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c;
-            }
-            memcpy(db_path_buf + j, ".db", 4);
-            db_path = db_path_buf;
-        } else {
-            db_path = "repertoire.db";
-        }
+        snprintf(db_path_buf, sizeof(db_path_buf), "%s.db", base_name);
+        db_path = db_path_buf;
     }
 
     /* Signal handlers */
@@ -489,9 +501,11 @@ int main(int argc, char *argv[]) {
     printf("  Speeds:           %s\n", speeds);
     printf("  Min games:        %d\n", min_games);
     printf("  Database:         %s\n", db_path);
-    printf("  Database source:  %s\n", use_masters ? "Masters" : "Lichess");
-    printf("  Output:           %s\n", output_file);
-    if (pgn_output) printf("  PGN output:       %s\n", pgn_output);
+    printf("  Opponent source:  %s\n",
+           maia_only ? "Maia-only (no API)" :
+           use_masters ? "Masters" : "Lichess");
+    printf("  Output:           %s\n", pgn_path);
+    printf("  Tree state:       %s\n", tree_path);
     if (load_tree_file) printf("  Loading tree:     %s\n", load_tree_file);
     printf("\n");
 
@@ -514,6 +528,12 @@ int main(int argc, char *argv[]) {
     } else if (maia_model_path) {
         fprintf(stderr, "  Warning: Maia model not found at %s\n",
                 maia_model_path);
+    }
+
+    if (maia_only && !maia) {
+        fprintf(stderr, "Error: --maia-only requires a working Maia model.\n");
+        fprintf(stderr, "  Use --maia-model <path> or place maia_rapid.onnx next to the binary.\n");
+        return 1;
     }
 
     /* ================================================================
@@ -564,9 +584,9 @@ int main(int argc, char *argv[]) {
     Tree *tree = NULL;
     bool needs_build = !skip_build;
 
-    const char *tree_source = load_tree_file ? load_tree_file : output_file;
+    const char *tree_source = load_tree_file ? load_tree_file : tree_path;
 
-    if (load_tree_file || (!skip_build && access(output_file, F_OK) == 0)) {
+    if (load_tree_file || (!skip_build && access(tree_path, F_OK) == 0)) {
         tree = tree_load(tree_source);
         if (tree) {
             tree->config.play_as_white = play_as_white;
@@ -601,26 +621,32 @@ int main(int argc, char *argv[]) {
     }
 
     if (needs_build) {
-        if (!tree) printf("[1/4] Building opening tree (interleaved)...\n");
+        if (!tree) printf("[1/4] Building opening tree (%s)...\n",
+                          maia_only ? "Maia-only" : "interleaved");
 
-        LichessExplorer *explorer = lichess_explorer_create();
-        if (!explorer) {
-            fprintf(stderr, "Error: Failed to create Lichess explorer\n");
-            if (engine_pool) engine_pool_destroy(engine_pool);
-            if (maia) maia_destroy(maia);
-            if (tree) tree_destroy(tree);
-            rdb_close(db);
-            return 1;
-        }
+        LichessExplorer *explorer = NULL;
+        if (!maia_only) {
+            explorer = lichess_explorer_create();
+            if (!explorer) {
+                fprintf(stderr, "Error: Failed to create Lichess explorer\n");
+                if (engine_pool) engine_pool_destroy(engine_pool);
+                if (maia) maia_destroy(maia);
+                if (tree) tree_destroy(tree);
+                rdb_close(db);
+                return 1;
+            }
 
-        lichess_explorer_set_ratings(explorer, ratings);
-        lichess_explorer_set_speeds(explorer, speeds);
-        lichess_explorer_set_delay(explorer, 500);
-        if (lichess_token) {
-            lichess_explorer_set_token(explorer, lichess_token);
-            printf("  Using Lichess auth token\n");
+            lichess_explorer_set_ratings(explorer, ratings);
+            lichess_explorer_set_speeds(explorer, speeds);
+            lichess_explorer_set_delay(explorer, 500);
+            if (lichess_token) {
+                lichess_explorer_set_token(explorer, lichess_token);
+                printf("  Using Lichess auth token\n");
+            } else {
+                printf("  Warning: No --token provided, API may return 401\n");
+            }
         } else {
-            printf("  Warning: No --token provided, API may return 401\n");
+            printf("  Maia-only mode: no Lichess API queries\n");
         }
 
         if (!tree) {
@@ -668,6 +694,7 @@ int main(int argc, char *argv[]) {
             config.maia_elo = maia_elo;
             config.maia_threshold = maia_threshold;
             config.maia_min_prob = maia_min_prob;
+            config.maia_only = maia_only;
         }
 
         if (verbose) config.progress_callback = progress_callback;
@@ -713,14 +740,16 @@ int main(int argc, char *argv[]) {
             printf("  Built %zu nodes in %.1fs (max depth %d)\n",
                    tree->total_nodes, build_time, tree->max_depth_reached);
 
-        lichess_explorer_print_stats(explorer);
-        lichess_explorer_destroy(explorer);
+        if (explorer) {
+            lichess_explorer_print_stats(explorer);
+            lichess_explorer_destroy(explorer);
+        }
 
-        printf("  Saving tree to %s...\n", output_file);
+        printf("  Saving tree to %s...\n", tree_path);
         SerializationOptions opts = serialization_options_default();
         opts.format = FORMAT_JSON;
         opts.json_indent = 2;
-        tree_save(tree, output_file, &opts);
+        tree_save(tree, tree_path, &opts);
         printf("\n");
     }
 
@@ -803,26 +832,22 @@ int main(int argc, char *argv[]) {
      * ================================================================ */
     printf("[4/4] Exporting results...\n");
 
-    SerializationOptions opts = serialization_options_default();
-    opts.format = FORMAT_JSON;
-    opts.json_indent = 2;
-    opts.include_engine_eval = true;
-    opts.include_ease = true;
-
-    if (tree_save(tree, output_file, &opts))
-        printf("  Tree saved: %s (%zu nodes)\n", output_file, tree->total_nodes);
-
-    if (result) {
-        char rep_json[512];
-        snprintf(rep_json, sizeof(rep_json), "%s.repertoire.json", output_file);
-        if (repertoire_export_json(result, rep_json))
-            printf("  Repertoire JSON: %s (%d moves, %d lines)\n",
-                   rep_json, result->num_moves, result->num_lines);
+    /* Save tree state for resumption */
+    {
+        SerializationOptions opts = serialization_options_default();
+        opts.format = FORMAT_JSON;
+        opts.json_indent = 2;
+        opts.include_engine_eval = true;
+        opts.include_ease = true;
+        if (tree_save(tree, tree_path, &opts))
+            printf("  Tree state: %s (%zu nodes)\n", tree_path, tree->total_nodes);
     }
 
-    if (pgn_output && result) {
-        if (repertoire_export_pgn(result, pgn_output, &rep_config))
-            printf("  PGN saved: %s\n", pgn_output);
+    /* PGN is the primary output */
+    if (result) {
+        if (repertoire_export_pgn(result, pgn_path, &rep_config))
+            printf("  PGN saved: %s (%d moves, %d lines)\n",
+                   pgn_path, result->num_moves, result->num_lines);
     }
 
     rdb_get_stats(db, &cached_explorer, &cached_evals, &cached_ease);
@@ -842,15 +867,15 @@ int main(int argc, char *argv[]) {
                         (pipeline_end.tv_nsec - pipeline_start.tv_nsec) / 1e9;
     printf("\n  Total time: %.1f seconds (%.1f minutes)\n",
            total_time, total_time / 60.0);
-    printf("\nDone! Repertoire saved to %s\n\n", output_file);
+    printf("\nDone! Repertoire saved to %s\n\n", pgn_path);
 
 cleanup:
-    if (g_interrupted && tree && output_file) {
-        printf("\n  [INTERRUPTED] Saving partial tree to %s...\n", output_file);
+    if (g_interrupted && tree && base_name) {
+        printf("\n  [INTERRUPTED] Saving partial tree to %s...\n", tree_path);
         SerializationOptions interrupt_opts = serialization_options_default();
         interrupt_opts.format = FORMAT_JSON;
         interrupt_opts.json_indent = 2;
-        tree_save(tree, output_file, &interrupt_opts);
+        tree_save(tree, tree_path, &interrupt_opts);
         printf("  Partial tree saved (%zu nodes). Re-run to resume.\n",
                tree->total_nodes);
     }

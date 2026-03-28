@@ -5,9 +5,9 @@
 The tree builder generates chess opening repertoires through a single
 interleaved DFS that builds the tree and evaluates positions simultaneously:
 
-1. **Building** the move tree by querying Lichess Explorer and Stockfish
-   together — engine MultiPV for our-move candidates, Lichess DB for opponent
-   responses, with eval-window pruning at every node
+1. **Building** the move tree by querying Lichess Explorer, Maia, and Stockfish
+   together — engine MultiPV for our-move candidates, Lichess DB + Maia
+   supplement for opponent responses, with eval-window pruning at every node
 2. Computing **ease scores** (legacy compatibility with the Flutter app)
 3. Computing **ECA (Expected Centipawn Advantage)** — a win-probability-delta
    metric estimating how much win probability opponents hand us on average
@@ -58,19 +58,30 @@ The MultiPV taper at each depth:
 | 6           | 4       | 2–3                         |
 | 8+          | 2       | 1–2                         |
 
-#### Opponent-Move Nodes (Lichess-Driven)
+#### Opponent-Move Nodes (Lichess + Maia)
 
-1. **Lichess Explorer** — query for human move frequencies.
-2. **Maia fallback** — if the explorer returns no data and cumulative
-   probability is above `maia_threshold`, predict human moves with the Maia
-   neural network.
-3. **Branching caps (tapering)** — add children until either
-   `opp_max_children` (default 6) moves are added, or the depth-dependent
-   mass target is reached. The mass target tapers linearly from
-   `opp_mass_root` (default 95%) at the root to `opp_mass_floor` (default
-   50%) at `taper_depth` and beyond. Near the root this covers almost every
-   played response (including 2–5% sidelines worth preparing against); deeper
-   in the tree it focuses on only the most popular replies.
+Opponent moves use a blended strategy: Lichess database moves are added
+first (real game data), then Maia fills in remaining mass with predicted
+human moves. A single node can end up with a mix of both sources.
+
+1. **Lichess Explorer** — query for human move frequencies. Add moves that
+   have at least `min_games` games, tracking cumulative mass covered.
+2. **Maia supplement** — if the mass target hasn't been reached and
+   `cumulative_probability >= maia_threshold`, run Maia inference and add
+   predicted moves that weren't already added from Lichess. This handles
+   three cases seamlessly:
+   - Lichess covered some mass but not enough (e.g. 2 Lichess moves at 40%,
+     Maia adds 3 more moves to reach 90%)
+   - Lichess had total games but no individual move passed `min_games`
+     (Maia provides the entire distribution)
+   - Lichess had no data at all (equivalent to the old "fallback" behavior)
+3. **Branching caps (tapering)** — both Lichess and Maia additions respect
+   `opp_max_children` (default 6) and the depth-dependent mass target. The
+   mass target tapers linearly from `opp_mass_root` (default 95%) at the
+   root to `opp_mass_floor` (default 50%) at `taper_depth` and beyond. Near
+   the root this covers almost every played response (including 2–5%
+   sidelines worth preparing against); deeper in the tree it focuses on only
+   the most popular replies.
 4. **Engine top-1** — run Stockfish on this position. If the engine's best
    move is not already a child, add it (as a low-probability entry). This
    ensures the tree accounts for the opponent's objectively best play, not
@@ -78,6 +89,11 @@ The MultiPV taper at each depth:
 5. **Batch evaluate** all children that lack evaluations (checks DB cache
    first, then Stockfish). Evals are cached to DB.
 6. **Recurse** into each child.
+
+The `--maia-only` flag bypasses Lichess entirely, using Maia as the sole
+source of opponent moves. This eliminates the 500ms per-query API rate
+limit but produces larger trees (Maia always has predictions, unlike
+Lichess which naturally prunes positions with too few games).
 
 The mass target taper at each depth:
 
@@ -115,12 +131,20 @@ building resumes from unexplored leaves. Nodes with children or marked
 **Evals are cached.** Every evaluation is stored in SQLite so re-runs skip
 already-evaluated positions. The DB also caches Lichess explorer responses.
 
-#### Maia Neural Network Fallback
+#### Maia Neural Network Integration
 
-When the Lichess explorer returns no data at an opponent-move node:
-- Maia model was found (auto-detected from `./maia_rapid.onnx` or `../assets/maia_rapid.onnx`, or explicit `--maia-model <path>`)
+Maia supplements Lichess data at opponent-move nodes, filling in mass that
+Lichess couldn't cover. It triggers when all of:
+- A Maia model was found (auto-detected from `./maia_rapid.onnx` or
+  `../assets/maia_rapid.onnx`, or explicit `--maia-model <path>`)
+- The mass target hasn't been reached after Lichess moves
 - `node.cumulative_probability >= maia_threshold` (default 0.01 = 1%)
-- Maia moves below `maia_min_prob` (default 0.02 = 2%) are discarded
+
+Maia moves already present from Lichess are skipped (dedup by UCI).
+Maia moves below `maia_min_prob` (default 0.02 = 2%) are discarded.
+
+With `--maia-only`, Lichess is skipped entirely and the `maia_threshold`
+gate is removed — every position gets Maia predictions regardless of cumP.
 
 ### Stage 2: Generate Repertoire (Ease + ECA + Selection)
 
@@ -252,7 +276,7 @@ are followed. Lines always end with the repertoire side's move.
 | `taper_depth` | `--taper-depth` | 8 | Ply at which both tapers bottom out |
 | `max_eval_loss_cp` | `--max-eval-loss` | 50 | Candidates must be within this of best |
 
-### Tree Building — Opponent Moves (Lichess-Driven)
+### Tree Building — Opponent Moves (Lichess + Maia)
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
@@ -280,14 +304,15 @@ are followed. Lines always end with the repertoire side's move.
 | `max_eval_cp` | `--max-eval` | W: 200, B: 100 | Stop if our eval exceeds this |
 | `relative_eval` | `--relative` | off | Make thresholds relative to root eval |
 
-### Maia Fallback
+### Maia Supplement
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
 | `maia_model` | `--maia-model` | auto-detect | Path to `maia_rapid.onnx` |
 | `maia_elo` | `--maia-elo` | 2000 | Elo for predictions (1100–2100) |
-| `maia_threshold` | `--maia-threshold` | 0.01 (1%) | Min cumProb to trigger fallback |
+| `maia_threshold` | `--maia-threshold` | 0.01 (1%) | Min cumProb for Maia supplement |
 | `maia_min_prob` | `--maia-min-prob` | 0.02 (2%) | Skip moves below this probability |
+| `maia_only` | `--maia-only` | off | Bypass Lichess API, use Maia exclusively |
 
 ### ECA & Move Selection
 
@@ -308,7 +333,8 @@ are followed. Lines always end with the repertoire side's move.
 - **`opp_mass_root / opp_mass_floor`**: "How much of the opponent's
   probability mass to cover?" At the root, cover 95% — prepare for almost
   everything, including 2–5% sidelines. Deep in the tree, 50% means only
-  the top 1–2 replies. Combined with cumulative-probability pruning, this
+  the top 1–2 replies. Lichess moves fill mass first, then Maia supplements
+  to reach the target. Combined with cumulative-probability pruning, this
   focuses deep branches naturally.
 
 - **`taper_depth`**: "When does the tree shift from broad exploration to
@@ -330,6 +356,16 @@ are followed. Lines always end with the repertoire side's move.
 - **`min/max_eval_cp`**: "What eval range should we explore?" Stops the DFS
   when positions are too bad (lost cause) or too good (already winning,
   no need to study further). Applied during the build as inline pruning.
+
+- **`maia_threshold`**: "When should Maia supplement Lichess?" Only positions
+  with cumulative probability above this get Maia predictions. Prevents
+  wasting inference on unlikely branches. With `--maia-only`, this gate is
+  removed.
+
+- **`--maia-only`**: "Skip the Lichess API entirely?" Eliminates the 500ms
+  per-query rate limit, but produces larger trees since Maia always has
+  predictions (unlike Lichess which prunes positions with too few games).
+  Tighten pruning parameters to compensate.
 
 ---
 
@@ -379,12 +415,15 @@ tree_builder/
    ┌───────────────┐                      ┌──────────────────┐
    │  OUR MOVE     │                      │  OPPONENT MOVE   │
    │               │                      │                  │
-   │  Stockfish    │                      │  Lichess Explorer│
-   │  MultiPV      │                      │  (+ Maia fallback)
-   │  (10 → 2)     │                      │  + engine top-1  │
-   │  → eval filter│                      │  → batch eval    │
-   │  → Lichess    │                      │  → mass target   │
-   │    enrichment │                      │    (95% → 50%)   │
+   │  Stockfish    │                      │  1. Lichess DB   │
+   │  MultiPV      │                      │     (min_games)  │
+   │  (10 → 2)     │                      │  2. Maia fills   │
+   │  → eval filter│                      │     remaining    │
+   │  → Lichess    │                      │     mass         │
+   │    enrichment │                      │  3. Engine top-1 │
+   │               │                      │  → batch eval    │
+   │               │                      │  → mass target   │
+   │               │                      │    (95% → 50%)   │
    └──────┬────────┘                      └────────┬─────────┘
           │                                        │
           │   Eval-window pruning at every node    │

@@ -6,7 +6,7 @@
  * evaluation so branches can be pruned immediately by eval window.
  *
  * At OUR-move nodes:   Stockfish MultiPV → filter by eval → recurse
- * At OPPONENT nodes:   Lichess DB (+ Maia fallback) + engine top-1 → recurse
+ * At OPPONENT nodes:   Lichess DB + Maia supplement + engine top-1 → recurse
  */
 
 #ifndef TREE_H
@@ -74,13 +74,15 @@ typedef struct TreeConfig {
     int min_games;                  /* Minimum games to consider a move */
     bool use_masters;               /* Use masters database instead of Lichess */
 
-    /* Maia fallback: when the explorer is exhausted but cumulative
-       probability is still above maia_threshold, use Maia to predict
-       likely human moves and continue expanding. */
+    /* Maia supplement: after Lichess moves are added, Maia fills in
+       remaining mass with predicted human moves.  Positions can have a
+       mix of Lichess and Maia children.  maia_only bypasses Lichess
+       entirely. */
     struct MaiaContext *maia;       /* NULL = disabled */
     int    maia_elo;                /* Elo for Maia predictions (1100-2100) */
     double maia_threshold;          /* Min cumProb to trigger Maia fallback */
     double maia_min_prob;           /* Skip Maia moves below this probability */
+    bool   maia_only;              /* Use Maia exclusively (bypass Lichess API) */
 
     /* Progress callback */
     void (*progress_callback)(int nodes_built, int current_depth, const char *current_fen);

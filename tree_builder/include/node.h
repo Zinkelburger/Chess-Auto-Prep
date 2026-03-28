@@ -97,6 +97,12 @@ typedef struct TreeNode {
     double local_cpl;
     double accumulated_eca;
     bool   has_eca;                     /* Whether ECA values have been computed */
+
+    /* Engine-injected flag: this move was added as the engine's top-1 best
+     * move during opponent-move expansion (not from Lichess/Maia data).
+     * Subtrees below engine-injected nodes are built with pure engine #1
+     * for both sides, bypassing cumP and eval-window pruning. */
+    bool   engine_injected;
     
 } TreeNode;
 

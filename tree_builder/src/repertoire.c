@@ -353,6 +353,7 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
         TreeNode *node;
         char moves_san[128][16];
         char moves_uci[128][16];
+        bool is_engine_injected[128];
         int depth;
     } LineState;
 
@@ -387,8 +388,10 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                 next->depth = current.depth + 1;
                 memcpy(next->moves_san, current.moves_san, sizeof(current.moves_san));
                 memcpy(next->moves_uci, current.moves_uci, sizeof(current.moves_uci));
+                memcpy(next->is_engine_injected, current.is_engine_injected, sizeof(current.is_engine_injected));
                 strncpy(next->moves_san[current.depth], selected->move_san, 15);
                 strncpy(next->moves_uci[current.depth], selected->move_uci, 15);
+                next->is_engine_injected[current.depth] = selected->engine_injected;
                 stack_top++;
                 pushed_any = true;
             }
@@ -402,8 +405,10 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                     next->depth = current.depth + 1;
                     memcpy(next->moves_san, current.moves_san, sizeof(current.moves_san));
                     memcpy(next->moves_uci, current.moves_uci, sizeof(current.moves_uci));
+                    memcpy(next->is_engine_injected, current.is_engine_injected, sizeof(current.is_engine_injected));
                     strncpy(next->moves_san[current.depth], child->move_san, 15);
                     strncpy(next->moves_uci[current.depth], child->move_uci, 15);
+                    next->is_engine_injected[current.depth] = child->engine_injected;
                     stack_top++;
                     pushed_any = true;
                 }
@@ -427,6 +432,7 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
             RepertoireLine *line = &out_lines[num_lines];
             memcpy(line->moves_san, current.moves_san, sizeof(current.moves_san));
             memcpy(line->moves_uci, current.moves_uci, sizeof(current.moves_uci));
+            memcpy(line->is_engine_injected, current.is_engine_injected, sizeof(current.is_engine_injected));
             line->num_moves = depth;
             line->probability = current.node
                 ? current.node->cumulative_probability : 0;
@@ -667,6 +673,10 @@ bool repertoire_export_pgn(const RepertoireResult *result,
             else if (j == 0 && !root_white_to_move)
                 fprintf(f, "%d... ", (ply / 2) + 1);
             fprintf(f, "%s ", line->moves_san[j]);
+            if (line->is_engine_injected[j] &&
+                (j == 0 || !line->is_engine_injected[j - 1])) {
+                fprintf(f, "{Engine best move; continuing with #1 engine moves} ");
+            }
         }
         fprintf(f, "*\n");
     }
