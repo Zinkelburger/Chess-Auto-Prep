@@ -11,8 +11,9 @@ node.
 
 - **Our-move nodes**: Stockfish MultiPV finds candidate moves → eval filter →
   depth-dependent candidate cap → Lichess enrichment for SAN/win rates
-- **Opponent-move nodes**: Lichess DB (+ Maia fallback) for likely human
-  responses + engine top-1 → batch eval all children
+- **Opponent-move nodes**: Lichess DB moves first, then Maia fills remaining
+  mass with predicted human moves (a single node can have both sources) +
+  engine top-1 → batch eval all children
 - **Eval-window pruning** at every node — stop exploring when positions
   leave `[min_eval, max_eval]`
 - **All evals cached** in SQLite for instant resume
@@ -45,8 +46,16 @@ The executable will be at `bin/tree_builder`.
 ## Usage
 
 ```bash
-./bin/tree_builder [options] <output.json>
+./bin/tree_builder [options] <name>
 ```
+
+The `<name>` argument is the base name for all output files:
+
+| File | Purpose |
+|------|---------|
+| `<name>.pgn` | Repertoire lines (primary output) |
+| `<name>.tree.json` | Tree state for resumption |
+| `<name>.db` | Cached evals and explorer data |
 
 ### Core Options
 
@@ -59,28 +68,33 @@ The executable will be at `bin/tree_builder`.
 | `-e, --eval-depth <N>` | Stockfish search depth | 20 |
 | `-t, --threads <N>` | Parallel Stockfish engines | 4 |
 | `-S, --stockfish <path>` | Stockfish binary path | auto-detect |
-| `-n, --name <name>` | Repertoire name | |
+| `-n, --name <name>` | Repertoire name (shown in PGN headers) | |
 | `-v, --verbose` | Verbose progress | |
 
 ### Our-Move Candidates (Engine-Driven)
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--our-multipv <N>` | MultiPV lines to evaluate | 5 |
-| `--our-max-early <N>` | Max candidates at depth < taper | 8 |
-| `--our-max-late <N>` | Max candidates at depth >= taper | 2 |
-| `--taper-depth <N>` | Ply at which candidate cap shrinks | 8 |
+| `--our-multipv-root <N>` | MultiPV at root (explore broadly) | 10 |
+| `--our-multipv-floor <N>` | MultiPV floor (deep positions) | 2 |
+| `--taper-depth <N>` | Ply at which MultiPV bottoms out | 8 |
 | `--max-eval-loss <cp>` | Skip candidates worse than best by this | 50 |
 
-### Opponent Responses (Lichess-Driven)
+### Opponent Responses (Lichess + Maia)
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--opp-max-children <N>` | Max opponent responses | 6 |
-| `--opp-mass <0-1>` | Stop after this probability mass | 0.80 |
-| `-g, --min-games <N>` | Min games per move | 10 |
+| `--opp-mass-root <0-1>` | Mass target at root (explore broadly) | 0.95 |
+| `--opp-mass-floor <0-1>` | Mass target floor (deep positions) | 0.50 |
+| `-g, --min-games <N>` | Min games per move (Lichess) | 10 |
 | `-r, --ratings <R>` | Rating buckets | 2000,2200,2500 |
 | `-s, --speeds <S>` | Time controls | blitz,rapid,classical |
+| `--maia-only` | Use Maia exclusively (no Lichess API) | off |
+| `--maia-model <path>` | Path to `maia_rapid.onnx` | auto-detect |
+| `--maia-elo <N>` | Elo for Maia predictions | 2000 |
+| `--maia-threshold <P>` | Min cumProb for Maia supplement | 0.01 |
+| `--maia-min-prob <P>` | Skip Maia moves below this | 0.02 |
 
 ### Eval Window
 
@@ -102,24 +116,19 @@ The executable will be at `bin/tree_builder`.
 
 Build a Black repertoire with verbose output:
 ```bash
-./bin/tree_builder -c b -e 20 -t 4 -v --name "Modern Benoni" benoni.json
+./bin/tree_builder -c b -e 20 -t 4 -v -n "Modern Benoni" modern_benoni
 ```
 
-Build from a custom FEN, narrow candidate selection:
+Build from a custom FEN:
 ```bash
-./bin/tree_builder -c w --our-max-late 1 --opp-max-children 4 \
+./bin/tree_builder -c w --opp-max-children 4 \
   -f "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" \
-  e4_repertoire.json
+  e4_repertoire
 ```
 
 Resume an interrupted build:
 ```bash
-./bin/tree_builder -c b -v benoni.json  # continues from saved state
-```
-
-Export with PGN:
-```bash
-./bin/tree_builder -c w --pgn repertoire.pgn -v repertoire.json
+./bin/tree_builder -c b -v modern_benoni  # resumes from modern_benoni.tree.json
 ```
 
 ## API (Library Usage)
@@ -146,7 +155,7 @@ int main() {
                &config, explorer);
 
     SerializationOptions opts = serialization_options_default();
-    tree_save(tree, "output.json", &opts);
+    tree_save(tree, "output.tree.json", &opts);
 
     tree_destroy(tree);
     lichess_explorer_destroy(explorer);

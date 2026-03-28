@@ -99,6 +99,7 @@ typedef struct {
 typedef struct {
     char moves_san[128][16];        /* SAN moves in the line */
     char moves_uci[128][16];       /* UCI moves in the line */
+    bool is_engine_injected[128];   /* Per-move: was this an engine-injected move? */
     int num_moves;                  /* Number of moves */
     
     /* Aggregate scores */

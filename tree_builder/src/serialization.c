@@ -82,6 +82,9 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
     if (node->explored) {
         cJSON_AddBoolToObject(obj, "explored", true);
     }
+    if (node->engine_injected) {
+        cJSON_AddBoolToObject(obj, "engine_injected", true);
+    }
 
     /* Children */
     if (node->children_count > 0) {
@@ -295,6 +298,12 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent) {
         node->explored = cJSON_IsTrue(expl);
     } else {
         node->explored = (node->children_count > 0);
+    }
+
+    /* Parse engine_injected flag */
+    cJSON *einj = cJSON_GetObjectItem(obj, "engine_injected");
+    if (einj) {
+        node->engine_injected = cJSON_IsTrue(einj);
     }
 
     /* Parse node ID */
