@@ -79,7 +79,7 @@ typedef struct TreeConfig {
        mix of Lichess and Maia children.  maia_only bypasses Lichess
        entirely. */
     struct MaiaContext *maia;       /* NULL = disabled */
-    int    maia_elo;                /* Elo for Maia predictions (1100-2100) */
+    int    maia_elo;                /* Elo for Maia predictions (600-2400) */
     double maia_threshold;          /* Min cumProb to trigger Maia fallback */
     double maia_min_prob;           /* Skip Maia moves below this probability */
     bool   maia_only;              /* Use Maia exclusively (bypass Lichess API) */
@@ -102,6 +102,8 @@ typedef struct Tree {
     bool is_building;
     bool build_complete;
     uint64_t next_node_id;
+
+    void *expanded_fens;    /* FenSet* — tracks expanded FENs for transposition detection */
 
 } Tree;
 
@@ -150,15 +152,16 @@ size_t tree_calculate_ease(Tree *tree);
 /**
  * Compute ECA (Expected Centipawn Advantage) for the entire tree.
  *
- * Uses win-probability-delta units.  Post-order DFS:
- *   - local_cpl at each node from children's evals
+ * All values in centipawn units.  Post-order DFS:
+ *   - local_cpl at each node from children's evals (avg cp loss by opponent)
  *   - accumulated_eca bottom-up
  *
  * At opponent nodes:
  *   accumulated = γ^d × local_cpl + Σ(prob_i × child.accumulated_eca)
  * At our-move nodes:
- *   Select the child using the blended score
- *   (α × wp_us + (1-α) × child.accumulated_eca), propagate its eca.
+ *   avg_cpl = child.accumulated_eca / (1 + subtree_depth/2)
+ *   score   = eval_us_cp + eval_weight × avg_cpl
+ *   Select the child with the highest blended score, propagate its eca.
  */
 size_t tree_calculate_eca(Tree *tree, const struct RepertoireConfig *config);
 

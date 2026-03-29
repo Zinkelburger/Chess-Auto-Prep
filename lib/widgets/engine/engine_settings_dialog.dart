@@ -201,8 +201,8 @@ void showEngineSettingsDialog({
                 _buildNumberField(
                   label: 'Maia Elo',
                   value: settings.maiaElo,
-                  min: 1100,
-                  max: 2100,
+                  min: 600,
+                  max: 2400,
                   step: 100,
                   onChanged: (v) {
                     settings.maiaElo = v;

@@ -1,8 +1,8 @@
 /**
- * maia.c - Maia Neural Network Integration
+ * maia.c - Maia-3 Neural Network Integration
  *
- * Ported from the Flutter MaiaService / MaiaTensor implementation.
- * Uses the ONNX Runtime C API to run the maia_rapid.onnx model, and
+ * Ported from the maia-platform-frontend TypeScript implementation.
+ * Uses the ONNX Runtime C API to run the maia3_simplified.onnx model, and
  * alexmdc/chesslib (BSD-2-Clause) for legal move generation.
  *
  * Build with -DHAVE_ONNXRUNTIME and link -lonnxruntime to enable.
@@ -30,11 +30,11 @@
 #endif
 
 /* ═══════════════════════════════════════════════════════════════════════
- *  Move vocabulary — 1880 UCI strings matching the Maia policy head.
- *  Generated from assets/data/all_moves_reversed.json.
+ *  Move vocabulary — 4352 UCI strings matching the Maia-3 policy head.
+ *  Generated from assets/data/all_moves_maia3_reversed.json.
  * ═══════════════════════════════════════════════════════════════════════ */
 
-#define MAIA_VOCAB_SIZE 1880
+#define MAIA_VOCAB_SIZE 4352
 
 #include "maia_vocab.inc"
 
@@ -42,7 +42,7 @@
  *  UCI → vocab-index hash table (built once at init)
  * ═══════════════════════════════════════════════════════════════════════ */
 
-#define HASH_BUCKETS 4096
+#define HASH_BUCKETS 8192
 
 typedef struct HashEntry {
     char uci[6];
@@ -84,18 +84,7 @@ static int vocab_lookup(const char *uci) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- *  Elo → category mapping  (matches Flutter MaiaTensor._mapToCategory)
- *  Bins: <1100=0, 1100-1199=1, … , 1900-1999=9, >=2000=10
- * ═══════════════════════════════════════════════════════════════════════ */
-
-static int elo_to_category(int elo) {
-    if (elo < 1100) return 0;
-    if (elo >= 2000) return 10;
-    return 1 + (elo - 1100) / 100;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
- *  FEN mirroring  (matches Flutter MaiaTensor.mirrorFEN)
+ *  FEN mirroring  (matches TypeScript mirrorFEN)
  *  Flips the board vertically and swaps piece colors so the model
  *  always sees the position from White's perspective.
  * ═══════════════════════════════════════════════════════════════════════ */
@@ -202,23 +191,20 @@ static void mirror_uci_move(const char *uci, char *out) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- *  Board → tensor  (matches Flutter MaiaTensor.boardToTensor)
- *  18 channels × 8 × 8 = 1152 floats
- *    ch  0-11: piece planes (P,N,B,R,Q,K,p,n,b,r,q,k)
- *    ch 12:    turn (all 1s if white)
- *    ch 13-16: castling rights (K,Q,k,q)
- *    ch 17:    en-passant target
+ *  Board → tensor  (Maia-3 format)
+ *  64 squares × 12 piece channels = 768 floats
+ *  Layout: for each square (rank-major, a1=0), 12-element one-hot
+ *  Piece order: P,N,B,R,Q,K,p,n,b,r,q,k
  * ═══════════════════════════════════════════════════════════════════════ */
 
-#define TENSOR_SIZE (18 * 64)
+#define MAIA3_TENSOR_SIZE (64 * 12)
 
 static const char PIECE_CHARS[] = "PNBRQKpnbrqk";
 
-static void board_to_tensor(const char *fen, float *tensor) {
-    memset(tensor, 0, TENSOR_SIZE * sizeof(float));
+static void board_to_maia3_tokens(const char *fen, float *tensor) {
+    memset(tensor, 0, MAIA3_TENSOR_SIZE * sizeof(float));
 
     const char *p = fen;
-    /* Parse piece placement */
     for (int fen_rank = 0; fen_rank < 8; fen_rank++) {
         int row = 7 - fen_rank;
         int file = 0;
@@ -228,51 +214,15 @@ static void board_to_tensor(const char *fen, float *tensor) {
             } else {
                 const char *idx = strchr(PIECE_CHARS, *p);
                 if (idx) {
-                    int ch = (int)(idx - PIECE_CHARS);
-                    tensor[ch * 64 + row * 8 + file] = 1.0f;
+                    int piece_idx = (int)(idx - PIECE_CHARS);
+                    int square = row * 8 + file;
+                    tensor[square * 12 + piece_idx] = 1.0f;
                 }
                 file++;
             }
             p++;
         }
         if (*p == '/') p++;
-    }
-
-    /* Skip to active color field */
-    while (*p == ' ') p++;
-    char active = *p++;
-
-    /* Channel 12: turn */
-    float turn_val = (active == 'w') ? 1.0f : 0.0f;
-    for (int i = 0; i < 64; i++)
-        tensor[12 * 64 + i] = turn_val;
-
-    /* Skip to castling field */
-    while (*p == ' ') p++;
-    const char *castling_start = p;
-    while (*p && *p != ' ') p++;
-
-    /* Channels 13-16: castling rights */
-    const char rights[] = "KQkq";
-    for (int i = 0; i < 4; i++) {
-        if (memchr(castling_start, rights[i], p - castling_start)) {
-            int ch_start = (13 + i) * 64;
-            for (int j = 0; j < 64; j++)
-                tensor[ch_start + j] = 1.0f;
-        }
-    }
-
-    /* Skip to en-passant field */
-    while (*p == ' ') p++;
-
-    /* Channel 17: en-passant */
-    if (*p != '-' && *p >= 'a' && *p <= 'h') {
-        int ep_file = *p - 'a'; p++;
-        if (*p >= '1' && *p <= '8') {
-            int ep_rank = *p - '1';
-            int row = 7 - ep_rank;
-            tensor[17 * 64 + row * 8 + ep_file] = 1.0f;
-        }
     }
 }
 
@@ -323,7 +273,7 @@ static void build_legal_mask(const char *fen, float *mask) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- *  Softmax over masked logits (matches Flutter _processLogits)
+ *  Softmax over masked logits
  * ═══════════════════════════════════════════════════════════════════════ */
 
 typedef struct { int index; double prob; } IndexProb;
@@ -336,7 +286,6 @@ static int cmp_prob_desc(const void *a, const void *b) {
 
 static int masked_softmax(const float *logits, const float *mask, int n,
                           IndexProb *out, int max_out) {
-    /* Collect legal logits */
     int count = 0;
     double max_logit = -1e30;
     int legal_indices[256];
@@ -353,7 +302,6 @@ static int masked_softmax(const float *logits, const float *mask, int n,
     }
     if (count == 0) return 0;
 
-    /* Softmax */
     double sum = 0.0;
     double probs[256];
     for (int i = 0; i < count; i++) {
@@ -363,7 +311,6 @@ static int masked_softmax(const float *logits, const float *mask, int n,
     for (int i = 0; i < count; i++)
         probs[i] /= sum;
 
-    /* Build output array */
     int out_count = count < max_out ? count : max_out;
     IndexProb temp[256];
     for (int i = 0; i < count; i++) {
@@ -374,6 +321,23 @@ static int masked_softmax(const float *logits, const float *mask, int n,
 
     memcpy(out, temp, out_count * sizeof(IndexProb));
     return out_count;
+}
+
+/* WDL logits → win probability (white perspective) */
+static double process_wdl(const float *wdl, bool is_black) {
+    double max_w = wdl[0];
+    if (wdl[1] > max_w) max_w = wdl[1];
+    if (wdl[2] > max_w) max_w = wdl[2];
+
+    double exp_l = exp(wdl[0] - max_w);
+    double exp_d = exp(wdl[1] - max_w);
+    double exp_w = exp(wdl[2] - max_w);
+    double sum = exp_l + exp_d + exp_w;
+
+    double win_prob = (exp_w + 0.5 * exp_d) / sum;
+    if (is_black) win_prob = 1.0 - win_prob;
+
+    return win_prob;
 }
 
 #endif /* HAVE_ONNXRUNTIME — end of inference helpers */
@@ -460,7 +424,7 @@ MaiaContext *maia_create(const char *model_path) {
     }
 
     ctx->ready = true;
-    fprintf(stderr, "Maia model loaded: %s\n", model_path);
+    fprintf(stderr, "Maia-3 model loaded: %s\n", model_path);
     return ctx;
 
 #else
@@ -508,13 +472,13 @@ bool maia_evaluate(MaiaContext *ctx, const char *fen, int elo,
         strncpy(processed_fen, fen, sizeof(processed_fen) - 1);
     processed_fen[sizeof(processed_fen) - 1] = '\0';
 
-    /* 1. Board tensor [1, 18, 8, 8] */
-    float board_tensor[TENSOR_SIZE];
-    board_to_tensor(processed_fen, board_tensor);
+    /* 1. Board tensor [1, 64, 12] */
+    float board_tensor[MAIA3_TENSOR_SIZE];
+    board_to_maia3_tokens(processed_fen, board_tensor);
 
-    /* 2. Elo categories */
-    int64_t elo_self_cat = elo_to_category(elo);
-    int64_t elo_oppo_cat = elo_self_cat;
+    /* 2. Elo as continuous floats */
+    float elo_self_f = (float)elo;
+    float elo_oppo_f = (float)elo;
 
     /* 3. Legal-move mask (on the processed/mirrored FEN) */
     float legal_mask[MAIA_VOCAB_SIZE];
@@ -524,19 +488,19 @@ bool maia_evaluate(MaiaContext *ctx, const char *fen, int elo,
     const OrtApi *api = ctx->api;
     OrtStatus *status;
 
-    int64_t board_shape[] = {1, 18, 8, 8};
+    int64_t board_shape[] = {1, 64, 12};
     int64_t elo_shape[]   = {1};
 
     OrtValue *board_val = NULL, *elo_self_val = NULL, *elo_oppo_val = NULL;
 
     status = api->CreateTensorWithDataAsOrtValue(
         ctx->memory_info, board_tensor, sizeof(board_tensor),
-        board_shape, 4, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &board_val);
+        board_shape, 3, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &board_val);
     if (status) { api->ReleaseStatus(status); return false; }
 
     status = api->CreateTensorWithDataAsOrtValue(
-        ctx->memory_info, &elo_self_cat, sizeof(int64_t),
-        elo_shape, 1, ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &elo_self_val);
+        ctx->memory_info, &elo_self_f, sizeof(float),
+        elo_shape, 1, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &elo_self_val);
     if (status) {
         api->ReleaseStatus(status);
         api->ReleaseValue(board_val);
@@ -544,8 +508,8 @@ bool maia_evaluate(MaiaContext *ctx, const char *fen, int elo,
     }
 
     status = api->CreateTensorWithDataAsOrtValue(
-        ctx->memory_info, &elo_oppo_cat, sizeof(int64_t),
-        elo_shape, 1, ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64, &elo_oppo_val);
+        ctx->memory_info, &elo_oppo_f, sizeof(float),
+        elo_shape, 1, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &elo_oppo_val);
     if (status) {
         api->ReleaseStatus(status);
         api->ReleaseValue(board_val);
@@ -553,15 +517,15 @@ bool maia_evaluate(MaiaContext *ctx, const char *fen, int elo,
         return false;
     }
 
-    /* Run inference */
-    const char *input_names[]  = {"boards", "elo_self", "elo_oppo"};
-    const char *output_names[] = {"logits_maia"};
+    /* Run inference — 2 outputs: logits_move + logits_value */
+    const char *input_names[]  = {"tokens", "elo_self", "elo_oppo"};
+    const char *output_names[] = {"logits_move", "logits_value"};
     const OrtValue *inputs[]   = {board_val, elo_self_val, elo_oppo_val};
-    OrtValue *output = NULL;
+    OrtValue *outputs[2] = {NULL, NULL};
 
     status = api->Run(ctx->session, NULL,
                       input_names, inputs, 3,
-                      output_names, 1, &output);
+                      output_names, 2, outputs);
 
     api->ReleaseValue(board_val);
     api->ReleaseValue(elo_self_val);
@@ -573,13 +537,24 @@ bool maia_evaluate(MaiaContext *ctx, const char *fen, int elo,
         return false;
     }
 
-    /* Extract logits */
+    /* Extract policy logits */
     float *logits = NULL;
-    status = api->GetTensorMutableData(output, (void **)&logits);
+    status = api->GetTensorMutableData(outputs[0], (void **)&logits);
     if (status || !logits) {
         if (status) api->ReleaseStatus(status);
-        api->ReleaseValue(output);
+        api->ReleaseValue(outputs[0]);
+        if (outputs[1]) api->ReleaseValue(outputs[1]);
         return false;
+    }
+
+    /* Extract WDL value logits */
+    float *wdl = NULL;
+    if (outputs[1]) {
+        status = api->GetTensorMutableData(outputs[1], (void **)&wdl);
+        if (status) {
+            api->ReleaseStatus(status);
+            wdl = NULL;
+        }
     }
 
     /* Softmax over legal moves */
@@ -587,7 +562,15 @@ bool maia_evaluate(MaiaContext *ctx, const char *fen, int elo,
     int n = masked_softmax(logits, legal_mask, MAIA_VOCAB_SIZE,
                            ranked, MAIA_MAX_MOVES);
 
-    api->ReleaseValue(output);
+    /* Process WDL */
+    if (wdl) {
+        response->win_prob = process_wdl(wdl, is_black);
+    } else {
+        response->win_prob = 0.5;
+    }
+
+    api->ReleaseValue(outputs[0]);
+    if (outputs[1]) api->ReleaseValue(outputs[1]);
 
     /* Build response, un-mirroring if needed */
     for (int i = 0; i < n; i++) {

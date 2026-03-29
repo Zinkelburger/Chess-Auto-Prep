@@ -96,6 +96,7 @@ typedef struct TreeNode {
      */
     double local_cpl;
     double accumulated_eca;
+    int    subtree_depth;               /* Max ply below this node (0 for leaves) */
     bool   has_eca;                     /* Whether ECA values have been computed */
 
     /* Engine-injected flag: this move was added as the engine's top-1 best

@@ -3,6 +3,11 @@ import 'dart:typed_data';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 
+/// Maia-3 tensor preprocessing.
+///
+/// Board encoding: (64, 12) per-square one-hot piece channels.
+/// Elo: continuous float (not categorical).
+/// Move vocabulary: 4352 (64×64 grid + 256 promotions).
 class MaiaTensor {
   static Map<String, int> _allMoves = {};
   static Map<int, String> _allMovesReversed = {};
@@ -12,14 +17,17 @@ class MaiaTensor {
     if (_initialized) return;
 
     try {
-      final movesJson = await rootBundle.loadString('assets/data/all_moves.json');
-      final movesRevJson = await rootBundle.loadString('assets/data/all_moves_reversed.json');
+      final movesJson =
+          await rootBundle.loadString('assets/data/all_moves_maia3.json');
+      final movesRevJson = await rootBundle
+          .loadString('assets/data/all_moves_maia3_reversed.json');
 
       final Map<String, dynamic> movesMap = json.decode(movesJson);
       _allMoves = movesMap.map((key, value) => MapEntry(key, value as int));
 
       final Map<String, dynamic> movesRevMap = json.decode(movesRevJson);
-      _allMovesReversed = movesRevMap.map((key, value) => MapEntry(int.parse(key), value as String));
+      _allMovesReversed =
+          movesRevMap.map((key, value) => MapEntry(int.parse(key), value as String));
 
       _initialized = true;
     } catch (e) {
@@ -27,84 +35,35 @@ class MaiaTensor {
     }
   }
 
-  static Float32List boardToTensor(String fen) {
-    final tokens = fen.split(' ');
-    final piecePlacement = tokens[0];
-    final activeColor = tokens[1];
-    final castlingAvailability = tokens[2];
-    final enPassantTarget = tokens[3];
-
+  /// Maia-3 board tensor: (64, 12) flattened = 768 floats.
+  /// Each square gets a 12-element one-hot vector for the piece on it.
+  /// Piece order: P,N,B,R,Q,K,p,n,b,r,q,k (indices 0-11).
+  static Float32List boardToMaia3Tokens(String fen) {
+    final piecePlacement = fen.split(' ')[0];
     const pieceTypes = [
       'P', 'N', 'B', 'R', 'Q', 'K',
       'p', 'n', 'b', 'r', 'q', 'k'
     ];
 
-    // 18 channels: 12 for pieces, 1 for turn, 4 for castling, 1 for en passant
-    final tensor = Float32List((12 + 6) * 8 * 8);
-
+    final tensor = Float32List(64 * 12);
     final rows = piecePlacement.split('/');
 
-    // Fill piece channels (0-11)
     for (int rank = 0; rank < 8; rank++) {
       final row = 7 - rank;
       int file = 0;
       for (int i = 0; i < rows[rank].length; i++) {
         final char = rows[rank][i];
-        if (int.tryParse(char) != null) {
-          file += int.parse(char);
+        final digit = int.tryParse(char);
+        if (digit != null) {
+          file += digit;
         } else {
-          final index = pieceTypes.indexOf(char);
-          if (index != -1) {
-            final tensorIndex = index * 64 + row * 8 + file;
-            tensor[tensorIndex] = 1.0;
+          final pieceIdx = pieceTypes.indexOf(char);
+          if (pieceIdx >= 0) {
+            final square = row * 8 + file;
+            tensor[square * 12 + pieceIdx] = 1.0;
           }
-          file += 1;
+          file++;
         }
-      }
-    }
-
-    // Channel 12: Turn (White = 1.0, Black = 0.0)
-    final turnChannelStart = 12 * 64;
-    final turnValue = activeColor == 'w' ? 1.0 : 0.0;
-    for (int i = turnChannelStart; i < turnChannelStart + 64; i++) {
-      tensor[i] = turnValue;
-    }
-
-    // Channel 13-16: Castling Rights
-    final rights = [
-      castlingAvailability.contains('K'),
-      castlingAvailability.contains('Q'),
-      castlingAvailability.contains('k'),
-      castlingAvailability.contains('q')
-    ];
-
-    for (int i = 0; i < 4; i++) {
-      if (rights[i]) {
-        final channelStart = (13 + i) * 64;
-        for (int j = channelStart; j < channelStart + 64; j++) {
-          tensor[j] = 1.0;
-        }
-      }
-    }
-
-    // Channel 17: En Passant Target
-    final epChannelStart = 17 * 64;
-    if (enPassantTarget != '-') {
-      final file = enPassantTarget.codeUnitAt(0) - 'a'.codeUnitAt(0);
-      final rank = int.parse(enPassantTarget[1]) - 1;
-      final row = 7 - rank; // Invert rank to match tensor indexing (0 is bottom/rank 1)
-      // Note: The TS code does 'row = 7 - rank' and 'rank = parseInt(...) - 1'.
-      // If target is e3 (rank 2, index 2), rank var is 2. row = 7-2 = 5.
-      // Let's double check TS logic:
-      // const rank = parseInt(enPassantTarget[1], 10) - 1 // '3' -> 2
-      // const row = 7 - rank // 7 - 2 = 5
-      // Wait, chess board usually rank 0 is 1. 
-      // Let's stick to porting the TS logic exactly.
-      
-      // TS: const index = epChannel + row * 8 + file
-      final index = epChannelStart + row * 8 + file;
-      if (index >= epChannelStart && index < epChannelStart + 64) {
-        tensor[index] = 1.0;
       }
     }
 
@@ -114,8 +73,6 @@ class MaiaTensor {
   static Map<String, dynamic> preprocess(String fen, int eloSelf, int eloOppo) {
     if (!_initialized) throw Exception('MaiaTensor not initialized');
 
-    // Handle mirroring if it's black's turn
-    // The model is trained on White's perspective
     Position position;
     try {
       position = Chess.fromSetup(Setup.parseFen(fen));
@@ -134,19 +91,10 @@ class MaiaTensor {
       }
     }
 
-    // Convert board to tensor
-    final boardInput = boardToTensor(processedFen);
+    final boardInput = boardToMaia3Tokens(processedFen);
 
-    // Map Elo to categories
-    final eloDict = _createEloDict();
-    final eloSelfCategory = _mapToCategory(eloSelf, eloDict);
-    final eloOppoCategory = _mapToCategory(eloOppo, eloDict);
-
-    // Generate legal moves tensor (mask)
-    // Size should match the output size of the model (all possible moves)
     final legalMoves = Float32List(_allMoves.length);
 
-    // Iterate position.legalMoves: IMap<Square, SquareSet>
     for (final entry in position.legalMoves.entries) {
       final fromSq = entry.key;
       final targets = entry.value;
@@ -178,10 +126,10 @@ class MaiaTensor {
 
     return {
       'boardInput': boardInput,
-      'eloSelfCategory': eloSelfCategory,
-      'eloOppoCategory': eloOppoCategory,
+      'eloSelf': eloSelf.toDouble(),
+      'eloOppo': eloOppo.toDouble(),
       'legalMoves': legalMoves,
-      'isBlack': isBlack, // Pass this along to un-mirror output
+      'isBlack': isBlack,
     };
   }
 
@@ -193,45 +141,7 @@ class MaiaTensor {
         _ => '',
       };
 
-  static Map<String, int> _createEloDict() {
-    const interval = 100;
-    const start = 1100;
-    const end = 2000;
-
-    final Map<String, int> eloDict = {'<$start': 0};
-    int rangeIndex = 1;
-
-    for (int lowerBound = start; lowerBound < end; lowerBound += interval) {
-      final upperBound = lowerBound + interval;
-      eloDict['$lowerBound-${upperBound - 1}'] = rangeIndex;
-      rangeIndex += 1;
-    }
-
-    eloDict['>=$end'] = rangeIndex;
-    return eloDict;
-  }
-
-  static int _mapToCategory(int elo, Map<String, int> eloDict) {
-    const interval = 100;
-    const start = 1100;
-    const end = 2000;
-
-    if (elo < start) {
-      return eloDict['<$start']!;
-    } else if (elo >= end) {
-      return eloDict['>=$end']!;
-    } else {
-      for (int lowerBound = start; lowerBound < end; lowerBound += interval) {
-        final upperBound = lowerBound + interval;
-        if (elo >= lowerBound && elo < upperBound) {
-          return eloDict['$lowerBound-${upperBound - 1}']!;
-        }
-      }
-    }
-    throw Exception('Elo value is out of range.');
-  }
-
-  // --- Mirroring Logic (Ported from TS) ---
+  // --- Mirroring Logic ---
 
   static String mirrorFEN(String fen) {
     final tokens = fen.split(' ');
@@ -243,12 +153,14 @@ class MaiaTensor {
     final fullmove = tokens.length > 5 ? tokens[5] : '1';
 
     final ranks = position.split('/');
-    final mirroredRanks = ranks.reversed.map((rank) => _swapColorsInRank(rank)).toList();
+    final mirroredRanks =
+        ranks.reversed.map((rank) => _swapColorsInRank(rank)).toList();
     final mirroredPosition = mirroredRanks.join('/');
 
     final mirroredActiveColor = activeColor == 'w' ? 'b' : 'w';
     final mirroredCastling = _swapCastlingRights(castling);
-    final mirroredEnPassant = enPassant != '-' ? _mirrorSquare(enPassant) : '-';
+    final mirroredEnPassant =
+        enPassant != '-' ? _mirrorSquare(enPassant) : '-';
 
     return '$mirroredPosition $mirroredActiveColor $mirroredCastling $mirroredEnPassant $halfmove $fullmove';
   }
@@ -258,14 +170,12 @@ class MaiaTensor {
     for (int i = 0; i < rank.length; i++) {
       final char = rank[i];
       if (char.toUpperCase() != char.toLowerCase()) {
-        // It's a letter
         if (char == char.toUpperCase()) {
           buffer.write(char.toLowerCase());
         } else {
           buffer.write(char.toUpperCase());
         }
       } else {
-        // Number or other
         buffer.write(char);
       }
     }
@@ -274,7 +184,7 @@ class MaiaTensor {
 
   static String _swapCastlingRights(String castling) {
     if (castling == '-') return '-';
-    
+
     final rights = castling.split('').toSet();
     final swapped = <String>{};
 
@@ -305,27 +215,8 @@ class MaiaTensor {
 
     return '${_mirrorSquare(startSquare)}${_mirrorSquare(endSquare)}$promotion';
   }
-  
+
   static String getMoveFromIndex(int index) {
     return _allMovesReversed[index] ?? '';
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

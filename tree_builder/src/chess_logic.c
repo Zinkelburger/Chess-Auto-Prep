@@ -296,6 +296,28 @@ void position_to_fen(const ChessPosition *pos, char *fen, size_t max_len) {
 }
 
 
+/* ========== Castling UCI normalization ========== */
+
+void normalize_castling_uci(const ChessPosition *pos, char *uci) {
+    if (!pos || !uci || strlen(uci) < 4) return;
+
+    int from_file = char_to_file(uci[0]);
+    int from_rank = char_to_rank(uci[1]);
+    int to_file   = char_to_file(uci[2]);
+    if (from_file < 0 || from_rank < 0 || to_file < 0) return;
+
+    int8_t piece = pos->board[from_rank][from_file];
+    if (abs_piece(piece) != 6) return; /* not a king */
+
+    /* e1h1 → e1g1  (white kingside)  */
+    /* e1a1 → e1c1  (white queenside) */
+    /* e8h8 → e8g8  (black kingside)  */
+    /* e8a8 → e8c8  (black queenside) */
+    if (from_file == 4 && to_file == 7)      uci[2] = 'g'; /* h→g */
+    else if (from_file == 4 && to_file == 0) uci[2] = 'c'; /* a→c */
+}
+
+
 /* ========== UCI Move Application ========== */
 
 bool position_apply_uci(ChessPosition *pos, const char *uci) {
@@ -303,12 +325,18 @@ bool position_apply_uci(ChessPosition *pos, const char *uci) {
     
     size_t len = strlen(uci);
     if (len < 4 || len > 5) return false;
-    
+
+    /* Work on a mutable copy so we can normalize castling in-place */
+    char norm[8];
+    memcpy(norm, uci, len);
+    norm[len] = '\0';
+    normalize_castling_uci(pos, norm);
+
     /* Parse source and target squares */
-    int from_file = char_to_file(uci[0]);
-    int from_rank = char_to_rank(uci[1]);
-    int to_file   = char_to_file(uci[2]);
-    int to_rank   = char_to_rank(uci[3]);
+    int from_file = char_to_file(norm[0]);
+    int from_rank = char_to_rank(norm[1]);
+    int to_file   = char_to_file(norm[2]);
+    int to_rank   = char_to_rank(norm[3]);
     
     if (from_file < 0 || from_rank < 0 || to_file < 0 || to_rank < 0) {
         return false;
@@ -355,7 +383,7 @@ bool position_apply_uci(ChessPosition *pos, const char *uci) {
     /* Handle promotion */
     int8_t promotion_piece = EMPTY;
     if (len == 5) {
-        char promo_char = tolower(uci[4]);
+        char promo_char = tolower(norm[4]);
         bool is_white = piece_is_white(piece);
         switch (promo_char) {
             case 'q': promotion_piece = is_white ? W_QUEEN  : B_QUEEN;  break;

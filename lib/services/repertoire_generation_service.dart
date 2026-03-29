@@ -744,8 +744,8 @@ class RepertoireGenerationService {
     if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
       return const [];
     }
-    final maia = await MaiaFactory.instance!.evaluate(fen, maiaElo);
-    final sorted = maia.entries.toList()
+    final maiaResult = await MaiaFactory.instance!.evaluate(fen, maiaElo);
+    final sorted = maiaResult.policy.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return sorted
         .where((e) => e.value >= _kMinLikelyPlayRate / 100.0)
@@ -770,9 +770,9 @@ class RepertoireGenerationService {
     if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
       return out;
     }
-    final maia = await MaiaFactory.instance!.evaluate(fen, maiaElo);
-    if (maia.isEmpty) return out;
-    final sorted = maia.entries.toList()
+    final maiaResult = await MaiaFactory.instance!.evaluate(fen, maiaElo);
+    if (maiaResult.policy.isEmpty) return out;
+    final sorted = maiaResult.policy.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     for (final e in sorted) {
       if (e.value < kMinOpponentPlayFraction) continue;

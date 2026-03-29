@@ -9,8 +9,8 @@ interleaved DFS that builds the tree and evaluates positions simultaneously:
    together — engine MultiPV for our-move candidates, Lichess DB + Maia
    supplement for opponent responses, with eval-window pruning at every node
 2. Computing **ease scores** (legacy compatibility with the Flutter app)
-3. Computing **ECA (Expected Centipawn Advantage)** — a win-probability-delta
-   metric estimating how much win probability opponents hand us on average
+3. Computing **ECA (Expected Centipawn Advantage)** — estimating how many
+   centipawns opponents hand us per turn due to suboptimal play
 4. **Selecting** repertoire moves using a blended score of eval and ECA
 5. Extracting complete lines and exporting to JSON/PGN
 
@@ -131,6 +131,16 @@ building resumes from unexplored leaves. Nodes with children or marked
 **Evals are cached.** Every evaluation is stored in SQLite so re-runs skip
 already-evaluated positions. The DB also caches Lichess explorer responses.
 
+**Transposition detection.** A FEN hash set tracks every position that has
+been fully expanded during the build. When a position is reached via a
+different move order, the node gets its eval from the DB cache but is not
+expanded again — it becomes a leaf. This prevents duplicated subtrees and
+keeps the tree size proportional to the number of *unique* positions rather
+than the number of paths. The tree remains a tree (not a DAG), so
+serialization and traversal are unchanged. On resume, existing nodes
+re-register their FENs in the set so transpositions are still detected for
+newly expanded branches.
+
 #### Maia Neural Network Integration
 
 Maia supplements Lichess data at opponent-move nodes, filling in mass that
@@ -141,6 +151,8 @@ Lichess couldn't cover. It triggers when all of:
 - `node.cumulative_probability >= maia_threshold` (default 0.01 = 1%)
 
 Maia moves already present from Lichess are skipped (dedup by UCI).
+All child creation goes through `make_child()` which also rejects
+duplicates by resulting FEN as a safety net.
 Maia moves below `maia_min_prob` (default 0.02 = 2%) are discarded.
 
 With `--maia-only`, Lichess is skipped entirely and the `maia_threshold`
@@ -192,38 +204,32 @@ Children with `move_probability < 0.01` (1%) are excluded.
 
 ---
 
-## ECA: Expected Centipawn Advantage (Win-Probability-Delta Units)
+## ECA: Expected Centipawn Advantage
 
 ### Concept
 
-ECA measures: "If I play this line, how much win probability will my opponent
-hand me on average due to suboptimal play?"
+ECA measures: "If I play this line, how many centipawns will my opponent
+hand me on average per opponent turn, due to suboptimal play?"
 
-Everything is measured in win-probability-delta units [0, ~0.5] from the
-bottom of the tree to the top. One number per node, one formula, no
-normalization.
-
-### Win Probability Function
-
-The Lichess-calibrated sigmoid:
-
-```
-wp(cp) = 1 / (1 + e^(-0.00368208 × cp))
-```
-
-Maps centipawns to [0, 1] from White's perspective. A 50cp blunder near
-equality (0.50 → 0.55 wp) contributes ~0.046 wp-delta. The same 50cp
-blunder when already up 300cp (0.75 → 0.77 wp) contributes only ~0.016.
+Everything is in centipawn units. `local_cpl` is computed bottom-up
+at each node, then `accumulated_eca` aggregates the signal through the
+tree. At selection time, accumulated ECA is normalized by opponent ply
+count so deep and shallow lines are compared on the same scale.
 
 ### Local Trickiness (local_cpl)
 
-```
-wp_for_mover(child) = 1 - wp(child.engine_eval_cp)
+At opponent-move nodes, `child.engine_eval_cp` is eval for the side to
+move (us, since the opponent just played). The opponent's best move
+minimises our eval:
 
-best_wp   = max(wp_for_mover(child) for all children with evals)
-local_cpl = Σ(prob_i × max(0, best_wp - wp_for_mover(child_i)))
-            for children with move_probability >= 0.01
 ```
+best_opp_cp = min(child.engine_eval_cp for all children with evals)
+local_cpl   = Σ(prob_i × max(0, child_i.engine_eval_cp - best_opp_cp))
+              for children with move_probability >= 0.01
+```
+
+`local_cpl` is the expected centipawn gift the opponent hands us at this
+node by playing popular moves instead of their best move.
 
 ### Bottom-Up Accumulation
 
@@ -232,10 +238,8 @@ Post-order DFS with the full `RepertoireConfig` for filter consistency:
 - **Leaf nodes**: `accumulated_eca = γ^d × local_cpl`
 - **Opponent-move nodes**:
   `accumulated_eca = γ^d × local_cpl + Σ(prob_i × child_i.accumulated_eca)`
-- **Our-move nodes**: Select the child using the blended score
-  `α × wp_us(child.eval) + (1-α) × child.accumulated_eca`, with eval-guard
-  and max-eval-loss filters applied. Propagate the selected child's
-  `accumulated_eca` upward.
+- **Our-move nodes**: Select the child using the blended score (see Move
+  Selection below). Propagate the selected child's `accumulated_eca`.
 
 A shared helper `score_our_move_children()` is used by both accumulation
 and selection to guarantee consistency.
@@ -245,14 +249,23 @@ and selection to guarantee consistency.
 At our-move nodes during the top-down traversal:
 
 ```
-for each child (after eval-guard and max-eval-loss filtering,
+for each child (after max-eval-loss filtering,
                 with "if all fail, re-score all" fallback):
-    score = α × wp_us(child.eval) + (1-α) × child.accumulated_eca
+    opp_plies = 1 + subtree_depth / 2
+    avg_cpl   = child.accumulated_eca / opp_plies
+    score     = eval_us_cp(child) + eval_weight × avg_cpl
 
 select argmax(score)
 ```
 
-This is **identical** to what the accumulation phase computed.
+The `opp_plies` denominator estimates how many opponent turns exist
+below the child. This normalizes accumulated CPL to "average centipawns
+gifted per opponent turn" so deep and shallow lines are scored fairly.
+Raw accumulated CPL always grows with depth; dividing by opponent plies
+makes it stable.
+
+Both terms are in centipawn units. `eval_weight` controls how much
+trickiness matters relative to objective eval.
 
 At opponent-move nodes, all children above the probability threshold are
 recursed into. The DFS also stops at eval-window boundaries.
@@ -262,6 +275,21 @@ recursed into. The DFS also stops at eval-window boundaries.
 Follow selected repertoire moves through the tree. At our-move nodes, only
 the selected move is followed. At opponent-move nodes, all likely responses
 are followed. Lines always end with the repertoire side's move.
+
+### Castling UCI Normalization
+
+The Lichess Explorer API returns castling in "king captures rook" notation
+(`e1h1`, `e1a1`, `e8h8`, `e8a8`) while Stockfish uses "king destination"
+notation (`e1g1`, `e1c1`, `e8g8`, `e8c8`). The tree builder normalizes
+all castling UCI to king-destination form at three levels:
+
+1. **Lichess responses** — normalized in `build_opponent_move()` and
+   `build_our_move()` before any downstream use.
+2. **`position_apply_uci()`** — normalizes internally so FEN generation
+   is always correct regardless of input format.
+3. **`make_child()` FEN dedup** — rejects a new child if a sibling with
+   the same resulting FEN already exists, catching any representation
+   mismatch that UCI-level dedup might miss.
 
 ---
 
@@ -319,8 +347,7 @@ are followed. Lines always end with the repertoire side's move.
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
 | `depth_discount` | `--depth-decay` | 1.0 | Depth discount for ECA |
-| `eval_weight` | `--eval-weight` | 0.40 | Blend ratio (0 = trickiness, 1 = eval) |
-| `eval_guard_threshold` | `--eval-guard` | 0.35 | Min win probability to consider a move |
+| `eval_weight` | `--eval-weight` | 0.40 | Multiplier on avg CPL per opponent turn in the blended score |
 
 ### What Each Parameter Does Intuitively
 
@@ -345,13 +372,10 @@ are followed. Lines always end with the repertoire side's move.
   Safety net — rarely hit when the mass target is doing its job. Raise to
   8-10 for more thorough preparation.
 
-- **`eval_weight`**: "How much do I trust objective eval vs trickiness?"
-  At 0.40, a move needs both good eval AND high ECA. Raise toward 1.0 for
-  principled repertoires. Lower toward 0.0 for tricky lines.
-
-- **`eval_guard`**: "How bad of a position are we willing to accept for
-  trickiness?" At 0.35, we'd play a line with only 35% win probability if
-  it's tricky enough.
+- **`eval_weight`**: "How much should trickiness boost the score?"
+  Multiplied against average CPL per opponent turn and added to eval.
+  At 0.0, selection is purely by objective eval. Higher values reward
+  lines where the opponent is more likely to blunder.
 
 - **`min/max_eval_cp`**: "What eval range should we explore?" Stops the DFS
   when positions are too bad (lost cause) or too good (already winning,
@@ -381,7 +405,7 @@ tree_builder/
 │   ├── engine_pool.h   # Multithreaded Stockfish (batch + MultiPV)
 │   ├── database.h      # SQLite caching layer
 │   ├── serialization.h # JSON import/export
-│   ├── chess_logic.h   # FEN parsing, UCI move application
+│   ├── chess_logic.h   # FEN parsing, UCI move application, castling normalization
 │   ├── maia.h          # Maia neural network (ONNX Runtime)
 │   └── thread_pool.h   # Generic thread pool
 ├── src/
@@ -393,7 +417,7 @@ tree_builder/
 │   ├── engine_pool.c   # Stockfish process pool (fork/pipe, MultiPV)
 │   ├── database.c      # SQLite operations
 │   ├── serialization.c # JSON serialization
-│   ├── chess_logic.c   # Minimal chess rules for FEN/UCI
+│   ├── chess_logic.c   # Minimal chess rules for FEN/UCI, castling normalization
 │   ├── maia.c          # ONNX Runtime inference
 │   ├── thread_pool.c   # Thread pool implementation
 │   ├── cJSON.c         # JSON library (vendored)
@@ -436,11 +460,11 @@ tree_builder/
               tree_calculate_ease()  → ease [0, 1]
                            │
                            ▼
-              tree_calculate_eca()   → accumulated_eca (wp-delta)
+              tree_calculate_eca()   → accumulated_eca (centipawns)
                            │
                            ▼
               build_repertoire_recursive()
-                  Our nodes: α × eval + (1-α) × acc_eca
+                  Our nodes: eval + weight × avg_cpl_per_opp_turn
                   Opp nodes: traverse all children
                            │
                            ▼

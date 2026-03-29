@@ -23,6 +23,75 @@
 #include <math.h>
 
 
+/* ========== FEN Hash Set (transposition detection during build) ========== */
+
+#define FEN_SET_INITIAL_BUCKETS 4096
+
+typedef struct FenSetEntry {
+    char *fen;
+    struct FenSetEntry *next;
+} FenSetEntry;
+
+typedef struct FenSet {
+    FenSetEntry **buckets;
+    size_t num_buckets;
+    size_t count;
+} FenSet;
+
+static uint32_t fen_hash(const char *fen, size_t num_buckets) {
+    uint32_t hash = 2166136261u;
+    for (const char *p = fen; *p; p++) {
+        hash ^= (uint8_t)*p;
+        hash *= 16777619u;
+    }
+    return hash % (uint32_t)num_buckets;
+}
+
+static FenSet *fen_set_create(void) {
+    FenSet *set = (FenSet *)calloc(1, sizeof(FenSet));
+    if (!set) return NULL;
+    set->num_buckets = FEN_SET_INITIAL_BUCKETS;
+    set->buckets = (FenSetEntry **)calloc(set->num_buckets, sizeof(FenSetEntry *));
+    if (!set->buckets) { free(set); return NULL; }
+    return set;
+}
+
+static void fen_set_destroy(FenSet *set) {
+    if (!set) return;
+    for (size_t i = 0; i < set->num_buckets; i++) {
+        FenSetEntry *e = set->buckets[i];
+        while (e) {
+            FenSetEntry *next = e->next;
+            free(e->fen);
+            free(e);
+            e = next;
+        }
+    }
+    free(set->buckets);
+    free(set);
+}
+
+static bool fen_set_contains(const FenSet *set, const char *fen) {
+    if (!set) return false;
+    uint32_t idx = fen_hash(fen, set->num_buckets);
+    for (FenSetEntry *e = set->buckets[idx]; e; e = e->next) {
+        if (strcmp(e->fen, fen) == 0) return true;
+    }
+    return false;
+}
+
+static void fen_set_add(FenSet *set, const char *fen) {
+    if (!set || fen_set_contains(set, fen)) return;
+    uint32_t idx = fen_hash(fen, set->num_buckets);
+    FenSetEntry *e = (FenSetEntry *)malloc(sizeof(FenSetEntry));
+    if (!e) return;
+    e->fen = strdup(fen);
+    e->next = set->buckets[idx];
+    set->buckets[idx] = e;
+    set->count++;
+}
+
+
 /* Ease calculation constants (matching the Flutter/Python implementation) */
 #define EASE_ALPHA (1.0/3.0)
 #define EASE_BETA  1.5
@@ -103,10 +172,18 @@ void tree_destroy(Tree *tree) {
 
 /* ========== Build helpers ========== */
 
-/** Create a child node from a FEN, add it to the tree. */
+/** Create a child node from a FEN, add it to the tree.
+ *  Returns NULL (without adding) if a sibling with the same FEN
+ *  already exists — this catches any move-representation mismatch
+ *  that the UCI-level dedup might miss. */
 static TreeNode *make_child(TreeNode *parent, const char *fen,
                              const char *san, const char *uci,
                              Tree *tree) {
+    for (size_t i = 0; i < parent->children_count; i++) {
+        if (strcmp(parent->children[i]->fen, fen) == 0)
+            return NULL;
+    }
+
     TreeNode *child = node_create(fen, san, uci, parent);
     if (!child) return NULL;
     if (!node_add_child(parent, child)) {
@@ -337,6 +414,15 @@ static void build_our_move(Tree *tree, TreeNode *node,
     }
 
     if (has_lichess && lichess.success) {
+        /* Normalize castling UCI in Lichess response */
+        {
+            ChessPosition _norm_pos;
+            if (position_from_fen(&_norm_pos, node->fen)) {
+                for (size_t i = 0; i < lichess.move_count; i++)
+                    normalize_castling_uci(&_norm_pos, lichess.moves[i].uci);
+            }
+        }
+
         node_set_lichess_stats(node, lichess.total_white_wins,
                                lichess.total_black_wins, lichess.total_draws);
         if (lichess.has_opening) {
@@ -439,6 +525,17 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
         has_lichess = query_lichess_cached(config->db, explorer, node->fen,
                                            config->use_masters, &response);
         if (has_lichess && response.success) {
+            /* Normalize castling UCI across all Lichess moves so
+               king-captures-rook notation (e1h1) becomes king-destination
+               (e1g1), matching what Stockfish produces. */
+            {
+                ChessPosition _norm_pos;
+                if (position_from_fen(&_norm_pos, node->fen)) {
+                    for (size_t i = 0; i < response.move_count; i++)
+                        normalize_castling_uci(&_norm_pos, response.moves[i].uci);
+                }
+            }
+
             node_set_lichess_stats(node, response.total_white_wins,
                                    response.total_black_wins,
                                    response.total_draws);
@@ -689,7 +786,8 @@ static void build_engine_line(Tree *tree, TreeNode *node,
  *   3. Resume support (skip explored nodes, recurse into existing children)
  *   4. Ensure this node has an eval (for window pruning)
  *   5. Eval-window pruning
- *   6. Dispatch to build_our_move or build_opponent_move
+ *   6. Transposition detection (skip if FEN already expanded elsewhere)
+ *   7. Dispatch to build_our_move or build_opponent_move
  */
 static void build_recursive(Tree *tree, TreeNode *node,
                              const TreeConfig *config,
@@ -710,6 +808,7 @@ static void build_recursive(Tree *tree, TreeNode *node,
 
     /* Resume: skip nodes that were already explored */
     if (node->children_count > 0) {
+        fen_set_add((FenSet *)tree->expanded_fens, node->fen);
         for (size_t i = 0; i < node->children_count; i++)
             build_recursive(tree, node->children[i], config, explorer);
         return;
@@ -729,6 +828,16 @@ static void build_recursive(Tree *tree, TreeNode *node,
             return;
         }
     }
+
+    /* Transposition detection: if this FEN was already expanded
+       elsewhere in the tree, skip it.  The node keeps its eval
+       (set above by ensure_eval) but gets no children. */
+    FenSet *fset = (FenSet *)tree->expanded_fens;
+    if (fset && fen_set_contains(fset, node->fen)) {
+        node->explored = true;
+        return;
+    }
+    fen_set_add(fset, node->fen);
 
     bool is_our_move = (node->is_white_to_move == config->play_as_white);
     node->explored = true;
@@ -770,7 +879,12 @@ bool tree_build(Tree *tree, const char *start_fen,
         }
     }
 
+    tree->expanded_fens = fen_set_create();
+
     build_recursive(tree, tree->root, &tree->config, explorer);
+
+    fen_set_destroy((FenSet *)tree->expanded_fens);
+    tree->expanded_fens = NULL;
 
     tree->build_complete = tree->is_building;
     tree->is_building = false;
@@ -921,23 +1035,20 @@ double win_probability(int cp) {
     return 1.0 / (1.0 + exp(-0.00368208 * cp));
 }
 
-static double eca_wp_us(const TreeNode *child, bool play_as_white) {
-    if (!child->has_engine_eval) return 0.5;
-    int eval_white = child->is_white_to_move ? child->engine_eval_cp
-                                             : -child->engine_eval_cp;
-    double wp_white = win_probability(eval_white);
-    return play_as_white ? wp_white : (1.0 - wp_white);
-}
 
 static void compute_local_eca(TreeNode *node) {
     if (!node || node->children_count == 0) return;
 
-    double best_wp = -1.0;
+    /* Find the opponent's best move (lowest eval for us = best for them).
+       child->engine_eval_cp is from side-to-move perspective; at opponent-
+       move nodes the children have our side to move, so low values = good
+       for the opponent. */
+    int best_opp_cp = 100000;
     bool has_any = false;
     for (size_t i = 0; i < node->children_count; i++) {
         if (!node->children[i]->has_engine_eval) continue;
-        double mover_wp = 1.0 - win_probability(node->children[i]->engine_eval_cp);
-        if (mover_wp > best_wp) best_wp = mover_wp;
+        if (node->children[i]->engine_eval_cp < best_opp_cp)
+            best_opp_cp = node->children[i]->engine_eval_cp;
         has_any = true;
     }
     if (!has_any) return;
@@ -947,10 +1058,9 @@ static void compute_local_eca(TreeNode *node) {
         TreeNode *child = node->children[i];
         if (!child->has_engine_eval) continue;
         if (child->move_probability < 0.01) continue;
-        double mover_wp = 1.0 - win_probability(child->engine_eval_cp);
-        double delta = best_wp - mover_wp;
+        int delta = child->engine_eval_cp - best_opp_cp;
         if (delta < 0) delta = 0;
-        sum += child->move_probability * delta;
+        sum += child->move_probability * (double)delta;
     }
     node->local_cpl = sum;
 }
@@ -982,20 +1092,10 @@ int score_our_move_children(TreeNode *node,
         if (!child->has_eca) continue;
         int cp_us = our_eval(child, config->play_as_white);
         if (cp_us < best_child_cp - config->max_eval_loss_cp) continue;
-        double eval_us_wp = eca_wp_us(child, config->play_as_white);
-        if (eval_us_wp < config->eval_guard_threshold) continue;
         passing++;
-        double score;
-        if (child->children_count == 0) {
-            /* Leaf nodes have accumulated_eca == 0 by definition.  Scoring
-               them with the normal blend would cap them at eval_weight of
-               their win probability, unfairly penalising unexplored moves.
-               Use pure eval so they compete fairly with explored siblings. */
-            score = eval_us_wp;
-        } else {
-            score = config->eval_weight * eval_us_wp
-                  + (1.0 - config->eval_weight) * child->accumulated_eca;
-        }
+        int opp_plies = 1 + child->subtree_depth / 2;
+        double avg_cpl = child->accumulated_eca / opp_plies;
+        double score = (double)cp_us + config->eval_weight * avg_cpl;
         if (score > best_score) {
             best_score = score;
             best_child = child;
@@ -1009,14 +1109,10 @@ int score_our_move_children(TreeNode *node,
         for (size_t i = 0; i < node->children_count; i++) {
             TreeNode *child = node->children[i];
             if (!child->has_eca) continue;
-            double eval_us_wp = eca_wp_us(child, config->play_as_white);
-            double score;
-            if (child->children_count == 0) {
-                score = eval_us_wp;
-            } else {
-                score = config->eval_weight * eval_us_wp
-                      + (1.0 - config->eval_weight) * child->accumulated_eca;
-            }
+            int cp_us = our_eval(child, config->play_as_white);
+            int opp_plies = 1 + child->subtree_depth / 2;
+            double avg_cpl = child->accumulated_eca / opp_plies;
+            double score = (double)cp_us + config->eval_weight * avg_cpl;
             if (score > best_score) {
                 best_score = score;
                 best_child = child;
@@ -1043,6 +1139,18 @@ static size_t calculate_eca_recursive(TreeNode *node,
 
     double gamma_d = pow(config->depth_discount, (double)node->depth);
     bool is_our_move = (node->is_white_to_move == config->play_as_white);
+
+    /* Compute subtree_depth: max ply below this node */
+    if (node->children_count == 0) {
+        node->subtree_depth = 0;
+    } else {
+        int max_sd = 0;
+        for (size_t i = 0; i < node->children_count; i++) {
+            int sd = node->children[i]->subtree_depth + 1;
+            if (sd > max_sd) max_sd = sd;
+        }
+        node->subtree_depth = max_sd;
+    }
 
     if (node->children_count == 0) {
         node->accumulated_eca = gamma_d * node->local_cpl;
