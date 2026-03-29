@@ -183,7 +183,7 @@ test-full: $(TARGET)
 
 # Portable distribution: bundles binary + shared libs + maia model + stockfish
 DIST_DIR = dist/tree_builder
-MAIA_MODEL = ../assets/maia_rapid.onnx
+MAIA_MODEL = ../assets/maia3_simplified.onnx
 dist: $(TARGET)
 	@echo "Creating portable distribution..."
 	@rm -rf $(DIST_DIR)
@@ -198,8 +198,8 @@ dist: $(TARGET)
 	done
 	@# Bundle Maia model
 	@if [ -f "$(MAIA_MODEL)" ]; then \
-		cp "$(MAIA_MODEL)" $(DIST_DIR)/maia_rapid.onnx; \
-		echo "  Bundled maia_rapid.onnx"; \
+		cp "$(MAIA_MODEL)" $(DIST_DIR)/maia3_simplified.onnx; \
+		echo "  Bundled maia3_simplified.onnx"; \
 	else \
 		echo "  WARNING: Maia model not found at $(MAIA_MODEL)"; \
 	fi

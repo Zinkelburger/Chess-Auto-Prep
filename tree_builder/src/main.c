@@ -56,8 +56,8 @@ static const char *STOCKFISH_SEARCH_PATHS[] = {
 };
 
 static const char *MAIA_SEARCH_PATHS[] = {
-    "./maia_rapid.onnx",
-    "../assets/maia_rapid.onnx",
+    "./maia3_simplified.onnx",
+    "../assets/maia3_simplified.onnx",
     NULL
 };
 
@@ -113,11 +113,10 @@ static void print_usage(const char *prog_name) {
     printf("\n");
     printf("ECA scoring (move selection phase):\n");
     printf("  --eval-weight <0-1>    Eval vs trickiness blend [default: 0.40]\n");
-    printf("  --eval-guard <0-1>     Min win probability to consider a move [default: 0.35]\n");
     printf("  --depth-decay <0-1>    Depth discount for ECA [default: 1.0]\n");
     printf("\n");
     printf("Maia fallback (extends tree when explorer is exhausted):\n");
-    printf("  --maia-model <path>    Path to maia_rapid.onnx [default: auto-detect]\n");
+    printf("  --maia-model <path>    Path to maia3_simplified.onnx [default: auto-detect]\n");
     printf("  --maia-elo <N>         Elo for Maia predictions [default: 2000]\n");
     printf("  --maia-threshold <P>   Min cumProb to trigger Maia [default: 0.01]\n");
     printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.02]\n");
@@ -213,7 +212,7 @@ static const char* find_maia_model(const char *user_path) {
     static char buf[PATH_MAX];
     if (user_path && access(user_path, R_OK) == 0) return user_path;
     /* Check next to binary first */
-    snprintf(buf, sizeof(buf), "%s/maia_rapid.onnx", g_exe_dir);
+    snprintf(buf, sizeof(buf), "%s/maia3_simplified.onnx", g_exe_dir);
     if (access(buf, R_OK) == 0) return buf;
     for (int i = 0; MAIA_SEARCH_PATHS[i]; i++) {
         if (access(MAIA_SEARCH_PATHS[i], R_OK) == 0)
@@ -308,7 +307,6 @@ int main(int argc, char *argv[]) {
 
     /* ECA scoring overrides */
     double eval_weight_arg = -1.0;
-    double eval_guard_arg = -1.0;
     double depth_decay_arg = -1.0;
 
     static struct option long_options[] = {
@@ -344,7 +342,6 @@ int main(int argc, char *argv[]) {
         {"relative",         no_argument,       0, 2022},
         /* ECA scoring */
         {"eval-weight",      required_argument, 0, 2030},
-        {"eval-guard",       required_argument, 0, 2031},
         {"depth-decay",      required_argument, 0, 2032},
         /* Maia */
         {"maia-model",       required_argument, 0, 3001},
@@ -411,7 +408,6 @@ int main(int argc, char *argv[]) {
             case 2022: relative_eval = true; break;
             /* ECA */
             case 2030: if (!parse_double(optarg, "eval-weight", &eval_weight_arg)) return 1; break;
-            case 2031: if (!parse_double(optarg, "eval-guard", &eval_guard_arg)) return 1; break;
             case 2032: if (!parse_double(optarg, "depth-decay", &depth_decay_arg)) return 1; break;
             /* Maia */
             case 3001: maia_model_path = optarg; break;
@@ -532,7 +528,7 @@ int main(int argc, char *argv[]) {
 
     if (maia_only && !maia) {
         fprintf(stderr, "Error: --maia-only requires a working Maia model.\n");
-        fprintf(stderr, "  Use --maia-model <path> or place maia_rapid.onnx next to the binary.\n");
+        fprintf(stderr, "  Use --maia-model <path> or place maia3_simplified.onnx next to the binary.\n");
         return 1;
     }
 
@@ -771,7 +767,6 @@ int main(int argc, char *argv[]) {
     rep_config.quick_eval_depth = eval_depth > 15 ? 15 : eval_depth;
     rep_config.verbose_search = verbose;
     if (eval_weight_arg >= 0.0) rep_config.eval_weight = eval_weight_arg;
-    if (eval_guard_arg >= 0.0) rep_config.eval_guard_threshold = eval_guard_arg;
     if (depth_decay_arg >= 0.0) rep_config.depth_discount = depth_decay_arg;
     if (min_eval_arg != -99999) rep_config.min_eval_cp = min_eval_arg;
     if (max_eval_arg != -99999) rep_config.max_eval_cp = max_eval_arg;

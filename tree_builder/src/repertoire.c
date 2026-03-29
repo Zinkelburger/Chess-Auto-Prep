@@ -75,8 +75,6 @@ RepertoireConfig repertoire_config_default(void) {
 
         .depth_discount = 1.0,
         .eval_weight = 0.40,
-        .eval_guard_threshold = 0.35,
-
         .min_eval_cp = -50,
         .max_eval_cp = 300,
         .max_eval_loss_cp = 50,

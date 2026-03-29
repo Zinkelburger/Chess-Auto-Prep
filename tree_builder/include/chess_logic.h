@@ -126,4 +126,18 @@ int char_to_file(char c);
  */
 int char_to_rank(char c);
 
+/**
+ * Normalize a UCI castling move in-place.
+ *
+ * Some APIs (Lichess) encode castling as king-captures-rook
+ * (e1h1, e1a1, e8h8, e8a8) while Stockfish uses king-destination
+ * (e1g1, e1c1, e8g8, e8c8).  This rewrites the king-captures-rook
+ * form to king-destination so all sources share a canonical
+ * representation.  Requires the position to identify the king.
+ *
+ * @param pos  Current position (to verify the source square holds a king)
+ * @param uci  UCI string to normalize in-place (must be writable, len >= 5)
+ */
+void normalize_castling_uci(const ChessPosition *pos, char *uci);
+
 #endif /* CHESS_LOGIC_H */

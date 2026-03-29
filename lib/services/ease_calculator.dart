@@ -135,10 +135,10 @@ class EaseCalculator {
       if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
         return null;
       }
-      final maiaProbs = await MaiaFactory.instance!.evaluate(fen, maiaElo);
-      if (maiaProbs.isEmpty) return null;
+      final maiaResult = await MaiaFactory.instance!.evaluate(fen, maiaElo);
+      if (maiaResult.policy.isEmpty) return null;
 
-      final sorted = maiaProbs.entries.toList()
+      final sorted = maiaResult.policy.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
 
       double cumulative = 0.0;

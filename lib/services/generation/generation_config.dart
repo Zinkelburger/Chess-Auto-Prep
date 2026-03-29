@@ -50,7 +50,7 @@ class RepertoireGenerationConfig {
     this.maxEvalLossCp = 50,
     this.minEvalCpForUs = 0,
     this.maxEvalCpForUs = 200,
-    this.maiaElo = 2100,
+    this.maiaElo = 1500,
     this.ecaDepthDiscount = 0.90,
     this.ecaEvalWeight = 0.40,
     this.ecaEvalGuardThreshold = 0.35,

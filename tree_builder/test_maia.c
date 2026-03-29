@@ -42,7 +42,7 @@ static const char *TEST_NAMES[] = {
 };
 
 int main(void) {
-    const char *model_path = "../assets/maia_rapid.onnx";
+    const char *model_path = "../assets/maia3_simplified.onnx";
 
     printf("═══════════════════════════════════════════════════\n");
     printf("  Maia C Integration Test\n");
@@ -70,7 +70,8 @@ int main(void) {
             continue;
         }
 
-        printf("  Success: %s, Moves: %d\n", resp.success ? "yes" : "no", resp.move_count);
+        printf("  Success: %s, Moves: %d, WinProb: %.4f\n",
+               resp.success ? "yes" : "no", resp.move_count, resp.win_prob);
 
         int show = resp.move_count < 10 ? resp.move_count : 10;
         for (int i = 0; i < show; i++) {

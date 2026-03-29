@@ -109,7 +109,6 @@ The `<name>` argument is the base name for all output files:
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--eval-weight <0-1>` | Eval vs trickiness blend | 0.40 |
-| `--eval-guard <0-1>` | Min win probability for a move | 0.35 |
 | `--depth-decay <0-1>` | Depth discount for ECA | 1.0 |
 
 ### Examples

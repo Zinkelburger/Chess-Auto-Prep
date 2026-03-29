@@ -51,9 +51,9 @@ flutter:
   assets:
     - assets/images/
     - assets/pieces/
-    - assets/maia_rapid.onnx
-    - assets/data/all_moves.json
-    - assets/data/all_moves_reversed.json
+    - assets/maia3_simplified.onnx
+    - assets/data/all_moves_maia3.json
+    - assets/data/all_moves_maia3_reversed.json
     - assets/executables/stockfish-windows.exe.gz
     - assets/executables/stockfish-macos.gz
     - assets/executables/stockfish-linux.gz

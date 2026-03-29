@@ -48,7 +48,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final TextEditingController _ecaEvalWeightCtrl =
       TextEditingController(text: '0.40');
   final TextEditingController _maiaEloCtrl =
-      TextEditingController(text: '2100');
+      TextEditingController(text: '1500');
   // Max Load removed — workers field on EngineSettings is the control now.
 
   GenerationStrategy _strategy = GenerationStrategy.eca;

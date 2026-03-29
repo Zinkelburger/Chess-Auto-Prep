@@ -350,10 +350,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     }
     _perfLog('Maia inference START');
     try {
-      final probs =
+      final result =
           await MaiaFactory.instance!.evaluate(widget.fen, _settings.maiaElo);
-      _perfLog('Maia inference DONE — ${probs.length} moves');
-      return probs;
+      _perfLog('Maia inference DONE — ${result.policy.length} moves');
+      return result.policy;
     } catch (e) {
       _perfLog('Maia FAILED — $e');
       return {};
