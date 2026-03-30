@@ -24,6 +24,8 @@ static int piece_type(ChessPiece p) {
 bool uci_to_san(const char *fen, const char *uci, char *san, size_t san_len) {
     if (!fen || !uci || !san || san_len < 12) return false;
 
+    chess_generate_init();
+
     size_t len = strlen(uci);
     if (len < 4 || len > 5) return false;
 
@@ -122,4 +124,78 @@ add_check:
 
     san[idx] = '\0';
     return true;
+}
+
+
+static void chessmove_to_uci_str(ChessMove m, char *out) {
+    ChessSquare from = chess_move_from(m);
+    ChessSquare to   = chess_move_to(m);
+    ChessMovePromote promo = chess_move_promotes(m);
+
+    out[0] = chess_file_to_char(chess_square_file(from));
+    out[1] = chess_rank_to_char(chess_square_rank(from));
+    out[2] = chess_file_to_char(chess_square_file(to));
+    out[3] = chess_rank_to_char(chess_square_rank(to));
+
+    if (promo != CHESS_MOVE_PROMOTE_NONE) {
+        out[4] = chess_move_promote_to_char(promo);
+        out[5] = '\0';
+    } else {
+        out[4] = '\0';
+    }
+}
+
+bool san_to_uci(const char *fen, const char *san_input,
+                char *uci, size_t uci_len) {
+    if (!fen || !san_input || !uci || uci_len < 8) return false;
+
+    chess_generate_init();
+
+    /* Strip optional move numbers: "1." "1..." "12." etc. */
+    const char *san = san_input;
+    while (*san >= '0' && *san <= '9') san++;
+    while (*san == '.') san++;
+    while (*san == ' ') san++;
+    if (*san == '\0') return false;
+
+    /* Strip trailing +/# for comparison (we add them in uci_to_san) */
+    char clean[16];
+    size_t slen = strlen(san);
+    if (slen >= sizeof(clean)) return false;
+    memcpy(clean, san, slen + 1);
+    while (slen > 0 && (clean[slen-1] == '+' || clean[slen-1] == '#'))
+        clean[--slen] = '\0';
+    if (slen == 0) return false;
+
+    ChessPosition pos;
+    if (!chess_fen_load(fen, &pos)) return false;
+
+    ChessArray moves;
+    chess_array_init(&moves, sizeof(ChessMove));
+    chess_generate_moves(&pos, &moves);
+
+    bool found = false;
+    for (size_t i = 0; i < chess_array_size(&moves); i++) {
+        ChessMove m = *(const ChessMove *)chess_array_elem(&moves, i);
+        char move_uci[8];
+        chessmove_to_uci_str(m, move_uci);
+        char move_san[16];
+        if (!uci_to_san(fen, move_uci, move_san, sizeof(move_san)))
+            continue;
+
+        /* Strip +/# from generated SAN too */
+        size_t mlen = strlen(move_san);
+        while (mlen > 0 && (move_san[mlen-1] == '+' || move_san[mlen-1] == '#'))
+            move_san[--mlen] = '\0';
+
+        if (strcmp(clean, move_san) == 0) {
+            strncpy(uci, move_uci, uci_len - 1);
+            uci[uci_len - 1] = '\0';
+            found = true;
+            break;
+        }
+    }
+
+    chess_array_cleanup(&moves);
+    return found;
 }

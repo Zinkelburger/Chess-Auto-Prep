@@ -21,22 +21,38 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 
 
-/* ========== FEN Hash Set (transposition detection during build) ========== */
+/* ========== Instrumentation helpers ========== */
 
-#define FEN_SET_INITIAL_BUCKETS 4096
+static double elapsed_ms(const struct timespec *start) {
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    return (end.tv_sec - start->tv_sec) * 1000.0 +
+           (end.tv_nsec - start->tv_nsec) / 1e6;
+}
 
-typedef struct FenSetEntry {
+#define STATS_INC(cfg, field)  do { if ((cfg)->stats) (cfg)->stats->field++; } while(0)
+#define STATS_ADD(cfg, field, v) do { if ((cfg)->stats) (cfg)->stats->field += (v); } while(0)
+
+
+/* ========== FEN Map (transposition table — FEN → canonical TreeNode*) ========== */
+
+#define FEN_MAP_INITIAL_BUCKETS 4096
+#define FEN_MAP_LOAD_FACTOR     0.75
+
+typedef struct FenMapEntry {
     char *fen;
-    struct FenSetEntry *next;
-} FenSetEntry;
+    TreeNode *node;
+    struct FenMapEntry *next;
+} FenMapEntry;
 
-typedef struct FenSet {
-    FenSetEntry **buckets;
+typedef struct FenMap {
+    FenMapEntry **buckets;
     size_t num_buckets;
     size_t count;
-} FenSet;
+} FenMap;
 
 static uint32_t fen_hash(const char *fen, size_t num_buckets) {
     uint32_t hash = 2166136261u;
@@ -47,48 +63,72 @@ static uint32_t fen_hash(const char *fen, size_t num_buckets) {
     return hash % (uint32_t)num_buckets;
 }
 
-static FenSet *fen_set_create(void) {
-    FenSet *set = (FenSet *)calloc(1, sizeof(FenSet));
-    if (!set) return NULL;
-    set->num_buckets = FEN_SET_INITIAL_BUCKETS;
-    set->buckets = (FenSetEntry **)calloc(set->num_buckets, sizeof(FenSetEntry *));
-    if (!set->buckets) { free(set); return NULL; }
-    return set;
+static FenMap *fen_map_create(void) {
+    FenMap *map = (FenMap *)calloc(1, sizeof(FenMap));
+    if (!map) return NULL;
+    map->num_buckets = FEN_MAP_INITIAL_BUCKETS;
+    map->buckets = (FenMapEntry **)calloc(map->num_buckets, sizeof(FenMapEntry *));
+    if (!map->buckets) { free(map); return NULL; }
+    return map;
 }
 
-static void fen_set_destroy(FenSet *set) {
-    if (!set) return;
-    for (size_t i = 0; i < set->num_buckets; i++) {
-        FenSetEntry *e = set->buckets[i];
+static void fen_map_destroy(FenMap *map) {
+    if (!map) return;
+    for (size_t i = 0; i < map->num_buckets; i++) {
+        FenMapEntry *e = map->buckets[i];
         while (e) {
-            FenSetEntry *next = e->next;
+            FenMapEntry *next = e->next;
             free(e->fen);
             free(e);
             e = next;
         }
     }
-    free(set->buckets);
-    free(set);
+    free(map->buckets);
+    free(map);
 }
 
-static bool fen_set_contains(const FenSet *set, const char *fen) {
-    if (!set) return false;
-    uint32_t idx = fen_hash(fen, set->num_buckets);
-    for (FenSetEntry *e = set->buckets[idx]; e; e = e->next) {
-        if (strcmp(e->fen, fen) == 0) return true;
+static void fen_map_resize(FenMap *map) {
+    size_t new_buckets = map->num_buckets * 2;
+    FenMapEntry **new_table = (FenMapEntry **)calloc(new_buckets, sizeof(FenMapEntry *));
+    if (!new_table) return;
+    for (size_t i = 0; i < map->num_buckets; i++) {
+        FenMapEntry *e = map->buckets[i];
+        while (e) {
+            FenMapEntry *next = e->next;
+            uint32_t idx = fen_hash(e->fen, new_buckets);
+            e->next = new_table[idx];
+            new_table[idx] = e;
+            e = next;
+        }
     }
-    return false;
+    free(map->buckets);
+    map->buckets = new_table;
+    map->num_buckets = new_buckets;
 }
 
-static void fen_set_add(FenSet *set, const char *fen) {
-    if (!set || fen_set_contains(set, fen)) return;
-    uint32_t idx = fen_hash(fen, set->num_buckets);
-    FenSetEntry *e = (FenSetEntry *)malloc(sizeof(FenSetEntry));
+/** Look up the canonical node for a FEN.  Returns NULL if not present. */
+static TreeNode *fen_map_get(const FenMap *map, const char *fen) {
+    if (!map) return NULL;
+    uint32_t idx = fen_hash(fen, map->num_buckets);
+    for (FenMapEntry *e = map->buckets[idx]; e; e = e->next) {
+        if (strcmp(e->fen, fen) == 0) return e->node;
+    }
+    return NULL;
+}
+
+/** Insert a FEN → node mapping.  No-op if the FEN is already present. */
+static void fen_map_put(FenMap *map, const char *fen, TreeNode *node) {
+    if (!map || fen_map_get(map, fen)) return;
+    if ((double)map->count / (double)map->num_buckets >= FEN_MAP_LOAD_FACTOR)
+        fen_map_resize(map);
+    uint32_t idx = fen_hash(fen, map->num_buckets);
+    FenMapEntry *e = (FenMapEntry *)malloc(sizeof(FenMapEntry));
     if (!e) return;
     e->fen = strdup(fen);
-    e->next = set->buckets[idx];
-    set->buckets[idx] = e;
-    set->count++;
+    e->node = node;
+    e->next = map->buckets[idx];
+    map->buckets[idx] = e;
+    map->count++;
 }
 
 
@@ -117,6 +157,10 @@ TreeConfig tree_config_default(void) {
         .opp_mass_root = 0.95,
         .opp_mass_floor = 0.50,
 
+        .inj_max_depth = 20,
+        .inj_min_probability = 0.005,
+        .inj_max_line_depth = 6,
+
         .min_eval_cp = -50,
         .max_eval_cp = 300,
         .relative_eval = false,
@@ -132,6 +176,7 @@ TreeConfig tree_config_default(void) {
         .maia_min_prob = 0.02,
         .maia_only = false,
         .progress_callback = NULL,
+        .stats = NULL,
     };
     return config;
 }
@@ -190,6 +235,7 @@ static TreeNode *make_child(TreeNode *parent, const char *fen,
         node_destroy_single(child);
         return NULL;
     }
+    child->inj_origin_depth = parent->inj_origin_depth;
     tree->total_nodes++;
     if (child->depth > tree->max_depth_reached)
         tree->max_depth_reached = child->depth;
@@ -225,22 +271,29 @@ static void ensure_eval(TreeNode *node, const TreeConfig *config) {
     if (config->db) {
         int cp, depth;
         if (rdb_get_eval(config->db, node->fen, &cp, &depth)) {
+            STATS_INC(config, db_eval_hits);
             node_set_eval(node, cp);
             return;
         }
+        STATS_INC(config, db_eval_misses);
     }
 
     /* Run engine */
     if (config->engine_pool) {
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+
         EvalJob job;
-        strncpy(job.fen, node->fen, MAX_EVAL_FEN_LENGTH - 1);
-        job.fen[MAX_EVAL_FEN_LENGTH - 1] = '\0';
+        snprintf(job.fen, MAX_EVAL_FEN_LENGTH, "%s", node->fen);
         if (engine_pool_evaluate_full(config->engine_pool, node->fen, &job) &&
             job.success) {
             node_set_eval(node, job.eval_cp);
             if (config->db)
                 rdb_put_eval(config->db, node->fen, job.eval_cp, job.depth_reached);
         }
+
+        STATS_INC(config, sf_single_calls);
+        STATS_ADD(config, sf_single_ms, elapsed_ms(&t0));
     }
 }
 
@@ -266,18 +319,27 @@ static void batch_eval_children(TreeNode *node, const TreeConfig *config) {
         if (config->db) {
             int cp, depth;
             if (rdb_get_eval(config->db, child->fen, &cp, &depth)) {
+                STATS_INC(config, db_eval_hits);
                 node_set_eval(child, cp);
                 continue;
             }
+            STATS_INC(config, db_eval_misses);
         }
 
-        strncpy(jobs[job_count].fen, child->fen, MAX_EVAL_FEN_LENGTH - 1);
+        snprintf(jobs[job_count].fen, MAX_EVAL_FEN_LENGTH, "%s", child->fen);
         idx_map[job_count] = i;
         job_count++;
     }
 
     if (job_count > 0) {
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+
         engine_pool_evaluate_batch(config->engine_pool, jobs, job_count, NULL, NULL);
+
+        STATS_INC(config, sf_batch_calls);
+        STATS_ADD(config, sf_batch_ms, elapsed_ms(&t0));
+
         for (int k = 0; k < job_count; k++) {
             if (!jobs[k].success) continue;
             TreeNode *child = node->children[idx_map[k]];
@@ -297,19 +359,23 @@ static void batch_eval_children(TreeNode *node, const TreeConfig *config) {
 
 static bool query_lichess_cached(RepertoireDB *db, LichessExplorer *explorer,
                                   const char *fen, bool use_masters,
-                                  ExplorerResponse *response) {
+                                  ExplorerResponse *response,
+                                  const TreeConfig *config) {
     memset(response, 0, sizeof(*response));
 
     if (db) {
         CachedExplorerResponse cached;
         if (rdb_get_explorer_cache(db, fen, &cached) && cached.found) {
+            STATS_INC(config, db_explorer_hits);
+            STATS_INC(config, lichess_cache_hits);
+
             response->success = true;
             response->move_count = cached.move_count;
             response->total_games = cached.total_games;
-            strncpy(response->opening_eco, cached.opening_eco,
-                    sizeof(response->opening_eco) - 1);
-            strncpy(response->opening_name, cached.opening_name,
-                    sizeof(response->opening_name) - 1);
+            snprintf(response->opening_eco, sizeof(response->opening_eco),
+                     "%s", cached.opening_eco);
+            snprintf(response->opening_name, sizeof(response->opening_name),
+                     "%s", cached.opening_name);
             response->has_opening = (cached.opening_eco[0] != '\0');
 
             uint64_t tw = 0, tb = 0, td = 0;
@@ -330,11 +396,18 @@ static bool query_lichess_cached(RepertoireDB *db, LichessExplorer *explorer,
             response->total_draws      = td;
             return true;
         }
+        STATS_INC(config, db_explorer_misses);
     }
+
+    struct timespec t0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
 
     bool ok = use_masters
         ? lichess_explorer_query_masters(explorer, fen, response)
         : lichess_explorer_query(explorer, fen, response);
+
+    STATS_INC(config, lichess_queries);
+    STATS_ADD(config, lichess_total_ms, elapsed_ms(&t0));
 
     if (ok && response->success && db) {
         CachedExplorerMove cmoves[MAX_EXPLORER_MOVES];
@@ -391,10 +464,16 @@ static void build_our_move(Tree *tree, TreeNode *node,
     /* 1. Run Stockfish MultiPV (tapers with depth) */
     int mpv_count = multipv_for_depth(config, node->depth);
     MultiPVJob mpv;
-    if (!engine_pool_evaluate_multipv(config->engine_pool, node->fen,
-                                      config->eval_depth,
-                                      mpv_count, &mpv))
-        return;
+    {
+        struct timespec t0;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        bool ok = engine_pool_evaluate_multipv(config->engine_pool, node->fen,
+                                               config->eval_depth,
+                                               mpv_count, &mpv);
+        STATS_INC(config, sf_multipv_calls);
+        STATS_ADD(config, sf_multipv_ms, elapsed_ms(&t0));
+        if (!ok) return;
+    }
     if (!mpv.success || mpv.num_lines == 0) return;
 
     /* Set node's own eval from the top line if not already set */
@@ -410,7 +489,7 @@ static void build_our_move(Tree *tree, TreeNode *node,
     bool has_lichess = false;
     if (!config->maia_only) {
         has_lichess = query_lichess_cached(config->db, explorer, node->fen,
-                                           config->use_masters, &lichess);
+                                           config->use_masters, &lichess, config);
     }
 
     if (has_lichess && lichess.success) {
@@ -426,10 +505,10 @@ static void build_our_move(Tree *tree, TreeNode *node,
         node_set_lichess_stats(node, lichess.total_white_wins,
                                lichess.total_black_wins, lichess.total_draws);
         if (lichess.has_opening) {
-            strncpy(node->opening_name, lichess.opening_name,
-                    sizeof(node->opening_name) - 1);
-            strncpy(node->opening_eco, lichess.opening_eco,
-                    sizeof(node->opening_eco) - 1);
+            snprintf(node->opening_name, sizeof(node->opening_name),
+                     "%s", lichess.opening_name);
+            snprintf(node->opening_eco, sizeof(node->opening_eco),
+                     "%s", lichess.opening_eco);
         }
     }
 
@@ -517,17 +596,20 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
     int children_added = 0;
     double mass_covered = 0.0;
 
+    /* Maia response at function scope so engine injection can
+       look up the probability for its bestmove. */
+    MaiaResponse maia_resp;
+    memset(&maia_resp, 0, sizeof(maia_resp));
+    bool has_maia_resp = false;
+
     /* 1. Query Lichess explorer and add qualifying moves */
     ExplorerResponse response;
     bool has_lichess = false;
 
     if (!config->maia_only) {
         has_lichess = query_lichess_cached(config->db, explorer, node->fen,
-                                           config->use_masters, &response);
+                                           config->use_masters, &response, config);
         if (has_lichess && response.success) {
-            /* Normalize castling UCI across all Lichess moves so
-               king-captures-rook notation (e1h1) becomes king-destination
-               (e1g1), matching what Stockfish produces. */
             {
                 ChessPosition _norm_pos;
                 if (position_from_fen(&_norm_pos, node->fen)) {
@@ -540,10 +622,10 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
                                    response.total_black_wins,
                                    response.total_draws);
             if (response.has_opening) {
-                strncpy(node->opening_name, response.opening_name,
-                        sizeof(node->opening_name) - 1);
-                strncpy(node->opening_eco, response.opening_eco,
-                        sizeof(node->opening_eco) - 1);
+                snprintf(node->opening_name, sizeof(node->opening_name),
+                         "%s", response.opening_name);
+                snprintf(node->opening_eco, sizeof(node->opening_eco),
+                         "%s", response.opening_eco);
             }
 
             uint64_t total = response.total_games;
@@ -595,11 +677,17 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
     if (need_maia && config->maia &&
         (config->maia_only ||
          node->cumulative_probability >= config->maia_threshold)) {
-        MaiaResponse maia_resp;
-        memset(&maia_resp, 0, sizeof(maia_resp));
-        if (maia_evaluate(config->maia, node->fen,
-                          config->maia_elo, &maia_resp) &&
-            maia_resp.success && maia_resp.move_count > 0) {
+        struct timespec t_maia;
+        clock_gettime(CLOCK_MONOTONIC, &t_maia);
+
+        bool maia_ok = maia_evaluate(config->maia, node->fen,
+                                     config->maia_elo, &maia_resp);
+
+        STATS_INC(config, maia_evals);
+        STATS_ADD(config, maia_total_ms, elapsed_ms(&t_maia));
+
+        if (maia_ok && maia_resp.success && maia_resp.move_count > 0) {
+            has_maia_resp = true;
             for (int i = 0; i < maia_resp.move_count; i++) {
                 const char *uci = maia_resp.moves[i].uci;
                 double prob = maia_resp.moves[i].probability;
@@ -611,7 +699,6 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
                 if (mass_target > 0.0 && mass_covered >= mass_target)
                     break;
 
-                /* Skip moves already added from Lichess */
                 bool exists = false;
                 for (size_t c = 0; c < node->children_count; c++) {
                     if (strcmp(node->children[c]->move_uci, uci) == 0) {
@@ -648,56 +735,103 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
         }
     }
 
-    /* If neither source produced children, nothing to explore */
     if (children_added == 0 && node->children_count == 0) return;
 
-    /* 3. Add engine top-1 if not already in children */
+    /* 3. Engine top-1 injection.
+     *
+     * If the engine's best move isn't already a child, add it so we
+     * have a response prepared.  The injected node is built with
+     * normal DFS logic (not an unbranched PV), subject to a depth
+     * cap of inj_max_line_depth plies from the injection point.
+     *
+     * Probability: use Maia's prediction for this move if available,
+     * otherwise fall back to a fixed value (0.05). */
     if (config->engine_pool) {
-        EvalJob best_job;
-        if (engine_pool_evaluate_full(config->engine_pool, node->fen, &best_job) &&
-            best_job.success && best_job.bestmove[0]) {
-            /* Set node's own eval from this call */
-            if (!node->has_engine_eval) {
-                node_set_eval(node, best_job.eval_cp);
-                if (config->db)
-                    rdb_put_eval(config->db, node->fen,
-                                 best_job.eval_cp, best_job.depth_reached);
-            }
+        bool depth_ok = node->depth <= config->inj_max_depth;
+        bool prob_ok  = node->cumulative_probability >= config->inj_min_probability;
 
-            bool exists = false;
-            for (size_t c = 0; c < node->children_count; c++) {
-                if (strcmp(node->children[c]->move_uci, best_job.bestmove) == 0) {
-                    /* Already present — just make sure it has an eval */
-                    if (!node->children[c]->has_engine_eval) {
-                        node_set_eval(node->children[c], -best_job.eval_cp);
-                        if (config->db)
-                            rdb_put_eval(config->db, node->children[c]->fen,
-                                         -best_job.eval_cp, best_job.depth_reached);
-                    }
-                    exists = true;
-                    break;
+        if (!depth_ok)       STATS_INC(config, injections_skipped_depth);
+        else if (!prob_ok)   STATS_INC(config, injections_skipped_prob);
+
+        if (depth_ok && prob_ok) {
+            STATS_INC(config, injections_attempted);
+
+            struct timespec t_inj;
+            clock_gettime(CLOCK_MONOTONIC, &t_inj);
+
+            EvalJob best_job;
+            bool got_eval = engine_pool_evaluate_full(config->engine_pool,
+                                                      node->fen, &best_job);
+
+            STATS_INC(config, sf_single_calls);
+            STATS_ADD(config, sf_single_ms, elapsed_ms(&t_inj));
+
+            if (got_eval && best_job.success && best_job.bestmove[0]) {
+                if (!node->has_engine_eval) {
+                    node_set_eval(node, best_job.eval_cp);
+                    if (config->db)
+                        rdb_put_eval(config->db, node->fen,
+                                     best_job.eval_cp, best_job.depth_reached);
                 }
-            }
-            if (!exists) {
-                char child_fen[MAX_FEN_LENGTH];
-                if (apply_uci(node->fen, best_job.bestmove,
-                              child_fen, MAX_FEN_LENGTH)) {
-                    const char *eng_san = best_job.bestmove;
-                    if (uci_to_san(node->fen, best_job.bestmove,
-                                   san_buf, sizeof(san_buf)))
-                        eng_san = san_buf;
-                    TreeNode *child = make_child(node, child_fen,
-                                                  eng_san,
-                                                  best_job.bestmove, tree);
-                    if (child) {
-                        child->engine_injected = true;
-                        child->move_probability = 0.01;
-                        child->cumulative_probability =
-                            node->cumulative_probability * 0.01;
-                        node_set_eval(child, -best_job.eval_cp);
-                        if (config->db)
-                            rdb_put_eval(config->db, child_fen,
-                                         -best_job.eval_cp, best_job.depth_reached);
+
+                bool exists = false;
+                for (size_t c = 0; c < node->children_count; c++) {
+                    if (strcmp(node->children[c]->move_uci, best_job.bestmove) == 0) {
+                        if (!node->children[c]->has_engine_eval) {
+                            node_set_eval(node->children[c], -best_job.eval_cp);
+                            if (config->db)
+                                rdb_put_eval(config->db, node->children[c]->fen,
+                                             -best_job.eval_cp, best_job.depth_reached);
+                        }
+                        exists = true;
+                        break;
+                    }
+                }
+
+                if (exists) {
+                    STATS_INC(config, injections_skipped_exists);
+                } else {
+                    char child_fen[MAX_FEN_LENGTH];
+                    if (apply_uci(node->fen, best_job.bestmove,
+                                  child_fen, MAX_FEN_LENGTH)) {
+                        FenMap *fmap = (FenMap *)tree->expanded_fens;
+                        if (fmap && fen_map_get(fmap, child_fen)) {
+                            STATS_INC(config, injections_skipped_transposition);
+                        } else {
+                            const char *eng_san = best_job.bestmove;
+                            if (uci_to_san(node->fen, best_job.bestmove,
+                                           san_buf, sizeof(san_buf)))
+                                eng_san = san_buf;
+                            TreeNode *child = make_child(node, child_fen,
+                                                          eng_san,
+                                                          best_job.bestmove, tree);
+                            if (child) {
+                                child->engine_injected = true;
+                                child->inj_origin_depth = node->depth;
+
+                                /* Use Maia probability if available */
+                                double inj_prob = 0.05;
+                                if (has_maia_resp) {
+                                    for (int m = 0; m < maia_resp.move_count; m++) {
+                                        if (strcmp(maia_resp.moves[m].uci,
+                                                   best_job.bestmove) == 0) {
+                                            inj_prob = maia_resp.moves[m].probability;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                child->move_probability = inj_prob;
+                                child->cumulative_probability =
+                                    node->cumulative_probability * inj_prob;
+                                node_set_eval(child, -best_job.eval_cp);
+                                if (config->db)
+                                    rdb_put_eval(config->db, child_fen,
+                                                 -best_job.eval_cp,
+                                                 best_job.depth_reached);
+                                STATS_INC(config, injections_created);
+                            }
+                        }
                     }
                 }
             }
@@ -707,7 +841,8 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
     /* 4. Batch-evaluate children that still lack evals */
     batch_eval_children(node, config);
 
-    /* 5. Recurse into children */
+    /* 5. Recurse into children (normal DFS — injected nodes are
+       handled by the standard build logic with a depth cap). */
     for (size_t i = 0; i < node->children_count; i++) {
         if (!tree->is_building) break;
         build_recursive(tree, node->children[i], config, explorer);
@@ -716,78 +851,16 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
 
 
 /**
- * Build a pure engine-#1 continuation line.
- *
- * Called for nodes inside an engine-injected subtree.  Both sides play
- * the engine's single best move, creating one unbranched PV down to
- * max_depth.  Bypasses cumP, eval-window, and Lichess/Maia logic.
- */
-static void build_engine_line(Tree *tree, TreeNode *node,
-                               const TreeConfig *config) {
-    if (!tree->is_building) return;
-    if (node->depth >= config->max_depth) return;
-
-    /* Resume: recurse into existing children */
-    if (node->children_count > 0) {
-        for (size_t i = 0; i < node->children_count; i++)
-            build_engine_line(tree, node->children[i], config);
-        return;
-    }
-    if (node->explored) return;
-
-    ensure_eval(node, config);
-    node->explored = true;
-
-    if (!config->engine_pool) return;
-
-    EvalJob job;
-    if (!engine_pool_evaluate_full(config->engine_pool, node->fen, &job) ||
-        !job.success || !job.bestmove[0])
-        return;
-
-    if (!node->has_engine_eval) {
-        node_set_eval(node, job.eval_cp);
-        if (config->db)
-            rdb_put_eval(config->db, node->fen, job.eval_cp, job.depth_reached);
-    }
-
-    char child_fen[MAX_FEN_LENGTH];
-    if (!apply_uci(node->fen, job.bestmove, child_fen, MAX_FEN_LENGTH))
-        return;
-
-    char san_buf[MAX_MOVE_LENGTH];
-    const char *san = job.bestmove;
-    if (uci_to_san(node->fen, job.bestmove, san_buf, sizeof(san_buf)))
-        san = san_buf;
-
-    TreeNode *child = make_child(node, child_fen, san, job.bestmove, tree);
-    if (!child) return;
-
-    child->engine_injected = true;
-    child->move_probability = 1.0;
-    child->cumulative_probability = node->cumulative_probability;
-    node_set_eval(child, -job.eval_cp);
-    if (config->db)
-        rdb_put_eval(config->db, child_fen, -job.eval_cp, job.depth_reached);
-
-    if (config->progress_callback)
-        config->progress_callback(tree->total_nodes, child->depth, child->fen);
-
-    build_engine_line(tree, child, config);
-}
-
-
-/**
  * Main recursive build — the single DFS that builds the tree.
  *
  * At each node:
- *   1. Check stop conditions (depth, cumP, interrupt)
- *   2. Engine-injected subtrees → build_engine_line (skips cumP / eval window)
- *   3. Resume support (skip explored nodes, recurse into existing children)
- *   4. Ensure this node has an eval (for window pruning)
- *   5. Eval-window pruning
- *   6. Transposition detection (skip if FEN already expanded elsewhere)
- *   7. Dispatch to build_our_move or build_opponent_move
+ *   1. Check stop conditions (depth, cumP, interrupt, injection depth cap)
+ *   2. Resume support (skip explored nodes, recurse into existing children)
+ *   3. Ensure this node has an eval (for window pruning)
+ *   4. Eval-window pruning (marks prune reason for annotation/deletion)
+ *   5. Transposition detection (O(1) FenMap lookup; links equivalent
+ *      nodes into a circular ring via next_equivalent)
+ *   6. Dispatch to build_our_move or build_opponent_move
  */
 static void build_recursive(Tree *tree, TreeNode *node,
                              const TreeConfig *config,
@@ -795,20 +868,22 @@ static void build_recursive(Tree *tree, TreeNode *node,
     if (!tree->is_building) return;
     if (node->depth >= config->max_depth) return;
 
-    /* Engine-injected subtrees bypass cumP and eval-window pruning;
-       build a single PV with engine #1 for both sides. */
-    if (node->engine_injected) {
-        build_engine_line(tree, node, config);
+    /* Engine-injected subtree depth cap: stop when we've gone
+       inj_max_line_depth plies beyond the injection point. */
+    if (node->inj_origin_depth >= 0 &&
+        config->inj_max_line_depth > 0 &&
+        node->depth - node->inj_origin_depth >= config->inj_max_line_depth)
         return;
-    }
 
     if (node->cumulative_probability < config->min_probability) return;
     if (config->max_nodes > 0 && tree->total_nodes >= (size_t)config->max_nodes)
         return;
 
+    FenMap *fmap = (FenMap *)tree->expanded_fens;
+
     /* Resume: skip nodes that were already explored */
     if (node->children_count > 0) {
-        fen_set_add((FenSet *)tree->expanded_fens, node->fen);
+        fen_map_put(fmap, node->fen, node);
         for (size_t i = 0; i < node->children_count; i++)
             build_recursive(tree, node->children[i], config, explorer);
         return;
@@ -819,25 +894,40 @@ static void build_recursive(Tree *tree, TreeNode *node,
        (Most non-root nodes will already have one from their parent.) */
     ensure_eval(node, config);
 
-    /* Eval-window pruning */
+    /* Eval-window pruning — mark the reason for downstream use. */
     if (node->has_engine_eval) {
         int eval_us = our_eval(node, config->play_as_white);
-        if (eval_us < config->min_eval_cp ||
-            eval_us > config->max_eval_cp) {
+        if (eval_us > config->max_eval_cp) {
             node->explored = true;
+            node->prune_reason = PRUNE_EVAL_TOO_HIGH;
+            node->prune_eval_cp = eval_us;
+            return;
+        }
+        if (eval_us < config->min_eval_cp) {
+            node->explored = true;
+            node->prune_reason = PRUNE_EVAL_TOO_LOW;
+            node->prune_eval_cp = eval_us;
             return;
         }
     }
 
-    /* Transposition detection: if this FEN was already expanded
-       elsewhere in the tree, skip it.  The node keeps its eval
-       (set above by ensure_eval) but gets no children. */
-    FenSet *fset = (FenSet *)tree->expanded_fens;
-    if (fset && fen_set_contains(fset, node->fen)) {
+    /* Transposition detection: O(1) lookup via FenMap.  If this FEN
+       was already expanded elsewhere, link this node into the
+       equivalence ring and skip expansion. */
+    TreeNode *canonical = fen_map_get(fmap, node->fen);
+    if (canonical) {
+        /* Insert into the circular equivalence ring:
+           canonical → ... → node → canonical */
+        if (canonical->next_equivalent) {
+            node->next_equivalent = canonical->next_equivalent;
+        } else {
+            node->next_equivalent = canonical;
+        }
+        canonical->next_equivalent = node;
         node->explored = true;
         return;
     }
-    fen_set_add(fset, node->fen);
+    fen_map_put(fmap, node->fen, node);
 
     bool is_our_move = (node->is_white_to_move == config->play_as_white);
     node->explored = true;
@@ -879,17 +969,59 @@ bool tree_build(Tree *tree, const char *start_fen,
         }
     }
 
-    tree->expanded_fens = fen_set_create();
+    tree->expanded_fens = fen_map_create();
 
     build_recursive(tree, tree->root, &tree->config, explorer);
 
-    fen_set_destroy((FenSet *)tree->expanded_fens);
+    fen_map_destroy((FenMap *)tree->expanded_fens);
     tree->expanded_fens = NULL;
 
     tree->build_complete = tree->is_building;
     tree->is_building = false;
 
     return true;
+}
+
+
+/** Remove a child from parent's children array by index. */
+static void remove_child_at(TreeNode *parent, size_t idx) {
+    if (idx >= parent->children_count) return;
+    for (size_t i = idx; i + 1 < parent->children_count; i++)
+        parent->children[i] = parent->children[i + 1];
+    parent->children_count--;
+}
+
+/**
+ * Post-build cleanup: delete nodes pruned for eval-too-low.
+ * These positions are too bad for us — no point keeping them.
+ * Returns the number of nodes removed.
+ */
+static size_t prune_low_eval_recursive(TreeNode *node, Tree *tree) {
+    if (!node) return 0;
+    size_t removed = 0;
+
+    /* Process children in reverse so removal doesn't skip entries */
+    for (size_t i = node->children_count; i > 0; i--) {
+        TreeNode *child = node->children[i - 1];
+        if (child->prune_reason == PRUNE_EVAL_TOO_LOW) {
+            size_t subtree_size = node_count_subtree(child);
+            remove_child_at(node, i - 1);
+            node_destroy(child);
+            removed += subtree_size;
+        } else {
+            removed += prune_low_eval_recursive(child, tree);
+        }
+    }
+    return removed;
+}
+
+size_t tree_prune_eval_too_low(Tree *tree) {
+    if (!tree || !tree->root) return 0;
+    size_t removed = prune_low_eval_recursive(tree->root, tree);
+    if (removed > 0) {
+        tree->total_nodes = node_count_subtree(tree->root);
+    }
+    return removed;
 }
 
 
@@ -1093,9 +1225,10 @@ int score_our_move_children(TreeNode *node,
         int cp_us = our_eval(child, config->play_as_white);
         if (cp_us < best_child_cp - config->max_eval_loss_cp) continue;
         passing++;
-        int opp_plies = 1 + child->subtree_depth / 2;
+        int opp_plies = child->subtree_opp_plies > 0 ? child->subtree_opp_plies : 1;
         double avg_cpl = child->accumulated_eca / opp_plies;
-        double score = (double)cp_us + config->eval_weight * avg_cpl;
+        double eval_conf = (child->subtree_opp_plies > 0) ? 1.0 : config->leaf_confidence;
+        double score = eval_conf * (double)cp_us + config->eval_weight * avg_cpl;
         if (score > best_score) {
             best_score = score;
             best_child = child;
@@ -1110,9 +1243,10 @@ int score_our_move_children(TreeNode *node,
             TreeNode *child = node->children[i];
             if (!child->has_eca) continue;
             int cp_us = our_eval(child, config->play_as_white);
-            int opp_plies = 1 + child->subtree_depth / 2;
+            int opp_plies = child->subtree_opp_plies > 0 ? child->subtree_opp_plies : 1;
             double avg_cpl = child->accumulated_eca / opp_plies;
-            double score = (double)cp_us + config->eval_weight * avg_cpl;
+            double eval_conf = (child->subtree_opp_plies > 0) ? 1.0 : config->leaf_confidence;
+            double score = eval_conf * (double)cp_us + config->eval_weight * avg_cpl;
             if (score > best_score) {
                 best_score = score;
                 best_child = child;
@@ -1143,13 +1277,40 @@ static size_t calculate_eca_recursive(TreeNode *node,
     /* Compute subtree_depth: max ply below this node */
     if (node->children_count == 0) {
         node->subtree_depth = 0;
+        node->subtree_opp_plies = 0;
     } else {
         int max_sd = 0;
+        int max_opp = 0;
         for (size_t i = 0; i < node->children_count; i++) {
             int sd = node->children[i]->subtree_depth + 1;
             if (sd > max_sd) max_sd = sd;
+
+            int opp = node->children[i]->subtree_opp_plies;
+            if (!is_our_move) opp += 1;
+            if (opp > max_opp) max_opp = opp;
         }
         node->subtree_depth = max_sd;
+        node->subtree_opp_plies = max_opp;
+    }
+
+    /* For transposition leaves, borrow ECA from the canonical node
+       (the one in the equivalence ring that has children). */
+    if (node->children_count == 0 && node->next_equivalent) {
+        TreeNode *equiv = node->next_equivalent;
+        while (equiv != node) {
+            if (equiv->has_eca && equiv->children_count > 0) {
+                node->accumulated_eca = equiv->accumulated_eca;
+                node->local_cpl = equiv->local_cpl;
+                node->subtree_depth = equiv->subtree_depth;
+                node->subtree_opp_plies = equiv->subtree_opp_plies;
+                node->has_eca = true;
+                count++;
+                return count;
+            }
+            if (!equiv->next_equivalent || equiv->next_equivalent == node)
+                break;
+            equiv = equiv->next_equivalent;
+        }
     }
 
     if (node->children_count == 0) {
@@ -1249,6 +1410,13 @@ void tree_print_stats(const Tree *tree) {
            tree->config.taper_depth);
     printf("  Eval window: [%+d, %+d] cp\n",
            tree->config.min_eval_cp, tree->config.max_eval_cp);
+    printf("  Injection: depth<=%d, cumP>=%.3f, PV cap %d\n",
+           tree->config.inj_max_depth,
+           tree->config.inj_min_probability, tree->config.inj_max_line_depth);
+    printf("  Opponent source: %s\n",
+           tree->config.maia_only ? "Maia-only" : "Lichess API + Maia supplement");
+    if (tree->config.maia_only)
+        printf("  Maia Elo: %d\n", tree->config.maia_elo);
     printf("========================\n\n");
 }
 

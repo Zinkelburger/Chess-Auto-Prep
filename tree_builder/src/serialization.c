@@ -85,6 +85,19 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
     if (node->engine_injected) {
         cJSON_AddBoolToObject(obj, "engine_injected", true);
     }
+    if (node->inj_origin_depth >= 0) {
+        cJSON_AddNumberToObject(obj, "inj_origin_depth", node->inj_origin_depth);
+    }
+    if (node->prune_reason != PRUNE_NONE) {
+        const char *reason = node->prune_reason == PRUNE_EVAL_TOO_HIGH
+                           ? "eval_too_high" : "eval_too_low";
+        cJSON_AddStringToObject(obj, "prune_reason", reason);
+        cJSON_AddNumberToObject(obj, "prune_eval_cp", node->prune_eval_cp);
+    }
+    if (node->next_equivalent) {
+        cJSON_AddNumberToObject(obj, "next_equivalent_id",
+                                (double)node->next_equivalent->node_id);
+    }
 
     /* Children */
     if (node->children_count > 0) {
@@ -226,10 +239,97 @@ bool tree_save_to_buffer(const Tree *tree, char **out_buffer, size_t *out_size,
 }
 
 
+/* ========== LoadContext: build ID→node map during parse, resolve
+   next_equivalent links afterwards (zero extra tree walks). ========== */
+
+typedef struct {
+    TreeNode **id_to_node;
+    size_t     capacity;
+
+    struct { TreeNode *node; uint64_t target_id; } *links;
+    size_t link_count;
+    size_t link_capacity;
+
+    uint64_t max_id;
+} LoadContext;
+
+static LoadContext *load_ctx_create(void) {
+    LoadContext *ctx = (LoadContext *)calloc(1, sizeof(LoadContext));
+    if (!ctx) return NULL;
+    ctx->capacity = 4096;
+    ctx->id_to_node = (TreeNode **)calloc(ctx->capacity, sizeof(TreeNode *));
+    ctx->link_capacity = 256;
+    ctx->links = malloc(ctx->link_capacity * sizeof(*ctx->links));
+    if (!ctx->id_to_node || !ctx->links) {
+        free(ctx->id_to_node);
+        free(ctx->links);
+        free(ctx);
+        return NULL;
+    }
+    return ctx;
+}
+
+static void load_ctx_register(LoadContext *ctx, TreeNode *node) {
+    if (!ctx || !node) return;
+    uint64_t id = node->node_id;
+    if (id >= ctx->capacity) {
+        size_t new_cap = ctx->capacity;
+        while (new_cap <= id) new_cap *= 2;
+        TreeNode **grown = (TreeNode **)realloc(
+            ctx->id_to_node, new_cap * sizeof(TreeNode *));
+        if (!grown) return;
+        memset(grown + ctx->capacity, 0,
+               (new_cap - ctx->capacity) * sizeof(TreeNode *));
+        ctx->id_to_node = grown;
+        ctx->capacity = new_cap;
+    }
+    ctx->id_to_node[id] = node;
+    if (id > ctx->max_id) ctx->max_id = id;
+}
+
+static void load_ctx_add_link(LoadContext *ctx, TreeNode *node,
+                               uint64_t target_id) {
+    if (!ctx) return;
+    if (ctx->link_count >= ctx->link_capacity) {
+        size_t new_cap = ctx->link_capacity * 2;
+        void *tmp = realloc(ctx->links, new_cap * sizeof(*ctx->links));
+        if (!tmp) return;
+        ctx->links = tmp;
+        ctx->link_capacity = new_cap;
+    }
+    ctx->links[ctx->link_count].node = node;
+    ctx->links[ctx->link_count].target_id = target_id;
+    ctx->link_count++;
+}
+
+static void load_ctx_resolve(LoadContext *ctx) {
+    if (!ctx) return;
+    size_t resolved = 0;
+    for (size_t i = 0; i < ctx->link_count; i++) {
+        uint64_t tid = ctx->links[i].target_id;
+        if (tid < ctx->capacity && ctx->id_to_node[tid]) {
+            ctx->links[i].node->next_equivalent = ctx->id_to_node[tid];
+            resolved++;
+        }
+    }
+    if (ctx->link_count > 0)
+        fprintf(stderr, "  Restored %zu/%zu equivalence links\n",
+                resolved, ctx->link_count);
+}
+
+static void load_ctx_destroy(LoadContext *ctx) {
+    if (!ctx) return;
+    free(ctx->id_to_node);
+    free(ctx->links);
+    free(ctx);
+}
+
+
 /**
  * Recursively parse cJSON into TreeNode
  */
-static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent) {
+static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
+                                LoadContext *ctx) {
     if (!obj) return NULL;
     
     /* Get FEN and moves */
@@ -306,18 +406,44 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent) {
         node->engine_injected = cJSON_IsTrue(einj);
     }
 
+    /* Parse injection origin depth */
+    cJSON *iod = cJSON_GetObjectItem(obj, "inj_origin_depth");
+    if (iod && cJSON_IsNumber(iod)) {
+        node->inj_origin_depth = (int)iod->valuedouble;
+    }
+
+    /* Parse prune reason */
+    cJSON *pr = cJSON_GetObjectItem(obj, "prune_reason");
+    if (pr && cJSON_IsString(pr)) {
+        if (strcmp(pr->valuestring, "eval_too_high") == 0)
+            node->prune_reason = PRUNE_EVAL_TOO_HIGH;
+        else if (strcmp(pr->valuestring, "eval_too_low") == 0)
+            node->prune_reason = PRUNE_EVAL_TOO_LOW;
+    }
+    cJSON *pec = cJSON_GetObjectItem(obj, "prune_eval_cp");
+    if (pec && cJSON_IsNumber(pec)) {
+        node->prune_eval_cp = (int)pec->valuedouble;
+    }
+
     /* Parse node ID */
     cJSON *id = cJSON_GetObjectItem(obj, "id");
     if (id && cJSON_IsNumber(id)) {
         node->node_id = (uint64_t)id->valuedouble;
     }
-    
+
+    /* Register in LoadContext for equivalence linking */
+    if (ctx) load_ctx_register(ctx, node);
+
+    cJSON *neq = cJSON_GetObjectItem(obj, "next_equivalent_id");
+    if (neq && cJSON_IsNumber(neq) && ctx)
+        load_ctx_add_link(ctx, node, (uint64_t)neq->valuedouble);
+
     /* Parse children */
     cJSON *children = cJSON_GetObjectItem(obj, "children");
     if (children && cJSON_IsArray(children)) {
         cJSON *child_item;
         cJSON_ArrayForEach(child_item, children) {
-            TreeNode *child = cjson_to_node(child_item, node);
+            TreeNode *child = cjson_to_node(child_item, node, ctx);
             if (child) {
                 node_add_child(node, child);
             }
@@ -418,15 +544,25 @@ Tree* tree_load_from_buffer(const char *buffer, size_t size) {
         }
     }
     
-    /* Parse tree */
+    /* Parse tree with a LoadContext to rebuild equivalence rings */
+    LoadContext *ctx = load_ctx_create();
+
     cJSON *tree_obj = cJSON_GetObjectItem(root, "tree");
     if (tree_obj) {
-        tree->root = cjson_to_node(tree_obj, NULL);
+        tree->root = cjson_to_node(tree_obj, NULL, ctx);
         
         /* Recalculate total nodes */
         if (tree->root) {
             tree->total_nodes = node_count_subtree(tree->root);
         }
+    }
+
+    /* Restore next_equivalent rings from serialized IDs, and sync the
+       global node-ID counter so resume doesn't create collisions. */
+    if (ctx) {
+        load_ctx_resolve(ctx);
+        node_reset_id_counter(ctx->max_id + 1);
+        load_ctx_destroy(ctx);
     }
     
     cJSON_Delete(root);

@@ -75,6 +75,7 @@ RepertoireConfig repertoire_config_default(void) {
 
         .depth_discount = 1.0,
         .eval_weight = 0.40,
+        .leaf_confidence = 1.0,
         .min_eval_cp = -50,
         .max_eval_cp = 300,
         .max_eval_loss_cp = 50,
@@ -438,6 +439,10 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
             line->avg_ease_for_us = 0;
             line->avg_ease_for_opponent = 0;
             line->mistake_potential = 0;
+            if (current.node) {
+                line->leaf_prune_reason = current.node->prune_reason;
+                line->leaf_prune_eval_cp = current.node->prune_eval_cp;
+            }
             num_lines++;
         }
     }
@@ -673,8 +678,12 @@ bool repertoire_export_pgn(const RepertoireResult *result,
             fprintf(f, "%s ", line->moves_san[j]);
             if (line->is_engine_injected[j] &&
                 (j == 0 || !line->is_engine_injected[j - 1])) {
-                fprintf(f, "{Engine best move; continuing with #1 engine moves} ");
+                fprintf(f, "{Engine best move} ");
             }
+        }
+        if (line->leaf_prune_reason == PRUNE_EVAL_TOO_HIGH) {
+            fprintf(f, "{Already winning (%+.1f); no further preparation needed} ",
+                    line->leaf_prune_eval_cp / 100.0);
         }
         fprintf(f, "*\n");
     }

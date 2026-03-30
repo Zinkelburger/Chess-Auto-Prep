@@ -8,7 +8,7 @@ interleaved DFS that builds the tree and evaluates positions simultaneously:
 1. **Building** the move tree by querying Lichess Explorer, Maia, and Stockfish
    together — engine MultiPV for our-move candidates, Lichess DB + Maia
    supplement for opponent responses, with eval-window pruning at every node
-2. Computing **ease scores** (legacy compatibility with the Flutter app)
+2. Computing **ease scores** (how likely the side to move finds a good move)
 3. Computing **ECA (Expected Centipawn Advantage)** — estimating how many
    centipawns opponents hand us per turn due to suboptimal play
 4. **Selecting** repertoire moves using a blended score of eval and ECA
@@ -82,18 +82,37 @@ human moves. A single node can end up with a mix of both sources.
    the root this covers almost every played response (including 2–5%
    sidelines worth preparing against); deeper in the tree it focuses on only
    the most popular replies.
-4. **Engine top-1** — run Stockfish on this position. If the engine's best
-   move is not already a child, add it (as a low-probability entry). This
-   ensures the tree accounts for the opponent's objectively best play, not
-   just their popular play.
+4. **Engine top-1 injection** — run Stockfish on this position. If the
+   engine's best move is not already a child, inject it so we have a
+   prepared response.  Two structural gates control injection:
+   - `depth <= inj_max_depth` (default 20)
+   - `cumulative_probability >= inj_min_probability` (default 0.005)
+
+   A transposition check also prevents injection when the resulting FEN
+   is already expanded elsewhere in the tree. If the engine's move already
+   exists as a child, its eval is backfilled instead of duplicating.
+
+   **Probability:** The injected move's probability comes from Maia's
+   prediction for that move if available (the Maia response from step 2
+   is reused).  If the move isn't in Maia's output, a fixed fallback of
+   0.05 is used.
+
+   **Subtree building:** Engine-injected nodes are built with normal DFS
+   logic — both our-move and opponent-move expansion use the standard
+   Lichess/Maia/MultiPV pipeline. The only special treatment is a depth
+   cap: the subtree stops at `inj_max_line_depth` (default 6) plies below
+   the injection point (tracked via `inj_origin_depth` on the node,
+   propagated to all descendants).  This means injected subtrees get
+   proper branching and ECA signal rather than an unbranched engine PV.
 5. **Batch evaluate** all children that lack evaluations (checks DB cache
    first, then Stockfish). Evals are cached to DB.
 6. **Recurse** into each child.
 
-The `--maia-only` flag bypasses Lichess entirely, using Maia as the sole
-source of opponent moves. This eliminates the 500ms per-query API rate
-limit but produces larger trees (Maia always has predictions, unlike
-Lichess which naturally prunes positions with too few games).
+`--maia-only` (the default) bypasses Lichess entirely, using Maia as the
+sole source of opponent moves. This eliminates the 500ms per-query API
+rate limit but produces larger trees (Maia always has predictions, unlike
+Lichess which naturally prunes positions with too few games). Use
+`--lichess` to enable Lichess API queries with Maia as a supplement.
 
 The mass target taper at each depth:
 
@@ -110,8 +129,14 @@ The mass target taper at each depth:
 At every node, before branching:
 - Check if the node has an engine evaluation (most nodes do — set by their
   parent during creation).
-- If `eval_for_us <= min_eval_cp` — position is too bad, stop.
-- If `eval_for_us >= max_eval_cp` — position is already won, stop studying.
+- If `eval_for_us > max_eval_cp` — position is already won, stop studying.
+  The node is kept as a leaf with `prune_reason = PRUNE_EVAL_TOO_HIGH` and
+  the triggering eval stored in `prune_eval_cp`.  PGN export annotates
+  these with `{Already winning (+1.50); no further preparation needed}`.
+- If `eval_for_us < min_eval_cp` — position is too bad for us.  The node
+  is marked `PRUNE_EVAL_TOO_LOW` during the build, then **deleted** in a
+  post-build cleanup pass (`tree_prune_eval_too_low()`).  There's no point
+  keeping positions where we're already lost.
 
 This prunes the tree inline as it's built, avoiding wasteful exploration of
 positions outside the eval window.
@@ -131,22 +156,51 @@ building resumes from unexplored leaves. Nodes with children or marked
 **Evals are cached.** Every evaluation is stored in SQLite so re-runs skip
 already-evaluated positions. The DB also caches Lichess explorer responses.
 
-**Transposition detection.** A FEN hash set tracks every position that has
-been fully expanded during the build. When a position is reached via a
-different move order, the node gets its eval from the DB cache but is not
-expanded again — it becomes a leaf. This prevents duplicated subtrees and
-keeps the tree size proportional to the number of *unique* positions rather
-than the number of paths. The tree remains a tree (not a DAG), so
-serialization and traversal are unchanged. On resume, existing nodes
-re-register their FENs in the set so transpositions are still detected for
-newly expanded branches.
+**Transposition detection.** A FenMap (hash table, FEN → canonical
+TreeNode*) tracks every position that has been fully expanded during the
+build.  The map starts at 4096 buckets and doubles when the load factor
+exceeds 0.75, so lookups stay O(1).
+
+When a position is reached via a different move order, the transposition
+node is linked into a **circular equivalence ring** with the canonical
+node via the `next_equivalent` pointer.  All nodes for the same position
+can find each other by walking the ring.  The canonical node (first
+expanded) has children; the others are transposition leaves.
+
+During ECA calculation, transposition leaves walk their equivalence ring
+to find the canonical node and borrow `accumulated_eca`, `local_cpl`,
+`subtree_depth`, and `subtree_opp_plies` from it instead of contributing
+zero.  The tree remains a tree (not a DAG) for serialization and
+traversal, but the equivalence ring lets ECA see through to the canonical
+subtree.  On resume, existing nodes re-register their FENs in the map so
+transpositions are still detected for newly expanded branches.
+
+Equivalence rings are persisted in JSON via `next_equivalent_id` on each
+node.  On load, a `LoadContext` builds an ID→node map during parsing and
+resolves all links in a single pass afterwards.  The global node-ID
+counter is also synced to `max(loaded_id) + 1` so resume doesn't create
+collisions.
+
+**Known limitation:** ECA borrowing from the canonical node depends on
+DFS traversal order — the canonical node must be processed *before* its
+transposition leaves.  This holds in the common case (canonical was
+expanded first, so it's in an earlier branch), but is not guaranteed
+after reordering or manual edits.  When borrowing fails silently, the
+transposition leaf contributes ECA=0.
+
+**Known limitation:** Transposition leaves keep the cumulative probability
+of the path that discovered them.  If a higher-probability path reaches
+the same position later, the canonical node is not re-expanded at the
+deeper depth that the higher cumP would allow.  This is acceptable since
+it only under-explores some positions rather than producing incorrect
+results.
 
 #### Maia Neural Network Integration
 
 Maia supplements Lichess data at opponent-move nodes, filling in mass that
 Lichess couldn't cover. It triggers when all of:
-- A Maia model was found (auto-detected from `./maia_rapid.onnx` or
-  `../assets/maia_rapid.onnx`, or explicit `--maia-model <path>`)
+- A Maia model was found (auto-detected from `./maia3_simplified.onnx` or
+  `../assets/maia3_simplified.onnx`, or explicit `--maia-model <path>`)
 - The mass target hasn't been reached after Lichess moves
 - `node.cumulative_probability >= maia_threshold` (default 0.01 = 1%)
 
@@ -251,21 +305,38 @@ At our-move nodes during the top-down traversal:
 ```
 for each child (after max-eval-loss filtering,
                 with "if all fail, re-score all" fallback):
-    opp_plies = 1 + subtree_depth / 2
+    opp_plies = child.subtree_opp_plies   (actual count, min 1)
     avg_cpl   = child.accumulated_eca / opp_plies
     score     = eval_us_cp(child) + eval_weight × avg_cpl
 
 select argmax(score)
 ```
 
-The `opp_plies` denominator estimates how many opponent turns exist
-below the child. This normalizes accumulated CPL to "average centipawns
-gifted per opponent turn" so deep and shallow lines are scored fairly.
-Raw accumulated CPL always grows with depth; dividing by opponent plies
-makes it stable.
+`subtree_opp_plies` is the actual number of opponent-move levels in the
+subtree, computed bottom-up during ECA calculation:
+- Leaves: `subtree_opp_plies = 0`
+- Opponent-move nodes: `subtree_opp_plies = 1 + max(child.subtree_opp_plies)`
+- Our-move nodes: `subtree_opp_plies = max(child.subtree_opp_plies)`
+
+This replaces the old estimate `1 + subtree_depth / 2`, which was
+inaccurate in asymmetric trees where pruning removed branches unevenly.
 
 Both terms are in centipawn units. `eval_weight` controls how much
 trickiness matters relative to objective eval.
+
+**Known issue:** `subtree_opp_plies` uses the *maximum* child depth,
+not a weighted average.  In highly asymmetric trees (one deep branch,
+many shallow ones), the max can over-count.  A probability-weighted
+expected depth would be more accurate but is more complex to compute
+(requires a second bottom-up pass after move selection, creating a
+circular dependency).  The current approach is correct for balanced
+trees and a reasonable approximation for asymmetric ones.
+
+**Known issue:** For transposition leaves, `subtree_opp_plies` is
+borrowed from the canonical node.  This is correct if the canonical
+subtree is representative, but the actual depth from this path may
+differ (the transposition might be reached deeper or shallower).
+Currently accepted as a reasonable approximation.
 
 At opponent-move nodes, all children above the probability threshold are
 recursed into. The DFS also stops at eval-window boundaries.
@@ -332,15 +403,24 @@ all castling UCI to king-destination form at three levels:
 | `max_eval_cp` | `--max-eval` | W: 200, B: 100 | Stop if our eval exceeds this |
 | `relative_eval` | `--relative` | off | Make thresholds relative to root eval |
 
+### Engine Injection
+
+| Parameter | Flag | Default | Description |
+|-----------|------|---------|-------------|
+| `inj_max_depth` | `--inj-max-depth` | 20 | Don't inject deeper than this ply |
+| `inj_min_probability` | `--inj-min-prob` | 0.005 (0.5%) | Only inject if cumProb >= this |
+| `inj_max_line_depth` | `--inj-line-depth` | 6 | Cap injected subtree at N plies below injection (0 = unlimited) |
+
 ### Maia Supplement
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| `maia_model` | `--maia-model` | auto-detect | Path to `maia_rapid.onnx` |
-| `maia_elo` | `--maia-elo` | 2000 | Elo for predictions (1100–2100) |
+| `maia_model` | `--maia-model` | auto-detect | Path to `maia3_simplified.onnx` |
+| `maia_elo` | `--maia-elo` | 2200 | Elo for predictions (600–2400) |
 | `maia_threshold` | `--maia-threshold` | 0.01 (1%) | Min cumProb for Maia supplement |
 | `maia_min_prob` | `--maia-min-prob` | 0.02 (2%) | Skip moves below this probability |
-| `maia_only` | `--maia-only` | off | Bypass Lichess API, use Maia exclusively |
+| `maia_only` | `--maia-only` | on (default) | Bypass Lichess API, use Maia exclusively |
+| | `--lichess` | | Enable Lichess API (overrides `--maia-only`) |
 
 ### ECA & Move Selection
 
@@ -386,10 +466,11 @@ all castling UCI to king-destination form at three levels:
   wasting inference on unlikely branches. With `--maia-only`, this gate is
   removed.
 
-- **`--maia-only`**: "Skip the Lichess API entirely?" Eliminates the 500ms
-  per-query rate limit, but produces larger trees since Maia always has
-  predictions (unlike Lichess which prunes positions with too few games).
-  Tighten pruning parameters to compensate.
+- **`--maia-only`** (default): "Skip the Lichess API entirely?" Eliminates
+  the 500ms per-query rate limit, but produces larger trees since Maia
+  always has predictions (unlike Lichess which prunes positions with too
+  few games). Use `--lichess` to override. Tighten pruning parameters to
+  compensate for larger trees.
 
 ---
 
@@ -406,6 +487,7 @@ tree_builder/
 │   ├── database.h      # SQLite caching layer
 │   ├── serialization.h # JSON import/export
 │   ├── chess_logic.h   # FEN parsing, UCI move application, castling normalization
+│   ├── san_convert.h   # SAN ↔ UCI move conversion
 │   ├── maia.h          # Maia neural network (ONNX Runtime)
 │   └── thread_pool.h   # Generic thread pool
 ├── src/
@@ -418,6 +500,7 @@ tree_builder/
 │   ├── database.c      # SQLite operations
 │   ├── serialization.c # JSON serialization
 │   ├── chess_logic.c   # Minimal chess rules for FEN/UCI, castling normalization
+│   ├── san_convert.c   # SAN ↔ UCI move conversion
 │   ├── maia.c          # ONNX Runtime inference
 │   ├── thread_pool.c   # Thread pool implementation
 │   ├── cJSON.c         # JSON library (vendored)
@@ -473,3 +556,70 @@ tree_builder/
                            ▼
               JSON / PGN export
 ```
+
+---
+
+## Known Issues and Future Improvements
+
+### Leaf Node ECA
+
+Leaf nodes contribute `accumulated_eca = 0` (since `local_cpl` requires
+children to compute).  This means lines pruned early look "less tricky"
+simply because they have less depth, not because the opponent plays better
+there.  Transposition leaves now borrow ECA from the canonical node (see
+above), but other leaf types (max-depth, cumP-pruned) still contribute
+zero.
+
+A future improvement could estimate leaf ECA from the node's eval or
+from the average ECA of nearby non-leaf nodes.
+
+### Probability Normalization After Blended Sources
+
+When both Lichess and Maia contribute children at an opponent node, the
+`move_probability` values come from different distributions and may not
+sum to 1.0.  The ECA formula weights by `move_probability`:
+
+```
+future += child.move_probability × child.accumulated_eca
+```
+
+If probabilities sum to 0.75, the remaining 0.25 mass is implicitly
+treated as "opponent plays a move with zero ECA contribution."  This
+underweights the ECA signal at every opponent node and the effect
+compounds through the tree.
+
+With `--maia-only` (the default), Maia probabilities are more
+self-consistent but still capped at the mass target (e.g. 50% deep in
+the tree), leaving substantial unnormalized mass.
+
+A fix would be to normalize `move_probability` across all children after
+all sources (Lichess, Maia, engine injection) have contributed, by
+dividing each by the sum.  This would require a normalization pass at
+the end of `build_opponent_move` after all children are created.
+
+Alternatively, the ECA accumulation could divide by `mass_covered`
+instead of assuming probabilities sum to 1.0.
+
+### DFS Order Bias on Interrupted Builds
+
+The build is DFS, so earlier children are fully explored before later
+ones.  If interrupted (SIGINT), earlier children have deeper subtrees
+and accumulate more ECA signal.  Resume partially mitigates this, but
+any time-limited build has an inherent bias toward first-explored
+branches.
+
+### `subtree_opp_plies` for Transposition Leaves
+
+When a transposition leaf borrows `subtree_opp_plies` from the canonical
+node, the value reflects the canonical path's depth, not the
+transposition path's depth.  A position reached 4 ply later via
+transposition would have a different number of opponent plies from root,
+but the borrowed value comes from the canonical expansion context.
+
+### Equivalence Ring Not Serialized
+
+The `next_equivalent` pointers are runtime-only — they are built during
+`tree_build()` and destroyed when the FenMap is freed.  Trees loaded
+from JSON without a rebuild will have `next_equivalent = NULL` on all
+nodes.  A future improvement could reconstruct the ring after loading
+by scanning for duplicate FENs.

@@ -46,6 +46,7 @@ typedef struct RepertoireConfig {
     /* ECA (Expected Centipawn Advantage) settings */
     double depth_discount;          /* γ: depth discount factor (1.0=none, <1.0 prefers early blunders) */
     double eval_weight;             /* α: blend eval vs ECA (0=pure ECA, 1=pure eval, 0.5=balanced) */
+    double leaf_confidence;         /* Discount on eval for unexplored leaves (1.0=trust fully, <1.0=discount) */
     
     /* Eval-window pruning (stop exploring lines outside this range) */
     int min_eval_cp;                 /* Stop DFS if our eval drops below this (default: -50) */
@@ -108,7 +109,11 @@ typedef struct {
     double final_eval;              /* Engine eval at leaf */
     double probability;             /* Cumulative probability of reaching end */
     double mistake_potential;       /* How likely opponent is to err in this line */
-    
+
+    /* Terminal node info: why this line ended */
+    int    leaf_prune_reason;       /* PruneReason of the terminal node (0 = normal leaf) */
+    int    leaf_prune_eval_cp;      /* Eval that triggered pruning (from our perspective) */
+
     /* Opening info */
     char opening_name[128];
     char opening_eco[8];

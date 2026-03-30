@@ -75,20 +75,34 @@ TreeNode* node_create(const char *fen, const char *move_san,
     
     /* Assign unique ID */
     node->node_id = g_next_node_id++;
-    
+
+    /* Not inside an engine-injected subtree by default */
+    node->inj_origin_depth = -1;
+
     return node;
+}
+
+
+void node_reset_id_counter(uint64_t next_id) {
+    if (next_id > g_next_node_id)
+        g_next_node_id = next_id;
 }
 
 
 void node_destroy(TreeNode *node) {
     if (!node) return;
     
-    /* Recursively destroy children */
+    /* N.B. We do NOT unlink this node from the next_equivalent ring.
+       This is safe when destroying the entire tree (all ring members
+       are freed), and when pruning PRUNE_EVAL_TOO_LOW nodes (those
+       are never added to a ring — they're pruned before FenMap
+       insertion).  If future code removes arbitrary nodes while
+       rings are live, it must unlink them first. */
+
     for (size_t i = 0; i < node->children_count; i++) {
         node_destroy(node->children[i]);
     }
     
-    /* Free children array and node */
     free(node->children);
     free(node);
 }

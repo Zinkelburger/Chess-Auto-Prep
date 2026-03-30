@@ -30,6 +30,7 @@
 #include "engine_pool.h"
 #include "repertoire.h"
 #include "chess_logic.h"
+#include "san_convert.h"
 #include "maia.h"
 
 
@@ -79,6 +80,7 @@ static void print_usage(const char *prog_name) {
     printf("  <name>.db         Cached evals and explorer data\n\n");
     printf("Options:\n");
     printf("  -f, --fen <FEN>        Starting position FEN\n");
+    printf("  --moves <SAN...>       Starting moves in SAN (e.g. \"e4 d5 exd5 Qxd5\")\n");
     printf("  -c, --color <w|b>      Play as white (w) or black (b) [default: w]\n");
     printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
     printf("  -d, --depth <N>        Max tree depth in ply [default: 30]\n");
@@ -106,6 +108,11 @@ static void print_usage(const char *prog_name) {
     printf("  --opp-mass-root <0-1>  Mass target at root (explore broadly) [default: 0.95]\n");
     printf("  --opp-mass-floor <0-1> Mass target floor (deep positions) [default: 0.50]\n");
     printf("\n");
+    printf("Engine injection (novelty detection at opponent nodes):\n");
+    printf("  --inj-max-depth <N>    Don't inject deeper than this ply [default: 20]\n");
+    printf("  --inj-min-prob <P>     Only inject if cumProb >= P [default: 0.005]\n");
+    printf("  --inj-line-depth <N>   Cap injected PV at N plies (0=unlimited) [default: 6]\n");
+    printf("\n");
     printf("Eval window pruning:\n");
     printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: color-dependent]\n");
     printf("  --max-eval <cp>        Stop DFS if our eval exceeds this [default: color-dependent]\n");
@@ -113,14 +120,16 @@ static void print_usage(const char *prog_name) {
     printf("\n");
     printf("ECA scoring (move selection phase):\n");
     printf("  --eval-weight <0-1>    Eval vs trickiness blend [default: 0.40]\n");
+    printf("  --leaf-confidence <0-1> Eval discount for unexplored leaves [default: 1.0]\n");
     printf("  --depth-decay <0-1>    Depth discount for ECA [default: 1.0]\n");
     printf("\n");
-    printf("Maia fallback (extends tree when explorer is exhausted):\n");
+    printf("Opponent move source:\n");
     printf("  --maia-model <path>    Path to maia3_simplified.onnx [default: auto-detect]\n");
-    printf("  --maia-elo <N>         Elo for Maia predictions [default: 2000]\n");
+    printf("  --maia-elo <N>         Elo for Maia predictions [default: 2200]\n");
     printf("  --maia-threshold <P>   Min cumProb to trigger Maia [default: 0.01]\n");
     printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.02]\n");
-    printf("  --maia-only            Use Maia exclusively for opponent moves (no Lichess API)\n");
+    printf("  --maia-only            Use Maia exclusively (default, no Lichess API)\n");
+    printf("  --lichess              Use Lichess API for opponent moves (overrides --maia-only)\n");
     printf("\n");
     printf("Output:\n");
     printf("  -n, --name <name>      Repertoire name (shown in PGN headers)\n");
@@ -130,6 +139,7 @@ static void print_usage(const char *prog_name) {
     printf("Examples:\n");
     printf("  %s -c w -e 20 -t 4 -v repertoire\n", prog_name);
     printf("  %s -c b -f \"FEN\" -n \"Modern Benoni\" modern_benoni\n", prog_name);
+    printf("  %s -c w --moves \"e4 d5 exd5 Qxd5\" scandinavian\n", prog_name);
     printf("  %s -c b -v modern_benoni   # resumes from modern_benoni.tree.json\n", prog_name);
     printf("\n");
 }
@@ -262,6 +272,8 @@ int main(int argc, char *argv[]) {
 
     /* Configuration with defaults */
     const char *start_fen = DEFAULT_FEN;
+    const char *start_moves = NULL;
+    char computed_fen[256] = {0};
     const char *base_name = NULL;
     char pgn_path[PATH_MAX] = {0};
     char tree_path[PATH_MAX] = {0};
@@ -284,10 +296,11 @@ int main(int argc, char *argv[]) {
     const char *lichess_token = NULL;
     const char *repertoire_name = NULL;
     const char *maia_model_path = NULL;
-    int maia_elo = 2000;
+    int maia_elo = 2200;
     double maia_threshold = 0.01;
     double maia_min_prob = 0.02;
-    bool maia_only = false;
+    bool maia_only = true;
+    bool use_lichess = false;
     bool relative_eval = false;
 
     /* Our-move overrides (-1 = use default) */
@@ -301,16 +314,23 @@ int main(int argc, char *argv[]) {
     double opp_mass_root_arg = -1.0;
     double opp_mass_floor_arg = -1.0;
 
+    /* Engine injection overrides */
+    int inj_max_depth_arg = -1;
+    double inj_min_probability_arg = -1.0;
+    int inj_max_line_depth_arg = -1;
+
     /* Eval window overrides */
     int min_eval_arg = -99999;
     int max_eval_arg = -99999;
 
     /* ECA scoring overrides */
     double eval_weight_arg = -1.0;
+    double leaf_confidence_arg = -1.0;
     double depth_decay_arg = -1.0;
 
     static struct option long_options[] = {
         {"fen",              required_argument, 0, 'f'},
+        {"moves",            required_argument, 0, 1010},
         {"color",            required_argument, 0, 'c'},
         {"probability",      required_argument, 0, 'p'},
         {"depth",            required_argument, 0, 'd'},
@@ -336,12 +356,17 @@ int main(int argc, char *argv[]) {
         {"opp-max-children", required_argument, 0, 2010},
         {"opp-mass-root",    required_argument, 0, 2011},
         {"opp-mass-floor",   required_argument, 0, 2012},
+        /* Engine injection */
+        {"inj-max-depth",    required_argument, 0, 2014},
+        {"inj-min-prob",     required_argument, 0, 2015},
+        {"inj-line-depth",   required_argument, 0, 2016},
         /* Eval window */
         {"min-eval",         required_argument, 0, 2020},
         {"max-eval",         required_argument, 0, 2021},
         {"relative",         no_argument,       0, 2022},
         /* ECA scoring */
         {"eval-weight",      required_argument, 0, 2030},
+        {"leaf-confidence",  required_argument, 0, 2031},
         {"depth-decay",      required_argument, 0, 2032},
         /* Maia */
         {"maia-model",       required_argument, 0, 3001},
@@ -349,6 +374,7 @@ int main(int argc, char *argv[]) {
         {"maia-threshold",   required_argument, 0, 3003},
         {"maia-min-prob",    required_argument, 0, 3004},
         {"maia-only",        no_argument,       0, 3005},
+        {"lichess",          no_argument,       0, 3006},
         /* General */
         {"verbose",          no_argument,       0, 'v'},
         {"help",             no_argument,       0, 'h'},
@@ -360,6 +386,7 @@ int main(int argc, char *argv[]) {
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'f': start_fen = optarg; break;
+            case 1010: start_moves = optarg; break;
             case 'c':
                 play_as_white = (optarg[0] == 'w' || optarg[0] == 'W');
                 break;
@@ -402,12 +429,17 @@ int main(int argc, char *argv[]) {
             case 2010: if (!parse_int(optarg, "opp-max-children", &opp_max_children_arg)) return 1; break;
             case 2011: if (!parse_double(optarg, "opp-mass-root", &opp_mass_root_arg)) return 1; break;
             case 2012: if (!parse_double(optarg, "opp-mass-floor", &opp_mass_floor_arg)) return 1; break;
+            /* Engine injection */
+            case 2014: if (!parse_int(optarg, "inj-max-depth", &inj_max_depth_arg)) return 1; break;
+            case 2015: if (!parse_double(optarg, "inj-min-prob", &inj_min_probability_arg)) return 1; break;
+            case 2016: if (!parse_int(optarg, "inj-line-depth", &inj_max_line_depth_arg)) return 1; break;
             /* Eval window */
             case 2020: if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1; break;
             case 2021: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
             case 2022: relative_eval = true; break;
             /* ECA */
             case 2030: if (!parse_double(optarg, "eval-weight", &eval_weight_arg)) return 1; break;
+            case 2031: if (!parse_double(optarg, "leaf-confidence", &leaf_confidence_arg)) return 1; break;
             case 2032: if (!parse_double(optarg, "depth-decay", &depth_decay_arg)) return 1; break;
             /* Maia */
             case 3001: maia_model_path = optarg; break;
@@ -415,9 +447,12 @@ int main(int argc, char *argv[]) {
             case 3003: if (!parse_double(optarg, "maia-threshold", &maia_threshold)) return 1; break;
             case 3004: if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1; break;
             case 3005: maia_only = true; break;
+            case 3006: use_lichess = true; break;
             default: print_usage(argv[0]); return 1;
         }
     }
+
+    if (use_lichess) maia_only = false;
 
     if (optind < argc) {
         base_name = argv[optind];
@@ -445,6 +480,58 @@ int main(int argc, char *argv[]) {
 
     snprintf(pgn_path, sizeof(pgn_path), "%s.pgn", base_name);
     snprintf(tree_path, sizeof(tree_path), "%s.tree.json", base_name);
+
+    /* Convert --moves to a FEN by applying each SAN move from startpos */
+    if (start_moves) {
+        if (start_fen != (const char *)DEFAULT_FEN && strcmp(start_fen, DEFAULT_FEN) != 0) {
+            fprintf(stderr, "Error: --moves and --fen are mutually exclusive\n");
+            return 1;
+        }
+        ChessPosition pos;
+        position_from_fen(&pos, DEFAULT_FEN);
+
+        char fen_buf[256];
+        position_to_fen(&pos, fen_buf, sizeof(fen_buf));
+
+        char moves_copy[2048];
+        strncpy(moves_copy, start_moves, sizeof(moves_copy) - 1);
+        moves_copy[sizeof(moves_copy) - 1] = '\0';
+
+        printf("Applying moves:");
+        char *saveptr = NULL;
+        char *tok = strtok_r(moves_copy, " \t", &saveptr);
+        int move_num = 0;
+        while (tok) {
+            /* Skip move number tokens like "1." or "2..." */
+            {
+                const char *p = tok;
+                while (*p >= '0' && *p <= '9') p++;
+                if (*p == '.' || *p == '\0') {
+                    tok = strtok_r(NULL, " \t", &saveptr);
+                    continue;
+                }
+            }
+
+            char uci_move[8];
+            if (!san_to_uci(fen_buf, tok, uci_move, sizeof(uci_move))) {
+                fprintf(stderr, "\nError: illegal or unrecognised move '%s'\n", tok);
+                return 1;
+            }
+            if (!position_apply_uci(&pos, uci_move)) {
+                fprintf(stderr, "\nError: could not apply move '%s' (uci: %s)\n",
+                        tok, uci_move);
+                return 1;
+            }
+            position_to_fen(&pos, fen_buf, sizeof(fen_buf));
+            move_num++;
+            printf(" %s", tok);
+            tok = strtok_r(NULL, " \t", &saveptr);
+        }
+        printf(" (%d plies)\n", move_num);
+
+        snprintf(computed_fen, sizeof(computed_fen), "%s", fen_buf);
+        start_fen = computed_fen;
+    }
 
     /* Resolve Lichess token */
     char *token_buf = NULL;
@@ -497,9 +584,11 @@ int main(int argc, char *argv[]) {
     printf("  Speeds:           %s\n", speeds);
     printf("  Min games:        %d\n", min_games);
     printf("  Database:         %s\n", db_path);
-    printf("  Opponent source:  %s\n",
-           maia_only ? "Maia-only (no API)" :
-           use_masters ? "Masters" : "Lichess");
+    if (maia_only)
+        printf("  Opponent source:  Maia-only (elo=%d, no API)\n", maia_elo);
+    else
+        printf("  Opponent source:  %s + Maia supplement\n",
+               use_masters ? "Masters DB" : "Lichess API");
     printf("  Output:           %s\n", pgn_path);
     printf("  Tree state:       %s\n", tree_path);
     if (load_tree_file) printf("  Loading tree:     %s\n", load_tree_file);
@@ -527,9 +616,9 @@ int main(int argc, char *argv[]) {
     }
 
     if (maia_only && !maia) {
-        fprintf(stderr, "Error: --maia-only requires a working Maia model.\n");
+        fprintf(stderr, "  Warning: Maia model not found — falling back to Lichess API mode.\n");
         fprintf(stderr, "  Use --maia-model <path> or place maia3_simplified.onnx next to the binary.\n");
-        return 1;
+        maia_only = false;
     }
 
     /* ================================================================
@@ -681,6 +770,9 @@ int main(int argc, char *argv[]) {
         if (opp_max_children_arg >= 0) config.opp_max_children = opp_max_children_arg;
         if (opp_mass_root_arg >= 0.0) config.opp_mass_root = opp_mass_root_arg;
         if (opp_mass_floor_arg >= 0.0) config.opp_mass_floor = opp_mass_floor_arg;
+        if (inj_max_depth_arg >= 0) config.inj_max_depth = inj_max_depth_arg;
+        if (inj_min_probability_arg >= 0.0) config.inj_min_probability = inj_min_probability_arg;
+        if (inj_max_line_depth_arg >= 0) config.inj_max_line_depth = inj_max_line_depth_arg;
         if (min_eval_arg != -99999) config.min_eval_cp = min_eval_arg;
         if (max_eval_arg != -99999) config.max_eval_cp = max_eval_arg;
         config.relative_eval = relative_eval;
@@ -701,9 +793,20 @@ int main(int argc, char *argv[]) {
         printf("  Opponent:   max %d children, mass %.0f%% → %.0f%%\n",
                config.opp_max_children,
                config.opp_mass_root * 100.0, config.opp_mass_floor * 100.0);
+        if (config.inj_max_line_depth > 0)
+            printf("  Injection:  depth<=%d, cumP>=%.3f, PV cap %d ply\n",
+                   config.inj_max_depth, config.inj_min_probability,
+                   config.inj_max_line_depth);
+        else
+            printf("  Injection:  depth<=%d, cumP>=%.3f, PV unlimited\n",
+                   config.inj_max_depth, config.inj_min_probability);
         printf("  Eval window: [%+d, %+d] cp%s\n",
                config.min_eval_cp, config.max_eval_cp,
                relative_eval ? " (relative)" : "");
+
+        BuildStats build_stats;
+        memset(&build_stats, 0, sizeof(build_stats));
+        config.stats = &build_stats;
 
         struct timespec build_start, build_end;
         clock_gettime(CLOCK_MONOTONIC, &build_start);
@@ -736,6 +839,100 @@ int main(int argc, char *argv[]) {
             printf("  Built %zu nodes in %.1fs (max depth %d)\n",
                    tree->total_nodes, build_time, tree->max_depth_reached);
 
+        /* Post-build: remove nodes where eval is too bad for us */
+        size_t pruned = tree_prune_eval_too_low(tree);
+        if (pruned > 0)
+            printf("  Pruned %zu nodes (eval below %+dcp)\n",
+                   pruned, config.min_eval_cp);
+
+        /* Print build timing breakdown */
+        printf("\n  Build timing breakdown:\n");
+        if (build_stats.lichess_queries > 0 || build_stats.lichess_cache_hits > 0) {
+            int total_lichess = build_stats.lichess_queries + build_stats.lichess_cache_hits;
+            printf("    Lichess API:    %d queries (%d cached) | %.1fs",
+                   build_stats.lichess_queries, build_stats.lichess_cache_hits,
+                   build_stats.lichess_total_ms / 1000.0);
+            if (build_stats.lichess_queries > 0)
+                printf(" (%.1fms avg)",
+                       build_stats.lichess_total_ms / build_stats.lichess_queries);
+            printf("\n");
+            (void)total_lichess;
+        }
+        if (build_stats.maia_evals > 0) {
+            printf("    Maia:           %d evals | %.1fs",
+                   build_stats.maia_evals, build_stats.maia_total_ms / 1000.0);
+            if (build_stats.maia_evals > 0)
+                printf(" (%.1fms avg)",
+                       build_stats.maia_total_ms / build_stats.maia_evals);
+            printf("\n");
+        }
+        printf("    Stockfish:\n");
+        printf("      MultiPV:      %d calls | %.1fs",
+               build_stats.sf_multipv_calls, build_stats.sf_multipv_ms / 1000.0);
+        if (build_stats.sf_multipv_calls > 0)
+            printf(" (%.0fms avg)",
+                   build_stats.sf_multipv_ms / build_stats.sf_multipv_calls);
+        printf("\n");
+        printf("      Single eval:  %d calls | %.1fs",
+               build_stats.sf_single_calls, build_stats.sf_single_ms / 1000.0);
+        if (build_stats.sf_single_calls > 0)
+            printf(" (%.0fms avg)",
+                   build_stats.sf_single_ms / build_stats.sf_single_calls);
+        printf("\n");
+        printf("      Batch eval:   %d calls | %.1fs",
+               build_stats.sf_batch_calls, build_stats.sf_batch_ms / 1000.0);
+        if (build_stats.sf_batch_calls > 0)
+            printf(" (%.0fms avg)",
+                   build_stats.sf_batch_ms / build_stats.sf_batch_calls);
+        printf("\n");
+        {
+            int total_eval = build_stats.db_eval_hits + build_stats.db_eval_misses;
+            int total_expl = build_stats.db_explorer_hits + build_stats.db_explorer_misses;
+            printf("    DB cache:       eval %d/%d hits",
+                   build_stats.db_eval_hits, total_eval);
+            if (total_eval > 0)
+                printf(" (%d%%)", build_stats.db_eval_hits * 100 / total_eval);
+            printf(" | explorer %d/%d hits",
+                   build_stats.db_explorer_hits, total_expl);
+            if (total_expl > 0)
+                printf(" (%d%%)", build_stats.db_explorer_hits * 100 / total_expl);
+            printf("\n");
+        }
+        {
+            int total_skipped = build_stats.injections_skipped_depth +
+                                build_stats.injections_skipped_prob +
+                                build_stats.injections_skipped_exists +
+                                build_stats.injections_skipped_transposition;
+            printf("    Injection:      %d attempted, %d created, %d skipped",
+                   build_stats.injections_attempted,
+                   build_stats.injections_created, total_skipped);
+            if (total_skipped > 0) {
+                printf(" (");
+                bool first = true;
+                if (build_stats.injections_skipped_exists > 0) {
+                    printf("%d exists", build_stats.injections_skipped_exists);
+                    first = false;
+                }
+                if (build_stats.injections_skipped_transposition > 0) {
+                    printf("%s%d transpos", first ? "" : ", ",
+                           build_stats.injections_skipped_transposition);
+                    first = false;
+                }
+                if (build_stats.injections_skipped_depth > 0) {
+                    printf("%s%d depth", first ? "" : ", ",
+                           build_stats.injections_skipped_depth);
+                    first = false;
+                }
+                if (build_stats.injections_skipped_prob > 0) {
+                    printf("%s%d prob", first ? "" : ", ",
+                           build_stats.injections_skipped_prob);
+                }
+                printf(")");
+            }
+            printf("\n");
+        }
+        printf("\n");
+
         if (explorer) {
             lichess_explorer_print_stats(explorer);
             lichess_explorer_destroy(explorer);
@@ -759,7 +956,7 @@ int main(int argc, char *argv[]) {
     RepertoireConfig rep_config = repertoire_config_default();
     rep_config.play_as_white = play_as_white;
     repertoire_config_set_color_defaults(&rep_config);
-    strncpy(rep_config.start_fen, start_fen, sizeof(rep_config.start_fen) - 1);
+    snprintf(rep_config.start_fen, sizeof(rep_config.start_fen), "%s", start_fen);
     rep_config.max_depth = max_depth;
     rep_config.min_probability = min_probability;
     rep_config.min_games = min_games;
@@ -767,6 +964,7 @@ int main(int argc, char *argv[]) {
     rep_config.quick_eval_depth = eval_depth > 15 ? 15 : eval_depth;
     rep_config.verbose_search = verbose;
     if (eval_weight_arg >= 0.0) rep_config.eval_weight = eval_weight_arg;
+    if (leaf_confidence_arg >= 0.0) rep_config.leaf_confidence = leaf_confidence_arg;
     if (depth_decay_arg >= 0.0) rep_config.depth_discount = depth_decay_arg;
     if (min_eval_arg != -99999) rep_config.min_eval_cp = min_eval_arg;
     if (max_eval_arg != -99999) rep_config.max_eval_cp = max_eval_arg;

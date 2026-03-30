@@ -23,6 +23,43 @@ struct RepertoireDB;
 struct RepertoireConfig;
 
 /**
+ * BuildStats - Accumulated timing and counters from a tree build.
+ * Populated by tree_build(); caller owns the struct.
+ */
+typedef struct BuildStats {
+    /* Lichess API */
+    int    lichess_queries;
+    int    lichess_cache_hits;
+    double lichess_total_ms;
+
+    /* Maia */
+    int    maia_evals;
+    double maia_total_ms;
+
+    /* Stockfish (broken down by call type) */
+    int    sf_multipv_calls;
+    double sf_multipv_ms;
+    int    sf_single_calls;
+    double sf_single_ms;
+    int    sf_batch_calls;
+    double sf_batch_ms;
+
+    /* DB cache */
+    int    db_eval_hits;
+    int    db_eval_misses;
+    int    db_explorer_hits;
+    int    db_explorer_misses;
+
+    /* Injection */
+    int    injections_attempted;
+    int    injections_created;
+    int    injections_skipped_depth;
+    int    injections_skipped_prob;
+    int    injections_skipped_exists;
+    int    injections_skipped_transposition;
+} BuildStats;
+
+/**
  * TreeConfig - Configuration for tree building
  *
  * The build is a single DFS pass that queries Lichess and Stockfish
@@ -74,6 +111,19 @@ typedef struct TreeConfig {
     int min_games;                  /* Minimum games to consider a move */
     bool use_masters;               /* Use masters database instead of Lichess */
 
+    /* Engine injection at opponent nodes.
+     *
+     * The engine's top-1 move is injected when both structural gates pass:
+     *   1. node->depth <= inj_max_depth
+     *   2. node->cumulative_probability >= inj_min_probability
+     * and the resulting FEN is not already in the tree (transposition check).
+     *
+     * The injected PV is capped at inj_max_line_depth plies below the
+     * injection point (instead of extending to max_depth). */
+    int    inj_max_depth;           /* Don't inject deeper than this ply */
+    double inj_min_probability;     /* Don't inject on low-probability lines */
+    int    inj_max_line_depth;      /* Cap injected PV continuation (0 = unlimited) */
+
     /* Maia supplement: after Lichess moves are added, Maia fills in
        remaining mass with predicted human moves.  Positions can have a
        mix of Lichess and Maia children.  maia_only bypasses Lichess
@@ -86,6 +136,9 @@ typedef struct TreeConfig {
 
     /* Progress callback */
     void (*progress_callback)(int nodes_built, int current_depth, const char *current_fen);
+
+    /* Build instrumentation (optional, caller-owned) */
+    BuildStats *stats;
 
 } TreeConfig;
 
@@ -103,7 +156,7 @@ typedef struct Tree {
     bool build_complete;
     uint64_t next_node_id;
 
-    void *expanded_fens;    /* FenSet* — tracks expanded FENs for transposition detection */
+    void *expanded_fens;    /* FenMap* — FEN → canonical TreeNode* for transposition detection */
 
 } Tree;
 
@@ -141,6 +194,15 @@ bool tree_build(Tree *tree, const char *start_fen,
 
 void tree_stop_build(Tree *tree);
 
+/**
+ * Post-build cleanup: remove nodes marked PRUNE_EVAL_TOO_LOW.
+ * These positions are too bad for us — no point keeping them in
+ * the tree.  Call after tree_build() completes.
+ *
+ * @return Number of nodes removed.
+ */
+size_t tree_prune_eval_too_low(Tree *tree);
+
 TreeNode* tree_find_by_fen(const Tree *tree, const char *fen);
 TreeNode* tree_find_by_moves(const Tree *tree, const char **moves, size_t num_moves);
 size_t tree_get_leaves(const Tree *tree, TreeNode **out_leaves, size_t max_leaves);
@@ -159,8 +221,8 @@ size_t tree_calculate_ease(Tree *tree);
  * At opponent nodes:
  *   accumulated = γ^d × local_cpl + Σ(prob_i × child.accumulated_eca)
  * At our-move nodes:
- *   avg_cpl = child.accumulated_eca / (1 + subtree_depth/2)
- *   score   = eval_us_cp + eval_weight × avg_cpl
+ *   avg_cpl = child.accumulated_eca / subtree_opp_plies
+ *   score   = eval_conf × eval_us_cp + eval_weight × avg_cpl
  *   Select the child with the highest blended score, propagate its eca.
  */
 size_t tree_calculate_eca(Tree *tree, const struct RepertoireConfig *config);
