@@ -32,6 +32,10 @@
 #define RETRY_BASE_SECONDS 60
 #define RETRY_MAX_ATTEMPTS 3
 
+/* Network-error retry: wait 5 minutes between probes, retry indefinitely */
+#define NETWORK_RETRY_INTERVAL_S 300
+#define NETWORK_PROBE_INTERVAL_S 30
+
 
 /**
  * Buffer for CURL response
@@ -306,45 +310,93 @@ static long perform_request(LichessExplorer *explorer, const char *url,
 }
 
 
+static uint64_t mono_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
 /**
- * Perform an explorer request with 429 retry + exponential backoff.
- * Waits 60s, 120s, 240s on successive 429s (up to RETRY_MAX_ATTEMPTS).
+ * Perform an explorer request with retry logic for both 429 rate-limits
+ * and network failures.
+ *
+ * 429:     exponential backoff 60/120/240s, up to RETRY_MAX_ATTEMPTS.
+ * Network: logs the outage, waits NETWORK_RETRY_INTERVAL_S, probes every
+ *          NETWORK_PROBE_INTERVAL_S until connectivity returns.  Retries
+ *          indefinitely so long builds survive wifi drops.
  */
 static bool explorer_request_with_retry(LichessExplorer *explorer,
                                         const char *url,
                                         ExplorerResponse *response) {
-    for (int attempt = 0; attempt <= RETRY_MAX_ATTEMPTS; attempt++) {
+    int rate_attempts = 0;
+
+    for (;;) {
         char *body = NULL;
         size_t body_size = 0;
         long http_code = perform_request(explorer, url, &body, &body_size);
 
+        /* ---- Network / CURL error ---- */
         if (http_code == -1) {
-            snprintf(response->error_message, sizeof(response->error_message),
-                     "CURL error (attempt %d/%d)", attempt + 1,
-                     RETRY_MAX_ATTEMPTS + 1);
-            return false;
+            if (!explorer->network_down) {
+                explorer->network_down = true;
+                explorer->network_down_since = mono_ms();
+                fprintf(stderr,
+                    "\n  [API] Network error — connection lost. "
+                    "Waiting %ds before retry...\n",
+                    NETWORK_RETRY_INTERVAL_S);
+                fflush(stderr);
+                sleep(NETWORK_RETRY_INTERVAL_S);
+            } else {
+                double down_min = (mono_ms() - explorer->network_down_since)
+                                  / 60000.0;
+                fprintf(stderr,
+                    "  [API] Still offline (%.0f min). "
+                    "Probing again in %ds...\n",
+                    down_min, NETWORK_PROBE_INTERVAL_S);
+                fflush(stderr);
+                sleep(NETWORK_PROBE_INTERVAL_S);
+            }
+            explorer->network_retries++;
+            continue;
         }
 
+        /* ---- Recovered from outage ---- */
+        if (explorer->network_down) {
+            double down_min = (mono_ms() - explorer->network_down_since)
+                              / 60000.0;
+            fprintf(stderr,
+                "  [API] Network restored after %.1f min "
+                "(%lu retries). Resuming build.\n",
+                down_min, (unsigned long)explorer->network_retries);
+            fflush(stderr);
+            explorer->network_down = false;
+        }
+
+        /* ---- 429 rate-limited ---- */
         if (http_code == 429) {
             free(body);
-            int backoff = RETRY_BASE_SECONDS * (1 << attempt);
-            if (attempt < RETRY_MAX_ATTEMPTS) {
+            int backoff = RETRY_BASE_SECONDS * (1 << rate_attempts);
+            if (rate_attempts < RETRY_MAX_ATTEMPTS) {
                 fprintf(stderr,
                     "  [API] 429 rate-limited — waiting %ds before retry "
                     "(attempt %d/%d)\n",
-                    backoff, attempt + 1, RETRY_MAX_ATTEMPTS + 1);
+                    backoff, rate_attempts + 1, RETRY_MAX_ATTEMPTS + 1);
+                fflush(stderr);
                 sleep(backoff);
+                rate_attempts++;
                 continue;
             }
             fprintf(stderr,
                 "  [API] 429 rate-limited — all %d retries exhausted\n",
                 RETRY_MAX_ATTEMPTS + 1);
             snprintf(response->error_message, sizeof(response->error_message),
-                     "429 rate-limited after %d retries", RETRY_MAX_ATTEMPTS + 1);
+                     "429 rate-limited after %d retries",
+                     RETRY_MAX_ATTEMPTS + 1);
             explorer->failed_requests++;
             return false;
         }
 
+        /* ---- Other HTTP error ---- */
         if (http_code != 200) {
             snprintf(response->error_message, sizeof(response->error_message),
                      "HTTP error: %ld", http_code);
@@ -353,12 +405,12 @@ static bool explorer_request_with_retry(LichessExplorer *explorer,
             return false;
         }
 
+        /* ---- Success ---- */
         bool success = parse_explorer_response(body, response);
         free(body);
         if (!success) explorer->failed_requests++;
         return success;
     }
-    return false;
 }
 
 
@@ -433,6 +485,8 @@ void lichess_explorer_print_stats(const LichessExplorer *explorer) {
     printf("\n=== Lichess Explorer Stats ===\n");
     printf("Total requests: %lu\n", (unsigned long)explorer->total_requests);
     printf("Failed requests: %lu\n", (unsigned long)explorer->failed_requests);
+    if (explorer->network_retries > 0)
+        printf("Network retries: %lu\n", (unsigned long)explorer->network_retries);
     
     double success_rate = explorer->total_requests > 0 ?
         (double)(explorer->total_requests - explorer->failed_requests) / 

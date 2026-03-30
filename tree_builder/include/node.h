@@ -26,6 +26,22 @@
 
 
 /**
+ * PruneReason - Why a node was not expanded further.
+ *
+ * PRUNE_NONE:           Node was expanded normally (or is a leaf for other reasons).
+ * PRUNE_EVAL_TOO_HIGH:  Position already winning; no need to study further.
+ *                       Node is kept as a leaf with annotation info.
+ * PRUNE_EVAL_TOO_LOW:   Position too bad for us.  Marked during build,
+ *                       then deleted in a post-build cleanup pass.
+ */
+typedef enum {
+    PRUNE_NONE = 0,
+    PRUNE_EVAL_TOO_HIGH,
+    PRUNE_EVAL_TOO_LOW,
+} PruneReason;
+
+
+/**
  * TreeNode - A node in the opening tree
  * 
  * Contains position data, statistics, and tree structure pointers.
@@ -78,21 +94,18 @@ typedef struct TreeNode {
     double opponent_ease;               /* Ease score from opponent's perspective */
     double trap_score;                  /* How often opponents play suboptimal here */
     
-    /* ECA (Expected Centipawn Advantage) — win-probability-delta units.
+    /* ECA (Expected Centipawn Advantage).
      *
-     * local_cpl:  expected win-probability loss by the side to move at THIS
-     *             node = Σ(prob_i × max(0, best_wp - wp_i)) over children.
-     *             Measured in [0, 1] (typically 0.00-0.10).  The name "cpl"
-     *             is kept for backward compatibility; the unit is now
-     *             win-probability delta, not centipawns.
+     * local_cpl:  expected centipawn loss by the side to move at THIS node
+     *             = Σ(prob_i × max(0, child_i_cp - best_opp_cp)) over
+     *             children with move_probability >= 0.01.
      *
-     * accumulated_eca:  total expected win-probability delta in the subtree.
+     * accumulated_eca:  total expected centipawn advantage in the subtree.
      *                   At opponent nodes:
-     *                     local_cpl + Σ(prob_i × child.accumulated_eca)
+     *                     γ^d × local_cpl + Σ(prob_i × child.accumulated_eca)
      *                   At our-move nodes:
      *                     accumulated_eca of the child selected by the
-     *                     blended score (α × eval_us + (1-α) × acc_eca),
-     *                     mirroring the selection-phase formula.
+     *                     blended score (eval_us + eval_weight × avg_cpl).
      */
     double local_cpl;
     double accumulated_eca;
@@ -101,10 +114,37 @@ typedef struct TreeNode {
 
     /* Engine-injected flag: this move was added as the engine's top-1 best
      * move during opponent-move expansion (not from Lichess/Maia data).
-     * Subtrees below engine-injected nodes are built with pure engine #1
-     * for both sides, bypassing cumP and eval-window pruning. */
+     * Only set on the injection point itself, not on descendants. */
     bool   engine_injected;
-    
+
+    /* Injection depth cap: if this node is inside an engine-injected
+     * subtree, inj_origin_depth records the ply at which injection
+     * occurred.  build_recursive stops when depth exceeds
+     * inj_origin_depth + inj_max_line_depth.  -1 = not in an injected
+     * subtree.  Propagated from parent to child in make_child(). */
+    int    inj_origin_depth;
+
+    /* Prune reason: why this node was not expanded further.
+     * prune_eval_cp stores the eval (from our perspective) that
+     * triggered the prune, for PGN annotation. */
+    PruneReason prune_reason;
+    int    prune_eval_cp;
+
+    /* Transposition equivalence ring: all nodes representing the
+     * same position (reached via different move orders) are linked
+     * in a circular singly-linked list through next_equivalent.
+     * The canonical node (first expanded) is the one with children;
+     * the others are transposition leaves.
+     *
+     * NULL means this node has no known transpositions. */
+    struct TreeNode *next_equivalent;
+
+    /* Actual number of opponent-move levels in the subtree below
+     * this node.  Computed bottom-up during ECA calculation.
+     * Used instead of the estimate (subtree_depth / 2) for
+     * normalizing accumulated ECA to "avg CPL per opponent turn." */
+    int    subtree_opp_plies;
+
 } TreeNode;
 
 
@@ -206,10 +246,17 @@ size_t node_count_subtree(const TreeNode *node);
  * Set ECA (Expected Centipawn Advantage) values
  *
  * @param node The node to update
- * @param local_cpl Local expected win-probability loss at this node
- * @param accumulated_eca Subtree accumulated ECA (win-probability deltas)
+ * @param local_cpl Local expected centipawn loss at this node
+ * @param accumulated_eca Subtree accumulated ECA (centipawns)
  */
 void node_set_eca(TreeNode *node, double local_cpl, double accumulated_eca);
+
+/**
+ * Reset the global node-ID counter so the next node_create() returns
+ * an ID >= next_id.  Call after loading a tree from JSON to prevent
+ * ID collisions when new nodes are created during resume.
+ */
+void node_reset_id_counter(uint64_t next_id);
 
 /**
  * Print node info to stdout (for debugging)

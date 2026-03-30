@@ -77,6 +77,11 @@ typedef struct LichessExplorer {
     /* Statistics */
     uint64_t total_requests;
     uint64_t failed_requests;
+    uint64_t network_retries;           /* Times we retried on network error */
+    
+    /* Network status */
+    bool     network_down;              /* Currently in network-down state */
+    uint64_t network_down_since;        /* Monotonic ms when outage started */
     
     /* Authentication */
     char *auth_token;                   /* Lichess API token (Bearer) */
