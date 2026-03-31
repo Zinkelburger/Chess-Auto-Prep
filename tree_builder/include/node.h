@@ -117,13 +117,6 @@ typedef struct TreeNode {
      * Only set on the injection point itself, not on descendants. */
     bool   engine_injected;
 
-    /* Injection depth cap: if this node is inside an engine-injected
-     * subtree, inj_origin_depth records the ply at which injection
-     * occurred.  build_recursive stops when depth exceeds
-     * inj_origin_depth + inj_max_line_depth.  -1 = not in an injected
-     * subtree.  Propagated from parent to child in make_child(). */
-    int    inj_origin_depth;
-
     /* Prune reason: why this node was not expanded further.
      * prune_eval_cp stores the eval (from our perspective) that
      * triggered the prune, for PGN annotation. */
@@ -257,6 +250,12 @@ void node_set_eca(TreeNode *node, double local_cpl, double accumulated_eca);
  * ID collisions when new nodes are created during resume.
  */
 void node_reset_id_counter(uint64_t next_id);
+
+/**
+ * Engine eval from our perspective (positive = good for us).
+ * Returns 0 if the node has no engine eval.
+ */
+int node_eval_for_us(const TreeNode *node, bool play_as_white);
 
 /**
  * Print node info to stdout (for debugging)

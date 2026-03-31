@@ -157,12 +157,8 @@ TreeConfig tree_config_default(void) {
         .opp_mass_root = 0.95,
         .opp_mass_floor = 0.50,
 
-        .inj_max_depth = 20,
-        .inj_min_probability = 0.005,
-        .inj_max_line_depth = 6,
-
-        .min_eval_cp = -50,
-        .max_eval_cp = 300,
+        .min_eval_cp = 0,
+        .max_eval_cp = 200,
         .relative_eval = false,
 
         .rating_range = "2000,2200,2500",
@@ -235,7 +231,6 @@ static TreeNode *make_child(TreeNode *parent, const char *fen,
         node_destroy_single(child);
         return NULL;
     }
-    child->inj_origin_depth = parent->inj_origin_depth;
     tree->total_nodes++;
     if (child->depth > tree->max_depth_reached)
         tree->max_depth_reached = child->depth;
@@ -250,14 +245,6 @@ static bool apply_uci(const char *fen, const char *uci,
     if (!position_apply_uci(&pos, uci)) return false;
     position_to_fen(&pos, out_fen, out_len);
     return true;
-}
-
-/** Eval from our perspective (positive = good for us). */
-static int our_eval(const TreeNode *node, bool play_as_white) {
-    if (!node->has_engine_eval) return 0;
-    int eval_white = node->is_white_to_move ? node->engine_eval_cp
-                                            : -node->engine_eval_cp;
-    return play_as_white ? eval_white : -eval_white;
 }
 
 /**
@@ -737,100 +724,90 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
 
     if (children_added == 0 && node->children_count == 0) return;
 
-    /* 3. Engine top-1 injection.
-     *
-     * If the engine's best move isn't already a child, add it so we
-     * have a response prepared.  The injected node is built with
-     * normal DFS logic (not an unbranched PV), subject to a depth
-     * cap of inj_max_line_depth plies from the injection point.
-     *
-     * Probability: use Maia's prediction for this move if available,
-     * otherwise fall back to a fixed value (0.05). */
+    /* 3. Engine top-1 injection: if the engine's best move isn't
+     *    already a child, add it so we have a response prepared.
+     *    The injected child is a normal node — its cumP (based on
+     *    Maia's probability for that move) governs how deep the
+     *    subtree is explored through the tree's standard pruning. */
     if (config->engine_pool) {
-        bool depth_ok = node->depth <= config->inj_max_depth;
-        bool prob_ok  = node->cumulative_probability >= config->inj_min_probability;
+        STATS_INC(config, injections_attempted);
 
-        if (!depth_ok)       STATS_INC(config, injections_skipped_depth);
-        else if (!prob_ok)   STATS_INC(config, injections_skipped_prob);
+        struct timespec t_inj;
+        clock_gettime(CLOCK_MONOTONIC, &t_inj);
 
-        if (depth_ok && prob_ok) {
-            STATS_INC(config, injections_attempted);
+        EvalJob best_job;
+        bool got_eval = engine_pool_evaluate_full(config->engine_pool,
+                                                  node->fen, &best_job);
 
-            struct timespec t_inj;
-            clock_gettime(CLOCK_MONOTONIC, &t_inj);
+        STATS_INC(config, sf_single_calls);
+        STATS_ADD(config, sf_single_ms, elapsed_ms(&t_inj));
 
-            EvalJob best_job;
-            bool got_eval = engine_pool_evaluate_full(config->engine_pool,
-                                                      node->fen, &best_job);
+        if (got_eval && best_job.success && best_job.bestmove[0]) {
+            if (!node->has_engine_eval) {
+                node_set_eval(node, best_job.eval_cp);
+                if (config->db)
+                    rdb_put_eval(config->db, node->fen,
+                                 best_job.eval_cp, best_job.depth_reached);
+            }
 
-            STATS_INC(config, sf_single_calls);
-            STATS_ADD(config, sf_single_ms, elapsed_ms(&t_inj));
-
-            if (got_eval && best_job.success && best_job.bestmove[0]) {
-                if (!node->has_engine_eval) {
-                    node_set_eval(node, best_job.eval_cp);
-                    if (config->db)
-                        rdb_put_eval(config->db, node->fen,
-                                     best_job.eval_cp, best_job.depth_reached);
-                }
-
-                bool exists = false;
-                for (size_t c = 0; c < node->children_count; c++) {
-                    if (strcmp(node->children[c]->move_uci, best_job.bestmove) == 0) {
-                        if (!node->children[c]->has_engine_eval) {
-                            node_set_eval(node->children[c], -best_job.eval_cp);
-                            if (config->db)
-                                rdb_put_eval(config->db, node->children[c]->fen,
-                                             -best_job.eval_cp, best_job.depth_reached);
-                        }
-                        exists = true;
-                        break;
+            /* Check if this move already exists as a child */
+            bool exists = false;
+            for (size_t c = 0; c < node->children_count; c++) {
+                if (strcmp(node->children[c]->move_uci, best_job.bestmove) == 0) {
+                    if (!node->children[c]->has_engine_eval) {
+                        node_set_eval(node->children[c], -best_job.eval_cp);
+                        if (config->db)
+                            rdb_put_eval(config->db, node->children[c]->fen,
+                                         -best_job.eval_cp, best_job.depth_reached);
                     }
+                    exists = true;
+                    break;
                 }
+            }
 
-                if (exists) {
-                    STATS_INC(config, injections_skipped_exists);
-                } else {
-                    char child_fen[MAX_FEN_LENGTH];
-                    if (apply_uci(node->fen, best_job.bestmove,
-                                  child_fen, MAX_FEN_LENGTH)) {
-                        FenMap *fmap = (FenMap *)tree->expanded_fens;
-                        if (fmap && fen_map_get(fmap, child_fen)) {
-                            STATS_INC(config, injections_skipped_transposition);
-                        } else {
-                            const char *eng_san = best_job.bestmove;
-                            if (uci_to_san(node->fen, best_job.bestmove,
-                                           san_buf, sizeof(san_buf)))
-                                eng_san = san_buf;
-                            TreeNode *child = make_child(node, child_fen,
-                                                          eng_san,
-                                                          best_job.bestmove, tree);
-                            if (child) {
-                                child->engine_injected = true;
-                                child->inj_origin_depth = node->depth;
+            if (exists) {
+                STATS_INC(config, injections_skipped_exists);
+            } else {
+                char child_fen[MAX_FEN_LENGTH];
+                if (apply_uci(node->fen, best_job.bestmove,
+                              child_fen, MAX_FEN_LENGTH)) {
+                    FenMap *fmap = (FenMap *)tree->expanded_fens;
+                    if (fmap && fen_map_get(fmap, child_fen)) {
+                        STATS_INC(config, injections_skipped_transposition);
+                    } else {
+                        const char *eng_san = best_job.bestmove;
+                        if (uci_to_san(node->fen, best_job.bestmove,
+                                       san_buf, sizeof(san_buf)))
+                            eng_san = san_buf;
+                        TreeNode *child = make_child(node, child_fen,
+                                                      eng_san,
+                                                      best_job.bestmove, tree);
+                        if (child) {
+                            child->engine_injected = true;
 
-                                /* Use Maia probability if available */
-                                double inj_prob = 0.05;
-                                if (has_maia_resp) {
-                                    for (int m = 0; m < maia_resp.move_count; m++) {
-                                        if (strcmp(maia_resp.moves[m].uci,
-                                                   best_job.bestmove) == 0) {
-                                            inj_prob = maia_resp.moves[m].probability;
-                                            break;
-                                        }
+                            /* Use Maia's probability for this move if
+                               available; fall back to 1% for moves Maia
+                               didn't even list in its output. */
+                            double inj_prob = 0.01;
+                            if (has_maia_resp) {
+                                for (int m = 0; m < maia_resp.move_count; m++) {
+                                    if (strcmp(maia_resp.moves[m].uci,
+                                               best_job.bestmove) == 0) {
+                                        inj_prob = maia_resp.moves[m].probability;
+                                        break;
                                     }
                                 }
-
-                                child->move_probability = inj_prob;
-                                child->cumulative_probability =
-                                    node->cumulative_probability * inj_prob;
-                                node_set_eval(child, -best_job.eval_cp);
-                                if (config->db)
-                                    rdb_put_eval(config->db, child_fen,
-                                                 -best_job.eval_cp,
-                                                 best_job.depth_reached);
-                                STATS_INC(config, injections_created);
                             }
+
+                            child->move_probability = inj_prob;
+                            child->cumulative_probability =
+                                node->cumulative_probability * inj_prob;
+                            node_set_eval(child, -best_job.eval_cp);
+                            if (config->db)
+                                rdb_put_eval(config->db, child_fen,
+                                             -best_job.eval_cp,
+                                             best_job.depth_reached);
+                            STATS_INC(config, injections_created);
                         }
                     }
                 }
@@ -841,8 +818,7 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
     /* 4. Batch-evaluate children that still lack evals */
     batch_eval_children(node, config);
 
-    /* 5. Recurse into children (normal DFS — injected nodes are
-       handled by the standard build logic with a depth cap). */
+    /* 5. Recurse into children */
     for (size_t i = 0; i < node->children_count; i++) {
         if (!tree->is_building) break;
         build_recursive(tree, node->children[i], config, explorer);
@@ -867,14 +843,6 @@ static void build_recursive(Tree *tree, TreeNode *node,
                              LichessExplorer *explorer) {
     if (!tree->is_building) return;
     if (node->depth >= config->max_depth) return;
-
-    /* Engine-injected subtree depth cap: stop when we've gone
-       inj_max_line_depth plies beyond the injection point. */
-    if (node->inj_origin_depth >= 0 &&
-        config->inj_max_line_depth > 0 &&
-        node->depth - node->inj_origin_depth >= config->inj_max_line_depth)
-        return;
-
     if (node->cumulative_probability < config->min_probability) return;
     if (config->max_nodes > 0 && tree->total_nodes >= (size_t)config->max_nodes)
         return;
@@ -896,7 +864,7 @@ static void build_recursive(Tree *tree, TreeNode *node,
 
     /* Eval-window pruning — mark the reason for downstream use. */
     if (node->has_engine_eval) {
-        int eval_us = our_eval(node, config->play_as_white);
+        int eval_us = node_eval_for_us(node, config->play_as_white);
         if (eval_us > config->max_eval_cp) {
             node->explored = true;
             node->prune_reason = PRUNE_EVAL_TOO_HIGH;
@@ -963,7 +931,7 @@ bool tree_build(Tree *tree, const char *start_fen,
     if (tree->config.relative_eval) {
         ensure_eval(tree->root, &tree->config);
         if (tree->root->has_engine_eval) {
-            int root_eval = our_eval(tree->root, tree->config.play_as_white);
+            int root_eval = node_eval_for_us(tree->root, tree->config.play_as_white);
             tree->config.min_eval_cp += root_eval;
             tree->config.max_eval_cp += root_eval;
         }
@@ -1210,7 +1178,7 @@ int score_our_move_children(TreeNode *node,
     int best_child_cp = -100000;
     for (size_t i = 0; i < node->children_count; i++) {
         if (!node->children[i]->has_engine_eval) continue;
-        int cp_us = our_eval(node->children[i], config->play_as_white);
+        int cp_us = node_eval_for_us(node->children[i], config->play_as_white);
         if (cp_us > best_child_cp) best_child_cp = cp_us;
     }
 
@@ -1222,7 +1190,7 @@ int score_our_move_children(TreeNode *node,
     for (size_t i = 0; i < node->children_count; i++) {
         TreeNode *child = node->children[i];
         if (!child->has_eca) continue;
-        int cp_us = our_eval(child, config->play_as_white);
+        int cp_us = node_eval_for_us(child, config->play_as_white);
         if (cp_us < best_child_cp - config->max_eval_loss_cp) continue;
         passing++;
         int opp_plies = child->subtree_opp_plies > 0 ? child->subtree_opp_plies : 1;
@@ -1242,7 +1210,7 @@ int score_our_move_children(TreeNode *node,
         for (size_t i = 0; i < node->children_count; i++) {
             TreeNode *child = node->children[i];
             if (!child->has_eca) continue;
-            int cp_us = our_eval(child, config->play_as_white);
+            int cp_us = node_eval_for_us(child, config->play_as_white);
             int opp_plies = child->subtree_opp_plies > 0 ? child->subtree_opp_plies : 1;
             double avg_cpl = child->accumulated_eca / opp_plies;
             double eval_conf = (child->subtree_opp_plies > 0) ? 1.0 : config->leaf_confidence;
@@ -1410,9 +1378,6 @@ void tree_print_stats(const Tree *tree) {
            tree->config.taper_depth);
     printf("  Eval window: [%+d, %+d] cp\n",
            tree->config.min_eval_cp, tree->config.max_eval_cp);
-    printf("  Injection: depth<=%d, cumP>=%.3f, PV cap %d\n",
-           tree->config.inj_max_depth,
-           tree->config.inj_min_probability, tree->config.inj_max_line_depth);
     printf("  Opponent source: %s\n",
            tree->config.maia_only ? "Maia-only" : "Lichess API + Maia supplement");
     if (tree->config.maia_only)

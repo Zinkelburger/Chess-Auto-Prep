@@ -108,11 +108,6 @@ static void print_usage(const char *prog_name) {
     printf("  --opp-mass-root <0-1>  Mass target at root (explore broadly) [default: 0.95]\n");
     printf("  --opp-mass-floor <0-1> Mass target floor (deep positions) [default: 0.50]\n");
     printf("\n");
-    printf("Engine injection (novelty detection at opponent nodes):\n");
-    printf("  --inj-max-depth <N>    Don't inject deeper than this ply [default: 20]\n");
-    printf("  --inj-min-prob <P>     Only inject if cumProb >= P [default: 0.005]\n");
-    printf("  --inj-line-depth <N>   Cap injected PV at N plies (0=unlimited) [default: 6]\n");
-    printf("\n");
     printf("Eval window pruning:\n");
     printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: color-dependent]\n");
     printf("  --max-eval <cp>        Stop DFS if our eval exceeds this [default: color-dependent]\n");
@@ -314,11 +309,6 @@ int main(int argc, char *argv[]) {
     double opp_mass_root_arg = -1.0;
     double opp_mass_floor_arg = -1.0;
 
-    /* Engine injection overrides */
-    int inj_max_depth_arg = -1;
-    double inj_min_probability_arg = -1.0;
-    int inj_max_line_depth_arg = -1;
-
     /* Eval window overrides */
     int min_eval_arg = -99999;
     int max_eval_arg = -99999;
@@ -356,10 +346,6 @@ int main(int argc, char *argv[]) {
         {"opp-max-children", required_argument, 0, 2010},
         {"opp-mass-root",    required_argument, 0, 2011},
         {"opp-mass-floor",   required_argument, 0, 2012},
-        /* Engine injection */
-        {"inj-max-depth",    required_argument, 0, 2014},
-        {"inj-min-prob",     required_argument, 0, 2015},
-        {"inj-line-depth",   required_argument, 0, 2016},
         /* Eval window */
         {"min-eval",         required_argument, 0, 2020},
         {"max-eval",         required_argument, 0, 2021},
@@ -429,10 +415,6 @@ int main(int argc, char *argv[]) {
             case 2010: if (!parse_int(optarg, "opp-max-children", &opp_max_children_arg)) return 1; break;
             case 2011: if (!parse_double(optarg, "opp-mass-root", &opp_mass_root_arg)) return 1; break;
             case 2012: if (!parse_double(optarg, "opp-mass-floor", &opp_mass_floor_arg)) return 1; break;
-            /* Engine injection */
-            case 2014: if (!parse_int(optarg, "inj-max-depth", &inj_max_depth_arg)) return 1; break;
-            case 2015: if (!parse_double(optarg, "inj-min-prob", &inj_min_probability_arg)) return 1; break;
-            case 2016: if (!parse_int(optarg, "inj-line-depth", &inj_max_line_depth_arg)) return 1; break;
             /* Eval window */
             case 2020: if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1; break;
             case 2021: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
@@ -770,9 +752,6 @@ int main(int argc, char *argv[]) {
         if (opp_max_children_arg >= 0) config.opp_max_children = opp_max_children_arg;
         if (opp_mass_root_arg >= 0.0) config.opp_mass_root = opp_mass_root_arg;
         if (opp_mass_floor_arg >= 0.0) config.opp_mass_floor = opp_mass_floor_arg;
-        if (inj_max_depth_arg >= 0) config.inj_max_depth = inj_max_depth_arg;
-        if (inj_min_probability_arg >= 0.0) config.inj_min_probability = inj_min_probability_arg;
-        if (inj_max_line_depth_arg >= 0) config.inj_max_line_depth = inj_max_line_depth_arg;
         if (min_eval_arg != -99999) config.min_eval_cp = min_eval_arg;
         if (max_eval_arg != -99999) config.max_eval_cp = max_eval_arg;
         config.relative_eval = relative_eval;
@@ -793,13 +772,6 @@ int main(int argc, char *argv[]) {
         printf("  Opponent:   max %d children, mass %.0f%% → %.0f%%\n",
                config.opp_max_children,
                config.opp_mass_root * 100.0, config.opp_mass_floor * 100.0);
-        if (config.inj_max_line_depth > 0)
-            printf("  Injection:  depth<=%d, cumP>=%.3f, PV cap %d ply\n",
-                   config.inj_max_depth, config.inj_min_probability,
-                   config.inj_max_line_depth);
-        else
-            printf("  Injection:  depth<=%d, cumP>=%.3f, PV unlimited\n",
-                   config.inj_max_depth, config.inj_min_probability);
         printf("  Eval window: [%+d, %+d] cp%s\n",
                config.min_eval_cp, config.max_eval_cp,
                relative_eval ? " (relative)" : "");
@@ -899,9 +871,7 @@ int main(int argc, char *argv[]) {
             printf("\n");
         }
         {
-            int total_skipped = build_stats.injections_skipped_depth +
-                                build_stats.injections_skipped_prob +
-                                build_stats.injections_skipped_exists +
+            int total_skipped = build_stats.injections_skipped_exists +
                                 build_stats.injections_skipped_transposition;
             printf("    Injection:      %d attempted, %d created, %d skipped",
                    build_stats.injections_attempted,
@@ -916,16 +886,6 @@ int main(int argc, char *argv[]) {
                 if (build_stats.injections_skipped_transposition > 0) {
                     printf("%s%d transpos", first ? "" : ", ",
                            build_stats.injections_skipped_transposition);
-                    first = false;
-                }
-                if (build_stats.injections_skipped_depth > 0) {
-                    printf("%s%d depth", first ? "" : ", ",
-                           build_stats.injections_skipped_depth);
-                    first = false;
-                }
-                if (build_stats.injections_skipped_prob > 0) {
-                    printf("%s%d prob", first ? "" : ", ",
-                           build_stats.injections_skipped_prob);
                 }
                 printf(")");
             }
@@ -955,7 +915,8 @@ int main(int argc, char *argv[]) {
 
     RepertoireConfig rep_config = repertoire_config_default();
     rep_config.play_as_white = play_as_white;
-    repertoire_config_set_color_defaults(&rep_config);
+    rep_config.min_eval_cp = tree->config.min_eval_cp;
+    rep_config.max_eval_cp = tree->config.max_eval_cp;
     snprintf(rep_config.start_fen, sizeof(rep_config.start_fen), "%s", start_fen);
     rep_config.max_depth = max_depth;
     rep_config.min_probability = min_probability;
