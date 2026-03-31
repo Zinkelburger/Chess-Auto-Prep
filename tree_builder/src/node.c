@@ -76,9 +76,6 @@ TreeNode* node_create(const char *fen, const char *move_san,
     /* Assign unique ID */
     node->node_id = g_next_node_id++;
 
-    /* Not inside an engine-injected subtree by default */
-    node->inj_origin_depth = -1;
-
     return node;
 }
 
@@ -140,6 +137,14 @@ bool node_add_child(TreeNode *parent, TreeNode *child) {
     child->depth = parent->depth + 1;
     
     return true;
+}
+
+
+int node_eval_for_us(const TreeNode *node, bool play_as_white) {
+    if (!node || !node->has_engine_eval) return 0;
+    int eval_white = node->is_white_to_move ? node->engine_eval_cp
+                                            : -node->engine_eval_cp;
+    return play_as_white ? eval_white : -eval_white;
 }
 
 

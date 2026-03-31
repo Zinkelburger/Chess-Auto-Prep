@@ -32,13 +32,7 @@ typedef struct RepertoireConfig {
     int max_depth;                  /* Maximum depth to explore (ply) */
     double min_probability;         /* Stop exploring below this cumul. probability */
     int min_games;                  /* Minimum games to consider a line */
-    
-    /* Scoring weights (should sum to ~1.0 for interpretability) */
-    double weight_eval;             /* Weight for engine evaluation */
-    double weight_ease;             /* Weight for ease (opponent mistake potential) */
-    double weight_winrate;          /* Weight for database win rate */
-    double weight_sharpness;        /* Weight for position sharpness (low ease for opp) */
-    
+
     /* Engine settings */
     int eval_depth;                 /* Depth for engine evaluation */
     int quick_eval_depth;           /* Depth for quick/filtering evaluation */
@@ -56,8 +50,7 @@ typedef struct RepertoireConfig {
 
     /* Candidate selection */
     int max_candidates_per_position; /* Max moves to consider at each position */
-    double candidate_min_prob;       /* Minimum probability for a candidate move */
-    
+
     /* Logging */
     bool verbose_search;             /* Log each decision point during traversal */
 
@@ -149,17 +142,6 @@ typedef struct {
 RepertoireConfig repertoire_config_default(void);
 
 /**
- * Apply color-specific eval-window defaults
- * 
- * Must be called after setting config->play_as_white.
- * White: min_eval=0, max_eval=200 (never accept worse than equal)
- * Black: min_eval=-200, max_eval=100 (accept being slightly worse)
- * 
- * @param config Config to modify (play_as_white must already be set)
- */
-void repertoire_config_set_color_defaults(RepertoireConfig *config);
-
-/**
  * Generate a complete repertoire from a tree
  * 
  * This is the main entry point. It:
@@ -186,26 +168,6 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
  * Free a repertoire result
  */
 void repertoire_result_free(RepertoireResult *result);
-
-/**
- * Score a position for repertoire potential
- * 
- * Higher score = better repertoire candidate.
- * 
- * @param eval_cp Engine evaluation in centipawns
- * @param ease Ease score for the side to move [0,1]
- * @param opponent_ease Ease score for opponent [0,1]
- * @param win_rate Win rate from database [0,1]
- * @param probability Probability of reaching this position [0,1]
- * @param total_games Number of games in database
- * @param config Repertoire configuration (for weights)
- * @param is_our_move Whether it's our turn to move
- * @return Composite score [0,1]
- */
-double score_position(int eval_cp, double ease, double opponent_ease,
-                       double win_rate, double probability, 
-                       uint64_t total_games, const RepertoireConfig *config,
-                       bool is_our_move);
 
 /**
  * Find the most "mistake-prone" lines for the opponent

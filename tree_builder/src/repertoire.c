@@ -15,46 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <math.h>
-#include <float.h>
-
-/* Ease formula constants */
-#define EASE_ALPHA (1.0/3.0)
-#define EASE_BETA  1.5
-#define Q_SIGMOID_K 0.004
-
-
-/* ========== Utility Functions ========== */
-
-static double cp_to_q(int cp) {
-    if (abs(cp) > 9000) return cp > 0 ? 1.0 : -1.0;
-    double win_prob = 1.0 / (1.0 + exp(-Q_SIGMOID_K * cp));
-    return 2.0 * win_prob - 1.0;
-}
-
-static double cp_to_win_prob(int cp) {
-    return 1.0 / (1.0 + exp(-0.00368208 * cp));
-}
-
-static double normalize_eval(int eval_cp, bool play_as_white) {
-    double wp = cp_to_win_prob(eval_cp);
-    return play_as_white ? wp : (1.0 - wp);
-}
-
-static double normalize_winrate(uint64_t wins, uint64_t draws, uint64_t total,
-                                 bool play_as_white) {
-    if (total == 0) return 0.5;
-    uint64_t our_wins = play_as_white ? wins : (total - wins - draws);
-    return ((double)our_wins + 0.5 * (double)draws) / (double)total;
-}
-
-static int get_eval_for_us(const TreeNode *node, bool play_as_white) {
-    if (!node->has_engine_eval) return 0;
-    int eval_white = node->is_white_to_move ? node->engine_eval_cp
-                                            : -node->engine_eval_cp;
-    return play_as_white ? eval_white : -eval_white;
-}
-
 
 /* ========== Configuration ========== */
 
@@ -65,23 +25,17 @@ RepertoireConfig repertoire_config_default(void) {
         .min_probability = 0.0001,
         .min_games = 10,
 
-        .weight_eval = 0.30,
-        .weight_ease = 0.25,
-        .weight_winrate = 0.25,
-        .weight_sharpness = 0.20,
-
         .eval_depth = 20,
         .quick_eval_depth = 15,
 
         .depth_discount = 1.0,
         .eval_weight = 0.40,
         .leaf_confidence = 1.0,
-        .min_eval_cp = -50,
-        .max_eval_cp = 300,
+        .min_eval_cp = 0,
+        .max_eval_cp = 200,
         .max_eval_loss_cp = 50,
 
         .max_candidates_per_position = 8,
-        .candidate_min_prob = 0.01,
         .verbose_search = false,
         .start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
         .name = "",
@@ -89,106 +43,6 @@ RepertoireConfig repertoire_config_default(void) {
     return config;
 }
 
-
-void repertoire_config_set_color_defaults(RepertoireConfig *config) {
-    if (config->play_as_white) {
-        config->min_eval_cp = 0;
-        config->max_eval_cp = 200;
-    } else {
-        config->min_eval_cp = -200;
-        config->max_eval_cp = 100;
-    }
-}
-
-
-/* ========== Ease (for fallback scoring) ========== */
-
-static double calculate_ease_for_node(TreeNode *node, RepertoireDB *db) {
-    if (!node || node->children_count == 0) return -1.0;
-
-    int best_eval = -100000;
-    bool has_any_eval = false;
-
-    for (size_t i = 0; i < node->children_count; i++) {
-        int eval_cp;
-        int depth;
-        if (rdb_get_eval(db, node->children[i]->fen, &eval_cp, &depth)) {
-            int eval_for_us = -eval_cp;
-            if (eval_for_us > best_eval) best_eval = eval_for_us;
-            has_any_eval = true;
-        } else if (node->children[i]->has_engine_eval) {
-            int eval_for_us = -node->children[i]->engine_eval_cp;
-            if (eval_for_us > best_eval) best_eval = eval_for_us;
-            has_any_eval = true;
-        }
-    }
-    if (!has_any_eval) return -1.0;
-
-    double q_max = cp_to_q(best_eval);
-    double sum_weighted_regret = 0.0;
-
-    for (size_t i = 0; i < node->children_count; i++) {
-        TreeNode *child = node->children[i];
-        double prob = child->move_probability;
-        if (prob < 0.01) continue;
-
-        int child_eval;
-        int depth;
-        if (rdb_get_eval(db, child->fen, &child_eval, &depth))
-            child_eval = -child_eval;
-        else if (child->has_engine_eval)
-            child_eval = -child->engine_eval_cp;
-        else
-            continue;
-
-        double q_val = cp_to_q(child_eval);
-        double regret = fmax(0.0, q_max - q_val);
-        sum_weighted_regret += pow(prob, EASE_BETA) * regret;
-    }
-
-    double raw_ease = 1.0 - pow(sum_weighted_regret / 2.0, EASE_ALPHA);
-    if (raw_ease < 0.0) raw_ease = 0.0;
-    if (raw_ease > 1.0) raw_ease = 1.0;
-    return raw_ease;
-}
-
-
-/* ========== Position Scoring (fallback when no ECA) ========== */
-
-double score_position(int eval_cp, double ease, double opponent_ease,
-                       double win_rate, double probability,
-                       uint64_t total_games, const RepertoireConfig *config,
-                       bool is_our_move) {
-    if (!config) return 0.0;
-
-    double eval_score = normalize_eval(eval_cp, config->play_as_white);
-
-    double ease_component;
-    if (is_our_move)
-        ease_component = ease >= 0 ? ease : 0.5;
-    else
-        ease_component = opponent_ease >= 0 ? (1.0 - opponent_ease) : 0.5;
-
-    double sharpness = opponent_ease >= 0 ? (1.0 - opponent_ease) : 0.5;
-    double wr_component = win_rate >= 0 ? win_rate : 0.5;
-
-    double confidence = 1.0;
-    if (total_games < 100)
-        confidence = 0.5 + 0.5 * ((double)total_games / 100.0);
-
-    double score = config->weight_eval * eval_score
-                 + config->weight_ease * ease_component
-                 + config->weight_winrate * wr_component
-                 + config->weight_sharpness * sharpness;
-    score *= confidence;
-
-    double prob_factor = 1.0;
-    if (probability > 0)
-        prob_factor = 0.5 + 0.5 * sqrt(probability);
-    score *= prob_factor;
-
-    return score;
-}
 
 
 /* ========== Trap Score ========== */
@@ -251,7 +105,7 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
     if (node->children_count == 0) return;
 
     if (node->depth > 0) {
-        int eval_us = get_eval_for_us(node, config->play_as_white);
+        int eval_us = node_eval_for_us(node, config->play_as_white);
         if (eval_us <= config->min_eval_cp || eval_us >= config->max_eval_cp)
             return;
     }
@@ -261,45 +115,16 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
                      : !node->is_white_to_move;
 
     if (is_our_move) {
-        TreeNode *best_child = NULL;
-        double best_score = -DBL_MAX;
-        bool using_eca = false;
+        ScoredChild winner;
+        score_our_move_children(node, config, &winner);
 
-        for (size_t i = 0; i < node->children_count; i++)
-            if (node->children[i]->has_eca) { using_eca = true; break; }
-
-        if (using_eca) {
-            ScoredChild winner;
-            score_our_move_children(node, config, &winner);
-            best_child = winner.child;
-            best_score = winner.score;
-        } else {
-            for (size_t i = 0; i < node->children_count; i++) {
-                TreeNode *child = node->children[i];
-                int eval_cp = child->has_engine_eval ? child->engine_eval_cp : 0;
-                double ease = child->has_ease ? child->ease : -1.0;
-                double opp_ease = calculate_ease_for_node(child, db);
-                double win_rate = 0.5;
-                if (child->total_games > 0)
-                    win_rate = normalize_winrate(child->white_wins, child->draws,
-                                                 child->total_games,
-                                                 config->play_as_white);
-                double score = score_position(eval_cp, ease, opp_ease, win_rate,
-                                              child->cumulative_probability,
-                                              child->total_games, config, true);
-                if (score > best_score) {
-                    best_score = score;
-                    best_child = child;
-                }
-            }
-        }
-
-        if (best_child && *num_moves < max_moves) {
+        if (winner.child && *num_moves < max_moves) {
+            TreeNode *best_child = winner.child;
             RepertoireMove *rm = &out_moves[*num_moves];
             strncpy(rm->fen, node->fen, sizeof(rm->fen) - 1);
             strncpy(rm->move_san, best_child->move_san, sizeof(rm->move_san) - 1);
             strncpy(rm->move_uci, best_child->move_uci, sizeof(rm->move_uci) - 1);
-            rm->composite_score = best_score;
+            rm->composite_score = winner.score;
             rm->depth = node->depth;
             rm->probability = node->cumulative_probability;
             rm->eval_cp = best_child->has_engine_eval ? best_child->engine_eval_cp : 0;
@@ -307,7 +132,7 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
             (*num_moves)++;
 
             rdb_save_repertoire_move(db, node->fen, best_child->move_san,
-                                      best_child->move_uci, best_score);
+                                      best_child->move_uci, winner.score);
 
             build_repertoire_recursive(best_child, tree, db, engine_pool,
                                         config, out_moves, num_moves, max_moves,
@@ -356,7 +181,8 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
         int depth;
     } LineState;
 
-    LineState *stack = (LineState *)calloc(10000, sizeof(LineState));
+    int stack_cap = max_lines < 2000 ? 2000 : max_lines;
+    LineState *stack = (LineState *)calloc(stack_cap, sizeof(LineState));
     if (!stack) return 0;
 
     int stack_top = 0;
@@ -381,7 +207,7 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
 
         if (is_our_move) {
             TreeNode *selected = find_repertoire_child(node, moves, num_moves);
-            if (selected && stack_top < 10000) {
+            if (selected && stack_top < stack_cap) {
                 LineState *next = &stack[stack_top];
                 next->node = selected;
                 next->depth = current.depth + 1;
@@ -398,7 +224,7 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
             for (size_t i = 0; i < node->children_count; i++) {
                 TreeNode *child = node->children[i];
                 if (child->cumulative_probability < config->min_probability) continue;
-                if (stack_top < 10000) {
+                if (stack_top < stack_cap) {
                     LineState *next = &stack[stack_top];
                     next->node = child;
                     next->depth = current.depth + 1;
@@ -476,8 +302,9 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     if (!result) return NULL;
 
     int max_moves = (int)tree->total_nodes;
+    int max_lines = max_moves < 10000 ? max_moves : 10000;
     result->moves = (RepertoireMove *)calloc(max_moves, sizeof(RepertoireMove));
-    result->lines = (RepertoireLine *)calloc(10000, sizeof(RepertoireLine));
+    result->lines = (RepertoireLine *)calloc(max_lines, sizeof(RepertoireLine));
     if (!result->moves || !result->lines) {
         free(result->moves);
         free(result->lines);
@@ -491,7 +318,7 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
 
     /* Resolve --relative eval offsets */
     if (cfg_local.relative_eval) {
-        int root_eval = get_eval_for_us(tree->root, cfg_local.play_as_white);
+        int root_eval = node_eval_for_us(tree->root, cfg_local.play_as_white);
         printf("  Root eval (our perspective): %+dcp\n", root_eval);
         cfg_local.min_eval_cp += root_eval;
         cfg_local.max_eval_cp += root_eval;
@@ -524,7 +351,7 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     /* Extract complete lines */
     if (progress) progress("Line extraction", 0, 0);
     result->num_lines = extract_lines(tree, result->moves, result->num_moves,
-                                       config, result->lines, 10000);
+                                       config, result->lines, max_lines);
     printf("  Extracted %d complete lines\n", result->num_lines);
 
     /* Summary statistics */
