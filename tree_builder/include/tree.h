@@ -207,7 +207,7 @@ size_t tree_calculate_ease(Tree *tree);
  *   accumulated = γ^d × local_cpl + Σ(prob_i × child.accumulated_eca)
  * At our-move nodes:
  *   avg_cpl = child.accumulated_eca / subtree_opp_plies
- *   score   = eval_conf × eval_us_cp + eval_weight × avg_cpl
+ *   score   = eval_conf × eval_us_cp + eca_weight × avg_cpl
  *   Select the child with the highest blended score, propagate its eca.
  */
 size_t tree_calculate_eca(Tree *tree, const struct RepertoireConfig *config);

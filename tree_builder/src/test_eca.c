@@ -91,7 +91,7 @@ int main(void) {
     RepertoireConfig config = repertoire_config_default();
     config.play_as_white = true;
     config.depth_discount = 0.90;
-    config.eval_weight = 0.40;
+    config.eca_weight = 0.40;
 
     printf("Computing ECA (play_as_white=true, γ=0.90, α=0.40)...\n\n");
     size_t annotated = tree_calculate_eca(tree, &config);
@@ -165,9 +165,9 @@ int main(void) {
     printf("  Expected local_cpl = %.4f  (got %.4f)\n", local_b, b_opp->local_cpl);
 
     /* Test sensitivity to α */
-    printf("\n── Sensitivity to α (eval_weight) ──\n");
+    printf("\n── Sensitivity to α (eca_weight) ──\n");
     for (double alpha = 0.0; alpha <= 1.01; alpha += 0.20) {
-        config.eval_weight = alpha;
+        config.eca_weight = alpha;
         tree_calculate_eca(tree, &config);
         printf("  α=%.2f  A=%.4f  B=%.4f  root=%.4f  → %s\n",
                alpha, a_opp->accumulated_eca, b_opp->accumulated_eca,

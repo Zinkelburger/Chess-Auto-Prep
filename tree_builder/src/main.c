@@ -114,7 +114,7 @@ static void print_usage(const char *prog_name) {
     printf("  --relative             Make --min-eval/--max-eval relative to root eval\n");
     printf("\n");
     printf("ECA scoring (move selection phase):\n");
-    printf("  --eval-weight <0-1>    Eval vs trickiness blend [default: 0.40]\n");
+    printf("  --eca-weight <0-1>     Weight on ECA (trickiness) in blended score [default: 0.40]\n");
     printf("  --leaf-confidence <0-1> Eval discount for unexplored leaves [default: 1.0]\n");
     printf("  --depth-decay <0-1>    Depth discount for ECA [default: 1.0]\n");
     printf("\n");
@@ -314,7 +314,7 @@ int main(int argc, char *argv[]) {
     int max_eval_arg = -99999;
 
     /* ECA scoring overrides */
-    double eval_weight_arg = -1.0;
+    double eca_weight_arg = -1.0;
     double leaf_confidence_arg = -1.0;
     double depth_decay_arg = -1.0;
 
@@ -351,7 +351,7 @@ int main(int argc, char *argv[]) {
         {"max-eval",         required_argument, 0, 2021},
         {"relative",         no_argument,       0, 2022},
         /* ECA scoring */
-        {"eval-weight",      required_argument, 0, 2030},
+        {"eca-weight",       required_argument, 0, 2030},
         {"leaf-confidence",  required_argument, 0, 2031},
         {"depth-decay",      required_argument, 0, 2032},
         /* Maia */
@@ -420,7 +420,7 @@ int main(int argc, char *argv[]) {
             case 2021: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
             case 2022: relative_eval = true; break;
             /* ECA */
-            case 2030: if (!parse_double(optarg, "eval-weight", &eval_weight_arg)) return 1; break;
+            case 2030: if (!parse_double(optarg, "eca-weight", &eca_weight_arg)) return 1; break;
             case 2031: if (!parse_double(optarg, "leaf-confidence", &leaf_confidence_arg)) return 1; break;
             case 2032: if (!parse_double(optarg, "depth-decay", &depth_decay_arg)) return 1; break;
             /* Maia */
@@ -924,7 +924,7 @@ int main(int argc, char *argv[]) {
     rep_config.eval_depth = eval_depth;
     rep_config.quick_eval_depth = eval_depth > 15 ? 15 : eval_depth;
     rep_config.verbose_search = verbose;
-    if (eval_weight_arg >= 0.0) rep_config.eval_weight = eval_weight_arg;
+    if (eca_weight_arg >= 0.0) rep_config.eca_weight = eca_weight_arg;
     if (leaf_confidence_arg >= 0.0) rep_config.leaf_confidence = leaf_confidence_arg;
     if (depth_decay_arg >= 0.0) rep_config.depth_discount = depth_decay_arg;
     if (min_eval_arg != -99999) rep_config.min_eval_cp = min_eval_arg;
