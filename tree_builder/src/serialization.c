@@ -85,9 +85,6 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
     if (node->engine_injected) {
         cJSON_AddBoolToObject(obj, "engine_injected", true);
     }
-    if (node->inj_origin_depth >= 0) {
-        cJSON_AddNumberToObject(obj, "inj_origin_depth", node->inj_origin_depth);
-    }
     if (node->prune_reason != PRUNE_NONE) {
         const char *reason = node->prune_reason == PRUNE_EVAL_TOO_HIGH
                            ? "eval_too_high" : "eval_too_low";
@@ -404,12 +401,6 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
     cJSON *einj = cJSON_GetObjectItem(obj, "engine_injected");
     if (einj) {
         node->engine_injected = cJSON_IsTrue(einj);
-    }
-
-    /* Parse injection origin depth */
-    cJSON *iod = cJSON_GetObjectItem(obj, "inj_origin_depth");
-    if (iod && cJSON_IsNumber(iod)) {
-        node->inj_origin_depth = (int)iod->valuedouble;
     }
 
     /* Parse prune reason */

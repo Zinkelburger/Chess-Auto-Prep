@@ -53,8 +53,6 @@ typedef struct BuildStats {
     /* Injection */
     int    injections_attempted;
     int    injections_created;
-    int    injections_skipped_depth;
-    int    injections_skipped_prob;
     int    injections_skipped_exists;
     int    injections_skipped_transposition;
 } BuildStats;
@@ -110,19 +108,6 @@ typedef struct TreeConfig {
     const char *speeds;             /* e.g. "blitz,rapid,classical" */
     int min_games;                  /* Minimum games to consider a move */
     bool use_masters;               /* Use masters database instead of Lichess */
-
-    /* Engine injection at opponent nodes.
-     *
-     * The engine's top-1 move is injected when both structural gates pass:
-     *   1. node->depth <= inj_max_depth
-     *   2. node->cumulative_probability >= inj_min_probability
-     * and the resulting FEN is not already in the tree (transposition check).
-     *
-     * The injected PV is capped at inj_max_line_depth plies below the
-     * injection point (instead of extending to max_depth). */
-    int    inj_max_depth;           /* Don't inject deeper than this ply */
-    double inj_min_probability;     /* Don't inject on low-probability lines */
-    int    inj_max_line_depth;      /* Cap injected PV continuation (0 = unlimited) */
 
     /* Maia supplement: after Lichess moves are added, Maia fills in
        remaining mass with predicted human moves.  Positions can have a
