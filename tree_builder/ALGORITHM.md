@@ -84,26 +84,24 @@ human moves. A single node can end up with a mix of both sources.
    the most popular replies.
 4. **Engine top-1 injection** — run Stockfish on this position. If the
    engine's best move is not already a child, inject it so we have a
-   prepared response.  Two structural gates control injection:
-   - `depth <= inj_max_depth` (default 20)
-   - `cumulative_probability >= inj_min_probability` (default 0.005)
-
-   A transposition check also prevents injection when the resulting FEN
-   is already expanded elsewhere in the tree. If the engine's move already
-   exists as a child, its eval is backfilled instead of duplicating.
+   prepared response.  A transposition check prevents injection when the
+   resulting FEN is already expanded elsewhere in the tree.  If the
+   engine's move already exists as a child, its eval is backfilled
+   instead of duplicating.
 
    **Probability:** The injected move's probability comes from Maia's
    prediction for that move if available (the Maia response from step 2
-   is reused).  If the move isn't in Maia's output, a fixed fallback of
-   0.05 is used.
+   is reused).  If the move isn't in Maia's output, a fallback of 0.01
+   (1%) is used.  This probability governs how deep the injected subtree
+   is explored: the `cumulative_probability` of the child is
+   `parent_cumP × prob`, and the tree's standard `min_probability`
+   pruning naturally limits depth.
 
-   **Subtree building:** Engine-injected nodes are built with normal DFS
-   logic — both our-move and opponent-move expansion use the standard
-   Lichess/Maia/MultiPV pipeline. The only special treatment is a depth
-   cap: the subtree stops at `inj_max_line_depth` (default 6) plies below
-   the injection point (tracked via `inj_origin_depth` on the node,
-   propagated to all descendants).  This means injected subtrees get
-   proper branching and ECA signal rather than an unbranched engine PV.
+   **Subtree building:** Engine-injected nodes are normal children —
+   they use the standard DFS build logic with the same pruning rules
+   (cumP, mass target, eval window, max depth) as any other node.  No
+   separate depth cap is needed because the low probability assigned
+   to moves Maia didn't predict causes their cumP to decay quickly.
 5. **Batch evaluate** all children that lack evaluations (checks DB cache
    first, then Stockfish). Evals are cached to DB.
 6. **Recurse** into each child.
@@ -402,14 +400,6 @@ all castling UCI to king-destination form at three levels:
 | `min_eval_cp` | `--min-eval` | W: 0, B: -200 | Stop if our eval drops below this |
 | `max_eval_cp` | `--max-eval` | W: 200, B: 100 | Stop if our eval exceeds this |
 | `relative_eval` | `--relative` | off | Make thresholds relative to root eval |
-
-### Engine Injection
-
-| Parameter | Flag | Default | Description |
-|-----------|------|---------|-------------|
-| `inj_max_depth` | `--inj-max-depth` | 20 | Don't inject deeper than this ply |
-| `inj_min_probability` | `--inj-min-prob` | 0.005 (0.5%) | Only inject if cumProb >= this |
-| `inj_max_line_depth` | `--inj-line-depth` | 6 | Cap injected subtree at N plies below injection (0 = unlimited) |
 
 ### Maia Supplement
 
