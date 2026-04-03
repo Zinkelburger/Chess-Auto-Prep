@@ -105,7 +105,7 @@ typedef struct TreeNode {
      *                     γ^d × local_cpl + Σ(prob_i × child.accumulated_eca)
      *                   At our-move nodes:
      *                     accumulated_eca of the child selected by the
-     *                     blended score (eval_us + eval_weight × avg_cpl).
+     *                     blended score (eval_us + eca_weight × avg_cpl).
      */
     double local_cpl;
     double accumulated_eca;

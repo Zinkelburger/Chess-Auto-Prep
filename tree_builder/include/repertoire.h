@@ -39,7 +39,7 @@ typedef struct RepertoireConfig {
     
     /* ECA (Expected Centipawn Advantage) settings */
     double depth_discount;          /* γ: depth discount factor (1.0=none, <1.0 prefers early blunders) */
-    double eval_weight;             /* α: blend eval vs ECA (0=pure ECA, 1=pure eval, 0.5=balanced) */
+    double eca_weight;              /* α: weight on ECA (opponent error signal) in blended score */
     double leaf_confidence;         /* Discount on eval for unexplored leaves (1.0=trust fully, <1.0=discount) */
     
     /* Eval-window pruning (stop exploring lines outside this range) */

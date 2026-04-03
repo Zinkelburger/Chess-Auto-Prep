@@ -305,7 +305,7 @@ for each child (after max-eval-loss filtering,
                 with "if all fail, re-score all" fallback):
     opp_plies = child.subtree_opp_plies   (actual count, min 1)
     avg_cpl   = child.accumulated_eca / opp_plies
-    score     = eval_us_cp(child) + eval_weight × avg_cpl
+    score     = eval_us_cp(child) + eca_weight × avg_cpl
 
 select argmax(score)
 ```
@@ -319,7 +319,7 @@ subtree, computed bottom-up during ECA calculation:
 This replaces the old estimate `1 + subtree_depth / 2`, which was
 inaccurate in asymmetric trees where pruning removed branches unevenly.
 
-Both terms are in centipawn units. `eval_weight` controls how much
+Both terms are in centipawn units. `eca_weight` controls how much
 trickiness matters relative to objective eval.
 
 **Known issue:** `subtree_opp_plies` uses the *maximum* child depth,
@@ -417,7 +417,7 @@ all castling UCI to king-destination form at three levels:
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
 | `depth_discount` | `--depth-decay` | 1.0 | Depth discount for ECA |
-| `eval_weight` | `--eval-weight` | 0.40 | Multiplier on avg CPL per opponent turn in the blended score |
+| `eca_weight` | `--eca-weight` | 0.40 | Multiplier on avg CPL per opponent turn in the blended score |
 
 ### What Each Parameter Does Intuitively
 
@@ -442,7 +442,7 @@ all castling UCI to king-destination form at three levels:
   Safety net — rarely hit when the mass target is doing its job. Raise to
   8-10 for more thorough preparation.
 
-- **`eval_weight`**: "How much should trickiness boost the score?"
+- **`eca_weight`**: "How much should trickiness boost the score?"
   Multiplied against average CPL per opponent turn and added to eval.
   At 0.0, selection is purely by objective eval. Higher values reward
   lines where the opponent is more likely to blunder.
@@ -606,10 +606,11 @@ transposition path's depth.  A position reached 4 ply later via
 transposition would have a different number of opponent plies from root,
 but the borrowed value comes from the canonical expansion context.
 
-### Equivalence Ring Not Serialized
+### Equivalence Ring Serialization
 
-The `next_equivalent` pointers are runtime-only — they are built during
-`tree_build()` and destroyed when the FenMap is freed.  Trees loaded
-from JSON without a rebuild will have `next_equivalent = NULL` on all
-nodes.  A future improvement could reconstruct the ring after loading
-by scanning for duplicate FENs.
+Equivalence rings ARE serialized.  `node_to_cjson` writes a
+`next_equivalent_id` field for each node in a ring, and the loader
+(`cjson_to_node`) collects `(node, target_id)` pairs which
+`load_ctx_resolve` wires back up after the full tree is parsed.
+Trees loaded from JSON therefore have their equivalence rings fully
+restored without needing a rebuild.

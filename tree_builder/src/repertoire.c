@@ -29,7 +29,7 @@ RepertoireConfig repertoire_config_default(void) {
         .quick_eval_depth = 15,
 
         .depth_discount = 1.0,
-        .eval_weight = 0.40,
+        .eca_weight = 0.40,
         .leaf_confidence = 1.0,
         .min_eval_cp = 0,
         .max_eval_cp = 200,
@@ -335,7 +335,7 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     if (progress) progress("ECA calculation", 0, (int)tree->total_nodes);
     size_t eca_count = tree_calculate_eca(tree, config);
     printf("  Computed ECA for %zu nodes (depth-decay=%.2f, eval-weight=%.2f)\n",
-           eca_count, config->depth_discount, config->eval_weight);
+           eca_count, config->depth_discount, config->eca_weight);
     if (tree->root && tree->root->has_eca)
         printf("  Root accumulated ECA: %.4f wp-delta\n",
                tree->root->accumulated_eca);
