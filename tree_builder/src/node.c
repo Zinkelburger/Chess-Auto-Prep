@@ -188,11 +188,11 @@ void node_set_lichess_stats(TreeNode *node, uint64_t white_wins,
 }
 
 
-void node_set_eca(TreeNode *node, double local_cpl, double accumulated_eca) {
+void node_set_expectimax(TreeNode *node, double local_cpl, double expectimax_value) {
     if (!node) return;
     node->local_cpl = local_cpl;
-    node->accumulated_eca = accumulated_eca;
-    node->has_eca = true;
+    node->expectimax_value = expectimax_value;
+    node->has_expectimax = true;
 }
 
 
@@ -259,9 +259,9 @@ void node_print(const TreeNode *node, int indent) {
         printf(" [ease=%.3f]", node->ease);
     }
     
-    if (node->has_eca) {
-        printf(" [local_wp=%.4f acc_wp=%.4f]",
-               node->local_cpl, node->accumulated_eca);
+    if (node->has_expectimax) {
+        printf(" [local_cpl=%.4f V=%.4f]",
+               node->local_cpl, node->expectimax_value);
     }
     
     printf("\n");

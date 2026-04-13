@@ -6,14 +6,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
 
+import 'dart:io' as io;
+
 import '../core/repertoire_controller.dart';
+import '../models/build_tree_node.dart';
 import '../models/engine_settings.dart';
 import '../models/repertoire_line.dart';
 import '../services/analysis_service.dart';
 import '../services/engine/stockfish_pool.dart';
+import '../services/generation/tree_serialization.dart';
 import '../services/repertoire_service.dart';
 import '../utils/app_messages.dart';
 import '../utils/chess_utils.dart' show uciToSan;
+import '../widgets/build_tree_widget.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
 import '../widgets/interactive_pgn_editor.dart';
@@ -37,24 +42,26 @@ class RepertoireScreen extends StatefulWidget {
 
 class _RepertoireScreenState extends State<RepertoireScreen>
     with TickerProviderStateMixin {
-  // All state is now managed by the controller
   late final RepertoireController _controller;
   late final TabController _tabController;
   final PgnEditorController _pgnEditorController = PgnEditorController();
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
+  final GlobalKey<BuildTreeWidgetState> _buildTreeKey =
+      GlobalKey<BuildTreeWidgetState>();
   bool _isGenerating = false;
-  
-  // Board orientation - true = Black's perspective (board flipped)
+
+  BuildTree? _buildTree;
+  bool _isLoadingTree = false;
+
   bool _boardFlipped = false;
-  
-  // Track which repertoire we last set the flip for (to reset on switch)
+
   String? _lastRepertoireId;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _tabController.addListener(() {
       final settled = _tabController.indexIsChanging ||
           _tabController.animation?.value == _tabController.index;
@@ -97,6 +104,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         if (currentId != null && currentId != _lastRepertoireId) {
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
+          _buildTree = null;
           EngineSettings().probabilityStartMoves = _controller.rootMoves;
         }
 
@@ -275,6 +283,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               return KeyEventResult.handled;
             }
           }
+          // Eval Tree Tab (Index 5) - BuildTreeWidget handles navigation
+          else if (_tabController.index == 5) {
+            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+              _buildTreeKey.currentState?.goBack();
+              return KeyEventResult.handled;
+            } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+              _buildTreeKey.currentState?.goForward();
+              return KeyEventResult.handled;
+            }
+          }
           
           return KeyEventResult.ignored;
         },
@@ -323,6 +341,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                         Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
                         Tab(text: 'Lines', icon: Icon(Icons.library_books, size: 16)),
                         Tab(text: 'Generate', icon: Icon(Icons.auto_awesome, size: 16)),
+                        Tab(text: 'Eval Tree', icon: Icon(Icons.insights, size: 16)),
                         Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
                       ],
                     ),
@@ -336,6 +355,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                           _buildPgnTab(),
                           _buildLinesTab(),
                           _KeepAliveTab(child: _buildGenerateTab()),
+                          _buildEvalTreeTab(),
                           _buildActionsTab(),
                         ],
                       ),
@@ -511,6 +531,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       onLineSaved: (moves, title, pgn) {
         _controller.appendNewLine(moves, title, pgn);
       },
+      onTreeBuilt: (tree) {
+        if (!mounted) return;
+        setState(() => _buildTree = tree);
+      },
     );
   }
   
@@ -669,6 +693,142 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onLineRenamed: _renameLine,
       ),
     );
+  }
+
+  Widget _buildEvalTreeTab() {
+    if (_buildTree == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.insights, size: 64, color: Colors.grey[400]),
+              const SizedBox(height: 16),
+              const Text(
+                'No eval tree loaded',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Generate a repertoire tree in the Generate tab,\n'
+                'or load a previously saved tree from file.',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _isLoadingTree ? null : _tryLoadBuildTree,
+                icon: _isLoadingTree
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.file_open),
+                label: Text(_isLoadingTree ? 'Loading...' : 'Load from file'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final playAsWhite =
+        _buildTree!.configSnapshot['play_as_white'] as bool? ??
+            _controller.isRepertoireWhite;
+
+    return Column(
+      children: [
+        // Summary bar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.insights, size: 16, color: Colors.grey[400]),
+              const SizedBox(width: 8),
+              Text(
+                '${_buildTree!.totalNodes} nodes • '
+                'depth ${_buildTree!.maxDepthReached}',
+                style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+              ),
+              const Spacer(),
+              SizedBox(
+                height: 28,
+                child: TextButton.icon(
+                  onPressed: _tryLoadBuildTree,
+                  icon: Icon(Icons.refresh, size: 14, color: Colors.grey[400]),
+                  label: Text(
+                    'Reload',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: 28,
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _buildTree = null),
+                  icon: Icon(Icons.close, size: 14, color: Colors.grey[400]),
+                  label: Text(
+                    'Close',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(
+          child: BuildTreeWidget(
+            key: _buildTreeKey,
+            tree: _buildTree!,
+            playAsWhite: playAsWhite,
+            onPositionSelected: (fen) {
+              _controller.setPositionFromFen(fen);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _tryLoadBuildTree() async {
+    final filePath = _controller.currentRepertoire?['filePath'] as String?;
+    if (filePath == null || filePath.isEmpty) return;
+
+    final treePath = '${filePath.replaceAll('.pgn', '')}_tree.json';
+    final file = io.File(treePath);
+
+    if (!await file.exists()) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          'No tree file found. Generate a tree first.',
+        );
+      }
+      return;
+    }
+
+    setState(() => _isLoadingTree = true);
+
+    try {
+      final json = await file.readAsString();
+      final tree = deserializeTree(json);
+      if (mounted) {
+        setState(() {
+          _buildTree = tree;
+          _isLoadingTree = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingTree = false);
+        showAppSnackBar(context, 'Failed to load tree: $e', isError: true);
+      }
+    }
   }
 
   Widget _buildActionsTab() {

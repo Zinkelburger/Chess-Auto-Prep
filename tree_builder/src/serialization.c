@@ -64,10 +64,10 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
         cJSON_AddNumberToObject(obj, "ease", node->ease);
     }
     
-    /* Optional ECA (win-probability-delta units) */
-    if (opts->include_eca && node->has_eca) {
+    /* Expectimax value [0,1] + local CPL (display only) */
+    if (opts->include_eca && node->has_expectimax) {
         cJSON_AddNumberToObject(obj, "local_cpl", node->local_cpl);
-        cJSON_AddNumberToObject(obj, "accumulated_eca", node->accumulated_eca);
+        cJSON_AddNumberToObject(obj, "expectimax_value", node->expectimax_value);
     }
     
     /* Optional Lichess stats */
@@ -81,9 +81,6 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
     cJSON_AddBoolToObject(obj, "is_white_to_move", node->is_white_to_move);
     if (node->explored) {
         cJSON_AddBoolToObject(obj, "explored", true);
-    }
-    if (node->engine_injected) {
-        cJSON_AddBoolToObject(obj, "engine_injected", true);
     }
     if (node->prune_reason != PRUNE_NONE) {
         const char *reason = node->prune_reason == PRUNE_EVAL_TOO_HIGH
@@ -125,8 +122,7 @@ static char* tree_to_json_internal(const Tree *tree, const SerializationOptions 
     
     /* Tree metadata */
     cJSON_AddStringToObject(root, "format", "opening_tree");
-    cJSON_AddNumberToObject(root, "version", 2.0);
-    cJSON_AddStringToObject(root, "eca_units", "wp_delta");
+    cJSON_AddNumberToObject(root, "version", 3.0);
     cJSON_AddNumberToObject(root, "total_nodes", (double)tree->total_nodes);
     cJSON_AddNumberToObject(root, "max_depth", tree->max_depth_reached);
     cJSON_AddBoolToObject(root, "build_complete", tree->build_complete);
@@ -364,11 +360,19 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
         node_set_ease(node, ease->valuedouble);
     }
     
-    /* Parse ECA fields (v2: wp-delta only; v1 backward compat: ignore Q-loss) */
+    /* Parse expectimax value (v3) or legacy accumulated_eca (v2).
+       Legacy values are ignored since generate_repertoire recomputes. */
     cJSON *lcpl = cJSON_GetObjectItem(obj, "local_cpl");
-    cJSON *aeca = cJSON_GetObjectItem(obj, "accumulated_eca");
-    if (lcpl && aeca) {
-        node_set_eca(node, lcpl->valuedouble, aeca->valuedouble);
+    cJSON *emx = cJSON_GetObjectItem(obj, "expectimax_value");
+    if (lcpl && emx) {
+        node_set_expectimax(node, lcpl->valuedouble, emx->valuedouble);
+    } else {
+        cJSON *aeca = cJSON_GetObjectItem(obj, "accumulated_eca");
+        if (lcpl && aeca) {
+            /* v2 backward compat: store local_cpl but mark as needing
+               recomputation (expectimax_value is not meaningful here). */
+            node->local_cpl = lcpl->valuedouble;
+        }
     }
     
     /* Parse Lichess stats */
@@ -395,12 +399,6 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
         node->explored = cJSON_IsTrue(expl);
     } else {
         node->explored = (node->children_count > 0);
-    }
-
-    /* Parse engine_injected flag */
-    cJSON *einj = cJSON_GetObjectItem(obj, "engine_injected");
-    if (einj) {
-        node->engine_injected = cJSON_IsTrue(einj);
     }
 
     /* Parse prune reason */

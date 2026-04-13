@@ -23,3 +23,12 @@ double scoreToQ(int cp) {
   final winProb = 1.0 / (1.0 + math.exp(-0.004 * cp));
   return 2.0 * winProb - 1.0;
 }
+
+/// Win probability sigmoid used by ECA move selection.
+///
+/// Maps centipawns to [0, 1] using the same constant as the C tree builder's
+/// `win_probability()` (0.00368208).  Mate scores saturate to 0.0 / 1.0.
+double winProbability(int cp) {
+  if (cp.abs() > 9000) return cp > 0 ? 1.0 : 0.0;
+  return 1.0 / (1.0 + math.exp(-0.00368208 * cp));
+}

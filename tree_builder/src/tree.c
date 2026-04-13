@@ -6,7 +6,7 @@
  * and the eval filter prunes immediately.  At opponent-move nodes,
  * Lichess DB moves are added first, then Maia fills remaining mass
  * with predicted human moves (a single node can have a mix of both
- * sources).  The engine's top-1 move is injected if not already present.
+ * sources).
  */
 
 #include "tree.h"
@@ -132,9 +132,6 @@ static void fen_map_put(FenMap *map, const char *fen, TreeNode *node) {
 }
 
 
-/* Ease calculation constants (matching the Flutter/Python implementation) */
-#define EASE_ALPHA (1.0/3.0)
-#define EASE_BETA  1.5
 
 
 TreeConfig tree_config_default(void) {
@@ -250,13 +247,8 @@ static bool apply_uci(const char *fen, const char *uci,
 /**
  * Ensure a node has an engine evaluation.
  * Checks the DB cache first, then runs a single Stockfish eval.
- * If out_job is non-NULL, the full EvalJob result is written there
- * so callers can reuse the bestmove without a redundant engine call.
  */
-static void ensure_eval(TreeNode *node, const TreeConfig *config,
-                        EvalJob *out_job) {
-    if (out_job) memset(out_job, 0, sizeof(*out_job));
-
+static void ensure_eval(TreeNode *node, const TreeConfig *config) {
     if (node->has_engine_eval) return;
 
     /* Try DB cache */
@@ -282,7 +274,6 @@ static void ensure_eval(TreeNode *node, const TreeConfig *config,
             node_set_eval(node, job.eval_cp);
             if (config->db)
                 rdb_put_eval(config->db, node->fen, job.eval_cp, job.depth_reached);
-            if (out_job) *out_job = job;
         }
 
         STATS_INC(config, sf_single_calls);
@@ -572,7 +563,7 @@ static void build_our_move(Tree *tree, TreeNode *node,
 
 
 /**
- * OPPONENT MOVE: Lichess DB + Maia supplement + engine top-1 → recurse.
+ * OPPONENT MOVE: Lichess DB + Maia supplement → recurse.
  *
  * Blended strategy: Lichess moves are added first (real game data),
  * then Maia fills in until the mass target is reached.  A position
@@ -583,18 +574,14 @@ static void build_our_move(Tree *tree, TreeNode *node,
  */
 static void build_opponent_move(Tree *tree, TreeNode *node,
                                  const TreeConfig *config,
-                                 LichessExplorer *explorer,
-                                 const EvalJob *precomputed_job) {
+                                 LichessExplorer *explorer) {
     char san_buf[MAX_MOVE_LENGTH];
     double mass_target = opp_mass_for_depth(config, node->depth);
     int children_added = 0;
     double mass_covered = 0.0;
 
-    /* Maia response at function scope so engine injection can
-       look up the probability for its bestmove. */
     MaiaResponse maia_resp;
     memset(&maia_resp, 0, sizeof(maia_resp));
-    bool has_maia_resp = false;
 
     /* 1. Query Lichess explorer and add qualifying moves */
     ExplorerResponse response;
@@ -681,7 +668,6 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
         STATS_ADD(config, maia_total_ms, elapsed_ms(&t_maia));
 
         if (maia_ok && maia_resp.success && maia_resp.move_count > 0) {
-            has_maia_resp = true;
             for (int i = 0; i < maia_resp.move_count; i++) {
                 const char *uci = maia_resp.moves[i].uci;
                 double prob = maia_resp.moves[i].probability;
@@ -731,78 +717,10 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
 
     if (children_added == 0 && node->children_count == 0) return;
 
-    /* 3. Engine top-1 injection: reuse the EvalJob from ensure_eval
-     *    (passed in as precomputed_job) to avoid a redundant engine call.
-     *    If the engine's best move isn't already a child, inject it. */
-    if (config->engine_pool && precomputed_job &&
-        precomputed_job->success && precomputed_job->bestmove[0]) {
-        STATS_INC(config, injections_attempted);
-
-        /* Check if this move already exists as a child */
-        bool exists = false;
-        for (size_t c = 0; c < node->children_count; c++) {
-            if (strcmp(node->children[c]->move_uci, precomputed_job->bestmove) == 0) {
-                if (!node->children[c]->has_engine_eval) {
-                    node_set_eval(node->children[c], -precomputed_job->eval_cp);
-                    if (config->db)
-                        rdb_put_eval(config->db, node->children[c]->fen,
-                                     -precomputed_job->eval_cp, precomputed_job->depth_reached);
-                }
-                exists = true;
-                break;
-            }
-        }
-
-        if (exists) {
-            STATS_INC(config, injections_skipped_exists);
-        } else {
-            char child_fen[MAX_FEN_LENGTH];
-            if (apply_uci(node->fen, precomputed_job->bestmove,
-                          child_fen, MAX_FEN_LENGTH)) {
-                FenMap *fmap = (FenMap *)tree->expanded_fens;
-                if (fmap && fen_map_get(fmap, child_fen)) {
-                    STATS_INC(config, injections_skipped_transposition);
-                } else {
-                    const char *eng_san = precomputed_job->bestmove;
-                    if (uci_to_san(node->fen, precomputed_job->bestmove,
-                                   san_buf, sizeof(san_buf)))
-                        eng_san = san_buf;
-                    TreeNode *child = make_child(node, child_fen,
-                                                  eng_san,
-                                                  precomputed_job->bestmove, tree);
-                    if (child) {
-                        child->engine_injected = true;
-
-                        double inj_prob = 0.01;
-                        if (has_maia_resp) {
-                            for (int m = 0; m < maia_resp.move_count; m++) {
-                                if (strcmp(maia_resp.moves[m].uci,
-                                           precomputed_job->bestmove) == 0) {
-                                    inj_prob = maia_resp.moves[m].probability;
-                                    break;
-                                }
-                            }
-                        }
-
-                        child->move_probability = inj_prob;
-                        child->cumulative_probability =
-                            node->cumulative_probability * inj_prob;
-                        node_set_eval(child, -precomputed_job->eval_cp);
-                        if (config->db)
-                            rdb_put_eval(config->db, child_fen,
-                                         -precomputed_job->eval_cp,
-                                         precomputed_job->depth_reached);
-                        STATS_INC(config, injections_created);
-                    }
-                }
-            }
-        }
-    }
-
-    /* 3b. Normalize child probabilities so they sum to 1.0.
-     *     Lichess, Maia, and engine injection contribute from different
-     *     distributions; without normalization the missing mass biases
-     *     the ECA signal downward at every opponent node. */
+    /* 3. Normalize child probabilities so they sum to 1.0.
+     *    Lichess and Maia contribute from different distributions;
+     *    without normalization the missing mass biases the ECA signal
+     *    downward at every opponent node. */
     {
         double prob_sum = 0.0;
         for (size_t i = 0; i < node->children_count; i++)
@@ -819,7 +737,8 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
     /* 4. Batch-evaluate children that still lack evals */
     batch_eval_children(node, config);
 
-    /* 5. Recurse into children */
+    /* 5. Recurse into children (TODO: --engine-injection post-processing
+     *    flag could inject Stockfish top-1 moves here as a future feature) */
     for (size_t i = 0; i < node->children_count; i++) {
         if (!tree->is_building) break;
         build_recursive(tree, node->children[i], config, explorer);
@@ -833,8 +752,7 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
  * At each node:
  *   1. Check stop conditions (depth, cumP, interrupt)
  *   2. Resume support (skip explored nodes, recurse into existing children)
- *   3. Ensure this node has an eval (for window pruning); keep the EvalJob
- *      so opponent nodes can reuse the bestmove for engine injection
+ *   3. Ensure this node has an eval (for window pruning)
  *   4. Eval-window pruning (marks prune reason for annotation/deletion)
  *   5. Transposition detection (O(1) FenMap lookup; links equivalent
  *      nodes into a circular ring via next_equivalent)
@@ -860,11 +778,7 @@ static void build_recursive(Tree *tree, TreeNode *node,
     }
     if (node->explored) return;
 
-    /* Ensure this node has an eval for window pruning.
-       The EvalJob is kept so opponent nodes can reuse the bestmove
-       for engine injection without a redundant engine call. */
-    EvalJob eval_job;
-    ensure_eval(node, config, &eval_job);
+    ensure_eval(node, config);
 
     /* Eval-window pruning — mark the reason for downstream use. */
     if (node->has_engine_eval) {
@@ -907,7 +821,7 @@ static void build_recursive(Tree *tree, TreeNode *node,
     if (is_our_move)
         build_our_move(tree, node, config, explorer);
     else
-        build_opponent_move(tree, node, config, explorer, &eval_job);
+        build_opponent_move(tree, node, config, explorer);
 }
 
 
@@ -933,7 +847,7 @@ bool tree_build(Tree *tree, const char *start_fen,
     tree->is_building = true;
 
     if (tree->config.relative_eval) {
-        ensure_eval(tree->root, &tree->config, NULL);
+        ensure_eval(tree->root, &tree->config);
         if (tree->root->has_engine_eval) {
             int root_eval = node_eval_for_us(tree->root, tree->config.play_as_white);
             tree->config.min_eval_cp += root_eval;
@@ -1075,64 +989,9 @@ size_t tree_get_nodes_at_depth(const Tree *tree, int depth,
 }
 
 
-/* ========== Ease calculation ========== */
-
-static double ease_cp_to_q(int cp) {
-    if (abs(cp) > 9000) return cp > 0 ? 1.0 : -1.0;
-    double wp = 1.0 / (1.0 + exp(-0.004 * cp));
-    return 2.0 * wp - 1.0;
-}
-
-static void calculate_node_ease(TreeNode *node) {
-    if (!node || node->children_count == 0) return;
-
-    int best_eval = -100000;
-    bool has_evals = false;
-    for (size_t i = 0; i < node->children_count; i++) {
-        if (node->children[i]->has_engine_eval) {
-            int eval_for_us = -node->children[i]->engine_eval_cp;
-            if (eval_for_us > best_eval) best_eval = eval_for_us;
-            has_evals = true;
-        }
-    }
-    if (!has_evals) return;
-
-    double q_max = ease_cp_to_q(best_eval);
-    double sum_weighted_regret = 0.0;
-    for (size_t i = 0; i < node->children_count; i++) {
-        TreeNode *child = node->children[i];
-        if (!child->has_engine_eval) continue;
-        if (child->move_probability < 0.01) continue;
-        double q_val = ease_cp_to_q(-child->engine_eval_cp);
-        double regret = fmax(0.0, q_max - q_val);
-        sum_weighted_regret += pow(child->move_probability, EASE_BETA) * regret;
-    }
-
-    double ease = 1.0 - pow(sum_weighted_regret / 2.0, EASE_ALPHA);
-    if (ease < 0.0) ease = 0.0;
-    if (ease > 1.0) ease = 1.0;
-    node_set_ease(node, ease);
-}
-
-static size_t calculate_ease_recursive(TreeNode *node) {
-    if (!node) return 0;
-    size_t count = 0;
-    if (node->children_count > 0) {
-        calculate_node_ease(node);
-        if (node->has_ease) count++;
-    }
-    for (size_t i = 0; i < node->children_count; i++)
-        count += calculate_ease_recursive(node->children[i]);
-    return count;
-}
-
-size_t tree_calculate_ease(Tree *tree) {
-    if (!tree || !tree->root) return 0;
-    return calculate_ease_recursive(tree->root);
-}
 
 
-/* ========== ECA (Expected Centipawn Advantage) ========== */
+/* ========== Expectimax Value Propagation ========== */
 
 double win_probability(int cp) {
     if (abs(cp) > 9000) return cp > 0 ? 1.0 : 0.0;
@@ -1140,13 +999,10 @@ double win_probability(int cp) {
 }
 
 
-static void compute_local_eca(TreeNode *node) {
+/** Compute local_cpl at opponent-move nodes (display/diagnostics only). */
+static void compute_local_cpl(TreeNode *node) {
     if (!node || node->children_count == 0) return;
 
-    /* Find the opponent's best move (lowest eval for us = best for them).
-       child->engine_eval_cp is from side-to-move perspective; at opponent-
-       move nodes the children have our side to move, so low values = good
-       for the opponent. */
     int best_opp_cp = 100000;
     bool has_any = false;
     for (size_t i = 0; i < node->children_count; i++) {
@@ -1170,15 +1026,20 @@ static void compute_local_eca(TreeNode *node) {
 }
 
 
+/**
+ * At an our-move node, pick the child with the highest expectimax_value
+ * among candidates passing the eval-loss filter.
+ * Falls back to all children if none pass.
+ */
 int score_our_move_children(TreeNode *node,
                             const struct RepertoireConfig *config,
                             ScoredChild *best_out) {
     if (!node || !config || !best_out) return 0;
 
     best_out->child = NULL;
-    best_out->score = -1e9;
-    best_out->accumulated_eca = 0.0;
+    best_out->expectimax_value = -1.0;
 
+    /* Find best eval among children for the eval-loss filter */
     int best_child_cp = -100000;
     for (size_t i = 0; i < node->children_count; i++) {
         if (!node->children[i]->has_engine_eval) continue;
@@ -1187,66 +1048,55 @@ int score_our_move_children(TreeNode *node,
     }
 
     int passing = 0;
-    double best_score = -1e9;
+    double best_v = -1.0;
     TreeNode *best_child = NULL;
-    double best_eca = 0.0;
 
     for (size_t i = 0; i < node->children_count; i++) {
         TreeNode *child = node->children[i];
-        if (!child->has_eca) continue;
+        if (!child->has_expectimax) continue;
         int cp_us = node_eval_for_us(child, config->play_as_white);
         if (cp_us < best_child_cp - config->max_eval_loss_cp) continue;
         passing++;
-        int opp_plies = child->subtree_opp_plies > 0 ? child->subtree_opp_plies : 1;
-        double avg_cpl = child->accumulated_eca / opp_plies;
-        double eval_conf = (child->subtree_opp_plies > 0) ? 1.0 : config->leaf_confidence;
-        double score = eval_conf * (double)cp_us + config->eca_weight * avg_cpl;
-        if (score > best_score) {
-            best_score = score;
+        if (child->expectimax_value > best_v) {
+            best_v = child->expectimax_value;
             best_child = child;
-            best_eca = child->accumulated_eca;
         }
     }
 
-    /* Fallback: all filtered out → re-score without filters */
+    /* Fallback: all filtered out → consider all children */
     if (passing == 0) {
-        best_score = -1e9;
         for (size_t i = 0; i < node->children_count; i++) {
             TreeNode *child = node->children[i];
-            if (!child->has_eca) continue;
-            int cp_us = node_eval_for_us(child, config->play_as_white);
-            int opp_plies = child->subtree_opp_plies > 0 ? child->subtree_opp_plies : 1;
-            double avg_cpl = child->accumulated_eca / opp_plies;
-            double eval_conf = (child->subtree_opp_plies > 0) ? 1.0 : config->leaf_confidence;
-            double score = eval_conf * (double)cp_us + config->eca_weight * avg_cpl;
-            if (score > best_score) {
-                best_score = score;
+            if (!child->has_expectimax) continue;
+            if (child->expectimax_value > best_v) {
+                best_v = child->expectimax_value;
                 best_child = child;
-                best_eca = child->accumulated_eca;
             }
         }
     }
 
     best_out->child = best_child;
-    best_out->score = best_score;
-    best_out->accumulated_eca = best_eca;
+    best_out->expectimax_value = best_v;
     return passing;
 }
 
 
-static size_t calculate_eca_recursive(TreeNode *node,
-                                       const RepertoireConfig *config) {
+static size_t calculate_expectimax_recursive(TreeNode *node,
+                                              const RepertoireConfig *config) {
     if (!node) return 0;
     size_t count = 0;
+
+    /* Post-order: recurse children first */
     for (size_t i = 0; i < node->children_count; i++)
-        count += calculate_eca_recursive(node->children[i], config);
+        count += calculate_expectimax_recursive(node->children[i], config);
 
-    compute_local_eca(node);
-
-    double gamma_d = pow(config->depth_discount, (double)node->depth);
     bool is_our_move = (node->is_white_to_move == config->play_as_white);
 
-    /* Compute subtree_depth: max ply below this node */
+    /* Compute local_cpl for display (only meaningful at opponent-move nodes) */
+    if (!is_our_move && node->children_count > 0)
+        compute_local_cpl(node);
+
+    /* Compute subtree_depth and subtree_opp_plies for diagnostics */
     if (node->children_count == 0) {
         node->subtree_depth = 0;
         node->subtree_opp_plies = 0;
@@ -1265,17 +1115,18 @@ static size_t calculate_eca_recursive(TreeNode *node,
         node->subtree_opp_plies = max_opp;
     }
 
-    /* For transposition leaves, borrow ECA from the canonical node
-       (the one in the equivalence ring that has children). */
+    /* Transposition leaves: borrow V from the canonical node (the one
+       in the equivalence ring that has children).  Must happen BEFORE
+       the leaf case so we don't compute V = wp(eval) and then overwrite. */
     if (node->children_count == 0 && node->next_equivalent) {
         TreeNode *equiv = node->next_equivalent;
         while (equiv != node) {
-            if (equiv->has_eca && equiv->children_count > 0) {
-                node->accumulated_eca = equiv->accumulated_eca;
+            if (equiv->has_expectimax && equiv->children_count > 0) {
+                node->expectimax_value = equiv->expectimax_value;
                 node->local_cpl = equiv->local_cpl;
                 node->subtree_depth = equiv->subtree_depth;
                 node->subtree_opp_plies = equiv->subtree_opp_plies;
-                node->has_eca = true;
+                node->has_expectimax = true;
                 count++;
                 return count;
             }
@@ -1285,30 +1136,52 @@ static size_t calculate_eca_recursive(TreeNode *node,
         }
     }
 
+    double alpha = config->trick_weight / 100.0;
+    double alpha_eff = alpha * pow(config->depth_discount, (double)node->depth);
+
     if (node->children_count == 0) {
-        node->accumulated_eca = gamma_d * node->local_cpl;
+        /* Leaf: V = leaf_conf × wp(eval_for_us) */
+        int cp_us = node_eval_for_us(node, config->play_as_white);
+        node->expectimax_value = config->leaf_confidence * win_probability(cp_us);
+
     } else if (is_our_move) {
+        /* Our move: V = max(V_child) among eval-loss-filtered candidates */
         ScoredChild best;
         score_our_move_children(node, config, &best);
-        node->accumulated_eca = best.child ? best.accumulated_eca : 0.0;
+        node->expectimax_value = best.child ? best.expectimax_value : 0.0;
+
     } else {
-        double future = 0.0;
+        /* Opponent move: blend minimax and expectimax */
+        int cp_us = node_eval_for_us(node, config->play_as_white);
+        double v_engine = win_probability(cp_us);
+
+        /* Normalize child probabilities to sum to 1.0 (Pitfall 6) */
+        double prob_sum = 0.0;
+        for (size_t i = 0; i < node->children_count; i++)
+            prob_sum += node->children[i]->move_probability;
+
+        double v_human = 0.0;
         for (size_t i = 0; i < node->children_count; i++) {
             TreeNode *child = node->children[i];
-            if (!child->has_eca) continue;
-            future += child->move_probability * child->accumulated_eca;
+            if (!child->has_expectimax) continue;
+            double norm_prob = (prob_sum > 0.0)
+                ? child->move_probability / prob_sum
+                : child->move_probability;
+            v_human += norm_prob * child->expectimax_value;
         }
-        node->accumulated_eca = gamma_d * node->local_cpl + future;
+
+        node->expectimax_value = (1.0 - alpha_eff) * v_engine
+                                + alpha_eff * v_human;
     }
 
-    node->has_eca = true;
+    node->has_expectimax = true;
     count++;
     return count;
 }
 
-size_t tree_calculate_eca(Tree *tree, const struct RepertoireConfig *config) {
+size_t tree_calculate_expectimax(Tree *tree, const struct RepertoireConfig *config) {
     if (!tree || !tree->root || !config) return 0;
-    return calculate_eca_recursive(tree->root, config);
+    return calculate_expectimax_recursive(tree->root, config);
 }
 
 

@@ -94,28 +94,21 @@ typedef struct TreeNode {
     double opponent_ease;               /* Ease score from opponent's perspective */
     double trap_score;                  /* How often opponents play suboptimal here */
     
-    /* ECA (Expected Centipawn Advantage).
+    /* Expectimax value propagation.
      *
      * local_cpl:  expected centipawn loss by the side to move at THIS node
-     *             = Σ(prob_i × max(0, child_i_cp - best_opp_cp)) over
-     *             children with move_probability >= 0.01.
+     *             (display/diagnostics only, not used in scoring).
      *
-     * accumulated_eca:  total expected centipawn advantage in the subtree.
-     *                   At opponent nodes:
-     *                     γ^d × local_cpl + Σ(prob_i × child.accumulated_eca)
-     *                   At our-move nodes:
-     *                     accumulated_eca of the child selected by the
-     *                     blended score (eval_us + eca_weight × avg_cpl).
+     * expectimax_value:  practical win probability in [0, 1], computed
+     *                    bottom-up via expectimax:
+     *                    - Leaves:    wp(eval_for_us) × leaf_confidence
+     *                    - Opp nodes: (1-α_eff)×wp(eval) + α_eff×Σ(prob×V_child)
+     *                    - Our nodes: max(V_child) among eval-loss-filtered candidates
      */
     double local_cpl;
-    double accumulated_eca;
+    double expectimax_value;
     int    subtree_depth;               /* Max ply below this node (0 for leaves) */
-    bool   has_eca;                     /* Whether ECA values have been computed */
-
-    /* Engine-injected flag: this move was added as the engine's top-1 best
-     * move during opponent-move expansion (not from Lichess/Maia data).
-     * Only set on the injection point itself, not on descendants. */
-    bool   engine_injected;
+    bool   has_expectimax;              /* Whether expectimax value has been computed */
 
     /* Prune reason: why this node was not expanded further.
      * prune_eval_cp stores the eval (from our perspective) that
@@ -236,13 +229,13 @@ double node_draw_rate(const TreeNode *node);
 size_t node_count_subtree(const TreeNode *node);
 
 /**
- * Set ECA (Expected Centipawn Advantage) values
+ * Set expectimax value and local CPL.
  *
  * @param node The node to update
- * @param local_cpl Local expected centipawn loss at this node
- * @param accumulated_eca Subtree accumulated ECA (centipawns)
+ * @param local_cpl Local expected centipawn loss (display only)
+ * @param expectimax_value Practical win probability [0, 1]
  */
-void node_set_eca(TreeNode *node, double local_cpl, double accumulated_eca);
+void node_set_expectimax(TreeNode *node, double local_cpl, double expectimax_value);
 
 /**
  * Reset the global node-ID counter so the next node_create() returns

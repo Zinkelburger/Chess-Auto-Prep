@@ -4,16 +4,13 @@
  * Algorithms for traversing the move tree and selecting optimal
  * repertoire lines based on:
  * - Engine evaluation (objective quality)
- * - Ease metric (opponent mistake potential)
+ * - ECA (expected centipawn advantage from opponent mistakes)
  * - Win rates from Lichess database
  * - Move probabilities (focus on likely lines)
- * - Game count (statistical significance)
  * 
- * The core insight: we want positions where:
- * - When it's OUR turn: high ease (hard for us to blunder)
- * - When it's OPPONENT's turn: low ease (easy for them to make mistakes)
- * - Good objective evaluation (we're not in a bad position)
- * - High probability (these lines actually occur in practice)
+ * The core insight: we want positions where opponents frequently
+ * play suboptimal moves, giving us a practical edge beyond the
+ * raw engine evaluation.
  */
 
 #ifndef REPERTOIRE_H
@@ -39,7 +36,7 @@ typedef struct RepertoireConfig {
     
     /* ECA (Expected Centipawn Advantage) settings */
     double depth_discount;          /* γ: depth discount factor (1.0=none, <1.0 prefers early blunders) */
-    double eca_weight;              /* α: weight on ECA (opponent error signal) in blended score */
+    int trick_weight;               /* 0-100: blend between engine eval (0) and practical/tricky (100) in move selection */
     double leaf_confidence;         /* Discount on eval for unexplored leaves (1.0=trust fully, <1.0=discount) */
     
     /* Eval-window pruning (stop exploring lines outside this range) */
@@ -92,7 +89,6 @@ typedef struct {
 typedef struct {
     char moves_san[128][16];        /* SAN moves in the line */
     char moves_uci[128][16];       /* UCI moves in the line */
-    bool is_engine_injected[128];   /* Per-move: was this an engine-injected move? */
     int num_moves;                  /* Number of moves */
     
     /* Aggregate scores */
@@ -145,11 +141,10 @@ RepertoireConfig repertoire_config_default(void);
  * Generate a complete repertoire from a tree
  * 
  * This is the main entry point. It:
- * 1. Traverses the tree
- * 2. Evaluates positions with Stockfish (parallel)
- * 3. Calculates ease scores
- * 4. Scores and selects moves
- * 5. Extracts complete lines
+ * 1. Loads DB-cached evals into nodes
+ * 2. Computes ECA (Expected Centipawn Advantage)
+ * 3. Scores and selects moves
+ * 4. Extracts complete lines
  * 
  * @param tree The opening tree (with Lichess data)
  * @param db Database for caching
@@ -173,7 +168,7 @@ void repertoire_result_free(RepertoireResult *result);
  * Find the most "mistake-prone" lines for the opponent
  * 
  * Returns lines sorted by how likely the opponent is to err.
- * Uses combination of low ease scores and high engine disparity
+ * Uses high engine disparity
  * between popular and best moves.
  * 
  * @param tree The opening tree
@@ -206,7 +201,7 @@ double calculate_trap_score(const TreeNode *node, RepertoireDB *db);
  * Creates a PGN file with:
  * - Main line = our chosen moves
  * - Variations = likely opponent responses
- * - Comments = eval, ease, probability
+ * - Comments = eval, probability
  * 
  * @param result The repertoire result
  * @param filename Output PGN file

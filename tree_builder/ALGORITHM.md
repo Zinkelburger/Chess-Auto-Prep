@@ -8,11 +8,10 @@ interleaved DFS that builds the tree and evaluates positions simultaneously:
 1. **Building** the move tree by querying Lichess Explorer, Maia, and Stockfish
    together — engine MultiPV for our-move candidates, Lichess DB + Maia
    supplement for opponent responses, with eval-window pruning at every node
-2. Computing **ease scores** (how likely the side to move finds a good move)
-3. Computing **ECA (Expected Centipawn Advantage)** — estimating how many
+2. Computing **ECA (Expected Centipawn Advantage)** — estimating how many
    centipawns opponents hand us per turn due to suboptimal play
-4. **Selecting** repertoire moves using a blended score of eval and ECA
-5. Extracting complete lines and exporting to JSON/PGN
+3. **Selecting** repertoire moves using a blended score of eval and ECA
+4. Extracting complete lines and exporting to JSON/PGN
 
 ---
 
@@ -23,7 +22,7 @@ The CLI runs five stages (`[0/4]` through `[4/4]`).
 ### Stage 0: Database + Engine Initialization
 
 Open (or create) the SQLite database for caching explorer responses, engine
-evaluations, and ease scores. Locate and start the Stockfish engine pool
+evaluations. Locate and start the Stockfish engine pool
 (required for building).
 
 ### Stage 1: Build Opening Tree (Interleaved)
@@ -82,29 +81,16 @@ human moves. A single node can end up with a mix of both sources.
    the root this covers almost every played response (including 2–5%
    sidelines worth preparing against); deeper in the tree it focuses on only
    the most popular replies.
-4. **Engine top-1 injection** — run Stockfish on this position. If the
-   engine's best move is not already a child, inject it so we have a
-   prepared response.  A transposition check prevents injection when the
-   resulting FEN is already expanded elsewhere in the tree.  If the
-   engine's move already exists as a child, its eval is backfilled
-   instead of duplicating.
-
-   **Probability:** The injected move's probability comes from Maia's
-   prediction for that move if available (the Maia response from step 2
-   is reused).  If the move isn't in Maia's output, a fallback of 0.01
-   (1%) is used.  This probability governs how deep the injected subtree
-   is explored: the `cumulative_probability` of the child is
-   `parent_cumP × prob`, and the tree's standard `min_probability`
-   pruning naturally limits depth.
-
-   **Subtree building:** Engine-injected nodes are normal children —
-   they use the standard DFS build logic with the same pruning rules
-   (cumP, mass target, eval window, max depth) as any other node.  No
-   separate depth cap is needed because the low probability assigned
-   to moves Maia didn't predict causes their cumP to decay quickly.
-5. **Batch evaluate** all children that lack evaluations (checks DB cache
+4. **Batch evaluate** all children that lack evaluations (checks DB cache
    first, then Stockfish). Evals are cached to DB.
-6. **Recurse** into each child.
+5. **Recurse** into each child.
+
+> **TODO — Engine injection (`--engine-injection`):** A future
+> post-processing flag could inject Stockfish's top-1 best move at each
+> opponent node when that move is not already a child. This would ensure
+> we have a prepared response to engine-best moves, but is intentionally
+> excluded from the default build since the repertoire targets play
+> against humans, not hypothetical engine moves.
 
 `--maia-only` (the default) bypasses Lichess entirely, using Maia as the
 sole source of opponent moves. This eliminates the 500ms per-query API
@@ -165,11 +151,11 @@ node via the `next_equivalent` pointer.  All nodes for the same position
 can find each other by walking the ring.  The canonical node (first
 expanded) has children; the others are transposition leaves.
 
-During ECA calculation, transposition leaves walk their equivalence ring
-to find the canonical node and borrow `accumulated_eca`, `local_cpl`,
+During expectimax calculation, transposition leaves walk their equivalence
+ring to find the canonical node and borrow `expectimax_value`, `local_cpl`,
 `subtree_depth`, and `subtree_opp_plies` from it instead of contributing
-zero.  The tree remains a tree (not a DAG) for serialization and
-traversal, but the equivalence ring lets ECA see through to the canonical
+a raw leaf value.  The tree remains a tree (not a DAG) for serialization
+and traversal, but the equivalence ring lets expectimax see through to the
 subtree.  On resume, existing nodes re-register their FENs in the map so
 transpositions are still detected for newly expanded branches.
 
@@ -184,7 +170,7 @@ DFS traversal order — the canonical node must be processed *before* its
 transposition leaves.  This holds in the common case (canonical was
 expanded first, so it's in an earlier branch), but is not guaranteed
 after reordering or manual edits.  When borrowing fails silently, the
-transposition leaf contributes ECA=0.
+transposition leaf gets a raw leaf value instead of the canonical's deeper one.
 
 **Known limitation:** Transposition leaves keep the cumulative probability
 of the path that discovered them.  If a higher-probability path reaches
@@ -210,19 +196,17 @@ Maia moves below `maia_min_prob` (default 0.02 = 2%) are discarded.
 With `--maia-only`, Lichess is skipped entirely and the `maia_threshold`
 gate is removed — every position gets Maia predictions regardless of cumP.
 
-### Stage 2: Generate Repertoire (Ease + ECA + Selection)
+### Stage 2: Generate Repertoire (Expectimax + Selection)
 
 After the tree is built with all nodes evaluated:
 
 1. **Load DB evals** — for trees loaded from JSON, sync DB-cached evals
    into TreeNode structs.
-2. **Ease calculation** — compute ease scores from node evaluations (see
-   Ease Metric below).
-3. **ECA calculation** — compute local trickiness and accumulated ECA
-   (see ECA section below).
-4. **Move selection** — traverse the tree top-down, selecting one move at
-   each our-move node using the blended score.
-5. **Line extraction** — extract complete repertoire lines from the
+2. **Expectimax value propagation** — compute a practical win probability
+   V in [0, 1] at every node (see Expectimax section below).
+3. **Move selection** — traverse the tree top-down, selecting the child
+   with the highest V at each our-move node.
+4. **Line extraction** — extract complete repertoire lines from the
    selected moves.
 
 ### Stage 3: Trap Detection (Optional)
@@ -238,41 +222,56 @@ Save results to JSON tree, repertoire JSON, and optionally PGN.
 
 ---
 
-## Ease Metric
-
-Ease measures how likely the side to move is to find a good move. It's
-computed from node evaluations (no DB lookups needed — evals are on nodes
-from the build phase).
-
-```
-q(cp) = 2 / (1 + e^(-0.004 × cp)) - 1         # sigmoid, maps cp to [-1, 1]
-q_max = q(best child eval, from our perspective)
-
-weighted_regret = Σ(prob_i^1.5 × max(0, q_max - q(child_i eval)))
-ease = 1 - (weighted_regret / 2)^(1/3)
-```
-
-Children with `move_probability < 0.01` (1%) are excluded.
-
----
-
-## ECA: Expected Centipawn Advantage
+## Expectimax Value Propagation
 
 ### Concept
 
-ECA measures: "If I play this line, how many centipawns will my opponent
-hand me on average per opponent turn, due to suboptimal play?"
+Every node gets a single value **V** in [0, 1] — its **practical win
+probability** — computed in one bottom-up DFS pass.  V naturally
+incorporates opponent mistake tendencies at every level.
 
-Everything is in centipawn units. `local_cpl` is computed bottom-up
-at each node, then `accumulated_eca` aggregates the signal through the
-tree. At selection time, accumulated ECA is normalized by opponent ply
-count so deep and shallow lines are compared on the same scale.
+### Three Rules
 
-### Local Trickiness (local_cpl)
+**Leaves** (no children):
 
-At opponent-move nodes, `child.engine_eval_cp` is eval for the side to
-move (us, since the opponent just played). The opponent's best move
-minimises our eval:
+```
+V = leaf_confidence × wp(engine_eval_for_us)
+```
+
+**Opponent-move nodes** (blend of engine truth and human reality):
+
+```
+α_eff = α × γ^depth
+V_engine = wp(engine_eval_for_us)
+V_human  = Σ(norm_prob_i × V(child_i))
+V = (1 - α_eff) × V_engine + α_eff × V_human
+```
+
+Child probabilities are normalized to sum to 1.0 at each opponent node.
+
+**Our-move nodes** (we choose optimally):
+
+```
+candidates = children where eval_for_us >= best_child_eval - max_eval_loss_cp
+V = max(V(child_i)) for child_i in candidates
+```
+
+Fallback: if no children pass the eval-loss filter, consider all children.
+
+### Why This Works
+
+Trickiness is implicit: if the popular opponent move leads to a child
+with high V (good for us) while the engine-best reply (which happens
+rarely) leads to low V, then V_human > V_engine.  The "trick" signal
+emerges naturally from the gap, compounded properly through the sigmoid
+at every level.  A 50cp gift at +50 eval matters far more than at +300
+eval, and the per-node sigmoid handles this correctly — unlike additive
+centipawn accumulation which loses this information.
+
+### Local CPL (display only)
+
+`local_cpl` is still computed at opponent-move nodes for display and
+diagnostics.  It is NOT used in scoring:
 
 ```
 best_opp_cp = min(child.engine_eval_cp for all children with evals)
@@ -280,70 +279,26 @@ local_cpl   = Σ(prob_i × max(0, child_i.engine_eval_cp - best_opp_cp))
               for children with move_probability >= 0.01
 ```
 
-`local_cpl` is the expected centipawn gift the opponent hands us at this
-node by playing popular moves instead of their best move.
+### Transposition Handling
 
-### Bottom-Up Accumulation
-
-Post-order DFS with the full `RepertoireConfig` for filter consistency:
-
-- **Leaf nodes**: `accumulated_eca = γ^d × local_cpl`
-- **Opponent-move nodes**:
-  `accumulated_eca = γ^d × local_cpl + Σ(prob_i × child_i.accumulated_eca)`
-- **Our-move nodes**: Select the child using the blended score (see Move
-  Selection below). Propagate the selected child's `accumulated_eca`.
-
-A shared helper `score_our_move_children()` is used by both accumulation
-and selection to guarantee consistency.
+Transposition leaves borrow V from the canonical node before the leaf
+formula runs.  The canonical's V already has `leaf_confidence` baked in
+at its own leaves, so transposition leaves do not re-apply the discount.
 
 ### Move Selection
 
-At our-move nodes during the top-down traversal:
-
-```
-for each child (after max-eval-loss filtering,
-                with "if all fail, re-score all" fallback):
-    opp_plies = child.subtree_opp_plies   (actual count, min 1)
-    avg_cpl   = child.accumulated_eca / opp_plies
-    score     = eval_us_cp(child) + eca_weight × avg_cpl
-
-select argmax(score)
-```
-
-`subtree_opp_plies` is the actual number of opponent-move levels in the
-subtree, computed bottom-up during ECA calculation:
-- Leaves: `subtree_opp_plies = 0`
-- Opponent-move nodes: `subtree_opp_plies = 1 + max(child.subtree_opp_plies)`
-- Our-move nodes: `subtree_opp_plies = max(child.subtree_opp_plies)`
-
-This replaces the old estimate `1 + subtree_depth / 2`, which was
-inaccurate in asymmetric trees where pruning removed branches unevenly.
-
-Both terms are in centipawn units. `eca_weight` controls how much
-trickiness matters relative to objective eval.
-
-**Known issue:** `subtree_opp_plies` uses the *maximum* child depth,
-not a weighted average.  In highly asymmetric trees (one deep branch,
-many shallow ones), the max can over-count.  A probability-weighted
-expected depth would be more accurate but is more complex to compute
-(requires a second bottom-up pass after move selection, creating a
-circular dependency).  The current approach is correct for balanced
-trees and a reasonable approximation for asymmetric ones.
-
-**Known issue:** For transposition leaves, `subtree_opp_plies` is
-borrowed from the canonical node.  This is correct if the canonical
-subtree is representative, but the actual depth from this path may
-differ (the transposition might be reached deeper or shallower).
-Currently accepted as a reasonable approximation.
+Selection is trivial: at each our-move node, `score_our_move_children()`
+filters by `max_eval_loss_cp`, then returns `argmax(V)`.  No formula at
+all — just pick the child with the highest practical win probability.
 
 At opponent-move nodes, all children above the probability threshold are
-recursed into. The DFS also stops at eval-window boundaries.
+recursed into.  The DFS also stops at eval-window boundaries.
 
-### Line Extraction
+### Line Extraction (unchanged)
 
-Follow selected repertoire moves through the tree. At our-move nodes, only
-the selected move is followed. At opponent-move nodes, all likely responses
-are followed. Lines always end with the repertoire side's move.
+Follow selected repertoire moves through the tree.  At our-move nodes, only
+the selected move is followed.  At opponent-move nodes, all likely responses
+are followed.  Lines always end with the repertoire side's move.
 
 ### Castling UCI Normalization
 
@@ -412,12 +367,29 @@ all castling UCI to king-destination form at three levels:
 | `maia_only` | `--maia-only` | on (default) | Bypass Lichess API, use Maia exclusively |
 | | `--lichess` | | Enable Lichess API (overrides `--maia-only`) |
 
-### ECA & Move Selection
+### Expectimax & Move Selection
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| `depth_discount` | `--depth-decay` | 1.0 | Depth discount for ECA |
-| `eca_weight` | `--eca-weight` | 0.40 | Multiplier on avg CPL per opponent turn in the blended score |
+| `alpha` (trick_weight/100) | `--trick-weight` | 50 | 0 = trust engine, 100 = trust human probabilities |
+| `gamma` (depth_discount) | `--depth-decay` | 1.0 | Depth discount for alpha |
+| `leaf_confidence` | `--leaf-confidence` | 1.0 | Discount on wp(eval) for unexplored leaves |
+| `max_eval_loss_cp` | `--max-eval-loss` | 50 | Quality floor at our-move nodes |
+
+### Preset Modes
+
+The CLI supports four preset bundles (`--solid`, `--practical`, `--tricky`,
+`--traps`). Each sets defaults for trick weight, eval floor (`--min-eval`),
+depth decay (gamma), and max eval loss. **Modes set defaults only; explicit flags
+override.** For example: `--tricky --max-eval-loss 50` keeps tricky’s
+trick-weight and min-eval defaults but forces max-eval-loss to 50.
+
+| Mode | alpha | gamma | `--min-eval` (W / B) | `--max-eval-loss` | Intent |
+|------|-------|-------|----------------------|-------------------|--------|
+| `--solid` | 0.10 | 1.0 | 0 / -100 | 30 | Nearly pure engine. Opponent model barely matters. |
+| `--practical` | 0.50 | 1.0 | -25 / -200 | 50 | Balanced. Half engine, half human tendencies. |
+| `--tricky` | 0.70 | 0.95 | -50 / -250 | 75 | Trust probability model more, especially near root. |
+| `--traps` | 0.90 | 0.90 | -100 / -300 | 100 | Almost pure expectimax. Maximize human mistakes. |
 
 ### What Each Parameter Does Intuitively
 
@@ -442,10 +414,11 @@ all castling UCI to king-destination form at three levels:
   Safety net — rarely hit when the mass target is doing its job. Raise to
   8-10 for more thorough preparation.
 
-- **`eca_weight`**: "How much should trickiness boost the score?"
-  Multiplied against average CPL per opponent turn and added to eval.
-  At 0.0, selection is purely by objective eval. Higher values reward
-  lines where the opponent is more likely to blunder.
+- **`trick_weight`** (alpha): "How much should opponent tendencies matter?"
+  Controls the blend between engine-optimal (V_engine = wp(eval)) and
+  human-practical (V_human = probability-weighted child values) at opponent
+  nodes.  0 = pure engine minimax, 100 = pure expectimax over human
+  probabilities.  The effective alpha decays with depth when gamma < 1.
 
 - **`min/max_eval_cp`**: "What eval range should we explore?" Stops the DFS
   when positions are too bad (lost cause) or too good (already winning,
@@ -470,7 +443,7 @@ all castling UCI to king-destination form at three levels:
 tree_builder/
 ├── include/
 │   ├── node.h          # TreeNode struct (eval, ECA, probabilities)
-│   ├── tree.h          # Tree config + interleaved build + ease/ECA
+│   ├── tree.h          # Tree config + interleaved build + ECA
 │   ├── repertoire.h    # RepertoireConfig, move selection, export
 │   ├── lichess_api.h   # Lichess Explorer API client
 │   ├── engine_pool.h   # Multithreaded Stockfish (batch + MultiPV)
@@ -481,7 +454,7 @@ tree_builder/
 │   ├── maia.h          # Maia neural network (ONNX Runtime)
 │   └── thread_pool.h   # Generic thread pool
 ├── src/
-│   ├── tree.c          # Interleaved build, ease, ECA, traversal
+│   ├── tree.c          # Interleaved build, expectimax, traversal
 │   ├── repertoire.c    # Repertoire selection, scoring, line extraction, export
 │   ├── node.c          # Node CRUD
 │   ├── main.c          # CLI entry point, pipeline orchestration
@@ -517,8 +490,7 @@ tree_builder/
    │  (10 → 2)     │                      │  2. Maia fills   │
    │  → eval filter│                      │     remaining    │
    │  → Lichess    │                      │     mass         │
-   │    enrichment │                      │  3. Engine top-1 │
-   │               │                      │  → batch eval    │
+   │    enrichment │                      │  → batch eval    │
    │               │                      │  → mass target   │
    │               │                      │    (95% → 50%)   │
    └──────┬────────┘                      └────────┬─────────┘
@@ -530,14 +502,11 @@ tree_builder/
               Tree with evals on all nodes
                            │
                            ▼
-              tree_calculate_ease()  → ease [0, 1]
-                           │
-                           ▼
-              tree_calculate_eca()   → accumulated_eca (centipawns)
+              tree_calculate_expectimax()   → V in [0,1] at every node
                            │
                            ▼
               build_repertoire_recursive()
-                  Our nodes: eval + weight × avg_cpl_per_opp_turn
+                  Our nodes: pick argmax(V) after eval-loss filter
                   Opp nodes: traverse all children
                            │
                            ▼
@@ -551,60 +520,29 @@ tree_builder/
 
 ## Known Issues and Future Improvements
 
-### Leaf Node ECA
+### Leaf Node Values
 
-Leaf nodes contribute `accumulated_eca = 0` (since `local_cpl` requires
-children to compute).  This means lines pruned early look "less tricky"
-simply because they have less depth, not because the opponent plays better
-there.  Transposition leaves now borrow ECA from the canonical node (see
-above), but other leaf types (max-depth, cumP-pruned) still contribute
-zero.
-
-A future improvement could estimate leaf ECA from the node's eval or
-from the average ECA of nearby non-leaf nodes.
-
-### Probability Normalization After Blended Sources
-
-When both Lichess and Maia contribute children at an opponent node, the
-`move_probability` values come from different distributions and may not
-sum to 1.0.  The ECA formula weights by `move_probability`:
-
-```
-future += child.move_probability × child.accumulated_eca
-```
-
-If probabilities sum to 0.75, the remaining 0.25 mass is implicitly
-treated as "opponent plays a move with zero ECA contribution."  This
-underweights the ECA signal at every opponent node and the effect
-compounds through the tree.
-
-With `--maia-only` (the default), Maia probabilities are more
-self-consistent but still capped at the mass target (e.g. 50% deep in
-the tree), leaving substantial unnormalized mass.
-
-A fix would be to normalize `move_probability` across all children after
-all sources (Lichess, Maia, engine injection) have contributed, by
-dividing each by the sum.  This would require a normalization pass at
-the end of `build_opponent_move` after all children are created.
-
-Alternatively, the ECA accumulation could divide by `mass_covered`
-instead of assuming probabilities sum to 1.0.
+Leaf nodes get `V = leaf_confidence * wp(eval_for_us)`.  With
+`leaf_confidence < 1`, unexplored leaves are discounted, which
+systematically biases V toward `V_engine` near the tree fringe.
+This is arguably more correct than trusting unexplored evals at
+full weight, but it is a behavior change from the old ECA system.
 
 ### DFS Order Bias on Interrupted Builds
 
 The build is DFS, so earlier children are fully explored before later
 ones.  If interrupted (SIGINT), earlier children have deeper subtrees
-and accumulate more ECA signal.  Resume partially mitigates this, but
+and accumulate more expectimax signal.  Resume partially mitigates this, but
 any time-limited build has an inherent bias toward first-explored
 branches.
 
-### `subtree_opp_plies` for Transposition Leaves
+### Transposition Leaf Values
 
-When a transposition leaf borrows `subtree_opp_plies` from the canonical
-node, the value reflects the canonical path's depth, not the
-transposition path's depth.  A position reached 4 ply later via
-transposition would have a different number of opponent plies from root,
-but the borrowed value comes from the canonical expansion context.
+When a transposition leaf borrows `expectimax_value` from the canonical
+node, the value reflects the canonical path's subtree.  A position
+reached via a different move order borrows the same V value regardless
+of how the path to reach it differs.  In practice this is minor since
+transposition leaves are a small fraction of candidates.
 
 ### Equivalence Ring Serialization
 
