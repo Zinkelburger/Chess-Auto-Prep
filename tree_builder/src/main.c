@@ -4,7 +4,7 @@
  * Pipeline:
  *   0. INIT      - Open database + create Stockfish engine pool
  *   1. BUILD     - Interleaved Lichess + Stockfish tree construction
- *   2. SELECT    - Ease + ECA calculation → repertoire move selection
+ *   2. SELECT    - ECA calculation → repertoire move selection
  *   3. TRAPS     - (optional) find opponent trap positions
  *   4. EXPORT    - Save PGN, tree (for resume), and database
  *
@@ -113,10 +113,17 @@ static void print_usage(const char *prog_name) {
     printf("  --max-eval <cp>        Stop DFS if our eval exceeds this [default: color-dependent]\n");
     printf("  --relative             Make --min-eval/--max-eval relative to root eval\n");
     printf("\n");
-    printf("ECA scoring (move selection phase):\n");
-    printf("  --eca-weight <0-1>     Weight on ECA (trickiness) in blended score [default: 0.40]\n");
+    printf("Preset modes (move selection + eval window; omitted flags keep defaults):\n");
+    printf("  --solid                Engine-first; tight eval window\n");
+    printf("  --practical            Balanced objective vs human-practical lines\n");
+    printf("  --tricky               More trickiness; slightly wider window, depth decay 0.95\n");
+    printf("  --traps                Hunt for traps; widest window, depth decay 0.90, enables reporting\n");
+    printf("\n");
+    printf("Expectimax scoring (move selection phase):\n");
+    printf("  --trick-weight <0-100> Alpha: 0=trust engine, 100=trust human probabilities [default: 50]\n");
+    printf("  --eval-weight <0-1>    [deprecated] Maps to --trick-weight as value×100; prefer --trick-weight\n");
     printf("  --leaf-confidence <0-1> Eval discount for unexplored leaves [default: 1.0]\n");
-    printf("  --depth-decay <0-1>    Depth discount for ECA [default: 1.0]\n");
+    printf("  --depth-decay <0-1>    Depth discount for alpha (α_eff = α × γ^depth) [default: 1.0]\n");
     printf("\n");
     printf("Opponent move source:\n");
     printf("  --maia-model <path>    Path to maia3_simplified.onnx [default: auto-detect]\n");
@@ -128,7 +135,8 @@ static void print_usage(const char *prog_name) {
     printf("\n");
     printf("Output:\n");
     printf("  -n, --name <name>      Repertoire name (shown in PGN headers)\n");
-    printf("  --traps                Find opponent trap positions\n");
+    printf("  --show-traps           Find and print opponent trap positions\n");
+    printf("  --traps                Trap-hunting preset + trap reporting (see Preset modes)\n");
     printf("  -v, --verbose          Verbose progress output\n");
     printf("  -h, --help             Show this help\n\n");
     printf("Examples:\n");
@@ -314,7 +322,13 @@ int main(int argc, char *argv[]) {
     int max_eval_arg = -99999;
 
     /* ECA scoring overrides */
-    double eca_weight_arg = -1.0;
+    int trick_weight_arg = -1;
+    const char *mode_name = NULL;
+    int mode_id = 0;
+    bool user_trick_weight = false;
+    bool user_min_eval = false;
+    bool user_max_eval_loss = false;
+    bool user_depth_decay = false;
     double leaf_confidence_arg = -1.0;
     double depth_decay_arg = -1.0;
 
@@ -336,6 +350,7 @@ int main(int argc, char *argv[]) {
         {"masters",          no_argument,       0, 'm'},
         {"skip-build",       no_argument,       0, 1001},
         {"traps",            no_argument,       0, 1004},
+        {"show-traps",       no_argument,       0, 2043},
         {"token",            required_argument, 0, 1006},
         /* Our-move */
         {"our-multipv-root", required_argument, 0, 2001},
@@ -351,9 +366,13 @@ int main(int argc, char *argv[]) {
         {"max-eval",         required_argument, 0, 2021},
         {"relative",         no_argument,       0, 2022},
         /* ECA scoring */
-        {"eca-weight",       required_argument, 0, 2030},
+        {"trick-weight",     required_argument, 0, 2033},
+        {"eval-weight",      required_argument, 0, 2030},
         {"leaf-confidence",  required_argument, 0, 2031},
         {"depth-decay",      required_argument, 0, 2032},
+        {"solid",            no_argument,       0, 2040},
+        {"practical",        no_argument,       0, 2041},
+        {"tricky",           no_argument,       0, 2042},
         /* Maia */
         {"maia-model",       required_argument, 0, 3001},
         {"maia-elo",         required_argument, 0, 3002},
@@ -404,25 +423,59 @@ int main(int argc, char *argv[]) {
             case 'v': verbose = true; break;
             case 'h': print_usage(argv[0]); return 0;
             case 1001: skip_build = true; break;
-            case 1004: find_traps = true; break;
+            case 1004: mode_id = 4; find_traps = true; break;
+            case 2043: find_traps = true; break;
             case 1006: lichess_token = optarg; break;
             /* Our-move */
             case 2001: if (!parse_int(optarg, "our-multipv-root", &our_multipv_root_arg)) return 1; break;
             case 2002: if (!parse_int(optarg, "our-multipv-floor", &our_multipv_floor_arg)) return 1; break;
             case 2004: if (!parse_int(optarg, "taper-depth", &taper_depth_arg)) return 1; break;
-            case 2005: if (!parse_int(optarg, "max-eval-loss", &max_eval_loss_arg)) return 1; break;
+            case 2005:
+                if (!parse_int(optarg, "max-eval-loss", &max_eval_loss_arg)) return 1;
+                user_max_eval_loss = true;
+                break;
             /* Opponent-move */
             case 2010: if (!parse_int(optarg, "opp-max-children", &opp_max_children_arg)) return 1; break;
             case 2011: if (!parse_double(optarg, "opp-mass-root", &opp_mass_root_arg)) return 1; break;
             case 2012: if (!parse_double(optarg, "opp-mass-floor", &opp_mass_floor_arg)) return 1; break;
             /* Eval window */
-            case 2020: if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1; break;
+            case 2020:
+                if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1;
+                user_min_eval = true;
+                break;
             case 2021: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
             case 2022: relative_eval = true; break;
-            /* ECA */
-            case 2030: if (!parse_double(optarg, "eca-weight", &eca_weight_arg)) return 1; break;
+            /* ECA / move-selection blend */
+            case 2030: {
+                double ew;
+                if (!parse_double(optarg, "eval-weight", &ew)) return 1;
+                fprintf(stderr,
+                        "Warning: --eval-weight is deprecated; use --trick-weight <0-100> instead.\n");
+                trick_weight_arg = (int)(ew * 100.0);
+                if (trick_weight_arg < 0) trick_weight_arg = 0;
+                if (trick_weight_arg > 100) trick_weight_arg = 100;
+                user_trick_weight = true;
+                break;
+            }
             case 2031: if (!parse_double(optarg, "leaf-confidence", &leaf_confidence_arg)) return 1; break;
-            case 2032: if (!parse_double(optarg, "depth-decay", &depth_decay_arg)) return 1; break;
+            case 2032:
+                if (!parse_double(optarg, "depth-decay", &depth_decay_arg)) return 1;
+                user_depth_decay = true;
+                break;
+            case 2033: {
+                int tw;
+                if (!parse_int(optarg, "trick-weight", &tw)) return 1;
+                if (tw < 0 || tw > 100) {
+                    fprintf(stderr, "Error: --trick-weight must be between 0 and 100\n");
+                    return 1;
+                }
+                trick_weight_arg = tw;
+                user_trick_weight = true;
+                break;
+            }
+            case 2040: mode_id = 1; break;
+            case 2041: mode_id = 2; break;
+            case 2042: mode_id = 3; break;
             /* Maia */
             case 3001: maia_model_path = optarg; break;
             case 3002: if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1; break;
@@ -435,6 +488,39 @@ int main(int argc, char *argv[]) {
     }
 
     if (use_lichess) maia_only = false;
+
+    /* Preset modes: fill defaults only for options the user did not set */
+    if (mode_id != 0) {
+        switch (mode_id) {
+        case 1:
+            mode_name = "solid";
+            if (!user_trick_weight) trick_weight_arg = 10;
+            if (!user_min_eval) min_eval_arg = play_as_white ? 0 : -100;
+            if (!user_max_eval_loss) max_eval_loss_arg = 30;
+            break;
+        case 2:
+            mode_name = "practical";
+            if (!user_trick_weight) trick_weight_arg = 50;
+            if (!user_min_eval) min_eval_arg = play_as_white ? -25 : -200;
+            if (!user_max_eval_loss) max_eval_loss_arg = 50;
+            break;
+        case 3:
+            mode_name = "tricky";
+            if (!user_trick_weight) trick_weight_arg = 70;
+            if (!user_min_eval) min_eval_arg = play_as_white ? -50 : -250;
+            if (!user_depth_decay) depth_decay_arg = 0.95;
+            if (!user_max_eval_loss) max_eval_loss_arg = 75;
+            break;
+        case 4:
+            mode_name = "traps";
+            if (!user_trick_weight) trick_weight_arg = 90;
+            if (!user_min_eval) min_eval_arg = play_as_white ? -100 : -300;
+            if (!user_depth_decay) depth_decay_arg = 0.90;
+            if (!user_max_eval_loss) max_eval_loss_arg = 100;
+            find_traps = true;
+            break;
+        }
+    }
 
     if (optind < argc) {
         base_name = argv[optind];
@@ -565,6 +651,11 @@ int main(int argc, char *argv[]) {
     printf("  Ratings:          %s\n", ratings);
     printf("  Speeds:           %s\n", speeds);
     printf("  Min games:        %d\n", min_games);
+    {
+        int tw_banner = trick_weight_arg >= 0 ? trick_weight_arg : 50;
+        printf("  Mode:             %s (alpha=%.2f)\n",
+               mode_name ? mode_name : "custom", tw_banner / 100.0);
+    }
     printf("  Database:         %s\n", db_path);
     if (maia_only)
         printf("  Opponent source:  Maia-only (elo=%d, no API)\n", maia_elo);
@@ -616,8 +707,8 @@ int main(int argc, char *argv[]) {
 
     int cached_explorer, cached_evals, cached_ease;
     rdb_get_stats(db, &cached_explorer, &cached_evals, &cached_ease);
-    printf("  Cached: %d explorer | %d evals | %d ease scores\n",
-           cached_explorer, cached_evals, cached_ease);
+    printf("  Cached: %d explorer | %d evals\n",
+           cached_explorer, cached_evals);
 
     if (!skip_build) {
         const char *sf_path = find_stockfish(stockfish_path);
@@ -870,27 +961,6 @@ int main(int argc, char *argv[]) {
                 printf(" (%d%%)", build_stats.db_explorer_hits * 100 / total_expl);
             printf("\n");
         }
-        {
-            int total_skipped = build_stats.injections_skipped_exists +
-                                build_stats.injections_skipped_transposition;
-            printf("    Injection:      %d attempted, %d created, %d skipped",
-                   build_stats.injections_attempted,
-                   build_stats.injections_created, total_skipped);
-            if (total_skipped > 0) {
-                printf(" (");
-                bool first = true;
-                if (build_stats.injections_skipped_exists > 0) {
-                    printf("%d exists", build_stats.injections_skipped_exists);
-                    first = false;
-                }
-                if (build_stats.injections_skipped_transposition > 0) {
-                    printf("%s%d transpos", first ? "" : ", ",
-                           build_stats.injections_skipped_transposition);
-                }
-                printf(")");
-            }
-            printf("\n");
-        }
         printf("\n");
 
         if (explorer) {
@@ -909,7 +979,7 @@ int main(int argc, char *argv[]) {
     if (g_interrupted) goto cleanup;
 
     /* ================================================================
-     *  STAGE 2: Generate Repertoire (Ease + ECA + Selection)
+     *  STAGE 2: Generate Repertoire (ECA + Selection)
      * ================================================================ */
     printf("[2/4] Generating repertoire...\n");
 
@@ -924,7 +994,7 @@ int main(int argc, char *argv[]) {
     rep_config.eval_depth = eval_depth;
     rep_config.quick_eval_depth = eval_depth > 15 ? 15 : eval_depth;
     rep_config.verbose_search = verbose;
-    if (eca_weight_arg >= 0.0) rep_config.eca_weight = eca_weight_arg;
+    if (trick_weight_arg >= 0) rep_config.trick_weight = trick_weight_arg;
     if (leaf_confidence_arg >= 0.0) rep_config.leaf_confidence = leaf_confidence_arg;
     if (depth_decay_arg >= 0.0) rep_config.depth_discount = depth_decay_arg;
     if (min_eval_arg != -99999) rep_config.min_eval_cp = min_eval_arg;
@@ -978,7 +1048,7 @@ int main(int argc, char *argv[]) {
         }
         printf("\n");
     } else {
-        printf("[3/4] Skipped trap detection (use --traps to enable)\n\n");
+        printf("[3/4] Skipped trap detection (use --show-traps or preset --traps)\n\n");
     }
 
     /* ================================================================
@@ -1005,8 +1075,8 @@ int main(int argc, char *argv[]) {
     }
 
     rdb_get_stats(db, &cached_explorer, &cached_evals, &cached_ease);
-    printf("  Database: %d explorer | %d evals | %d ease scores\n",
-           cached_explorer, cached_evals, cached_ease);
+    printf("  Database: %d explorer | %d evals\n",
+           cached_explorer, cached_evals);
 
     if (engine_pool) {
         EnginePoolStats eng_stats;

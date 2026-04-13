@@ -6,7 +6,7 @@
  * evaluation so branches can be pruned immediately by eval window.
  *
  * At OUR-move nodes:   Stockfish MultiPV → filter by eval → recurse
- * At OPPONENT nodes:   Lichess DB + Maia supplement + engine top-1 → recurse
+ * At OPPONENT nodes:   Lichess DB + Maia supplement → recurse
  */
 
 #ifndef TREE_H
@@ -49,12 +49,6 @@ typedef struct BuildStats {
     int    db_eval_misses;
     int    db_explorer_hits;
     int    db_explorer_misses;
-
-    /* Injection */
-    int    injections_attempted;
-    int    injections_created;
-    int    injections_skipped_exists;
-    int    injections_skipped_transposition;
 } BuildStats;
 
 /**
@@ -168,7 +162,7 @@ void tree_destroy(Tree *tree);
  *
  * Interleaves Lichess explorer queries with Stockfish evaluation:
  *   - Our moves:      Stockfish MultiPV → eval filter → recurse
- *   - Opponent moves:  Lichess DB + engine top-1 → batch eval → recurse
+ *   - Opponent moves:  Lichess DB + Maia → batch eval → recurse
  *
  * Requires config->engine_pool to be non-NULL.
  *
@@ -194,30 +188,28 @@ size_t tree_get_leaves(const Tree *tree, TreeNode **out_leaves, size_t max_leave
 size_t tree_get_nodes_at_depth(const Tree *tree, int depth,
                                 TreeNode **out_nodes, size_t max_nodes);
 
-size_t tree_calculate_ease(Tree *tree);
-
 /**
- * Compute ECA (Expected Centipawn Advantage) for the entire tree.
+ * Compute expectimax values for the entire tree.
  *
- * All values in centipawn units.  Post-order DFS:
- *   - local_cpl at each node from children's evals (avg cp loss by opponent)
- *   - accumulated_eca bottom-up
+ * Post-order DFS assigns each node a practical win probability V in [0,1]:
+ *   - Leaves:     V = leaf_conf × wp(eval_for_us)
+ *   - Opp nodes:  V = (1-α_eff)×wp(eval) + α_eff×Σ(prob_i×V_child)
+ *   - Our nodes:  V = max(V_child) among eval-loss-filtered candidates
  *
- * At opponent nodes:
- *   accumulated = γ^d × local_cpl + Σ(prob_i × child.accumulated_eca)
- * At our-move nodes:
- *   avg_cpl = child.accumulated_eca / subtree_opp_plies
- *   score   = eval_conf × eval_us_cp + eca_weight × avg_cpl
- *   Select the child with the highest blended score, propagate its eca.
+ * Also computes local_cpl at opponent nodes (display only).
  */
-size_t tree_calculate_eca(Tree *tree, const struct RepertoireConfig *config);
+size_t tree_calculate_expectimax(Tree *tree, const struct RepertoireConfig *config);
 
 typedef struct {
     TreeNode *child;
-    double score;
-    double accumulated_eca;
+    double expectimax_value;
 } ScoredChild;
 
+/**
+ * At an our-move node, find the child with the highest expectimax value
+ * among those passing the eval-loss filter.  Falls back to all children
+ * if none pass.  Returns the number of children that passed the filter.
+ */
 int score_our_move_children(TreeNode *node,
                             const struct RepertoireConfig *config,
                             ScoredChild *best_out);

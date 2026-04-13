@@ -2,8 +2,8 @@
  * repertoire.c - Automatic Repertoire Generation
  *
  * Selection phase: runs AFTER the interleaved build has populated the
- * tree with engine evaluations.  Computes ease scores, ECA values,
- * and selects one move at each our-move node.
+ * tree with engine evaluations.  Computes ECA values and selects one
+ * move at each our-move node.
  *
  * At our-move nodes: pick the child with the best blended score.
  * At opponent nodes: traverse all children (already capped during build).
@@ -29,7 +29,7 @@ RepertoireConfig repertoire_config_default(void) {
         .quick_eval_depth = 15,
 
         .depth_discount = 1.0,
-        .eca_weight = 0.40,
+        .trick_weight = 50,
         .leaf_confidence = 1.0,
         .min_eval_cp = 0,
         .max_eval_cp = 200,
@@ -124,7 +124,7 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
             strncpy(rm->fen, node->fen, sizeof(rm->fen) - 1);
             strncpy(rm->move_san, best_child->move_san, sizeof(rm->move_san) - 1);
             strncpy(rm->move_uci, best_child->move_uci, sizeof(rm->move_uci) - 1);
-            rm->composite_score = winner.score;
+            rm->composite_score = winner.expectimax_value;
             rm->depth = node->depth;
             rm->probability = node->cumulative_probability;
             rm->eval_cp = best_child->has_engine_eval ? best_child->engine_eval_cp : 0;
@@ -132,7 +132,7 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
             (*num_moves)++;
 
             rdb_save_repertoire_move(db, node->fen, best_child->move_san,
-                                      best_child->move_uci, winner.score);
+                                      best_child->move_uci, winner.expectimax_value);
 
             build_repertoire_recursive(best_child, tree, db, engine_pool,
                                         config, out_moves, num_moves, max_moves,
@@ -177,7 +177,6 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
         TreeNode *node;
         char moves_san[128][16];
         char moves_uci[128][16];
-        bool is_engine_injected[128];
         int depth;
     } LineState;
 
@@ -213,10 +212,8 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                 next->depth = current.depth + 1;
                 memcpy(next->moves_san, current.moves_san, sizeof(current.moves_san));
                 memcpy(next->moves_uci, current.moves_uci, sizeof(current.moves_uci));
-                memcpy(next->is_engine_injected, current.is_engine_injected, sizeof(current.is_engine_injected));
                 strncpy(next->moves_san[current.depth], selected->move_san, 15);
                 strncpy(next->moves_uci[current.depth], selected->move_uci, 15);
-                next->is_engine_injected[current.depth] = selected->engine_injected;
                 stack_top++;
                 pushed_any = true;
             }
@@ -230,10 +227,8 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                     next->depth = current.depth + 1;
                     memcpy(next->moves_san, current.moves_san, sizeof(current.moves_san));
                     memcpy(next->moves_uci, current.moves_uci, sizeof(current.moves_uci));
-                    memcpy(next->is_engine_injected, current.is_engine_injected, sizeof(current.is_engine_injected));
                     strncpy(next->moves_san[current.depth], child->move_san, 15);
                     strncpy(next->moves_uci[current.depth], child->move_uci, 15);
-                    next->is_engine_injected[current.depth] = child->engine_injected;
                     stack_top++;
                     pushed_any = true;
                 }
@@ -257,7 +252,6 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
             RepertoireLine *line = &out_lines[num_lines];
             memcpy(line->moves_san, current.moves_san, sizeof(current.moves_san));
             memcpy(line->moves_uci, current.moves_uci, sizeof(current.moves_uci));
-            memcpy(line->is_engine_injected, current.is_engine_injected, sizeof(current.is_engine_injected));
             line->num_moves = depth;
             line->probability = current.node
                 ? current.node->cumulative_probability : 0;
@@ -326,19 +320,14 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
                cfg_local.min_eval_cp, cfg_local.max_eval_cp);
     }
 
-    /* Ease scores (from node evals, computed in tree.c) */
-    if (progress) progress("Ease calculation", 0, (int)tree->total_nodes);
-    size_t ease_count = tree_calculate_ease(tree);
-    printf("  Computed %zu ease scores\n", ease_count);
-
-    /* ECA (Expected Centipawn Advantage) */
-    if (progress) progress("ECA calculation", 0, (int)tree->total_nodes);
-    size_t eca_count = tree_calculate_eca(tree, config);
-    printf("  Computed ECA for %zu nodes (depth-decay=%.2f, eval-weight=%.2f)\n",
-           eca_count, config->depth_discount, config->eca_weight);
-    if (tree->root && tree->root->has_eca)
-        printf("  Root accumulated ECA: %.4f wp-delta\n",
-               tree->root->accumulated_eca);
+    /* Expectimax value propagation */
+    if (progress) progress("Expectimax calculation", 0, (int)tree->total_nodes);
+    size_t emx_count = tree_calculate_expectimax(tree, config);
+    printf("  Computed expectimax for %zu nodes (alpha=%.2f, gamma=%.2f)\n",
+           emx_count, config->trick_weight / 100.0, config->depth_discount);
+    if (tree->root && tree->root->has_expectimax)
+        printf("  Root expectimax value: %.4f\n",
+               tree->root->expectimax_value);
 
     /* Select repertoire moves */
     if (progress) progress("Move selection", 0, (int)tree->total_nodes);
@@ -356,18 +345,13 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
 
     /* Summary statistics */
     result->total_positions_analyzed = (int)tree->total_nodes;
-    double total_eval = 0, total_ease = 0;
-    int eval_count = 0, ease_count2 = 0;
+    double total_eval = 0;
+    int eval_count = 0;
     for (int i = 0; i < result->num_moves; i++) {
         total_eval += result->moves[i].eval_cp;
         eval_count++;
-        if (result->moves[i].ease_score >= 0) {
-            total_ease += result->moves[i].ease_score;
-            ease_count2++;
-        }
     }
     result->avg_eval = eval_count > 0 ? total_eval / eval_count : 0;
-    result->avg_ease = ease_count2 > 0 ? total_ease / ease_count2 : 0;
 
     return result;
 }
@@ -503,10 +487,6 @@ bool repertoire_export_pgn(const RepertoireResult *result,
             else if (j == 0 && !root_white_to_move)
                 fprintf(f, "%d... ", (ply / 2) + 1);
             fprintf(f, "%s ", line->moves_san[j]);
-            if (line->is_engine_injected[j] &&
-                (j == 0 || !line->is_engine_injected[j - 1])) {
-                fprintf(f, "{Engine best move} ");
-            }
         }
         if (line->leaf_prune_reason == PRUNE_EVAL_TOO_HIGH) {
             fprintf(f, "{Already winning (%+.1f); no further preparation needed} ",
@@ -589,7 +569,6 @@ void repertoire_print_summary(const RepertoireResult *result) {
     printf("  Repertoire moves:  %d\n", result->num_moves);
     printf("  Complete lines:    %d\n", result->num_lines);
     printf("  Average eval:      %+.0f cp\n", result->avg_eval);
-    printf("  Average ease:      %.3f\n", result->avg_ease);
 
     if (result->num_lines > 0) {
         printf("\n  Top lines:\n");
