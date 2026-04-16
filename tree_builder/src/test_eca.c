@@ -84,11 +84,9 @@ int main(void) {
 
     RepertoireConfig config = repertoire_config_default();
     config.play_as_white = true;
-    config.depth_discount = 0.90;
-    config.trick_weight = 40;
     config.leaf_confidence = 1.0;
 
-    printf("Computing expectimax (play_as_white=true, alpha=0.40, gamma=0.90)...\n\n");
+    printf("Computing expectimax (play_as_white=true, pure expectimax)...\n\n");
     size_t annotated = tree_calculate_expectimax(tree, &config);
     printf("Annotated %zu nodes.\n\n", annotated);
 
@@ -102,7 +100,7 @@ int main(void) {
     printf("  B2 (eval +30 for us): V = %.4f\n", b2->expectimax_value);
     printf("  B3 (eval +35 for us): V = %.4f\n", b3->expectimax_value);
 
-    printf("\n-- Opponent nodes (blend of V_engine and V_human) --\n");
+    printf("\n-- Opponent nodes (V = Σ prob_i × V_child_i) --\n");
     printf("  A (sharp, d=%d):\n", a_opp->depth);
     printf("    local_cpl = %.4f\n", a_opp->local_cpl);
     printf("    V = %.4f\n", a_opp->expectimax_value);
@@ -128,51 +126,29 @@ int main(void) {
     double v_a3 = win_probability(80);  /* +80 for white */
     printf("  Expected leaves: A1=%.4f A2=%.4f A3=%.4f\n", v_a1, v_a2, v_a3);
 
-    /* Opponent node A: eval_for_us at A is... A doesn't have its own eval
-       set (eval_cp=0, but it's black to move, so eval_for_us=0).
-       V_engine = wp(0) = 0.5
-       alpha_eff = 0.40 * 0.90^1 = 0.36
-       V_human = 0.55*V(A1) + 0.25*V(A2) + 0.20*V(A3)
-       V = (1-0.36)*V_engine + 0.36*V_human */
-    double alpha_eff_1 = 0.40 * 0.90;
-    double v_engine_a = win_probability(0); /* eval_for_us at black-to-move with eval=0 */
-    double v_human_a = 0.55*v_a1 + 0.25*v_a2 + 0.20*v_a3;
-    double v_a = (1.0 - alpha_eff_1)*v_engine_a + alpha_eff_1*v_human_a;
+    /* Opponent node A: pure expectimax
+       V = 0.55*V(A1) + 0.25*V(A2) + 0.20*V(A3) */
+    double v_opp_a = 0.55*v_a1 + 0.25*v_a2 + 0.20*v_a3;
+    double v_a = v_opp_a;
     printf("\n  Line A:\n");
-    printf("    V_engine = wp(0) = %.4f\n", v_engine_a);
-    printf("    V_human  = 0.55*%.4f + 0.25*%.4f + 0.20*%.4f = %.4f\n",
-           v_a1, v_a2, v_a3, v_human_a);
-    printf("    alpha_eff = 0.40 * 0.90^1 = %.4f\n", alpha_eff_1);
+    printf("    V = 0.55*%.4f + 0.25*%.4f + 0.20*%.4f = %.4f\n",
+           v_a1, v_a2, v_a3, v_opp_a);
     printf("    Expected V = %.4f  (got %.4f)\n", v_a, a_opp->expectimax_value);
 
     double v_b1 = win_probability(25);
     double v_b2 = win_probability(30);
     double v_b3 = win_probability(35);
-    double v_engine_b = win_probability(0);
-    double v_human_b = 0.45*v_b1 + 0.35*v_b2 + 0.20*v_b3;
-    double v_b = (1.0 - alpha_eff_1)*v_engine_b + alpha_eff_1*v_human_b;
+    double v_opp_b = 0.45*v_b1 + 0.35*v_b2 + 0.20*v_b3;
+    double v_b = v_opp_b;
     printf("\n  Line B:\n");
-    printf("    V_engine = wp(0) = %.4f\n", v_engine_b);
-    printf("    V_human  = 0.45*%.4f + 0.35*%.4f + 0.20*%.4f = %.4f\n",
-           v_b1, v_b2, v_b3, v_human_b);
+    printf("    V = 0.45*%.4f + 0.35*%.4f + 0.20*%.4f = %.4f\n",
+           v_b1, v_b2, v_b3, v_opp_b);
     printf("    Expected V = %.4f  (got %.4f)\n", v_b, b_opp->expectimax_value);
 
     /* Root: our move, V = max(V_A, V_B) */
     double v_root = v_a > v_b ? v_a : v_b;
     printf("\n  Root: max(%.4f, %.4f) = %.4f  (got %.4f)\n",
            v_a, v_b, v_root, tree->root->expectimax_value);
-
-    /* Sensitivity to alpha (trick_weight) */
-    printf("\n-- Sensitivity to alpha --\n");
-    for (int tw = 0; tw <= 100; tw += 20) {
-        config.trick_weight = tw;
-        tree_calculate_expectimax(tree, &config);
-        printf("  alpha=%.2f  A=%.4f  B=%.4f  root=%.4f  -> %s\n",
-               tw / 100.0,
-               a_opp->expectimax_value, b_opp->expectimax_value,
-               tree->root->expectimax_value,
-               a_opp->expectimax_value > b_opp->expectimax_value ? "A" : "B");
-    }
 
     tree_destroy(tree);
     printf("\nDone.\n");

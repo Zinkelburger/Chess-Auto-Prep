@@ -31,7 +31,7 @@ typedef struct SerializationOptions {
     bool include_fen;               /* Include FEN strings (adds size but useful) */
     bool include_engine_eval;       /* Include engine evaluations */
     bool include_ease;              /* Include ease scores */
-    bool include_eca;               /* Include ECA (Expected Centipawn Advantage) */
+    bool include_eca;               /* Include expectimax values (V, local_cpl) */
     bool include_lichess_stats;     /* Include detailed Lichess stats */
     int json_indent;                /* JSON indentation (0 = compact) */
 } SerializationOptions;

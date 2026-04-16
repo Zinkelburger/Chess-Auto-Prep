@@ -2,10 +2,10 @@
  * repertoire.c - Automatic Repertoire Generation
  *
  * Selection phase: runs AFTER the interleaved build has populated the
- * tree with engine evaluations.  Computes ECA values and selects one
- * move at each our-move node.
+ * tree with engine evaluations.  Computes expectimax values and selects
+ * one move at each our-move node.
  *
- * At our-move nodes: pick the child with the best blended score.
+ * At our-move nodes: pick the child with the highest expectimax value.
  * At opponent nodes: traverse all children (already capped during build).
  */
 
@@ -15,22 +15,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 /* ========== Configuration ========== */
 
 RepertoireConfig repertoire_config_default(void) {
     RepertoireConfig config = {
         .play_as_white = true,
-        .max_depth = 30,
+        .max_depth = 20,
         .min_probability = 0.0001,
         .min_games = 10,
 
         .eval_depth = 20,
         .quick_eval_depth = 15,
 
-        .depth_discount = 1.0,
-        .trick_weight = 50,
         .leaf_confidence = 1.0,
+        .novelty_weight = 0,
         .min_eval_cp = 0,
         .max_eval_cp = 200,
         .max_eval_loss_cp = 50,
@@ -89,6 +89,23 @@ double calculate_trap_score(const TreeNode *node, RepertoireDB *db) {
 }
 
 
+/* ========== Transposition Resolution ========== */
+
+static TreeNode* resolve_transposition(TreeNode *node) {
+    if (!node || node->children_count > 0 || !node->next_equivalent)
+        return node;
+    TreeNode *equiv = node->next_equivalent;
+    while (equiv != node) {
+        if (equiv->children_count > 0)
+            return equiv;
+        if (!equiv->next_equivalent || equiv->next_equivalent == node)
+            break;
+        equiv = equiv->next_equivalent;
+    }
+    return node;
+}
+
+
 /* ========== Repertoire Selection ========== */
 
 static void build_repertoire_recursive(TreeNode *node, Tree *tree,
@@ -102,11 +119,13 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
     if (!node || *num_moves >= max_moves) return;
     if (node->depth >= config->max_depth) return;
     if (node->cumulative_probability < config->min_probability) return;
+
+    node = resolve_transposition(node);
     if (node->children_count == 0) return;
 
     if (node->depth > 0) {
         int eval_us = node_eval_for_us(node, config->play_as_white);
-        if (eval_us <= config->min_eval_cp || eval_us >= config->max_eval_cp)
+        if (eval_us < config->min_eval_cp || eval_us > config->max_eval_cp)
             return;
     }
 
@@ -156,11 +175,12 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
 
 static TreeNode* find_repertoire_child(TreeNode *node,
                                         const RepertoireMove *moves, int num_moves) {
+    TreeNode *resolved = resolve_transposition(node);
     for (int m = 0; m < num_moves; m++) {
         if (strcmp(moves[m].fen, node->fen) != 0) continue;
-        for (size_t c = 0; c < node->children_count; c++) {
-            if (strcmp(node->children[c]->move_san, moves[m].move_san) == 0)
-                return node->children[c];
+        for (size_t c = 0; c < resolved->children_count; c++) {
+            if (strcmp(resolved->children[c]->move_san, moves[m].move_san) == 0)
+                return resolved->children[c];
         }
     }
     return NULL;
@@ -218,8 +238,9 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                 pushed_any = true;
             }
         } else {
-            for (size_t i = 0; i < node->children_count; i++) {
-                TreeNode *child = node->children[i];
+            TreeNode *resolved = resolve_transposition(node);
+            for (size_t i = 0; i < resolved->children_count; i++) {
+                TreeNode *child = resolved->children[i];
                 if (child->cumulative_probability < config->min_probability) continue;
                 if (stack_top < stack_cap) {
                     LineState *next = &stack[stack_top];
@@ -323,8 +344,7 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     /* Expectimax value propagation */
     if (progress) progress("Expectimax calculation", 0, (int)tree->total_nodes);
     size_t emx_count = tree_calculate_expectimax(tree, config);
-    printf("  Computed expectimax for %zu nodes (alpha=%.2f, gamma=%.2f)\n",
-           emx_count, config->trick_weight / 100.0, config->depth_discount);
+    printf("  Computed expectimax for %zu nodes\n", emx_count);
     if (tree->root && tree->root->has_expectimax)
         printf("  Root expectimax value: %.4f\n",
                tree->root->expectimax_value);
@@ -466,7 +486,12 @@ bool repertoire_export_pgn(const RepertoireResult *result,
         else
             fprintf(f, "[Event \"Repertoire Line #%d\"]\n", i + 1);
         fprintf(f, "[Site \"tree_builder\"]\n");
-        fprintf(f, "[Date \"????.??.??\"]\n");
+        {
+            time_t now = time(NULL);
+            struct tm *tm = localtime(&now);
+            fprintf(f, "[Date \"%04d.%02d.%02d\"]\n",
+                    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+        }
         fprintf(f, "[Round \"-\"]\n");
         fprintf(f, "[White \"%s\"]\n",
                 config->play_as_white ? "Repertoire" : "Opponent");
@@ -478,7 +503,26 @@ bool repertoire_export_pgn(const RepertoireResult *result,
             fprintf(f, "[FEN \"%s\"]\n", config->start_fen);
             fprintf(f, "[SetUp \"1\"]\n");
         }
+        if (config->build_time_seconds > 0) {
+            fprintf(f, "[BuildTimeSeconds \"%.1f\"]\n", config->build_time_seconds);
+            fprintf(f, "[BuildNodes \"%d\"]\n", config->build_nodes);
+            fprintf(f, "[BuildNodesPerMin \"%.1f\"]\n", config->nodes_per_minute);
+            fprintf(f, "[BuildBranchingFactor \"%.2f\"]\n", config->branching_factor);
+            fprintf(f, "[BuildThreads \"%d\"]\n", config->build_threads);
+            fprintf(f, "[BuildEvalDepth \"%d\"]\n", config->build_eval_depth);
+        }
         fprintf(f, "[Result \"*\"]\n\n");
+
+        fprintf(f, "{CumProb %.3f%%, Eval %d cp",
+                line->probability * 100.0,
+                line->leaf_prune_reason == PRUNE_EVAL_TOO_HIGH
+                    ? line->leaf_prune_eval_cp
+                    : (int)line->final_eval);
+        if (line->leaf_prune_reason == PRUNE_EVAL_TOO_HIGH) {
+            fprintf(f, ", Already winning (%+.1f)",
+                    line->leaf_prune_eval_cp / 100.0);
+        }
+        fprintf(f, "}\n");
 
         for (int j = 0; j < line->num_moves; j++) {
             int ply = j + (root_white_to_move ? 0 : 1);
@@ -487,10 +531,6 @@ bool repertoire_export_pgn(const RepertoireResult *result,
             else if (j == 0 && !root_white_to_move)
                 fprintf(f, "%d... ", (ply / 2) + 1);
             fprintf(f, "%s ", line->moves_san[j]);
-        }
-        if (line->leaf_prune_reason == PRUNE_EVAL_TOO_HIGH) {
-            fprintf(f, "{Already winning (%+.1f); no further preparation needed} ",
-                    line->leaf_prune_eval_cp / 100.0);
         }
         fprintf(f, "*\n");
     }

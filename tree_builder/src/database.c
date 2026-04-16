@@ -25,6 +25,10 @@ struct RepertoireDB {
     sqlite3_stmt *stmt_get_ease;
     sqlite3_stmt *stmt_put_ease;
     sqlite3_stmt *stmt_save_rep_move;
+    sqlite3_stmt *stmt_get_multipv;
+    sqlite3_stmt *stmt_put_multipv;
+    sqlite3_stmt *stmt_get_maia;
+    sqlite3_stmt *stmt_put_maia;
 };
 
 
@@ -83,6 +87,28 @@ static const char *SCHEMA_SQL =
     ");"
     
     
+    /* MultiPV cache (our-move Stockfish results) */
+    "CREATE TABLE IF NOT EXISTS multipv_cache ("
+    "  fen TEXT NOT NULL,"
+    "  depth INTEGER NOT NULL,"
+    "  num_pvs INTEGER NOT NULL,"
+    "  num_lines INTEGER NOT NULL,"
+    "  lines_blob BLOB,"
+    "  cached_at INTEGER,"
+    "  PRIMARY KEY (fen, depth, num_pvs)"
+    ");"
+
+    /* Maia policy cache (deterministic given fen+elo+model).
+     * moves_blob packs `move_count` entries of {uci[8], probability(double)}. */
+    "CREATE TABLE IF NOT EXISTS maia_cache ("
+    "  fen TEXT NOT NULL,"
+    "  elo INTEGER NOT NULL,"
+    "  move_count INTEGER NOT NULL,"
+    "  moves_blob BLOB,"
+    "  cached_at INTEGER,"
+    "  PRIMARY KEY (fen, elo)"
+    ");"
+
     /* Indexes for performance */
     "CREATE INDEX IF NOT EXISTS idx_explorer_moves_fen ON explorer_moves(fen);"
     "CREATE INDEX IF NOT EXISTS idx_repertoire_fen ON repertoire_moves(fen);"
@@ -150,6 +176,26 @@ static bool prepare_statements(RepertoireDB *rdb) {
         "VALUES (?, ?, ?, ?, 1, ?)",
         -1, &rdb->stmt_save_rep_move, NULL);
     
+    /* MultiPV cache statements */
+    sqlite3_prepare_v2(db,
+        "SELECT num_lines, lines_blob FROM multipv_cache WHERE fen = ? AND depth >= ? AND num_pvs >= ?",
+        -1, &rdb->stmt_get_multipv, NULL);
+
+    sqlite3_prepare_v2(db,
+        "INSERT OR REPLACE INTO multipv_cache (fen, depth, num_pvs, num_lines, lines_blob, cached_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        -1, &rdb->stmt_put_multipv, NULL);
+
+    /* Maia cache statements */
+    sqlite3_prepare_v2(db,
+        "SELECT move_count, moves_blob FROM maia_cache WHERE fen = ? AND elo = ?",
+        -1, &rdb->stmt_get_maia, NULL);
+
+    sqlite3_prepare_v2(db,
+        "INSERT OR REPLACE INTO maia_cache (fen, elo, move_count, moves_blob, cached_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        -1, &rdb->stmt_put_maia, NULL);
+
     return true;
 }
 
@@ -204,7 +250,11 @@ void rdb_close(RepertoireDB *db) {
     sqlite3_finalize(db->stmt_get_ease);
     sqlite3_finalize(db->stmt_put_ease);
     sqlite3_finalize(db->stmt_save_rep_move);
-    
+    sqlite3_finalize(db->stmt_get_multipv);
+    sqlite3_finalize(db->stmt_put_multipv);
+    sqlite3_finalize(db->stmt_get_maia);
+    sqlite3_finalize(db->stmt_put_maia);
+
     sqlite3_close(db->db);
     free(db);
 }
@@ -366,6 +416,167 @@ void rdb_put_ease(RepertoireDB *db, const char *fen, double ease) {
     sqlite3_bind_double(db->stmt_put_ease, 2, ease);
     sqlite3_bind_int64(db->stmt_put_ease, 3, (sqlite3_int64)now);
     sqlite3_step(db->stmt_put_ease);
+}
+
+
+/* ========== MultiPV Cache ========== */
+
+/*
+ * Each cached line is packed as:
+ *   16 bytes move_uci (null-padded)
+ *    4 bytes eval_cp      (int32 LE)
+ *    4 bytes depth_reached (int32 LE)
+ *    1 byte  is_mate
+ *    4 bytes mate_in      (int32 LE)
+ *   = 29 bytes per line
+ */
+#define MPV_LINE_PACKED_SIZE 29
+
+bool rdb_get_multipv(RepertoireDB *db, const char *fen, int depth,
+                     int num_pvs, MultiPVJob *out) {
+    if (!db || !fen || !out) return false;
+
+    sqlite3_reset(db->stmt_get_multipv);
+    sqlite3_bind_text(db->stmt_get_multipv, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_bind_int(db->stmt_get_multipv, 2, depth);
+    sqlite3_bind_int(db->stmt_get_multipv, 3, num_pvs);
+
+    if (sqlite3_step(db->stmt_get_multipv) != SQLITE_ROW)
+        return false;
+
+    int num_lines = sqlite3_column_int(db->stmt_get_multipv, 0);
+    const void *blob = sqlite3_column_blob(db->stmt_get_multipv, 1);
+    int blob_size = sqlite3_column_bytes(db->stmt_get_multipv, 1);
+
+    if (!blob || num_lines <= 0 || blob_size < num_lines * MPV_LINE_PACKED_SIZE)
+        return false;
+    if (num_lines > MAX_MULTIPV) num_lines = MAX_MULTIPV;
+
+    memset(out, 0, sizeof(*out));
+    strncpy(out->fen, fen, MAX_EVAL_FEN_LENGTH - 1);
+    out->num_lines = num_lines;
+    out->success = true;
+
+    const unsigned char *p = (const unsigned char *)blob;
+    for (int i = 0; i < num_lines; i++) {
+        MultiPVLine *line = &out->lines[i];
+        memcpy(line->move_uci, p, 16);
+        line->move_uci[15] = '\0';
+        p += 16;
+        memcpy(&line->eval_cp, p, 4); p += 4;
+        memcpy(&line->depth_reached, p, 4); p += 4;
+        line->is_mate = *p; p += 1;
+        memcpy(&line->mate_in, p, 4); p += 4;
+    }
+    return true;
+}
+
+
+void rdb_put_multipv(RepertoireDB *db, const char *fen, int depth,
+                     int num_pvs, const MultiPVJob *job) {
+    if (!db || !fen || !job || job->num_lines <= 0) return;
+
+    int n = job->num_lines;
+    if (n > MAX_MULTIPV) n = MAX_MULTIPV;
+    int blob_size = n * MPV_LINE_PACKED_SIZE;
+    unsigned char *buf = (unsigned char *)malloc(blob_size);
+    if (!buf) return;
+
+    unsigned char *p = buf;
+    for (int i = 0; i < n; i++) {
+        const MultiPVLine *line = &job->lines[i];
+        memset(p, 0, 16);
+        strncpy((char *)p, line->move_uci, 15);
+        p += 16;
+        memcpy(p, &line->eval_cp, 4); p += 4;
+        memcpy(p, &line->depth_reached, 4); p += 4;
+        *p = line->is_mate ? 1 : 0; p += 1;
+        memcpy(p, &line->mate_in, 4); p += 4;
+    }
+
+    time_t now = time(NULL);
+    sqlite3_reset(db->stmt_put_multipv);
+    sqlite3_bind_text(db->stmt_put_multipv, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_bind_int(db->stmt_put_multipv, 2, depth);
+    sqlite3_bind_int(db->stmt_put_multipv, 3, num_pvs);
+    sqlite3_bind_int(db->stmt_put_multipv, 4, n);
+    sqlite3_bind_blob(db->stmt_put_multipv, 5, buf, blob_size, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(db->stmt_put_multipv, 6, (sqlite3_int64)now);
+    sqlite3_step(db->stmt_put_multipv);
+
+    free(buf);
+}
+
+
+/* ========== Maia Policy Cache ==========
+ *
+ * Blob layout: an array of MAIA_MOVE_PACKED_SIZE-byte records, one per move:
+ *     8 bytes uci (null-padded)
+ *     8 bytes probability (double, native endian)
+ * The native-endian write matches the typical use case of the DB being
+ * read on the same machine that wrote it.
+ */
+#define MAIA_MOVE_PACKED_SIZE 16
+
+bool rdb_get_maia(RepertoireDB *db, const char *fen, int elo,
+                  CachedMaiaMove *out_moves, int max_moves, int *out_count) {
+    if (out_count) *out_count = 0;
+    if (!db || !fen || !out_moves || max_moves <= 0) return false;
+
+    sqlite3_reset(db->stmt_get_maia);
+    sqlite3_bind_text(db->stmt_get_maia, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_bind_int(db->stmt_get_maia, 2, elo);
+
+    if (sqlite3_step(db->stmt_get_maia) != SQLITE_ROW) return false;
+
+    int move_count = sqlite3_column_int(db->stmt_get_maia, 0);
+    const void *blob = sqlite3_column_blob(db->stmt_get_maia, 1);
+    int blob_size = sqlite3_column_bytes(db->stmt_get_maia, 1);
+
+    if (move_count <= 0 || !blob) return false;
+    if (blob_size < move_count * MAIA_MOVE_PACKED_SIZE) return false;
+    if (move_count > max_moves) move_count = max_moves;
+
+    const unsigned char *p = (const unsigned char *)blob;
+    for (int i = 0; i < move_count; i++) {
+        memcpy(out_moves[i].uci, p, 8);
+        out_moves[i].uci[7] = '\0';
+        p += 8;
+        memcpy(&out_moves[i].probability, p, 8);
+        p += 8;
+    }
+    if (out_count) *out_count = move_count;
+    return true;
+}
+
+void rdb_put_maia(RepertoireDB *db, const char *fen, int elo,
+                  const CachedMaiaMove *moves, int move_count) {
+    if (!db || !fen || !moves || move_count <= 0) return;
+
+    int blob_size = move_count * MAIA_MOVE_PACKED_SIZE;
+    unsigned char *buf = (unsigned char *)malloc(blob_size);
+    if (!buf) return;
+
+    unsigned char *p = buf;
+    for (int i = 0; i < move_count; i++) {
+        memset(p, 0, 8);
+        /* uci is at most 7 chars + null; copy up to 7 bytes of payload. */
+        strncpy((char *)p, moves[i].uci, 7);
+        p += 8;
+        memcpy(p, &moves[i].probability, 8);
+        p += 8;
+    }
+
+    time_t now = time(NULL);
+    sqlite3_reset(db->stmt_put_maia);
+    sqlite3_bind_text(db->stmt_put_maia, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_bind_int(db->stmt_put_maia, 2, elo);
+    sqlite3_bind_int(db->stmt_put_maia, 3, move_count);
+    sqlite3_bind_blob(db->stmt_put_maia, 4, buf, blob_size, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(db->stmt_put_maia, 5, (sqlite3_int64)now);
+    sqlite3_step(db->stmt_put_maia);
+
+    free(buf);
 }
 
 

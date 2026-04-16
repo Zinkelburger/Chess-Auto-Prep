@@ -3,8 +3,8 @@
  * 
  * Algorithms for traversing the move tree and selecting optimal
  * repertoire lines based on:
+ * - Expectimax values (practical win probability from opponent mistakes)
  * - Engine evaluation (objective quality)
- * - ECA (expected centipawn advantage from opponent mistakes)
  * - Win rates from Lichess database
  * - Move probabilities (focus on likely lines)
  * 
@@ -34,10 +34,9 @@ typedef struct RepertoireConfig {
     int eval_depth;                 /* Depth for engine evaluation */
     int quick_eval_depth;           /* Depth for quick/filtering evaluation */
     
-    /* ECA (Expected Centipawn Advantage) settings */
-    double depth_discount;          /* γ: depth discount factor (1.0=none, <1.0 prefers early blunders) */
-    int trick_weight;               /* 0-100: blend between engine eval (0) and practical/tricky (100) in move selection */
-    double leaf_confidence;         /* Discount on eval for unexplored leaves (1.0=trust fully, <1.0=discount) */
+    /* Expectimax settings */
+    double leaf_confidence;         /* Blend factor between wp(eval) and a 0.5 neutral prior at leaves (1.0=trust eval fully, 0.0=assume 50/50). See tree.c:leaf_value(). */
+    int novelty_weight;             /* 0-100: boost for rarely-played moves at our-move nodes (0=off) */
     
     /* Eval-window pruning (stop exploring lines outside this range) */
     int min_eval_cp;                 /* Stop DFS if our eval drops below this (default: -50) */
@@ -56,7 +55,15 @@ typedef struct RepertoireConfig {
 
     /* Human-readable name for this repertoire */
     char name[128];
-    
+
+    /* Build performance (for PGN headers) */
+    double build_time_seconds;
+    int    build_nodes;
+    double nodes_per_minute;
+    double branching_factor;
+    int    build_threads;
+    int    build_eval_depth;
+
 } RepertoireConfig;
 
 /**
@@ -142,7 +149,7 @@ RepertoireConfig repertoire_config_default(void);
  * 
  * This is the main entry point. It:
  * 1. Loads DB-cached evals into nodes
- * 2. Computes ECA (Expected Centipawn Advantage)
+ * 2. Computes expectimax values (practical win probability)
  * 3. Scores and selects moves
  * 4. Extracts complete lines
  * 

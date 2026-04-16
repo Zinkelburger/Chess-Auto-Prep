@@ -24,6 +24,9 @@
 /* Timeout for engine response (seconds) */
 #define ENGINE_TIMEOUT_SEC 120
 
+/* Defined in main.c; lets engine I/O loops break out on SIGINT/SIGTERM */
+extern volatile int g_interrupted;
+
 
 /**
  * Single Stockfish engine instance
@@ -37,6 +40,7 @@ typedef struct {
     bool is_ready;          /* Engine has responded to 'isready' */
     bool is_alive;          /* Process is running */
     int id;                 /* Engine index */
+    int current_multipv;    /* Last MultiPV value sent (avoids redundant setoption) */
     pthread_mutex_t lock;   /* Per-engine lock */
 } StockfishEngine;
 
@@ -119,6 +123,7 @@ static bool spawn_engine(StockfishEngine *eng, const char *path) {
     eng->stdout_fp = fdopen(eng->stdout_fd, "r");
     eng->is_alive = true;
     eng->is_ready = false;
+    eng->current_multipv = 1;
     
     if (!eng->stdin_fp || !eng->stdout_fp) {
         fprintf(stderr, "Failed to fdopen engine pipes\n");
@@ -424,17 +429,17 @@ static bool evaluate_on_engine(StockfishEngine *eng, const char *fen,
     char cmd[512];
     
     pthread_mutex_lock(&eng->lock);
-    
-    /* Clear previous state */
-    engine_send(eng, "ucinewgame");
-    engine_send(eng, "isready");
-    
-    /* Wait for readyok */
-    while (engine_readline(eng, buf, sizeof(buf))) {
-        if (strstr(buf, "readyok")) break;
+
+    /* Reset MultiPV to 1 if a previous multipv call changed it */
+    if (eng->current_multipv != 1) {
+        engine_send(eng, "setoption name MultiPV value 1");
+        engine_send(eng, "isready");
+        while (engine_readline(eng, buf, sizeof(buf))) {
+            if (strstr(buf, "readyok")) break;
+        }
+        eng->current_multipv = 1;
     }
-    
-    /* Set position and start search */
+
     snprintf(cmd, sizeof(cmd), "position fen %s", fen);
     engine_send(eng, cmd);
     
@@ -446,7 +451,7 @@ static bool evaluate_on_engine(StockfishEngine *eng, const char *fen,
     memset(job->bestmove, 0, sizeof(job->bestmove));
     memset(job->pv, 0, sizeof(job->pv));
     
-    while (engine_readline(eng, buf, sizeof(buf))) {
+    while (!g_interrupted && engine_readline(eng, buf, sizeof(buf))) {
         if (strncmp(buf, "info ", 5) == 0) {
             /* Only parse info lines with score (skip early low-depth lines) */
             if (strstr(buf, "score ")) {
@@ -469,6 +474,8 @@ static bool evaluate_on_engine(StockfishEngine *eng, const char *fen,
             break;
         }
     }
+
+    if (g_interrupted) engine_send(eng, "stop");
     
     pthread_mutex_unlock(&eng->lock);
     
@@ -478,7 +485,8 @@ static bool evaluate_on_engine(StockfishEngine *eng, const char *fen,
 
 /**
  * Evaluate a position with MultiPV on a specific engine.
- * Sets MultiPV before the search and resets it to 1 afterward.
+ * Sets MultiPV before the search; defers reset to the next single-eval
+ * call via current_multipv tracking.
  */
 static bool evaluate_multipv_on_engine(StockfishEngine *eng, const char *fen,
                                         int depth, int num_pvs, MultiPVJob *job) {
@@ -490,13 +498,14 @@ static bool evaluate_multipv_on_engine(StockfishEngine *eng, const char *fen,
 
     pthread_mutex_lock(&eng->lock);
 
-    snprintf(cmd, sizeof(cmd), "setoption name MultiPV value %d", num_pvs);
-    engine_send(eng, cmd);
-
-    engine_send(eng, "ucinewgame");
-    engine_send(eng, "isready");
-    while (engine_readline(eng, buf, sizeof(buf))) {
-        if (strstr(buf, "readyok")) break;
+    if (eng->current_multipv != num_pvs) {
+        snprintf(cmd, sizeof(cmd), "setoption name MultiPV value %d", num_pvs);
+        engine_send(eng, cmd);
+        engine_send(eng, "isready");
+        while (engine_readline(eng, buf, sizeof(buf))) {
+            if (strstr(buf, "readyok")) break;
+        }
+        eng->current_multipv = num_pvs;
     }
 
     snprintf(cmd, sizeof(cmd), "position fen %s", fen);
@@ -509,7 +518,7 @@ static bool evaluate_multipv_on_engine(StockfishEngine *eng, const char *fen,
     job->num_lines = 0;
     job->success = false;
 
-    while (engine_readline(eng, buf, sizeof(buf))) {
+    while (!g_interrupted && engine_readline(eng, buf, sizeof(buf))) {
         if (strncmp(buf, "info ", 5) == 0 && strstr(buf, "score ")) {
             int pv_idx = 0;
             const char *mpv = strstr(buf, "multipv ");
@@ -557,12 +566,7 @@ static bool evaluate_multipv_on_engine(StockfishEngine *eng, const char *fen,
         }
     }
 
-    /* Reset MultiPV to 1 */
-    engine_send(eng, "setoption name MultiPV value 1");
-    engine_send(eng, "isready");
-    while (engine_readline(eng, buf, sizeof(buf))) {
-        if (strstr(buf, "readyok")) break;
-    }
+    if (g_interrupted) engine_send(eng, "stop");
 
     pthread_mutex_unlock(&eng->lock);
     return job->success;

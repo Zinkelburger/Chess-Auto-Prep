@@ -77,6 +77,10 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
         cJSON_AddNumberToObject(obj, "draws", (double)node->draws);
         cJSON_AddNumberToObject(obj, "total_games", (double)node->total_games);
     }
+
+    if (node->maia_frequency >= 0.0) {
+        cJSON_AddNumberToObject(obj, "maia_frequency", node->maia_frequency);
+    }
     
     cJSON_AddBoolToObject(obj, "is_white_to_move", node->is_white_to_move);
     if (node->explored) {
@@ -142,6 +146,17 @@ static char* tree_to_json_internal(const Tree *tree, const SerializationOptions 
         cJSON_AddItemToObject(root, "config", config);
     }
     
+    /* Build performance */
+    if (tree->build_time_seconds > 0) {
+        cJSON *perf = cJSON_CreateObject();
+        cJSON_AddNumberToObject(perf, "build_time_seconds", tree->build_time_seconds);
+        cJSON_AddNumberToObject(perf, "nodes_per_minute", tree->nodes_per_minute);
+        cJSON_AddNumberToObject(perf, "branching_factor", tree->branching_factor);
+        cJSON_AddNumberToObject(perf, "threads", tree->build_threads);
+        cJSON_AddNumberToObject(perf, "eval_depth", tree->build_eval_depth);
+        cJSON_AddItemToObject(root, "build_performance", perf);
+    }
+
     /* Tree structure */
     if (tree->root) {
         cJSON *tree_obj = node_to_cjson(tree->root, opts);
@@ -387,6 +402,11 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
                                (uint64_t)dr->valuedouble);
     }
     
+    /* Parse maia_frequency (novelty signal for --fresh) */
+    cJSON *mf = cJSON_GetObjectItem(obj, "maia_frequency");
+    if (mf && cJSON_IsNumber(mf))
+        node->maia_frequency = mf->valuedouble;
+
     /* Parse is_white_to_move */
     cJSON *wtm = cJSON_GetObjectItem(obj, "is_white_to_move");
     if (wtm) {
@@ -533,6 +553,21 @@ Tree* tree_load_from_buffer(const char *buffer, size_t size) {
         }
     }
     
+    /* Parse build performance */
+    cJSON *perf = cJSON_GetObjectItem(root, "build_performance");
+    if (perf) {
+        cJSON *bt = cJSON_GetObjectItem(perf, "build_time_seconds");
+        if (bt && cJSON_IsNumber(bt)) tree->build_time_seconds = bt->valuedouble;
+        cJSON *npm = cJSON_GetObjectItem(perf, "nodes_per_minute");
+        if (npm && cJSON_IsNumber(npm)) tree->nodes_per_minute = npm->valuedouble;
+        cJSON *bf = cJSON_GetObjectItem(perf, "branching_factor");
+        if (bf && cJSON_IsNumber(bf)) tree->branching_factor = bf->valuedouble;
+        cJSON *thr = cJSON_GetObjectItem(perf, "threads");
+        if (thr && cJSON_IsNumber(thr)) tree->build_threads = (int)thr->valuedouble;
+        cJSON *ed = cJSON_GetObjectItem(perf, "eval_depth");
+        if (ed && cJSON_IsNumber(ed)) tree->build_eval_depth = (int)ed->valuedouble;
+    }
+
     /* Parse tree with a LoadContext to rebuild equivalence rings */
     LoadContext *ctx = load_ctx_create();
 

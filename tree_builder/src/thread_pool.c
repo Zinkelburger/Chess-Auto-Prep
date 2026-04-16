@@ -203,7 +203,14 @@ void thread_pool_wait(ThreadPool *pool) {
     
     pthread_mutex_lock(&pool->mutex);
     while (pool->queue_size > 0 || pool->active_tasks > 0) {
-        pthread_cond_wait(&pool->work_done, &pool->mutex);
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_nsec += 100000000; /* 100ms */
+        if (ts.tv_nsec >= 1000000000) {
+            ts.tv_sec += 1;
+            ts.tv_nsec -= 1000000000;
+        }
+        pthread_cond_timedwait(&pool->work_done, &pool->mutex, &ts);
     }
     pthread_mutex_unlock(&pool->mutex);
 }

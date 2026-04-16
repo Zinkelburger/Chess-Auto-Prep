@@ -62,6 +62,7 @@ TreeNode* node_create(const char *fen, const char *move_san,
     /* No evaluations yet */
     node->has_engine_eval = false;
     node->has_ease = false;
+    node->maia_frequency = -1.0;
     
     /* Determine whose turn from FEN */
     if (fen) {

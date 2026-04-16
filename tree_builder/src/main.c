@@ -4,7 +4,7 @@
  * Pipeline:
  *   0. INIT      - Open database + create Stockfish engine pool
  *   1. BUILD     - Interleaved Lichess + Stockfish tree construction
- *   2. SELECT    - ECA calculation → repertoire move selection
+ *   2. SELECT    - Expectimax calculation → repertoire move selection
  *   3. TRAPS     - (optional) find opponent trap positions
  *   4. EXPORT    - Save PGN, tree (for resume), and database
  *
@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
 #include <sys/sysinfo.h>
 
 #include "tree.h"
@@ -63,7 +64,7 @@ static const char *MAIA_SEARCH_PATHS[] = {
 };
 
 static Tree *g_tree = NULL;
-static volatile int g_interrupted = 0;
+volatile int g_interrupted = 0;
 
 
 static void print_usage(const char *prog_name) {
@@ -83,7 +84,7 @@ static void print_usage(const char *prog_name) {
     printf("  --moves <SAN...>       Starting moves in SAN (e.g. \"e4 d5 exd5 Qxd5\")\n");
     printf("  -c, --color <w|b>      Play as white (w) or black (b) [default: w]\n");
     printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
-    printf("  -d, --depth <N>        Max tree depth in ply [default: 30]\n");
+    printf("  -d, --depth <N>        Max tree depth in ply [default: 20]\n");
     printf("  -e, --eval-depth <N>   Stockfish search depth [default: 20]\n");
     printf("  -t, --threads <N>      Parallel Stockfish engines [default: 4]\n");
     printf("  -r, --ratings <R>      Rating buckets [default: 2000,2200,2500]\n");
@@ -98,40 +99,35 @@ static void print_usage(const char *prog_name) {
     printf("                         Also reads: $LICHESS_TOKEN, ~/.config/tree_builder/token, .lichess_token\n");
     printf("\n");
     printf("Our-move candidates (engine-driven):\n");
-    printf("  --our-multipv-root <N> MultiPV at root (explore broadly) [default: 10]\n");
-    printf("  --our-multipv-floor <N> MultiPV floor (deep positions) [default: 2]\n");
-    printf("  --taper-depth <N>      Ply at which MultiPV bottoms out [default: 8]\n");
+    printf("  --our-multipv <N>      MultiPV count at every depth [default: 5]\n");
     printf("  --max-eval-loss <cp>   Skip candidates more than N cp worse than best [default: 50]\n");
     printf("\n");
-    printf("Opponent-move selection (Lichess-driven):\n");
+    printf("Opponent-move selection (single-source — Maia or Lichess):\n");
     printf("  --opp-max-children <N> Max opponent responses per position [default: 6]\n");
-    printf("  --opp-mass-root <0-1>  Mass target at root (explore broadly) [default: 0.95]\n");
-    printf("  --opp-mass-floor <0-1> Mass target floor (deep positions) [default: 0.50]\n");
+    printf("  --opp-mass <0-1>       Mass target at every depth [default: 0.95]\n");
     printf("\n");
     printf("Eval window pruning:\n");
     printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: color-dependent]\n");
     printf("  --max-eval <cp>        Stop DFS if our eval exceeds this [default: color-dependent]\n");
     printf("  --relative             Make --min-eval/--max-eval relative to root eval\n");
     printf("\n");
-    printf("Preset modes (move selection + eval window; omitted flags keep defaults):\n");
-    printf("  --solid                Engine-first; tight eval window\n");
-    printf("  --practical            Balanced objective vs human-practical lines\n");
-    printf("  --tricky               More trickiness; slightly wider window, depth decay 0.95\n");
-    printf("  --traps                Hunt for traps; widest window, depth decay 0.90, enables reporting\n");
+    printf("Preset modes (eval tolerance + novelty; omitted flags keep defaults):\n");
+    printf("  --solid                Tight eval window, strict quality floor\n");
+    printf("  --practical            Balanced eval tolerance\n");
+    printf("  --tricky               Wider tolerance for speculative moves\n");
+    printf("  --traps                Widest tolerance, enables trap reporting\n");
+    printf("  --fresh                Sound but unusual moves; favors rarely-played lines\n");
     printf("\n");
     printf("Expectimax scoring (move selection phase):\n");
-    printf("  --trick-weight <0-100> Alpha: 0=trust engine, 100=trust human probabilities [default: 50]\n");
-    printf("  --eval-weight <0-1>    [deprecated] Maps to --trick-weight as value×100; prefer --trick-weight\n");
-    printf("  --leaf-confidence <0-1> Eval discount for unexplored leaves [default: 1.0]\n");
-    printf("  --depth-decay <0-1>    Depth discount for alpha (α_eff = α × γ^depth) [default: 1.0]\n");
+    printf("  --novelty-weight <0-100> Boost for rarely-played moves at our-move nodes [default: 0]\n");
+    printf("  --leaf-confidence <0-1> Leaf V = c*wp(eval) + (1-c)*0.5  [default: 1.0; 0 = assume 50/50]\n");
     printf("\n");
     printf("Opponent move source:\n");
     printf("  --maia-model <path>    Path to maia3_simplified.onnx [default: auto-detect]\n");
     printf("  --maia-elo <N>         Elo for Maia predictions [default: 2200]\n");
-    printf("  --maia-threshold <P>   Min cumProb to trigger Maia [default: 0.01]\n");
-    printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.02]\n");
-    printf("  --maia-only            Use Maia exclusively (default, no Lichess API)\n");
-    printf("  --lichess              Use Lichess API for opponent moves (overrides --maia-only)\n");
+    printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.05]\n");
+    printf("  --maia-only            Use Maia exclusively for opponent moves (default)\n");
+    printf("  --lichess              Use Lichess API exclusively for opponent moves\n");
     printf("\n");
     printf("Output:\n");
     printf("  -n, --name <name>      Repertoire name (shown in PGN headers)\n");
@@ -151,13 +147,30 @@ static void print_usage(const char *prog_name) {
 static void progress_callback(int nodes_built, int current_depth,
                                 const char *current_fen) {
     static int last_printed = -1;
-    if (nodes_built == 0) last_printed = -1;
-    if (nodes_built - last_printed >= 50) {
-        printf("\r  [Build] Nodes: %d | Depth: %d | %.40s...    ",
-               nodes_built, current_depth, current_fen ? current_fen : "");
-        fflush(stdout);
-        last_printed = nodes_built;
+    static struct timespec start_time;
+    static bool started = false;
+
+    if (!started || nodes_built <= 1) {
+        clock_gettime(CLOCK_MONOTONIC, &start_time);
+        started = true;
+        last_printed = -1;
     }
+    if (nodes_built - last_printed < 50) return;
+
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    double elapsed_s = (now.tv_sec - start_time.tv_sec)
+                     + (now.tv_nsec - start_time.tv_nsec) / 1e9;
+    double rate = (elapsed_s > 0.5) ? nodes_built / (elapsed_s / 60.0) : 0;
+
+    int em = (int)(elapsed_s / 60);
+    int es = (int)elapsed_s % 60;
+
+    printf("\r  [Build] %d nodes | %.0f/min | %dm%02ds | depth %d | %.30s...    ",
+           nodes_built, rate, em, es, current_depth,
+           current_fen ? current_fen : "");
+    fflush(stdout);
+    last_printed = nodes_built;
 }
 
 static void pipeline_progress(const char *stage, int current, int total) {
@@ -285,7 +298,7 @@ int main(int argc, char *argv[]) {
     const char *stockfish_path = NULL;
     const char *load_tree_file = NULL;
     double min_probability = 0.0001;
-    int max_depth = 30;
+    int max_depth = 20;
     int eval_depth = 20;
     int num_threads = 4;
     const char *ratings = "2000,2200,2500";
@@ -300,37 +313,31 @@ int main(int argc, char *argv[]) {
     const char *repertoire_name = NULL;
     const char *maia_model_path = NULL;
     int maia_elo = 2200;
-    double maia_threshold = 0.01;
-    double maia_min_prob = 0.02;
+    double maia_min_prob = 0.05;
     bool maia_only = true;
     bool use_lichess = false;
     bool relative_eval = false;
 
     /* Our-move overrides (-1 = use default) */
-    int our_multipv_root_arg = -1;
-    int our_multipv_floor_arg = -1;
-    int taper_depth_arg = -1;
+    int our_multipv_arg = -1;
     int max_eval_loss_arg = -1;
 
     /* Opponent-move overrides */
     int opp_max_children_arg = -1;
-    double opp_mass_root_arg = -1.0;
-    double opp_mass_floor_arg = -1.0;
+    double opp_mass_target_arg = -1.0;
 
     /* Eval window overrides */
     int min_eval_arg = -99999;
     int max_eval_arg = -99999;
 
-    /* ECA scoring overrides */
-    int trick_weight_arg = -1;
+    /* Expectimax scoring overrides */
+    int novelty_weight_arg = -1;
     const char *mode_name = NULL;
     int mode_id = 0;
-    bool user_trick_weight = false;
+    bool user_novelty_weight = false;
     bool user_min_eval = false;
     bool user_max_eval_loss = false;
-    bool user_depth_decay = false;
     double leaf_confidence_arg = -1.0;
-    double depth_decay_arg = -1.0;
 
     static struct option long_options[] = {
         {"fen",              required_argument, 0, 'f'},
@@ -353,30 +360,25 @@ int main(int argc, char *argv[]) {
         {"show-traps",       no_argument,       0, 2043},
         {"token",            required_argument, 0, 1006},
         /* Our-move */
-        {"our-multipv-root", required_argument, 0, 2001},
-        {"our-multipv-floor",required_argument, 0, 2002},
-        {"taper-depth",      required_argument, 0, 2004},
+        {"our-multipv",      required_argument, 0, 2001},
         {"max-eval-loss",    required_argument, 0, 2005},
         /* Opponent-move */
         {"opp-max-children", required_argument, 0, 2010},
-        {"opp-mass-root",    required_argument, 0, 2011},
-        {"opp-mass-floor",   required_argument, 0, 2012},
+        {"opp-mass",         required_argument, 0, 2011},
         /* Eval window */
         {"min-eval",         required_argument, 0, 2020},
         {"max-eval",         required_argument, 0, 2021},
         {"relative",         no_argument,       0, 2022},
-        /* ECA scoring */
-        {"trick-weight",     required_argument, 0, 2033},
-        {"eval-weight",      required_argument, 0, 2030},
+        /* Expectimax scoring */
         {"leaf-confidence",  required_argument, 0, 2031},
-        {"depth-decay",      required_argument, 0, 2032},
+        {"novelty-weight",   required_argument, 0, 2034},
         {"solid",            no_argument,       0, 2040},
         {"practical",        no_argument,       0, 2041},
         {"tricky",           no_argument,       0, 2042},
+        {"fresh",            no_argument,       0, 2044},
         /* Maia */
         {"maia-model",       required_argument, 0, 3001},
         {"maia-elo",         required_argument, 0, 3002},
-        {"maia-threshold",   required_argument, 0, 3003},
         {"maia-min-prob",    required_argument, 0, 3004},
         {"maia-only",        no_argument,       0, 3005},
         {"lichess",          no_argument,       0, 3006},
@@ -427,17 +429,14 @@ int main(int argc, char *argv[]) {
             case 2043: find_traps = true; break;
             case 1006: lichess_token = optarg; break;
             /* Our-move */
-            case 2001: if (!parse_int(optarg, "our-multipv-root", &our_multipv_root_arg)) return 1; break;
-            case 2002: if (!parse_int(optarg, "our-multipv-floor", &our_multipv_floor_arg)) return 1; break;
-            case 2004: if (!parse_int(optarg, "taper-depth", &taper_depth_arg)) return 1; break;
+            case 2001: if (!parse_int(optarg, "our-multipv", &our_multipv_arg)) return 1; break;
             case 2005:
                 if (!parse_int(optarg, "max-eval-loss", &max_eval_loss_arg)) return 1;
                 user_max_eval_loss = true;
                 break;
             /* Opponent-move */
             case 2010: if (!parse_int(optarg, "opp-max-children", &opp_max_children_arg)) return 1; break;
-            case 2011: if (!parse_double(optarg, "opp-mass-root", &opp_mass_root_arg)) return 1; break;
-            case 2012: if (!parse_double(optarg, "opp-mass-floor", &opp_mass_floor_arg)) return 1; break;
+            case 2011: if (!parse_double(optarg, "opp-mass", &opp_mass_target_arg)) return 1; break;
             /* Eval window */
             case 2020:
                 if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1;
@@ -445,41 +444,26 @@ int main(int argc, char *argv[]) {
                 break;
             case 2021: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
             case 2022: relative_eval = true; break;
-            /* ECA / move-selection blend */
-            case 2030: {
-                double ew;
-                if (!parse_double(optarg, "eval-weight", &ew)) return 1;
-                fprintf(stderr,
-                        "Warning: --eval-weight is deprecated; use --trick-weight <0-100> instead.\n");
-                trick_weight_arg = (int)(ew * 100.0);
-                if (trick_weight_arg < 0) trick_weight_arg = 0;
-                if (trick_weight_arg > 100) trick_weight_arg = 100;
-                user_trick_weight = true;
-                break;
-            }
+            /* Expectimax scoring */
             case 2031: if (!parse_double(optarg, "leaf-confidence", &leaf_confidence_arg)) return 1; break;
-            case 2032:
-                if (!parse_double(optarg, "depth-decay", &depth_decay_arg)) return 1;
-                user_depth_decay = true;
-                break;
-            case 2033: {
-                int tw;
-                if (!parse_int(optarg, "trick-weight", &tw)) return 1;
-                if (tw < 0 || tw > 100) {
-                    fprintf(stderr, "Error: --trick-weight must be between 0 and 100\n");
+            case 2034: {
+                int nw;
+                if (!parse_int(optarg, "novelty-weight", &nw)) return 1;
+                if (nw < 0 || nw > 100) {
+                    fprintf(stderr, "Error: --novelty-weight must be between 0 and 100\n");
                     return 1;
                 }
-                trick_weight_arg = tw;
-                user_trick_weight = true;
+                novelty_weight_arg = nw;
+                user_novelty_weight = true;
                 break;
             }
             case 2040: mode_id = 1; break;
             case 2041: mode_id = 2; break;
             case 2042: mode_id = 3; break;
+            case 2044: mode_id = 5; break;
             /* Maia */
             case 3001: maia_model_path = optarg; break;
             case 3002: if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1; break;
-            case 3003: if (!parse_double(optarg, "maia-threshold", &maia_threshold)) return 1; break;
             case 3004: if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1; break;
             case 3005: maia_only = true; break;
             case 3006: use_lichess = true; break;
@@ -494,30 +478,29 @@ int main(int argc, char *argv[]) {
         switch (mode_id) {
         case 1:
             mode_name = "solid";
-            if (!user_trick_weight) trick_weight_arg = 10;
             if (!user_min_eval) min_eval_arg = play_as_white ? 0 : -100;
             if (!user_max_eval_loss) max_eval_loss_arg = 30;
             break;
         case 2:
             mode_name = "practical";
-            if (!user_trick_weight) trick_weight_arg = 50;
             if (!user_min_eval) min_eval_arg = play_as_white ? -25 : -200;
             if (!user_max_eval_loss) max_eval_loss_arg = 50;
             break;
         case 3:
             mode_name = "tricky";
-            if (!user_trick_weight) trick_weight_arg = 70;
             if (!user_min_eval) min_eval_arg = play_as_white ? -50 : -250;
-            if (!user_depth_decay) depth_decay_arg = 0.95;
             if (!user_max_eval_loss) max_eval_loss_arg = 75;
             break;
         case 4:
             mode_name = "traps";
-            if (!user_trick_weight) trick_weight_arg = 90;
             if (!user_min_eval) min_eval_arg = play_as_white ? -100 : -300;
-            if (!user_depth_decay) depth_decay_arg = 0.90;
             if (!user_max_eval_loss) max_eval_loss_arg = 100;
             find_traps = true;
+            break;
+        case 5:
+            mode_name = "fresh";
+            if (!user_novelty_weight) novelty_weight_arg = 60;
+            if (!user_max_eval_loss) max_eval_loss_arg = 40;
             break;
         }
     }
@@ -652,9 +635,14 @@ int main(int argc, char *argv[]) {
     printf("  Speeds:           %s\n", speeds);
     printf("  Min games:        %d\n", min_games);
     {
-        int tw_banner = trick_weight_arg >= 0 ? trick_weight_arg : 50;
-        printf("  Mode:             %s (alpha=%.2f)\n",
-               mode_name ? mode_name : "custom", tw_banner / 100.0);
+        int nw_banner = novelty_weight_arg >= 0 ? novelty_weight_arg : 0;
+        if (nw_banner > 0)
+            printf("  Mode:             %s (novelty=%.2f)\n",
+                   mode_name ? mode_name : "default",
+                   nw_banner / 100.0);
+        else
+            printf("  Mode:             %s\n",
+                   mode_name ? mode_name : "default");
     }
     printf("  Database:         %s\n", db_path);
     if (maia_only)
@@ -665,6 +653,13 @@ int main(int argc, char *argv[]) {
     printf("  Output:           %s\n", pgn_path);
     printf("  Tree state:       %s\n", tree_path);
     if (load_tree_file) printf("  Loading tree:     %s\n", load_tree_file);
+    {
+        int nw_warn = novelty_weight_arg >= 0 ? novelty_weight_arg : 0;
+        if (nw_warn > 0 && maia_only) {
+            printf("\n  Note: --fresh uses Maia-predicted frequency (approximate).\n");
+            printf("        Use --lichess for novelty based on real game data.\n");
+        }
+    }
     printf("\n");
 
     struct timespec pipeline_start, pipeline_end;
@@ -836,13 +831,10 @@ int main(int argc, char *argv[]) {
         config.use_masters = use_masters;
 
         /* Apply CLI overrides */
-        if (our_multipv_root_arg > 0) config.our_multipv_root = our_multipv_root_arg;
-        if (our_multipv_floor_arg > 0) config.our_multipv_floor = our_multipv_floor_arg;
-        if (taper_depth_arg >= 0) config.taper_depth = taper_depth_arg;
+        if (our_multipv_arg > 0) config.our_multipv = our_multipv_arg;
         if (max_eval_loss_arg >= 0) config.max_eval_loss_cp = max_eval_loss_arg;
         if (opp_max_children_arg >= 0) config.opp_max_children = opp_max_children_arg;
-        if (opp_mass_root_arg >= 0.0) config.opp_mass_root = opp_mass_root_arg;
-        if (opp_mass_floor_arg >= 0.0) config.opp_mass_floor = opp_mass_floor_arg;
+        if (opp_mass_target_arg >= 0.0) config.opp_mass_target = opp_mass_target_arg;
         if (min_eval_arg != -99999) config.min_eval_cp = min_eval_arg;
         if (max_eval_arg != -99999) config.max_eval_cp = max_eval_arg;
         config.relative_eval = relative_eval;
@@ -850,19 +842,24 @@ int main(int argc, char *argv[]) {
         if (maia) {
             config.maia = maia;
             config.maia_elo = maia_elo;
-            config.maia_threshold = maia_threshold;
             config.maia_min_prob = maia_min_prob;
             config.maia_only = maia_only;
         }
 
+        /* Only run Maia at our-move nodes for novelty scoring if we're
+         * actually going to use it.  With novelty_weight == 0 and no
+         * trap-hunting, `maia_frequency` would be written and never
+         * read — one ONNX inference per our-move node wasted. */
+        int planned_novelty = novelty_weight_arg >= 0 ? novelty_weight_arg : 0;
+        config.populate_maia_frequency = (planned_novelty > 0) || find_traps;
+
         if (verbose) config.progress_callback = progress_callback;
 
-        printf("  Our moves:  MultiPV %d → %d (taper over %d ply), %dcp loss max\n",
-               config.our_multipv_root, config.our_multipv_floor,
-               config.taper_depth, config.max_eval_loss_cp);
-        printf("  Opponent:   max %d children, mass %.0f%% → %.0f%%\n",
+        printf("  Our moves:  MultiPV %d (constant), %dcp loss max\n",
+               config.our_multipv, config.max_eval_loss_cp);
+        printf("  Opponent:   max %d children, mass target %.0f%%\n",
                config.opp_max_children,
-               config.opp_mass_root * 100.0, config.opp_mass_floor * 100.0);
+               config.opp_mass_target * 100.0);
         printf("  Eval window: [%+d, %+d] cp%s\n",
                config.min_eval_cp, config.max_eval_cp,
                relative_eval ? " (relative)" : "");
@@ -894,13 +891,23 @@ int main(int argc, char *argv[]) {
         }
 
         size_t new_nodes = tree->total_nodes - nodes_before;
+
+        tree->build_time_seconds = build_time;
+        tree->nodes_per_minute = (build_time > 0)
+            ? tree->total_nodes / (build_time / 60.0) : 0;
+        tree->branching_factor = (tree->max_depth_reached > 0)
+            ? pow((double)tree->total_nodes, 1.0 / tree->max_depth_reached) : 1.0;
+        tree->build_threads = num_threads;
+        tree->build_eval_depth = eval_depth;
+
         if (nodes_before > 1)
             printf("  Resumed: %zu new nodes (total %zu) in %.1fs (max depth %d)\n",
                    new_nodes, tree->total_nodes, build_time,
                    tree->max_depth_reached);
         else
-            printf("  Built %zu nodes in %.1fs (max depth %d)\n",
-                   tree->total_nodes, build_time, tree->max_depth_reached);
+            printf("  Built %zu nodes in %.1fs (%.1f n/min, b=%.2f, %d threads, depth %d)\n",
+                   tree->total_nodes, build_time, tree->nodes_per_minute,
+                   tree->branching_factor, num_threads, eval_depth);
 
         /* Post-build: remove nodes where eval is too bad for us */
         size_t pruned = tree_prune_eval_too_low(tree);
@@ -960,6 +967,12 @@ int main(int argc, char *argv[]) {
             if (total_expl > 0)
                 printf(" (%d%%)", build_stats.db_explorer_hits * 100 / total_expl);
             printf("\n");
+            int total_mpv = build_stats.db_multipv_hits + build_stats.db_multipv_misses;
+            printf("    MultiPV cache:  %d/%d hits",
+                   build_stats.db_multipv_hits, total_mpv);
+            if (total_mpv > 0)
+                printf(" (%d%%)", build_stats.db_multipv_hits * 100 / total_mpv);
+            printf("\n");
         }
         printf("\n");
 
@@ -979,7 +992,7 @@ int main(int argc, char *argv[]) {
     if (g_interrupted) goto cleanup;
 
     /* ================================================================
-     *  STAGE 2: Generate Repertoire (ECA + Selection)
+     *  STAGE 2: Generate Repertoire (Expectimax + Selection)
      * ================================================================ */
     printf("[2/4] Generating repertoire...\n");
 
@@ -994,9 +1007,8 @@ int main(int argc, char *argv[]) {
     rep_config.eval_depth = eval_depth;
     rep_config.quick_eval_depth = eval_depth > 15 ? 15 : eval_depth;
     rep_config.verbose_search = verbose;
-    if (trick_weight_arg >= 0) rep_config.trick_weight = trick_weight_arg;
+    if (novelty_weight_arg >= 0) rep_config.novelty_weight = novelty_weight_arg;
     if (leaf_confidence_arg >= 0.0) rep_config.leaf_confidence = leaf_confidence_arg;
-    if (depth_decay_arg >= 0.0) rep_config.depth_discount = depth_decay_arg;
     if (min_eval_arg != -99999) rep_config.min_eval_cp = min_eval_arg;
     if (max_eval_arg != -99999) rep_config.max_eval_cp = max_eval_arg;
     if (max_eval_loss_arg >= 0) rep_config.max_eval_loss_cp = max_eval_loss_arg;
@@ -1066,6 +1078,14 @@ int main(int argc, char *argv[]) {
         if (tree_save(tree, tree_path, &opts))
             printf("  Tree state: %s (%zu nodes)\n", tree_path, tree->total_nodes);
     }
+
+    /* Copy build performance stats into rep_config for PGN headers */
+    rep_config.build_time_seconds = tree->build_time_seconds;
+    rep_config.build_nodes        = (int)tree->total_nodes;
+    rep_config.nodes_per_minute   = tree->nodes_per_minute;
+    rep_config.branching_factor   = tree->branching_factor;
+    rep_config.build_threads      = tree->build_threads;
+    rep_config.build_eval_depth   = tree->build_eval_depth;
 
     /* PGN is the primary output */
     if (result) {
