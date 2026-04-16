@@ -41,6 +41,7 @@ typedef struct {
     bool is_alive;          /* Process is running */
     int id;                 /* Engine index */
     int current_multipv;    /* Last MultiPV value sent (avoids redundant setoption) */
+    int current_threads;    /* Last Threads value sent (avoids redundant setoption) */
     pthread_mutex_t lock;   /* Per-engine lock */
 } StockfishEngine;
 
@@ -53,6 +54,7 @@ struct EnginePool {
     int num_engines;
     int default_depth;
     int hash_mb;
+    int total_cores;
     char stockfish_path[512];
     
     /* Thread pool for batch jobs */
@@ -187,7 +189,7 @@ static char* engine_readline(StockfishEngine *eng, char *buf, size_t buf_size) {
 /**
  * Initialize UCI protocol and wait for readyok
  */
-static bool engine_init_uci(StockfishEngine *eng, int hash_mb) {
+static bool engine_init_uci(StockfishEngine *eng, int hash_mb, int sf_threads) {
     char buf[MAX_ENGINE_LINE];
     
     /* Send UCI init */
@@ -206,8 +208,10 @@ static bool engine_init_uci(StockfishEngine *eng, int hash_mb) {
         engine_send(eng, cmd);
     }
     
-    /* Set single thread per engine (pool handles parallelism) */
-    engine_send(eng, "setoption name Threads value 1");
+    int init_threads = sf_threads > 0 ? sf_threads : 1;
+    snprintf(cmd, sizeof(cmd), "setoption name Threads value %d", init_threads);
+    engine_send(eng, cmd);
+    eng->current_threads = init_threads;
     
     /* Enable UCI_ShowWDL for win/draw/loss info */
     engine_send(eng, "setoption name UCI_ShowWDL value true");
@@ -223,6 +227,26 @@ static bool engine_init_uci(StockfishEngine *eng, int hash_mb) {
     }
     
     return false;
+}
+
+
+/**
+ * Dynamically set Stockfish Threads (skips if already at desired count).
+ * Caller must hold eng->lock.
+ */
+static void set_engine_threads(StockfishEngine *eng, int threads) {
+    if (threads < 1) threads = 1;
+    if (eng->current_threads == threads) return;
+
+    char cmd[64];
+    char buf[MAX_ENGINE_LINE];
+    snprintf(cmd, sizeof(cmd), "setoption name Threads value %d", threads);
+    engine_send(eng, cmd);
+    engine_send(eng, "isready");
+    while (engine_readline(eng, buf, sizeof(buf))) {
+        if (strstr(buf, "readyok")) break;
+    }
+    eng->current_threads = threads;
 }
 
 
@@ -256,8 +280,8 @@ static void engine_kill(StockfishEngine *eng) {
 
 /* ========== Engine Pool ========== */
 
-EnginePool* engine_pool_create(const char *stockfish_path, int num_engines, 
-                                int default_depth) {
+EnginePool* engine_pool_create(const char *stockfish_path, int num_engines,
+                                int default_depth, int sf_threads) {
     if (!stockfish_path || num_engines <= 0) return NULL;
     
     /* Verify Stockfish binary exists */
@@ -273,6 +297,7 @@ EnginePool* engine_pool_create(const char *stockfish_path, int num_engines,
     pool->num_engines = num_engines;
     pool->default_depth = default_depth;
     pool->hash_mb = 64; /* Default 64MB hash per engine */
+    pool->total_cores = sf_threads > 0 ? sf_threads : 1;
     
     pthread_mutex_init(&pool->stats_lock, NULL);
     pthread_mutex_init(&pool->alloc_lock, NULL);
@@ -302,7 +327,8 @@ EnginePool* engine_pool_create(const char *stockfish_path, int num_engines,
             continue;
         }
         
-        if (!engine_init_uci(&pool->engines[i], pool->hash_mb)) {
+        if (!engine_init_uci(&pool->engines[i], pool->hash_mb,
+                             pool->total_cores / pool->num_engines)) {
             fprintf(stderr, "  Warning: Engine %d failed UCI init\n", i);
             engine_kill(&pool->engines[i]);
             continue;
@@ -628,8 +654,11 @@ bool engine_pool_evaluate_multipv(EnginePool *pool, const char *fen,
     strncpy(job->fen, fen, MAX_EVAL_FEN_LENGTH - 1);
 
     int eng_idx = acquire_engine(pool);
-    bool success = evaluate_multipv_on_engine(&pool->engines[eng_idx], fen,
-                                               depth, num_pvs, job);
+    StockfishEngine *eng = &pool->engines[eng_idx];
+    pthread_mutex_lock(&eng->lock);
+    set_engine_threads(eng, pool->total_cores);
+    pthread_mutex_unlock(&eng->lock);
+    bool success = evaluate_multipv_on_engine(eng, fen, depth, num_pvs, job);
     release_engine(pool, eng_idx);
 
     pthread_mutex_lock(&pool->stats_lock);
@@ -645,6 +674,7 @@ bool engine_pool_evaluate_multipv(EnginePool *pool, const char *fen,
 typedef struct {
     EnginePool *pool;
     EvalJob *job;
+    int assigned_threads;
     void (*progress_callback)(int completed, int total, void *ud);
     void *user_data;
     int *completed_count;
@@ -657,8 +687,13 @@ static void batch_eval_task(void *arg) {
     BatchTaskArg *bta = (BatchTaskArg *)arg;
     
     int eng_idx = acquire_engine(bta->pool);
-    
-    evaluate_on_engine(&bta->pool->engines[eng_idx], bta->job->fen,
+    StockfishEngine *eng = &bta->pool->engines[eng_idx];
+
+    pthread_mutex_lock(&eng->lock);
+    set_engine_threads(eng, bta->assigned_threads);
+    pthread_mutex_unlock(&eng->lock);
+
+    evaluate_on_engine(eng, bta->job->fen,
                         bta->pool->default_depth, bta->job);
     
     release_engine(bta->pool, eng_idx);
@@ -692,6 +727,12 @@ int engine_pool_evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
     pthread_mutex_t progress_lock;
     pthread_mutex_init(&progress_lock, NULL);
     
+    /* Distribute total_cores across active engines */
+    int active = num_jobs < pool->num_engines ? num_jobs : pool->num_engines;
+    int base_threads = pool->total_cores / (active > 0 ? active : 1);
+    int extra_threads = pool->total_cores % (active > 0 ? active : 1);
+    if (base_threads < 1) base_threads = 1;
+
     /* Submit all jobs to thread pool */
     for (int i = 0; i < num_jobs; i++) {
         BatchTaskArg *bta = (BatchTaskArg *)malloc(sizeof(BatchTaskArg));
@@ -699,6 +740,7 @@ int engine_pool_evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
         
         bta->pool = pool;
         bta->job = &jobs[i];
+        bta->assigned_threads = base_threads + (i < extra_threads ? 1 : 0);
         bta->progress_callback = progress_callback;
         bta->user_data = user_data;
         bta->completed_count = &completed_count;

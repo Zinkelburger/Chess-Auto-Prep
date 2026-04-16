@@ -165,4 +165,4 @@ including expectimax math, parameter explanations, and data flow diagrams.
 
 ## License
 
-MIT License - see main project LICENSE file.
+AGPL-3.0 — see main project [LICENSE](../LICENSE) file.

@@ -1,7 +1,7 @@
 /// Persistent tree model for the two-phase repertoire build algorithm.
 ///
 /// Phase 1 builds the full tree with evaluations on every node.
-/// Phase 2 computes ease/ECA and selects repertoire moves from it.
+/// Phase 2 computes ease/expectimax and selects repertoire moves from it.
 ///
 /// This is separate from [OpeningTreeNode] which is used for PGN-imported
 /// trees and game analysis.
@@ -78,6 +78,18 @@ class BuildTreeNode {
   int subtreeOppPlies = 0;
 
   bool hasExpectimax = false;
+
+  /// Ease score from the opponent's perspective.
+  double opponentEase = 0.0;
+
+  /// Trap score: how often opponents play suboptimal moves here [0, 1].
+  /// -1.0 means not computed / insufficient data.
+  double trapScore = -1.0;
+
+  /// Maia-predicted probability that a human would play this move.
+  /// Used as a novelty signal when novelty_weight > 0.
+  /// -1.0 means not set.
+  double maiaFrequency = -1.0;
 
   /// Selected as part of the repertoire during the selection phase.
   bool isRepertoireMove = false;

@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>org.chessautoprep.app</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>MIT</project_license>
+  <project_license>AGPL-3.0-or-later</project_license>
   <name>Chess Auto Prep</name>
   <summary>Chess tactics trainer and PGN analyzer</summary>
   <description>

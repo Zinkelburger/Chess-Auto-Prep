@@ -112,3 +112,7 @@ Set your Lichess username in the app settings to load tactics from your games.
 3. Make your changes
 4. Add tests if applicable
 5. Submit a pull request
+
+## License
+
+AGPL-3.0 — see [LICENSE](LICENSE) for the full text.

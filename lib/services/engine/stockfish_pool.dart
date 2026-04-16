@@ -5,7 +5,7 @@
 /// each.
 ///
 /// Used by [AnalysisService] for interactive analysis and by
-/// [RepertoireGenerationService] for generation-mode evaluation.
+/// [TreeBuildService] for generation-mode evaluation.
 library;
 
 import 'dart:async';

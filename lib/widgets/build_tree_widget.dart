@@ -1,15 +1,14 @@
-/// Interactive tree viewer for [BuildTree] / ECA analysis.
+/// Interactive tree viewer for [BuildTree] / expectimax analysis.
 ///
-/// Displays engine eval, probability, local CPL (trickiness),
-/// accumulated ECA, ease, and other metrics for each node.
-/// Allows the user to traverse the tree manually.
+/// Displays engine eval, probability, local CPL (opponent expected
+/// centipawn loss), expectimax value, ease, and other metrics for each
+/// node.  Allows the user to traverse the tree manually.
 library;
-
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../models/build_tree_node.dart';
+import '../utils/ease_utils.dart' show winProbability;
 
 class BuildTreeWidget extends StatefulWidget {
   final BuildTree tree;
@@ -108,6 +107,11 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
     final children = _sortedChildren();
     final isOurMove = _currentNode.isWhiteToMove == widget.playAsWhite;
 
+    double maxProb = 0;
+    for (final c in children) {
+      if (c.moveProbability > maxProb) maxProb = c.moveProbability;
+    }
+
     return Column(
       children: [
         _buildHeader(isOurMove),
@@ -120,7 +124,8 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
               ? _buildLeafMessage()
               : ListView.builder(
                   itemCount: children.length,
-                  itemBuilder: (_, i) => _buildChildItem(children[i]),
+                  itemBuilder: (_, i) =>
+                      _buildChildItem(children[i], maxProb),
                 ),
         ),
       ],
@@ -248,7 +253,8 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
             ),
           ],
           if (node.hasExpectimax && node.subtreeDepth > 0 ||
-              node.pruneReason != PruneReason.none) ...[
+              node.pruneReason != PruneReason.none ||
+              node.trapScore > 0.05) ...[
             const SizedBox(height: 4),
             Row(
               children: [
@@ -258,6 +264,14 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
                     '${node.subtreeDepth} ply',
                     Colors.grey[400]!,
                   ),
+                if (node.trapScore > 0.05) ...[
+                  const SizedBox(width: 10),
+                  _statBadge(
+                    'Trap',
+                    '${(node.trapScore * 100).toStringAsFixed(0)}%',
+                    _trapColor(node.trapScore),
+                  ),
+                ],
                 if (node.pruneReason != PruneReason.none) ...[
                   const SizedBox(width: 10),
                   _pruneBadge(node),
@@ -313,7 +327,7 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
     if (!node.hasEngineEval) return const SizedBox.shrink();
 
     final cpForUs = _evalForUs(node);
-    final wp = 1.0 / (1.0 + math.pow(10, -cpForUs / 400.0));
+    final wp = winProbability(cpForUs);
 
     return Container(
       height: 10,
@@ -368,16 +382,12 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
 
   // ── Child item ─────────────────────────────────────────────────────────
 
-  Widget _buildChildItem(BuildTreeNode child) {
+  Widget _buildChildItem(BuildTreeNode child, double maxProb) {
     final evalCp = child.hasEngineEval ? _evalForUs(child) : null;
     final isSelected = child.isRepertoireMove;
 
-    double totalProb = 0;
-    for (final c in _currentNode.children) {
-      totalProb += c.moveProbability;
-    }
-    final probFraction =
-        totalProb > 0 ? child.moveProbability / totalProb : 0.0;
+    final barFraction =
+        maxProb > 0 ? child.moveProbability / maxProb : 0.0;
 
     return InkWell(
       onTap: () => _navigateToChild(child),
@@ -397,7 +407,7 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Row 1: Move name + eval chip + probability + ECA
+            // Row 1: Move name + eval chip + probability + V
             Row(
               children: [
                 if (isSelected)
@@ -461,7 +471,7 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
               children: [
                 SizedBox(
                   width: 64,
-                  child: _buildProbabilityBar(probFraction),
+                  child: _buildProbabilityBar(barFraction),
                 ),
                 const SizedBox(width: 8),
                 if (child.ease != null)
@@ -481,6 +491,12 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
                     'games',
                     _compactNumber(child.totalGames),
                     Colors.grey[500]!,
+                  ),
+                if (child.trapScore > 0.05)
+                  _miniStat(
+                    'trap',
+                    '${(child.trapScore * 100).toStringAsFixed(0)}%',
+                    _trapColor(child.trapScore),
                   ),
                 if (isSelected && child.repertoireScore != 0)
                   _miniStat(
@@ -597,6 +613,12 @@ class BuildTreeWidgetState extends State<BuildTreeWidget> {
     if (cpl < 15) return Colors.green[300]!;
     if (cpl < 30) return Colors.yellow[300]!;
     return Colors.orange[300]!;
+  }
+
+  Color _trapColor(double trap) {
+    if (trap > 0.5) return Colors.red[300]!;
+    if (trap > 0.2) return Colors.orange[300]!;
+    return Colors.yellow[300]!;
   }
 
   Color _vColor(double v) {
