@@ -1,12 +1,12 @@
 /**
  * tree.h - Opening Tree Builder
  *
- * Builds and manages the complete opening tree structure.
- * Tree building interleaves Lichess explorer queries with Stockfish
- * evaluation so branches can be pruned immediately by eval window.
+ * Builds and manages the complete opening tree structure in a single
+ * interleaved DFS so branches can be pruned immediately by eval window.
  *
- * At OUR-move nodes:   Stockfish MultiPV → filter by eval → recurse
- * At OPPONENT nodes:   Lichess DB + Maia supplement → recurse
+ * At OUR-move nodes:     Stockfish MultiPV → eval-loss filter → recurse
+ * At OPPONENT nodes:     single source — pure Maia (default) or pure
+ *                        Lichess (`maia_only = false`) → recurse
  */
 
 #ifndef TREE_H
@@ -49,6 +49,8 @@ typedef struct BuildStats {
     int    db_eval_misses;
     int    db_explorer_hits;
     int    db_explorer_misses;
+    int    db_multipv_hits;
+    int    db_multipv_misses;
 } BuildStats;
 
 /**
@@ -74,23 +76,22 @@ typedef struct TreeConfig {
 
     /* Our-move candidate selection (engine-driven)
      *
-     * MultiPV tapers linearly from our_multipv_root (at the root) down to
-     * our_multipv_floor (at taper_depth and beyond).  All lines within
-     * max_eval_loss_cp of the best are added — no separate candidate cap. */
-    int our_multipv_root;           /* MultiPV at depth 0 (explore broadly) */
-    int our_multipv_floor;          /* MultiPV at depth >= taper_depth */
-    int taper_depth;                /* Ply at which MultiPV bottoms out */
+     * MultiPV is constant at every depth — Stockfish returns the top
+     * `our_multipv` lines, and all of them within `max_eval_loss_cp`
+     * of the best are kept.  Natural pruning comes from `min_probability`,
+     * `max_depth`, and the eval window.  No depth-based tapering. */
+    int our_multipv;                /* MultiPV count at every depth */
     int max_eval_loss_cp;           /* Candidates must be within this of best */
 
-    /* Opponent-move selection (Lichess-driven)
+    /* Opponent-move selection
      *
-     * Mass target tapers linearly from opp_mass_root (at the root) down
-     * to opp_mass_floor (at taper_depth and beyond).  Combined with
-     * cumulative-probability pruning this focuses deep branches on the
-     * most popular replies only. */
-    int opp_max_children;           /* Max opponent responses per position (0 = unlimited) */
-    double opp_mass_root;           /* Mass target at depth 0 (explore broadly) */
-    double opp_mass_floor;          /* Mass target at depth >= taper_depth */
+     * Mass target is constant at every depth.  We walk moves in probability
+     * order (Maia or Lichess) until we hit either the mass target or the
+     * children cap.  The expectimax pass accounts for uncovered mass via a
+     * tail term, so `opp_mass_target` trades runtime for tighter V, not
+     * correctness. */
+    int opp_max_children;           /* Hard cap on opponent responses (0 = unlimited) */
+    double opp_mass_target;         /* Covered-mass target at every depth */
 
     /* Eval window pruning — stop exploring outside this range */
     int min_eval_cp;                /* Prune if our eval drops below this */
@@ -103,15 +104,19 @@ typedef struct TreeConfig {
     int min_games;                  /* Minimum games to consider a move */
     bool use_masters;               /* Use masters database instead of Lichess */
 
-    /* Maia supplement: after Lichess moves are added, Maia fills in
-       remaining mass with predicted human moves.  Positions can have a
-       mix of Lichess and Maia children.  maia_only bypasses Lichess
-       entirely. */
+    /* Maia neural network
+     *
+     * `maia_only` selects the opponent move source: true = Maia, false =
+     * Lichess explorer.  `populate_maia_frequency` controls whether Maia
+     * is *also* run at our-move nodes to fill in `child->maia_frequency`
+     * for novelty scoring during selection.  If you know you won't use
+     * novelty (`novelty_weight == 0`), setting this to false saves one
+     * Maia inference per our-move node. */
     struct MaiaContext *maia;       /* NULL = disabled */
     int    maia_elo;                /* Elo for Maia predictions (600-2400) */
-    double maia_threshold;          /* Min cumProb to trigger Maia fallback */
     double maia_min_prob;           /* Skip Maia moves below this probability */
-    bool   maia_only;              /* Use Maia exclusively (bypass Lichess API) */
+    bool   maia_only;               /* Pure Maia for opponent moves (else pure Lichess) */
+    bool   populate_maia_frequency; /* Run Maia at our-move nodes for novelty */
 
     /* Progress callback */
     void (*progress_callback)(int nodes_built, int current_depth, const char *current_fen);
@@ -136,6 +141,13 @@ typedef struct Tree {
     uint64_t next_node_id;
 
     void *expanded_fens;    /* FenMap* — FEN → canonical TreeNode* for transposition detection */
+
+    /* Build performance (set by caller after tree_build returns) */
+    double build_time_seconds;
+    double nodes_per_minute;
+    double branching_factor;   /* total_nodes^(1/max_depth_reached) */
+    int    build_threads;
+    int    build_eval_depth;
 
 } Tree;
 
@@ -191,10 +203,21 @@ size_t tree_get_nodes_at_depth(const Tree *tree, int depth,
 /**
  * Compute expectimax values for the entire tree.
  *
- * Post-order DFS assigns each node a practical win probability V in [0,1]:
- *   - Leaves:     V = leaf_conf × wp(eval_for_us)
- *   - Opp nodes:  V = (1-α_eff)×wp(eval) + α_eff×Σ(prob_i×V_child)
- *   - Our nodes:  V = max(V_child) among eval-loss-filtered candidates
+ * Two-pass post-order DFS assigning each node a practical win
+ * probability V in [0, 1]:
+ *   - Leaves:     V = leaf_conf · wp(eval_for_us) + (1 − leaf_conf) · 0.5
+ *                 (blend of the engine's win-probability estimate with a
+ *                 neutral 0.5 prior; leaf_conf = 1.0 ⇒ V = wp(eval))
+ *   - Opp nodes:  V = Σ pᵢ · V(childᵢ) + (1 − Σ pᵢ) · leaf_value(this)
+ *                 (raw — not renormalized — covered probabilities, with
+ *                 a tail term for uncovered mass)
+ *   - Our nodes:  V = max over candidates passing the eval-loss filter
+ *                 (novelty-weighted when novelty_weight > 0); fallback to
+ *                 all children if none pass.
+ *
+ * Two passes are used so transposition leaves can reliably borrow V from
+ * their canonical equivalent even when DFS order would otherwise visit
+ * the leaf first (e.g. after a load-from-JSON that reordered subtrees).
  *
  * Also computes local_cpl at opponent nodes (display only).
  */

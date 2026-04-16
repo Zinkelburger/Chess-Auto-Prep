@@ -101,9 +101,15 @@ typedef struct TreeNode {
      *
      * expectimax_value:  practical win probability in [0, 1], computed
      *                    bottom-up via expectimax:
-     *                    - Leaves:    wp(eval_for_us) × leaf_confidence
-     *                    - Opp nodes: (1-α_eff)×wp(eval) + α_eff×Σ(prob×V_child)
-     *                    - Our nodes: max(V_child) among eval-loss-filtered candidates
+     *                    - Leaves:    leaf_conf · wp(eval_for_us)
+     *                                 + (1 − leaf_conf) · 0.5
+     *                                 (blends engine eval with a neutral
+     *                                 0.5 prior; leaf_conf = 1.0 ⇒ pure
+     *                                 wp(eval); leaf_conf = 0.0 ⇒ pure 0.5)
+     *                    - Opp nodes: Σ pᵢ·V(childᵢ) + (1−Σpᵢ)·V_tail,
+     *                                 with V_tail = leaf_value(this node)
+     *                    - Our nodes: max(V_child) among eval-loss-filtered
+     *                                 candidates (novelty-weighted if enabled)
      */
     double local_cpl;
     double expectimax_value;
@@ -126,10 +132,16 @@ typedef struct TreeNode {
     struct TreeNode *next_equivalent;
 
     /* Actual number of opponent-move levels in the subtree below
-     * this node.  Computed bottom-up during ECA calculation.
-     * Used instead of the estimate (subtree_depth / 2) for
-     * normalizing accumulated ECA to "avg CPL per opponent turn." */
+     * this node.  Computed bottom-up during expectimax calculation.
+     * Used for diagnostics (e.g. normalizing local CPL to
+     * "avg CPL per opponent turn"). */
     int    subtree_opp_plies;
+
+    /* Maia-predicted probability that a human would play this move.
+     * Populated at our-move children during build.  Used as a novelty
+     * signal when --fresh / --novelty-weight is active.
+     * -1.0 means not set. */
+    double maia_frequency;
 
 } TreeNode;
 

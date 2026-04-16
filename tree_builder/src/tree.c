@@ -1,12 +1,36 @@
 /**
  * tree.c - Opening Tree Implementation
  *
- * The build pass interleaves Lichess explorer queries with Stockfish
- * evaluation.  At our-move nodes, Stockfish MultiPV finds candidates
- * and the eval filter prunes immediately.  At opponent-move nodes,
- * Lichess DB moves are added first, then Maia fills remaining mass
- * with predicted human moves (a single node can have a mix of both
- * sources).
+ * Single interleaved DFS.  At our-move nodes Stockfish MultiPV finds
+ * candidates and the eval-loss filter prunes immediately.  At
+ * opponent-move nodes we use exactly one distribution source — Maia's
+ * policy head (default) or the Lichess explorer — with no blending,
+ * no renormalization, and a tail term in the expectimax pass to
+ * account for uncovered probability mass.  Branching budgets
+ * (`our_multipv`, `opp_mass_target`, `opp_max_children`) are constant
+ * at every depth so the MAX/CHANCE operators see a stable action
+ * space.  A smaller action space at deeper plies would make MAX
+ * monotonically under-estimate our achievable V (fewer candidates
+ * can only lower the max), and would similarly truncate the CHANCE
+ * sum toward the eval-based tail — both pushing V systematically
+ * lower at depth.  Keeping the budgets constant sidesteps this;
+ * natural depth termination comes from `min_probability`,
+ * `max_depth`, and the eval window instead.
+ *
+ * Evaluation is split between the two node types so we never run
+ * Stockfish twice on the same FEN:
+ *   - Opponent-move nodes need an eval ONLY for the window-prune check
+ *     (Maia/Lichess provide the policy, not a score).  That eval is
+ *     the single-PV `ensure_eval` in `build_recursive`.
+ *   - Our-move nodes run MultiPV for candidate generation anyway, so
+ *     the node's own eval is taken from MultiPV line 0 and the window
+ *     check is deferred into `build_our_move` (after MultiPV).  This
+ *     avoids the previously-redundant pattern of "single-PV to gate
+ *     MultiPV" on the same position.
+ *
+ * Maia policy outputs are cached in the DB keyed by (fen, elo) so
+ * resumed builds don't re-run ONNX inference on positions that were
+ * already expanded in an earlier session.
  */
 
 #include "tree.h"
@@ -138,21 +162,18 @@ TreeConfig tree_config_default(void) {
     TreeConfig config = {
         .play_as_white = true,
         .min_probability = 0.0001,
-        .max_depth = 30,
+        .max_depth = 20,
         .max_nodes = 0,
 
         .engine_pool = NULL,
         .db = NULL,
         .eval_depth = 20,
 
-        .our_multipv_root = 10,
-        .our_multipv_floor = 2,
-        .taper_depth = 8,
+        .our_multipv = 5,
         .max_eval_loss_cp = 50,
 
         .opp_max_children = 6,
-        .opp_mass_root = 0.95,
-        .opp_mass_floor = 0.50,
+        .opp_mass_target = 0.95,
 
         .min_eval_cp = 0,
         .max_eval_cp = 200,
@@ -165,9 +186,12 @@ TreeConfig tree_config_default(void) {
 
         .maia = NULL,
         .maia_elo = 2200,
-        .maia_threshold = 0.01,
-        .maia_min_prob = 0.02,
-        .maia_only = false,
+        .maia_min_prob = 0.05,
+        .maia_only = true,  /* default matches main.c and docs; fall back
+                               to Lichess only if caller explicitly opts in */
+        .populate_maia_frequency = true,  /* default on for back-compat;
+                                             main.c turns this off when
+                                             novelty scoring isn't used */
         .progress_callback = NULL,
         .stats = NULL,
     };
@@ -281,62 +305,13 @@ static void ensure_eval(TreeNode *node, const TreeConfig *config) {
     }
 }
 
-/**
- * Batch-evaluate children that don't have evals yet.
- * Checks the DB cache first, then engine-evaluates the remainder.
- */
-static void batch_eval_children(TreeNode *node, const TreeConfig *config) {
-    if (!config->engine_pool || node->children_count == 0) return;
-
-    /* Collect children needing evals */
-    size_t n = node->children_count;
-    EvalJob *jobs = (EvalJob *)calloc(n, sizeof(EvalJob));
-    size_t *idx_map = (size_t *)calloc(n, sizeof(size_t));
-    if (!jobs || !idx_map) { free(jobs); free(idx_map); return; }
-
-    int job_count = 0;
-    for (size_t i = 0; i < n; i++) {
-        TreeNode *child = node->children[i];
-        if (child->has_engine_eval) continue;
-
-        /* Check DB cache */
-        if (config->db) {
-            int cp, depth;
-            if (rdb_get_eval(config->db, child->fen, &cp, &depth)) {
-                STATS_INC(config, db_eval_hits);
-                node_set_eval(child, cp);
-                continue;
-            }
-            STATS_INC(config, db_eval_misses);
-        }
-
-        snprintf(jobs[job_count].fen, MAX_EVAL_FEN_LENGTH, "%s", child->fen);
-        idx_map[job_count] = i;
-        job_count++;
-    }
-
-    if (job_count > 0) {
-        struct timespec t0;
-        clock_gettime(CLOCK_MONOTONIC, &t0);
-
-        engine_pool_evaluate_batch(config->engine_pool, jobs, job_count, NULL, NULL);
-
-        STATS_INC(config, sf_batch_calls);
-        STATS_ADD(config, sf_batch_ms, elapsed_ms(&t0));
-
-        for (int k = 0; k < job_count; k++) {
-            if (!jobs[k].success) continue;
-            TreeNode *child = node->children[idx_map[k]];
-            node_set_eval(child, jobs[k].eval_cp);
-            if (config->db)
-                rdb_put_eval(config->db, child->fen,
-                             jobs[k].eval_cp, jobs[k].depth_reached);
-        }
-    }
-
-    free(jobs);
-    free(idx_map);
-}
+/* NOTE: The former `batch_eval_children` helper was removed when opponent
+ * nodes stopped pre-evaluating their children.  Its only caller was
+ * `build_opponent_move`, and every child of an opponent node is an
+ * our-move node whose `build_our_move` pass runs MultiPV on the same
+ * FEN at the same depth — a strictly cheaper source of that eval.
+ * Stats counters `sf_batch_calls` / `sf_batch_ms` are kept in
+ * BuildStats for ABI stability but will now stay at zero. */
 
 
 /* ========== Lichess query with DB caching ========== */
@@ -414,20 +389,66 @@ static bool query_lichess_cached(RepertoireDB *db, LichessExplorer *explorer,
 }
 
 
-/** MultiPV tapers linearly from root value to floor over taper_depth plies. */
-static int multipv_for_depth(const TreeConfig *config, int depth) {
-    if (depth >= config->taper_depth)
-        return config->our_multipv_floor;
-    int span = config->our_multipv_root - config->our_multipv_floor;
-    return config->our_multipv_root - span * depth / config->taper_depth;
-}
+/* ========== Maia query with DB caching ========== */
 
-/** Opponent mass target tapers linearly from root to floor over taper_depth. */
-static double opp_mass_for_depth(const TreeConfig *config, int depth) {
-    if (depth >= config->taper_depth)
-        return config->opp_mass_floor;
-    double span = config->opp_mass_root - config->opp_mass_floor;
-    return config->opp_mass_root - span * depth / config->taper_depth;
+/**
+ * Run (or look up) Maia's policy head at (fen, elo).
+ *
+ * Fills `response` with a MaiaResponse containing moves sorted by probability.
+ * The DB cache is checked first; on miss the ONNX model is invoked and the
+ * result is written back to the cache.  Maia's `win_prob` is NOT cached — it
+ * isn't used anywhere in the build path and re-running the model just to
+ * recover it on a hit would defeat the point of caching.
+ */
+static bool query_maia_cached(const TreeConfig *config, const char *fen,
+                              MaiaResponse *response) {
+    memset(response, 0, sizeof(*response));
+    if (!config->maia) return false;
+
+    /* Cache hit → build the response directly from DB rows. */
+    if (config->db) {
+        CachedMaiaMove cmoves[MAIA_MAX_MOVES];
+        int count = 0;
+        if (rdb_get_maia(config->db, fen, config->maia_elo,
+                         cmoves, MAIA_MAX_MOVES, &count) && count > 0) {
+            int n = count < MAIA_MAX_MOVES ? count : MAIA_MAX_MOVES;
+            response->success = true;
+            response->move_count = n;
+            response->win_prob = 0.0;  /* not cached; unused in build */
+            /* CachedMaiaMove and MaiaMove both use a fixed 8-byte uci
+             * buffer; memcpy sidesteps a strncpy truncation warning and
+             * preserves the null terminator that rdb_get_maia wrote. */
+            for (int i = 0; i < n; i++) {
+                memcpy(response->moves[i].uci, cmoves[i].uci, 8);
+                response->moves[i].uci[7] = '\0';
+                response->moves[i].probability = cmoves[i].probability;
+            }
+            return true;
+        }
+    }
+
+    /* Cache miss → run the model, instrument, and persist the result. */
+    struct timespec t0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+
+    bool ok = maia_evaluate(config->maia, fen, config->maia_elo, response);
+
+    STATS_INC(config, maia_evals);
+    STATS_ADD(config, maia_total_ms, elapsed_ms(&t0));
+
+    if (ok && response->success && response->move_count > 0 && config->db) {
+        CachedMaiaMove cmoves[MAIA_MAX_MOVES];
+        int n = response->move_count;
+        if (n > MAIA_MAX_MOVES) n = MAIA_MAX_MOVES;
+        for (int i = 0; i < n; i++) {
+            memset(&cmoves[i], 0, sizeof(cmoves[i]));
+            memcpy(cmoves[i].uci, response->moves[i].uci, 8);
+            cmoves[i].uci[7] = '\0';
+            cmoves[i].probability = response->moves[i].probability;
+        }
+        rdb_put_maia(config->db, fen, config->maia_elo, cmoves, n);
+    }
+    return ok;
 }
 
 
@@ -438,17 +459,30 @@ static void build_recursive(Tree *tree, TreeNode *node,
                              LichessExplorer *explorer);
 
 /**
- * OUR MOVE: Stockfish MultiPV → eval filter → recurse.
+ * OUR MOVE: Stockfish MultiPV → window prune → eval filter → recurse.
  *
  * Also queries Lichess for SAN notation and win-rate enrichment.
+ *
+ * The window-prune step lives here (rather than in `build_recursive`) so
+ * that MultiPV's line-0 eval doubles as the node's engine eval — otherwise
+ * we'd pay an extra single-PV Stockfish call on the same FEN just to gate
+ * the MultiPV call that follows.
  */
 static void build_our_move(Tree *tree, TreeNode *node,
                             const TreeConfig *config,
                             LichessExplorer *explorer) {
-    /* 1. Run Stockfish MultiPV (tapers with depth) */
-    int mpv_count = multipv_for_depth(config, node->depth);
+    /* 1. Run Stockfish MultiPV (constant across depths), with DB cache */
+    int mpv_count = config->our_multipv;
     MultiPVJob mpv;
-    {
+    bool mpv_from_cache = false;
+
+    if (config->db &&
+        rdb_get_multipv(config->db, node->fen, config->eval_depth,
+                        mpv_count, &mpv)) {
+        mpv_from_cache = true;
+        STATS_INC(config, db_multipv_hits);
+    } else {
+        STATS_INC(config, db_multipv_misses);
         struct timespec t0;
         clock_gettime(CLOCK_MONOTONIC, &t0);
         bool ok = engine_pool_evaluate_multipv(config->engine_pool, node->fen,
@@ -457,8 +491,13 @@ static void build_our_move(Tree *tree, TreeNode *node,
         STATS_INC(config, sf_multipv_calls);
         STATS_ADD(config, sf_multipv_ms, elapsed_ms(&t0));
         if (!ok) return;
+
+        if (mpv.success && mpv.num_lines > 0 && config->db)
+            rdb_put_multipv(config->db, node->fen, config->eval_depth,
+                            mpv_count, &mpv);
     }
     if (!mpv.success || mpv.num_lines == 0) return;
+    (void)mpv_from_cache;
 
     /* Set node's own eval from the top line if not already set */
     if (!node->has_engine_eval) {
@@ -468,7 +507,24 @@ static void build_our_move(Tree *tree, TreeNode *node,
                          mpv.lines[0].eval_cp, mpv.lines[0].depth_reached);
     }
 
-    /* 2. Query Lichess for SAN notation and win rates (enrichment only) */
+    /* 2. Eval-window pruning (deferred from build_recursive — see header
+     *    comment).  If we're outside the window, mark the reason for
+     *    PGN annotation / post-build cleanup and stop before branching. */
+    {
+        int eval_us = node_eval_for_us(node, config->play_as_white);
+        if (eval_us > config->max_eval_cp) {
+            node->prune_reason = PRUNE_EVAL_TOO_HIGH;
+            node->prune_eval_cp = eval_us;
+            return;
+        }
+        if (eval_us < config->min_eval_cp) {
+            node->prune_reason = PRUNE_EVAL_TOO_LOW;
+            node->prune_eval_cp = eval_us;
+            return;
+        }
+    }
+
+    /* 3. Query Lichess for SAN notation and win rates (enrichment only) */
     ExplorerResponse lichess;
     bool has_lichess = false;
     if (!config->maia_only) {
@@ -498,7 +554,7 @@ static void build_our_move(Tree *tree, TreeNode *node,
 
     char our_san_buf[MAX_MOVE_LENGTH];
 
-    /* 3. Filter candidates by eval threshold */
+    /* 4. Filter candidates by eval threshold */
     int best_cp = mpv.lines[0].eval_cp;
 
     int added = 0;
@@ -554,7 +610,29 @@ static void build_our_move(Tree *tree, TreeNode *node,
             config->progress_callback(tree->total_nodes, child->depth, child->fen);
     }
 
-    /* 4. Recurse into children */
+    /* 5. Populate maia_frequency for novelty scoring.
+     * Gated on `populate_maia_frequency` so builds that won't use novelty
+     * (the common case: novelty_weight == 0) don't pay one Maia inference
+     * per our-move node for data that's never consumed.  Goes through the
+     * DB-cached wrapper so this inference is reused on resume. */
+    if (config->maia && config->populate_maia_frequency && added > 0) {
+        MaiaResponse maia_freq_resp;
+        if (query_maia_cached(config, node->fen, &maia_freq_resp)) {
+            for (size_t i = 0; i < node->children_count; i++) {
+                TreeNode *child = node->children[i];
+                for (int j = 0; j < maia_freq_resp.move_count; j++) {
+                    if (strcmp(child->move_uci,
+                              maia_freq_resp.moves[j].uci) == 0) {
+                        child->maia_frequency =
+                            maia_freq_resp.moves[j].probability;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /* 6. Recurse into children */
     for (size_t i = 0; i < node->children_count; i++) {
         if (!tree->is_building) break;
         build_recursive(tree, node->children[i], config, explorer);
@@ -563,182 +641,152 @@ static void build_our_move(Tree *tree, TreeNode *node,
 
 
 /**
- * OPPONENT MOVE: Lichess DB + Maia supplement → recurse.
+ * OPPONENT MOVE: one source only — pure Maia or pure Lichess.
  *
- * Blended strategy: Lichess moves are added first (real game data),
- * then Maia fills in until the mass target is reached.  A position
- * can end up with a mix of Lichess and Maia children.
+ *   maia_only=true  → Maia's legal-move distribution is the sole source.
+ *   maia_only=false → Lichess explorer's empirical distribution only.
  *
- * Children are batch-evaluated before recursion so the eval window
- * can prune immediately.
+ * Probabilities are stored raw (no renormalization to 1).  The covered
+ * mass Σ pᵢ is typically < 1 — the expectimax pass adds a tail term
+ * for the uncovered mass so the result stays unbiased.
+ *
+ * Children are NOT pre-evaluated here.  Every opponent-move child is an
+ * our-move node; when it recurses it will run MultiPV, whose line-0 eval
+ * becomes both the node's eval and the basis for its own window-prune
+ * check (see `build_our_move`).  Pre-evaluating with a single-PV call
+ * would duplicate the work the MultiPV call does anyway.
  */
 static void build_opponent_move(Tree *tree, TreeNode *node,
                                  const TreeConfig *config,
                                  LichessExplorer *explorer) {
     char san_buf[MAX_MOVE_LENGTH];
-    double mass_target = opp_mass_for_depth(config, node->depth);
+    double mass_target = config->opp_mass_target;
     int children_added = 0;
     double mass_covered = 0.0;
 
-    MaiaResponse maia_resp;
-    memset(&maia_resp, 0, sizeof(maia_resp));
+    if (config->maia_only) {
+        /* ---------- Pure Maia path ---------- */
+        if (!config->maia) return;
 
-    /* 1. Query Lichess explorer and add qualifying moves */
-    ExplorerResponse response;
-    bool has_lichess = false;
+        MaiaResponse maia_resp;
+        bool maia_ok = query_maia_cached(config, node->fen, &maia_resp);
 
-    if (!config->maia_only) {
-        has_lichess = query_lichess_cached(config->db, explorer, node->fen,
-                                           config->use_masters, &response, config);
-        if (has_lichess && response.success) {
-            {
-                ChessPosition _norm_pos;
-                if (position_from_fen(&_norm_pos, node->fen)) {
-                    for (size_t i = 0; i < response.move_count; i++)
-                        normalize_castling_uci(&_norm_pos, response.moves[i].uci);
-                }
+        if (!maia_ok || !maia_resp.success || maia_resp.move_count == 0)
+            return;
+
+        for (int i = 0; i < maia_resp.move_count; i++) {
+            const char *uci = maia_resp.moves[i].uci;
+            double prob = maia_resp.moves[i].probability;
+            if (prob < config->maia_min_prob) continue;
+
+            if (config->opp_max_children > 0 &&
+                children_added >= config->opp_max_children)
+                break;
+            if (mass_target > 0.0 && mass_covered >= mass_target)
+                break;
+
+            double new_cumul = node->cumulative_probability * prob;
+            if (new_cumul < config->min_probability) continue;
+
+            char child_fen[MAX_FEN_LENGTH];
+            if (!apply_uci(node->fen, uci, child_fen, MAX_FEN_LENGTH))
+                continue;
+
+            const char *san = uci;
+            if (uci_to_san(node->fen, uci, san_buf, sizeof(san_buf)))
+                san = san_buf;
+
+            TreeNode *child = make_child(node, child_fen, san, uci, tree);
+            if (!child) continue;
+
+            child->move_probability = prob;
+            child->cumulative_probability = new_cumul;
+            children_added++;
+            mass_covered += prob;
+
+            if (config->progress_callback)
+                config->progress_callback(tree->total_nodes,
+                                          child->depth, child->fen);
+        }
+    } else {
+        /* ---------- Pure Lichess path ---------- */
+        ExplorerResponse response;
+        if (!query_lichess_cached(config->db, explorer, node->fen,
+                                  config->use_masters, &response, config))
+            return;
+        if (!response.success) return;
+
+        {
+            ChessPosition _norm_pos;
+            if (position_from_fen(&_norm_pos, node->fen)) {
+                for (size_t i = 0; i < response.move_count; i++)
+                    normalize_castling_uci(&_norm_pos, response.moves[i].uci);
             }
+        }
 
-            node_set_lichess_stats(node, response.total_white_wins,
-                                   response.total_black_wins,
-                                   response.total_draws);
-            if (response.has_opening) {
-                snprintf(node->opening_name, sizeof(node->opening_name),
-                         "%s", response.opening_name);
-                snprintf(node->opening_eco, sizeof(node->opening_eco),
-                         "%s", response.opening_eco);
-            }
+        node_set_lichess_stats(node, response.total_white_wins,
+                               response.total_black_wins,
+                               response.total_draws);
+        if (response.has_opening) {
+            snprintf(node->opening_name, sizeof(node->opening_name),
+                     "%s", response.opening_name);
+            snprintf(node->opening_eco, sizeof(node->opening_eco),
+                     "%s", response.opening_eco);
+        }
 
-            uint64_t total = response.total_games;
-            for (size_t i = 0; i < response.move_count && total > 0; i++) {
-                ExplorerMove *move = &response.moves[i];
-                uint64_t games = move->white_wins + move->draws + move->black_wins;
-                if (games < (uint64_t)config->min_games) continue;
+        uint64_t total = response.total_games;
+        if (total == 0) return;
 
-                if (config->opp_max_children > 0 &&
-                    children_added >= config->opp_max_children)
-                    break;
-                if (mass_target > 0.0 && mass_covered >= mass_target)
-                    break;
+        for (size_t i = 0; i < response.move_count; i++) {
+            ExplorerMove *move = &response.moves[i];
+            uint64_t games = move->white_wins + move->draws + move->black_wins;
+            if (games < (uint64_t)config->min_games) continue;
 
-                double prob = (double)games / (double)total;
-                double new_cumul = node->cumulative_probability * prob;
-                if (new_cumul < config->min_probability) continue;
+            if (config->opp_max_children > 0 &&
+                children_added >= config->opp_max_children)
+                break;
+            if (mass_target > 0.0 && mass_covered >= mass_target)
+                break;
 
-                char child_fen[MAX_FEN_LENGTH];
-                if (!apply_uci(node->fen, move->uci, child_fen, MAX_FEN_LENGTH))
-                    continue;
+            double prob = (double)games / (double)total;
+            double new_cumul = node->cumulative_probability * prob;
+            if (new_cumul < config->min_probability) continue;
 
-                TreeNode *child = make_child(node, child_fen, move->san,
-                                              move->uci, tree);
-                if (!child) continue;
+            char child_fen[MAX_FEN_LENGTH];
+            if (!apply_uci(node->fen, move->uci, child_fen, MAX_FEN_LENGTH))
+                continue;
 
-                child->move_probability = prob;
-                child->cumulative_probability = new_cumul;
-                node_set_lichess_stats(child, move->white_wins,
-                                       move->black_wins, move->draws);
-                children_added++;
-                mass_covered += prob;
+            TreeNode *child = make_child(node, child_fen, move->san,
+                                          move->uci, tree);
+            if (!child) continue;
 
-                if (config->progress_callback)
-                    config->progress_callback(tree->total_nodes,
-                                              child->depth, child->fen);
-            }
+            child->move_probability = prob;
+            child->cumulative_probability = new_cumul;
+            node_set_lichess_stats(child, move->white_wins,
+                                   move->black_wins, move->draws);
+            children_added++;
+            mass_covered += prob;
+
+            if (config->progress_callback)
+                config->progress_callback(tree->total_nodes,
+                                          child->depth, child->fen);
         }
     }
 
-    /* 2. Maia supplement: fill remaining mass with predicted human moves.
-       Runs when Lichess didn't cover the mass target (or had no data at
-       all) and cumP is above the Maia threshold. */
-    bool need_maia = config->maia_only
-        || (mass_covered < mass_target &&
-            (config->opp_max_children <= 0 ||
-             children_added < config->opp_max_children));
+    if (node->children_count == 0) return;
 
-    if (need_maia && config->maia &&
-        (config->maia_only ||
-         node->cumulative_probability >= config->maia_threshold)) {
-        struct timespec t_maia;
-        clock_gettime(CLOCK_MONOTONIC, &t_maia);
+    /* Probabilities are kept RAW (Σ pᵢ ≤ 1).  The expectimax pass
+     * accounts for the uncovered mass via a tail term so no
+     * renormalization is needed or desired here — renormalizing
+     * would silently assert that the moves we dropped behave like
+     * the moves we kept, which is false. */
 
-        bool maia_ok = maia_evaluate(config->maia, node->fen,
-                                     config->maia_elo, &maia_resp);
+    /* No batch-eval here.  Every child is an our-move node whose own
+     * MultiPV call (in build_our_move) will produce an eval naturally.
+     * Pre-evaluating would be a redundant single-PV pass on positions
+     * that are about to be searched again at the same depth. */
 
-        STATS_INC(config, maia_evals);
-        STATS_ADD(config, maia_total_ms, elapsed_ms(&t_maia));
-
-        if (maia_ok && maia_resp.success && maia_resp.move_count > 0) {
-            for (int i = 0; i < maia_resp.move_count; i++) {
-                const char *uci = maia_resp.moves[i].uci;
-                double prob = maia_resp.moves[i].probability;
-                if (prob < config->maia_min_prob) continue;
-
-                if (config->opp_max_children > 0 &&
-                    children_added >= config->opp_max_children)
-                    break;
-                if (mass_target > 0.0 && mass_covered >= mass_target)
-                    break;
-
-                bool exists = false;
-                for (size_t c = 0; c < node->children_count; c++) {
-                    if (strcmp(node->children[c]->move_uci, uci) == 0) {
-                        exists = true;
-                        break;
-                    }
-                }
-                if (exists) continue;
-
-                double new_cumul = node->cumulative_probability * prob;
-                if (new_cumul < config->min_probability) continue;
-
-                char child_fen[MAX_FEN_LENGTH];
-                if (!apply_uci(node->fen, uci, child_fen, MAX_FEN_LENGTH))
-                    continue;
-
-                const char *maia_san = uci;
-                if (uci_to_san(node->fen, uci, san_buf, sizeof(san_buf)))
-                    maia_san = san_buf;
-
-                TreeNode *child = make_child(node, child_fen, maia_san,
-                                              uci, tree);
-                if (!child) continue;
-
-                child->move_probability = prob;
-                child->cumulative_probability = new_cumul;
-                children_added++;
-                mass_covered += prob;
-
-                if (config->progress_callback)
-                    config->progress_callback(tree->total_nodes,
-                                              child->depth, child->fen);
-            }
-        }
-    }
-
-    if (children_added == 0 && node->children_count == 0) return;
-
-    /* 3. Normalize child probabilities so they sum to 1.0.
-     *    Lichess and Maia contribute from different distributions;
-     *    without normalization the missing mass biases the ECA signal
-     *    downward at every opponent node. */
-    {
-        double prob_sum = 0.0;
-        for (size_t i = 0; i < node->children_count; i++)
-            prob_sum += node->children[i]->move_probability;
-        if (prob_sum > 0.0 && fabs(prob_sum - 1.0) > 1e-9) {
-            for (size_t i = 0; i < node->children_count; i++) {
-                node->children[i]->move_probability /= prob_sum;
-                node->children[i]->cumulative_probability =
-                    node->cumulative_probability * node->children[i]->move_probability;
-            }
-        }
-    }
-
-    /* 4. Batch-evaluate children that still lack evals */
-    batch_eval_children(node, config);
-
-    /* 5. Recurse into children (TODO: --engine-injection post-processing
-     *    flag could inject Stockfish top-1 moves here as a future feature) */
+    /* Recurse into children */
     for (size_t i = 0; i < node->children_count; i++) {
         if (!tree->is_building) break;
         build_recursive(tree, node->children[i], config, explorer);
@@ -752,11 +800,13 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
  * At each node:
  *   1. Check stop conditions (depth, cumP, interrupt)
  *   2. Resume support (skip explored nodes, recurse into existing children)
- *   3. Ensure this node has an eval (for window pruning)
- *   4. Eval-window pruning (marks prune reason for annotation/deletion)
- *   5. Transposition detection (O(1) FenMap lookup; links equivalent
+ *   3. For opponent-move nodes only: ensure eval and do the window-prune
+ *      check.  Our-move nodes defer this to `build_our_move` so the eval
+ *      can be harvested from the MultiPV call we're about to run anyway
+ *      instead of paying an extra single-PV Stockfish call here.
+ *   4. Transposition detection (O(1) FenMap lookup; links equivalent
  *      nodes into a circular ring via next_equivalent)
- *   6. Dispatch to build_our_move or build_opponent_move
+ *   5. Dispatch to build_our_move or build_opponent_move
  */
 static void build_recursive(Tree *tree, TreeNode *node,
                              const TreeConfig *config,
@@ -778,22 +828,29 @@ static void build_recursive(Tree *tree, TreeNode *node,
     }
     if (node->explored) return;
 
-    ensure_eval(node, config);
+    bool is_our_move = (node->is_white_to_move == config->play_as_white);
 
-    /* Eval-window pruning — mark the reason for downstream use. */
-    if (node->has_engine_eval) {
-        int eval_us = node_eval_for_us(node, config->play_as_white);
-        if (eval_us > config->max_eval_cp) {
-            node->explored = true;
-            node->prune_reason = PRUNE_EVAL_TOO_HIGH;
-            node->prune_eval_cp = eval_us;
-            return;
-        }
-        if (eval_us < config->min_eval_cp) {
-            node->explored = true;
-            node->prune_reason = PRUNE_EVAL_TOO_LOW;
-            node->prune_eval_cp = eval_us;
-            return;
+    /* Window-prune for opponent-move nodes happens here because
+     * `build_opponent_move` produces a policy, not an eval.  Our-move
+     * nodes run their own prune check inside `build_our_move` after
+     * MultiPV has given them an eval for free — see the file header
+     * comment for the rationale. */
+    if (!is_our_move) {
+        ensure_eval(node, config);
+        if (node->has_engine_eval) {
+            int eval_us = node_eval_for_us(node, config->play_as_white);
+            if (eval_us > config->max_eval_cp) {
+                node->explored = true;
+                node->prune_reason = PRUNE_EVAL_TOO_HIGH;
+                node->prune_eval_cp = eval_us;
+                return;
+            }
+            if (eval_us < config->min_eval_cp) {
+                node->explored = true;
+                node->prune_reason = PRUNE_EVAL_TOO_LOW;
+                node->prune_eval_cp = eval_us;
+                return;
+            }
         }
     }
 
@@ -815,7 +872,6 @@ static void build_recursive(Tree *tree, TreeNode *node,
     }
     fen_map_put(fmap, node->fen, node);
 
-    bool is_our_move = (node->is_white_to_move == config->play_as_white);
     node->explored = true;
 
     if (is_our_move)
@@ -993,9 +1049,62 @@ size_t tree_get_nodes_at_depth(const Tree *tree, int depth,
 
 /* ========== Expectimax Value Propagation ========== */
 
+/**
+ * Centipawn → win probability (for us).
+ *
+ * Logistic curve matching Lichess's published eval-to-winrate
+ * conversion (the one used in their UI):
+ *
+ *     wp = 1 / (1 + exp(-k · cp))
+ *     k  = ln(10) / 625  ≈ 0.00368208
+ *
+ * Sanity checks at this k:
+ *     wp(+100) ≈ 0.59   wp(+200) ≈ 0.68   wp(+400) ≈ 0.81
+ *     wp(+625) ≈ 0.91   (k·625 = ln 10  ⇒  1/(1+10⁻¹))
+ *
+ * Mate scores (|cp| > 9000) are clamped explicitly to 1/0 — the
+ * logistic alone does not saturate them cleanly and we don't want
+ * engine `cp` values anywhere near the tails of the sigmoid to
+ * propagate as non-trivial numbers.
+ */
+#define EVAL_TO_WP_K        0.00368208   /* = ln(10) / 625 */
+#define WP_MATE_CUTOFF_CP   9000
+
 double win_probability(int cp) {
-    if (abs(cp) > 9000) return cp > 0 ? 1.0 : 0.0;
-    return 1.0 / (1.0 + exp(-0.00368208 * cp));
+    if (abs(cp) > WP_MATE_CUTOFF_CP) return cp > 0 ? 1.0 : 0.0;
+    return 1.0 / (1.0 + exp(-EVAL_TO_WP_K * (double)cp));
+}
+
+/**
+ * Leaf value used in the expectimax pass.
+ *
+ * Blends the engine's win-probability estimate with a neutral prior
+ * (0.5 = "we don't know who's winning") using `leaf_confidence`:
+ *
+ *     V = leaf_conf · wp(eval_for_us) + (1 − leaf_conf) · 0.5
+ *
+ * At leaf_conf = 1.0 (the default) this is just wp(eval) — full trust in
+ * the engine's verdict.  At smaller leaf_conf the value is pulled toward
+ * 0.5, which is what an honest "I haven't expanded this position" estimate
+ * should look like.  The previous form `leaf_conf · wp(eval)` biased
+ * unexplored leaves toward 0 (certain loss), which is categorically the
+ * wrong direction for an uncertainty discount.
+ *
+ * If the node has no engine eval at all (shouldn't happen post-build) we
+ * return 0.5 for the same reason: "unknown" is the correct fallback, not
+ * "certain loss".
+ */
+static double leaf_value(const TreeNode *node,
+                         const RepertoireConfig *config) {
+    double lc = config->leaf_confidence;
+    if (lc < 0.0) lc = 0.0;
+    if (lc > 1.0) lc = 1.0;
+
+    if (!node->has_engine_eval)
+        return 0.5;  /* neutral prior when we have nothing else */
+
+    int cp_us = node_eval_for_us(node, config->play_as_white);
+    return lc * win_probability(cp_us) + (1.0 - lc) * 0.5;
 }
 
 
@@ -1026,10 +1135,37 @@ static void compute_local_cpl(TreeNode *node) {
 }
 
 
+/** Novelty-adjusted V for move selection at an our-move node.
+ *  novelty_weight = 0 (default) → returns V unchanged.  Otherwise
+ *  boosts rarely-played moves proportionally.  Lichess game counts
+ *  are preferred; Maia frequency is the fallback. */
+static double adjusted_v_for_selection(const TreeNode *parent,
+                                        const TreeNode *child,
+                                        double nw) {
+    double v = child->expectimax_value;
+    if (nw <= 0.0) return v;
+
+    double novelty = 0.0;
+    if (parent->total_games > 0 && child->total_games > 0) {
+        novelty = 1.0 - (double)child->total_games
+                        / (double)parent->total_games;
+    } else if (child->maia_frequency >= 0.0) {
+        novelty = 1.0 - child->maia_frequency;
+    }
+    if (novelty < 0.0) novelty = 0.0;
+    return v * (1.0 + nw * novelty);
+}
+
 /**
  * At an our-move node, pick the child with the highest expectimax_value
  * among candidates passing the eval-loss filter.
- * Falls back to all children if none pass.
+ *
+ * Falls back to all children if none pass.  Under the default pipeline
+ * every child already passed the same `max_eval_loss_cp` gate at build
+ * time, so the filter is usually a no-op and the fallback is only
+ * reached if the selection-phase config uses a stricter threshold.
+ *
+ * Returns the number of children that passed the eval-loss filter.
  */
 int score_our_move_children(TreeNode *node,
                             const struct RepertoireConfig *config,
@@ -1039,7 +1175,7 @@ int score_our_move_children(TreeNode *node,
     best_out->child = NULL;
     best_out->expectimax_value = -1.0;
 
-    /* Find best eval among children for the eval-loss filter */
+    /* Find best eval among children for the eval-loss filter. */
     int best_child_cp = -100000;
     for (size_t i = 0; i < node->children_count; i++) {
         if (!node->children[i]->has_engine_eval) continue;
@@ -1047,36 +1183,38 @@ int score_our_move_children(TreeNode *node,
         if (cp_us > best_child_cp) best_child_cp = cp_us;
     }
 
+    double nw = config->novelty_weight / 100.0;
+
     int passing = 0;
-    double best_v = -1.0;
-    TreeNode *best_child = NULL;
+    double best_filtered_v = -1.0;
+    TreeNode *best_filtered = NULL;
+    double best_any_v = -1.0;
+    TreeNode *best_any = NULL;
 
     for (size_t i = 0; i < node->children_count; i++) {
         TreeNode *child = node->children[i];
         if (!child->has_expectimax) continue;
+
+        double v = adjusted_v_for_selection(node, child, nw);
+
+        if (v > best_any_v) {
+            best_any_v = v;
+            best_any = child;
+        }
+
         int cp_us = node_eval_for_us(child, config->play_as_white);
         if (cp_us < best_child_cp - config->max_eval_loss_cp) continue;
         passing++;
-        if (child->expectimax_value > best_v) {
-            best_v = child->expectimax_value;
-            best_child = child;
+
+        if (v > best_filtered_v) {
+            best_filtered_v = v;
+            best_filtered = child;
         }
     }
 
-    /* Fallback: all filtered out → consider all children */
-    if (passing == 0) {
-        for (size_t i = 0; i < node->children_count; i++) {
-            TreeNode *child = node->children[i];
-            if (!child->has_expectimax) continue;
-            if (child->expectimax_value > best_v) {
-                best_v = child->expectimax_value;
-                best_child = child;
-            }
-        }
-    }
-
-    best_out->child = best_child;
-    best_out->expectimax_value = best_v;
+    TreeNode *winner = best_filtered ? best_filtered : best_any;
+    best_out->child = winner;
+    best_out->expectimax_value = winner ? winner->expectimax_value : -1.0;
     return passing;
 }
 
@@ -1136,42 +1274,61 @@ static size_t calculate_expectimax_recursive(TreeNode *node,
         }
     }
 
-    double alpha = config->trick_weight / 100.0;
-    double alpha_eff = alpha * pow(config->depth_discount, (double)node->depth);
-
     if (node->children_count == 0) {
-        /* Leaf: V = leaf_conf × wp(eval_for_us) */
-        int cp_us = node_eval_for_us(node, config->play_as_white);
-        node->expectimax_value = config->leaf_confidence * win_probability(cp_us);
+        /* Leaf: V = leaf_value(node) — see leaf_value() for the formula. */
+        node->expectimax_value = leaf_value(node, config);
 
     } else if (is_our_move) {
-        /* Our move: V = max(V_child) among eval-loss-filtered candidates */
+        /* Our move: V = max(V_child) among eval-loss-filtered candidates.
+         * If no child scored (shouldn't normally happen — post-order
+         * guarantees children have has_expectimax set), fall back to the
+         * leaf value for this node rather than asserting V=0 (certain
+         * loss), which would be a worse lie than "we don't know". */
         ScoredChild best;
         score_our_move_children(node, config, &best);
-        node->expectimax_value = best.child ? best.expectimax_value : 0.0;
+        node->expectimax_value = best.child
+            ? best.expectimax_value
+            : leaf_value(node, config);
 
     } else {
-        /* Opponent move: blend minimax and expectimax */
-        int cp_us = node_eval_for_us(node, config->play_as_white);
-        double v_engine = win_probability(cp_us);
-
-        /* Normalize child probabilities to sum to 1.0 (Pitfall 6) */
-        double prob_sum = 0.0;
-        for (size_t i = 0; i < node->children_count; i++)
-            prob_sum += node->children[i]->move_probability;
-
-        double v_human = 0.0;
+        /* Opponent move — proper expectimax with a tail term for
+         * uncovered probability mass.
+         *
+         *   V_opp = Σ pᵢ · V(childᵢ)  +  (1 − Σ pᵢ) · V_tail
+         *
+         * pᵢ are raw (not renormalized) covered probabilities.
+         * V_tail is our win probability if the opponent plays a move
+         * we didn't model.  Since Stockfish's eval at THIS node is
+         * by definition the value after best opponent play, and rare
+         * human moves are on average ≥ that (worse for opponent),
+         * wp(eval_for_us) is a principled — and slightly conservative
+         * — estimate.  leaf_value() applies the same uncertainty blend
+         * toward 0.5 that it applies to any other unexplored leaf, so
+         * the tail term honours leaf_confidence without double-counting
+         * the bias. */
+        double covered = 0.0;
+        double v = 0.0;
         for (size_t i = 0; i < node->children_count; i++) {
             TreeNode *child = node->children[i];
             if (!child->has_expectimax) continue;
-            double norm_prob = (prob_sum > 0.0)
-                ? child->move_probability / prob_sum
-                : child->move_probability;
-            v_human += norm_prob * child->expectimax_value;
+            covered += child->move_probability;
+            v += child->move_probability * child->expectimax_value;
         }
 
-        node->expectimax_value = (1.0 - alpha_eff) * v_engine
-                                + alpha_eff * v_human;
+        /* Clamp covered to [0, 1] against float drift / data noise. */
+        if (covered > 1.0) covered = 1.0;
+        if (covered < 0.0) covered = 0.0;
+
+        double tail = 1.0 - covered;
+        if (tail > 0.0) {
+            /* V_tail = leaf value at this node.  leaf_value() returns
+             * the 0.5 neutral prior if this node somehow has no engine
+             * eval, so the tail term always contributes something
+             * reasonable rather than silently dropping to 0. */
+            v += tail * leaf_value(node, config);
+        }
+
+        node->expectimax_value = v;
     }
 
     node->has_expectimax = true;
@@ -1181,6 +1338,28 @@ static size_t calculate_expectimax_recursive(TreeNode *node,
 
 size_t tree_calculate_expectimax(Tree *tree, const struct RepertoireConfig *config) {
     if (!tree || !tree->root || !config) return 0;
+
+    /* Two-pass expectimax.
+     *
+     * The transposition-leaf borrow rule in calculate_expectimax_recursive
+     * copies V from the canonical (the equivalent node that has children).
+     * In a single post-order DFS this only works if the canonical is
+     * processed before any of its transposition leaves — which is true
+     * whenever build-time DFS and expectimax DFS visit subtrees in the
+     * same order, but is NOT guaranteed after a load-from-JSON or if a
+     * later session reorders children.
+     *
+     * Fix: run the recursion twice.  Pass 1 gives every canonical a
+     * correct has_expectimax flag (their subtrees don't depend on
+     * transposition leaves, only the other way around).  Pass 2 fully
+     * overwrites every node's V, so any transposition leaf that fell
+     * back to leaf_value in pass 1 now finds its canonical ready and
+     * the corrected value propagates up through its ancestors.
+     *
+     * Total cost is 2·O(n) — still linear in tree size, and dominated
+     * by the build phase's Stockfish/Maia inferences by many orders of
+     * magnitude. */
+    calculate_expectimax_recursive(tree->root, config);
     return calculate_expectimax_recursive(tree->root, config);
 }
 
@@ -1244,19 +1423,15 @@ void tree_print_stats(const Tree *tree) {
     printf("\nConfiguration:\n");
     printf("  Min probability: %.4f%%\n", tree->config.min_probability * 100.0);
     printf("  Max depth: %d ply\n", tree->config.max_depth);
-    printf("  Our MultiPV: %d → %d (taper over %d ply)\n",
-           tree->config.our_multipv_root,
-           tree->config.our_multipv_floor,
-           tree->config.taper_depth);
-    printf("  Opponent: max %d children, mass %.0f%% → %.0f%% (taper over %d ply)\n",
+    printf("  Our MultiPV: %d (constant, eval-loss filter %dcp)\n",
+           tree->config.our_multipv, tree->config.max_eval_loss_cp);
+    printf("  Opponent: max %d children, mass target %.0f%%\n",
            tree->config.opp_max_children,
-           tree->config.opp_mass_root * 100.0,
-           tree->config.opp_mass_floor * 100.0,
-           tree->config.taper_depth);
+           tree->config.opp_mass_target * 100.0);
     printf("  Eval window: [%+d, %+d] cp\n",
            tree->config.min_eval_cp, tree->config.max_eval_cp);
     printf("  Opponent source: %s\n",
-           tree->config.maia_only ? "Maia-only" : "Lichess API + Maia supplement");
+           tree->config.maia_only ? "Maia (policy head)" : "Lichess explorer");
     if (tree->config.maia_only)
         printf("  Maia Elo: %d\n", tree->config.maia_elo);
     printf("========================\n\n");

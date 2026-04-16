@@ -156,6 +156,63 @@ bool rdb_get_eval(RepertoireDB *db, const char *fen, int *eval_cp, int *depth);
 void rdb_put_eval(RepertoireDB *db, const char *fen, int eval_cp, int depth);
 
 
+/* ========== MultiPV Cache ========== */
+
+#include "engine_pool.h"
+
+/**
+ * Get cached MultiPV result.
+ * Returns true if a cached result with depth >= requested depth
+ * and num_pvs >= requested count exists.
+ */
+bool rdb_get_multipv(RepertoireDB *db, const char *fen, int depth,
+                     int num_pvs, MultiPVJob *out);
+
+/**
+ * Store a MultiPV result in the cache.
+ */
+void rdb_put_multipv(RepertoireDB *db, const char *fen, int depth,
+                     int num_pvs, const MultiPVJob *job);
+
+
+/* ========== Maia Policy Cache ==========
+ *
+ * Maia inference is deterministic for a fixed (fen, elo, model), so its
+ * output can be cached exactly like a Stockfish eval.  Without this the
+ * policy head is re-run on every opponent node on every resume, which
+ * is a large fraction of total build time for long runs.
+ *
+ * The cache does NOT include a model-version key — deleting the DB is
+ * the supported way to force regeneration after swapping Maia weights.
+ */
+
+/** One cached Maia move prediction (matches MaiaMove layout). */
+typedef struct {
+    char uci[8];
+    double probability;
+} CachedMaiaMove;
+
+/**
+ * Look up a cached Maia response for (fen, elo).
+ *
+ * @param db            Database handle
+ * @param fen           Position FEN
+ * @param elo           Elo the prediction was taken at
+ * @param out_moves     Output buffer
+ * @param max_moves     Capacity of out_moves
+ * @param out_count     Output: number of moves written
+ * @return true if found; false on miss (out_count set to 0)
+ */
+bool rdb_get_maia(RepertoireDB *db, const char *fen, int elo,
+                  CachedMaiaMove *out_moves, int max_moves, int *out_count);
+
+/**
+ * Store a Maia response under (fen, elo).
+ */
+void rdb_put_maia(RepertoireDB *db, const char *fen, int elo,
+                  const CachedMaiaMove *moves, int move_count);
+
+
 /* ========== Ease Scores ========== */
 
 /**

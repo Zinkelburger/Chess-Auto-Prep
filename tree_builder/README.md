@@ -9,11 +9,16 @@ node.
 
 **Single interleaved DFS** — no separate build/eval/discovery stages:
 
-- **Our-move nodes**: Stockfish MultiPV finds candidate moves → eval filter →
-  depth-dependent candidate cap → Lichess enrichment for SAN/win rates
-- **Opponent-move nodes**: Lichess DB moves first, then Maia fills remaining
-  mass with predicted human moves (a single node can have both sources) +
-  engine top-1 → batch eval all children
+- **Our-move nodes**: Stockfish MultiPV (constant count at every depth) →
+  eval-loss filter → (optional Lichess enrichment for SAN/win rates)
+- **Opponent-move nodes**: one source only — pure Maia (default) OR pure
+  Lichess (`--lichess`). Probabilities are kept raw; the missing mass is
+  accounted for by an eval-based tail term during expectimax.
+- **No depth-based tapering** — branching budgets (`our_multipv`,
+  `opp_mass_target`, `opp_max_children`) are constant at every ply.
+  Tapering would silently bias the MAX/CHANCE operators; depth pruning
+  is instead handled by `min_probability`, `max_depth`, and the eval
+  window.
 - **Eval-window pruning** at every node — stop exploring when positions
   leave `[min_eval, max_eval]`
 - **All evals cached** in SQLite for instant resume
@@ -64,7 +69,7 @@ The `<name>` argument is the base name for all output files:
 | `-f, --fen <FEN>` | Starting position FEN | Standard starting position |
 | `-c, --color <w\|b>` | Play as white or black | w |
 | `-p, --probability <P>` | Min probability threshold | 0.0001 (0.01%) |
-| `-d, --depth <N>` | Max depth in ply | 30 |
+| `-d, --depth <N>` | Max depth in ply | 20 |
 | `-e, --eval-depth <N>` | Stockfish search depth | 20 |
 | `-t, --threads <N>` | Parallel Stockfish engines | 4 |
 | `-S, --stockfish <path>` | Stockfish binary path | auto-detect |
@@ -75,26 +80,23 @@ The `<name>` argument is the base name for all output files:
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--our-multipv-root <N>` | MultiPV at root (explore broadly) | 10 |
-| `--our-multipv-floor <N>` | MultiPV floor (deep positions) | 2 |
-| `--taper-depth <N>` | Ply at which MultiPV bottoms out | 8 |
+| `--our-multipv <N>` | MultiPV count at every depth (constant) | 5 |
 | `--max-eval-loss <cp>` | Skip candidates worse than best by this | 50 |
 
-### Opponent Responses (Lichess + Maia)
+### Opponent Responses (single source — Maia OR Lichess)
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--opp-max-children <N>` | Max opponent responses | 6 |
-| `--opp-mass-root <0-1>` | Mass target at root (explore broadly) | 0.95 |
-| `--opp-mass-floor <0-1>` | Mass target floor (deep positions) | 0.50 |
+| `--opp-mass <0-1>` | Mass target at every depth (constant) | 0.95 |
+| `--maia-only` | Pure Maia for opponent moves (no Lichess) | on |
+| `--lichess` | Pure Lichess for opponent moves (no Maia) | off |
 | `-g, --min-games <N>` | Min games per move (Lichess) | 10 |
 | `-r, --ratings <R>` | Rating buckets | 2000,2200,2500 |
 | `-s, --speeds <S>` | Time controls | blitz,rapid,classical |
-| `--maia-only` | Use Maia exclusively (no Lichess API) | off |
-| `--maia-model <path>` | Path to `maia_rapid.onnx` | auto-detect |
-| `--maia-elo <N>` | Elo for Maia predictions | 2000 |
-| `--maia-threshold <P>` | Min cumProb for Maia supplement | 0.01 |
-| `--maia-min-prob <P>` | Skip Maia moves below this | 0.02 |
+| `--maia-model <path>` | Path to `maia3_simplified.onnx` | auto-detect |
+| `--maia-elo <N>` | Elo for Maia predictions | 2200 |
+| `--maia-min-prob <P>` | Skip Maia moves below this probability | 0.05 |
 
 ### Eval Window
 
@@ -103,13 +105,6 @@ The `<name>` argument is the base name for all output files:
 | `--min-eval <cp>` | Stop if our eval below this | Color-dependent |
 | `--max-eval <cp>` | Stop if our eval above this | Color-dependent |
 | `--relative` | Make thresholds relative to root eval | off |
-
-### ECA Scoring
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--eval-weight <0-1>` | Eval vs trickiness blend | 0.40 |
-| `--depth-decay <0-1>` | Depth discount for ECA | 1.0 |
 
 ### Examples
 
@@ -166,7 +161,7 @@ int main() {
 ## Algorithm Details
 
 See [ALGORITHM.md](ALGORITHM.md) for the full algorithm design document
-including ECA math, parameter explanations, and data flow diagrams.
+including expectimax math, parameter explanations, and data flow diagrams.
 
 ## License
 

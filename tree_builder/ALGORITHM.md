@@ -8,9 +8,9 @@ interleaved DFS that builds the tree and evaluates positions simultaneously:
 1. **Building** the move tree by querying Lichess Explorer, Maia, and Stockfish
    together — engine MultiPV for our-move candidates, Lichess DB + Maia
    supplement for opponent responses, with eval-window pruning at every node
-2. Computing **ECA (Expected Centipawn Advantage)** — estimating how many
-   centipawns opponents hand us per turn due to suboptimal play
-3. **Selecting** repertoire moves using a blended score of eval and ECA
+2. Computing **expectimax values** — propagating practical win probabilities
+   bottom-up through the tree
+3. **Selecting** repertoire moves using expectimax values
 4. Extracting complete lines and exporting to JSON/PGN
 
 ---
@@ -33,86 +33,100 @@ move it is:
 
 #### Our-Move Nodes (Engine-Driven)
 
-1. **Stockfish MultiPV (tapering)** — evaluate the position with a
-   depth-dependent number of lines. At the root, `our_multipv_root`
-   (default 10) lines cast a wide net to discover every viable opening
-   move. This tapers linearly to `our_multipv_floor` (default 2) by
-   `taper_depth` (default 8 ply), where only the top engine moves matter.
-2. **Eval filter** — discard candidates more than `max_eval_loss_cp` (default
-   50) worse than the best line. All surviving lines become children — no
-   separate candidate cap. The MultiPV count *is* the exploration budget.
-3. **Lichess enrichment** — query the Lichess explorer for this position to
-   get SAN notation, win rates, and game counts (enrichment only — Stockfish
-   drives the branching decision).
-4. **Create children** with evaluations set inline, cached to the DB.
-5. **Recurse** into each child.
+1. **Stockfish MultiPV** — evaluate the position with `our_multipv`
+   (default 5) lines, a **constant at every depth**.  No depth-based
+   tapering — a smaller MultiPV at deeper plies would monotonically
+   under-estimate V (fewer candidates can only lower the MAX), so
+   shrinking the action space with depth would bake a systematic
+   downward bias into every value propagated upward.  The line-0
+   score is also used as the node's own engine eval (the DB cache
+   stores it for us), so there is no separate single-PV call before
+   MultiPV.
+2. **Window-prune check** — run the `min_eval_cp` / `max_eval_cp`
+   check using the line-0 score and stop here if the position is
+   already outside the window.  The check lives here (rather than
+   before the MultiPV call) so the MultiPV result can double as the
+   eval — it's strictly more information at the same cost.
+3. **Eval-loss filter** — discard candidates more than
+   `max_eval_loss_cp` (default 50) worse than the best line.  All
+   surviving lines become children.  This is a *quality* gate, not a
+   branching budget.
+4. **Lichess enrichment** — if `--lichess`, query the explorer for SAN
+   notation, win rates, and game counts (enrichment only — Stockfish
+   drives branching).
+5. **Create children** with evaluations set inline, cached to the DB.
+6. **Maia frequency enrichment** — if a Maia model is loaded and
+   `populate_maia_frequency` is set (e.g. under `--fresh` /
+   `--novelty-weight`), run inference on the parent position and store
+   each child's predicted human play probability as `maia_frequency`.
+   This inference goes through the DB-cached Maia wrapper so resumed
+   builds don't pay for it twice.
+7. **Recurse** into each child.
 
-The MultiPV taper at each depth:
+#### Opponent-Move Nodes (single source — Maia OR Lichess)
 
-| Depth (ply) | MultiPV | Typical surviving candidates |
-|-------------|---------|----------------------------|
-| 0 (root)    | 10      | 4–7 (many near-equal moves) |
-| 2           | 8       | 3–5                         |
-| 4           | 6       | 2–4                         |
-| 6           | 4       | 2–3                         |
-| 8+          | 2       | 1–2                         |
+Opponent moves come from exactly one source so the resulting child
+probabilities live in a single, coherent distribution.  The choice is a
+hard switch:
 
-#### Opponent-Move Nodes (Lichess + Maia)
+- `--maia-only` (default) — Maia's policy head over all legal moves.
+  Every opponent node always gets a prediction; no API rate limit.
+- `--lichess` — Lichess Explorer empirical distribution only.  Opponent
+  nodes without enough games simply get no children and the expectimax
+  tail term (below) absorbs the missing mass.
 
-Opponent moves use a blended strategy: Lichess database moves are added
-first (real game data), then Maia fills in remaining mass with predicted
-human moves. A single node can end up with a mix of both sources.
+Either way, the selection loop is the same:
 
-1. **Lichess Explorer** — query for human move frequencies. Add moves that
-   have at least `min_games` games, tracking cumulative mass covered.
-2. **Maia supplement** — if the mass target hasn't been reached and
-   `cumulative_probability >= maia_threshold`, run Maia inference and add
-   predicted moves that weren't already added from Lichess. This handles
-   three cases seamlessly:
-   - Lichess covered some mass but not enough (e.g. 2 Lichess moves at 40%,
-     Maia adds 3 more moves to reach 90%)
-   - Lichess had total games but no individual move passed `min_games`
-     (Maia provides the entire distribution)
-   - Lichess had no data at all (equivalent to the old "fallback" behavior)
-3. **Branching caps (tapering)** — both Lichess and Maia additions respect
-   `opp_max_children` (default 6) and the depth-dependent mass target. The
-   mass target tapers linearly from `opp_mass_root` (default 95%) at the
-   root to `opp_mass_floor` (default 50%) at `taper_depth` and beyond. Near
-   the root this covers almost every played response (including 2–5%
-   sidelines worth preparing against); deeper in the tree it focuses on only
-   the most popular replies.
-4. **Batch evaluate** all children that lack evaluations (checks DB cache
-   first, then Stockfish). Evals are cached to DB.
-5. **Recurse** into each child.
+1. Walk the chosen source's moves in probability order.
+2. Drop moves below the source's min-probability gate
+   (`min_games` for Lichess, `maia_min_prob` for Maia, default 0.05).
+3. Stop when `opp_max_children` is reached or the mass target
+   `opp_mass_target` (default 0.95, **constant at every depth**) is
+   covered.
+4. **Probabilities are kept raw** — `child.move_probability` is the
+   real-world frequency from the source, not a renormalized share.
+   `Σ pᵢ` is usually < 1 (we deliberately don't cover 100%); the
+   expectimax pass treats the uncovered mass as a tail term evaluated
+   by the engine eval at this node.
+5. **Recurse** into each child.  Children are NOT batch-evaluated up
+   front: every opponent-move child is an our-move node, and its
+   `build_our_move` pass will run MultiPV on that FEN at the same
+   depth anyway.  A batch single-PV pre-eval would be strictly
+   redundant with the MultiPV pass that follows.
 
-> **TODO — Engine injection (`--engine-injection`):** A future
-> post-processing flag could inject Stockfish's top-1 best move at each
-> opponent node when that move is not already a child. This would ensure
-> we have a prepared response to engine-best moves, but is intentionally
-> excluded from the default build since the repertoire targets play
-> against humans, not hypothetical engine moves.
+No normalization to 1.0 is performed at build time — renormalizing
+would silently claim the moves we dropped behave identically to the
+moves we kept, which is false.  Leaving `Σ pᵢ < 1` preserves the
+honest covered-mass signal that the expectimax pass uses to weight
+the tail.
 
-`--maia-only` (the default) bypasses Lichess entirely, using Maia as the
-sole source of opponent moves. This eliminates the 500ms per-query API
-rate limit but produces larger trees (Maia always has predictions, unlike
-Lichess which naturally prunes positions with too few games). Use
-`--lichess` to enable Lichess API queries with Maia as a supplement.
+> **TODO — Engine injection (`--engine-injection`):** A future flag
+> could inject Stockfish's top-1 opponent move at each opponent node
+> when that move is not already a child.  This would replace the
+> eval-based tail term with an actual V value from an engine-best
+> subtree, giving a tighter bound on the uncovered mass.
 
-The mass target taper at each depth:
-
-| Depth (ply) | Mass target | Typical opponent children |
-|-------------|-------------|--------------------------|
-| 0           | 95%         | 5–6                      |
-| 2           | 84%         | 4                        |
-| 4           | 73%         | 3                        |
-| 6           | 61%         | 2–3                      |
-| 8+          | 50%         | 1–2                      |
+Runtime at every depth is bounded by the hard caps (`our_multipv`,
+`opp_max_children`) and the eval filters; natural depth limits come from
+`min_probability` (cumulative probability pruning), `max_depth`, and the
+`[min_eval_cp, max_eval_cp]` window — not from depth-dependent branching.
 
 #### Eval-Window Pruning
 
-At every node, before branching:
-- Check if the node has an engine evaluation (most nodes do — set by their
-  parent during creation).
+The window check runs where the eval already lives, not as a separate
+pre-step:
+
+- **Opponent-move nodes** — the expansion step produces a policy, not
+  an eval.  `build_recursive` runs `ensure_eval` (a single-PV call,
+  with DB cache) immediately before dispatching so the window check
+  has something to look at.
+- **Our-move nodes** — MultiPV is about to run anyway.  The window
+  check is deferred into `build_our_move` and uses MultiPV's line-0
+  score, so no extra Stockfish call is made just to gate the MultiPV
+  call on the same FEN.
+
+The check itself is the same either way:
+
 - If `eval_for_us > max_eval_cp` — position is already won, stop studying.
   The node is kept as a leaf with `prune_reason = PRUNE_EVAL_TOO_HIGH` and
   the triggering eval stored in `prune_eval_cp`.  PGN export annotates
@@ -165,7 +179,7 @@ resolves all links in a single pass afterwards.  The global node-ID
 counter is also synced to `max(loaded_id) + 1` so resume doesn't create
 collisions.
 
-**Known limitation:** ECA borrowing from the canonical node depends on
+**Known limitation:** Expectimax value borrowing from the canonical node depends on
 DFS traversal order — the canonical node must be processed *before* its
 transposition leaves.  This holds in the common case (canonical was
 expanded first, so it's in an earlier branch), but is not guaranteed
@@ -181,20 +195,26 @@ results.
 
 #### Maia Neural Network Integration
 
-Maia supplements Lichess data at opponent-move nodes, filling in mass that
-Lichess couldn't cover. It triggers when all of:
-- A Maia model was found (auto-detected from `./maia3_simplified.onnx` or
-  `../assets/maia3_simplified.onnx`, or explicit `--maia-model <path>`)
-- The mass target hasn't been reached after Lichess moves
-- `node.cumulative_probability >= maia_threshold` (default 0.01 = 1%)
+With `--maia-only` (the default), Maia's policy head is the **sole**
+source of opponent moves.  Maia runs at every opponent node and its
+top predictions — filtered by `maia_min_prob` (default 0.05) and the
+mass / children caps — become the children.  `make_child()`
+rejects duplicates by resulting FEN as a safety net.
 
-Maia moves already present from Lichess are skipped (dedup by UCI).
-All child creation goes through `make_child()` which also rejects
-duplicates by resulting FEN as a safety net.
-Maia moves below `maia_min_prob` (default 0.02 = 2%) are discarded.
+With `--lichess`, Maia is not used for opponent move selection at all
+— the opponent distribution is exclusively the Lichess Explorer's
+empirical frequencies.  Maia may still be loaded for novelty scoring
+(see `--novelty-weight`) where it provides a predicted-frequency
+fallback when Lichess game counts aren't available at a position.
 
-With `--maia-only`, Lichess is skipped entirely and the `maia_threshold`
-gate is removed — every position gets Maia predictions regardless of cumP.
+Maia auto-detects at `./maia3_simplified.onnx` or
+`../assets/maia3_simplified.onnx`, or use explicit `--maia-model <path>`.
+
+Maia policy responses are cached in the repertoire DB under
+`(fen, elo)`.  On a resumed build the inference is skipped entirely
+for positions that have already been seen in an earlier session.
+The cache does not key on model hash — delete the `.db` file after
+swapping Maia weights if you want the predictions regenerated.
 
 ### Stage 2: Generate Repertoire (Expectimax + Selection)
 
@@ -230,24 +250,95 @@ Every node gets a single value **V** in [0, 1] — its **practical win
 probability** — computed in one bottom-up DFS pass.  V naturally
 incorporates opponent mistake tendencies at every level.
 
+### Intuition
+
+At any position where the opponent is about to move, Maia predicts the
+likelihood of each reply.  Each child already has its own V from the
+subtree below it.  The opponent node's value is the probability-weighted
+average of children's values — what will actually happen when real humans
+choose the next move.
+
+If the most popular opponent move is a mistake (leads to a high-V child),
+V at this node will be high.  If the popular move is the engine-best move,
+V reflects that too.  Trickiness emerges naturally: no tuning parameter
+is needed.
+
+### Worked Example
+
+Consider two candidate moves for White that Stockfish evaluates equally
+at +0.50 (50 centipawns).  Each leads to a position where the opponent
+has two replies:
+
+**Position A** (after 5. Nf3 — a quiet, natural position):
+
+| Opponent reply | Maia prob | Engine eval (for us) | wp(eval) |
+|----------------|-----------|----------------------|----------|
+| ...d6 (good)   | 85%       | +55 cp               | 0.523    |
+| ...Bg4 (good)  | 15%       | +45 cp               | 0.517    |
+
+The opponent's most likely moves are both reasonable:
+
+```
+V_A = 0.85 × 0.523 + 0.15 × 0.517 = 0.522
+```
+
+**Position B** (after 5. Ng5 — a tricky, provocative move):
+
+| Opponent reply | Maia prob | Engine eval (for us) | wp(eval) |
+|----------------|-----------|----------------------|----------|
+| ...d5! (best)  | 30%       | +20 cp               | 0.504    |
+| ...h6?? (trap) | 70%       | +150 cp              | 0.575    |
+
+Most opponents play the natural ...h6, chasing the knight — but it's a
+mistake.  Only 30% find the correct ...d5:
+
+```
+V_B = 0.30 × 0.504 + 0.70 × 0.575 = 0.554
+```
+
+**Result:** Position B scores **0.554 vs 0.522** despite both positions
+having the same engine evaluation (+50 cp).  The algorithm prefers Ng5
+because it leads to a position where opponents are likely to go wrong.
+
+This compounds through the tree.  At deeper levels, each child's V
+already reflects the trickiness of *its* subtree.  A line that offers
+repeated opportunities for opponent mistakes will accumulate a higher V
+at every level.
+
 ### Three Rules
 
 **Leaves** (no children):
 
 ```
-V = leaf_confidence × wp(engine_eval_for_us)
+V = leaf_confidence · wp(engine_eval_for_us)
+  + (1 − leaf_confidence) · 0.5
 ```
 
-**Opponent-move nodes** (blend of engine truth and human reality):
+At `leaf_confidence = 1.0` (the default) this is just `wp(eval)`.  For
+`leaf_confidence < 1.0` the value is pulled toward 0.5 — the honest
+"we haven't expanded this position, we don't really know who's winning"
+prior.  The earlier formulation of this rule (plain `leaf_conf · wp`)
+biased unexplored leaves toward 0 instead of toward neutral, which is
+the wrong direction for an uncertainty discount.
+
+**Opponent-move nodes** (probability-weighted expectation with a
+proper tail term for uncovered mass):
 
 ```
-α_eff = α × γ^depth
-V_engine = wp(engine_eval_for_us)
-V_human  = Σ(norm_prob_i × V(child_i))
-V = (1 - α_eff) × V_engine + α_eff × V_human
+covered = Σ pᵢ          (raw probabilities of explored children)
+V       = Σ pᵢ · V(childᵢ)  +  (1 − covered) · V_tail
+V_tail  = leaf_value(this node)
+        = leaf_confidence · wp(eval_for_us at this node)
+          + (1 − leaf_confidence) · 0.5
 ```
 
-Child probabilities are normalized to sum to 1.0 at each opponent node.
+Child probabilities are NOT renormalized.  `covered` is typically
+< 1 (we cap at `opp_max_children` and the mass target).  The
+missing `(1 − covered)` mass is the opponent playing moves we did not
+model — the engine eval at the node is our expected result if they
+play best, which is a principled, slightly conservative anchor for
+that tail (rare human moves on average give us a slightly better
+result than engine-best).
 
 **Our-move nodes** (we choose optimally):
 
@@ -262,11 +353,24 @@ Fallback: if no children pass the eval-loss filter, consider all children.
 
 Trickiness is implicit: if the popular opponent move leads to a child
 with high V (good for us) while the engine-best reply (which happens
-rarely) leads to low V, then V_human > V_engine.  The "trick" signal
-emerges naturally from the gap, compounded properly through the sigmoid
-at every level.  A 50cp gift at +50 eval matters far more than at +300
-eval, and the per-node sigmoid handles this correctly — unlike additive
-centipawn accumulation which loses this information.
+rarely) leads to low V, the probability-weighted sum pulls V up.
+The "trick" signal emerges naturally, compounded properly through the
+sigmoid at every level.
+
+The sigmoid conversion (`wp()`) is critical.  A 50cp blunder at +50 cp
+moves our win probability from 0.52 to 0.56 — a meaningful swing.  The
+same 50cp blunder at +300 cp moves it from 0.75 to 0.78 — barely
+noticeable, because the game is already won.  By working in win
+probability space rather than raw centipawns, the algorithm
+automatically weights blunders by how much they *matter*.
+
+Depth compounds this effect.  In the worked example above, Position B
+scored higher at a single node.  But in a real tree, each child's V
+reflects the full subtree below it.  A line that consistently presents
+the opponent with tricky decisions — where the popular move is worse
+than the engine-best move — will accumulate a higher V at every level.
+The algorithm doesn't need an explicit "trickiness" metric; it emerges
+naturally from the probability-weighted propagation.
 
 ### Local CPL (display only)
 
@@ -285,11 +389,48 @@ Transposition leaves borrow V from the canonical node before the leaf
 formula runs.  The canonical's V already has `leaf_confidence` baked in
 at its own leaves, so transposition leaves do not re-apply the discount.
 
+The expectimax pass runs **twice** (`tree_calculate_expectimax`) so the
+borrow is robust to DFS order.  In a single pass, a transposition leaf
+visited before its canonical would fall through to the leaf formula and
+pollute the values propagated up through its ancestors.  The first pass
+guarantees every canonical has `has_expectimax = true`; the second pass
+fully overwrites every node's V, so transposition leaves now find their
+canonical ready and the corrected value propagates cleanly.  Total
+cost is 2·O(n) — still linear, and negligible against the build
+phase's engine-call cost.
+
 ### Move Selection
 
-Selection is trivial: at each our-move node, `score_our_move_children()`
-filters by `max_eval_loss_cp`, then returns `argmax(V)`.  No formula at
-all — just pick the child with the highest practical win probability.
+At each our-move node, `score_our_move_children()` filters by
+`max_eval_loss_cp`, then returns `argmax(V)` — just pick the child with
+the highest practical win probability.
+
+When `novelty_weight > 0` (e.g. via `--fresh` or `--novelty-weight`),
+the selection applies a novelty bonus before picking:
+
+```
+novelty = 1 - frequency          // 0 for the mainline, ~1 for rare moves
+V_adj   = V × (1 + nw × novelty)
+selected = argmax(V_adj)
+```
+
+The **frequency** signal comes from one of two sources, chosen
+automatically:
+
+- **Lichess mode** (`--lichess`): `frequency = child.total_games /
+  parent.total_games`.  A move played in 200 of 10,000 games has
+  frequency 0.02 and novelty 0.98.
+- **Maia-only mode** (default): `frequency = child.maia_frequency`,
+  where `maia_frequency` is Maia's predicted probability that a human
+  would play this move (populated during build via a single ONNX
+  inference per our-move node).  A move Maia predicts at 60% has
+  novelty 0.4; a move at 2% has novelty 0.98.
+
+The Lichess signal is preferred when available (real game data); Maia
+is the fallback.  The `max_eval_loss_cp` filter still runs first, so
+novelty cannot promote objectively bad moves.  The raw
+`expectimax_value` (without the novelty boost) is what propagates
+upward in the tree — novelty only affects the local argmax choice.
 
 At opponent-move nodes, all children above the probability threshold are
 recursed into.  The DFS also stops at eval-window boundaries.
@@ -323,19 +464,18 @@ all castling UCI to king-destination form at three levels:
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| `our_multipv_root` | `--our-multipv-root` | 10 | MultiPV at root (explore broadly) |
-| `our_multipv_floor` | `--our-multipv-floor` | 2 | MultiPV floor (deep positions) |
-| `taper_depth` | `--taper-depth` | 8 | Ply at which both tapers bottom out |
+| `our_multipv` | `--our-multipv` | 5 | MultiPV count at every depth (constant, no taper) |
 | `max_eval_loss_cp` | `--max-eval-loss` | 50 | Candidates must be within this of best |
 
-### Tree Building — Opponent Moves (Lichess + Maia)
+### Tree Building — Opponent Moves (Maia-only OR Lichess-only)
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| `opp_max_children` | `--opp-max-children` | 6 | Max opponent responses per position |
-| `opp_mass_root` | `--opp-mass-root` | 0.95 | Mass target at root (explore broadly) |
-| `opp_mass_floor` | `--opp-mass-floor` | 0.50 | Mass target floor (deep positions) |
-| `min_games` | `-g` | 10 | Minimum Lichess games to include a move |
+| `opp_max_children` | `--opp-max-children` | 6 | Hard cap on opponent responses per position |
+| `opp_mass_target` | `--opp-mass` | 0.95 | Covered-mass target at every depth (constant, no taper) |
+| `maia_only` | `--maia-only` | on | Use Maia exclusively for opponent moves |
+| — | `--lichess` | off | Use Lichess exclusively for opponent moves |
+| `min_games` | `-g` | 10 | Minimum Lichess games to include a move (Lichess mode) |
 | `ratings` | `-r` | 2000,2200,2500 | Lichess rating buckets |
 | `speeds` | `-s` | blitz,rapid,classical | Time controls |
 
@@ -344,7 +484,7 @@ all castling UCI to king-destination form at three levels:
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
 | `min_probability` | `-p` | 0.0001 (0.01%) | Prune branches below this cumulative probability |
-| `max_depth` | `-d` | 30 ply | Maximum tree depth |
+| `max_depth` | `-d` | 20 ply | Maximum tree depth |
 | `eval_depth` | `-e` | 20 | Stockfish search depth per position |
 | `num_threads` | `-t` | 4 | Parallel Stockfish engines |
 
@@ -356,84 +496,85 @@ all castling UCI to king-destination form at three levels:
 | `max_eval_cp` | `--max-eval` | W: 200, B: 100 | Stop if our eval exceeds this |
 | `relative_eval` | `--relative` | off | Make thresholds relative to root eval |
 
-### Maia Supplement
+### Maia
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
 | `maia_model` | `--maia-model` | auto-detect | Path to `maia3_simplified.onnx` |
 | `maia_elo` | `--maia-elo` | 2200 | Elo for predictions (600–2400) |
-| `maia_threshold` | `--maia-threshold` | 0.01 (1%) | Min cumProb for Maia supplement |
-| `maia_min_prob` | `--maia-min-prob` | 0.02 (2%) | Skip moves below this probability |
-| `maia_only` | `--maia-only` | on (default) | Bypass Lichess API, use Maia exclusively |
-| | `--lichess` | | Enable Lichess API (overrides `--maia-only`) |
+| `maia_min_prob` | `--maia-min-prob` | 0.05 (5%) | Skip Maia moves below this probability |
 
 ### Expectimax & Move Selection
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
-| `alpha` (trick_weight/100) | `--trick-weight` | 50 | 0 = trust engine, 100 = trust human probabilities |
-| `gamma` (depth_discount) | `--depth-decay` | 1.0 | Depth discount for alpha |
-| `leaf_confidence` | `--leaf-confidence` | 1.0 | Discount on wp(eval) for unexplored leaves |
+| `leaf_confidence` | `--leaf-confidence` | 1.0 | Blends wp(eval) with a neutral 0.5 prior at unexplored leaves. 1.0 = trust eval fully, 0.0 = assume neutral. |
 | `max_eval_loss_cp` | `--max-eval-loss` | 50 | Quality floor at our-move nodes |
+| `novelty_weight` | `--novelty-weight` | 0 | 0 = off, 100 = maximize novelty boost at our-move nodes |
 
 ### Preset Modes
 
-The CLI supports four preset bundles (`--solid`, `--practical`, `--tricky`,
-`--traps`). Each sets defaults for trick weight, eval floor (`--min-eval`),
-depth decay (gamma), and max eval loss. **Modes set defaults only; explicit flags
-override.** For example: `--tricky --max-eval-loss 50` keeps tricky’s
-trick-weight and min-eval defaults but forces max-eval-loss to 50.
+The CLI supports five preset bundles (`--solid`, `--practical`, `--tricky`,
+`--traps`, `--fresh`). Each sets defaults for eval tolerance, novelty
+weight, and eval floor (`--min-eval`).
+**Modes set defaults only; explicit flags override.** For example:
+`--fresh --novelty-weight 80` keeps fresh’s other defaults but overrides
+the novelty weight to 80.
 
-| Mode | alpha | gamma | `--min-eval` (W / B) | `--max-eval-loss` | Intent |
-|------|-------|-------|----------------------|-------------------|--------|
-| `--solid` | 0.10 | 1.0 | 0 / -100 | 30 | Nearly pure engine. Opponent model barely matters. |
-| `--practical` | 0.50 | 1.0 | -25 / -200 | 50 | Balanced. Half engine, half human tendencies. |
-| `--tricky` | 0.70 | 0.95 | -50 / -250 | 75 | Trust probability model more, especially near root. |
-| `--traps` | 0.90 | 0.90 | -100 / -300 | 100 | Almost pure expectimax. Maximize human mistakes. |
+| Mode | novelty | `--min-eval` (W / B) | `--max-eval-loss` | Intent |
+|------|---------|----------------------|-------------------|--------|
+| `--solid` | 0 | 0 / -100 | 30 | Tight quality floor, no compromise. |
+| `--practical` | 0 | -25 / -200 | 50 | Balanced eval tolerance. |
+| `--tricky` | 0 | -50 / -250 | 75 | Wider tolerance for speculative moves. |
+| `--traps` | 0 | -100 / -300 | 100 | Widest tolerance, enables trap reporting. |
+| `--fresh` | 60 | (default) | 40 | Sound but unusual moves. Favor rarely-played lines. |
 
 ### What Each Parameter Does Intuitively
 
-- **`our_multipv_root / our_multipv_floor`**: "How many engine moves to
-  consider?" At the root, cast a wide net (10 lines) to discover every
-  viable opening move. Deep in the tree, only ask for the top 2. The eval
-  filter further narrows actual children — MultiPV is the exploration
-  budget, and `max_eval_loss_cp` decides who survives.
+- **`our_multipv`**: "How many engine moves to consider at our turn?"
+  Constant at every depth (default 5).  `max_eval_loss_cp` further
+  narrows actual children.  Keeping this flat avoids a one-sided
+  downward bias on the MAX operator: fewer candidates at deep plies
+  can only lower their V, which then propagates upward as a
+  systematic under-estimate of our achievable win probability.
 
-- **`opp_mass_root / opp_mass_floor`**: "How much of the opponent's
-  probability mass to cover?" At the root, cover 95% — prepare for almost
-  everything, including 2–5% sidelines. Deep in the tree, 50% means only
-  the top 1–2 replies. Lichess moves fill mass first, then Maia supplements
-  to reach the target. Combined with cumulative-probability pruning, this
-  focuses deep branches naturally.
-
-- **`taper_depth`**: "When does the tree shift from broad exploration to
-  focused depth?" Both the MultiPV taper and mass target taper reach their
-  floor values at this depth. Default 8 ply = 4 moves each side.
+- **`opp_mass_target`**: "How much of the opponent's probability mass
+  to cover at every opponent node?" Constant at every depth (default
+  0.95).  The uncovered `(1 − covered)` mass is not dropped on the
+  floor — expectimax handles it via the tail term
+  `(1 − covered) · leaf_value(this node)`, where `leaf_value` blends
+  `wp(eval_for_us)` with a neutral 0.5 prior according to
+  `leaf_confidence`.  Natural depth pruning comes from
+  `min_probability`, `max_depth`, and the eval window, not from a
+  depth-dependent mass target.
 
 - **`opp_max_children`**: "Hard cap on opponent responses per position?"
   Safety net — rarely hit when the mass target is doing its job. Raise to
-  8-10 for more thorough preparation.
+  8-10 for more thorough preparation of rare-sideline-heavy openings.
 
-- **`trick_weight`** (alpha): "How much should opponent tendencies matter?"
-  Controls the blend between engine-optimal (V_engine = wp(eval)) and
-  human-practical (V_human = probability-weighted child values) at opponent
-  nodes.  0 = pure engine minimax, 100 = pure expectimax over human
-  probabilities.  The effective alpha decays with depth when gamma < 1.
+- **`novelty_weight`**: "How much should we prefer unusual moves?"
+  At our-move nodes, boosts the adjusted V of moves that are rarely
+  played (low Lichess game count or low Maia predicted frequency).
+  The eval-loss filter still runs first, so novelty cannot promote
+  objectively bad moves.  Use `--fresh` for the preset or
+  `--novelty-weight <0-100>` for fine-grained control.  In maia-only
+  mode the novelty signal comes from Maia predictions (approximate);
+  `--lichess` gives novelty based on real game data.
 
 - **`min/max_eval_cp`**: "What eval range should we explore?" Stops the DFS
   when positions are too bad (lost cause) or too good (already winning,
   no need to study further). Applied during the build as inline pruning.
 
-- **`maia_threshold`**: "When should Maia supplement Lichess?" Only positions
-  with cumulative probability above this get Maia predictions. Prevents
-  wasting inference on unlikely branches. With `--maia-only`, this gate is
-  removed.
+- **`--maia-only`** (default): Pure Maia for opponent move selection.
+  Every opponent node gets a prediction (no API rate limit), which
+  produces larger trees than Lichess since Maia has no min-games gate.
+  Tighten `min_probability` / `maia_min_prob` / `opp_max_children`
+  to compensate if needed.
 
-- **`--maia-only`** (default): "Skip the Lichess API entirely?" Eliminates
-  the 500ms per-query rate limit, but produces larger trees since Maia
-  always has predictions (unlike Lichess which prunes positions with too
-  few games). Use `--lichess` to override. Tighten pruning parameters to
-  compensate for larger trees.
+- **`--lichess`**: Pure Lichess for opponent move selection.  Positions
+  with too few games simply get no children — the expectimax tail term
+  absorbs the uncovered mass using the engine eval.  Use this when you
+  trust empirical human play data more than Maia's NN predictions.
 
 ---
 
@@ -442,8 +583,8 @@ trick-weight and min-eval defaults but forces max-eval-loss to 50.
 ```
 tree_builder/
 ├── include/
-│   ├── node.h          # TreeNode struct (eval, ECA, probabilities)
-│   ├── tree.h          # Tree config + interleaved build + ECA
+│   ├── node.h          # TreeNode struct (eval, expectimax, probabilities)
+│   ├── tree.h          # Tree config + interleaved build + expectimax
 │   ├── repertoire.h    # RepertoireConfig, move selection, export
 │   ├── lichess_api.h   # Lichess Explorer API client
 │   ├── engine_pool.h   # Multithreaded Stockfish (batch + MultiPV)
@@ -485,24 +626,41 @@ tree_builder/
    ┌───────────────┐                      ┌──────────────────┐
    │  OUR MOVE     │                      │  OPPONENT MOVE   │
    │               │                      │                  │
-   │  Stockfish    │                      │  1. Lichess DB   │
-   │  MultiPV      │                      │     (min_games)  │
-   │  (10 → 2)     │                      │  2. Maia fills   │
-   │  → eval filter│                      │     remaining    │
-   │  → Lichess    │                      │     mass         │
-   │    enrichment │                      │  → batch eval    │
-   │               │                      │  → mass target   │
-   │               │                      │    (95% → 50%)   │
+   │  Stockfish    │                      │  single source:  │
+   │  MultiPV=5    │                      │   Maia OR Lichess│
+   │  (constant)   │                      │   (Maia cached   │
+   │  → line-0 cp  │                      │    in DB by      │
+   │    → node eval│                      │    (fen, elo))   │
+   │  → window     │                      │  → raw probs     │
+   │    prune      │                      │     (Σpᵢ ≤ 1)    │
+   │  → eval-loss  │                      │  → mass target   │
+   │    filter     │                      │    (95%, const)  │
+   │  → optional   │                      │  → children NOT  │
+   │    Lichess    │                      │    pre-evaluated │
+   │    enrichment │                      │    (each child's │
+   │               │                      │    MultiPV will  │
+   │               │                      │    produce the   │
+   │               │                      │    eval for free)│
+   │               │                      │  → tail absorbed │
+   │               │                      │    by expectimax │
    └──────┬────────┘                      └────────┬─────────┘
           │                                        │
-          │   Eval-window pruning at every node    │
-          │   DB caching of all evaluations        │
+          │   Window prune runs where the cheap    │
+          │   eval already lives: for opp-nodes    │
+          │   before expansion, for our-nodes      │
+          │   inside build_our_move after MultiPV. │
+          │   All evals cached in SQLite.          │
           └────────────────┬───────────────────────┘
                            ▼
               Tree with evals on all nodes
                            │
                            ▼
               tree_calculate_expectimax()   → V in [0,1] at every node
+                                              (two-pass, robust to trans-
+                                               positions / reloaded trees)
+                  Opp:  V = Σ pᵢVᵢ + (1−Σpᵢ)·leaf_value(this)
+                  Our:  V = max(Vᵢ) among eval-loss-filtered candidates
+                  Leaf: V = leaf_conf·wp(eval_us) + (1−leaf_conf)·0.5
                            │
                            ▼
               build_repertoire_recursive()
@@ -522,11 +680,11 @@ tree_builder/
 
 ### Leaf Node Values
 
-Leaf nodes get `V = leaf_confidence * wp(eval_for_us)`.  With
-`leaf_confidence < 1`, unexplored leaves are discounted, which
-systematically biases V toward `V_engine` near the tree fringe.
-This is arguably more correct than trusting unexplored evals at
-full weight, but it is a behavior change from the old ECA system.
+Leaf nodes use `V = leaf_conf · wp(eval) + (1 − leaf_conf) · 0.5`.  At
+`leaf_conf = 1.0` (default) this is just `wp(eval)` — full trust in the
+engine's verdict.  At smaller `leaf_conf`, V is pulled toward the 0.5
+"we don't know" prior rather than toward 0 (certain loss), which is
+what an uncertainty discount should actually do.
 
 ### DFS Order Bias on Interrupted Builds
 
@@ -543,6 +701,25 @@ node, the value reflects the canonical path's subtree.  A position
 reached via a different move order borrows the same V value regardless
 of how the path to reach it differs.  In practice this is minor since
 transposition leaves are a small fraction of candidates.
+
+`tree_calculate_expectimax` runs the recursion twice so the borrow is
+robust to DFS traversal order (see *Transposition Handling* above).
+Total cost is 2·O(n) — still linear in tree size, and dominated by
+the build phase's Stockfish/Maia inferences by several orders of
+magnitude.
+
+### Eval-Too-Low Pruning and the Tail Term
+
+`tree_prune_eval_too_low` deletes children that fell below the eval
+window from the tree.  Their `move_probability` is no longer part of
+`covered`, so the expectimax tail credits that mass with
+`leaf_value(parent)` instead of the "we lost that branch" value it
+semantically deserves.  In practice this only overstates V when a
+meaningful share of the policy mass lands on positions well below
+`min_eval_cp`, which the build tries to avoid via `min_probability`
+anyway.  Fixing this would require retaining the pruned children with
+a clamped V (or tracking a separate "already-lost tail mass") — left
+as future work.
 
 ### Equivalence Ring Serialization
 
