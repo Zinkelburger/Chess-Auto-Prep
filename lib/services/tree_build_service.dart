@@ -1,19 +1,22 @@
 /// Two-phase tree builder — builds a persistent [BuildTree] with engine
 /// evaluations on every node, matching the C tree_builder algorithm.
 ///
-/// Phase 1 (this service): DFS build with MultiPV tapering (our moves),
-/// Lichess+Maia blended opponent moves, eval-window pruning, and
-/// transposition detection.
+/// Phase 1 (this service): DFS build with constant-depth MultiPV at
+/// our-move nodes, single-source opponent moves (Maia OR Lichess), eval-
+/// window pruning, and transposition detection.
 ///
-/// Phase 2 (separate calculators): ease, ECA, and repertoire selection
-/// run on the completed tree.
+/// Phase 2 (separate calculators): ease, expectimax, and repertoire
+/// selection run on the completed tree.
 library;
+
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
 import '../models/build_tree_node.dart';
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
 import 'engine/stockfish_pool.dart';
+import 'eval_cache.dart';
 import 'generation/fen_map.dart';
 import 'generation/generation_config.dart';
 import 'maia_factory.dart';
@@ -27,7 +30,7 @@ class TreeBuildService {
   bool _isBuilding = false;
   int _nextNodeId = 1;
 
-  final Map<String, int> _evalCache = {};
+  final EvalCache _evalCache = EvalCache.instance;
   final Map<String, ExplorerResponse?> _dbCache = {};
 
   late BuildStats _stats;
@@ -53,7 +56,10 @@ class TreeBuildService {
 
     var cfg = config;
 
-    await _pool.ensureWorkers();
+    await Future.wait([
+      _pool.ensureWorkers(),
+      _evalCache.init(),
+    ]);
     if (_pool.workerCount == 0) {
       throw StateError('No engine workers available');
     }
@@ -63,7 +69,6 @@ class TreeBuildService {
       tree = existingTree;
       _nextNodeId = _findMaxNodeId(tree.root) + 1;
     } else {
-      _evalCache.clear();
       _dbCache.clear();
       _nextNodeId = 1;
       final rootFen = cfg.startFen;
@@ -92,20 +97,20 @@ class TreeBuildService {
           startFen: cfg.startFen, playAsWhite: cfg.playAsWhite,
           minProbability: cfg.minProbability, maxDepth: cfg.maxDepth,
           maxNodes: cfg.maxNodes, evalDepth: cfg.evalDepth,
-          ourMultipvRoot: cfg.ourMultipvRoot,
-          ourMultipvFloor: cfg.ourMultipvFloor,
-          taperDepth: cfg.taperDepth, maxEvalLossCp: cfg.maxEvalLossCp,
-          oppMaxChildren: cfg.oppMaxChildren, oppMassRoot: cfg.oppMassRoot,
-          oppMassFloor: cfg.oppMassFloor,
+          ourMultipv: cfg.ourMultipv,
+          maxEvalLossCp: cfg.maxEvalLossCp,
+          oppMaxChildren: cfg.oppMaxChildren,
+          oppMassTarget: cfg.oppMassTarget,
           minEvalCp: cfg.minEvalCp + rootEvalUs,
           maxEvalCp: cfg.maxEvalCp + rootEvalUs,
           relativeEval: cfg.relativeEval,
-          useLichessDb: cfg.useLichessDb, ratingRange: cfg.ratingRange,
+          useLichessDb: cfg.useLichessDb, useMasters: cfg.useMasters,
+          ratingRange: cfg.ratingRange,
           speeds: cfg.speeds, minGames: cfg.minGames,
-          maiaElo: cfg.maiaElo, maiaThreshold: cfg.maiaThreshold,
-          maiaMinProb: cfg.maiaMinProb,
-          depthDiscount: cfg.depthDiscount, trickWeight: cfg.trickWeight,
+          maiaElo: cfg.maiaElo, maiaMinProb: cfg.maiaMinProb,
+          maiaOnly: cfg.maiaOnly,
           leafConfidence: cfg.leafConfidence,
+          noveltyWeight: cfg.noveltyWeight,
         );
       }
     }
@@ -173,22 +178,29 @@ class TreeBuildService {
     }
     if (node.explored) return;
 
-    await _ensureEval(node, config);
+    final isOurMove = node.isWhiteToMove == config.playAsWhite;
 
-    // Eval-window pruning
-    if (node.hasEngineEval) {
-      final evalUs = node.evalForUs(config.playAsWhite);
-      if (evalUs > config.maxEvalCp) {
-        node.explored = true;
-        node.pruneReason = PruneReason.evalTooHigh;
-        node.pruneEvalCp = evalUs;
-        return;
-      }
-      if (evalUs < config.minEvalCp) {
-        node.explored = true;
-        node.pruneReason = PruneReason.evalTooLow;
-        node.pruneEvalCp = evalUs;
-        return;
+    // Opponent-move nodes: ensure eval + window prune BEFORE expansion.
+    // Our-move nodes skip this — their eval comes from MultiPV line 0
+    // inside _buildOurMove, which also does its own window check.
+    // This matches C's build_recursive where ensure_eval + window is
+    // gated on `!is_our_move`.
+    if (!isOurMove) {
+      await _ensureEval(node, config);
+      if (node.hasEngineEval) {
+        final evalUs = node.evalForUs(config.playAsWhite);
+        if (evalUs > config.maxEvalCp) {
+          node.explored = true;
+          node.pruneReason = PruneReason.evalTooHigh;
+          node.pruneEvalCp = evalUs;
+          return;
+        }
+        if (evalUs < config.minEvalCp) {
+          node.explored = true;
+          node.pruneReason = PruneReason.evalTooLow;
+          node.pruneEvalCp = evalUs;
+          return;
+        }
       }
     }
 
@@ -201,7 +213,6 @@ class TreeBuildService {
     }
     fenMap.putCanonical(node.fen, node);
 
-    final isOurMove = node.isWhiteToMove == config.playAsWhite;
     node.explored = true;
 
     if (isOurMove) {
@@ -227,7 +238,7 @@ class TreeBuildService {
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
   }) async {
-    final mpvCount = config.multipvForDepth(node.depth);
+    final mpvCount = config.ourMultipv;
     final isWhiteToMove = node.fen.split(' ')[1] == 'w';
 
     final sw = Stopwatch()..start();
@@ -247,12 +258,30 @@ class TreeBuildService {
       final topCp = discovery.lines.first.effectiveCp;
       final stmCp = isWhiteToMove ? topCp : -topCp;
       node.engineEvalCp = stmCp;
-      _cacheEvalWhite(node.fen, topCp);
+      _cacheEvalWhite(node.fen, topCp, config.evalDepth);
     }
 
-    // Optional Lichess enrichment for SAN + win rates
+    // Eval-window pruning (deferred from _buildRecursive so the eval
+    // comes from MultiPV line 0, avoiding an extra single-PV call).
+    if (node.hasEngineEval) {
+      final evalUs = node.evalForUs(config.playAsWhite);
+      if (evalUs > config.maxEvalCp) {
+        node.pruneReason = PruneReason.evalTooHigh;
+        node.pruneEvalCp = evalUs;
+        return;
+      }
+      if (evalUs < config.minEvalCp) {
+        node.pruneReason = PruneReason.evalTooLow;
+        node.pruneEvalCp = evalUs;
+        return;
+      }
+    }
+
+    // Lichess enrichment for SAN + win rates at our-move nodes.
+    // Matches C: queried when `!maia_only` (Lichess is the opponent
+    // source, so the explorer data is available anyway).
     ExplorerResponse? lichess;
-    if (config.useLichessDb) {
+    if (!config.maiaOnly) {
       lichess = await _getDbData(node.fen);
     }
 
@@ -305,7 +334,8 @@ class TreeBuildService {
       child.cumulativeProbability = node.cumulativeProbability;
       child.engineEvalCp = childEvalStm;
       _cacheEvalWhite(childFen,
-          childIsWhite ? childEvalStm : -childEvalStm);
+          childIsWhite ? childEvalStm : -childEvalStm,
+          config.evalDepth);
 
       // Enrich with Lichess stats
       if (lichess != null) {
@@ -320,6 +350,31 @@ class TreeBuildService {
       _emitProgress(tree, child.depth, child.fen, onProgress);
     }
 
+    // Populate maia_frequency on our-move children.  C gates this on
+    // `populate_maia_frequency` (novelty > 0 || find_traps); Dart always
+    // populates when Maia is available since the data is useful for both
+    // novelty scoring and trap-line display.
+    if (MaiaFactory.isAvailable &&
+        MaiaFactory.instance != null &&
+        node.children.isNotEmpty) {
+      try {
+        final maiaResult = await MaiaFactory.instance!.evaluate(
+          node.fen, config.maiaElo,
+        );
+        _stats.maiaEvals++;
+        if (maiaResult.policy.isNotEmpty) {
+          for (final child in node.children) {
+            final freq = maiaResult.policy[child.moveUci];
+            if (freq != null) {
+              child.maiaFrequency = freq;
+            }
+          }
+        }
+      } catch (_) {
+        // Maia frequency is best-effort
+      }
+    }
+
     // Recurse into children
     for (final child in List.of(node.children)) {
       if (!_isBuilding || isCancelled()) break;
@@ -330,7 +385,7 @@ class TreeBuildService {
     }
   }
 
-  // ── Opponent move: Lichess + Maia → recurse ─────────────────────────
+  // ── Opponent move: single source (Maia OR Lichess) → recurse ─────────
 
   Future<void> _buildOpponentMove({
     required BuildTree tree,
@@ -340,152 +395,23 @@ class TreeBuildService {
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
   }) async {
-    final massTarget = config.oppMassForDepth(node.depth);
-    int childrenAdded = 0;
-    double massCovered = 0.0;
-
-    MaiaResult? maiaResult;
-
-    // ── 1. Lichess moves ──
-    if (config.useLichessDb) {
-      final response = await _getDbData(node.fen);
-      if (response != null && response.totalGames > 0) {
-        final totalW = response.moves.fold(0, (s, m) => s + m.white);
-        final totalB = response.moves.fold(0, (s, m) => s + m.black);
-        final totalD = response.moves.fold(0, (s, m) => s + m.draws);
-        node.setLichessStats(totalW, totalB, totalD);
-
-        for (final move in response.moves) {
-          if (move.total < config.minGames) continue;
-          if (config.oppMaxChildren > 0 &&
-              childrenAdded >= config.oppMaxChildren) {
-            break;
-          }
-          if (massTarget > 0.0 && massCovered >= massTarget) break;
-
-          final prob = move.playFraction;
-          final newCumul = node.cumulativeProbability * prob;
-          if (newCumul < config.minProbability) continue;
-
-          final childFen = playUciMove(node.fen, move.uci);
-          if (childFen == null) continue;
-
-          final child = _makeChild(
-            parent: node, fen: childFen, san: move.san,
-            uci: move.uci, tree: tree,
-          );
-          if (child == null) continue;
-
-          child.moveProbability = prob;
-          child.cumulativeProbability = newCumul;
-          child.setLichessStats(move.white, move.black, move.draws);
-          childrenAdded++;
-          massCovered += prob;
-
-          _emitProgress(tree, child.depth, child.fen, onProgress);
-        }
-      }
+    if (config.maiaOnly) {
+      await _addOpponentChildrenFromMaia(
+        tree: tree, node: node, config: config, onProgress: onProgress,
+      );
+    } else {
+      await _addOpponentChildrenFromLichess(
+        tree: tree, node: node, config: config, onProgress: onProgress,
+      );
     }
 
-    // ── 2. Maia supplement ──
-    final needMaia = !config.useLichessDb ||
-        (massCovered < massTarget &&
-            (config.oppMaxChildren <= 0 ||
-                childrenAdded < config.oppMaxChildren));
+    if (node.children.isEmpty) return;
 
-    if (needMaia &&
-        MaiaFactory.isAvailable &&
-        MaiaFactory.instance != null &&
-        (!config.useLichessDb ||
-            node.cumulativeProbability >= config.maiaThreshold)) {
-      final sw = Stopwatch()..start();
-      try {
-        maiaResult = await MaiaFactory.instance!.evaluate(
-          node.fen, config.maiaElo,
-        );
-        _stats.maiaEvals++;
-        _stats.maiaTotalMs += sw.elapsedMilliseconds;
+    // Probabilities are kept RAW (Σ pᵢ ≤ 1).  The expectimax tail term
+    // accounts for uncovered mass; renormalizing would silently bias V.
 
-        if (maiaResult.policy.isNotEmpty) {
-          final sortedMoves = maiaResult.policy.entries.toList()
-            ..sort((a, b) => b.value.compareTo(a.value));
-
-          for (final entry in sortedMoves) {
-            final uci = entry.key;
-            final prob = entry.value;
-            if (prob < config.maiaMinProb) continue;
-            if (config.oppMaxChildren > 0 &&
-                childrenAdded >= config.oppMaxChildren) {
-              break;
-            }
-            if (massTarget > 0.0 && massCovered >= massTarget) break;
-
-            // Skip if already added from Lichess
-            if (node.children.any((c) => c.moveUci == uci)) continue;
-
-            final newCumul = node.cumulativeProbability * prob;
-            if (newCumul < config.minProbability) continue;
-
-            final childFen = playUciMove(node.fen, uci);
-            if (childFen == null) continue;
-
-            final san = uciToSan(node.fen, uci);
-            final child = _makeChild(
-              parent: node, fen: childFen, san: san, uci: uci, tree: tree,
-            );
-            if (child == null) continue;
-
-            child.moveProbability = prob;
-            child.cumulativeProbability = newCumul;
-            childrenAdded++;
-            massCovered += prob;
-
-            _emitProgress(tree, child.depth, child.fen, onProgress);
-          }
-        }
-      } catch (e) {
-        _log('Maia eval failed: $e');
-      }
-    }
-
-    if (childrenAdded == 0 && node.children.isEmpty) return;
-
-    // ── 3. Probability normalization ──
-    _normalizeChildProbabilities(node);
-
-    // ── 4. Batch eval children without evals ──
-    final needEval = <int>[];
-    final needEvalFens = <String>[];
-    for (int i = 0; i < node.children.length; i++) {
-      if (!node.children[i].hasEngineEval) {
-        final cached = _getCachedEvalWhite(node.children[i].fen);
-        if (cached != null) {
-          final isChildWhiteStm = node.children[i].fen.split(' ')[1] == 'w';
-          node.children[i].engineEvalCp =
-              isChildWhiteStm ? cached : -cached;
-        } else {
-          needEval.add(i);
-          needEvalFens.add(node.children[i].fen);
-        }
-      }
-    }
-    if (needEvalFens.isNotEmpty) {
-      final sw = Stopwatch()..start();
-      final results = await _pool.evaluateMany(needEvalFens, config.evalDepth);
-      _stats.sfBatchCalls++;
-      _stats.sfBatchMs += sw.elapsedMilliseconds;
-      for (int k = 0; k < needEval.length; k++) {
-        final child = node.children[needEval[k]];
-        child.engineEvalCp = results[k].effectiveCp;
-        final isChildWhiteStm = child.fen.split(' ')[1] == 'w';
-        _cacheEvalWhite(child.fen,
-            isChildWhiteStm
-                ? results[k].effectiveCp
-                : -results[k].effectiveCp);
-      }
-    }
-
-    // ── 5. Recurse ──
+    // Recurse — eval-window check + ensureEval happen inside _buildRecursive,
+    // so no separate batch-eval pass is needed here.
     for (final child in List.of(node.children)) {
       if (!_isBuilding || isCancelled()) break;
       await _buildRecursive(
@@ -495,14 +421,122 @@ class TreeBuildService {
     }
   }
 
+  Future<void> _addOpponentChildrenFromLichess({
+    required BuildTree tree,
+    required BuildTreeNode node,
+    required TreeBuildConfig config,
+    required void Function(BuildProgress) onProgress,
+  }) async {
+    final response = await _getDbData(node.fen);
+    if (response == null || response.totalGames == 0) return;
+
+    final totalW = response.moves.fold(0, (s, m) => s + m.white);
+    final totalB = response.moves.fold(0, (s, m) => s + m.black);
+    final totalD = response.moves.fold(0, (s, m) => s + m.draws);
+    node.setLichessStats(totalW, totalB, totalD);
+
+    int childrenAdded = 0;
+    double massCovered = 0.0;
+    final massTarget = config.oppMassTarget;
+
+    for (final move in response.moves) {
+      if (move.total < config.minGames) continue;
+      if (config.oppMaxChildren > 0 &&
+          childrenAdded >= config.oppMaxChildren) {
+        break;
+      }
+      if (massTarget > 0.0 && massCovered >= massTarget) break;
+
+      final prob = move.playFraction;
+      final newCumul = node.cumulativeProbability * prob;
+      if (newCumul < config.minProbability) continue;
+
+      final childFen = playUciMove(node.fen, move.uci);
+      if (childFen == null) continue;
+
+      final child = _makeChild(
+        parent: node, fen: childFen, san: move.san,
+        uci: move.uci, tree: tree,
+      );
+      if (child == null) continue;
+
+      child.moveProbability = prob;
+      child.cumulativeProbability = newCumul;
+      child.setLichessStats(move.white, move.black, move.draws);
+      childrenAdded++;
+      massCovered += prob;
+
+      _emitProgress(tree, child.depth, child.fen, onProgress);
+    }
+  }
+
+  Future<void> _addOpponentChildrenFromMaia({
+    required BuildTree tree,
+    required BuildTreeNode node,
+    required TreeBuildConfig config,
+    required void Function(BuildProgress) onProgress,
+  }) async {
+    if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) return;
+
+    final sw = Stopwatch()..start();
+    final MaiaResult maiaResult;
+    try {
+      maiaResult = await MaiaFactory.instance!.evaluate(
+        node.fen, config.maiaElo,
+      );
+    } catch (e) {
+      _log('Maia eval failed: $e');
+      return;
+    }
+    _stats.maiaEvals++;
+    _stats.maiaTotalMs += sw.elapsedMilliseconds;
+    if (maiaResult.policy.isEmpty) return;
+
+    final sortedMoves = maiaResult.policy.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    int childrenAdded = 0;
+    double massCovered = 0.0;
+    final massTarget = config.oppMassTarget;
+
+    for (final entry in sortedMoves) {
+      final uci = entry.key;
+      final prob = entry.value;
+      if (prob < config.maiaMinProb) continue;
+      if (config.oppMaxChildren > 0 &&
+          childrenAdded >= config.oppMaxChildren) {
+        break;
+      }
+      if (massTarget > 0.0 && massCovered >= massTarget) break;
+
+      final newCumul = node.cumulativeProbability * prob;
+      if (newCumul < config.minProbability) continue;
+
+      final childFen = playUciMove(node.fen, uci);
+      if (childFen == null) continue;
+
+      final san = uciToSan(node.fen, uci);
+      final child = _makeChild(
+        parent: node, fen: childFen, san: san, uci: uci, tree: tree,
+      );
+      if (child == null) continue;
+
+      child.moveProbability = prob;
+      child.cumulativeProbability = newCumul;
+      childrenAdded++;
+      massCovered += prob;
+
+      _emitProgress(tree, child.depth, child.fen, onProgress);
+    }
+  }
+
   // ── Ensure eval (returns full result for bestmove reuse) ───────────────
 
   Future<void> _ensureEval(
       BuildTreeNode node, TreeBuildConfig config) async {
     if (node.hasEngineEval) return;
 
-    // Check cache
-    final cached = _getCachedEvalWhite(node.fen);
+    final cached = await _getCachedEvalWhite(node.fen, config.evalDepth);
     if (cached != null) {
       final isWhiteStm = node.fen.split(' ')[1] == 'w';
       node.engineEvalCp = isWhiteStm ? cached : -cached;
@@ -519,7 +553,8 @@ class TreeBuildService {
     node.engineEvalCp = result.effectiveCp;
     final isWhiteStm = node.fen.split(' ')[1] == 'w';
     _cacheEvalWhite(node.fen,
-        isWhiteStm ? result.effectiveCp : -result.effectiveCp);
+        isWhiteStm ? result.effectiveCp : -result.effectiveCp,
+        config.evalDepth);
   }
 
   // ── Prune eval-too-low (post-build cleanup) ────────────────────────────
@@ -577,20 +612,6 @@ class TreeBuildService {
     return child;
   }
 
-  void _normalizeChildProbabilities(BuildTreeNode node) {
-    if (node.children.isEmpty) return;
-    double probSum = 0.0;
-    for (final child in node.children) {
-      probSum += child.moveProbability;
-    }
-    if (probSum <= 0.0 || (probSum - 1.0).abs() < 1e-9) return;
-    for (final child in node.children) {
-      child.moveProbability /= probSum;
-      child.cumulativeProbability =
-          node.cumulativeProbability * child.moveProbability;
-    }
-  }
-
   Future<ExplorerResponse?> _getDbData(String fen) async {
     if (_dbCache.containsKey(fen)) {
       _stats.dbExplorerHits++;
@@ -603,11 +624,15 @@ class TreeBuildService {
     return data;
   }
 
-  void _cacheEvalWhite(String fen, int whiteCp) {
-    _evalCache[fen] = whiteCp;
+  /// Persist an eval (white-normalized cp).  Fire-and-forget — the L1
+  /// mirror inside [EvalCache] is updated synchronously, so subsequent
+  /// reads hit immediately without awaiting the DB write.
+  void _cacheEvalWhite(String fen, int whiteCp, int depth) {
+    unawaited(_evalCache.putEvalCpWhite(fen, whiteCp, depth));
   }
 
-  int? _getCachedEvalWhite(String fen) => _evalCache[fen];
+  Future<int?> _getCachedEvalWhite(String fen, int minDepth) =>
+      _evalCache.getEvalCpWhite(fen, minDepth: minDepth);
 
   void _emitProgress(
     BuildTree tree, int depth, String? fen,

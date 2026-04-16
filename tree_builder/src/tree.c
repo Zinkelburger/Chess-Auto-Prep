@@ -46,6 +46,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <time.h>
+#include <stdarg.h>
 
 
 /* ========== Instrumentation helpers ========== */
@@ -59,6 +60,35 @@ static double elapsed_ms(const struct timespec *start) {
 
 #define STATS_INC(cfg, field)  do { if ((cfg)->stats) (cfg)->stats->field++; } while(0)
 #define STATS_ADD(cfg, field, v) do { if ((cfg)->stats) (cfg)->stats->field += (v); } while(0)
+
+
+/* ========== Event log ========== */
+
+static double event_T(const TreeConfig *cfg) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (now.tv_sec - cfg->event_log_epoch.tv_sec) * 1000.0
+         + (now.tv_nsec - cfg->event_log_epoch.tv_nsec) / 1e6;
+}
+
+/**
+ * Write one TSV line to the event log.
+ *   T_ms  event  depth  node_type  detail...
+ * node_type: "our", "opp", or "-" when unknown/irrelevant.
+ */
+__attribute__((format(printf, 5, 6)))
+static void emit_event(const TreeConfig *cfg, const char *event,
+                        int depth, const char *node_type,
+                        const char *fmt, ...) {
+    if (!cfg->event_log) return;
+    fprintf(cfg->event_log, "%.1f\t%s\t%d\t%s\t", event_T(cfg),
+            event, depth, node_type);
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(cfg->event_log, fmt, ap);
+    va_end(ap);
+    fputc('\n', cfg->event_log);
+}
 
 
 /* ========== FEN Map (transposition table — FEN → canonical TreeNode*) ========== */
@@ -194,6 +224,8 @@ TreeConfig tree_config_default(void) {
                                              novelty scoring isn't used */
         .progress_callback = NULL,
         .stats = NULL,
+        .event_log = NULL,
+        .event_log_epoch = {0, 0},
     };
     return config;
 }
@@ -280,6 +312,8 @@ static void ensure_eval(TreeNode *node, const TreeConfig *config) {
         int cp, depth;
         if (rdb_get_eval(config->db, node->fen, &cp, &depth)) {
             STATS_INC(config, db_eval_hits);
+            emit_event(config, "eval", node->depth, "-",
+                       "src=db cp=%d depth=%d", cp, depth);
             node_set_eval(node, cp);
             return;
         }
@@ -300,8 +334,14 @@ static void ensure_eval(TreeNode *node, const TreeConfig *config) {
                 rdb_put_eval(config->db, node->fen, job.eval_cp, job.depth_reached);
         }
 
+        double ms = elapsed_ms(&t0);
+        node->sf_ms += ms;
         STATS_INC(config, sf_single_calls);
-        STATS_ADD(config, sf_single_ms, elapsed_ms(&t0));
+        STATS_ADD(config, sf_single_ms, ms);
+        emit_event(config, "eval", node->depth, "-",
+                   "src=sf ms=%.1f cp=%d depth=%d",
+                   ms, job.success ? job.eval_cp : 0,
+                   job.success ? job.depth_reached : 0);
     }
 }
 
@@ -319,7 +359,9 @@ static void ensure_eval(TreeNode *node, const TreeConfig *config) {
 static bool query_lichess_cached(RepertoireDB *db, LichessExplorer *explorer,
                                   const char *fen, bool use_masters,
                                   ExplorerResponse *response,
-                                  const TreeConfig *config) {
+                                  const TreeConfig *config,
+                                  double *out_ms) {
+    if (out_ms) *out_ms = 0.0;
     memset(response, 0, sizeof(*response));
 
     if (db) {
@@ -327,6 +369,8 @@ static bool query_lichess_cached(RepertoireDB *db, LichessExplorer *explorer,
         if (rdb_get_explorer_cache(db, fen, &cached) && cached.found) {
             STATS_INC(config, db_explorer_hits);
             STATS_INC(config, lichess_cache_hits);
+            emit_event(config, "lichess", -1, "-",
+                       "src=db moves=%zu", cached.move_count);
 
             response->success = true;
             response->move_count = cached.move_count;
@@ -365,8 +409,14 @@ static bool query_lichess_cached(RepertoireDB *db, LichessExplorer *explorer,
         ? lichess_explorer_query_masters(explorer, fen, response)
         : lichess_explorer_query(explorer, fen, response);
 
+    double lich_ms = elapsed_ms(&t0);
+    if (out_ms) *out_ms = lich_ms;
     STATS_INC(config, lichess_queries);
-    STATS_ADD(config, lichess_total_ms, elapsed_ms(&t0));
+    STATS_ADD(config, lichess_total_ms, lich_ms);
+    emit_event(config, "lichess", -1, "-",
+               "src=api ms=%.1f ok=%d moves=%zu",
+               lich_ms, ok && response->success ? 1 : 0,
+               ok ? response->move_count : (size_t)0);
 
     if (ok && response->success && db) {
         CachedExplorerMove cmoves[MAX_EXPLORER_MOVES];
@@ -401,8 +451,9 @@ static bool query_lichess_cached(RepertoireDB *db, LichessExplorer *explorer,
  * recover it on a hit would defeat the point of caching.
  */
 static bool query_maia_cached(const TreeConfig *config, const char *fen,
-                              MaiaResponse *response) {
+                              MaiaResponse *response, double *out_ms) {
     memset(response, 0, sizeof(*response));
+    if (out_ms) *out_ms = 0.0;
     if (!config->maia) return false;
 
     /* Cache hit → build the response directly from DB rows. */
@@ -412,6 +463,8 @@ static bool query_maia_cached(const TreeConfig *config, const char *fen,
         if (rdb_get_maia(config->db, fen, config->maia_elo,
                          cmoves, MAIA_MAX_MOVES, &count) && count > 0) {
             int n = count < MAIA_MAX_MOVES ? count : MAIA_MAX_MOVES;
+            emit_event(config, "maia", -1, "-",
+                       "src=db moves=%d", n);
             response->success = true;
             response->move_count = n;
             response->win_prob = 0.0;  /* not cached; unused in build */
@@ -433,8 +486,14 @@ static bool query_maia_cached(const TreeConfig *config, const char *fen,
 
     bool ok = maia_evaluate(config->maia, fen, config->maia_elo, response);
 
+    double maia_ms_val = elapsed_ms(&t0);
+    if (out_ms) *out_ms = maia_ms_val;
     STATS_INC(config, maia_evals);
-    STATS_ADD(config, maia_total_ms, elapsed_ms(&t0));
+    STATS_ADD(config, maia_total_ms, maia_ms_val);
+    emit_event(config, "maia", -1, "-",
+               "src=onnx ms=%.1f ok=%d moves=%d",
+               maia_ms_val, ok && response->success ? 1 : 0,
+               ok ? response->move_count : 0);
 
     if (ok && response->success && response->move_count > 0 && config->db) {
         CachedMaiaMove cmoves[MAIA_MAX_MOVES];
@@ -481,6 +540,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
                         mpv_count, &mpv)) {
         mpv_from_cache = true;
         STATS_INC(config, db_multipv_hits);
+        emit_event(config, "mpv", node->depth, "our",
+                   "src=db lines=%d", mpv.num_lines);
     } else {
         STATS_INC(config, db_multipv_misses);
         struct timespec t0;
@@ -488,8 +549,13 @@ static void build_our_move(Tree *tree, TreeNode *node,
         bool ok = engine_pool_evaluate_multipv(config->engine_pool, node->fen,
                                                config->eval_depth,
                                                mpv_count, &mpv);
+        double mpv_ms = elapsed_ms(&t0);
+        node->sf_ms += mpv_ms;
         STATS_INC(config, sf_multipv_calls);
-        STATS_ADD(config, sf_multipv_ms, elapsed_ms(&t0));
+        STATS_ADD(config, sf_multipv_ms, mpv_ms);
+        emit_event(config, "mpv", node->depth, "our",
+                   "src=sf ms=%.1f ok=%d lines=%d",
+                   mpv_ms, ok ? 1 : 0, ok ? mpv.num_lines : 0);
         if (!ok) return;
 
         if (mpv.success && mpv.num_lines > 0 && config->db)
@@ -515,11 +581,15 @@ static void build_our_move(Tree *tree, TreeNode *node,
         if (eval_us > config->max_eval_cp) {
             node->prune_reason = PRUNE_EVAL_TOO_HIGH;
             node->prune_eval_cp = eval_us;
+            emit_event(config, "prune", node->depth, "our",
+                       "reason=eval_high cp=%d", eval_us);
             return;
         }
         if (eval_us < config->min_eval_cp) {
             node->prune_reason = PRUNE_EVAL_TOO_LOW;
             node->prune_eval_cp = eval_us;
+            emit_event(config, "prune", node->depth, "our",
+                       "reason=eval_low cp=%d", eval_us);
             return;
         }
     }
@@ -528,8 +598,11 @@ static void build_our_move(Tree *tree, TreeNode *node,
     ExplorerResponse lichess;
     bool has_lichess = false;
     if (!config->maia_only) {
+        double lich_t = 0;
         has_lichess = query_lichess_cached(config->db, explorer, node->fen,
-                                           config->use_masters, &lichess, config);
+                                           config->use_masters, &lichess, config,
+                                           &lich_t);
+        node->lichess_ms += lich_t;
     }
 
     if (has_lichess && lichess.success) {
@@ -617,7 +690,9 @@ static void build_our_move(Tree *tree, TreeNode *node,
      * DB-cached wrapper so this inference is reused on resume. */
     if (config->maia && config->populate_maia_frequency && added > 0) {
         MaiaResponse maia_freq_resp;
-        if (query_maia_cached(config, node->fen, &maia_freq_resp)) {
+        double maia_t = 0;
+        if (query_maia_cached(config, node->fen, &maia_freq_resp, &maia_t)) {
+            node->maia_ms += maia_t;
             for (size_t i = 0; i < node->children_count; i++) {
                 TreeNode *child = node->children[i];
                 for (int j = 0; j < maia_freq_resp.move_count; j++) {
@@ -669,7 +744,9 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
         if (!config->maia) return;
 
         MaiaResponse maia_resp;
-        bool maia_ok = query_maia_cached(config, node->fen, &maia_resp);
+        double maia_t = 0;
+        bool maia_ok = query_maia_cached(config, node->fen, &maia_resp, &maia_t);
+        node->maia_ms += maia_t;
 
         if (!maia_ok || !maia_resp.success || maia_resp.move_count == 0)
             return;
@@ -711,9 +788,12 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
     } else {
         /* ---------- Pure Lichess path ---------- */
         ExplorerResponse response;
+        double lich_t = 0;
         if (!query_lichess_cached(config->db, explorer, node->fen,
-                                  config->use_masters, &response, config))
+                                  config->use_masters, &response, config,
+                                  &lich_t))
             return;
+        node->lichess_ms += lich_t;
         if (!response.success) return;
 
         {
@@ -812,15 +892,26 @@ static void build_recursive(Tree *tree, TreeNode *node,
                              const TreeConfig *config,
                              LichessExplorer *explorer) {
     if (!tree->is_building) return;
-    if (node->depth >= config->max_depth) return;
-    if (node->cumulative_probability < config->min_probability) return;
-    if (config->max_nodes > 0 && tree->total_nodes >= (size_t)config->max_nodes)
+    if (node->depth >= config->max_depth) {
+        emit_event(config, "skip", node->depth, "-", "reason=max_depth");
         return;
+    }
+    if (node->cumulative_probability < config->min_probability) {
+        emit_event(config, "skip", node->depth, "-",
+                   "reason=min_prob cum_prob=%.6f", node->cumulative_probability);
+        return;
+    }
+    if (config->max_nodes > 0 && tree->total_nodes >= (size_t)config->max_nodes) {
+        emit_event(config, "skip", node->depth, "-", "reason=max_nodes");
+        return;
+    }
 
     FenMap *fmap = (FenMap *)tree->expanded_fens;
 
     /* Resume: skip nodes that were already explored */
     if (node->children_count > 0) {
+        emit_event(config, "resume", node->depth, "-",
+                   "children=%zu", node->children_count);
         fen_map_put(fmap, node->fen, node);
         for (size_t i = 0; i < node->children_count; i++)
             build_recursive(tree, node->children[i], config, explorer);
@@ -829,12 +920,14 @@ static void build_recursive(Tree *tree, TreeNode *node,
     if (node->explored) return;
 
     bool is_our_move = (node->is_white_to_move == config->play_as_white);
+    const char *nt = is_our_move ? "our" : "opp";
 
-    /* Window-prune for opponent-move nodes happens here because
-     * `build_opponent_move` produces a policy, not an eval.  Our-move
-     * nodes run their own prune check inside `build_our_move` after
-     * MultiPV has given them an eval for free — see the file header
-     * comment for the rationale. */
+    node->build_t_ms = event_T(config);
+
+    emit_event(config, "node", node->depth, nt,
+               "total=%zu cum_prob=%.6f fen=%s",
+               tree->total_nodes, node->cumulative_probability, node->fen);
+
     if (!is_our_move) {
         ensure_eval(node, config);
         if (node->has_engine_eval) {
@@ -843,24 +936,24 @@ static void build_recursive(Tree *tree, TreeNode *node,
                 node->explored = true;
                 node->prune_reason = PRUNE_EVAL_TOO_HIGH;
                 node->prune_eval_cp = eval_us;
+                emit_event(config, "prune", node->depth, nt,
+                           "reason=eval_high cp=%d", eval_us);
                 return;
             }
             if (eval_us < config->min_eval_cp) {
                 node->explored = true;
                 node->prune_reason = PRUNE_EVAL_TOO_LOW;
                 node->prune_eval_cp = eval_us;
+                emit_event(config, "prune", node->depth, nt,
+                           "reason=eval_low cp=%d", eval_us);
                 return;
             }
         }
     }
 
-    /* Transposition detection: O(1) lookup via FenMap.  If this FEN
-       was already expanded elsewhere, link this node into the
-       equivalence ring and skip expansion. */
+    /* Transposition detection */
     TreeNode *canonical = fen_map_get(fmap, node->fen);
     if (canonical) {
-        /* Insert into the circular equivalence ring:
-           canonical → ... → node → canonical */
         if (canonical->next_equivalent) {
             node->next_equivalent = canonical->next_equivalent;
         } else {
@@ -868,6 +961,7 @@ static void build_recursive(Tree *tree, TreeNode *node,
         }
         canonical->next_equivalent = node;
         node->explored = true;
+        emit_event(config, "transposition", node->depth, nt, "fen=%s", node->fen);
         return;
     }
     fen_map_put(fmap, node->fen, node);
@@ -878,6 +972,9 @@ static void build_recursive(Tree *tree, TreeNode *node,
         build_our_move(tree, node, config, explorer);
     else
         build_opponent_move(tree, node, config, explorer);
+
+    emit_event(config, "expanded", node->depth, nt,
+               "children=%zu total=%zu", node->children_count, tree->total_nodes);
 }
 
 
@@ -911,6 +1008,20 @@ bool tree_build(Tree *tree, const char *start_fen,
         }
     }
 
+    /* Always set epoch so per-node build_t_ms works even without event log. */
+    if (tree->config.event_log_epoch.tv_sec == 0 &&
+        tree->config.event_log_epoch.tv_nsec == 0) {
+        clock_gettime(CLOCK_MONOTONIC, &tree->config.event_log_epoch);
+    }
+    if (tree->config.event_log) {
+        fprintf(tree->config.event_log,
+                "T_ms\tevent\tdepth\tnode_type\tdetail\n");
+        emit_event(&tree->config, "build_start", 0, "-",
+                   "nodes=%zu max_depth=%d min_prob=%.6f",
+                   tree->total_nodes, tree->config.max_depth,
+                   tree->config.min_probability);
+    }
+
     tree->expanded_fens = fen_map_create();
 
     build_recursive(tree, tree->root, &tree->config, explorer);
@@ -920,6 +1031,11 @@ bool tree_build(Tree *tree, const char *start_fen,
 
     tree->build_complete = tree->is_building;
     tree->is_building = false;
+
+    emit_event(&tree->config, "build_end", 0, "-",
+               "nodes=%zu max_depth=%d complete=%d",
+               tree->total_nodes, tree->max_depth_reached,
+               tree->build_complete ? 1 : 0);
 
     return true;
 }

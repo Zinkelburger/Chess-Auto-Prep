@@ -24,7 +24,7 @@ double scoreToQ(int cp) {
   return 2.0 * winProb - 1.0;
 }
 
-/// Win probability sigmoid used by ECA move selection.
+/// Win probability sigmoid used by expectimax value propagation.
 ///
 /// Maps centipawns to [0, 1] using the same constant as the C tree builder's
 /// `win_probability()` (0.00368208).  Mate scores saturate to 0.0 / 1.0.

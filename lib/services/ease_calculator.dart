@@ -5,7 +5,7 @@
 /// is unlikely to blunder — every popular reply is close to optimal.
 ///
 /// Used by both [AnalysisService] (per-move ease in the engine pane) and
-/// [RepertoireGenerationService] (propagated MetaEase during generation).
+/// the two-phase tree builder (ease propagation during generation).
 library;
 
 import 'dart:math' as math;

@@ -7,11 +7,11 @@ import 'package:flutter/material.dart';
 import '../models/build_tree_node.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
+import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
 import '../services/generation/repertoire_selector.dart';
 import '../services/generation/tree_ease.dart';
 import '../services/generation/tree_serialization.dart';
-import '../services/repertoire_generation_service.dart';
 import '../services/tree_build_service.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
@@ -40,9 +40,6 @@ class RepertoireGenerationTab extends StatefulWidget {
 }
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
-  // Legacy service kept for winRateOnly strategy
-  final RepertoireGenerationService _legacyService =
-      RepertoireGenerationService();
   final TreeBuildService _buildService = TreeBuildService();
 
   static const int _pgnFlushEveryLines = 10;
@@ -51,36 +48,35 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   final TextEditingController _cutoffCtrl =
       TextEditingController(text: '0.01');
-  final TextEditingController _depthCtrl = TextEditingController(text: '30');
+  final TextEditingController _depthCtrl = TextEditingController(text: '20');
   final TextEditingController _engineDepthCtrl =
       TextEditingController(text: '20');
   final TextEditingController _evalGuardCtrl =
       TextEditingController(text: '50');
   late final TextEditingController _minEvalCtrl;
   late final TextEditingController _maxEvalCtrl;
-  final TextEditingController _trickWeightCtrl =
-      TextEditingController(text: '50');
   final TextEditingController _maiaEloCtrl =
       TextEditingController(text: '2200');
 
   // Advanced
-  final TextEditingController _multipvRootCtrl =
-      TextEditingController(text: '10');
-  final TextEditingController _multipvFloorCtrl =
-      TextEditingController(text: '2');
-  final TextEditingController _taperDepthCtrl =
-      TextEditingController(text: '8');
+  final TextEditingController _multipvCtrl =
+      TextEditingController(text: '5');
   final TextEditingController _oppMaxChildrenCtrl =
       TextEditingController(text: '6');
-  final TextEditingController _oppMassRootCtrl =
+  final TextEditingController _oppMassTargetCtrl =
       TextEditingController(text: '0.95');
-  final TextEditingController _oppMassFloorCtrl =
-      TextEditingController(text: '0.50');
+  final TextEditingController _noveltyWeightCtrl =
+      TextEditingController(text: '0');
+  final TextEditingController _leafConfidenceCtrl =
+      TextEditingController(text: '1.0');
 
   bool _useLichessDb = false;
+  bool _useMasters = false;
+  bool _maiaOnly = true;
   bool _relativeEval = false;
+  BuildPreset _preset = BuildPreset.none;
+  bool _applyingPreset = false;
 
-  _GenerationMode _mode = _GenerationMode.treeBuild;
   bool _showAdvanced = false;
   bool _isGenerating = false;
   bool _cancelRequested = false;
@@ -106,6 +102,16 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _maxEvalCtrl = TextEditingController(
       text: widget.isWhiteRepertoire ? '200' : '100',
     );
+    _evalGuardCtrl.addListener(_onPresetFieldEdited);
+    _minEvalCtrl.addListener(_onPresetFieldEdited);
+    _noveltyWeightCtrl.addListener(_onPresetFieldEdited);
+  }
+
+  void _onPresetFieldEdited() {
+    if (_applyingPreset) return;
+    if (_preset != BuildPreset.none && mounted) {
+      setState(() => _preset = BuildPreset.none);
+    }
   }
 
   @override
@@ -116,23 +122,19 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _evalGuardCtrl.dispose();
     _minEvalCtrl.dispose();
     _maxEvalCtrl.dispose();
-    _trickWeightCtrl.dispose();
     _maiaEloCtrl.dispose();
-    _multipvRootCtrl.dispose();
-    _multipvFloorCtrl.dispose();
-    _taperDepthCtrl.dispose();
+    _multipvCtrl.dispose();
     _oppMaxChildrenCtrl.dispose();
-    _oppMassRootCtrl.dispose();
-    _oppMassFloorCtrl.dispose();
+    _oppMassTargetCtrl.dispose();
+    _noveltyWeightCtrl.dispose();
+    _leafConfidenceCtrl.dispose();
     super.dispose();
   }
 
   void cancelGeneration({String? reason}) {
     if (!_isGenerating) return;
     _cancelRequested = true;
-    if (_mode == _GenerationMode.treeBuild) {
-      _buildService.stopBuild();
-    }
+    _buildService.stopBuild();
     if (mounted && reason != null && reason.isNotEmpty) {
       setState(() => _status = reason);
     }
@@ -162,16 +164,17 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           (widget.isWhiteRepertoire ? 0 : -200),
       maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ??
           (widget.isWhiteRepertoire ? 200 : 100),
-      trickWeight: int.tryParse(_trickWeightCtrl.text.trim()) ?? 50,
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
-      ourMultipvRoot: int.tryParse(_multipvRootCtrl.text.trim()) ?? 10,
-      ourMultipvFloor: int.tryParse(_multipvFloorCtrl.text.trim()) ?? 2,
-      taperDepth: int.tryParse(_taperDepthCtrl.text.trim()) ?? 8,
+      maiaOnly: _maiaOnly,
+      ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 5,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 6,
-      oppMassRoot: double.tryParse(_oppMassRootCtrl.text.trim()) ?? 0.95,
-      oppMassFloor: double.tryParse(_oppMassFloorCtrl.text.trim()) ?? 0.50,
+      oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.85,
       useLichessDb: _useLichessDb,
+      useMasters: _useMasters,
       relativeEval: _relativeEval,
+      noveltyWeight: int.tryParse(_noveltyWeightCtrl.text.trim()) ?? 0,
+      leafConfidence:
+          double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
     );
 
     setState(() {
@@ -232,16 +235,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       final ecaCalc = ExpectimaxCalculator(config: config, fenMap: fenMap);
       final ecaCount = ecaCalc.calculate(tree);
 
+      // Phase 2b.2: Trap scores
+      ecaCalc.computeTrapScores(tree.root);
+
       // Phase 2c: Select repertoire moves
       if (mounted) {
         setState(() => _status = 'Phase 2: Selecting repertoire...');
       }
-      final selector = RepertoireSelector(config: config, ecaCalc: ecaCalc);
+      final selector = RepertoireSelector(
+        config: config, ecaCalc: ecaCalc, fenMap: fenMap,
+      );
       final selectedCount = selector.select(tree);
 
       // Phase 3: Extract lines
       if (mounted) setState(() => _status = 'Phase 3: Extracting lines...');
-      final extractor = LineExtractor(config: config);
+      final extractor = LineExtractor(config: config, fenMap: fenMap);
       final extractedLines = extractor.extract(tree);
       _lines = extractedLines.length;
 
@@ -273,8 +281,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       // Save tree JSON alongside PGN
       try {
         final treeJson = serializeTree(tree);
-        final treePath = '${filePath.replaceAll('.pgn', '')}_tree.json';
-        await File(treePath).writeAsString(treeJson);
+        final base = filePath.toLowerCase().endsWith('.pgn')
+            ? filePath.substring(0, filePath.length - 4)
+            : filePath;
+        await File('${base}_tree.json').writeAsString(treeJson);
       } catch (_) {
         // Tree JSON save is best-effort
       }
@@ -284,7 +294,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           _status = 'Complete: ${tree.totalNodes} nodes, '
               '$selectedCount repertoire moves, '
               '$_lines lines. '
-              '(ease=$easeCount, eca=$ecaCount)';
+              '(ease=$easeCount, expectimax=$ecaCount)';
         });
       }
     } catch (e) {
@@ -298,120 +308,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     } finally {
       if (mounted) setState(() => _isGenerating = false);
       widget.onGeneratingChanged(false);
-    }
-  }
-
-  // ── Legacy winRateOnly generation ─────────────────────────────────────
-
-  Future<void> _startLegacyGeneration() async {
-    if (_isGenerating) return;
-    final filePath = widget.currentRepertoire?['filePath'] as String?;
-    if (filePath == null || filePath.isEmpty) {
-      setState(() => _status = 'Select a repertoire first.');
-      return;
-    }
-
-    final config = RepertoireGenerationConfig(
-      startFen: widget.fen,
-      isWhiteRepertoire: widget.isWhiteRepertoire,
-      cumulativeProbabilityCutoff: _parsePercentToFraction(
-        _cutoffCtrl.text,
-        fallbackPercent: 0.01,
-      ),
-      maxDepthPly: int.tryParse(_depthCtrl.text.trim()) ?? 30,
-      opponentMassTarget: double.tryParse(_oppMassRootCtrl.text.trim()) ?? 0.80,
-      engineDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
-      maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 50,
-      minEvalCpForUs: int.tryParse(_minEvalCtrl.text.trim()) ??
-          (widget.isWhiteRepertoire ? 0 : -200),
-      maxEvalCpForUs: int.tryParse(_maxEvalCtrl.text.trim()) ??
-          (widget.isWhiteRepertoire ? 200 : 100),
-      maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
-    );
-
-    setState(() {
-      _isGenerating = true;
-      _cancelRequested = false;
-      _status = 'Starting DB-only generation...';
-      _nodes = 0;
-      _lines = 0;
-      _depth = 0;
-      _engineCalls = 0;
-      _engineCacheHits = 0;
-      _elapsedMs = 0;
-    });
-    _pendingPgnBuffer.clear();
-    _pendingPgnLines = 0;
-    widget.onGeneratingChanged(true);
-
-    try {
-      await _legacyService.generate(
-        config: config,
-        strategy: GenerationStrategy.winRateOnly,
-        isCancelled: () => _cancelRequested,
-        onProgress: (p) {
-          if (!mounted) return;
-          _nodes = p.nodesVisited;
-          _lines = p.linesGenerated;
-          _depth = p.currentDepth;
-          _engineCalls = p.dbCalls;
-          _engineCacheHits = p.dbCacheHits;
-          _elapsedMs = p.elapsedMs;
-          _status = p.message;
-
-          final now = DateTime.now();
-          if (now.difference(_lastProgressUpdate).inMilliseconds < 150) return;
-          _lastProgressUpdate = now;
-          setState(() {});
-        },
-        onLine: (line) async {
-          final idx = _lines + 1;
-          final title = 'Generated Line $idx';
-          final fullMoves = [...widget.currentMoveSequence, ...line.movesSan];
-          final pgn = _buildPgnEntry(
-            moves: fullMoves,
-            title: title,
-            cumulativeProb: line.cumulativeProbability,
-            finalEvalCp: line.finalEvalWhiteCp,
-          );
-          _queuePgnEntry(pgn);
-          if (_pendingPgnLines >= _pgnFlushEveryLines) {
-            await _flushPendingPgnWrites(filePath);
-          }
-          widget.onLineSaved(fullMoves, title, pgn);
-          if (!mounted) return;
-          setState(() => _status = 'Saved line $idx');
-        },
-      );
-
-      await _flushPendingPgnWrites(filePath);
-
-      if (!mounted) return;
-      setState(() {
-        _status = _cancelRequested
-            ? 'Generation cancelled. Saved $_lines lines.'
-            : 'Generation complete. Saved $_lines lines.';
-      });
-    } catch (e) {
-      final fp = widget.currentRepertoire?['filePath'] as String?;
-      if (fp != null && fp.isNotEmpty) {
-        await _flushPendingPgnWrites(fp);
-      }
-      if (!mounted) return;
-      setState(() => _status = 'Generation failed: $e');
-    } finally {
-      if (mounted) setState(() => _isGenerating = false);
-      widget.onGeneratingChanged(false);
-    }
-  }
-
-  // ── Dispatch ──────────────────────────────────────────────────────────
-
-  Future<void> _startGeneration() async {
-    if (_mode == _GenerationMode.winRateOnly) {
-      await _startLegacyGeneration();
-    } else {
-      await _startTreeBuild();
     }
   }
 
@@ -446,7 +342,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final date = DateTime.now().toIso8601String().split('T').first;
     final whiteName = widget.isWhiteRepertoire ? 'Repertoire' : 'Opponent';
     final blackName = widget.isWhiteRepertoire ? 'Opponent' : 'Repertoire';
-    final line = _movesToPgnMoveText(moves);
+
+    final rootFen = _rootFen();
+    final rootWhiteToMove = _rootWhiteToMove(rootFen);
+    final line = _movesToPgnMoveText(moves, rootWhiteToMove: rootWhiteToMove);
 
     final annotation = StringBuffer()
       ..write('{CumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%'
@@ -457,24 +356,53 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     }
     annotation.write('}');
 
-    return [
+    const standardStartpos =
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    final needsFenHeader = rootFen.isNotEmpty && rootFen != standardStartpos;
+
+    final tags = [
       '[Event "$title"]',
       '[Date "$date"]',
       '[White "$whiteName"]',
       '[Black "$blackName"]',
       '[Result "*"]',
       '[Annotator "AutoGenerate"]',
+      if (needsFenHeader) '[FEN "$rootFen"]',
+      if (needsFenHeader) '[SetUp "1"]',
+    ];
+
+    return [
+      ...tags,
       '',
       '$annotation',
       '$line *',
     ].join('\n');
   }
 
-  String _movesToPgnMoveText(List<String> moves) {
+  String _rootFen() {
+    // The `[...currentMoveSequence, ...line.movesSan]` path is relative to
+    // the app's standard startpos when currentMoveSequence is non-empty,
+    // but to widget.fen otherwise (custom start with no prior moves).
+    return widget.currentMoveSequence.isEmpty ? widget.fen : '';
+  }
+
+  bool _rootWhiteToMove(String rootFen) {
+    if (rootFen.isEmpty) return true; // standard startpos
+    final parts = rootFen.split(' ');
+    return parts.length < 2 || parts[1] == 'w';
+  }
+
+  String _movesToPgnMoveText(List<String> moves,
+      {bool rootWhiteToMove = true}) {
     if (moves.isEmpty) return '';
     final sb = StringBuffer();
     for (int i = 0; i < moves.length; i++) {
-      if (i.isEven) sb.write('${(i ~/ 2) + 1}. ');
+      final ply = i + (rootWhiteToMove ? 0 : 1);
+      if (ply.isEven) {
+        sb.write('${(ply ~/ 2) + 1}. ');
+      } else if (i == 0 && !rootWhiteToMove) {
+        sb.write('${(ply ~/ 2) + 1}... ');
+      }
       sb.write(moves[i]);
       sb.write(' ');
     }
@@ -545,6 +473,51 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           ),
           const SizedBox(height: 8),
 
+          // Preset selector
+          DropdownButtonFormField<BuildPreset>(
+            value: _preset,
+            decoration: const InputDecoration(
+              labelText: 'Preset',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: BuildPreset.none,
+                child: Text('None (manual config)'),
+              ),
+              DropdownMenuItem(
+                value: BuildPreset.solid,
+                child: Text('Solid — tight eval, strict quality'),
+              ),
+              DropdownMenuItem(
+                value: BuildPreset.practical,
+                child: Text('Practical — balanced tolerance'),
+              ),
+              DropdownMenuItem(
+                value: BuildPreset.tricky,
+                child: Text('Tricky — wider tolerance, speculative'),
+              ),
+              DropdownMenuItem(
+                value: BuildPreset.traps,
+                child: Text('Traps — widest tolerance, trap hunting'),
+              ),
+              DropdownMenuItem(
+                value: BuildPreset.fresh,
+                child: Text('Fresh — sound but unusual moves'),
+              ),
+            ],
+            onChanged: _isGenerating
+                ? null
+                : (v) {
+                    if (v != null) setState(() {
+                      _preset = v;
+                      _applyPresetToControllers(v);
+                    });
+                  },
+          ),
+          const SizedBox(height: 8),
+
           // Main config fields
           Wrap(
             spacing: 8,
@@ -556,11 +529,45 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               _numField(_evalGuardCtrl, 'Max Eval Loss (cp)'),
               _numField(_minEvalCtrl, 'Min Eval For Us (cp)'),
               _numField(_maxEvalCtrl, 'Max Eval For Us (cp)'),
-              _numField(_trickWeightCtrl, 'Trick Weight (0-100)'),
               _numField(_maiaEloCtrl, 'Maia Elo'),
             ],
           ),
           const SizedBox(height: 8),
+
+          // Opponent source: strict either/or (radio behavior)
+          Row(
+            children: [
+              const Text('Opponent moves: ',
+                  style: TextStyle(fontSize: 13)),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('Maia'),
+                selected: _maiaOnly,
+                onSelected: _isGenerating
+                    ? null
+                    : (_) {
+                        setState(() {
+                          _maiaOnly = true;
+                          _useLichessDb = false;
+                        });
+                      },
+              ),
+              const SizedBox(width: 6),
+              ChoiceChip(
+                label: const Text('Lichess'),
+                selected: _useLichessDb,
+                onSelected: _isGenerating
+                    ? null
+                    : (_) {
+                        setState(() {
+                          _useLichessDb = true;
+                          _maiaOnly = false;
+                        });
+                      },
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
 
           // Advanced section
           InkWell(
@@ -584,64 +591,43 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _numField(_multipvRootCtrl, 'MultiPV Root'),
-                _numField(_multipvFloorCtrl, 'MultiPV Floor'),
-                _numField(_taperDepthCtrl, 'Taper Depth'),
-                _numField(_oppMaxChildrenCtrl, 'Opp Max Children'),
-                _numField(_oppMassRootCtrl, 'Opp Mass Root'),
-                _numField(_oppMassFloorCtrl, 'Opp Mass Floor'),
+                _numField(_multipvCtrl, 'MultiPV',
+                    tooltip: 'Candidate moves evaluated per our-move node'),
+                _numField(_oppMaxChildrenCtrl, 'Opp Max Children',
+                    tooltip: 'Maximum opponent replies explored per position'),
+                _numField(_oppMassTargetCtrl, 'Opp Mass Target',
+                    tooltip:
+                        'Stop adding opponent moves after this probability mass is covered'),
+                _numField(_noveltyWeightCtrl, 'Novelty Weight (0-100)',
+                    tooltip:
+                        'Boost for less-played moves; higher prefers unusual lines'),
+                _numField(_leafConfidenceCtrl, 'Leaf Confidence (0-1)',
+                    tooltip:
+                        'Trust in engine eval at leaves; lower blends toward 0.5'),
               ],
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                _toggleSwitch('Lichess DB', _useLichessDb, (v) {
-                  setState(() => _useLichessDb = v);
-                }),
-                const SizedBox(width: 16),
                 _toggleSwitch('Relative Eval', _relativeEval, (v) {
                   setState(() => _relativeEval = v);
+                }),
+                const SizedBox(width: 12),
+                _toggleSwitch('Masters DB', _useMasters, (v) {
+                  setState(() => _useMasters = v);
                 }),
               ],
             ),
           ],
           const SizedBox(height: 8),
 
-          // Mode selector
-          DropdownButtonFormField<_GenerationMode>(
-            value: _mode,
-            decoration: const InputDecoration(
-              labelText: 'Generation Mode',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: _GenerationMode.treeBuild,
-                child: Text('Two-phase tree build (ECA)'),
-              ),
-              DropdownMenuItem(
-                value: _GenerationMode.winRateOnly,
-                child: Text('Win rate only (DB-only, no engine)'),
-              ),
-            ],
-            onChanged: _isGenerating
-                ? null
-                : (v) {
-                    if (v != null) setState(() => _mode = v);
-                  },
-          ),
-          const SizedBox(height: 8),
-
           // Action buttons
           Row(
             children: [
               FilledButton.icon(
-                onPressed: _isGenerating ? null : _startGeneration,
+                onPressed: _isGenerating ? null : _startTreeBuild,
                 icon: const Icon(Icons.play_arrow),
-                label: Text(_mode == _GenerationMode.treeBuild
-                    ? 'Build Repertoire Tree'
-                    : 'Start DB-Only Generation'),
+                label: const Text('Build Repertoire Tree'),
               ),
               const SizedBox(width: 8),
               OutlinedButton.icon(
@@ -658,20 +644,20 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           const SizedBox(height: 8),
           Text(_status, style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 8),
-          Text(
-            _mode == _GenerationMode.winRateOnly
-                ? 'DB-only: picks highest win-rate move per node. No engine analysis.'
-                : 'Two-phase: builds full tree with MultiPV tapering + Maia,'
-                    ' then computes ECA and selects repertoire lines.',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          const Text(
+            'Two-phase: builds full tree with constant-depth MultiPV +'
+            ' single-source opponent moves, then computes expectimax'
+            ' and selects repertoire lines.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ],
       ),
     );
   }
 
-  Widget _numField(TextEditingController controller, String label) {
-    return SizedBox(
+  Widget _numField(TextEditingController controller, String label,
+      {String? tooltip}) {
+    final field = SizedBox(
       width: 170,
       child: TextField(
         controller: controller,
@@ -684,6 +670,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         ),
       ),
     );
+    if (tooltip == null) return field;
+    return Tooltip(message: tooltip, child: field);
   }
 
   Widget _toggleSwitch(String label, bool value, ValueChanged<bool> onChanged) {
@@ -700,6 +688,37 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     );
   }
 
+  void _applyPresetToControllers(BuildPreset preset) {
+    if (preset == BuildPreset.none) return;
+    _applyingPreset = true;
+    final isWhite = widget.isWhiteRepertoire;
+    switch (preset) {
+      case BuildPreset.solid:
+        _minEvalCtrl.text = isWhite ? '0' : '-100';
+        _evalGuardCtrl.text = '30';
+        _noveltyWeightCtrl.text = '0';
+      case BuildPreset.practical:
+        _minEvalCtrl.text = isWhite ? '-25' : '-200';
+        _evalGuardCtrl.text = '50';
+        _noveltyWeightCtrl.text = '0';
+      case BuildPreset.tricky:
+        _minEvalCtrl.text = isWhite ? '-50' : '-250';
+        _evalGuardCtrl.text = '75';
+        _noveltyWeightCtrl.text = '0';
+      case BuildPreset.traps:
+        _minEvalCtrl.text = isWhite ? '-100' : '-300';
+        _evalGuardCtrl.text = '100';
+        _noveltyWeightCtrl.text = '0';
+      case BuildPreset.fresh:
+        _minEvalCtrl.text = isWhite ? '-25' : '-200';
+        _evalGuardCtrl.text = '40';
+        _noveltyWeightCtrl.text = '60';
+      case BuildPreset.none:
+        break;
+    }
+    _applyingPreset = false;
+  }
+
   double _parsePercentToFraction(
     String raw, {
     required double fallbackPercent,
@@ -708,9 +727,4 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final safePercent = (parsed ?? fallbackPercent).clamp(0.0, 100.0);
     return safePercent / 100.0;
   }
-}
-
-enum _GenerationMode {
-  treeBuild,
-  winRateOnly,
 }

@@ -160,3 +160,7 @@ python sharpness_analyzer.py --positions-file positions.txt --output bulk_result
 - Use `--backend cpu` if GPU setup is problematic
 - Limit game analysis with `--max-moves` for faster results
 - Use preset positions for consistent benchmarking
+
+## License
+
+AGPL-3.0 — see main project [LICENSE](../../LICENSE) file.

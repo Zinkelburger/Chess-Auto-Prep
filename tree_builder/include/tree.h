@@ -14,6 +14,8 @@
 
 #include "node.h"
 #include <stdbool.h>
+#include <stdio.h>
+#include <time.h>
 
 /* Forward declarations */
 struct LichessExplorer;
@@ -123,6 +125,15 @@ typedef struct TreeConfig {
 
     /* Build instrumentation (optional, caller-owned) */
     BuildStats *stats;
+
+    /* Structured event log (optional).
+     * When non-NULL, tree_build() writes one TSV line per event:
+     *   T_ms \t event \t depth \t node_type \t detail
+     * T_ms is monotonic milliseconds since build start.
+     * Set event_log_epoch via clock_gettime(CLOCK_MONOTONIC, ...) before
+     * calling tree_build() — or leave zeroed and tree_build() will set it. */
+    FILE *event_log;
+    struct timespec event_log_epoch;
 
 } TreeConfig;
 

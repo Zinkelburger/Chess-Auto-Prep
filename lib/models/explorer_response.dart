@@ -1,9 +1,8 @@
 /// Unified model for Lichess Explorer API responses.
 ///
-/// Used across the entire move-generation pipeline: [ProbabilityService],
-/// [RepertoireGenerationService], [MoveAnalysisPool], and the DB-only
-/// generation isolate.  Centralises parsing so there is exactly one
-/// JSON → Dart conversion for Explorer data.
+/// Used across the move-generation pipeline: [ProbabilityService],
+/// [TreeBuildService], and [MoveAnalysisPool].  Centralises parsing so
+/// there is exactly one JSON → Dart conversion for Explorer data.
 library;
 
 class ExplorerMove {

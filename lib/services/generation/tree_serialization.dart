@@ -1,6 +1,6 @@
 /// JSON serialization / deserialization for [BuildTree].
 ///
-/// Wire format matches the C tree builder's v2.0 JSON format so that
+/// Wire format matches the C tree builder's v3 JSON format so that
 /// trees are interchangeable between the Dart and C implementations.
 library;
 
@@ -11,12 +11,11 @@ import 'fen_map.dart';
 
 // ── Serialization ────────────────────────────────────────────────────────
 
-/// Encode a [BuildTree] as a JSON string matching the C v2.0 format.
+/// Encode a [BuildTree] as a JSON string matching the C v3 format.
 String serializeTree(BuildTree tree) {
   final root = <String, dynamic>{
     'format': 'opening_tree',
-    'version': 2.0,
-    'eca_units': 'wp_delta',
+    'version': 3,
     'total_nodes': tree.totalNodes,
     'max_depth': tree.maxDepthReached,
     'build_complete': tree.buildComplete,
@@ -51,6 +50,14 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   if (node.hasExpectimax) {
     obj['local_cpl'] = node.localCpl;
     obj['expectimax_value'] = node.expectimaxValue;
+  }
+
+  if (node.trapScore >= 0.0) {
+    obj['trap_score'] = node.trapScore;
+  }
+
+  if (node.maiaFrequency >= 0.0) {
+    obj['maia_frequency'] = node.maiaFrequency;
   }
 
   if (node.totalGames > 0) {
@@ -143,8 +150,15 @@ BuildTreeNode _nodeFromJson(
     node.expectimaxValue = (obj['expectimax_value'] as num).toDouble();
     node.hasExpectimax = true;
   } else if (obj.containsKey('local_cpl') && obj.containsKey('accumulated_eca')) {
-    // v2 backward compat: store local_cpl, recomputation will set expectimax
     node.localCpl = (obj['local_cpl'] as num).toDouble();
+  }
+
+  if (obj.containsKey('trap_score')) {
+    node.trapScore = (obj['trap_score'] as num).toDouble();
+  }
+
+  if (obj.containsKey('maia_frequency')) {
+    node.maiaFrequency = (obj['maia_frequency'] as num).toDouble();
   }
 
   if (obj.containsKey('white_wins')) {

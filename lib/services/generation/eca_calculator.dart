@@ -5,8 +5,6 @@
 /// `calculate_expectimax_recursive`.
 library;
 
-import 'dart:math' as math;
-
 import '../../models/build_tree_node.dart';
 import '../../utils/ease_utils.dart' show winProbability;
 import 'fen_map.dart';
@@ -20,8 +18,27 @@ class ExpectimaxCalculator {
 
   /// Run expectimax calculation on the full tree. Returns the count of nodes
   /// that received a value.
+  ///
+  /// Two-pass expectimax (matches C `tree_calculate_expectimax`): the first
+  /// pass gives every canonical node a correct value; the second pass ensures
+  /// transposition leaves that were visited before their canonical in pass 1
+  /// now find the canonical ready and propagate the corrected value upward.
   int calculate(BuildTree tree) {
+    _expectimaxRecursive(tree.root);
     return _expectimaxRecursive(tree.root);
+  }
+
+  /// Leaf value: blend engine win probability toward a neutral 0.5 prior
+  /// using `leafConfidence`.  Matches C `leaf_value()`.
+  ///
+  ///   V = lc * wp(eval_for_us) + (1 - lc) * 0.5
+  ///
+  /// Returns 0.5 (neutral/"unknown") when no engine eval is available.
+  double _leafValue(BuildTreeNode node) {
+    if (!node.hasEngineEval) return 0.5;
+    final lc = config.leafConfidence.clamp(0.0, 1.0);
+    final cpUs = node.evalForUs(config.playAsWhite);
+    return lc * winProbability(cpUs) + (1.0 - lc) * 0.5;
   }
 
   int _expectimaxRecursive(BuildTreeNode node) {
@@ -73,37 +90,31 @@ class ExpectimaxCalculator {
       }
     }
 
-    final alpha = config.trickWeight / 100.0;
-    final alphaEff = alpha * math.pow(config.depthDiscount, node.depth.toDouble());
-
     if (node.children.isEmpty) {
-      // Leaf: V = leaf_conf × wp(eval_for_us)
-      final cpUs = node.evalForUs(config.playAsWhite);
-      node.expectimaxValue = config.leafConfidence * winProbability(cpUs);
+      node.expectimaxValue = _leafValue(node);
     } else if (isOurMove) {
-      // Our move: V = max(V_child) among eval-loss-filtered candidates
       final best = scoreOurMoveChildren(node);
-      node.expectimaxValue = best?.expectimaxValue ?? 0.0;
+      node.expectimaxValue = best?.expectimaxValue ?? _leafValue(node);
     } else {
-      // Opponent move: blend minimax and expectimax
-      final cpUs = node.evalForUs(config.playAsWhite);
-      final vEngine = winProbability(cpUs);
-
-      double probSum = 0.0;
-      for (final child in node.children) {
-        probSum += child.moveProbability;
-      }
-
-      double vHuman = 0.0;
+      // Opponent move — raw probabilities with tail term for uncovered mass.
+      //   V = Σ p_i · V(child_i)  +  (1 − Σ p_i) · leaf_value(this)
+      double covered = 0.0;
+      double v = 0.0;
       for (final child in node.children) {
         if (!child.hasExpectimax) continue;
-        final normProb = probSum > 0.0
-            ? child.moveProbability / probSum
-            : child.moveProbability;
-        vHuman += normProb * child.expectimaxValue;
+        covered += child.moveProbability;
+        v += child.moveProbability * child.expectimaxValue;
       }
 
-      node.expectimaxValue = (1.0 - alphaEff) * vEngine + alphaEff * vHuman;
+      if (covered > 1.0) covered = 1.0;
+      if (covered < 0.0) covered = 0.0;
+
+      final tail = 1.0 - covered;
+      if (tail > 0.0) {
+        v += tail * _leafValue(node);
+      }
+
+      node.expectimaxValue = v;
     }
 
     node.hasExpectimax = true;
@@ -137,7 +148,14 @@ class ExpectimaxCalculator {
   }
 
   /// Pick the child with the highest expectimax value among candidates
-  /// passing the eval-loss filter.  Falls back to all children if none pass.
+  /// passing the eval-loss filter, with optional novelty boost.
+  /// Falls back to all children if none pass the filter.
+  ///
+  /// Novelty boost (matches C `score_our_move_children`):
+  ///   novelty = 1 - child.totalGames/parent.totalGames (if both have games)
+  ///           = 1 - child.maiaFrequency (if Maia data available)
+  ///   v_adj = v * (1 + nw * novelty)
+  /// The stored expectimax_value uses the *unboosted* child V.
   ScoredChild? scoreOurMoveChildren(BuildTreeNode node) {
     if (node.children.isEmpty) return null;
 
@@ -148,6 +166,8 @@ class ExpectimaxCalculator {
       if (cpUs > bestChildCp) bestChildCp = cpUs;
     }
 
+    final nw = config.noveltyWeight / 100.0;
+
     double bestV = -1.0;
     BuildTreeNode? bestChild;
     int passing = 0;
@@ -157,8 +177,21 @@ class ExpectimaxCalculator {
       final cpUs = child.evalForUs(config.playAsWhite);
       if (cpUs < bestChildCp - config.maxEvalLossCp) continue;
       passing++;
-      if (child.expectimaxValue > bestV) {
-        bestV = child.expectimaxValue;
+
+      double v = child.expectimaxValue;
+      if (nw > 0.0) {
+        double novelty = 0.0;
+        if (node.totalGames > 0 && child.totalGames > 0) {
+          novelty = 1.0 - child.totalGames / node.totalGames;
+        } else if (child.maiaFrequency >= 0.0) {
+          novelty = 1.0 - child.maiaFrequency;
+        }
+        if (novelty < 0.0) novelty = 0.0;
+        v *= (1.0 + nw * novelty);
+      }
+
+      if (v > bestV) {
+        bestV = v;
         bestChild = child;
       }
     }
@@ -167,8 +200,19 @@ class ExpectimaxCalculator {
     if (passing == 0) {
       for (final child in node.children) {
         if (!child.hasExpectimax) continue;
-        if (child.expectimaxValue > bestV) {
-          bestV = child.expectimaxValue;
+        double v = child.expectimaxValue;
+        if (nw > 0.0) {
+          double novelty = 0.0;
+          if (node.totalGames > 0 && child.totalGames > 0) {
+            novelty = 1.0 - child.totalGames / node.totalGames;
+          } else if (child.maiaFrequency >= 0.0) {
+            novelty = 1.0 - child.maiaFrequency;
+          }
+          if (novelty < 0.0) novelty = 0.0;
+          v *= (1.0 + nw * novelty);
+        }
+        if (v > bestV) {
+          bestV = v;
           bestChild = child;
         }
       }
@@ -177,8 +221,62 @@ class ExpectimaxCalculator {
     if (bestChild == null) return null;
     return ScoredChild(
       child: bestChild,
-      expectimaxValue: bestV,
+      expectimaxValue: bestChild.expectimaxValue,
     );
+  }
+
+  /// Compute trap scores on opponent-move nodes throughout the tree.
+  /// Trap score measures how often opponents play suboptimal moves:
+  ///   trap = clamp(eval_diff / 200, 0, 1) * highest_probability
+  /// where eval_diff is the difference between the best move's eval
+  /// and the most popular move's eval (from the mover's perspective).
+  void computeTrapScores(BuildTreeNode root) {
+    _trapScoreRecursive(root);
+  }
+
+  void _trapScoreRecursive(BuildTreeNode node) {
+    for (final child in node.children) {
+      _trapScoreRecursive(child);
+    }
+
+    final isOurMove = node.isWhiteToMove == config.playAsWhite;
+    if (isOurMove || node.children.length < 2) return;
+
+    BuildTreeNode? mostPopular;
+    BuildTreeNode? bestMove;
+    double highestProb = 0.0;
+    int bestEval = -100000;
+
+    for (final child in node.children) {
+      if (child.moveProbability > highestProb) {
+        highestProb = child.moveProbability;
+        mostPopular = child;
+      }
+      if (child.hasEngineEval) {
+        final evalForMover = -child.engineEvalCp!;
+        if (evalForMover > bestEval) {
+          bestEval = evalForMover;
+          bestMove = child;
+        }
+      }
+    }
+
+    if (mostPopular == null || bestMove == null) return;
+    if (mostPopular == bestMove) {
+      node.trapScore = 0.0;
+      return;
+    }
+
+    if (!mostPopular.hasEngineEval) return;
+    final popularEval = -mostPopular.engineEvalCp!;
+
+    double evalDiff = (bestEval - popularEval).toDouble();
+    if (evalDiff < 0) evalDiff = 0;
+    double trap = evalDiff / 200.0;
+    if (trap > 1.0) trap = 1.0;
+    trap *= highestProb;
+
+    node.trapScore = trap;
   }
 }
 

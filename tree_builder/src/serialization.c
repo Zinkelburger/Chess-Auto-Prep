@@ -81,7 +81,17 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
     if (node->maia_frequency >= 0.0) {
         cJSON_AddNumberToObject(obj, "maia_frequency", node->maia_frequency);
     }
-    
+
+    /* Per-node build timing (only when non-zero) */
+    if (node->build_t_ms > 0.0)
+        cJSON_AddNumberToObject(obj, "build_t_ms", node->build_t_ms);
+    if (node->sf_ms > 0.0)
+        cJSON_AddNumberToObject(obj, "sf_ms", node->sf_ms);
+    if (node->maia_ms > 0.0)
+        cJSON_AddNumberToObject(obj, "maia_ms", node->maia_ms);
+    if (node->lichess_ms > 0.0)
+        cJSON_AddNumberToObject(obj, "lichess_ms", node->lichess_ms);
+
     cJSON_AddBoolToObject(obj, "is_white_to_move", node->is_white_to_move);
     if (node->explored) {
         cJSON_AddBoolToObject(obj, "explored", true);
@@ -406,6 +416,16 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
     cJSON *mf = cJSON_GetObjectItem(obj, "maia_frequency");
     if (mf && cJSON_IsNumber(mf))
         node->maia_frequency = mf->valuedouble;
+
+    /* Parse per-node build timing */
+    cJSON *bt = cJSON_GetObjectItem(obj, "build_t_ms");
+    if (bt && cJSON_IsNumber(bt)) node->build_t_ms = bt->valuedouble;
+    cJSON *sfm = cJSON_GetObjectItem(obj, "sf_ms");
+    if (sfm && cJSON_IsNumber(sfm)) node->sf_ms = sfm->valuedouble;
+    cJSON *mm = cJSON_GetObjectItem(obj, "maia_ms");
+    if (mm && cJSON_IsNumber(mm)) node->maia_ms = mm->valuedouble;
+    cJSON *lm = cJSON_GetObjectItem(obj, "lichess_ms");
+    if (lm && cJSON_IsNumber(lm)) node->lichess_ms = lm->valuedouble;
 
     /* Parse is_white_to_move */
     cJSON *wtm = cJSON_GetObjectItem(obj, "is_white_to_move");

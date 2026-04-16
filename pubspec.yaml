@@ -37,6 +37,10 @@ dependencies:
   stockfish: ^1.7.1
   onnxruntime: ^1.4.1
 
+  # Persistent eval cache (desktop: Linux / macOS / Windows).
+  sqflite_common_ffi: ^2.3.3
+  path: ^1.9.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

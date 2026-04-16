@@ -85,3 +85,6 @@ tree_builder/local_lib/
 tree_builder/*.o
 tree_builder/*.json
 .lichess_token
+
+# Embedded repos
+maia-platform-frontend/

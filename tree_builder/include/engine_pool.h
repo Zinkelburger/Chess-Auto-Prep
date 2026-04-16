@@ -86,10 +86,11 @@ typedef struct {
  * @param stockfish_path Path to the Stockfish binary
  * @param num_engines Number of parallel engines (recommend: CPU cores - 1)
  * @param default_depth Default search depth (e.g., 25)
+ * @param sf_threads Stockfish threads per engine (0 or 1 = single-threaded)
  * @return Engine pool, or NULL on failure
  */
 EnginePool* engine_pool_create(const char *stockfish_path, int num_engines, 
-                                int default_depth);
+                                int default_depth, int sf_threads);
 
 /**
  * Destroy the engine pool

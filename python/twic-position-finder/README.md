@@ -142,3 +142,7 @@ Add to crontab for automatic weekly runs:
 5. **Subscription Matching**: Each user's FEN/player/ECO filters matched against new games
 6. **Lichess Import**: Matched games imported via `POST /api/import` for one-click analysis
 7. **Email Delivery**: Rich HTML emails via Amazon SES with game summaries and Lichess buttons
+
+## License
+
+AGPL-3.0 — see main project [LICENSE](../../LICENSE) file.

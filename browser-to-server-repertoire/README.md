@@ -204,4 +204,4 @@ curl -X POST http://localhost:9812/add-line \
 
 ## License
 
-MIT
+AGPL-3.0 — see main project [LICENSE](../LICENSE) file.

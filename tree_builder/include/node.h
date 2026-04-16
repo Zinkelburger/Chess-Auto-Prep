@@ -143,6 +143,16 @@ typedef struct TreeNode {
      * -1.0 means not set. */
     double maia_frequency;
 
+    /* Per-node build timing (ms since build start).
+     * build_t_ms:   wall-clock moment this node was expanded (0 = not set)
+     * sf_ms:        Stockfish time (single-PV or MultiPV) on this node
+     * maia_ms:      Maia ONNX inference time on this node
+     * lichess_ms:   Lichess API/cache time on this node */
+    double build_t_ms;
+    double sf_ms;
+    double maia_ms;
+    double lichess_ms;
+
 } TreeNode;
 
 

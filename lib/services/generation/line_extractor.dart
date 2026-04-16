@@ -6,6 +6,7 @@
 library;
 
 import '../../models/build_tree_node.dart';
+import 'fen_map.dart';
 import 'generation_config.dart';
 
 // ── Extracted line ───────────────────────────────────────────────────────
@@ -32,7 +33,10 @@ class ExtractedLine {
   });
 
   /// Format as PGN movetext with annotations.
-  String toPgn({required bool rootWhiteToMove, String? event}) {
+  ///
+  /// Pass [startFen] when the line starts from a non-standard position so
+  /// the emitted PGN includes a correct `[FEN]` / `[SetUp]` header.
+  String toPgn({required bool rootWhiteToMove, String? event, String? startFen}) {
     final sb = StringBuffer();
 
     if (event != null) sb.writeln('[Event "$event"]');
@@ -40,8 +44,10 @@ class ExtractedLine {
     sb.writeln('[Date "????.??.??"]');
     sb.writeln('[Round "-"]');
     sb.writeln('[Result "*"]');
-    if (!rootWhiteToMove) {
-      sb.writeln('[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1"]');
+    const standardStartpos =
+        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    if (startFen != null && startFen.isNotEmpty && startFen != standardStartpos) {
+      sb.writeln('[FEN "$startFen"]');
       sb.writeln('[SetUp "1"]');
     }
     sb.writeln();
@@ -71,8 +77,9 @@ class ExtractedLine {
 
 class LineExtractor {
   final TreeBuildConfig config;
+  final FenMap? fenMap;
 
-  LineExtractor({required this.config});
+  LineExtractor({required this.config, this.fenMap});
 
   /// Extract complete repertoire lines from the tree.
   List<ExtractedLine> extract(BuildTree tree, {int maxLines = 10000}) {
@@ -96,12 +103,15 @@ class LineExtractor {
   }) {
     if (lines.length >= maxLines) return;
 
+    // Resolve transpositions: childless leaves may redirect to a canonical
+    // node that has the real subtree (matches C `resolve_transposition`).
+    final resolved = _resolveTransposition(node);
+
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     bool pushedAny = false;
 
     if (isOurMove) {
-      // Find the selected repertoire child
-      final selected = node.children
+      final selected = resolved.children
           .where((c) => c.isRepertoireMove)
           .firstOrNull;
       if (selected != null) {
@@ -115,7 +125,7 @@ class LineExtractor {
         );
       }
     } else {
-      for (final child in node.children) {
+      for (final child in resolved.children) {
         if (child.cumulativeProbability < config.minProbability) continue;
         pushedAny = true;
         _extractDfs(
@@ -129,35 +139,39 @@ class LineExtractor {
     }
 
     // Leaf or no valid children → record line
-    if (!pushedAny && movesSan.isNotEmpty) {
-      // Only record lines that end on an opponent move or after our reply
-      // (trim trailing opponent half-move if it's the last move)
-      if (movesSan.isNotEmpty) {
-        // Find deepest opening info along the path
-        String? openingName;
-        String? openingEco;
-        BuildTreeNode? current = node;
-        while (current != null) {
-          if (current.openingName != null) {
-            openingName = current.openingName;
-            openingEco = current.openingEco;
-            break;
-          }
-          current = current.parent;
-        }
+    if (pushedAny || movesSan.isEmpty) return;
 
-        lines.add(ExtractedLine(
-          movesSan: movesSan,
-          movesUci: movesUci,
-          probability: node.cumulativeProbability,
-          leafPruneReason: node.pruneReason,
-          leafPruneEvalCp: node.pruneEvalCp,
-          openingName: openingName,
-          openingEco: openingEco,
-          leafEvalCp: node.engineEvalCp,
-        ));
+    String? openingName;
+    String? openingEco;
+    for (BuildTreeNode? current = node;
+        current != null;
+        current = current.parent) {
+      if (current.openingName != null) {
+        openingName = current.openingName;
+        openingEco = current.openingEco;
+        break;
       }
     }
+
+    lines.add(ExtractedLine(
+      movesSan: movesSan,
+      movesUci: movesUci,
+      probability: node.cumulativeProbability,
+      leafPruneReason: node.pruneReason,
+      leafPruneEvalCp: node.pruneEvalCp,
+      openingName: openingName,
+      openingEco: openingEco,
+      leafEvalCp: node.engineEvalCp,
+    ));
+  }
+
+  BuildTreeNode _resolveTransposition(BuildTreeNode node) {
+    if (node.children.isNotEmpty || fenMap == null) return node;
+    final canonical = fenMap!.getCanonical(node.fen);
+    if (canonical != null && canonical != node && canonical.children.isNotEmpty) {
+      return canonical;
+    }
+    return node;
   }
 
   /// Export all extracted lines as a single PGN string.
@@ -171,6 +185,7 @@ class LineExtractor {
       return e.value.toPgn(
         rootWhiteToMove: rootWhiteToMove,
         event: eventName,
+        startFen: config.startFen,
       );
     }).join('\n\n');
   }

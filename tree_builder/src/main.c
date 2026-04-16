@@ -86,25 +86,22 @@ static void print_usage(const char *prog_name) {
     printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
     printf("  -d, --depth <N>        Max tree depth in ply [default: 20]\n");
     printf("  -e, --eval-depth <N>   Stockfish search depth [default: 20]\n");
-    printf("  -t, --threads <N>      Parallel Stockfish engines [default: 4]\n");
-    printf("  -r, --ratings <R>      Rating buckets [default: 2000,2200,2500]\n");
-    printf("  -s, --speeds <S>       Time controls [default: blitz,rapid,classical]\n");
-    printf("  -g, --min-games <N>    Min games per move [default: 10]\n");
+    printf("  -t, --threads <N>      Total CPU cores to use [default: 4]\n");
     printf("  -S, --stockfish <path> Stockfish binary path\n");
     printf("  -D, --database <path>  SQLite database path [default: <name>.db]\n");
     printf("  -L, --load <file>      Load tree from a different JSON file\n");
-    printf("  -m, --masters          Use masters database\n");
     printf("  --skip-build           Skip tree building (use existing tree)\n");
-    printf("  --token <token>        Lichess API auth token\n");
-    printf("                         Also reads: $LICHESS_TOKEN, ~/.config/tree_builder/token, .lichess_token\n");
     printf("\n");
     printf("Our-move candidates (engine-driven):\n");
     printf("  --our-multipv <N>      MultiPV count at every depth [default: 5]\n");
     printf("  --max-eval-loss <cp>   Skip candidates more than N cp worse than best [default: 50]\n");
     printf("\n");
-    printf("Opponent-move selection (single-source — Maia or Lichess):\n");
+    printf("Opponent-move selection:\n");
     printf("  --opp-max-children <N> Max opponent responses per position [default: 6]\n");
     printf("  --opp-mass <0-1>       Mass target at every depth [default: 0.95]\n");
+    printf("  --maia-model <path>    Path to maia3_simplified.onnx [default: auto-detect]\n");
+    printf("  --maia-elo <N>         Elo for Maia predictions [default: 2200]\n");
+    printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.05]\n");
     printf("\n");
     printf("Eval window pruning:\n");
     printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: color-dependent]\n");
@@ -115,24 +112,24 @@ static void print_usage(const char *prog_name) {
     printf("  --solid                Tight eval window, strict quality floor\n");
     printf("  --practical            Balanced eval tolerance\n");
     printf("  --tricky               Wider tolerance for speculative moves\n");
-    printf("  --traps                Widest tolerance, enables trap reporting\n");
+    printf("  --traps                Widest tolerance + trap reporting\n");
     printf("  --fresh                Sound but unusual moves; favors rarely-played lines\n");
     printf("\n");
     printf("Expectimax scoring (move selection phase):\n");
     printf("  --novelty-weight <0-100> Boost for rarely-played moves at our-move nodes [default: 0]\n");
     printf("  --leaf-confidence <0-1> Leaf V = c*wp(eval) + (1-c)*0.5  [default: 1.0; 0 = assume 50/50]\n");
     printf("\n");
-    printf("Opponent move source:\n");
-    printf("  --maia-model <path>    Path to maia3_simplified.onnx [default: auto-detect]\n");
-    printf("  --maia-elo <N>         Elo for Maia predictions [default: 2200]\n");
-    printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.05]\n");
-    printf("  --maia-only            Use Maia exclusively for opponent moves (default)\n");
-    printf("  --lichess              Use Lichess API exclusively for opponent moves\n");
+    printf("Lichess API (use with --lichess to switch opponent source from Maia):\n");
+    printf("  --lichess              Use Lichess API for opponent moves instead of Maia\n");
+    printf("  -r, --ratings <R>      Rating buckets [default: 2000,2200,2500]\n");
+    printf("  -s, --speeds <S>       Time controls [default: blitz,rapid,classical]\n");
+    printf("  -g, --min-games <N>    Min games per move [default: 10]\n");
+    printf("  -m, --masters          Use masters database instead of player DB\n");
+    printf("  --token <token>        Auth token (also reads $LICHESS_TOKEN, ~/.config/tree_builder/token)\n");
     printf("\n");
     printf("Output:\n");
     printf("  -n, --name <name>      Repertoire name (shown in PGN headers)\n");
-    printf("  --show-traps           Find and print opponent trap positions\n");
-    printf("  --traps                Trap-hunting preset + trap reporting (see Preset modes)\n");
+    printf("  --event-log <file>     Write timestamped build events (TSV) for analysis\n");
     printf("  -v, --verbose          Verbose progress output\n");
     printf("  -h, --help             Show this help\n\n");
     printf("Examples:\n");
@@ -301,6 +298,7 @@ int main(int argc, char *argv[]) {
     int max_depth = 20;
     int eval_depth = 20;
     int num_threads = 4;
+
     const char *ratings = "2000,2200,2500";
     const char *speeds = "blitz,rapid,classical";
     int min_games = 10;
@@ -317,6 +315,7 @@ int main(int argc, char *argv[]) {
     bool maia_only = true;
     bool use_lichess = false;
     bool relative_eval = false;
+    const char *event_log_path = NULL;
 
     /* Our-move overrides (-1 = use default) */
     int our_multipv_arg = -1;
@@ -357,7 +356,6 @@ int main(int argc, char *argv[]) {
         {"masters",          no_argument,       0, 'm'},
         {"skip-build",       no_argument,       0, 1001},
         {"traps",            no_argument,       0, 1004},
-        {"show-traps",       no_argument,       0, 2043},
         {"token",            required_argument, 0, 1006},
         /* Our-move */
         {"our-multipv",      required_argument, 0, 2001},
@@ -377,12 +375,14 @@ int main(int argc, char *argv[]) {
         {"tricky",           no_argument,       0, 2042},
         {"fresh",            no_argument,       0, 2044},
         /* Maia */
+        /* --sf-threads removed: -t now means total cores */
         {"maia-model",       required_argument, 0, 3001},
         {"maia-elo",         required_argument, 0, 3002},
         {"maia-min-prob",    required_argument, 0, 3004},
-        {"maia-only",        no_argument,       0, 3005},
+        /* --maia-only removed: it's the default */
         {"lichess",          no_argument,       0, 3006},
         /* General */
+        {"event-log",        required_argument, 0, 4001},
         {"verbose",          no_argument,       0, 'v'},
         {"help",             no_argument,       0, 'h'},
         {0, 0, 0, 0}
@@ -426,7 +426,7 @@ int main(int argc, char *argv[]) {
             case 'h': print_usage(argv[0]); return 0;
             case 1001: skip_build = true; break;
             case 1004: mode_id = 4; find_traps = true; break;
-            case 2043: find_traps = true; break;
+            /* 2043 removed: --show-traps merged into --traps preset */
             case 1006: lichess_token = optarg; break;
             /* Our-move */
             case 2001: if (!parse_int(optarg, "our-multipv", &our_multipv_arg)) return 1; break;
@@ -461,12 +461,13 @@ int main(int argc, char *argv[]) {
             case 2041: mode_id = 2; break;
             case 2042: mode_id = 3; break;
             case 2044: mode_id = 5; break;
+            /* 2006 removed: --sf-threads folded into -t */
             /* Maia */
             case 3001: maia_model_path = optarg; break;
             case 3002: if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1; break;
             case 3004: if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1; break;
-            case 3005: maia_only = true; break;
             case 3006: use_lichess = true; break;
+            case 4001: event_log_path = optarg; break;
             default: print_usage(argv[0]); return 1;
         }
     }
@@ -630,10 +631,12 @@ int main(int argc, char *argv[]) {
     printf("  Max depth:        %d ply (%d moves each)\n",
            max_depth, max_depth / 2);
     printf("  Eval depth:       %d\n", eval_depth);
-    printf("  Engines:          %d (of %d cores)\n", num_threads, get_nprocs());
-    printf("  Ratings:          %s\n", ratings);
-    printf("  Speeds:           %s\n", speeds);
-    printf("  Min games:        %d\n", min_games);
+    printf("  Cores:            %d (dynamic thread distribution)\n", num_threads);
+    if (!maia_only) {
+        printf("  Ratings:          %s\n", ratings);
+        printf("  Speeds:           %s\n", speeds);
+        printf("  Min games:        %d\n", min_games);
+    }
     {
         int nw_banner = novelty_weight_arg >= 0 ? novelty_weight_arg : 0;
         if (nw_banner > 0)
@@ -721,7 +724,7 @@ int main(int argc, char *argv[]) {
         printf("  Stockfish: %s\n", sf_path);
         printf("  Engines: %d | Depth: %d\n", num_threads, eval_depth);
 
-        engine_pool = engine_pool_create(sf_path, num_threads, eval_depth);
+        engine_pool = engine_pool_create(sf_path, num_threads, eval_depth, num_threads);
         if (!engine_pool) {
             fprintf(stderr, "Error: Failed to create engine pool\n");
             if (maia) maia_destroy(maia);
@@ -868,6 +871,19 @@ int main(int argc, char *argv[]) {
         memset(&build_stats, 0, sizeof(build_stats));
         config.stats = &build_stats;
 
+        FILE *event_log_fp = NULL;
+        if (event_log_path) {
+            event_log_fp = fopen(event_log_path, "w");
+            if (!event_log_fp) {
+                fprintf(stderr, "Warning: cannot open event log %s: %s\n",
+                        event_log_path, strerror(errno));
+            } else {
+                config.event_log = event_log_fp;
+                clock_gettime(CLOCK_MONOTONIC, &config.event_log_epoch);
+                printf("  Event log: %s\n", event_log_path);
+            }
+        }
+
         struct timespec build_start, build_end;
         clock_gettime(CLOCK_MONOTONIC, &build_start);
 
@@ -975,6 +991,11 @@ int main(int argc, char *argv[]) {
             printf("\n");
         }
         printf("\n");
+
+        if (event_log_fp) {
+            fclose(event_log_fp);
+            config.event_log = NULL;
+        }
 
         if (explorer) {
             lichess_explorer_print_stats(explorer);
