@@ -10,8 +10,6 @@
 library;
 
 import 'dart:async';
-import 'dart:math' show pow;
-
 import 'package:flutter/foundation.dart';
 
 import '../models/build_tree_node.dart';
@@ -38,7 +36,6 @@ class TreeBuildService {
 
   late BuildStats _stats;
   late Stopwatch _buildSw;
-  late TreeBuildConfig _activeConfig;
 
   int _lastProgressNodes = 0;
 
@@ -79,7 +76,6 @@ class TreeBuildService {
     _lastProgressNodes = 0;
 
     var cfg = config;
-    _activeConfig = cfg;
     _isPaused = false;
     _pauseCompleter = null;
 
@@ -685,54 +681,12 @@ class TreeBuildService {
     }
     _lastProgressNodes = tree.totalNodes;
 
-    final elapsedMs = _buildSw.elapsedMilliseconds;
-    final elapsedSec = elapsedMs / 1000.0;
-
-    // Compute running ETA using measured nodes/sec and the config-based
-    // node estimate.  The pre-build estimate provides a target; nps is
-    // measured from actual hardware speed.  As the build progresses the
-    // estimate naturally converges.
-    double? nps;
-    double? bObs;
-    int? estTotal;
-    double? eta;
-
-    if (tree.totalNodes > 5 && elapsedSec > 0.5) {
-      nps = tree.totalNodes / elapsedSec;
-
-      // Observed branching factor (same formula C builder uses for display)
-      if (tree.maxDepthReached > 1) {
-        bObs = pow(tree.totalNodes.toDouble(),
-                   1.0 / tree.maxDepthReached)
-            .toDouble();
-      }
-
-      // Use the config-based pre-estimate for total nodes.  This avoids
-      // the exponential blowup from extrapolating observed b via the
-      // geometric series (±0.3 in b → 10× error in N).
-      final preEst = _activeConfig.estimateBuild();
-      estTotal = preEst.estimatedNodes;
-      if (estTotal < tree.totalNodes) {
-        // Build is already bigger than the pre-estimate — revise upward
-        // using simple linear extrapolation from the current completion
-        // fraction (nodes / estimated).
-        estTotal = (tree.totalNodes * 1.3).round();
-      }
-      if (_activeConfig.maxNodes > 0 && estTotal > _activeConfig.maxNodes) {
-        estTotal = _activeConfig.maxNodes;
-      }
-      if (nps > 0) {
-        eta = (estTotal - tree.totalNodes) / nps;
-        if (eta < 0) eta = 0;
-      }
-    }
-
     onProgress(BuildProgress(
       totalNodes: tree.totalNodes,
       currentDepth: depth,
       maxDepthReached: tree.maxDepthReached,
       currentFen: fen,
-      elapsedMs: elapsedMs,
+      elapsedMs: _buildSw.elapsedMilliseconds,
       engineCalls: _stats.sfMultipvCalls +
           _stats.sfSingleCalls + _stats.sfBatchCalls,
       engineCacheHits: _stats.dbEvalHits,
@@ -742,10 +696,6 @@ class TreeBuildService {
       message: '${tree.totalNodes}n d=$depth '
           'eng=${_stats.sfMultipvCalls + _stats.sfSingleCalls + _stats.sfBatchCalls} '
           'maia=${_stats.maiaEvals}',
-      nodesPerSecond: nps,
-      observedBranchingFactor: bObs,
-      estimatedTotalNodes: estTotal,
-      etaSeconds: eta,
     ));
   }
 

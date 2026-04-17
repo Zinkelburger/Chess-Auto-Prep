@@ -445,13 +445,23 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                                         ),
                                       ),
                                       const SizedBox(width: 10),
-                                      OutlinedButton.icon(
+                                      FilledButton.icon(
                                         onPressed: () {
                                           _generationTabKey.currentState
                                               ?.cancelGeneration();
                                         },
-                                        icon: const Icon(Icons.stop),
-                                        label: const Text('Cancel'),
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: Colors.red[700],
+                                        ),
+                                        icon: const Icon(Icons.stop,
+                                            color: Colors.white),
+                                        label: const Text(
+                                          'Cancel',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
                                       ),
                                     ],
                                   ],

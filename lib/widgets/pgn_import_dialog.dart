@@ -5,7 +5,7 @@
 /// from PGN" and "append lines to the current repertoire".
 library;
 
-import 'dart:io';
+import 'dart:io' as io;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:file_picker/file_picker.dart';
@@ -115,7 +115,7 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
       final path = result.files.single.path;
       if (path == null) return;
 
-      final content = await File(path).readAsString();
+      final content = await io.File(path).readAsString();
       _controller.text = content;
       setState(() => _fileName = result.files.single.name);
       _recount();
@@ -156,7 +156,7 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: cs.outline.withOpacity(0.3),
+                color: cs.outline.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -235,7 +235,7 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
                           '[Event "My Opening"]\n[White "Me"]\n[Black "Opponent"]\n'
                           '[Result "*"]\n\n1. e4 e5 2. Nf3 *',
                       hintStyle: TextStyle(
-                        color: cs.onSurfaceVariant.withOpacity(0.4),
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.4),
                         fontFamily: 'monospace',
                         fontSize: 13,
                       ),
@@ -304,7 +304,7 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: cs.outlineVariant.withOpacity(0.3)),
+                  top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3)),
                 ),
               ),
               child: Row(

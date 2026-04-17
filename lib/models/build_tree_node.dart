@@ -196,12 +196,6 @@ class BuildProgress {
 
   final String message;
 
-  // ETA estimation (filled by TreeBuildService once enough data exists)
-  final double? nodesPerSecond;
-  final double? observedBranchingFactor;
-  final int? estimatedTotalNodes;
-  final double? etaSeconds;
-
   const BuildProgress({
     required this.totalNodes,
     required this.currentDepth,
@@ -214,10 +208,6 @@ class BuildProgress {
     this.lichessQueries = 0,
     this.lichessCacheHits = 0,
     required this.message,
-    this.nodesPerSecond,
-    this.observedBranchingFactor,
-    this.estimatedTotalNodes,
-    this.etaSeconds,
   });
 }
 
