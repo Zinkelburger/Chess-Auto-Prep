@@ -112,7 +112,9 @@ static void print_usage(const char *prog_name) {
     printf("  --solid                Tight eval window, strict quality floor\n");
     printf("  --practical            Balanced eval tolerance\n");
     printf("  --tricky               Wider tolerance for speculative moves\n");
-    printf("  --traps                Widest tolerance + trap reporting\n");
+    printf("  --traps                Widest tolerance + find tricky positions in entire tree\n");
+    printf("                         (writes <name>.traps.pgn with annotated trap lines)\n");
+    printf("  --traps-in-repertoire  Find trap positions in the repertoire only (stdout)\n");
     printf("  --fresh                Sound but unusual moves; favors rarely-played lines\n");
     printf("\n");
     printf("Expectimax scoring (move selection phase):\n");
@@ -308,6 +310,7 @@ int main(int argc, char *argv[]) {
     bool use_masters = false;
     bool skip_build = false;
     bool find_traps = false;
+    bool find_traps_in_repertoire = false;
     const char *lichess_token = NULL;
     const char *repertoire_name = NULL;
     const char *maia_model_path = NULL;
@@ -357,6 +360,7 @@ int main(int argc, char *argv[]) {
         {"masters",          no_argument,       0, 'm'},
         {"skip-build",       no_argument,       0, 1001},
         {"traps",            no_argument,       0, 1004},
+        {"traps-in-repertoire", no_argument,    0, 1005},
         {"token",            required_argument, 0, 1006},
         /* Our-move */
         {"our-multipv",      required_argument, 0, 2001},
@@ -428,7 +432,7 @@ int main(int argc, char *argv[]) {
             case 'h': print_usage(argv[0]); return 0;
             case 1001: skip_build = true; break;
             case 1004: mode_id = 4; find_traps = true; break;
-            /* 2043 removed: --show-traps merged into --traps preset */
+            case 1005: find_traps_in_repertoire = true; break;
             case 1006: lichess_token = optarg; break;
             /* Our-move */
             case 2001: if (!parse_int(optarg, "our-multipv", &our_multipv_arg)) return 1; break;
@@ -879,7 +883,8 @@ int main(int argc, char *argv[]) {
          * trap-hunting, `maia_frequency` would be written and never
          * read — one ONNX inference per our-move node wasted. */
         int planned_novelty = novelty_weight_arg >= 0 ? novelty_weight_arg : 0;
-        config.populate_maia_frequency = (planned_novelty > 0) || find_traps;
+        config.populate_maia_frequency = (planned_novelty > 0) || find_traps
+                                        || find_traps_in_repertoire;
 
         config.progress_callback = progress_callback;  /* Always show progress */
 
@@ -1090,8 +1095,54 @@ int main(int argc, char *argv[]) {
     /* ================================================================
      *  STAGE 3: Find Trap Lines (Optional)
      * ================================================================ */
+    char traps_pgn_path[PATH_MAX] = {0};
+
     if (find_traps) {
-        printf("[3/4] Finding opponent mistake-prone lines...\n");
+        printf("[3/4] Searching entire tree for tricky positions...\n");
+
+        int max_trap_lines = 200;
+        TrapLineInfo *trap_lines = (TrapLineInfo *)calloc(
+            max_trap_lines, sizeof(TrapLineInfo));
+        if (trap_lines) {
+            int num_traps = find_trap_lines(tree, db, play_as_white,
+                                            trap_lines, max_trap_lines);
+            if (num_traps > 0) {
+                printf("  Found %d tricky positions (sorted by trick surplus)\n\n",
+                       num_traps);
+                int show = num_traps > 20 ? 20 : num_traps;
+                for (int i = 0; i < show; i++) {
+                    printf("  %2d. [surplus %+.1f%% V=%.1f%% wp=%.1f%%] ",
+                           i + 1,
+                           trap_lines[i].trick_surplus * 100,
+                           trap_lines[i].expectimax_value * 100,
+                           trap_lines[i].wp_eval * 100);
+                    for (int j = 0; j < trap_lines[i].num_moves && j < 16; j++) {
+                        if (j % 2 == 0) printf("%d.", (j / 2) + 1);
+                        printf("%s ", trap_lines[i].moves_san[j]);
+                    }
+                    printf("\n         %s (%.0f%%) loses %d cp vs best %s  [trap=%.0f%% reach=%.2f%%]\n",
+                           trap_lines[i].popular_move,
+                           trap_lines[i].popular_prob * 100,
+                           trap_lines[i].eval_diff_cp,
+                           trap_lines[i].best_move,
+                           trap_lines[i].trap_score * 100,
+                           trap_lines[i].cumulative_prob * 100);
+                }
+
+                snprintf(traps_pgn_path, sizeof(traps_pgn_path),
+                         "%s.traps.pgn", base_name);
+                if (export_traps_pgn(trap_lines, num_traps,
+                                     traps_pgn_path, &rep_config))
+                    printf("\n  Trap PGN saved: %s (%d lines)\n",
+                           traps_pgn_path, num_traps);
+            } else {
+                printf("  No significant trap positions found.\n");
+            }
+            free(trap_lines);
+        }
+        printf("\n");
+    } else if (find_traps_in_repertoire) {
+        printf("[3/4] Finding mistake-prone lines in repertoire...\n");
 
         RepertoireLine trap_lines[50];
         int num_traps = find_mistake_prone_lines(tree, db, play_as_white,
@@ -1115,7 +1166,7 @@ int main(int argc, char *argv[]) {
         }
         printf("\n");
     } else {
-        printf("[3/4] Skipped trap detection (use --show-traps or preset --traps)\n\n");
+        printf("[3/4] Skipped trap detection (use --traps or --traps-in-repertoire)\n\n");
     }
 
     /* ================================================================

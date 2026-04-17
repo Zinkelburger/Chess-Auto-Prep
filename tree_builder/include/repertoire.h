@@ -210,6 +210,71 @@ int find_mistake_prone_lines(const Tree *tree, RepertoireDB *db,
  */
 double calculate_trap_score(const TreeNode *node, RepertoireDB *db);
 
+
+/**
+ * A trap line found anywhere in the tree (not limited to the repertoire).
+ * Includes detailed annotation data explaining why the position is tricky.
+ */
+typedef struct {
+    char moves_san[128][16];    /* Path from root to the trap position */
+    int num_moves;              /* Length of path */
+
+    double trap_score;          /* Composite trap score [0,1] */
+    double popular_prob;        /* Probability opponent plays the bad move */
+    char popular_move[16];      /* SAN of the popular (bad) move */
+    char best_move[16];         /* SAN of the objectively best move */
+    int popular_eval_cp;        /* Eval after popular move (from our perspective) */
+    int best_eval_cp;           /* Eval after best move (from our perspective) */
+    int eval_diff_cp;           /* best_eval - popular_eval (centipawn gain) */
+    double cumulative_prob;     /* Probability of reaching this position */
+
+    /* Trick surplus: how much better we do in practice (expectimax)
+     * than the raw engine eval predicts.  V - wp(eval_for_us).
+     * Positive = subtree is trickier than the eval suggests.
+     * This compounds through the tree: multiple tricky positions
+     * along a line all contribute to a higher surplus. */
+    double trick_surplus;
+    double expectimax_value;    /* Raw V at this node */
+    double wp_eval;             /* wp(eval_for_us) at this node */
+} TrapLineInfo;
+
+
+/**
+ * Search the entire tree for tricky opponent positions.
+ *
+ * Unlike find_mistake_prone_lines (which uses RepertoireLine and
+ * minimal annotation), this returns TrapLineInfo with full detail
+ * about the popular-vs-best move discrepancy for PGN annotation.
+ *
+ * @param tree   The opening tree (full, not just repertoire)
+ * @param db     Database with cached evaluations
+ * @param play_as_white  Whether we are White
+ * @param out_lines  Output array (caller-allocated)
+ * @param max_lines  Capacity of out_lines
+ * @return Number of trap lines found (sorted by trap_score descending)
+ */
+int find_trap_lines(const Tree *tree, RepertoireDB *db,
+                    bool play_as_white,
+                    TrapLineInfo *out_lines, int max_lines);
+
+/**
+ * Export trap lines to an annotated PGN file.
+ *
+ * Each game in the PGN is a line leading to a tricky position.
+ * The final comment explains WHY it is tricky: which move opponents
+ * play, how often, and how much eval they give away.
+ *
+ * @param lines      Array of TrapLineInfo from find_trap_lines
+ * @param num_lines  Number of lines
+ * @param filename   Output .pgn path
+ * @param config     Repertoire config (for start_moves, FEN, etc.)
+ * @return true on success
+ */
+bool export_traps_pgn(const TrapLineInfo *lines, int num_lines,
+                      const char *filename,
+                      const RepertoireConfig *config);
+
+
 /**
  * Export repertoire to PGN with annotations
  * 

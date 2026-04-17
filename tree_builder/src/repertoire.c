@@ -460,6 +460,267 @@ int find_mistake_prone_lines(const Tree *tree, RepertoireDB *db,
 }
 
 
+static int emit_start_moves(FILE *f, const char *start_moves);
+
+/* ========== Whole-Tree Trap Line Search ========== */
+
+typedef struct {
+    TreeNode *node;
+    double trap_score;
+    double popular_prob;
+    char popular_move[16];
+    char best_move[16];
+    int popular_eval_cp;
+    int best_eval_cp;
+    int eval_diff_cp;
+    double trick_surplus;
+    double expectimax_value;
+    double wp_eval;
+} DetailedTrapCandidate;
+
+typedef struct {
+    DetailedTrapCandidate *cands;
+    int *count;
+    int max;
+    RepertoireDB *db;
+    bool as_white;
+} DetailedTrapCtx;
+
+static int detailed_trap_cmp_desc(const void *a, const void *b) {
+    double sa = ((const DetailedTrapCandidate *)a)->trick_surplus;
+    double sb = ((const DetailedTrapCandidate *)b)->trick_surplus;
+    return (sa < sb) - (sa > sb);
+}
+
+static void find_detailed_traps_callback(TreeNode *node, void *user_data) {
+    DetailedTrapCtx *ctx = (DetailedTrapCtx *)user_data;
+    bool is_opponent_move = ctx->as_white
+        ? !node->is_white_to_move
+        : node->is_white_to_move;
+    if (!is_opponent_move) return;
+    if (node->children_count < 2) return;
+    if (*ctx->count >= ctx->max) return;
+
+    TreeNode *most_popular = NULL;
+    TreeNode *best_move_node = NULL;
+    double highest_prob = 0;
+    int best_eval = -100000;
+
+    for (size_t i = 0; i < node->children_count; i++) {
+        TreeNode *child = node->children[i];
+        if (child->move_probability > highest_prob) {
+            highest_prob = child->move_probability;
+            most_popular = child;
+        }
+        int eval_cp, depth;
+        if (rdb_get_eval(ctx->db, child->fen, &eval_cp, &depth)) {
+            int eval_for_mover = -eval_cp;
+            if (eval_for_mover > best_eval) {
+                best_eval = eval_for_mover;
+                best_move_node = child;
+            }
+        }
+    }
+
+    if (!most_popular || !best_move_node) return;
+    if (most_popular == best_move_node) return;
+
+    int popular_eval_raw, depth;
+    if (!rdb_get_eval(ctx->db, most_popular->fen, &popular_eval_raw, &depth))
+        return;
+    int popular_eval = -popular_eval_raw;
+
+    int eval_diff = best_eval - popular_eval;
+    if (eval_diff <= 0) return;
+
+    double trap = (double)eval_diff / 200.0;
+    if (trap > 1.0) trap = 1.0;
+    trap *= highest_prob;
+    if (trap <= 0.05) return;
+
+    /* Trick surplus: how much the practical win rate (expectimax)
+     * exceeds the raw engine eval prediction at this node.
+     * Requires expectimax to have been computed already. */
+    if (!node->has_expectimax) return;
+    int eval_us = node_eval_for_us(node, ctx->as_white);
+    double wp_eval = win_probability(eval_us);
+    double surplus = node->expectimax_value - wp_eval;
+    if (surplus <= 0.005) return;
+
+    /* Convert evals from mover's perspective to "our" perspective.
+     * At opponent-move nodes the mover is the opponent, so
+     * eval_for_us = -eval_for_mover. */
+    int popular_eval_us = -popular_eval;
+    int best_eval_us = -best_eval;
+    /* After the popular (bad) move, our eval is better (higher);
+     * after the best move, our eval is worse (lower).
+     * eval_diff_cp from our perspective: popular_eval_us - best_eval_us */
+    int eval_diff_us = popular_eval_us - best_eval_us;
+
+    DetailedTrapCandidate *c = &ctx->cands[*ctx->count];
+    c->node = node;
+    c->trap_score = trap;
+    c->popular_prob = highest_prob;
+    strncpy(c->popular_move, most_popular->move_san, 15);
+    c->popular_move[15] = '\0';
+    strncpy(c->best_move, best_move_node->move_san, 15);
+    c->best_move[15] = '\0';
+    c->popular_eval_cp = popular_eval_us;
+    c->best_eval_cp = best_eval_us;
+    c->eval_diff_cp = eval_diff_us;
+    c->trick_surplus = surplus;
+    c->expectimax_value = node->expectimax_value;
+    c->wp_eval = wp_eval;
+    (*ctx->count)++;
+}
+
+int find_trap_lines(const Tree *tree, RepertoireDB *db,
+                    bool play_as_white,
+                    TrapLineInfo *out_lines, int max_lines) {
+    if (!tree || !tree->root || !db || !out_lines || max_lines <= 0) return 0;
+
+    int max_candidates = (int)tree->total_nodes;
+    if (max_candidates > 100000) max_candidates = 100000;
+    DetailedTrapCandidate *candidates = (DetailedTrapCandidate *)calloc(
+        max_candidates, sizeof(DetailedTrapCandidate));
+    if (!candidates) return 0;
+
+    int num_candidates = 0;
+    DetailedTrapCtx ctx = {
+        candidates, &num_candidates, max_candidates, db, play_as_white
+    };
+    tree_traverse_dfs(tree, find_detailed_traps_callback, &ctx);
+
+    qsort(candidates, num_candidates, sizeof(DetailedTrapCandidate),
+          detailed_trap_cmp_desc);
+
+    int num_lines = 0;
+    for (int i = 0; i < num_candidates && num_lines < max_lines; i++) {
+        DetailedTrapCandidate *c = &candidates[i];
+        TrapLineInfo *out = &out_lines[num_lines];
+
+        char moves[128][16];
+        size_t path_len = tree_get_line_to_node(c->node, moves, 128);
+
+        for (size_t j = 0; j < path_len && j < 128; j++)
+            strncpy(out->moves_san[j], moves[j], 15);
+        out->num_moves = (int)path_len;
+        out->trap_score = c->trap_score;
+        out->popular_prob = c->popular_prob;
+        strncpy(out->popular_move, c->popular_move, 15);
+        out->popular_move[15] = '\0';
+        strncpy(out->best_move, c->best_move, 15);
+        out->best_move[15] = '\0';
+        out->popular_eval_cp = c->popular_eval_cp;
+        out->best_eval_cp = c->best_eval_cp;
+        out->eval_diff_cp = c->eval_diff_cp;
+        out->cumulative_prob = c->node->cumulative_probability;
+        out->trick_surplus = c->trick_surplus;
+        out->expectimax_value = c->expectimax_value;
+        out->wp_eval = c->wp_eval;
+
+        num_lines++;
+    }
+
+    free(candidates);
+    return num_lines;
+}
+
+
+bool export_traps_pgn(const TrapLineInfo *lines, int num_lines,
+                      const char *filename,
+                      const RepertoireConfig *config) {
+    if (!lines || num_lines <= 0 || !filename) return false;
+
+    FILE *f = fopen(filename, "w");
+    if (!f) return false;
+
+    bool has_prefix = config && config->start_moves[0];
+    bool has_fen_header = false;
+    if (!has_prefix && config && config->start_fen[0] &&
+        strcmp(config->start_fen,
+               "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1") != 0) {
+        has_fen_header = true;
+    }
+
+    bool root_white_to_move = true;
+    if (!has_prefix && config && config->start_fen[0]) {
+        const char *sp = strchr(config->start_fen, ' ');
+        if (sp && *(sp + 1) == 'b') root_white_to_move = false;
+    }
+
+    bool has_name = config && config->name[0];
+
+    fprintf(f, "{Trap lines: %d positions where opponents frequently blunder}\n\n",
+            num_lines);
+
+    for (int i = 0; i < num_lines; i++) {
+        const TrapLineInfo *line = &lines[i];
+
+        if (has_name)
+            fprintf(f, "[Event \"%s Trap #%d\"]\n", config->name, i + 1);
+        else
+            fprintf(f, "[Event \"Trap #%d\"]\n", i + 1);
+        fprintf(f, "[Site \"tree_builder\"]\n");
+        {
+            time_t now = time(NULL);
+            struct tm *tm = localtime(&now);
+            fprintf(f, "[Date \"%04d.%02d.%02d\"]\n",
+                    tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+        }
+        fprintf(f, "[Round \"-\"]\n");
+        fprintf(f, "[White \"%s\"]\n",
+                config->play_as_white ? "Repertoire" : "Opponent");
+        fprintf(f, "[Black \"%s\"]\n",
+                config->play_as_white ? "Opponent" : "Repertoire");
+        if (has_fen_header) {
+            fprintf(f, "[FEN \"%s\"]\n", config->start_fen);
+            fprintf(f, "[SetUp \"1\"]\n");
+        }
+        fprintf(f, "[Result \"*\"]\n\n");
+
+        fprintf(f, "{Trick surplus %+.1f%% (V=%.1f%% vs wp=%.1f%%) | "
+                "Trap %.0f%% | Reach %.3f%% | "
+                "Opponents play %s (%.0f%%) "
+                "giving %+.2f → %+.2f (%d cp gain). "
+                "Best was %s (%+.2f).}",
+                line->trick_surplus * 100.0,
+                line->expectimax_value * 100.0,
+                line->wp_eval * 100.0,
+                line->trap_score * 100.0,
+                line->cumulative_prob * 100.0,
+                line->popular_move,
+                line->popular_prob * 100.0,
+                line->best_eval_cp / 100.0,
+                line->popular_eval_cp / 100.0,
+                line->eval_diff_cp,
+                line->best_move,
+                line->best_eval_cp / 100.0);
+        fprintf(f, "\n");
+
+        int prefix_plies = has_prefix
+            ? emit_start_moves(f, config->start_moves)
+            : 0;
+        int ply_offset = has_prefix
+            ? prefix_plies
+            : (root_white_to_move ? 0 : 1);
+
+        for (int j = 0; j < line->num_moves; j++) {
+            int ply = j + ply_offset;
+            if (ply % 2 == 0)
+                fprintf(f, "%d. ", (ply / 2) + 1);
+            else if (j == 0)
+                fprintf(f, "%d... ", (ply / 2) + 1);
+            fprintf(f, "%s ", line->moves_san[j]);
+        }
+        fprintf(f, "*\n");
+    }
+
+    fclose(f);
+    return true;
+}
+
+
 /* ========== Export Functions ========== */
 
 /* Emit start_moves (a space-separated SAN sequence from startpos) with
