@@ -83,6 +83,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   bool _isGenerating = false;
   bool _cancelRequested = false;
   bool _isPaused = false;
+  int _buildGeneration = 0;
   String _status = 'Idle';
   int _nodes = 0;
   int _lines = 0;
@@ -92,8 +93,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   int _maiaCalls = 0;
   int _lichessQueries = 0;
   int _elapsedMs = 0;
-  double? _nodesPerSecond;
-  double? _observedBranching;
   DateTime _lastProgressUpdate = DateTime(0);
   final StringBuffer _pendingPgnBuffer = StringBuffer();
   int _pendingPgnLines = 0;
@@ -202,10 +201,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     if (mounted) {
       setState(() {
         _isPaused = false;
-        if (reason != null && reason.isNotEmpty) _status = reason;
+        _isGenerating = false;
+        _status = reason ?? 'Cancelled ($_nodes nodes)';
       });
     }
     widget.onPauseChanged(false);
+    widget.onGeneratingChanged(false);
+    _checkForPartialTree();
   }
 
   void togglePause() {
@@ -232,6 +234,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   Future<void> _startTreeBuild({BuildTree? existingTree}) async {
     if (_isGenerating) return;
+    final gen = ++_buildGeneration;
     final filePath = widget.currentRepertoire?['filePath'] as String?;
     if (filePath == null || filePath.isEmpty) {
       setState(() => _status = 'Select a repertoire first.');
@@ -273,7 +276,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       );
     }
 
-    if (existingTree == null) _deletePartialTree();
+    if (existingTree == null) {
+      _deletePartialTree();
+    }
 
     setState(() {
       _isGenerating = true;
@@ -291,8 +296,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       _maiaCalls = 0;
       _lichessQueries = 0;
       _elapsedMs = 0;
-      _nodesPerSecond = null;
-      _observedBranching = null;
     });
     _pendingPgnBuffer.clear();
     _pendingPgnLines = 0;
@@ -313,8 +316,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           _maiaCalls = p.maiaCalls;
           _lichessQueries = p.lichessQueries;
           _elapsedMs = p.elapsedMs;
-          _nodesPerSecond = p.nodesPerSecond;
-          _observedBranching = p.observedBranchingFactor;
           _status = 'Building: ${p.message}';
 
           final now = DateTime.now();
@@ -415,8 +416,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         setState(() => _status = 'Generation failed: $e');
       }
     } finally {
-      if (mounted) setState(() => _isGenerating = false);
-      widget.onGeneratingChanged(false);
+      if (mounted && gen == _buildGeneration) {
+        setState(() => _isGenerating = false);
+        widget.onGeneratingChanged(false);
+      }
       _checkForPartialTree();
     }
   }
@@ -572,10 +575,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               if (_engineCacheHits > 0) _statChip('Cached', '$_engineCacheHits'),
               if (_maiaCalls > 0) _statChip('Maia', '$_maiaCalls'),
               if (_lichessQueries > 0) _statChip('Lichess', '$_lichessQueries'),
-              if (_nodesPerSecond != null)
-                _statChip('n/s', _nodesPerSecond!.toStringAsFixed(1)),
-              if (_observedBranching != null)
-                _statChip('b', _observedBranching!.toStringAsFixed(2)),
             ],
           ),
         ],
@@ -759,7 +758,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.amber.withOpacity(0.1),
+                color: Colors.amber.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.amber[700]!, width: 1),
               ),
@@ -852,10 +851,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                OutlinedButton.icon(
+                FilledButton.icon(
                   onPressed: () => cancelGeneration(),
-                  icon: const Icon(Icons.stop),
-                  label: const Text('Cancel'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.red[700],
+                  ),
+                  icon: const Icon(Icons.stop, color: Colors.white),
+                  label: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ],
