@@ -169,18 +169,37 @@ TreeNode* node_create(const char *fen, const char *move_san,
                       const char *move_uci, TreeNode *parent);
 
 /**
- * Free a TreeNode and all its descendants (recursive)
- * 
+ * Free a TreeNode and all its descendants (recursive).
+ *
+ * The node (and each descendant) is first unlinked from its
+ * next_equivalent ring, so surviving ring siblings never end up with
+ * a dangling pointer.  Safe to call on any node, whether or not
+ * equivalence rings are still live elsewhere in the tree.
+ *
  * @param node The node to free
  */
 void node_destroy(TreeNode *node);
 
 /**
- * Free only this node (not its children)
- * 
+ * Free only this node (not its children).  Like node_destroy, it
+ * unlinks from the equivalence ring first.
+ *
  * @param node The node to free
  */
 void node_destroy_single(TreeNode *node);
+
+/**
+ * Splice a node out of its next_equivalent ring, leaving the rest of
+ * the ring intact.  Sets node->next_equivalent to NULL.  No-op if the
+ * node is not in a ring.
+ *
+ * Used internally by node_destroy and node_destroy_single; exposed
+ * for callers that need to move a node out of a ring without
+ * destroying it.
+ *
+ * @param node The node to unlink
+ */
+void node_unlink_equivalent(TreeNode *node);
 
 /**
  * Add a child node

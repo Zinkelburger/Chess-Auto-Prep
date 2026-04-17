@@ -50,8 +50,16 @@ typedef struct RepertoireConfig {
     /* Logging */
     bool verbose_search;             /* Log each decision point during traversal */
 
-    /* Starting FEN (for PGN export side-to-move detection) */
+    /* Starting FEN (for PGN export side-to-move detection, and
+     * emitted as [FEN]/[SetUp "1"] when start_moves is empty) */
     char start_fen[128];
+
+    /* SAN move sequence from standard start that leads to the root
+     * position (e.g. "e4 c6 d4 d5 e5 Bf5").  When non-empty, PGN
+     * export inlines these moves at the start of every game's
+     * movetext and omits the [FEN] header — preferred form since
+     * it reads more naturally in PGN viewers. */
+    char start_moves[2048];
 
     /* Human-readable name for this repertoire */
     char name[128];

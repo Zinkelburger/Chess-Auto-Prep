@@ -82,7 +82,7 @@ static void print_usage(const char *prog_name) {
     printf("Options:\n");
     printf("  -f, --fen <FEN>        Starting position FEN\n");
     printf("  --moves <SAN...>       Starting moves in SAN (e.g. \"e4 d5 exd5 Qxd5\")\n");
-    printf("  -c, --color <w|b>      Play as white (w) or black (b) [default: w]\n");
+    printf("  -c, --color <w|b>      Play as white (w) or black (b) [REQUIRED]\n");
     printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
     printf("  -d, --depth <N>        Max tree depth in ply [default: 20]\n");
     printf("  -e, --eval-depth <N>   Stockfish search depth [default: 20]\n");
@@ -302,7 +302,8 @@ int main(int argc, char *argv[]) {
     const char *ratings = "2000,2200,2500";
     const char *speeds = "blitz,rapid,classical";
     int min_games = 10;
-    bool play_as_white = true;
+    bool play_as_white = false;  /* No default - must be specified */
+    bool color_specified = false;
     bool verbose = false;
     bool use_masters = false;
     bool skip_build = false;
@@ -396,6 +397,7 @@ int main(int argc, char *argv[]) {
             case 1010: start_moves = optarg; break;
             case 'c':
                 play_as_white = (optarg[0] == 'w' || optarg[0] == 'W');
+                color_specified = true;
                 break;
             case 'p':
                 if (!parse_double(optarg, "probability", &min_probability)) return 1;
@@ -504,6 +506,12 @@ int main(int argc, char *argv[]) {
             if (!user_max_eval_loss) max_eval_loss_arg = 40;
             break;
         }
+    }
+
+    if (!color_specified) {
+        fprintf(stderr, "Error: --color (-c) is required. Specify 'w' for white or 'b' for black.\n");
+        fprintf(stderr, "Usage: %s --color <w|b> [options] <name>\n", argv[0]);
+        return 1;
     }
 
     if (optind < argc) {
@@ -748,6 +756,15 @@ int main(int argc, char *argv[]) {
             tree->config.play_as_white = play_as_white;
             tree_recalculate_probabilities(tree);
 
+            /* CLI --moves (if given) overrides whatever was persisted
+             * in the tree JSON, so a user can re-export with a
+             * different leading move sequence without rebuilding. */
+            if (start_moves) {
+                strncpy(tree->start_moves, start_moves,
+                        sizeof(tree->start_moves) - 1);
+                tree->start_moves[sizeof(tree->start_moves) - 1] = '\0';
+            }
+
             if (tree->build_complete) {
                 printf("[1/4] Tree loaded from %s (%zu nodes, complete)\n",
                        tree_source, tree->total_nodes);
@@ -817,6 +834,14 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        /* Persist the SAN move sequence so later skip-build runs
+         * can re-export without having to re-specify --moves. */
+        if (start_moves) {
+            strncpy(tree->start_moves, start_moves,
+                    sizeof(tree->start_moves) - 1);
+            tree->start_moves[sizeof(tree->start_moves) - 1] = '\0';
+        }
+
         g_tree = tree;
 
         /* Configure tree build */
@@ -856,7 +881,7 @@ int main(int argc, char *argv[]) {
         int planned_novelty = novelty_weight_arg >= 0 ? novelty_weight_arg : 0;
         config.populate_maia_frequency = (planned_novelty > 0) || find_traps;
 
-        if (verbose) config.progress_callback = progress_callback;
+        config.progress_callback = progress_callback;  /* Always show progress */
 
         printf("  Our moves:  MultiPV %d (constant), %dcp loss max\n",
                config.our_multipv, config.max_eval_loss_cp);
@@ -894,7 +919,7 @@ int main(int argc, char *argv[]) {
         double build_time = (build_end.tv_sec - build_start.tv_sec) +
                             (build_end.tv_nsec - build_start.tv_nsec) / 1e9;
 
-        if (verbose) printf("\r%80s\r", "");
+        printf("\r%80s\r", "");  /* Always clear progress line */
 
         if (!success && !g_interrupted) {
             fprintf(stderr, "Error: Tree building failed\n");
@@ -1021,7 +1046,16 @@ int main(int argc, char *argv[]) {
     rep_config.play_as_white = play_as_white;
     rep_config.min_eval_cp = tree->config.min_eval_cp;
     rep_config.max_eval_cp = tree->config.max_eval_cp;
-    snprintf(rep_config.start_fen, sizeof(rep_config.start_fen), "%s", start_fen);
+    /* Prefer the tree root's FEN — it's the authoritative start
+     * position even after resume/skip-build.  Fall back to the CLI
+     * start_fen only if the tree somehow has no root. */
+    const char *export_fen = (tree->root && tree->root->fen[0])
+                             ? tree->root->fen
+                             : start_fen;
+    snprintf(rep_config.start_fen, sizeof(rep_config.start_fen), "%s",
+             export_fen);
+    snprintf(rep_config.start_moves, sizeof(rep_config.start_moves), "%s",
+             tree->start_moves);
     rep_config.max_depth = max_depth;
     rep_config.min_probability = min_probability;
     rep_config.min_games = min_games;

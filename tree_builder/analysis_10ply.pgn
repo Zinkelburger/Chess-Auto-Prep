@@ -1,0 +1,2282 @@
+{Build stats: 114929 nodes in 29654.9s (242/min), depth 20, branching 3.22, 8 threads}
+
+[Event "Repertoire Line #1"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.024%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O a6 7. Be3 Qb6 8. Nbd2 *
+[Event "Repertoire Line #2"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.013%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O a6 7. Be3 c5 8. dxc5 *
+[Event "Repertoire Line #3"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.016%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O a6 7. Be3 c5 8. dxc5 *
+[Event "Repertoire Line #4"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.027%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O a6 7. Be3 Ne7 8. b4 *
+[Event "Repertoire Line #5"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.015%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O a6 7. Be3 Nd7 8. c3 *
+[Event "Repertoire Line #6"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.074%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O a6 7. Be3 Nd7 8. c3 *
+[Event "Repertoire Line #7"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.137%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O a6 7. Be3 Nd7 8. c3 *
+[Event "Repertoire Line #8"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.080%, Eval 268 cp, Already winning (+2.7)}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 *
+[Event "Repertoire Line #9"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.010%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 Ne7 8. dxc5 *
+[Event "Repertoire Line #10"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.014%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 Ne7 8. dxc5 *
+[Event "Repertoire Line #11"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.091%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 Ne7 8. dxc5 *
+[Event "Repertoire Line #12"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.021%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 dxc4 8. Na3 *
+[Event "Repertoire Line #13"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.151%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 dxc4 8. Na3 *
+[Event "Repertoire Line #14"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.197%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 dxc4 8. Na3 *
+[Event "Repertoire Line #15"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.097%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 Nc6 8. Be3 *
+[Event "Repertoire Line #16"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.181%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 Nc6 8. Be3 *
+[Event "Repertoire Line #17"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.243%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O c5 7. c4 Nc6 8. Be3 *
+[Event "Repertoire Line #18"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.015%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 c5 8. dxc5 *
+[Event "Repertoire Line #19"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.016%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 c5 8. dxc5 *
+[Event "Repertoire Line #20"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.038%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 c5 8. dxc5 *
+[Event "Repertoire Line #21"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.025%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 g5 8. a4 *
+[Event "Repertoire Line #22"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.026%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 g5 8. a4 *
+[Event "Repertoire Line #23"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.033%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 g5 8. a4 *
+[Event "Repertoire Line #24"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.058%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 Bh7 8. b4 *
+[Event "Repertoire Line #25"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.059%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 Bh7 8. b4 *
+[Event "Repertoire Line #26"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.099%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 Bh7 8. b4 *
+[Event "Repertoire Line #27"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.180%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 Nd7 8. Nbd2 *
+[Event "Repertoire Line #28"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.609%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 Nd7 8. Nbd2 *
+[Event "Repertoire Line #29"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.735%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 Nd7 8. Nbd2 *
+[Event "Repertoire Line #30"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.833%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Ne7 7. c3 Nd7 8. Nbd2 *
+[Event "Repertoire Line #31"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.096%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 a6 8. a4 *
+[Event "Repertoire Line #32"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.179%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 a6 8. a4 *
+[Event "Repertoire Line #33"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.021%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 g5 8. Nb3 *
+[Event "Repertoire Line #34"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.038%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 g5 8. Nb3 *
+[Event "Repertoire Line #35"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.078%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 g5 8. Nb3 *
+[Event "Repertoire Line #36"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.166%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 g5 8. Nb3 *
+[Event "Repertoire Line #37"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.079%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 c5 8. c4 *
+[Event "Repertoire Line #38"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.128%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 c5 8. c4 *
+[Event "Repertoire Line #39"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.210%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 c5 8. c4 *
+[Event "Repertoire Line #40"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.529%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 c5 8. c4 *
+[Event "Repertoire Line #41"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.064%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #42"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.082%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #43"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.089%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #44"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.089%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #45"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.220%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #46"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.257%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 h6 6. O-O Nd7 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #47"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.012%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 c5 8. c3 *
+[Event "Repertoire Line #48"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.040%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 c5 8. c3 *
+[Event "Repertoire Line #49"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.022%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 h5 8. h3 *
+[Event "Repertoire Line #50"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.031%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 h5 8. h3 *
+[Event "Repertoire Line #51"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.065%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 Nd7 8. Ne1 *
+[Event "Repertoire Line #52"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.083%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 Nd7 8. Ne1 *
+[Event "Repertoire Line #53"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.114%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 Nd7 8. Ne1 *
+[Event "Repertoire Line #54"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.123%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 Nd7 8. Ne1 *
+[Event "Repertoire Line #55"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.220%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 Nd7 8. Ne1 *
+[Event "Repertoire Line #56"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.028%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 Be7 8. a4 *
+[Event "Repertoire Line #57"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.038%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 Be7 8. a4 *
+[Event "Repertoire Line #58"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.103%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 Be7 8. a4 *
+[Event "Repertoire Line #59"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.166%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Ng6 7. Be3 Be7 8. a4 *
+[Event "Repertoire Line #60"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.016%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Bg6 7. c3 c5 8. dxc5 *
+[Event "Repertoire Line #61"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.023%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Bg6 7. c3 c5 8. dxc5 *
+[Event "Repertoire Line #62"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.045%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Bg6 7. c3 c5 8. dxc5 *
+[Event "Repertoire Line #63"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.062%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Bg6 7. c3 Nd7 8. Nbd2 *
+[Event "Repertoire Line #64"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.324%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Bg6 7. c3 Nd7 8. Nbd2 *
+[Event "Repertoire Line #65"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.478%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Bg6 7. c3 Nd7 8. Nbd2 *
+[Event "Repertoire Line #66"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.087%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Bg6 7. c3 Nf5 8. Bf4 *
+[Event "Repertoire Line #67"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.108%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Bg6 7. c3 Nf5 8. Bf4 *
+[Event "Repertoire Line #68"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.225%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Bg6 7. c3 Nf5 8. Bf4 *
+[Event "Repertoire Line #69"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.030%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 a6 8. b4 *
+[Event "Repertoire Line #70"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.022%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 g5 8. c3 *
+[Event "Repertoire Line #71"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.023%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 g5 8. c3 *
+[Event "Repertoire Line #72"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.028%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 g5 8. c3 *
+[Event "Repertoire Line #73"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.032%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 a5 8. Na3 *
+[Event "Repertoire Line #74"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.043%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 a5 8. Na3 *
+[Event "Repertoire Line #75"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.016%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 Bh7 8. Na3 *
+[Event "Repertoire Line #76"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.099%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 Bh7 8. Na3 *
+[Event "Repertoire Line #77"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.107%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 Bh7 8. Na3 *
+[Event "Repertoire Line #78"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.157%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 Nd7 8. Be3 *
+[Event "Repertoire Line #79"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.177%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 Nd7 8. Be3 *
+[Event "Repertoire Line #80"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.288%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 Nd7 8. Be3 *
+[Event "Repertoire Line #81"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.609%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 Nd7 8. Be3 *
+[Event "Repertoire Line #82"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.887%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O h6 7. a4 Nd7 8. Be3 *
+[Event "Repertoire Line #83"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.153%, Eval 225 cp, Already winning (+2.2)}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O c5 7. dxc5 *
+[Event "Repertoire Line #84"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.333%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O c5 7. dxc5 Nbc6 8. c3 *
+[Event "Repertoire Line #85"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.470%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O c5 7. dxc5 Nbc6 8. c3 *
+[Event "Repertoire Line #86"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 3.063%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O c5 7. dxc5 Nbc6 8. c3 *
+[Event "Repertoire Line #87"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.016%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O c5 7. dxc5 Nd7 8. b4 *
+[Event "Repertoire Line #88"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.032%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O c5 7. dxc5 Nd7 8. b4 *
+[Event "Repertoire Line #89"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.048%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O c5 7. dxc5 Nd7 8. b4 *
+[Event "Repertoire Line #90"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.174%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O c5 7. dxc5 Nd7 8. b4 *
+[Event "Repertoire Line #91"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.861%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O c5 7. dxc5 Nec6 8. Be3 *
+[Event "Repertoire Line #92"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.038%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #93"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.039%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #94"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.057%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #95"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.087%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #96"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.103%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #97"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.145%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #98"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.045%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #99"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.061%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #100"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.063%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #101"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.094%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #102"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.121%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #103"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.162%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #104"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.062%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Bg6 8. Nbd2 *
+[Event "Repertoire Line #105"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.324%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Bg6 8. Nbd2 *
+[Event "Repertoire Line #106"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.478%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 Bg6 8. Nbd2 *
+[Event "Repertoire Line #107"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.177%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 h6 8. Re1 *
+[Event "Repertoire Line #108"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.438%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 h6 8. Re1 *
+[Event "Repertoire Line #109"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.536%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 h6 8. Re1 *
+[Event "Repertoire Line #110"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.792%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 h6 8. Re1 *
+[Event "Repertoire Line #111"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.193%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 c5 8. c4 *
+[Event "Repertoire Line #112"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.290%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 c5 8. c4 *
+[Event "Repertoire Line #113"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.777%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 c5 8. c4 *
+[Event "Repertoire Line #114"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 1.241%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Ne7 6. O-O Nd7 7. c3 c5 8. c4 *
+[Event "Repertoire Line #115"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.022%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O f6 7. Nc3 Qc7 8. Bf4 *
+[Event "Repertoire Line #116"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.037%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O f6 7. Nc3 Qc7 8. Bf4 *
+[Event "Repertoire Line #117"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.067%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O f6 7. Nc3 Qc7 8. Bf4 *
+[Event "Repertoire Line #118"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.119%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O f6 7. Nc3 Qc7 8. Bf4 *
+[Event "Repertoire Line #119"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.106%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O f6 7. Nc3 fxe5 8. dxe5 *
+[Event "Repertoire Line #120"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.211%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O f6 7. Nc3 fxe5 8. dxe5 *
+[Event "Repertoire Line #121"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.235%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O f6 7. Nc3 fxe5 8. dxe5 *
+[Event "Repertoire Line #122"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.547%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O f6 7. Nc3 fxe5 8. dxe5 *
+[Event "Repertoire Line #123"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.013%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 Rc8 8. Nbd2 *
+[Event "Repertoire Line #124"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.100%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 Rc8 8. Nbd2 *
+[Event "Repertoire Line #125"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.026%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 Ne7 8. c3 *
+[Event "Repertoire Line #126"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.033%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 Ne7 8. c3 *
+[Event "Repertoire Line #127"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.046%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 Ne7 8. c3 *
+[Event "Repertoire Line #128"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.054%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 Ne7 8. c3 *
+[Event "Repertoire Line #129"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.057%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 Ne7 8. c3 *
+[Event "Repertoire Line #130"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.015%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 h6 8. c3 *
+[Event "Repertoire Line #131"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.074%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 h6 8. c3 *
+[Event "Repertoire Line #132"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.137%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 h6 8. c3 *
+[Event "Repertoire Line #133"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.011%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 c5 8. c3 *
+[Event "Repertoire Line #134"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.012%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 c5 8. c3 *
+[Event "Repertoire Line #135"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.016%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 c5 8. c3 *
+[Event "Repertoire Line #136"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.020%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O a6 7. Be3 c5 8. c3 *
+[Event "Repertoire Line #137"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.096%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 a6 8. a4 *
+[Event "Repertoire Line #138"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.179%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 a6 8. a4 *
+[Event "Repertoire Line #139"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.021%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 g5 8. Nb3 *
+[Event "Repertoire Line #140"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.038%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 g5 8. Nb3 *
+[Event "Repertoire Line #141"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.078%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 g5 8. Nb3 *
+[Event "Repertoire Line #142"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.166%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 g5 8. Nb3 *
+[Event "Repertoire Line #143"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.079%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 c5 8. c4 *
+[Event "Repertoire Line #144"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.128%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 c5 8. c4 *
+[Event "Repertoire Line #145"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.210%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 c5 8. c4 *
+[Event "Repertoire Line #146"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.529%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 c5 8. c4 *
+[Event "Repertoire Line #147"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.161%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #148"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.207%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #149"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.224%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #150"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.224%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #151"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.553%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #152"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.647%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O h6 7. Nbd2 Ne7 8. Nb3 *
+[Event "Repertoire Line #153"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.424%, Eval 267 cp, Already winning (+2.7)}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 *
+[Event "Repertoire Line #154"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.545%, Eval 280 cp, Already winning (+2.8)}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 *
+[Event "Repertoire Line #155"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.166%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 dxc4 8. Na3 *
+[Event "Repertoire Line #156"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.210%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 dxc4 8. Na3 *
+[Event "Repertoire Line #157"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 1.456%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 dxc4 8. Na3 *
+[Event "Repertoire Line #158"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.132%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 Ne7 8. Nc3 *
+[Event "Repertoire Line #159"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.134%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 Ne7 8. Nc3 *
+[Event "Repertoire Line #160"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.231%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 Ne7 8. Nc3 *
+[Event "Repertoire Line #161"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.619%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 Ne7 8. Nc3 *
+[Event "Repertoire Line #162"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 1.054%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O c5 7. c4 Ne7 8. Nc3 *
+[Event "Repertoire Line #163"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.038%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #164"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.039%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #165"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.057%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #166"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.087%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #167"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.103%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #168"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.145%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Qc7 8. a4 *
+[Event "Repertoire Line #169"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.045%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #170"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.061%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #171"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.063%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #172"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.094%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #173"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.121%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #174"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.162%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Ng6 8. Ne1 *
+[Event "Repertoire Line #175"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.062%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Bg6 8. Nbd2 *
+[Event "Repertoire Line #176"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.324%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Bg6 8. Nbd2 *
+[Event "Repertoire Line #177"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.478%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 Bg6 8. Nbd2 *
+[Event "Repertoire Line #178"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.177%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 h6 8. Re1 *
+[Event "Repertoire Line #179"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.438%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 h6 8. Re1 *
+[Event "Repertoire Line #180"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.536%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 h6 8. Re1 *
+[Event "Repertoire Line #181"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.792%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 h6 8. Re1 *
+[Event "Repertoire Line #182"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.193%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 c5 8. c4 *
+[Event "Repertoire Line #183"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.290%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 c5 8. c4 *
+[Event "Repertoire Line #184"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.777%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 c5 8. c4 *
+[Event "Repertoire Line #185"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 1.241%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 Nd7 6. O-O Ne7 7. c3 c5 8. c4 *
+[Event "Repertoire Line #186"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.011%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O a6 8. c3 *
+[Event "Repertoire Line #187"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.012%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O a6 8. c3 *
+[Event "Repertoire Line #188"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.016%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O a6 8. c3 *
+[Event "Repertoire Line #189"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.020%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O a6 8. c3 *
+[Event "Repertoire Line #190"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.021%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O c4 8. b3 *
+[Event "Repertoire Line #191"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.098%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O c4 8. b3 *
+[Event "Repertoire Line #192"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.012%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Rc8 8. c4 *
+[Event "Repertoire Line #193"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.042%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Rc8 8. c4 *
+[Event "Repertoire Line #194"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.068%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Rc8 8. c4 *
+[Event "Repertoire Line #195"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.074%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Rc8 8. c4 *
+[Event "Repertoire Line #196"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.020%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Qb6 8. Nbd2 *
+[Event "Repertoire Line #197"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.025%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Qb6 8. Nbd2 *
+[Event "Repertoire Line #198"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.032%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Qb6 8. Nbd2 *
+[Event "Repertoire Line #199"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.037%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Qb6 8. Nbd2 *
+[Event "Repertoire Line #200"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.045%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Qb6 8. Nbd2 *
+[Event "Repertoire Line #201"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.079%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Qb6 8. Nbd2 *
+[Event "Repertoire Line #202"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.064%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O cxd4 8. Nxd4 *
+[Event "Repertoire Line #203"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.265%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O cxd4 8. Nxd4 *
+[Event "Repertoire Line #204"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.041%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Ne7 8. c4 *
+[Event "Repertoire Line #205"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.058%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Ne7 8. c4 *
+[Event "Repertoire Line #206"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.145%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Ne7 8. c4 *
+[Event "Repertoire Line #207"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.169%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nd7 7. O-O Ne7 8. c4 *
+[Event "Repertoire Line #208"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.384%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 cxd4 7. Nxd4 Ne7 8. O-O *
+[Event "Repertoire Line #209"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.788%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 cxd4 7. Nxd4 Ne7 8. O-O *
+[Event "Repertoire Line #210"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.326%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 cxd4 7. Nxd4 Bg6 8. c4 *
+[Event "Repertoire Line #211"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.474%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 cxd4 7. Nxd4 Bg6 8. c4 *
+[Event "Repertoire Line #212"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.474%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 cxd4 7. Nxd4 Bg6 8. c4 *
+[Event "Repertoire Line #213"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.973%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 cxd4 7. Nxd4 Bg6 8. c4 *
+[Event "Repertoire Line #214"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.040%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Qb6 7. Nc3 c4 8. Rb1 *
+[Event "Repertoire Line #215"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.077%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Qb6 7. Nc3 c4 8. Rb1 *
+[Event "Repertoire Line #216"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.173%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Qb6 7. Nc3 c4 8. Rb1 *
+[Event "Repertoire Line #217"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.233%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Qb6 7. Nc3 c4 8. Rb1 *
+[Event "Repertoire Line #218"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.195%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Qb6 7. Nc3 Qxb2 8. Qb1 *
+[Event "Repertoire Line #219"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 1.230%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Qb6 7. Nc3 Qxb2 8. Qb1 *
+[Event "Repertoire Line #220"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.958%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Qb6 7. Nc3 Nc6 8. O-O *
+[Event "Repertoire Line #221"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.989%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Qb6 7. Nc3 Nc6 8. O-O *
+[Event "Repertoire Line #222"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 2.525%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Qb6 7. Nc3 Nc6 8. O-O *
+[Event "Repertoire Line #223"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 3.554%, Eval 204 cp, Already winning (+2.0)}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nc6 7. dxc5 *
+[Event "Repertoire Line #224"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.353%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nc6 7. dxc5 Nge7 8. O-O *
+[Event "Repertoire Line #225"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 3.794%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nc6 7. dxc5 Nge7 8. O-O *
+[Event "Repertoire Line #226"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.325%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nc6 7. dxc5 Qc7 8. O-O *
+[Event "Repertoire Line #227"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 0.793%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nc6 7. dxc5 Qc7 8. O-O *
+[Event "Repertoire Line #228"]
+[Site "tree_builder"]
+[Date "2026.04.17"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 3.186%, Eval 0 cp}
+1. e4 c6 2. d4 d5 3. e5 Bf5 4. Be2 e6 5. Nf3 c5 6. Be3 Nc6 7. dxc5 Qc7 8. O-O *
