@@ -21,6 +21,7 @@ class AppState extends ChangeNotifier {
   String? _chesscomUsername;
   bool _isLoading = false;
   bool _isAnalysisMode = false;
+  bool _isRepertoireGenerating = false;
   bool? _initialBoardFlipped;
   final PgnService _pgnService = PgnService();
 
@@ -31,6 +32,7 @@ class AppState extends ChangeNotifier {
   String? get chesscomUsername => _chesscomUsername;
   bool get isLoading => _isLoading;
   bool get isAnalysisMode => _isAnalysisMode;
+  bool get isRepertoireGenerating => _isRepertoireGenerating;
   bool get boardFlipped {
     if (_currentMode == AppMode.tactics && _initialBoardFlipped != null) {
       return _initialBoardFlipped!;
@@ -98,6 +100,11 @@ class AppState extends ChangeNotifier {
 
   void setLoading(bool loading) {
     _isLoading = loading;
+    notifyListeners();
+  }
+
+  void setRepertoireGenerating(bool generating) {
+    _isRepertoireGenerating = generating;
     notifyListeners();
   }
 

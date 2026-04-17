@@ -55,10 +55,13 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           appBar: AppBar(
             title: const Text('Chess Auto Prep'),
             actions: [
-              // Mode selector
+              // Mode selector (disabled during repertoire generation)
               PopupMenuButton<AppMode>(
                 icon: const Icon(Icons.view_module),
-                tooltip: 'Select Mode',
+                tooltip: appState.isRepertoireGenerating
+                    ? 'Locked — repertoire generation in progress'
+                    : 'Select Mode',
+                enabled: !appState.isRepertoireGenerating,
                 onSelected: (mode) {
                   appState.setMode(mode);
                 },

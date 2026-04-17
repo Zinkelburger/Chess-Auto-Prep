@@ -20,6 +20,7 @@ class RepertoireGenerationTab extends StatefulWidget {
   final Map<String, dynamic>? currentRepertoire;
   final List<String> currentMoveSequence;
   final void Function(bool generating) onGeneratingChanged;
+  final void Function(bool paused) onPauseChanged;
   final void Function(List<String> moves, String title, String pgn) onLineSaved;
   final void Function(BuildTree tree)? onTreeBuilt;
 
@@ -30,6 +31,7 @@ class RepertoireGenerationTab extends StatefulWidget {
     required this.currentRepertoire,
     required this.currentMoveSequence,
     required this.onGeneratingChanged,
+    required this.onPauseChanged,
     required this.onLineSaved,
     this.onTreeBuilt,
   });
@@ -48,7 +50,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   final TextEditingController _cutoffCtrl =
       TextEditingController(text: '0.01');
-  final TextEditingController _depthCtrl = TextEditingController(text: '20');
+  final TextEditingController _depthCtrl = TextEditingController(text: '10');
   final TextEditingController _engineDepthCtrl =
       TextEditingController(text: '20');
   final TextEditingController _evalGuardCtrl =
@@ -80,6 +82,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   bool _showAdvanced = false;
   bool _isGenerating = false;
   bool _cancelRequested = false;
+  bool _isPaused = false;
   String _status = 'Idle';
   int _nodes = 0;
   int _lines = 0;
@@ -89,9 +92,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   int _maiaCalls = 0;
   int _lichessQueries = 0;
   int _elapsedMs = 0;
+  double? _nodesPerSecond;
+  double? _observedBranching;
   DateTime _lastProgressUpdate = DateTime(0);
   final StringBuffer _pendingPgnBuffer = StringBuffer();
   int _pendingPgnLines = 0;
+  BuildTree? _savedPartialTree;
 
   @override
   void initState() {
@@ -105,6 +111,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _evalGuardCtrl.addListener(_onPresetFieldEdited);
     _minEvalCtrl.addListener(_onPresetFieldEdited);
     _noveltyWeightCtrl.addListener(_onPresetFieldEdited);
+    _checkForPartialTree();
   }
 
   void _onPresetFieldEdited() {
@@ -131,18 +138,99 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant RepertoireGenerationTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldPath = oldWidget.currentRepertoire?['filePath'] as String?;
+    final newPath = widget.currentRepertoire?['filePath'] as String?;
+    if (oldPath != newPath) {
+      _savedPartialTree = null;
+      _checkForPartialTree();
+    }
+  }
+
+  String? _partialTreePath() {
+    final filePath = widget.currentRepertoire?['filePath'] as String?;
+    if (filePath == null || filePath.isEmpty) return null;
+    final base = filePath.toLowerCase().endsWith('.pgn')
+        ? filePath.substring(0, filePath.length - 4)
+        : filePath;
+    return '${base}_partial_tree.json';
+  }
+
+  Future<void> _checkForPartialTree() async {
+    final path = _partialTreePath();
+    if (path == null) return;
+    final file = File(path);
+    if (await file.exists()) {
+      try {
+        final json = await file.readAsString();
+        final tree = deserializeTree(json);
+        if (!tree.buildComplete && mounted) {
+          setState(() => _savedPartialTree = tree);
+        }
+      } catch (_) {}
+    } else if (_savedPartialTree != null && mounted) {
+      setState(() => _savedPartialTree = null);
+    }
+  }
+
+  Future<void> _savePartialTree() async {
+    final tree = _buildService.currentTree;
+    if (tree == null) return;
+    final path = _partialTreePath();
+    if (path == null) return;
+    try {
+      final treeJson = serializeTree(tree);
+      await File(path).writeAsString(treeJson);
+    } catch (_) {}
+  }
+
+  Future<void> _deletePartialTree() async {
+    final path = _partialTreePath();
+    if (path == null) return;
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+  }
+
   void cancelGeneration({String? reason}) {
     if (!_isGenerating) return;
     _cancelRequested = true;
     _buildService.stopBuild();
-    if (mounted && reason != null && reason.isNotEmpty) {
-      setState(() => _status = reason);
+    if (mounted) {
+      setState(() {
+        _isPaused = false;
+        if (reason != null && reason.isNotEmpty) _status = reason;
+      });
+    }
+    widget.onPauseChanged(false);
+  }
+
+  void togglePause() {
+    if (!_isGenerating) return;
+    if (_isPaused) {
+      _buildService.resumeBuild();
+      setState(() {
+        _isPaused = false;
+        _status = 'Building: resumed...';
+      });
+      widget.onPauseChanged(false);
+    } else {
+      _buildService.pauseBuild();
+      _savePartialTree();
+      setState(() {
+        _isPaused = true;
+        _status = 'Paused ($_nodes nodes)';
+      });
+      widget.onPauseChanged(true);
     }
   }
 
   // ── Tree build generation ─────────────────────────────────────────────
 
-  Future<void> _startTreeBuild() async {
+  Future<void> _startTreeBuild({BuildTree? existingTree}) async {
     if (_isGenerating) return;
     final filePath = widget.currentRepertoire?['filePath'] as String?;
     if (filePath == null || filePath.isEmpty) {
@@ -150,45 +238,61 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       return;
     }
 
-    final config = TreeBuildConfig(
-      startFen: widget.fen,
-      playAsWhite: widget.isWhiteRepertoire,
-      minProbability: _parsePercentToFraction(
-        _cutoffCtrl.text,
-        fallbackPercent: 0.01,
-      ),
-      maxDepth: int.tryParse(_depthCtrl.text.trim()) ?? 30,
-      evalDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
-      maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 50,
-      minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
-          (widget.isWhiteRepertoire ? 0 : -200),
-      maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ??
-          (widget.isWhiteRepertoire ? 200 : 100),
-      maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
-      maiaOnly: _maiaOnly,
-      ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 5,
-      oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 6,
-      oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.85,
-      useLichessDb: _useLichessDb,
-      useMasters: _useMasters,
-      relativeEval: _relativeEval,
-      noveltyWeight: int.tryParse(_noveltyWeightCtrl.text.trim()) ?? 0,
-      leafConfidence:
-          double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
-    );
+    final TreeBuildConfig config;
+    if (existingTree != null) {
+      config = TreeBuildConfig.fromJson(
+        existingTree.configSnapshot,
+        startFen: existingTree.root.fen,
+      );
+    } else {
+      config = TreeBuildConfig(
+        startFen: widget.fen,
+        playAsWhite: widget.isWhiteRepertoire,
+        minProbability: _parsePercentToFraction(
+          _cutoffCtrl.text,
+          fallbackPercent: 0.01,
+        ),
+        maxDepth: int.tryParse(_depthCtrl.text.trim()) ?? 10,
+        evalDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
+        maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 50,
+        minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
+            (widget.isWhiteRepertoire ? 0 : -200),
+        maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ??
+            (widget.isWhiteRepertoire ? 200 : 100),
+        maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
+        maiaOnly: _maiaOnly,
+        ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 5,
+        oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 6,
+        oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.85,
+        useLichessDb: _useLichessDb,
+        useMasters: _useMasters,
+        relativeEval: _relativeEval,
+        noveltyWeight: int.tryParse(_noveltyWeightCtrl.text.trim()) ?? 0,
+        leafConfidence:
+            double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
+      );
+    }
+
+    if (existingTree == null) _deletePartialTree();
 
     setState(() {
       _isGenerating = true;
       _cancelRequested = false;
-      _status = 'Phase 1: Building tree...';
-      _nodes = 0;
+      _isPaused = false;
+      _savedPartialTree = null;
+      _status = existingTree != null
+          ? 'Phase 1: Resuming build...'
+          : 'Phase 1: Building tree...';
+      _nodes = existingTree?.totalNodes ?? 0;
       _lines = 0;
-      _depth = 0;
+      _depth = existingTree?.maxDepthReached ?? 0;
       _engineCalls = 0;
       _engineCacheHits = 0;
       _maiaCalls = 0;
       _lichessQueries = 0;
       _elapsedMs = 0;
+      _nodesPerSecond = null;
+      _observedBranching = null;
     });
     _pendingPgnBuffer.clear();
     _pendingPgnLines = 0;
@@ -199,6 +303,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       final tree = await _buildService.build(
         config: config,
         isCancelled: () => _cancelRequested,
+        existingTree: existingTree,
         onProgress: (p) {
           if (!mounted) return;
           _nodes = p.totalNodes;
@@ -208,6 +313,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           _maiaCalls = p.maiaCalls;
           _lichessQueries = p.lichessQueries;
           _elapsedMs = p.elapsedMs;
+          _nodesPerSecond = p.nodesPerSecond;
+          _observedBranching = p.observedBranchingFactor;
           _status = 'Building: ${p.message}';
 
           final now = DateTime.now();
@@ -289,6 +396,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         // Tree JSON save is best-effort
       }
 
+      await _deletePartialTree();
+
       if (mounted) {
         setState(() {
           _status = 'Complete: ${tree.totalNodes} nodes, '
@@ -308,6 +417,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     } finally {
       if (mounted) setState(() => _isGenerating = false);
       widget.onGeneratingChanged(false);
+      _checkForPartialTree();
     }
   }
 
@@ -423,28 +533,51 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 4,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_isGenerating)
-            const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          _statChip('Nodes', '$_nodes'),
-          _statChip('Lines', '$_lines'),
-          _statChip('d', '$_depth'),
-          _statChip('Eng', '$_engineCalls'),
-          if (_engineCacheHits > 0) _statChip('Cached', '$_engineCacheHits'),
-          if (_maiaCalls > 0) _statChip('Maia', '$_maiaCalls'),
-          if (_lichessQueries > 0) _statChip('Lichess', '$_lichessQueries'),
-          Text(elapsed,
-              style: TextStyle(
-                fontSize: 13,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              )),
+          Row(
+            children: [
+              if (_isGenerating && !_isPaused)
+                const SizedBox(
+                  width: 14, height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              if (_isPaused)
+                Icon(Icons.pause_circle, size: 14, color: Colors.amber[400]),
+              const SizedBox(width: 6),
+              Text(
+                '$_nodes nodes',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                elapsed,
+                style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              _statChip('Lines', '$_lines'),
+              _statChip('d', '$_depth'),
+              _statChip('Eng', '$_engineCalls'),
+              if (_engineCacheHits > 0) _statChip('Cached', '$_engineCacheHits'),
+              if (_maiaCalls > 0) _statChip('Maia', '$_maiaCalls'),
+              if (_lichessQueries > 0) _statChip('Lichess', '$_lichessQueries'),
+              if (_nodesPerSecond != null)
+                _statChip('n/s', _nodesPerSecond!.toStringAsFixed(1)),
+              if (_observedBranching != null)
+                _statChip('b', _observedBranching!.toStringAsFixed(2)),
+            ],
+          ),
         ],
       ),
     );
@@ -459,7 +592,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -621,6 +754,64 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           ],
           const SizedBox(height: 8),
 
+          // Saved partial tree banner
+          if (_savedPartialTree != null && !_isGenerating) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.amber.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber[700]!, width: 1),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.pause_circle, size: 18,
+                          color: Colors.amber[400]),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Paused Build Available',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.amber[300],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_savedPartialTree!.totalNodes} nodes, '
+                    'depth ${_savedPartialTree!.maxDepthReached}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () =>
+                            _startTreeBuild(existingTree: _savedPartialTree!),
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Resume Build'),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          _deletePartialTree();
+                          setState(() => _savedPartialTree = null);
+                        },
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Discard'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+
           // Action buttons
           Row(
             children: [
@@ -629,12 +820,44 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Build Repertoire Tree'),
               ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                onPressed: _isGenerating ? () => cancelGeneration() : null,
-                icon: const Icon(Icons.stop),
-                label: const Text('Cancel'),
-              ),
+              if (_isGenerating && !_isPaused) ...[
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: togglePause,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.amber[800],
+                  ),
+                  icon: const Icon(Icons.pause, color: Colors.white),
+                  label: const Text(
+                    'Pause',
+                    style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+              if (_isGenerating && _isPaused) ...[
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: togglePause,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.green[700],
+                  ),
+                  icon: const Icon(Icons.play_arrow, color: Colors.white),
+                  label: const Text(
+                    'Resume',
+                    style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () => cancelGeneration(),
+                  icon: const Icon(Icons.stop),
+                  label: const Text('Cancel'),
+                ),
+              ],
             ],
           ),
           if (_isGenerating || _nodes > 0) ...[
@@ -718,6 +941,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     }
     _applyingPreset = false;
   }
+
 
   double _parsePercentToFraction(
     String raw, {

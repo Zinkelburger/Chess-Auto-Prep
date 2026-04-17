@@ -5,9 +5,11 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:provider/provider.dart';
 
 import 'dart:io' as io;
 
+import '../core/app_state.dart';
 import '../core/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/engine_settings.dart';
@@ -24,6 +26,7 @@ import '../widgets/coverage_calculator_widget.dart';
 import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/opening_tree_widget.dart';
 import '../widgets/repertoire_lines_browser.dart';
+import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
 import '../widgets/unified_engine_pane.dart';
 import 'repertoire_selection_screen.dart';
@@ -50,6 +53,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   final GlobalKey<BuildTreeWidgetState> _buildTreeKey =
       GlobalKey<BuildTreeWidgetState>();
   bool _isGenerating = false;
+  bool _isGenerationPaused = false;
 
   BuildTree? _buildTree;
   bool _isLoadingTree = false;
@@ -67,11 +71,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           _tabController.animation?.value == _tabController.index;
       if (!settled) return;
 
-      // Engine tab selected while generating -> stop generation first.
+      // Engine tab selected while generating -> pause generation first.
       if (_tabController.index == 1 && _isGenerating) {
-        _generationTabKey.currentState?.cancelGeneration(
-          reason: 'Generation paused because Engine tab was opened.',
-        );
+        _generationTabKey.currentState?.togglePause();
       }
 
       // Leaving engine tab -> hard-cancel analysis to avoid overlap.
@@ -215,16 +217,51 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           ],
         ),
         actions: [
+          if (_isGenerating)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _isGenerationPaused
+                        ? Colors.amber[800]
+                        : Colors.orange[900],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!_isGenerationPaused)
+                        const SizedBox(
+                          width: 12, height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white,
+                          ),
+                        )
+                      else
+                        const Icon(Icons.pause, size: 12, color: Colors.white),
+                      const SizedBox(width: 6),
+                      Text(
+                        _isGenerationPaused ? 'Paused' : 'Building...',
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.library_books),
             tooltip: 'Select Repertoire',
-            onPressed: _showRepertoireSelection,
+            onPressed: _isGenerating ? null : _showRepertoireSelection,
           ),
         ],
       ),
       body: Focus(
         autofocus: true,
-        onKeyEvent: (node, event) {
+        onKeyEvent: _isGenerating ? null : (node, event) {
           if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
           // Ctrl+Shift+V - Paste FEN from clipboard
@@ -236,13 +273,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           }
 
           // 'F' key - Flip the board (only if not typing in a text field)
-          // Check if we're in the PGN tab where text fields exist
           if (event.logicalKey == LogicalKeyboardKey.keyF &&
               !HardwareKeyboard.instance.isControlPressed &&
               !HardwareKeyboard.instance.isShiftPressed &&
               !HardwareKeyboard.instance.isAltPressed) {
-            // Don't flip if PGN tab is active (has text fields for comments)
-            // User can still flip with the keyboard when not focused on a text field
             final primaryFocus = FocusManager.instance.primaryFocus;
             final isTextInput = primaryFocus?.context?.widget is EditableText;
             if (!isTextInput) {
@@ -263,7 +297,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               return KeyEventResult.handled;
             }
           }
-          // Tree Tab (Index 0) or Lines Tab (Index 3) - Main controller handles navigation
+          // Tree Tab (Index 0) or Lines Tab (Index 3)
           else if (_tabController.index == 0 || _tabController.index == 3) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               _controller.goBack();
@@ -273,7 +307,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               return KeyEventResult.handled;
             }
           }
-          // Engine Tab (Index 1) - Main controller handles navigation
+          // Engine Tab (Index 1)
           else if (_tabController.index == 1) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               _controller.goBack();
@@ -283,7 +317,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               return KeyEventResult.handled;
             }
           }
-          // Eval Tree Tab (Index 5) - BuildTreeWidget handles navigation
+          // Eval Tree Tab (Index 5)
           else if (_tabController.index == 5) {
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               _buildTreeKey.currentState?.goBack();
@@ -301,22 +335,134 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             // Left panel - Chess board (60% of width)
             Expanded(
               flex: 6,
-              child: Container(
-                padding: const EdgeInsets.all(16.0),
-                child: ChessBoardWidget(
-                  // Force widget recreation when position changes to prevent race conditions
-                  key: ValueKey(_controller.fen),
-                  // Read game state from controller
-                  position: _controller.position,
-                  flipped: _boardFlipped,
-                  onPieceSelected: (square) {
-                    // Handle piece selection if needed
-                  },
-                  onMove: (CompletedMove move) {
-                    // Handle moves in repertoire
-                    _handleMove(move);
-                  },
-                ),
+              child: Stack(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ChessBoardWidget(
+                      key: ValueKey(_controller.fen),
+                      position: _controller.position,
+                      flipped: _boardFlipped,
+                      onPieceSelected: (square) {},
+                      onMove: (CompletedMove move) {
+                        _handleMove(move);
+                      },
+                    ),
+                  ),
+                  // Board overlay during generation
+                  if (_isGenerating)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32, vertical: 24),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.surface,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: _isGenerationPaused
+                                    ? Colors.amber[700]!
+                                    : Colors.orange[800]!,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!_isGenerationPaused)
+                                  const SizedBox(
+                                    width: 36, height: 36,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 3),
+                                  )
+                                else
+                                  Icon(Icons.pause_circle_filled,
+                                      size: 36, color: Colors.amber[400]),
+                                const SizedBox(height: 14),
+                                Text(
+                                  _isGenerationPaused
+                                      ? 'Generation Paused'
+                                      : 'Generating Repertoire...',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
+                                      ?.copyWith(
+                                          fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'All other features are locked.\n'
+                                  'Please leave this running.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[400],
+                                    height: 1.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 18),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (!_isGenerationPaused)
+                                      FilledButton.icon(
+                                        onPressed: () {
+                                          _generationTabKey.currentState
+                                              ?.togglePause();
+                                        },
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: Colors.amber[800],
+                                        ),
+                                        icon: const Icon(Icons.pause,
+                                            color: Colors.white),
+                                        label: const Text(
+                                          'Pause',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    if (_isGenerationPaused) ...[
+                                      FilledButton.icon(
+                                        onPressed: () {
+                                          _generationTabKey.currentState
+                                              ?.togglePause();
+                                        },
+                                        style: FilledButton.styleFrom(
+                                          backgroundColor: Colors.green[700],
+                                        ),
+                                        icon: const Icon(Icons.play_arrow,
+                                            color: Colors.white),
+                                        label: const Text(
+                                          'Resume',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      OutlinedButton.icon(
+                                        onPressed: () {
+                                          _generationTabKey.currentState
+                                              ?.cancelGeneration();
+                                        },
+                                        icon: const Icon(Icons.stop),
+                                        label: const Text('Cancel'),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
 
@@ -330,25 +476,34 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
-                    // Tab bar
-                    TabBar(
-                      controller: _tabController,
-                      isScrollable: true,
-                      tabAlignment: TabAlignment.start,
-                      tabs: const [
-                        Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
-                        Tab(text: 'Engine', icon: Icon(Icons.developer_board, size: 16)),
-                        Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
-                        Tab(text: 'Lines', icon: Icon(Icons.library_books, size: 16)),
-                        Tab(text: 'Generate', icon: Icon(Icons.auto_awesome, size: 16)),
-                        Tab(text: 'Eval Tree', icon: Icon(Icons.insights, size: 16)),
-                        Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
-                      ],
+                    // Tab bar — disabled (grayed out) during generation
+                    IgnorePointer(
+                      ignoring: _isGenerating,
+                      child: Opacity(
+                        opacity: _isGenerating ? 0.35 : 1.0,
+                        child: TabBar(
+                          controller: _tabController,
+                          isScrollable: true,
+                          tabAlignment: TabAlignment.start,
+                          tabs: const [
+                            Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
+                            Tab(text: 'Engine', icon: Icon(Icons.developer_board, size: 16)),
+                            Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
+                            Tab(text: 'Lines', icon: Icon(Icons.library_books, size: 16)),
+                            Tab(text: 'Generate', icon: Icon(Icons.auto_awesome, size: 16)),
+                            Tab(text: 'Eval Tree', icon: Icon(Icons.insights, size: 16)),
+                            Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
+                          ],
+                        ),
+                      ),
                     ),
                     // Tab views
                     Expanded(
                       child: TabBarView(
                         controller: _tabController,
+                        physics: _isGenerating
+                            ? const NeverScrollableScrollPhysics()
+                            : null,
                         children: [
                           _buildOpeningTreeTab(),
                           _KeepAliveTab(child: _buildEngineTab()),
@@ -526,7 +681,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         if (!mounted) return;
         setState(() {
           _isGenerating = generating;
+          if (!generating) _isGenerationPaused = false;
         });
+        context.read<AppState>().setRepertoireGenerating(generating);
+        if (generating) {
+          _tabController.animateTo(4);
+        }
+      },
+      onPauseChanged: (paused) {
+        if (!mounted) return;
+        setState(() => _isGenerationPaused = paused);
       },
       onLineSaved: (moves, title, pgn) {
         _controller.appendNewLine(moves, title, pgn);
@@ -1069,8 +1233,21 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _showFeatureNotImplemented('Expand via Quiz');
   }
 
-  void _importPgn() {
-    _showFeatureNotImplemented('Import PGN');
+  Future<void> _importPgn() async {
+    final result = await showPgnImportDialog(
+      context,
+      title: 'Import PGN into Repertoire',
+      confirmLabel: 'Add to Repertoire',
+    );
+    if (result == null || !mounted) return;
+
+    final added = await _controller.importPgnContent(result.pgnContent);
+    if (!mounted) return;
+
+    showAppSnackBar(
+      context,
+      'Imported $added game${added == 1 ? '' : 's'} into repertoire.',
+    );
   }
 
   void _showFeatureNotImplemented(String featureName) {
