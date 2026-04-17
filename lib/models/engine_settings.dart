@@ -123,9 +123,6 @@ class EngineSettings with ChangeNotifier {
 
   // ── Singleton + system detection ─────────────────────────────────────
 
-  /// Detected system RAM in MB.
-  static final int systemRamMb = getSystemRamMb();
-
   /// Detected logical CPU cores.
   static final int systemCores = getLogicalCores();
 

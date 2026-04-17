@@ -68,7 +68,7 @@ build/
 .pub-cache/
 .pub/
 *.lock
-pubspec.lock
+!pubspec.lock
 
 # Project specific
 maia2_models/

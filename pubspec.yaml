@@ -39,6 +39,7 @@ dependencies:
 
   # Persistent eval cache (desktop: Linux / macOS / Windows).
   sqflite_common_ffi: ^2.3.3
+  sqlite3_flutter_libs: ^0.5.24
   path: ^1.9.0
 
 dev_dependencies:
@@ -58,9 +59,7 @@ flutter:
     - assets/maia3_simplified.onnx
     - assets/data/all_moves_maia3.json
     - assets/data/all_moves_maia3_reversed.json
-    - assets/executables/stockfish-windows.exe.gz
-    - assets/executables/stockfish-macos.gz
-    - assets/executables/stockfish-linux.gz
+    - assets/executables/
 
 flutter_launcher_icons:
   android: true
