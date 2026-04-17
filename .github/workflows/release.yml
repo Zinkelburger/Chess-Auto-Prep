@@ -23,6 +23,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build clang libgtk-3-dev pkg-config
 
+      - name: Remove non-Linux Stockfish binaries
+        run: |
+          rm -f assets/executables/stockfish-windows.exe.gz
+          rm -f assets/executables/stockfish-macos.gz
+
       - name: Build Linux release
         run: flutter build linux --release
 
@@ -45,6 +50,12 @@ jobs:
         with:
           channel: stable
 
+      - name: Remove non-Windows Stockfish binaries
+        shell: pwsh
+        run: |
+          Remove-Item -Force assets/executables/stockfish-linux.gz -ErrorAction SilentlyContinue
+          Remove-Item -Force assets/executables/stockfish-macos.gz -ErrorAction SilentlyContinue
+
       - name: Build Windows release
         run: flutter build windows --release
 
@@ -66,6 +77,11 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+
+      - name: Remove non-macOS Stockfish binaries
+        run: |
+          rm -f assets/executables/stockfish-windows.exe.gz
+          rm -f assets/executables/stockfish-linux.gz
 
       - name: Build macOS release
         run: flutter build macos --release
