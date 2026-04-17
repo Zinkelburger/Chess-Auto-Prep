@@ -231,10 +231,27 @@ After the tree is built with all nodes evaluated:
 
 ### Stage 3: Trap Detection (Optional)
 
-Enabled with `--traps`. Finds opponent positions where the most popular move
-is significantly worse than the best move. The "trap score" measures how much
-eval the opponent gives away by playing the popular move, weighted by
-popularity.
+Two modes:
+
+**`--traps`** (whole-tree search): Scans every opponent-move node in the
+entire tree for positions where the most popular move is significantly
+worse than the best move.  Outputs an annotated `<name>.traps.pgn` with
+detailed explanations: which move opponents play, how often, the eval
+swing, and what the best response was.  The trap score formula is:
+
+```
+trap = min(1, max(0, best_eval − popular_eval) / 200) × p_popular
+```
+
+Lines are sorted by trap score descending (up to 200).  This is
+independent of the repertoire — it surfaces the trickiest positions
+anywhere in the tree.  The `--traps` preset also widens build
+tolerances (`min_eval` to −100/−300, `max_eval_loss` to 100cp) so
+the tree explores more speculative positions where traps are likelier.
+
+**`--traps-in-repertoire`**: The older behavior — scans the tree and
+prints the top 20 trap positions to stdout (no PGN output).  Can be
+combined with any preset.
 
 ### Stage 4: Export
 
@@ -249,6 +266,29 @@ Save results to JSON tree, repertoire JSON, and optionally PGN.
 Every node gets a single value **V** in [0, 1] — its **practical win
 probability** — computed in one bottom-up DFS pass.  V naturally
 incorporates opponent mistake tendencies at every level.
+
+**V = 0.500** means dead equal (50% expected win rate).  **V = 0.534**
+means "53.4% chance of winning in practice against a human" — a slight
+edge.  **V = 0.662** means a strong practical advantage, typically
+because opponents frequently blunder in the resulting positions.
+
+The conversion from engine centipawns to win probability uses a
+logistic function: `wp(cp) = 1 / (1 + e^(−0.00368 × cp))`.  Some
+reference points:
+
+| Engine eval | V (win prob) | Meaning |
+|-------------|--------------|---------|
+| 0 cp        | 0.500 (50%)  | Dead equal |
+| +50 cp      | 0.523 (52%)  | Slight edge |
+| +100 cp     | 0.545 (55%)  | Clear advantage |
+| +200 cp     | 0.590 (59%)  | Significant advantage |
+| +300 cp     | 0.633 (63%)  | Winning |
+
+These are **leaf** values — the raw engine conversion.  Interior nodes
+can have V higher or lower than wp(eval) because the expectimax backup
+accounts for which moves opponents actually play.  A position evaluated
+at +50 cp might have V = 0.56 if opponents frequently blunder there, or
+V = 0.51 if they always find the right move.
 
 ### Intuition
 
@@ -526,7 +566,7 @@ the novelty weight to 80.
 | `--solid` | 0 | 0 / -100 | 30 | Tight quality floor, no compromise. |
 | `--practical` | 0 | -25 / -200 | 50 | Balanced eval tolerance. |
 | `--tricky` | 0 | -50 / -250 | 75 | Wider tolerance for speculative moves. |
-| `--traps` | 0 | -100 / -300 | 100 | Widest tolerance, enables trap reporting. |
+| `--traps` | 0 | -100 / -300 | 100 | Widest tolerance + whole-tree trap PGN (`<name>.traps.pgn`). |
 | `--fresh` | 60 | (default) | 40 | Sound but unusual moves. Favor rarely-played lines. |
 
 ### What Each Parameter Does Intuitively
