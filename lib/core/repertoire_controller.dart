@@ -576,6 +576,34 @@ class RepertoireController with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Imports PGN content into the current repertoire file.
+  ///
+  /// Appends the raw PGN text to the file, then reloads so the opening tree
+  /// and lines list reflect the new games.  Returns the number of games
+  /// successfully added.
+  Future<int> importPgnContent(String pgnContent) async {
+    if (_currentRepertoire == null) return 0;
+
+    final filePath = _currentRepertoire!['filePath'] as String;
+    final file = io.File(filePath);
+    if (!await file.exists()) return 0;
+
+    // Count incoming games before writing.
+    final gameCount = '[Event '.allMatches(pgnContent).length;
+
+    final existing = await file.readAsString();
+    final separator = existing.endsWith('\n\n')
+        ? ''
+        : existing.endsWith('\n')
+            ? '\n'
+            : '\n\n';
+    await file.writeAsString('$existing$separator$pgnContent\n');
+
+    await loadRepertoire();
+
+    return gameCount > 0 ? gameCount : 1;
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
