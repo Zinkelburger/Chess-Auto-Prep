@@ -87,20 +87,59 @@ void node_reset_id_counter(uint64_t next_id) {
 }
 
 
+void node_unlink_equivalent(TreeNode *node) {
+    if (!node || !node->next_equivalent) return;
+
+    TreeNode *next = node->next_equivalent;
+
+    /* Defensive: a self-loop means the ring already contains only this
+     * node.  Just clear the pointer. */
+    if (next == node) {
+        node->next_equivalent = NULL;
+        return;
+    }
+
+    /* Walk forward from `next` until we find the predecessor — the
+     * node whose `next_equivalent` points back at us.  A well-formed
+     * ring always contains us, so this terminates in at most
+     * ring_size − 1 steps.  The guards below detect malformed rings
+     * (NULL links, self-loops, or a full cycle that doesn't include
+     * us) and bail without corrupting memory. */
+    TreeNode *pred = next;
+    while (pred->next_equivalent != node) {
+        TreeNode *step = pred->next_equivalent;
+        if (!step || step == pred || step == next) {
+            /* Broken ring — salvage by detaching self only. */
+            node->next_equivalent = NULL;
+            return;
+        }
+        pred = step;
+    }
+
+    if (pred == next) {
+        /* Ring of 2: the sole remaining sibling is no longer in a ring. */
+        pred->next_equivalent = NULL;
+    } else {
+        /* Ring of 3+: splice self out, leaving the rest connected. */
+        pred->next_equivalent = next;
+    }
+    node->next_equivalent = NULL;
+}
+
+
 void node_destroy(TreeNode *node) {
     if (!node) return;
-    
-    /* N.B. We do NOT unlink this node from the next_equivalent ring.
-       This is safe when destroying the entire tree (all ring members
-       are freed), and when pruning PRUNE_EVAL_TOO_LOW nodes (those
-       are never added to a ring — they're pruned before FenMap
-       insertion).  If future code removes arbitrary nodes while
-       rings are live, it must unlink them first. */
+
+    /* Unlink from the equivalence ring before freeing, so any surviving
+     * ring sibling doesn't end up with a dangling next_equivalent.
+     * This makes node_destroy safe to call on any node at any time,
+     * regardless of whether rings are live. */
+    node_unlink_equivalent(node);
 
     for (size_t i = 0; i < node->children_count; i++) {
         node_destroy(node->children[i]);
     }
-    
+
     free(node->children);
     free(node);
 }
@@ -108,8 +147,9 @@ void node_destroy(TreeNode *node) {
 
 void node_destroy_single(TreeNode *node) {
     if (!node) return;
-    
-    /* Just free the node itself */
+
+    node_unlink_equivalent(node);
+
     free(node->children);
     free(node);
 }

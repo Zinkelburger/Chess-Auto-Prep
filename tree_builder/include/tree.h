@@ -160,6 +160,16 @@ typedef struct Tree {
     int    build_threads;
     int    build_eval_depth;
 
+    /* SAN move sequence from standard start that leads to the root
+     * position, e.g. "e4 c6 d4 d5 e5 Bf5".  Persisted in the tree
+     * JSON and used by PGN export to inline the opening moves
+     * (preferred over a [FEN] header since it reads more naturally
+     * in PGN viewers).  Empty string means the root is startpos or
+     * the tree was built via --fen with no known move sequence, in
+     * which case PGN export falls back to a [FEN]/[SetUp "1"] header
+     * derived from the root FEN. */
+    char start_moves[2048];
+
 } Tree;
 
 

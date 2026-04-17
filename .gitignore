@@ -86,5 +86,11 @@ tree_builder/*.o
 tree_builder/*.json
 .lichess_token
 
+# Shared reference artefacts — un-ignore so these are usable across
+# machines despite the broad patterns above.
+!tree_builder/analysis_10ply.pgn
+!tree_builder/analysis_10ply.tree.json
+!tree_builder/analysis_10ply.db
+
 # Embedded repos
 maia-platform-frontend/

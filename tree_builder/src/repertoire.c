@@ -462,6 +462,36 @@ int find_mistake_prone_lines(const Tree *tree, RepertoireDB *db,
 
 /* ========== Export Functions ========== */
 
+/* Emit start_moves (a space-separated SAN sequence from startpos) with
+ * standard PGN numbering.  Returns the number of plies emitted, which
+ * the caller uses as the ply offset for the line's own moves so the
+ * numbering flows continuously. */
+static int emit_start_moves(FILE *f, const char *start_moves) {
+    if (!start_moves || !start_moves[0]) return 0;
+
+    char copy[2048];
+    snprintf(copy, sizeof(copy), "%s", start_moves);
+
+    int plies = 0;
+    char *save = NULL;
+    for (char *tok = strtok_r(copy, " \t\r\n", &save);
+         tok != NULL;
+         tok = strtok_r(NULL, " \t\r\n", &save)) {
+        /* Skip move-number tokens like "1." or "1...".  A bare number
+         * followed by dots or nothing isn't a move. */
+        const char *p = tok;
+        while (*p >= '0' && *p <= '9') p++;
+        if (*p == '.' || *p == '\0') continue;
+
+        if (plies % 2 == 0)
+            fprintf(f, "%d. ", (plies / 2) + 1);
+        fprintf(f, "%s ", tok);
+        plies++;
+    }
+    return plies;
+}
+
+
 bool repertoire_export_pgn(const RepertoireResult *result,
                             const char *filename,
                             const RepertoireConfig *config) {
@@ -470,13 +500,45 @@ bool repertoire_export_pgn(const RepertoireResult *result,
     FILE *f = fopen(filename, "w");
     if (!f) return false;
 
+    /* Choose starting-position representation.
+     *
+     * Preferred: inline the SAN sequence from startpos at the front of
+     * every game's movetext.  Falls back to a [FEN]/[SetUp "1"] header
+     * when only a raw FEN is known (e.g. --fen was used instead of
+     * --moves, or the tree predates start_moves persistence). */
+    bool has_prefix = config && config->start_moves[0];
+    bool has_fen_header = false;
+    if (!has_prefix && config && config->start_fen[0] &&
+        strcmp(config->start_fen,
+               "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1") != 0) {
+        has_fen_header = true;
+    }
+
+    /* When there's no prefix, infer which side moves first at the tree
+     * root from the FEN so line numbering is correct (e.g. a tree rooted
+     * on Black's turn starts with "1... Nc6"). */
     bool root_white_to_move = true;
-    if (config && config->start_fen[0]) {
+    if (!has_prefix && config && config->start_fen[0]) {
         const char *sp = strchr(config->start_fen, ' ');
         if (sp && *(sp + 1) == 'b') root_white_to_move = false;
     }
 
     bool has_name = config && config->name[0];
+
+    /* File-level build-stats comment.  PGN parsers treat {...} blocks
+     * outside game movetext as file-level comments, so this shows up
+     * once at the top rather than polluting all 200+ game headers. */
+    if (config && config->build_time_seconds > 0) {
+        fprintf(f,
+                "{Build stats: %d nodes in %.1fs (%.0f/min), depth %d, "
+                "branching %.2f, %d threads}\n\n",
+                config->build_nodes,
+                config->build_time_seconds,
+                config->nodes_per_minute,
+                config->build_eval_depth,
+                config->branching_factor,
+                config->build_threads);
+    }
 
     for (int i = 0; i < result->num_lines; i++) {
         const RepertoireLine *line = &result->lines[i];
@@ -497,19 +559,9 @@ bool repertoire_export_pgn(const RepertoireResult *result,
                 config->play_as_white ? "Repertoire" : "Opponent");
         fprintf(f, "[Black \"%s\"]\n",
                 config->play_as_white ? "Opponent" : "Repertoire");
-        if (config && config->start_fen[0] &&
-            strcmp(config->start_fen,
-                   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1") != 0) {
+        if (has_fen_header) {
             fprintf(f, "[FEN \"%s\"]\n", config->start_fen);
             fprintf(f, "[SetUp \"1\"]\n");
-        }
-        if (config->build_time_seconds > 0) {
-            fprintf(f, "[BuildTimeSeconds \"%.1f\"]\n", config->build_time_seconds);
-            fprintf(f, "[BuildNodes \"%d\"]\n", config->build_nodes);
-            fprintf(f, "[BuildNodesPerMin \"%.1f\"]\n", config->nodes_per_minute);
-            fprintf(f, "[BuildBranchingFactor \"%.2f\"]\n", config->branching_factor);
-            fprintf(f, "[BuildThreads \"%d\"]\n", config->build_threads);
-            fprintf(f, "[BuildEvalDepth \"%d\"]\n", config->build_eval_depth);
         }
         fprintf(f, "[Result \"*\"]\n\n");
 
@@ -524,11 +576,18 @@ bool repertoire_export_pgn(const RepertoireResult *result,
         }
         fprintf(f, "}\n");
 
+        int prefix_plies = has_prefix
+            ? emit_start_moves(f, config->start_moves)
+            : 0;
+        int ply_offset = has_prefix
+            ? prefix_plies
+            : (root_white_to_move ? 0 : 1);
+
         for (int j = 0; j < line->num_moves; j++) {
-            int ply = j + (root_white_to_move ? 0 : 1);
+            int ply = j + ply_offset;
             if (ply % 2 == 0)
                 fprintf(f, "%d. ", (ply / 2) + 1);
-            else if (j == 0 && !root_white_to_move)
+            else if (j == 0)
                 fprintf(f, "%d... ", (ply / 2) + 1);
             fprintf(f, "%s ", line->moves_san[j]);
         }

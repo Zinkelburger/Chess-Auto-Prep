@@ -140,6 +140,8 @@ static char* tree_to_json_internal(const Tree *tree, const SerializationOptions 
     cJSON_AddNumberToObject(root, "total_nodes", (double)tree->total_nodes);
     cJSON_AddNumberToObject(root, "max_depth", tree->max_depth_reached);
     cJSON_AddBoolToObject(root, "build_complete", tree->build_complete);
+    if (tree->start_moves[0])
+        cJSON_AddStringToObject(root, "start_moves", tree->start_moves);
     
     /* Config */
     cJSON *config = cJSON_CreateObject();
@@ -553,6 +555,13 @@ Tree* tree_load_from_buffer(const char *buffer, size_t size) {
     cJSON *bc = cJSON_GetObjectItem(root, "build_complete");
     /* Trees from older versions lack this field — assume complete */
     tree->build_complete = bc ? cJSON_IsTrue(bc) : true;
+
+    cJSON *sm = cJSON_GetObjectItem(root, "start_moves");
+    if (sm && cJSON_IsString(sm) && sm->valuestring) {
+        strncpy(tree->start_moves, sm->valuestring,
+                sizeof(tree->start_moves) - 1);
+        tree->start_moves[sizeof(tree->start_moves) - 1] = '\0';
+    }
 
     /* Parse config */
     cJSON *config = cJSON_GetObjectItem(root, "config");

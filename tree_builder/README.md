@@ -27,17 +27,25 @@ node.
 
 - GCC or Clang compiler
 - libcurl development files
+- ONNX Runtime library (for Maia neural network inference)
 - Stockfish binary (required for building)
 
 ### Fedora
 ```bash
-sudo dnf install gcc make libcurl-devel
+sudo dnf install gcc make libcurl-devel onnxruntime-devel
 ```
 
 ### Ubuntu/Debian
 ```bash
-sudo apt install build-essential libcurl4-openssl-dev
+sudo apt install build-essential libcurl4-openssl-dev libonnxruntime-dev
 ```
+
+### macOS
+```bash
+brew install curl onnxruntime
+```
+
+**Note**: If ONNX Runtime is not available via package manager, download the appropriate release from [Microsoft's ONNX Runtime releases](https://github.com/microsoft/onnxruntime/releases) and extract to a location where the linker can find it (e.g., `/usr/local/lib`).
 
 ## Building
 

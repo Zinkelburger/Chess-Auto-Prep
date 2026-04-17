@@ -1053,6 +1053,14 @@ static void remove_child_at(TreeNode *parent, size_t idx) {
  * Post-build cleanup: delete nodes pruned for eval-too-low.
  * These positions are too bad for us — no point keeping them.
  * Returns the number of nodes removed.
+ *
+ * A pruned our-move canonical can still be a member of a live
+ * equivalence ring (FenMap insertion in build_recursive happens
+ * before build_our_move runs its eval-window check, so transposition
+ * siblings may have already joined the ring by the time the canonical
+ * is marked PRUNE_EVAL_TOO_LOW).  node_destroy handles the unlink
+ * internally, so surviving siblings never see a dangling
+ * next_equivalent.
  */
 static size_t prune_low_eval_recursive(TreeNode *node, Tree *tree) {
     if (!node) return 0;
