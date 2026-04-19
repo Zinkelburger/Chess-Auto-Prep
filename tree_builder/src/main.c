@@ -33,6 +33,7 @@
 #include "chess_logic.h"
 #include "san_convert.h"
 #include "maia.h"
+#include "lichess_eval_db.h"
 
 
 #define DEFAULT_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -84,7 +85,7 @@ static void print_usage(const char *prog_name) {
     printf("  --moves <SAN...>       Starting moves in SAN (e.g. \"e4 d5 exd5 Qxd5\")\n");
     printf("  -c, --color <w|b>      Play as white (w) or black (b) [REQUIRED]\n");
     printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
-    printf("  -d, --depth <N>        Max tree depth in ply [default: 20]\n");
+    printf("  -d, --ply <N>          Max tree depth in ply (half-moves) [default: 20]\n");
     printf("  -e, --eval-depth <N>   Stockfish search depth [default: 20]\n");
     printf("  -t, --threads <N>      Total CPU cores to use [default: 4]\n");
     printf("  -S, --stockfish <path> Stockfish binary path\n");
@@ -134,6 +135,9 @@ static void print_usage(const char *prog_name) {
     printf("  --event-log <file>     Write timestamped build events (TSV) for analysis\n");
     printf("  -v, --verbose          Verbose progress output\n");
     printf("  -h, --help             Show this help\n\n");
+    printf("Lichess community eval DB (fast path for opponent-node evals):\n");
+    printf("  --lichess-eval-db <path>  Slim SQLite built by build_lichess_eval_db\n");
+    printf("                            (opponent-node only; depth must meet -e)\n\n");
     printf("Examples:\n");
     printf("  %s -c w -e 20 -t 4 -v repertoire\n", prog_name);
     printf("  %s -c b -f \"FEN\" -n \"Modern Benoni\" modern_benoni\n", prog_name);
@@ -165,7 +169,7 @@ static void progress_callback(int nodes_built, int current_depth,
     int em = (int)(elapsed_s / 60);
     int es = (int)elapsed_s % 60;
 
-    printf("\r  [Build] %d nodes | %.0f/min | %dm%02ds | depth %d | %.30s...    ",
+    printf("\r\033[K  [Build] %d nodes | %.0f/min | %dm%02ds | depth %d | %s",
            nodes_built, rate, em, es, current_depth,
            current_fen ? current_fen : "");
     fflush(stdout);
@@ -320,6 +324,7 @@ int main(int argc, char *argv[]) {
     bool use_lichess = false;
     bool relative_eval = false;
     const char *event_log_path = NULL;
+    const char *lichess_eval_db_path = NULL;
 
     /* Our-move overrides (-1 = use default) */
     int our_multipv_arg = -1;
@@ -347,7 +352,7 @@ int main(int argc, char *argv[]) {
         {"moves",            required_argument, 0, 1010},
         {"color",            required_argument, 0, 'c'},
         {"probability",      required_argument, 0, 'p'},
-        {"depth",            required_argument, 0, 'd'},
+        {"ply",              required_argument, 0, 'd'},
         {"eval-depth",       required_argument, 0, 'e'},
         {"threads",          required_argument, 0, 't'},
         {"ratings",          required_argument, 0, 'r'},
@@ -388,6 +393,7 @@ int main(int argc, char *argv[]) {
         {"lichess",          no_argument,       0, 3006},
         /* General */
         {"event-log",        required_argument, 0, 4001},
+        {"lichess-eval-db",  required_argument, 0, 4002},
         {"verbose",          no_argument,       0, 'v'},
         {"help",             no_argument,       0, 'h'},
         {0, 0, 0, 0}
@@ -410,7 +416,7 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             case 'd':
-                if (!parse_int(optarg, "depth", &max_depth)) return 1;
+                if (!parse_int(optarg, "ply", &max_depth)) return 1;
                 break;
             case 'e':
                 if (!parse_int(optarg, "eval-depth", &eval_depth)) return 1;
@@ -474,6 +480,7 @@ int main(int argc, char *argv[]) {
             case 3004: if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1; break;
             case 3006: use_lichess = true; break;
             case 4001: event_log_path = optarg; break;
+            case 4002: lichess_eval_db_path = optarg; break;
             default: print_usage(argv[0]); return 1;
         }
     }
@@ -720,6 +727,24 @@ int main(int argc, char *argv[]) {
     printf("  Cached: %d explorer | %d evals\n",
            cached_explorer, cached_evals);
 
+    /* Optional: open the read-only Lichess community eval DB. */
+    LichessEvalDB *eval_db = NULL;
+    if (lichess_eval_db_path) {
+        eval_db = lichess_eval_db_open(lichess_eval_db_path);
+        if (eval_db) {
+            long n = lichess_eval_db_count(eval_db);
+            if (n >= 0)
+                printf("  Lichess eval DB:  %s (%ld rows)\n",
+                       lichess_eval_db_path, n);
+            else
+                printf("  Lichess eval DB:  %s\n", lichess_eval_db_path);
+        } else {
+            fprintf(stderr,
+                "  Warning: --lichess-eval-db %s could not be opened; continuing without it.\n",
+                lichess_eval_db_path);
+        }
+    }
+
     if (!skip_build) {
         const char *sf_path = find_stockfish(stockfish_path);
         if (!sf_path) {
@@ -856,6 +881,7 @@ int main(int argc, char *argv[]) {
         config.max_depth = max_depth;
         config.engine_pool = engine_pool;
         config.db = db;
+        config.lichess_eval_db = eval_db;
         config.eval_depth = eval_depth;
         config.rating_range = ratings;
         config.speeds = speeds;
@@ -1019,6 +1045,20 @@ int main(int argc, char *argv[]) {
             if (total_mpv > 0)
                 printf(" (%d%%)", build_stats.db_multipv_hits * 100 / total_mpv);
             printf("\n");
+            int lichess_db_total = build_stats.lichess_eval_db_hits
+                                 + build_stats.lichess_eval_db_misses
+                                 + build_stats.lichess_eval_db_shallow;
+            if (eval_db || lichess_db_total > 0) {
+                printf("    Lichess DB:     %d/%d hits",
+                       build_stats.lichess_eval_db_hits, lichess_db_total);
+                if (lichess_db_total > 0)
+                    printf(" (%d%%)",
+                           build_stats.lichess_eval_db_hits * 100 / lichess_db_total);
+                if (build_stats.lichess_eval_db_shallow > 0)
+                    printf(" | %d shallow (depth < %d)",
+                           build_stats.lichess_eval_db_shallow, eval_depth);
+                printf("\n");
+            }
         }
         printf("\n");
 
@@ -1233,6 +1273,7 @@ cleanup:
     if (engine_pool) engine_pool_destroy(engine_pool);
     if (maia) maia_destroy(maia);
     if (tree) tree_destroy(tree);
+    if (eval_db) lichess_eval_db_close(eval_db);
     if (db) rdb_close(db);
     free(token_buf);
 

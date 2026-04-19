@@ -77,7 +77,7 @@ The `<name>` argument is the base name for all output files:
 | `-f, --fen <FEN>` | Starting position FEN | Standard starting position |
 | `-c, --color <w\|b>` | Play as white or black | w |
 | `-p, --probability <P>` | Min probability threshold | 0.0001 (0.01%) |
-| `-d, --depth <N>` | Max depth in ply | 20 |
+| `-d, --ply <N>` | Max tree depth in ply (half-moves) | 20 |
 | `-e, --eval-depth <N>` | Stockfish search depth | 20 |
 | `-t, --threads <N>` | Parallel Stockfish engines | 4 |
 | `-S, --stockfish <path>` | Stockfish binary path | auto-detect |

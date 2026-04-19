@@ -23,6 +23,7 @@ struct EnginePool;
 struct MaiaContext;
 struct RepertoireDB;
 struct RepertoireConfig;
+struct LichessEvalDB;
 
 /**
  * BuildStats - Accumulated timing and counters from a tree build.
@@ -53,6 +54,11 @@ typedef struct BuildStats {
     int    db_explorer_misses;
     int    db_multipv_hits;
     int    db_multipv_misses;
+
+    /* Lichess community eval DB (opponent-node shortcut) */
+    int    lichess_eval_db_hits;
+    int    lichess_eval_db_misses;
+    int    lichess_eval_db_shallow;  /* row found but depth < eval_depth */
 } BuildStats;
 
 /**
@@ -75,6 +81,11 @@ typedef struct TreeConfig {
     struct EnginePool *engine_pool; /* Stockfish pool — must be non-NULL */
     struct RepertoireDB *db;        /* SQLite cache for evals (optional but recommended) */
     int eval_depth;                 /* Stockfish search depth */
+
+    /* Optional: read-only Lichess community eval DB. When set, opponent-move
+     * nodes consult this DB before falling back to Stockfish.  Our-move nodes
+     * are not affected — they need multiPV-5 which the DB only sparsely has. */
+    struct LichessEvalDB *lichess_eval_db;
 
     /* Our-move candidate selection (engine-driven)
      *
