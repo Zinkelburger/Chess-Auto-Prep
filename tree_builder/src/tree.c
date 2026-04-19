@@ -41,6 +41,7 @@
 #include "engine_pool.h"
 #include "database.h"
 #include "maia.h"
+#include "lichess_eval_db.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -302,7 +303,15 @@ static bool apply_uci(const char *fen, const char *uci,
 
 /**
  * Ensure a node has an engine evaluation.
- * Checks the DB cache first, then runs a single Stockfish eval.
+ *
+ * Source precedence (cheapest first):
+ *   1. Project DB cache (from a previous build of this repertoire)
+ *   2. Lichess community eval DB (if provided, and its depth meets ours)
+ *   3. Stockfish single-PV at config->eval_depth
+ *
+ * A Lichess hit is written back to the project cache so the next node
+ * that visits the same FEN (a transposition during this build, or any
+ * node in a resumed build) doesn't re-hit the big DB.
  */
 static void ensure_eval(TreeNode *node, const TreeConfig *config) {
     if (node->has_engine_eval) return;
@@ -318,6 +327,28 @@ static void ensure_eval(TreeNode *node, const TreeConfig *config) {
             return;
         }
         STATS_INC(config, db_eval_misses);
+    }
+
+    /* Try the Lichess community eval DB.  Only accept the row if its
+     * search depth is at least our eval_depth — a shallower eval would
+     * quietly degrade quality relative to what Stockfish would give us. */
+    if (config->lichess_eval_db) {
+        int cp, depth;
+        if (lichess_eval_db_lookup(config->lichess_eval_db, node->fen,
+                                    &cp, &depth)) {
+            if (depth >= config->eval_depth) {
+                STATS_INC(config, lichess_eval_db_hits);
+                emit_event(config, "eval", node->depth, "-",
+                           "src=lichess_db cp=%d depth=%d", cp, depth);
+                node_set_eval(node, cp);
+                if (config->db)
+                    rdb_put_eval(config->db, node->fen, cp, depth);
+                return;
+            }
+            STATS_INC(config, lichess_eval_db_shallow);
+        } else {
+            STATS_INC(config, lichess_eval_db_misses);
+        }
     }
 
     /* Run engine */
@@ -530,6 +561,49 @@ static void build_recursive(Tree *tree, TreeNode *node,
 static void build_our_move(Tree *tree, TreeNode *node,
                             const TreeConfig *config,
                             LichessExplorer *explorer) {
+    /* 0. Lichess eval DB shortcut.  If the community DB has this position
+     *    at a depth at least our eval_depth and the eval is outside our
+     *    window, we can prune without ever running MultiPV-5 — the single
+     *    most expensive call per our-node.  If it's inside the window we
+     *    still need MultiPV for the candidate list, but the node's eval
+     *    comes from the (usually deeper) DB row and replaces the line-0
+     *    eval that MultiPV would otherwise assign. */
+    if (config->lichess_eval_db && !node->has_engine_eval) {
+        int db_cp, db_depth;
+        if (lichess_eval_db_lookup(config->lichess_eval_db, node->fen,
+                                    &db_cp, &db_depth)) {
+            if (db_depth >= config->eval_depth) {
+                STATS_INC(config, lichess_eval_db_hits);
+                emit_event(config, "eval", node->depth, "our",
+                           "src=lichess_db cp=%d depth=%d", db_cp, db_depth);
+                node_set_eval(node, db_cp);
+                if (config->db)
+                    rdb_put_eval(config->db, node->fen, db_cp, db_depth);
+
+                int eval_us = node_eval_for_us(node, config->play_as_white);
+                if (eval_us > config->max_eval_cp) {
+                    node->prune_reason = PRUNE_EVAL_TOO_HIGH;
+                    node->prune_eval_cp = eval_us;
+                    emit_event(config, "prune", node->depth, "our",
+                               "reason=eval_high cp=%d src=lichess_db", eval_us);
+                    return;
+                }
+                if (eval_us < config->min_eval_cp) {
+                    node->prune_reason = PRUNE_EVAL_TOO_LOW;
+                    node->prune_eval_cp = eval_us;
+                    emit_event(config, "prune", node->depth, "our",
+                               "reason=eval_low cp=%d src=lichess_db", eval_us);
+                    return;
+                }
+                /* In window — fall through to MultiPV for candidate generation. */
+            } else {
+                STATS_INC(config, lichess_eval_db_shallow);
+            }
+        } else {
+            STATS_INC(config, lichess_eval_db_misses);
+        }
+    }
+
     /* 1. Run Stockfish MultiPV (constant across depths), with DB cache */
     int mpv_count = config->our_multipv;
     MultiPVJob mpv;

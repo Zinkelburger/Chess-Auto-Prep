@@ -71,6 +71,7 @@ BIN_DIR = bin
 SRCS = $(SRC_DIR)/node.c \
        $(SRC_DIR)/tree.c \
        $(SRC_DIR)/lichess_api.c \
+       $(SRC_DIR)/lichess_eval_db.c \
        $(SRC_DIR)/serialization.c \
        $(SRC_DIR)/chess_logic.c \
        $(SRC_DIR)/san_convert.c \
@@ -100,12 +101,28 @@ OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS)) \
 # Target executable
 TARGET = $(BIN_DIR)/tree_builder
 
+# Standalone ETL tool: lichess_db_eval.jsonl -> slim SQLite
+ETL_TARGET = $(BIN_DIR)/build_lichess_eval_db
+ETL_OBJS = $(BUILD_DIR)/build_lichess_eval_db.o \
+           $(BUILD_DIR)/sqlite3_amalg.o \
+           $(BUILD_DIR)/cJSON.o
+
 # Include paths
 INCLUDES = -I$(INC_DIR) -I$(SRC_DIR) $(LOCAL_INC)
 
-.PHONY: all clean install test help check-deps dist
+.PHONY: all clean install test help check-deps dist etl
 
 all: check-deps directories $(TARGET)
+
+etl: directories $(ETL_TARGET)
+
+$(ETL_TARGET): $(ETL_OBJS)
+	$(CC) $(ETL_OBJS) -o $@ -lm -lpthread -ldl
+	@echo ""
+	@echo "══════════════════════════════════════════"
+	@echo "  Build complete: $(ETL_TARGET)"
+	@echo "══════════════════════════════════════════"
+	@echo ""
 
 directories:
 	@mkdir -p $(BUILD_DIR)
@@ -132,8 +149,9 @@ $(BUILD_DIR)/sqlite3_amalg.o: $(SRC_DIR)/sqlite3_amalg.c
 
 # Header dependencies
 $(BUILD_DIR)/node.o: $(INC_DIR)/node.h
-$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/san_convert.h $(INC_DIR)/maia.h $(INC_DIR)/engine_pool.h $(INC_DIR)/database.h $(INC_DIR)/repertoire.h
+$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/san_convert.h $(INC_DIR)/maia.h $(INC_DIR)/engine_pool.h $(INC_DIR)/database.h $(INC_DIR)/repertoire.h $(INC_DIR)/lichess_eval_db.h
 $(BUILD_DIR)/lichess_api.o: $(INC_DIR)/lichess_api.h $(SRC_DIR)/cJSON.h
+$(BUILD_DIR)/lichess_eval_db.o: $(INC_DIR)/lichess_eval_db.h
 $(BUILD_DIR)/serialization.o: $(INC_DIR)/serialization.h $(INC_DIR)/tree.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/chess_logic.o: $(INC_DIR)/chess_logic.h
 # san_convert uses chesslib types (separate TU to avoid ChessPosition name clash)
@@ -144,7 +162,7 @@ $(BUILD_DIR)/database.o: $(INC_DIR)/database.h
 $(BUILD_DIR)/engine_pool.o: $(INC_DIR)/engine_pool.h $(INC_DIR)/thread_pool.h
 $(BUILD_DIR)/repertoire.o: $(INC_DIR)/repertoire.h $(INC_DIR)/tree.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/chess_logic.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/maia.o: $(INC_DIR)/maia.h $(INC_DIR)/chess_logic.h $(SRC_DIR)/maia_vocab.inc
-$(BUILD_DIR)/main.o: $(INC_DIR)/tree.h $(INC_DIR)/lichess_api.h $(INC_DIR)/serialization.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/repertoire.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h
+$(BUILD_DIR)/main.o: $(INC_DIR)/tree.h $(INC_DIR)/lichess_api.h $(INC_DIR)/serialization.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/repertoire.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h $(INC_DIR)/lichess_eval_db.h
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
