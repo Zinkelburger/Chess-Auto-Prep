@@ -48,8 +48,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   // ── Controllers ────────────────────────────────────────────────────────
 
-  final TextEditingController _cutoffCtrl =
-      TextEditingController(text: '0.01');
+  final TextEditingController _cutoffCtrl = TextEditingController(text: '0.01');
   final TextEditingController _depthCtrl = TextEditingController(text: '10');
   final TextEditingController _engineDepthCtrl =
       TextEditingController(text: '20');
@@ -61,8 +60,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       TextEditingController(text: '2200');
 
   // Advanced
-  final TextEditingController _multipvCtrl =
-      TextEditingController(text: '5');
+  final TextEditingController _multipvCtrl = TextEditingController(text: '5');
   final TextEditingController _oppMaxChildrenCtrl =
       TextEditingController(text: '6');
   final TextEditingController _oppMassTargetCtrl =
@@ -180,6 +178,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final path = _partialTreePath();
     if (path == null) return;
     try {
+      _applyKnownRootMoves(tree);
       final treeJson = serializeTree(tree);
       await File(path).writeAsString(treeJson);
     } catch (_) {}
@@ -271,8 +270,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         useMasters: _useMasters,
         relativeEval: _relativeEval,
         noveltyWeight: int.tryParse(_noveltyWeightCtrl.text.trim()) ?? 0,
-        leafConfidence:
-            double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
+        leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
       );
     }
 
@@ -351,9 +349,16 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         setState(() => _status = 'Phase 2: Selecting repertoire...');
       }
       final selector = RepertoireSelector(
-        config: config, ecaCalc: ecaCalc, fenMap: fenMap,
+        config: config,
+        ecaCalc: ecaCalc,
+        fenMap: fenMap,
       );
       final selectedCount = selector.select(tree);
+
+      // Re-sort children and rebuild metadata now that repertoire flags are set.
+      tree.sortAllChildren();
+      tree.computeMetadata();
+      _applyKnownRootMoves(tree);
 
       // Phase 3: Extract lines
       if (mounted) setState(() => _status = 'Phase 3: Extracting lines...');
@@ -543,7 +548,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             children: [
               if (_isGenerating && !_isPaused)
                 const SizedBox(
-                  width: 14, height: 14,
+                  width: 14,
+                  height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               if (_isPaused)
@@ -572,7 +578,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               _statChip('Lines', '$_lines'),
               _statChip('d', '$_depth'),
               _statChip('Eng', '$_engineCalls'),
-              if (_engineCacheHits > 0) _statChip('Cached', '$_engineCacheHits'),
+              if (_engineCacheHits > 0)
+                _statChip('Cached', '$_engineCacheHits'),
               if (_maiaCalls > 0) _statChip('Maia', '$_maiaCalls'),
               if (_lichessQueries > 0) _statChip('Lichess', '$_lichessQueries'),
             ],
@@ -642,10 +649,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             onChanged: _isGenerating
                 ? null
                 : (v) {
-                    if (v != null) setState(() {
-                      _preset = v;
-                      _applyPresetToControllers(v);
-                    });
+                    if (v != null)
+                      setState(() {
+                        _preset = v;
+                        _applyPresetToControllers(v);
+                      });
                   },
           ),
           const SizedBox(height: 8),
@@ -669,8 +677,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           // Opponent source: strict either/or (radio behavior)
           Row(
             children: [
-              const Text('Opponent moves: ',
-                  style: TextStyle(fontSize: 13)),
+              const Text('Opponent moves: ', style: TextStyle(fontSize: 13)),
               const SizedBox(width: 8),
               ChoiceChip(
                 label: const Text('Maia'),
@@ -707,9 +714,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             child: Row(
               children: [
                 Icon(
-                  _showAdvanced
-                      ? Icons.expand_less
-                      : Icons.expand_more,
+                  _showAdvanced ? Icons.expand_less : Icons.expand_more,
                   size: 20,
                 ),
                 const SizedBox(width: 4),
@@ -767,8 +772,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.pause_circle, size: 18,
-                          color: Colors.amber[400]),
+                      Icon(Icons.pause_circle,
+                          size: 18, color: Colors.amber[400]),
                       const SizedBox(width: 8),
                       Text(
                         'Paused Build Available',
@@ -830,7 +835,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   label: const Text(
                     'Pause',
                     style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -846,7 +852,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   label: const Text(
                     'Resume',
                     style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -860,7 +867,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   label: const Text(
                     'Cancel',
                     style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -949,7 +957,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _applyingPreset = false;
   }
 
-
   double _parsePercentToFraction(
     String raw, {
     required double fallbackPercent,
@@ -957,5 +964,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final parsed = double.tryParse(raw.replaceAll('%', '').trim());
     final safePercent = (parsed ?? fallbackPercent).clamp(0.0, 100.0);
     return safePercent / 100.0;
+  }
+
+  void _applyKnownRootMoves(BuildTree tree) {
+    if (tree.startMoves.isNotEmpty ||
+        widget.currentMoveSequence.isEmpty ||
+        tree.root.fen != widget.fen) {
+      return;
+    }
+    tree.startMoves = widget.currentMoveSequence.join(' ');
   }
 }

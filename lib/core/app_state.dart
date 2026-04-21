@@ -76,7 +76,7 @@ class AppState extends ChangeNotifier {
       _loadedGames = games;
       notifyListeners();
     } catch (e) {
-      // Ignore errors loading saved games
+      debugPrint('Failed to load saved games: $e');
     }
   }
 
@@ -155,10 +155,6 @@ class AppState extends ChangeNotifier {
   }
 
   void onMoveAttempted(String moveUci) {
-    if (_isAnalysisMode) {
-      _onMoveAttempted?.call(moveUci);
-    } else if (_onMoveAttempted != null) {
-      _onMoveAttempted!(moveUci);
-    }
+    _onMoveAttempted?.call(moveUci);
   }
 }

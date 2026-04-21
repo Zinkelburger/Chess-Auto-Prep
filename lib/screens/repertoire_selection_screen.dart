@@ -13,7 +13,8 @@ class RepertoireSelectionScreen extends StatefulWidget {
   const RepertoireSelectionScreen({super.key});
 
   @override
-  State<RepertoireSelectionScreen> createState() => _RepertoireSelectionScreenState();
+  State<RepertoireSelectionScreen> createState() =>
+      _RepertoireSelectionScreenState();
 }
 
 class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
@@ -38,7 +39,10 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
         await repertoireDir.create(recursive: true);
       }
 
-      final files = await repertoireDir.list().where((file) => file.path.endsWith('.pgn')).toList();
+      final files = await repertoireDir
+          .list()
+          .where((file) => file.path.endsWith('.pgn'))
+          .toList();
       final repertoires = <Map<String, dynamic>>[];
 
       for (final file in files) {
@@ -56,13 +60,17 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
         });
       }
 
-      repertoires.sort((a, b) => (b['lastModified'] as DateTime).compareTo(a['lastModified'] as DateTime));
+      repertoires.sort((a, b) => (b['lastModified'] as DateTime)
+          .compareTo(a['lastModified'] as DateTime));
 
+      if (!mounted) return;
       setState(() {
         _repertoires = repertoires;
         _isLoading = false;
       });
     } catch (e) {
+      debugPrint('Load repertoires failed: $e');
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -75,31 +83,23 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('Select Repertoire'),
+        actions: [
+          IconButton(
+            tooltip: 'Back',
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.arrow_back),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _buildBody(),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'import',
-            onPressed: _importFromPgn,
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Import PGN'),
-            backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-            foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'create',
-            onPressed: _showCreateDialog,
-            icon: const Icon(Icons.add),
-            label: const Text('Create New'),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showCreateDialog,
+        icon: const Icon(Icons.add),
+        label: const Text('Create New'),
       ),
     );
   }
@@ -132,12 +132,6 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
               onPressed: _showCreateDialog,
               icon: const Icon(Icons.add),
               label: const Text('Create Repertoire'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _importFromPgn,
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Import from PGN'),
             ),
           ],
         ),
@@ -274,8 +268,9 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     final nameController = TextEditingController();
     String selectedColor = 'White';
     String? nameError;
+    PgnImportResult? importResult;
 
-    final result = await showDialog<Map<String, String>>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
@@ -320,6 +315,63 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
                   });
                 },
               ),
+              const SizedBox(height: 16),
+              if (importResult != null)
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle_outline,
+                          size: 18,
+                          color:
+                              Theme.of(context).colorScheme.onPrimaryContainer),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${importResult!.gameCount} game${importResult!.gameCount == 1 ? '' : 's'} ready to import',
+                          style: TextStyle(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onPrimaryContainer,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () => setState(() => importResult = null),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final pgn = await showPgnImportDialog(
+                      context,
+                      title: 'Import PGN',
+                      confirmLabel: 'Attach',
+                    );
+                    if (pgn != null) {
+                      setState(() => importResult = pgn);
+                      if (nameController.text.trim().isEmpty) {
+                        nameController.text = 'Imported Repertoire';
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text('Import PGN (optional)'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(44),
+                  ),
+                ),
             ],
           ),
           actions: [
@@ -327,7 +379,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Cancel'),
             ),
-            TextButton(
+            FilledButton(
               onPressed: () {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
@@ -337,6 +389,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
                 Navigator.of(context).pop({
                   'name': name,
                   'color': selectedColor,
+                  'pgn': importResult,
                 });
               },
               child: const Text('Create'),
@@ -346,17 +399,26 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
       ),
     );
 
+    nameController.dispose();
+
     if (result != null) {
-      await _createRepertoire(result['name']!, result['color']!);
+      await _createRepertoire(
+        result['name']! as String,
+        result['color']! as String,
+        pgnImport: result['pgn'] as PgnImportResult?,
+      );
     }
   }
 
-  Future<void> _createRepertoire(String name, String color) async {
+  Future<void> _createRepertoire(
+    String name,
+    String color, {
+    PgnImportResult? pgnImport,
+  }) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
       final repertoireDir = Directory('${directory.path}/repertoires');
 
-      // Create repertoires directory if it doesn't exist
       if (!await repertoireDir.exists()) {
         await repertoireDir.create(recursive: true);
       }
@@ -370,20 +432,29 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
         return;
       }
 
-      // Create empty PGN file with color metadata in comments
-      final header = '''// $name Repertoire
-// Color: $color
-// Created on ${DateTime.now().toString().split('.')[0]}
+      final header = '// $name Repertoire\n'
+          '// Color: $color\n'
+          '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
 
-''';
-
-      await file.writeAsString(header);
+      if (pgnImport != null) {
+        await file.writeAsString('$header${pgnImport.pgnContent}\n');
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            'Created "$name" with ${pgnImport.gameCount} '
+            'game${pgnImport.gameCount == 1 ? '' : 's'}.',
+          );
+        }
+      } else {
+        await file.writeAsString(header);
+      }
 
       await _loadRepertoires();
     } catch (e) {
       debugPrint('Create repertoire failed: $e');
       if (mounted) {
-        showAppSnackBar(context, AppMessages.createRepertoireFailed, isError: true);
+        showAppSnackBar(context, AppMessages.createRepertoireFailed,
+            isError: true);
       }
     }
   }
@@ -396,7 +467,8 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Repertoire'),
-        content: Text('Delete repertoire "$name"? This action cannot be undone.'),
+        content:
+            Text('Delete repertoire "$name"? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -422,134 +494,9 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
       } catch (e) {
         debugPrint('Delete repertoire failed: $e');
         if (mounted) {
-          showAppSnackBar(context, AppMessages.deleteRepertoireFailed, isError: true);
+          showAppSnackBar(context, AppMessages.deleteRepertoireFailed,
+              isError: true);
         }
-      }
-    }
-  }
-
-  Future<void> _importFromPgn() async {
-    final importResult = await showPgnImportDialog(
-      context,
-      title: 'Import PGN as Repertoire',
-      confirmLabel: 'Import',
-    );
-    if (importResult == null || !mounted) return;
-
-    // Ask for a name and color for the new repertoire.
-    final nameController = TextEditingController(
-      text: 'Imported Repertoire',
-    );
-    String selectedColor = 'White';
-    String? nameError;
-
-    final meta = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Name This Repertoire'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${importResult.gameCount} game${importResult.gameCount == 1 ? '' : 's'} ready to import.',
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
-                decoration: InputDecoration(
-                  labelText: 'Repertoire Name',
-                  hintText: 'Enter repertoire name',
-                  errorText: nameError,
-                ),
-                autofocus: true,
-                onChanged: (_) {
-                  if (nameError != null) setState(() => nameError = null);
-                },
-              ),
-              const SizedBox(height: 16),
-              const Text('Choose your color:'),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(
-                    value: 'White',
-                    label: Text('White'),
-                    icon: Icon(Icons.circle_outlined, size: 16),
-                  ),
-                  ButtonSegment(
-                    value: 'Black',
-                    label: Text('Black'),
-                    icon: Icon(Icons.circle, size: 16),
-                  ),
-                ],
-                selected: {selectedColor},
-                onSelectionChanged: (s) =>
-                    setState(() => selectedColor = s.first),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = nameController.text.trim();
-                if (name.isEmpty) {
-                  setState(() => nameError = 'Please enter a name');
-                  return;
-                }
-                Navigator.of(context).pop({
-                  'name': name,
-                  'color': selectedColor,
-                });
-              },
-              child: const Text('Create'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (meta == null || !mounted) return;
-
-    final name = meta['name']!;
-    final color = meta['color']!;
-
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory('${directory.path}/repertoires');
-      if (!await repertoireDir.exists()) {
-        await repertoireDir.create(recursive: true);
-      }
-
-      final file = File('${repertoireDir.path}/$name.pgn');
-      if (await file.exists()) {
-        if (mounted) {
-          showAppSnackBar(context, AppMessages.repertoireExists(name));
-        }
-        return;
-      }
-
-      final header = '// $name Repertoire\n'
-          '// Color: $color\n'
-          '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
-
-      await file.writeAsString('$header${importResult.pgnContent}\n');
-
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          'Created "$name" with ${importResult.gameCount} game${importResult.gameCount == 1 ? '' : 's'}.',
-        );
-      }
-
-      await _loadRepertoires();
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(context, AppMessages.importFailed, isError: true);
       }
     }
   }
@@ -595,6 +542,8 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
       ),
     );
 
+    nameController.dispose();
+
     if (result != null && result.isNotEmpty) {
       try {
         final directory = await getApplicationDocumentsDirectory();
@@ -614,7 +563,8 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
       } catch (e) {
         debugPrint('Rename repertoire failed: $e');
         if (mounted) {
-          showAppSnackBar(context, AppMessages.renameRepertoireFailed, isError: true);
+          showAppSnackBar(context, AppMessages.renameRepertoireFailed,
+              isError: true);
         }
       }
     }

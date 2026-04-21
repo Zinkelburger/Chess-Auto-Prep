@@ -12,13 +12,13 @@ class LineGroup {
   final String name;
   final String prefix; // Common move prefix
   final List<RepertoireLine> lines;
-  
+
   LineGroup({
     required this.name,
     required this.prefix,
     required this.lines,
   });
-  
+
   int get totalMoves => lines.fold(0, (sum, line) => sum + line.moves.length);
 }
 
@@ -45,11 +45,11 @@ class RepertoireLinesBrowser extends StatefulWidget {
 class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  
+
   List<RepertoireLine> _filteredLines = [];
   Map<String, List<RepertoireLine>> _groupedLines = {};
-  Set<String> _expandedGroups = {};
-  
+  final Set<String> _expandedGroups = {};
+
   // Filter options
   bool _showOnlyMatchingPosition = true;
   String _sortBy = 'name'; // 'name', 'length', 'position'
@@ -102,9 +102,9 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
         final formattedMoves = _formatMovesForSearch(line.moves).toLowerCase();
 
         return lineName.contains(searchTerm) ||
-               eventTitle.contains(searchTerm) ||
-               movesString.contains(searchTerm) ||
-               formattedMoves.contains(searchTerm);
+            eventTitle.contains(searchTerm) ||
+            movesString.contains(searchTerm) ||
+            formattedMoves.contains(searchTerm);
       }
 
       return true;
@@ -138,14 +138,13 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     setState(() {
       _filteredLines = filtered;
       _groupedLines = grouped;
-      
+
       // Auto-expand groups with matches at current position
       if (currentMoves.isNotEmpty) {
         for (final entry in grouped.entries) {
-          final hasExactMatch = entry.value.any((l) => 
-            l.moves.length >= currentMoves.length &&
-            _lineMatchesPosition(l, currentMoves)
-          );
+          final hasExactMatch = entry.value.any((l) =>
+              l.moves.length >= currentMoves.length &&
+              _lineMatchesPosition(l, currentMoves));
           if (hasExactMatch) {
             _expandedGroups.add(entry.key);
           }
@@ -198,15 +197,14 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
       children: [
         // Header with search and filters
         _buildHeader(),
-        
+
         // Stats bar
         _buildStatsBar(),
-        
+
         // Lines list
         Expanded(
-          child: _filteredLines.isEmpty
-              ? _buildEmptyState()
-              : _buildLinesList(),
+          child:
+              _filteredLines.isEmpty ? _buildEmptyState() : _buildLinesList(),
         ),
       ],
     );
@@ -255,17 +253,19 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
             ],
           ),
           const SizedBox(height: 8),
-          
+
           // Search field
           TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: 'Search by name, moves (e.g., "1.e4 e5" or "Sicilian")...',
+              hintText:
+                  'Search by name, moves (e.g., "1.e4 e5" or "Sicilian")...',
               hintStyle: TextStyle(color: Colors.grey[500], fontSize: 12),
               prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey[500]),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: Icon(Icons.clear, size: 18, color: Colors.grey[500]),
+                      icon:
+                          Icon(Icons.clear, size: 18, color: Colors.grey[500]),
                       onPressed: () {
                         _searchController.clear();
                       },
@@ -294,11 +294,12 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
             style: const TextStyle(fontSize: 13),
           ),
           const SizedBox(height: 8),
-          
+
           // Sort options
           Row(
             children: [
-              Text('Sort: ', style: TextStyle(fontSize: 11, color: Colors.grey[400])),
+              Text('Sort: ',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[400])),
               _buildSortChip('Name', 'name'),
               const SizedBox(width: 4),
               _buildSortChip('Length', 'length'),
@@ -338,10 +339,10 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
 
   Widget _buildStatsBar() {
     final currentMoves = widget.currentMoveSequence;
-    final matchingCount = _filteredLines.where((l) => 
-      _lineMatchesPosition(l, currentMoves)
-    ).length;
-    
+    final matchingCount = _filteredLines
+        .where((l) => _lineMatchesPosition(l, currentMoves))
+        .length;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       color: Colors.grey[900],
@@ -388,7 +389,8 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
               style: TextStyle(color: Colors.grey[500]),
               textAlign: TextAlign.center,
             ),
-            if (_showOnlyMatchingPosition && widget.currentMoveSequence.isNotEmpty) ...[
+            if (_showOnlyMatchingPosition &&
+                widget.currentMoveSequence.isNotEmpty) ...[
               const SizedBox(height: 12),
               TextButton(
                 onPressed: () {
@@ -418,7 +420,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
 
     // Multiple groups - show expandable sections
     final groupKeys = _groupedLines.keys.toList();
-    
+
     return ListView.builder(
       controller: _scrollController,
       itemCount: groupKeys.length,
@@ -426,13 +428,14 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
         final groupName = groupKeys[index];
         final lines = _groupedLines[groupName]!;
         final isExpanded = _expandedGroups.contains(groupName);
-        
+
         return _buildGroupSection(groupName, lines, isExpanded);
       },
     );
   }
 
-  Widget _buildGroupSection(String groupName, List<RepertoireLine> lines, bool isExpanded) {
+  Widget _buildGroupSection(
+      String groupName, List<RepertoireLine> lines, bool isExpanded) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -473,7 +476,8 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.grey[700],
                     borderRadius: BorderRadius.circular(10),
@@ -487,12 +491,11 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
             ),
           ),
         ),
-        
+
         // Expanded lines
         if (isExpanded)
-          ...lines.asMap().entries.map((entry) => 
-            _buildLineItem(entry.value, entry.key, indented: true)
-          ),
+          ...lines.asMap().entries.map((entry) =>
+              _buildLineItem(entry.value, entry.key, indented: true)),
       ],
     );
   }
@@ -502,7 +505,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     final currentTitle = !_isPlaceholderTitle(eventTitle) ? eventTitle : '';
     final controller = TextEditingController(text: currentTitle);
 
-    showDialog(
+    final renameDialog = showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Rename Line'),
@@ -539,16 +542,20 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
         ],
       ),
     );
+    renameDialog.whenComplete(controller.dispose);
   }
 
-  Widget _buildLineItem(RepertoireLine line, int index, {bool indented = false}) {
+  Widget _buildLineItem(RepertoireLine line, int index,
+      {bool indented = false}) {
     final eventTitle = _extractEventTitle(line.fullPgn);
-    final displayTitle = !_isPlaceholderTitle(eventTitle) ? eventTitle : line.name;
-    
+    final displayTitle =
+        !_isPlaceholderTitle(eventTitle) ? eventTitle : line.name;
+
     final currentMoves = widget.currentMoveSequence;
     final matchDepth = _getPositionMatchDepth(line, currentMoves);
-    final isExactMatch = matchDepth == currentMoves.length && currentMoves.isNotEmpty;
-    
+    final isExactMatch =
+        matchDepth == currentMoves.length && currentMoves.isNotEmpty;
+
     return InkWell(
       onTap: () => widget.onLineSelected?.call(line),
       child: Container(
@@ -559,11 +566,11 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
           bottom: 10,
         ),
         decoration: BoxDecoration(
-          color: isExactMatch 
-              ? Colors.blue[900]?.withOpacity(0.3)
+          color: isExactMatch
+              ? Colors.blue[900]?.withValues(alpha: 0.3)
               : (index % 2 == 0 ? Colors.grey[900] : Colors.grey[850]),
           border: Border(
-            left: isExactMatch 
+            left: isExactMatch
                 ? BorderSide(color: Colors.blue[400]!, width: 3)
                 : BorderSide.none,
             bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
@@ -601,9 +608,12 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
                 const SizedBox(width: 4),
                 // Color indicator
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: line.color == 'white' ? Colors.grey[200] : Colors.grey[800],
+                    color: line.color == 'white'
+                        ? Colors.grey[200]
+                        : Colors.grey[800],
                     borderRadius: BorderRadius.circular(4),
                     border: Border.all(color: Colors.grey[600]!, width: 0.5),
                   ),
@@ -612,7 +622,9 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
-                      color: line.color == 'white' ? Colors.grey[900] : Colors.grey[200],
+                      color: line.color == 'white'
+                          ? Colors.grey[900]
+                          : Colors.grey[200],
                     ),
                   ),
                 ),
@@ -628,10 +640,10 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
               ],
             ),
             const SizedBox(height: 6),
-            
+
             // Moves preview with highlighting
             _buildMovesPreview(line, matchDepth),
-            
+
             // Comments preview if any
             if (line.comments.isNotEmpty) ...[
               const SizedBox(height: 4),
@@ -652,7 +664,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
   Widget _buildMovesPreview(RepertoireLine line, int matchDepth) {
     final moves = line.moves;
     final maxPreviewMoves = widget.isExpanded ? 12 : 8;
-    
+
     return Wrap(
       spacing: 2,
       runSpacing: 2,
@@ -672,8 +684,8 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
             decoration: BoxDecoration(
-              color: i < matchDepth 
-                  ? Colors.blue[800]?.withOpacity(0.5) 
+              color: i < matchDepth
+                  ? Colors.blue[800]?.withValues(alpha: 0.5)
                   : null,
               borderRadius: BorderRadius.circular(2),
             ),
@@ -683,7 +695,8 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
                 fontSize: 11,
                 fontFamily: 'monospace',
                 color: i < matchDepth ? Colors.blue[200] : Colors.grey[300],
-                fontWeight: i < matchDepth ? FontWeight.bold : FontWeight.normal,
+                fontWeight:
+                    i < matchDepth ? FontWeight.bold : FontWeight.normal,
               ),
             ),
           ),
@@ -755,7 +768,7 @@ class RepertoireLinesBrowserDialog extends StatelessWidget {
                 ],
               ),
             ),
-            
+
             // Browser content
             Expanded(
               child: RepertoireLinesBrowser(
@@ -775,15 +788,3 @@ class RepertoireLinesBrowserDialog extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-

@@ -84,16 +84,18 @@ typedef struct TreeConfig {
 
     /* Optional: read-only Lichess community eval DB. When set, opponent-move
      * nodes consult this DB before falling back to Stockfish.  Our-move nodes
-     * are not affected — they need multiPV-5 which the DB only sparsely has. */
+     * still need explicit MultiPV candidate generation, which the DB only
+     * sparsely has. */
     struct LichessEvalDB *lichess_eval_db;
 
     /* Our-move candidate selection (engine-driven)
      *
-     * MultiPV is constant at every depth — Stockfish returns the top
-     * `our_multipv` lines, and all of them within `max_eval_loss_cp`
-     * of the best are kept.  Natural pruning comes from `min_probability`,
-     * `max_depth`, and the eval window.  No depth-based tapering. */
-    int our_multipv;                /* MultiPV count at every depth */
+     * Non-root our-move nodes use `our_multipv`.  The root widens to at
+     * least 10 lines so opening prep can branch into more unusual first
+     * moves.  All lines within `max_eval_loss_cp` of the best are kept.
+     * Natural pruning comes from `min_probability`, `max_depth`, and the
+     * eval window.  No depth-based tapering beyond the root exception. */
+    int our_multipv;                /* MultiPV count away from the root */
     int max_eval_loss_cp;           /* Candidates must be within this of best */
 
     /* Opponent-move selection
@@ -204,11 +206,12 @@ void tree_destroy(Tree *tree);
 /**
  * Build the opening tree from a starting FEN.
  *
- * Interleaves Lichess explorer queries with Stockfish evaluation:
+ * Interleaves opponent-source queries with Stockfish evaluation:
  *   - Our moves:      Stockfish MultiPV → eval filter → recurse
- *   - Opponent moves:  Lichess DB + Maia → batch eval → recurse
+ *   - Opponent moves: pure Maia or pure Lichess → recurse
  *
- * Requires config->engine_pool to be non-NULL.
+ * Requires config->engine_pool to be non-NULL. When
+ * config->maia_only is false, `explorer` must also be non-NULL.
  *
  * @return true on success, false on failure
  */

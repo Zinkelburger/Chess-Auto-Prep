@@ -97,6 +97,10 @@ class BuildTreeNode {
   /// Composite repertoire quality score (set during selection).
   double repertoireScore = 0.0;
 
+  /// Total number of nodes in this subtree (including this node).
+  /// Pre-computed by [BuildTree.computeMetadata] for O(1) access.
+  int subtreeSize = 1;
+
   BuildTreeNode({
     required this.fen,
     required this.moveSan,
@@ -114,9 +118,7 @@ class BuildTreeNode {
   /// Engine eval from our perspective (positive = good for us).
   int evalForUs(bool playAsWhite) {
     if (engineEvalCp == null) return 0;
-    return isWhiteToMove == playAsWhite
-        ? engineEvalCp!
-        : -engineEvalCp!;
+    return isWhiteToMove == playAsWhite ? engineEvalCp! : -engineEvalCp!;
   }
 
   void setLichessStats(int w, int b, int d) {
@@ -166,16 +168,70 @@ class BuildTree {
   int maxDepthReached;
   bool buildComplete;
 
+  /// SAN move sequence from standard start that leads to [root].
+  /// Empty when the tree starts from an arbitrary FEN with no known prefix.
+  String startMoves;
+
   /// Config snapshot used for serialization and re-scoring.
   final Map<String, dynamic> configSnapshot;
+
+  /// O(1) node lookup by [BuildTreeNode.nodeId].
+  /// Populated by [computeMetadata] or during build via [registerNode].
+  final Map<int, BuildTreeNode> nodeIndex = {};
 
   BuildTree({
     required this.root,
     this.totalNodes = 1,
     this.maxDepthReached = 0,
     this.buildComplete = false,
+    this.startMoves = '',
     this.configSnapshot = const {},
   });
+
+  /// Register a single node in [nodeIndex] (used during incremental build).
+  void registerNode(BuildTreeNode node) {
+    nodeIndex[node.nodeId] = node;
+  }
+
+  /// Sort every node's children in-place by
+  /// (isRepertoireMove desc, moveProbability desc).
+  ///
+  /// Call once after deserialization or after the selection phase — not
+  /// per-frame.
+  void sortAllChildren() {
+    _sortRecursive(root);
+  }
+
+  /// Rebuild [nodeIndex] from the tree and compute [BuildTreeNode.subtreeSize]
+  /// on every node via a single post-order DFS.
+  void computeMetadata() {
+    nodeIndex.clear();
+    _metadataRecursive(root);
+  }
+
+  static void _sortRecursive(BuildTreeNode node) {
+    if (node.children.length > 1) {
+      node.children.sort((a, b) {
+        if (a.isRepertoireMove != b.isRepertoireMove) {
+          return a.isRepertoireMove ? -1 : 1;
+        }
+        return b.moveProbability.compareTo(a.moveProbability);
+      });
+    }
+    for (final child in node.children) {
+      _sortRecursive(child);
+    }
+  }
+
+  int _metadataRecursive(BuildTreeNode node) {
+    nodeIndex[node.nodeId] = node;
+    int size = 1;
+    for (final child in node.children) {
+      size += _metadataRecursive(child);
+    }
+    node.subtreeSize = size;
+    return size;
+  }
 }
 
 // ── Build progress ───────────────────────────────────────────────────────
@@ -232,5 +288,4 @@ class BuildStats {
   int dbEvalMisses = 0;
   int dbExplorerHits = 0;
   int dbExplorerMisses = 0;
-
 }

@@ -94,12 +94,14 @@ static void print_usage(const char *prog_name) {
     printf("  --skip-build           Skip tree building (use existing tree)\n");
     printf("\n");
     printf("Our-move candidates (engine-driven):\n");
-    printf("  --our-multipv <N>      MultiPV count at every depth [default: 5]\n");
+    printf("  --our-multipv <N>      MultiPV count away from root [default: 5; root uses max(N,10)]\n");
     printf("  --max-eval-loss <cp>   Skip candidates more than N cp worse than best [default: 50]\n");
     printf("\n");
     printf("Opponent-move selection:\n");
     printf("  --opp-max-children <N> Max opponent responses per position [default: 6]\n");
     printf("  --opp-mass <0-1>       Mass target at every depth [default: 0.95]\n");
+    printf("  --maia-only            Use Maia for opponent moves [default]\n");
+    printf("  --lichess              Use Lichess API for opponent moves instead\n");
     printf("  --maia-model <path>    Path to maia3_simplified.onnx [default: auto-detect]\n");
     printf("  --maia-elo <N>         Elo for Maia predictions [default: 2200]\n");
     printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.05]\n");
@@ -321,7 +323,6 @@ int main(int argc, char *argv[]) {
     int maia_elo = 2200;
     double maia_min_prob = 0.05;
     bool maia_only = true;
-    bool use_lichess = false;
     bool relative_eval = false;
     const char *event_log_path = NULL;
     const char *lichess_eval_db_path = NULL;
@@ -389,7 +390,7 @@ int main(int argc, char *argv[]) {
         {"maia-model",       required_argument, 0, 3001},
         {"maia-elo",         required_argument, 0, 3002},
         {"maia-min-prob",    required_argument, 0, 3004},
-        /* --maia-only removed: it's the default */
+        {"maia-only",        no_argument,       0, 3005},
         {"lichess",          no_argument,       0, 3006},
         /* General */
         {"event-log",        required_argument, 0, 4001},
@@ -478,14 +479,13 @@ int main(int argc, char *argv[]) {
             case 3001: maia_model_path = optarg; break;
             case 3002: if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1; break;
             case 3004: if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1; break;
-            case 3006: use_lichess = true; break;
+            case 3005: maia_only = true; break;
+            case 3006: maia_only = false; break;
             case 4001: event_log_path = optarg; break;
             case 4002: lichess_eval_db_path = optarg; break;
             default: print_usage(argv[0]); return 1;
         }
     }
-
-    if (use_lichess) maia_only = false;
 
     /* Preset modes: fill defaults only for options the user did not set */
     if (mode_id != 0) {
@@ -631,6 +631,30 @@ int main(int argc, char *argv[]) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
+    RepertoireResult *result = NULL;
+    EnginePool *engine_pool = NULL;
+    MaiaContext *maia = NULL;
+
+    /* Auto-detect or use explicit Maia model path */
+    const char *resolved_maia = find_maia_model(maia_model_path);
+    if (resolved_maia) {
+        maia = maia_create(resolved_maia);
+        if (maia)
+            printf("  Maia model: %s (elo=%d)\n", resolved_maia, maia_elo);
+        else
+            fprintf(stderr, "  Warning: Could not load Maia model from %s\n",
+                    resolved_maia);
+    } else if (maia_model_path) {
+        fprintf(stderr, "  Warning: Maia model not found at %s\n",
+                maia_model_path);
+    }
+
+    if (maia_only && !maia) {
+        fprintf(stderr, "  Warning: Maia model not found — falling back to Lichess API mode.\n");
+        fprintf(stderr, "  Use --maia-model <path> or place maia3_simplified.onnx next to the binary.\n");
+        maia_only = false;
+    }
+
     /* Banner */
     printf("\n");
     printf("╔══════════════════════════════════════════════════════════╗\n");
@@ -667,10 +691,15 @@ int main(int argc, char *argv[]) {
                    mode_name ? mode_name : "default");
     }
     printf("  Database:         %s\n", db_path);
+    if (maia)
+        printf("  Maia model:       %s (elo=%d)\n", resolved_maia, maia_elo);
     if (maia_only)
-        printf("  Opponent source:  Maia-only (elo=%d, no API)\n", maia_elo);
+        printf("  Opponent source:  Maia-only\n");
+    else if (maia)
+        printf("  Opponent source:  %s (Maia optional for novelty)\n",
+               use_masters ? "Masters DB" : "Lichess API");
     else
-        printf("  Opponent source:  %s + Maia supplement\n",
+        printf("  Opponent source:  %s\n",
                use_masters ? "Masters DB" : "Lichess API");
     printf("  Output:           %s\n", pgn_path);
     printf("  Tree state:       %s\n", tree_path);
@@ -686,30 +715,6 @@ int main(int argc, char *argv[]) {
 
     struct timespec pipeline_start, pipeline_end;
     clock_gettime(CLOCK_MONOTONIC, &pipeline_start);
-
-    RepertoireResult *result = NULL;
-    EnginePool *engine_pool = NULL;
-    MaiaContext *maia = NULL;
-
-    /* Auto-detect or use explicit Maia model path */
-    const char *resolved_maia = find_maia_model(maia_model_path);
-    if (resolved_maia) {
-        maia = maia_create(resolved_maia);
-        if (maia)
-            printf("  Maia model: %s (elo=%d)\n", resolved_maia, maia_elo);
-        else
-            fprintf(stderr, "  Warning: Could not load Maia model from %s\n",
-                    resolved_maia);
-    } else if (maia_model_path) {
-        fprintf(stderr, "  Warning: Maia model not found at %s\n",
-                maia_model_path);
-    }
-
-    if (maia_only && !maia) {
-        fprintf(stderr, "  Warning: Maia model not found — falling back to Lichess API mode.\n");
-        fprintf(stderr, "  Use --maia-model <path> or place maia3_simplified.onnx next to the binary.\n");
-        maia_only = false;
-    }
 
     /* ================================================================
      *  STAGE 0: Initialize Database + Engine Pool
@@ -824,7 +829,7 @@ int main(int argc, char *argv[]) {
 
     if (needs_build) {
         if (!tree) printf("[1/4] Building opening tree (%s)...\n",
-                          maia_only ? "Maia-only" : "interleaved");
+                          maia_only ? "Maia-only" : "Lichess-backed");
 
         LichessExplorer *explorer = NULL;
         if (!maia_only) {
@@ -897,11 +902,11 @@ int main(int argc, char *argv[]) {
         if (max_eval_arg != -99999) config.max_eval_cp = max_eval_arg;
         config.relative_eval = relative_eval;
 
+        config.maia_only = maia_only;
         if (maia) {
             config.maia = maia;
             config.maia_elo = maia_elo;
             config.maia_min_prob = maia_min_prob;
-            config.maia_only = maia_only;
         }
 
         /* Only run Maia at our-move nodes for novelty scoring if we're
@@ -914,8 +919,16 @@ int main(int argc, char *argv[]) {
 
         config.progress_callback = progress_callback;  /* Always show progress */
 
-        printf("  Our moves:  MultiPV %d (constant), %dcp loss max\n",
-               config.our_multipv, config.max_eval_loss_cp);
+        {
+            int root_multipv = config.our_multipv < 10 ? 10 : config.our_multipv;
+            if (root_multipv == config.our_multipv) {
+                printf("  Our moves:  MultiPV %d, %dcp loss max\n",
+                       config.our_multipv, config.max_eval_loss_cp);
+            } else {
+                printf("  Our moves:  root MultiPV %d, others %d, %dcp loss max\n",
+                       root_multipv, config.our_multipv, config.max_eval_loss_cp);
+            }
+        }
         printf("  Opponent:   max %d children, mass target %.0f%%\n",
                config.opp_max_children,
                config.opp_mass_target * 100.0);

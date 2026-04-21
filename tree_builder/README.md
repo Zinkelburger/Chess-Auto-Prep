@@ -1,9 +1,9 @@
 # Chess Opening Tree Builder
 
-A C CLI tool that builds chess opening repertoires by interleaving Lichess
-database queries with Stockfish evaluation. Branches are pruned inline by
-eval window, producing a focused repertoire tree with evaluations on every
-node.
+A C CLI tool that builds chess opening repertoires by interleaving a
+human-move source (pure Maia by default, or pure Lichess with `--lichess`)
+with Stockfish evaluation. Branches are pruned inline by the eval window,
+producing a focused repertoire tree with evaluations on every node.
 
 ## Architecture
 
@@ -75,7 +75,7 @@ The `<name>` argument is the base name for all output files:
 | Option | Description | Default |
 |--------|-------------|---------|
 | `-f, --fen <FEN>` | Starting position FEN | Standard starting position |
-| `-c, --color <w\|b>` | Play as white or black | w |
+| `-c, --color <w\|b>` | Play as white or black | required |
 | `-p, --probability <P>` | Min probability threshold | 0.0001 (0.01%) |
 | `-d, --ply <N>` | Max tree depth in ply (half-moves) | 20 |
 | `-e, --eval-depth <N>` | Stockfish search depth | 20 |
@@ -142,7 +142,7 @@ Resume an interrupted build:
 #include "serialization.h"
 
 int main() {
-    EnginePool *pool = engine_pool_create("./stockfish", 4, 20);
+    EnginePool *pool = engine_pool_create("./stockfish", 4, 20, 1);
     LichessExplorer *explorer = lichess_explorer_create();
     lichess_explorer_set_ratings(explorer, "2000,2200,2500");
 
@@ -150,6 +150,7 @@ int main() {
     TreeConfig config = tree_config_default();
     config.play_as_white = true;
     config.engine_pool = pool;
+    config.maia_only = false;  // this example uses Lichess for opponent moves
     config.min_probability = 0.001;
     tree_config_set_color_defaults(&config);
 

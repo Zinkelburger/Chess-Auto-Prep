@@ -17,7 +17,7 @@ class MoveInLineProbability {
   final int moveNumber;
   final String san;
   final bool isOpponentMove;
-  final double probability; // 100 for user moves, database % for opponent moves
+  final double? probability; // null when database data is unavailable
   final double cumulativeAfter;
 
   MoveInLineProbability({
@@ -54,10 +54,7 @@ class ProbabilityService {
   final ValueNotifier<List<MoveInLineProbability>> lineBreakdown =
       ValueNotifier([]);
 
-  String _startMoves = '';
-
-  set startMoves(String moves) => _startMoves = moves;
-  String get startMoves => _startMoves;
+  String startMoves = '';
 
   List<String> _parseStartMoves(String movesStr) {
     if (movesStr.trim().isEmpty) return [];
@@ -79,7 +76,7 @@ class ProbabilityService {
     for (final san in moves) {
       final move = pos.parseSan(san);
       if (move == null) {
-        if (kDebugMode) print('Invalid starting move: $san');
+        if (kDebugMode) debugPrint('Invalid starting move: $san');
         break;
       }
       pos = pos.play(move);
@@ -153,7 +150,7 @@ class ProbabilityService {
     required bool isUserWhite,
     String? startingMoves,
   }) async {
-    final startMovesStr = startingMoves ?? _startMoves;
+    final startMovesStr = startingMoves ?? startMoves;
     final startingFen = _getStartingFen(startMovesStr);
     final startMovesList = _parseStartMoves(startMovesStr);
 
@@ -197,7 +194,7 @@ class ProbabilityService {
 
       final isOpponentMove =
           (isWhiteTurn && !isUserWhite) || (!isWhiteTurn && isUserWhite);
-      double moveProb = 100.0;
+      double? moveProb = 100.0;
 
       if (isOpponentMove) {
         final probs = await _fetchInternal(pos.fen);
@@ -216,7 +213,7 @@ class ProbabilityService {
             cumulative *= 0.001;
           }
         } else {
-          moveProb = -1;
+          moveProb = null;
         }
       }
 
@@ -265,7 +262,7 @@ class ProbabilityService {
     final ms = sw.elapsedMilliseconds;
 
     if (kDebugMode && result != null) {
-      print('[ProbService] ${ms}ms  ${result.moves.length} moves');
+      debugPrint('[ProbService] ${ms}ms  ${result.moves.length} moves');
     }
 
     if (result != null) _cache[key] = result;

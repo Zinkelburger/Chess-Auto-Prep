@@ -18,7 +18,7 @@ void main() {
         (tester) async {
       await pumpApp(tester);
 
-      expect(find.text('Chess Auto Prep'), findsOneWidget);
+      expect(find.text('Tactics'), findsOneWidget);
       expect(find.byType(ChessBoardWidget), findsOneWidget);
       expect(find.text('Import Games'), findsOneWidget);
       expect(find.text('Lichess Username'), findsOneWidget);
@@ -36,10 +36,34 @@ void main() {
       await tester.tap(find.byIcon(Icons.view_module));
       await tester.pumpAndSettle();
 
-      expect(find.text('Tactics'), findsOneWidget);
-      expect(find.text('Player Analysis'), findsOneWidget);
-      expect(find.text('Repertoire Builder'), findsOneWidget);
-      expect(find.text('Repertoire Trainer'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(PopupMenuItem<AppMode>),
+          matching: find.text('Tactics'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(PopupMenuItem<AppMode>),
+          matching: find.text('Player Analysis'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(PopupMenuItem<AppMode>),
+          matching: find.text('Repertoire Builder'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(PopupMenuItem<AppMode>),
+          matching: find.text('Repertoire Trainer'),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('switches to Repertoire Builder', (tester) async {

@@ -124,8 +124,9 @@ class OpeningTreeBuilder {
   }
 
   static double _calculateUserResult(String result, bool userIsWhite) {
-    if (result.contains('1-0')) return userIsWhite ? 1.0 : 0.0;
-    if (result.contains('0-1')) return userIsWhite ? 0.0 : 1.0;
+    final normalizedResult = result.trim();
+    if (normalizedResult == '1-0') return userIsWhite ? 1.0 : 0.0;
+    if (normalizedResult == '0-1') return userIsWhite ? 0.0 : 1.0;
     return 0.5; // Draws or '*'
   }
 }

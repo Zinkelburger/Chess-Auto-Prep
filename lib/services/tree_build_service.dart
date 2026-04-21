@@ -91,6 +91,9 @@ class TreeBuildService {
     if (existingTree != null) {
       tree = existingTree;
       _nextNodeId = _findMaxNodeId(tree.root) + 1;
+      if (tree.nodeIndex.isEmpty) {
+        tree.computeMetadata();
+      }
     } else {
       _dbCache.clear();
       _nextNodeId = 1;
@@ -108,6 +111,7 @@ class TreeBuildService {
         root: root,
         configSnapshot: cfg.toJson(),
       );
+      tree.registerNode(root);
     }
 
     _currentTree = tree;
@@ -597,26 +601,34 @@ class TreeBuildService {
   // ── Prune eval-too-low (post-build cleanup) ────────────────────────────
 
   int _pruneEvalTooLow(BuildTree tree) {
-    final removed = _pruneRecursive(tree.root);
+    final removed = _pruneRecursive(tree, tree.root);
     if (removed > 0) {
       tree.totalNodes = tree.root.countSubtree();
     }
     return removed;
   }
 
-  int _pruneRecursive(BuildTreeNode node) {
+  int _pruneRecursive(BuildTree tree, BuildTreeNode node) {
     int removed = 0;
     for (int i = node.children.length - 1; i >= 0; i--) {
       final child = node.children[i];
       if (child.pruneReason == PruneReason.evalTooLow) {
         final subtreeSize = child.countSubtree();
+        _removeFromIndex(tree, child);
         node.children.removeAt(i);
         removed += subtreeSize;
       } else {
-        removed += _pruneRecursive(child);
+        removed += _pruneRecursive(tree, child);
       }
     }
     return removed;
+  }
+
+  void _removeFromIndex(BuildTree tree, BuildTreeNode node) {
+    tree.nodeIndex.remove(node.nodeId);
+    for (final child in node.children) {
+      _removeFromIndex(tree, child);
+    }
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
@@ -642,6 +654,7 @@ class TreeBuildService {
       parent: parent,
     );
     parent.children.add(child);
+    tree.registerNode(child);
     tree.totalNodes++;
     if (child.depth > tree.maxDepthReached) {
       tree.maxDepthReached = child.depth;

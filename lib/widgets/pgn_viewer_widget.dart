@@ -185,6 +185,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         pgnText = widget.pgnText!;
       } else {
         pgnText = await _findGamePgn(widget.gameId!);
+        if (!mounted) return;
         if (pgnText.isEmpty) {
           setState(() {
             _error = 'Game not found in PGN files';
@@ -196,6 +197,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
       final game = PgnGame.parsePgn(pgnText);
       final moveHistory = game.moves.mainline().toList();
+      if (!mounted) return;
 
       setState(() {
         _game = game;
@@ -204,8 +206,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         _currentPosition = Chess.initial;
         _gameInfo = _buildGameInfo(game);
         _isLoading = false;
-        // Clear analysis when loading new game
-        _clearAnalysis();
+        // Clear analysis when loading a new game.
+        _resetAnalysisState();
       });
 
       // Defer the initial jump to after the current build frame.  The
@@ -220,6 +222,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         }
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = 'Error loading PGN: $e';
         _isLoading = false;
@@ -242,7 +245,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         }
       }
     } catch (e) {
-      print('Error finding game PGN: $e');
+      debugPrint('Error finding game PGN: $e');
     }
 
     return '';
@@ -513,10 +516,14 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   
   void _clearAnalysis() {
     setState(() {
-      _analysisRoots = [];
-      _analysisBranchPoint = -1;
-      _analysisPath = [];
+      _resetAnalysisState();
     });
+  }
+
+  void _resetAnalysisState() {
+    _analysisRoots = [];
+    _analysisBranchPoint = -1;
+    _analysisPath = [];
   }
 
   String _filterComment(String comment) {

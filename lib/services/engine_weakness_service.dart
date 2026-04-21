@@ -72,8 +72,10 @@ class EngineWeaknessService {
 
     final total = positions.length;
     final results = <EngineWeaknessResult>[];
+    final failedPositions = <String>[];
     int nextIndex = 0;
     int completed = 0;
+    int failedCount = 0;
 
     onProgress?.call(0, total);
 
@@ -124,7 +126,13 @@ class EngineWeaknessService {
               'd${eval.depth} ${node.gamesPlayed}g '
               '${node.getMovePathString()}');
         }
-      } catch (_) {}
+      } catch (e) {
+        failedCount++;
+        if (kDebugMode && failedPositions.length < 5) {
+          failedPositions.add(node.getMovePathString());
+          debugPrint('[Eval] Failed to evaluate ${node.getMovePathString()}: $e');
+        }
+      }
 
       completed++;
       onProgress?.call(completed, total);
@@ -136,6 +144,14 @@ class EngineWeaknessService {
       futures.add(evalPosition(idx));
     }
     await Future.wait(futures);
+
+    if (!_cancelled && results.isEmpty && failedCount > 0) {
+      throw Exception('Engine evaluation failed for all $failedCount positions.');
+    }
+    if (kDebugMode && failedCount > 0) {
+      debugPrint('[Eval] Failed on $failedCount/$total positions'
+          '${failedPositions.isEmpty ? '' : ' (${failedPositions.join(', ')})'}');
+    }
 
     return results;
   }

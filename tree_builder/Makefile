@@ -181,23 +181,25 @@ install: $(TARGET)
 	install -m 755 $(TARGET) /usr/local/bin/tree_builder
 	@echo "Installed to /usr/local/bin/tree_builder"
 
-# Quick test run (small tree)
+# Quick offline smoke test (only our first move, so no API/Maia needed)
 test: $(TARGET)
 	@echo ""
-	@echo "Running quick test (depth 4, probability 5%)..."
+	@echo "Running quick offline smoke test (depth 1)..."
 	@echo ""
-	$(TARGET) -v -p 0.05 -d 4 -e 15 --skip-eval test_output.json
+	$(TARGET) -c w -d 1 -e 8 -t 1 test_output
 	@echo ""
-	@echo "Test output saved to test_output.json"
-	@rm -f test_output.json repertoire.db
+	@echo "Test output saved to test_output.pgn"
+	@rm -f test_output.db test_output.db-shm test_output.db-wal \
+		test_output.pgn test_output.tree.json
 
 # Full test with engine
 test-full: $(TARGET)
 	@echo ""
 	@echo "Running full test with Stockfish (depth 6, 2 engines)..."
-	$(TARGET) -v -c w -p 0.01 -d 6 -e 20 -t 2 --traps --pgn test.pgn test_output.json
+	$(TARGET) -v -c w -p 0.01 -d 6 -e 20 -t 2 --traps test_output
 	@echo ""
-	@rm -f test_output.json test_output.json.repertoire.json test.pgn repertoire.db
+	@rm -f test_output.db test_output.db-shm test_output.db-wal \
+		test_output.pgn test_output.tree.json test_output.traps.pgn
 
 # Portable distribution: bundles binary + shared libs + maia model + stockfish
 DIST_DIR = dist/tree_builder

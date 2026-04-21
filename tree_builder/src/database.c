@@ -1,8 +1,10 @@
 /**
  * database.c - SQLite3 Persistent Storage Implementation
- * 
+ *
  * Uses WAL mode for concurrent read/write performance.
- * All FENs are stored normalized (without move counters) for deduplication.
+ * Position-cache tables use canonical 4-field FEN keys (piece placement,
+ * side to move, castling, en passant) so move counters do not block
+ * deduplication or cache reuse.
  */
 
 #include "database.h"
@@ -30,6 +32,25 @@ struct RepertoireDB {
     sqlite3_stmt *stmt_get_maia;
     sqlite3_stmt *stmt_put_maia;
 };
+
+#define DB_FEN_KEY_LEN 128
+
+static void canonicalize_fen_key(const char *fen, char *out, size_t out_len) {
+    if (!out || out_len == 0) return;
+    if (!fen) {
+        out[0] = '\0';
+        return;
+    }
+
+    snprintf(out, out_len, "%s", fen);
+    int spaces = 0;
+    for (char *p = out; *p; p++) {
+        if (*p == ' ' && ++spaces == 4) {
+            *p = '\0';
+            return;
+        }
+    }
+}
 
 
 /* ========== Schema ========== */
@@ -178,7 +199,9 @@ static bool prepare_statements(RepertoireDB *rdb) {
     
     /* MultiPV cache statements */
     sqlite3_prepare_v2(db,
-        "SELECT num_lines, lines_blob FROM multipv_cache WHERE fen = ? AND depth >= ? AND num_pvs >= ?",
+        "SELECT num_lines, lines_blob FROM multipv_cache "
+        "WHERE fen = ? AND depth >= ? AND num_pvs >= ? "
+        "ORDER BY depth DESC, num_pvs DESC LIMIT 1",
         -1, &rdb->stmt_get_multipv, NULL);
 
     sqlite3_prepare_v2(db,
@@ -277,13 +300,23 @@ bool rdb_get_explorer_cache(RepertoireDB *db, const char *fen,
     
     memset(out, 0, sizeof(CachedExplorerResponse));
     out->found = false;
+
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
+    const char *lookup_key = key;
     
     /* Get position-level data */
     sqlite3_reset(db->stmt_get_explorer);
-    sqlite3_bind_text(db->stmt_get_explorer, 1, fen, -1, SQLITE_STATIC);
-    
+    sqlite3_clear_bindings(db->stmt_get_explorer);
+    sqlite3_bind_text(db->stmt_get_explorer, 1, lookup_key, -1, SQLITE_TRANSIENT);
     if (sqlite3_step(db->stmt_get_explorer) != SQLITE_ROW) {
-        return false;
+        if (strcmp(key, fen) == 0) return false;
+        lookup_key = fen;
+        sqlite3_reset(db->stmt_get_explorer);
+        sqlite3_clear_bindings(db->stmt_get_explorer);
+        sqlite3_bind_text(db->stmt_get_explorer, 1, lookup_key, -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(db->stmt_get_explorer) != SQLITE_ROW)
+            return false;
     }
     
     out->total_games = (uint64_t)sqlite3_column_int64(db->stmt_get_explorer, 0);
@@ -296,7 +329,8 @@ bool rdb_get_explorer_cache(RepertoireDB *db, const char *fen,
     
     /* Get moves */
     sqlite3_reset(db->stmt_get_explorer_moves);
-    sqlite3_bind_text(db->stmt_get_explorer_moves, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_clear_bindings(db->stmt_get_explorer_moves);
+    sqlite3_bind_text(db->stmt_get_explorer_moves, 1, lookup_key, -1, SQLITE_TRANSIENT);
     
     out->move_count = 0;
     while (sqlite3_step(db->stmt_get_explorer_moves) == SQLITE_ROW && out->move_count < 64) {
@@ -328,10 +362,13 @@ void rdb_put_explorer_cache(RepertoireDB *db, const char *fen,
     if (!db || !fen) return;
     
     time_t now = time(NULL);
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
     
     /* Insert position */
     sqlite3_reset(db->stmt_put_explorer);
-    sqlite3_bind_text(db->stmt_put_explorer, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_clear_bindings(db->stmt_put_explorer);
+    sqlite3_bind_text(db->stmt_put_explorer, 1, key, -1, SQLITE_TRANSIENT);
     sqlite3_bind_int64(db->stmt_put_explorer, 2, (sqlite3_int64)total_games);
     sqlite3_bind_text(db->stmt_put_explorer, 3, opening_eco ? opening_eco : "", -1, SQLITE_STATIC);
     sqlite3_bind_text(db->stmt_put_explorer, 4, opening_name ? opening_name : "", -1, SQLITE_STATIC);
@@ -343,7 +380,8 @@ void rdb_put_explorer_cache(RepertoireDB *db, const char *fen,
         const CachedExplorerMove *m = &moves[i];
         
         sqlite3_reset(db->stmt_put_explorer_move);
-        sqlite3_bind_text(db->stmt_put_explorer_move, 1, fen, -1, SQLITE_STATIC);
+        sqlite3_clear_bindings(db->stmt_put_explorer_move);
+        sqlite3_bind_text(db->stmt_put_explorer_move, 1, key, -1, SQLITE_TRANSIENT);
         sqlite3_bind_text(db->stmt_put_explorer_move, 2, m->uci, -1, SQLITE_STATIC);
         sqlite3_bind_text(db->stmt_put_explorer_move, 3, m->san, -1, SQLITE_STATIC);
         sqlite3_bind_int64(db->stmt_put_explorer_move, 4, (sqlite3_int64)m->white_wins);
@@ -359,12 +397,20 @@ void rdb_put_explorer_cache(RepertoireDB *db, const char *fen,
 
 bool rdb_get_eval(RepertoireDB *db, const char *fen, int *eval_cp, int *depth) {
     if (!db || !fen) return false;
+
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
     
     sqlite3_reset(db->stmt_get_eval);
-    sqlite3_bind_text(db->stmt_get_eval, 1, fen, -1, SQLITE_STATIC);
-    
+    sqlite3_clear_bindings(db->stmt_get_eval);
+    sqlite3_bind_text(db->stmt_get_eval, 1, key, -1, SQLITE_TRANSIENT);
     if (sqlite3_step(db->stmt_get_eval) != SQLITE_ROW) {
-        return false;
+        if (strcmp(key, fen) == 0) return false;
+        sqlite3_reset(db->stmt_get_eval);
+        sqlite3_clear_bindings(db->stmt_get_eval);
+        sqlite3_bind_text(db->stmt_get_eval, 1, fen, -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(db->stmt_get_eval) != SQLITE_ROW)
+            return false;
     }
     
     if (eval_cp) *eval_cp = sqlite3_column_int(db->stmt_get_eval, 0);
@@ -378,9 +424,12 @@ void rdb_put_eval(RepertoireDB *db, const char *fen, int eval_cp, int depth) {
     if (!db || !fen) return;
     
     time_t now = time(NULL);
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
     
     sqlite3_reset(db->stmt_put_eval);
-    sqlite3_bind_text(db->stmt_put_eval, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_clear_bindings(db->stmt_put_eval);
+    sqlite3_bind_text(db->stmt_put_eval, 1, key, -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(db->stmt_put_eval, 2, eval_cp);
     sqlite3_bind_int(db->stmt_put_eval, 3, depth);
     sqlite3_bind_int64(db->stmt_put_eval, 4, (sqlite3_int64)now);
@@ -392,12 +441,20 @@ void rdb_put_eval(RepertoireDB *db, const char *fen, int eval_cp, int depth) {
 
 bool rdb_get_ease(RepertoireDB *db, const char *fen, double *ease) {
     if (!db || !fen) return false;
+
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
     
     sqlite3_reset(db->stmt_get_ease);
-    sqlite3_bind_text(db->stmt_get_ease, 1, fen, -1, SQLITE_STATIC);
-    
+    sqlite3_clear_bindings(db->stmt_get_ease);
+    sqlite3_bind_text(db->stmt_get_ease, 1, key, -1, SQLITE_TRANSIENT);
     if (sqlite3_step(db->stmt_get_ease) != SQLITE_ROW) {
-        return false;
+        if (strcmp(key, fen) == 0) return false;
+        sqlite3_reset(db->stmt_get_ease);
+        sqlite3_clear_bindings(db->stmt_get_ease);
+        sqlite3_bind_text(db->stmt_get_ease, 1, fen, -1, SQLITE_TRANSIENT);
+        if (sqlite3_step(db->stmt_get_ease) != SQLITE_ROW)
+            return false;
     }
     
     if (ease) *ease = sqlite3_column_double(db->stmt_get_ease, 0);
@@ -410,9 +467,12 @@ void rdb_put_ease(RepertoireDB *db, const char *fen, double ease) {
     if (!db || !fen) return;
     
     time_t now = time(NULL);
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
     
     sqlite3_reset(db->stmt_put_ease);
-    sqlite3_bind_text(db->stmt_put_ease, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_clear_bindings(db->stmt_put_ease);
+    sqlite3_bind_text(db->stmt_put_ease, 1, key, -1, SQLITE_TRANSIENT);
     sqlite3_bind_double(db->stmt_put_ease, 2, ease);
     sqlite3_bind_int64(db->stmt_put_ease, 3, (sqlite3_int64)now);
     sqlite3_step(db->stmt_put_ease);
@@ -436,13 +496,26 @@ bool rdb_get_multipv(RepertoireDB *db, const char *fen, int depth,
                      int num_pvs, MultiPVJob *out) {
     if (!db || !fen || !out) return false;
 
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
+    const char *lookup_key = key;
+
     sqlite3_reset(db->stmt_get_multipv);
-    sqlite3_bind_text(db->stmt_get_multipv, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_clear_bindings(db->stmt_get_multipv);
+    sqlite3_bind_text(db->stmt_get_multipv, 1, lookup_key, -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(db->stmt_get_multipv, 2, depth);
     sqlite3_bind_int(db->stmt_get_multipv, 3, num_pvs);
-
-    if (sqlite3_step(db->stmt_get_multipv) != SQLITE_ROW)
-        return false;
+    if (sqlite3_step(db->stmt_get_multipv) != SQLITE_ROW) {
+        if (strcmp(key, fen) == 0) return false;
+        lookup_key = fen;
+        sqlite3_reset(db->stmt_get_multipv);
+        sqlite3_clear_bindings(db->stmt_get_multipv);
+        sqlite3_bind_text(db->stmt_get_multipv, 1, lookup_key, -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(db->stmt_get_multipv, 2, depth);
+        sqlite3_bind_int(db->stmt_get_multipv, 3, num_pvs);
+        if (sqlite3_step(db->stmt_get_multipv) != SQLITE_ROW)
+            return false;
+    }
 
     int num_lines = sqlite3_column_int(db->stmt_get_multipv, 0);
     const void *blob = sqlite3_column_blob(db->stmt_get_multipv, 1);
@@ -495,8 +568,11 @@ void rdb_put_multipv(RepertoireDB *db, const char *fen, int depth,
     }
 
     time_t now = time(NULL);
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
     sqlite3_reset(db->stmt_put_multipv);
-    sqlite3_bind_text(db->stmt_put_multipv, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_clear_bindings(db->stmt_put_multipv);
+    sqlite3_bind_text(db->stmt_put_multipv, 1, key, -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(db->stmt_put_multipv, 2, depth);
     sqlite3_bind_int(db->stmt_put_multipv, 3, num_pvs);
     sqlite3_bind_int(db->stmt_put_multipv, 4, n);
@@ -523,11 +599,23 @@ bool rdb_get_maia(RepertoireDB *db, const char *fen, int elo,
     if (out_count) *out_count = 0;
     if (!db || !fen || !out_moves || max_moves <= 0) return false;
 
-    sqlite3_reset(db->stmt_get_maia);
-    sqlite3_bind_text(db->stmt_get_maia, 1, fen, -1, SQLITE_STATIC);
-    sqlite3_bind_int(db->stmt_get_maia, 2, elo);
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
+    const char *lookup_key = key;
 
-    if (sqlite3_step(db->stmt_get_maia) != SQLITE_ROW) return false;
+    sqlite3_reset(db->stmt_get_maia);
+    sqlite3_clear_bindings(db->stmt_get_maia);
+    sqlite3_bind_text(db->stmt_get_maia, 1, lookup_key, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(db->stmt_get_maia, 2, elo);
+    if (sqlite3_step(db->stmt_get_maia) != SQLITE_ROW) {
+        if (strcmp(key, fen) == 0) return false;
+        lookup_key = fen;
+        sqlite3_reset(db->stmt_get_maia);
+        sqlite3_clear_bindings(db->stmt_get_maia);
+        sqlite3_bind_text(db->stmt_get_maia, 1, lookup_key, -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(db->stmt_get_maia, 2, elo);
+        if (sqlite3_step(db->stmt_get_maia) != SQLITE_ROW) return false;
+    }
 
     int move_count = sqlite3_column_int(db->stmt_get_maia, 0);
     const void *blob = sqlite3_column_blob(db->stmt_get_maia, 1);
@@ -568,8 +656,11 @@ void rdb_put_maia(RepertoireDB *db, const char *fen, int elo,
     }
 
     time_t now = time(NULL);
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
     sqlite3_reset(db->stmt_put_maia);
-    sqlite3_bind_text(db->stmt_put_maia, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_clear_bindings(db->stmt_put_maia);
+    sqlite3_bind_text(db->stmt_put_maia, 1, key, -1, SQLITE_TRANSIENT);
     sqlite3_bind_int(db->stmt_put_maia, 2, elo);
     sqlite3_bind_int(db->stmt_put_maia, 3, move_count);
     sqlite3_bind_blob(db->stmt_put_maia, 4, buf, blob_size, SQLITE_TRANSIENT);
@@ -588,9 +679,12 @@ void rdb_save_repertoire_move(RepertoireDB *db, const char *fen,
     if (!db || !fen || !move_san || !move_uci) return;
     
     time_t now = time(NULL);
+    char key[DB_FEN_KEY_LEN];
+    canonicalize_fen_key(fen, key, sizeof(key));
     
     sqlite3_reset(db->stmt_save_rep_move);
-    sqlite3_bind_text(db->stmt_save_rep_move, 1, fen, -1, SQLITE_STATIC);
+    sqlite3_clear_bindings(db->stmt_save_rep_move);
+    sqlite3_bind_text(db->stmt_save_rep_move, 1, key, -1, SQLITE_TRANSIENT);
     sqlite3_bind_text(db->stmt_save_rep_move, 2, move_san, -1, SQLITE_STATIC);
     sqlite3_bind_text(db->stmt_save_rep_move, 3, move_uci, -1, SQLITE_STATIC);
     sqlite3_bind_double(db->stmt_save_rep_move, 4, score);

@@ -1,25 +1,28 @@
 /// JSON serialization / deserialization for [BuildTree].
 ///
-/// Wire format matches the C tree builder's v3 JSON format so that
+/// Wire format matches the C tree builder's v4 JSON format so that
 /// trees are interchangeable between the Dart and C implementations.
 library;
 
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 
 import '../../models/build_tree_node.dart';
 import 'fen_map.dart';
 
 // ── Serialization ────────────────────────────────────────────────────────
 
-/// Encode a [BuildTree] as a JSON string matching the C v3 format.
+/// Encode a [BuildTree] as a JSON string matching the C v4 format.
 String serializeTree(BuildTree tree) {
   final root = <String, dynamic>{
     'format': 'opening_tree',
-    'version': 3,
+    'version': 4,
     'total_nodes': tree.totalNodes,
     'max_depth': tree.maxDepthReached,
     'build_complete': tree.buildComplete,
     'config': tree.configSnapshot,
+    if (tree.startMoves.isNotEmpty) 'start_moves': tree.startMoves,
     'tree': _nodeToJson(tree.root),
   };
   return const JsonEncoder.withIndent('  ').convert(root);
@@ -50,6 +53,8 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   if (node.hasExpectimax) {
     obj['local_cpl'] = node.localCpl;
     obj['expectimax_value'] = node.expectimaxValue;
+    obj['subtree_depth'] = node.subtreeDepth;
+    obj['subtree_opp_plies'] = node.subtreeOppPlies;
   }
 
   if (node.trapScore >= 0.0) {
@@ -79,6 +84,8 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   }
 
   if (node.isRepertoireMove) obj['is_repertoire_move'] = true;
+  if (node.repertoireScore != 0.0)
+    obj['repertoire_score'] = node.repertoireScore;
 
   if (node.children.isNotEmpty) {
     obj['children'] = node.children.map(_nodeToJson).toList();
@@ -94,25 +101,51 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
 /// Optionally populates a [fenMap] with canonical nodes for transposition
 /// resolution in post-build phases.
 BuildTree deserializeTree(String jsonStr, {FenMap? fenMap}) {
+  final sw = Stopwatch()..start();
   final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+  final jsonParseMs = sw.elapsedMilliseconds;
+  final version = (data['version'] as num?)?.toInt() ?? 3;
 
   final configData = data['config'] as Map<String, dynamic>? ?? const {};
   final treeData = data['tree'] as Map<String, dynamic>;
 
+  sw.reset();
   final idToNode = <int, BuildTreeNode>{};
   final root = _nodeFromJson(treeData, null, idToNode);
+  final nodeBuiltMs = sw.elapsedMilliseconds;
 
   if (fenMap != null) {
     fenMap.populate(root);
   }
 
-  return BuildTree(
+  final totalNodes =
+      (data['total_nodes'] as num?)?.toInt() ?? root.countSubtree();
+
+  final tree = BuildTree(
     root: root,
-    totalNodes: (data['total_nodes'] as num?)?.toInt() ?? root.countSubtree(),
+    totalNodes: totalNodes,
     maxDepthReached: (data['max_depth'] as num?)?.toInt() ?? 0,
-    buildComplete: data['build_complete'] as bool? ?? false,
+    buildComplete: data['build_complete'] as bool? ?? true,
+    startMoves: data['start_moves'] as String? ?? '',
     configSnapshot: configData,
   );
+
+  // Populate the flat index from the map we already built during parsing,
+  // then compute subtreeSize and sort children in a single pass.
+  sw.reset();
+  tree.nodeIndex.addAll(idToNode);
+  tree.computeMetadata();
+  tree.sortAllChildren();
+  final metadataMs = sw.elapsedMilliseconds;
+
+  debugPrint('[deserializeTree] jsonParse=${jsonParseMs}ms, '
+      'nodeBuild=${nodeBuiltMs}ms, '
+      'metadata+sort=${metadataMs}ms, '
+      'version=$version, '
+      'nodeIndex=${tree.nodeIndex.length} entries, '
+      'totalNodes=$totalNodes');
+
+  return tree;
 }
 
 BuildTreeNode _nodeFromJson(
@@ -129,12 +162,14 @@ BuildTreeNode _nodeFromJson(
     fen: fen,
     moveSan: obj['move_san'] as String? ?? '',
     moveUci: obj['move_uci'] as String? ?? '',
-    depth: (obj['depth'] as num?)?.toInt() ?? (parent != null ? parent.depth + 1 : 0),
+    depth: (obj['depth'] as num?)?.toInt() ??
+        (parent != null ? parent.depth + 1 : 0),
     isWhiteToMove: isWhiteToMove,
     nodeId: nodeId,
     parent: parent,
     moveProbability: (obj['move_probability'] as num?)?.toDouble() ?? 1.0,
-    cumulativeProbability: (obj['cumulative_probability'] as num?)?.toDouble() ?? 1.0,
+    cumulativeProbability:
+        (obj['cumulative_probability'] as num?)?.toDouble() ?? 1.0,
   );
 
   if (obj.containsKey('engine_eval_cp')) {
@@ -149,8 +184,16 @@ BuildTreeNode _nodeFromJson(
     node.localCpl = (obj['local_cpl'] as num).toDouble();
     node.expectimaxValue = (obj['expectimax_value'] as num).toDouble();
     node.hasExpectimax = true;
-  } else if (obj.containsKey('local_cpl') && obj.containsKey('accumulated_eca')) {
+  } else if (obj.containsKey('local_cpl') &&
+      obj.containsKey('accumulated_eca')) {
     node.localCpl = (obj['local_cpl'] as num).toDouble();
+  }
+
+  if (obj.containsKey('subtree_depth')) {
+    node.subtreeDepth = (obj['subtree_depth'] as num).toInt();
+  }
+  if (obj.containsKey('subtree_opp_plies')) {
+    node.subtreeOppPlies = (obj['subtree_opp_plies'] as num).toInt();
   }
 
   if (obj.containsKey('trap_score')) {
@@ -161,7 +204,9 @@ BuildTreeNode _nodeFromJson(
     node.maiaFrequency = (obj['maia_frequency'] as num).toDouble();
   }
 
-  if (obj.containsKey('white_wins')) {
+  if (obj.containsKey('white_wins') &&
+      obj.containsKey('black_wins') &&
+      obj.containsKey('draws')) {
     node.setLichessStats(
       (obj['white_wins'] as num).toInt(),
       (obj['black_wins'] as num).toInt(),
@@ -182,6 +227,12 @@ BuildTreeNode _nodeFromJson(
   }
 
   node.isRepertoireMove = obj['is_repertoire_move'] as bool? ?? false;
+  if (obj.containsKey('repertoire_score')) {
+    node.repertoireScore = (obj['repertoire_score'] as num).toDouble();
+  } else if (node.isRepertoireMove && node.hasExpectimax) {
+    // v3 trees did not persist repertoire_score; fall back to the selected V.
+    node.repertoireScore = node.expectimaxValue;
+  }
 
   idToNode[nodeId] = node;
 
@@ -189,7 +240,9 @@ BuildTreeNode _nodeFromJson(
   if (children != null) {
     for (final childData in children) {
       final child = _nodeFromJson(
-        childData as Map<String, dynamic>, node, idToNode,
+        childData as Map<String, dynamic>,
+        node,
+        idToNode,
       );
       node.children.add(child);
     }
