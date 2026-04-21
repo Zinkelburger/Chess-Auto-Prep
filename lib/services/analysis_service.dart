@@ -90,7 +90,7 @@ class AnalysisService {
     );
 
     if (kDebugMode) {
-      print('[Analysis] Discovery START — MultiPV=$multiPv, depth=$depth, '
+      debugPrint('[Analysis] Discovery START — MultiPV=$multiPv, depth=$depth, '
           'workers=${_pool.workerCount}');
     }
 
@@ -118,13 +118,13 @@ class AnalysisService {
 
       discoveryResult.value = result;
       if (kDebugMode) {
-        print('[Analysis] Discovery DONE — ${result.lines.length} lines, '
+        debugPrint('[Analysis] Discovery DONE — ${result.lines.length} lines, '
             'depth ${result.depth}');
       }
       return result;
     } catch (e) {
       if (_generation != myGen) return const DiscoveryResult();
-      if (kDebugMode) print('[Analysis] Discovery FAILED: $e');
+      if (kDebugMode) debugPrint('[Analysis] Discovery FAILED: $e');
       return const DiscoveryResult();
     }
   }
@@ -179,7 +179,7 @@ class AnalysisService {
     );
 
     if (kDebugMode) {
-      print('[Analysis] Evaluation START — ${moveUcis.length} moves, '
+      debugPrint('[Analysis] Evaluation START — ${moveUcis.length} moves, '
           'depth=$evalDepth, ease=$easeDepth, '
           'workers=${_pool.workerCount}');
     }
@@ -290,7 +290,11 @@ class AnalysisService {
         try {
           easeResult = await _computeMoveEase(
               worker, resultingFen, eval, _easeDepth, generation);
-        } catch (_) {}
+        } catch (e) {
+          if (kDebugMode) {
+            debugPrint('[Analysis] Ease FAILED for $uci: $e');
+          }
+        }
         if (_generation != generation) return;
 
         _emitResult(
@@ -305,8 +309,11 @@ class AnalysisService {
             topResponseProb: easeResult?.topCandidateProb,
           ),
         );
-      } catch (_) {
+      } catch (e) {
         if (_generation != generation) return;
+        if (kDebugMode) {
+          debugPrint('[Analysis] Evaluation FAILED for $uci: $e');
+        }
       } finally {
         if (worker != null) _pool.release(worker);
         _workerCurrentMoves.remove(workerIndex);

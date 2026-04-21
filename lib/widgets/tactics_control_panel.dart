@@ -638,11 +638,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.green),
                 ),
-                child: Row(
+                child: const Row(
                   children: [
-                    const Icon(Icons.info_outline, color: Colors.green, size: 16),
-                    const SizedBox(width: 8),
-                    const Expanded(
+                    Icon(Icons.info_outline, color: Colors.green, size: 16),
+                    SizedBox(width: 8),
+                    Expanded(
                       child: Text(
                         'You can start training now! New tactics will be added as they\'re found.',
                         style: TextStyle(fontSize: 12, color: Colors.green),
@@ -727,8 +727,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
         // Game info
         Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}', style: const TextStyle(fontSize: 14)),
-        // TODO: figure out an elegant way to show success %
-        // Text('Success: ${(pos.successRate * 100).toStringAsFixed(1)}%', style: const TextStyle(fontSize: 14)),
 
         // Show the move that was played and what it allows
         if (pos.userMove.isNotEmpty) ...[
@@ -872,10 +870,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       color: Colors.grey,
     );
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
-        children: const [
+        children: [
           SizedBox(width: 72), // space for action icons
           SizedBox(width: 32, child: Text('Type', style: headerStyle)),
           SizedBox(width: 8),

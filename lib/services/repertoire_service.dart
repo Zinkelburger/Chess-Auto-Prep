@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart';
 import '../models/repertoire_line.dart';
 import 'storage/storage_factory.dart';
 
@@ -27,6 +28,7 @@ class RepertoireService {
   /// Parses repertoire PGN content and extracts trainable lines
   List<RepertoireLine> parseRepertoirePgn(String pgnContent) {
     final lines = <RepertoireLine>[];
+    final defaultTrainingColor = _extractRepertoireColor(pgnContent);
 
     // Split PGN into individual games/sections
     final games = _splitPgnIntoGames(pgnContent);
@@ -43,27 +45,10 @@ class RepertoireService {
 
         if (mainlineMoves.isEmpty) continue;
 
-        // Determine which color this line trains based on the first move
-        // If first move is White's, this trains Black responses (and vice versa)
-        // Actually, we need to determine from headers or make configurable
-        final whitePlayer = game.headers['White'] ?? '';
-        final blackPlayer = game.headers['Black'] ?? '';
-
-        // For now, determine training color based on player names
-        // If "Me" or similar is Black, we train Black
-        String trainingColor;
-        if (blackPlayer.toLowerCase().contains('me') ||
-            blackPlayer.toLowerCase().contains('repertoire') ||
-            blackPlayer.toLowerCase().contains('training')) {
-          trainingColor = 'black';
-        } else if (whitePlayer.toLowerCase().contains('me') ||
-                   whitePlayer.toLowerCase().contains('repertoire') ||
-                   whitePlayer.toLowerCase().contains('training')) {
-          trainingColor = 'white';
-        } else {
-          // Default: if the line starts with 1.e4, train Black responses
-          trainingColor = 'black';
-        }
+        final trainingColor = _determineTrainingColor(
+          game,
+          defaultTrainingColor: defaultTrainingColor,
+        );
 
         // Extract comments from the parsed game
         final comments = <String, String>{};
@@ -78,7 +63,7 @@ class RepertoireService {
           }
         }
 
-        // Extract variations (not implemented for training yet, but for reference)
+        // Extract variation main lines for reference.
         final variations = <String>[];
         _extractVariations(game.moves, variations);
 
@@ -98,12 +83,58 @@ class RepertoireService {
         ));
 
       } catch (e) {
-        print('Error parsing game $gameIndex: $e');
+        if (kDebugMode) {
+          debugPrint('Error parsing game $gameIndex: $e');
+        }
         continue;
       }
     }
 
     return lines;
+  }
+
+  String? _extractRepertoireColor(String content) {
+    final lines = content.split('\n');
+
+    for (int i = 0; i < lines.length && i < 20; i++) {
+      final line = lines[i].trim();
+      if (line.startsWith('// Color:')) {
+        final color = line.substring(9).trim().toLowerCase();
+        if (color == 'white' || color == 'black') {
+          return color;
+        }
+      }
+
+      if (line.startsWith('[Event ')) {
+        break;
+      }
+    }
+
+    return null;
+  }
+
+  String _determineTrainingColor(
+    PgnGame game, {
+    String? defaultTrainingColor,
+  }) {
+    final whitePlayer = game.headers['White'] ?? '';
+    final blackPlayer = game.headers['Black'] ?? '';
+
+    if (_looksLikeTrainingSide(blackPlayer)) {
+      return 'black';
+    }
+    if (_looksLikeTrainingSide(whitePlayer)) {
+      return 'white';
+    }
+
+    return defaultTrainingColor ?? 'black';
+  }
+
+  bool _looksLikeTrainingSide(String playerName) {
+    final lower = playerName.toLowerCase();
+    return lower.contains('me') ||
+        lower.contains('repertoire') ||
+        lower.contains('training');
   }
 
   /// Splits PGN content into individual games
@@ -168,12 +199,76 @@ class RepertoireService {
   }
 
   /// Recursively extracts variation strings for reference
-  void _extractVariations(PgnNode moves, List<String> variations) {
-    // This is a simplified extraction - real implementation would be more complex
-    // For now, we'll just note that variations exist
-    if (moves.children.isNotEmpty) {
-      variations.add('Variations available'); // Placeholder
+  void _extractVariations(PgnNode<PgnNodeData> moves, List<String> variations) {
+    for (int i = 1; i < moves.children.length; i++) {
+      final variation = _variationToSanString(moves.children[i]);
+      if (variation.isNotEmpty) {
+        variations.add(variation);
+      }
     }
+
+    if (moves.children.isNotEmpty) {
+      _extractVariations(moves.children.first, variations);
+    }
+  }
+
+  String _variationToSanString(PgnChildNode<PgnNodeData> startNode) {
+    final sans = <String>[startNode.data.san];
+    var current = startNode;
+
+    while (current.children.isNotEmpty) {
+      current = current.children.first;
+      sans.add(current.data.san);
+    }
+
+    return sans.join(' ');
+  }
+
+  ({String preamble, List<String> games}) _splitPgnDocumentPreservingPreamble(
+    String content,
+  ) {
+    final lines = content.split('\n');
+    final preambleLines = <String>[];
+    final games = <String>[];
+    var currentGame = <String>[];
+    var seenGame = false;
+
+    void flushCurrentGame() {
+      final gameText = currentGame.join('\n').trimRight();
+      if (gameText.isNotEmpty) {
+        games.add(gameText);
+      }
+      currentGame = <String>[];
+    }
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+
+      if (!seenGame) {
+        if (trimmed.startsWith('[Event')) {
+          seenGame = true;
+          currentGame.add(line);
+        } else if (trimmed.isNotEmpty) {
+          preambleLines.add(line);
+        }
+        continue;
+      }
+
+      if (trimmed.startsWith('[Event') && currentGame.isNotEmpty) {
+        flushCurrentGame();
+        currentGame.add(line);
+        continue;
+      }
+
+      currentGame.add(line);
+    }
+
+    flushCurrentGame();
+
+    return (
+      preamble: preambleLines.join('\n').trimRight(),
+      games: games,
+    );
   }
 
   /// Extract a stable line identifier, preferring a PGN header if present.
@@ -226,7 +321,12 @@ class RepertoireService {
           try {
             questions.add(line.createTrainingQuestion(moveIndex));
           } catch (e) {
-            print('Error creating training question for ${line.name} move $moveIndex: $e');
+            if (kDebugMode) {
+              debugPrint(
+                'Error creating training question for ${line.name} '
+                'move $moveIndex: $e',
+              );
+            }
           }
         }
       }
@@ -270,7 +370,8 @@ class RepertoireService {
     if (!await file.exists()) return false;
 
     final content = await file.readAsString();
-    final games = _splitPgnIntoGames(content);
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    final games = List<String>.from(document.games);
 
     // Find the game that matches this lineId
     int? matchIndex;
@@ -304,8 +405,14 @@ class RepertoireService {
 
     games[matchIndex] = updatedGame;
 
-    // Reassemble and write back
-    await file.writeAsString(games.join('\n'));
+    // Reassemble and write back without dropping top-level metadata.
+    final sections = <String>[];
+    if (document.preamble.isNotEmpty) {
+      sections.add(document.preamble);
+    }
+    sections.addAll(games);
+
+    await file.writeAsString('${sections.join('\n\n').trimRight()}\n');
     return true;
   }
 }

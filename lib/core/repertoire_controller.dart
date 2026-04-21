@@ -17,6 +17,9 @@ import '../utils/pgn_utils.dart' as pgn_utils;
 /// Manages repertoire state and acts as the single source of truth.
 /// All UI components should derive their chess position from this class.
 class RepertoireController with ChangeNotifier {
+  static const String _standardFen =
+      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+
   Map<String, dynamic>? _currentRepertoire;
   Map<String, dynamic>? get currentRepertoire => _currentRepertoire;
 
@@ -64,6 +67,16 @@ class RepertoireController with ChangeNotifier {
   List<String> get currentMoveSequence {
     if (_currentMoveIndex < 0) return [];
     return _moveHistory.sublist(0, _currentMoveIndex + 1);
+  }
+
+  String? _normalizeStartingFen(String? fen) {
+    final trimmedFen = fen?.trim();
+    if (trimmedFen == null ||
+        trimmedFen.isEmpty ||
+        trimmedFen == _standardFen) {
+      return null;
+    }
+    return trimmedFen;
   }
 
   // Flag to prevent update loops between board and PGN editor.
@@ -177,20 +190,45 @@ class RepertoireController with ChangeNotifier {
       _position = newPos;
       _moveHistory.clear();
       _currentMoveIndex = -1;
-
-      const standardFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-      if (trimmedFen != standardFen && !trimmedFen.startsWith(standardFen.split(' ')[0])) {
-        _startingFen = trimmedFen;
-      } else {
-        _startingFen = null;
-      }
+      _startingFen = _normalizeStartingFen(trimmedFen);
 
       _selectedPgnLine = null;
 
+      _syncOpeningTree();
       notifyListeners();
       return true;
     } catch (e) {
       debugPrint('Invalid FEN: $e');
+      return false;
+    }
+  }
+
+  /// Set the position from a move path, preserving history for PGN/tree sync.
+  bool setPositionFromMoveHistory({
+    required String fen,
+    required List<String> moves,
+    String? startingFen,
+  }) {
+    try {
+      final trimmedFen = fen.trim();
+      if (trimmedFen.isEmpty) return false;
+
+      final targetPosition = Chess.fromSetup(Setup.parseFen(trimmedFen));
+      _startingFen = _normalizeStartingFen(startingFen);
+      _moveHistory = List.from(moves);
+      _currentMoveIndex = _moveHistory.isEmpty ? -1 : _moveHistory.length - 1;
+      _rebuildPosition();
+
+      if (_position.fen != targetPosition.fen) {
+        _position = targetPosition;
+      }
+
+      _selectedPgnLine = null;
+      _syncOpeningTree();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Invalid move-history position: $e');
       return false;
     }
   }
@@ -237,7 +275,8 @@ class RepertoireController with ChangeNotifier {
 
     final colorLabel = isWhite ? 'White' : 'Black';
     final existing = await file.readAsString();
-    await file.writeAsString('// Color: $colorLabel\n$existing');
+    final updated = _upsertMetadataComment(existing, '// Color:', colorLabel);
+    await file.writeAsString(updated);
     _needsColorSelection = false;
     await loadRepertoire();
   }
@@ -299,16 +338,8 @@ class RepertoireController with ChangeNotifier {
     _rootMoves = moveText;
 
     final existing = await file.readAsString();
-    final lines = existing.split('\n');
-    final rootIndex = lines.indexWhere((l) => l.trim().startsWith('// Root:'));
-
-    if (rootIndex >= 0) {
-      lines[rootIndex] = '// Root: $moveText';
-    } else {
-      lines.insert(0, '// Root: $moveText');
-    }
-
-    await file.writeAsString(lines.join('\n'));
+    final updated = _upsertMetadataComment(existing, '// Root:', moveText);
+    await file.writeAsString(updated);
     notifyListeners();
   }
 
@@ -367,7 +398,8 @@ class RepertoireController with ChangeNotifier {
     try {
       final service = RepertoireService();
       _repertoireLines = service.parseRepertoirePgn(_repertoirePgn!);
-      debugPrint('Parsed ${_repertoireLines.length} repertoire lines for PGN browser');
+      debugPrint(
+          'Parsed ${_repertoireLines.length} repertoire lines for PGN browser');
     } catch (e) {
       debugPrint('Failed to parse repertoire lines: $e');
       _repertoireLines = [];
@@ -419,7 +451,8 @@ class RepertoireController with ChangeNotifier {
 
         if (trimmedLine.startsWith('[Event ')) {
           if (currentEvent != null && moveLines.isNotEmpty) {
-            final game = _buildGame(currentEvent, currentDate, currentWhite, currentBlack, currentResult, moveLines);
+            final game = _buildGame(currentEvent, currentDate, currentWhite,
+                currentBlack, currentResult, moveLines);
             if (game != null) {
               processedGames.add(game);
             }
@@ -445,7 +478,8 @@ class RepertoireController with ChangeNotifier {
       }
 
       if (currentEvent != null && moveLines.isNotEmpty) {
-        final game = _buildGame(currentEvent, currentDate, currentWhite, currentBlack, currentResult, moveLines);
+        final game = _buildGame(currentEvent, currentDate, currentWhite,
+            currentBlack, currentResult, moveLines);
         if (game != null) {
           processedGames.add(game);
         }
@@ -465,7 +499,8 @@ class RepertoireController with ChangeNotifier {
         strictPlayerMatching: false,
       );
 
-      debugPrint('Built opening tree with ${_openingTree?.totalGames} total games');
+      debugPrint(
+          'Built opening tree with ${_openingTree?.totalGames} total games');
     } catch (e) {
       debugPrint('Failed to build opening tree: $e');
       _openingTree = OpeningTree();
@@ -478,6 +513,7 @@ class RepertoireController with ChangeNotifier {
     if (_position.fen == fen || _isInternalUpdate) {
       return;
     }
+    setPositionFromFen(fen);
   }
 
   /// Sync to a specific move index from the PGN editor.
@@ -530,18 +566,19 @@ class RepertoireController with ChangeNotifier {
       pgn_utils.extractHeaderValue(line);
 
   String? _buildGame(
-      String? event,
-      String? date,
-      String? white,
-      String? black,
-      String? result,
-      List<String> moveLines,
-      ) {
+    String? event,
+    String? date,
+    String? white,
+    String? black,
+    String? result,
+    List<String> moveLines,
+  ) {
     if (moveLines.isEmpty) return null;
 
     final headers = <String>[];
     headers.add('[Event "${event ?? "Training Line"}"]');
-    headers.add('[Date "${date ?? DateTime.now().toIso8601String().split('T')[0]}"]');
+    headers.add(
+        '[Date "${date ?? DateTime.now().toIso8601String().split('T')[0]}"]');
     headers.add('[White "${white ?? "Training"}"]');
     headers.add('[Black "${black ?? "Me"}"]');
     headers.add('[Result "${result ?? "1-0"}"]');
@@ -589,7 +626,7 @@ class RepertoireController with ChangeNotifier {
     if (!await file.exists()) return 0;
 
     // Count incoming games before writing.
-    final gameCount = '[Event '.allMatches(pgnContent).length;
+    final gameCount = _countPgnGames(pgnContent);
 
     final existing = await file.readAsString();
     final separator = existing.endsWith('\n\n')
@@ -607,5 +644,55 @@ class RepertoireController with ChangeNotifier {
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
+  }
+
+  String _upsertMetadataComment(String content, String prefix, String value) {
+    final lines = content.split('\n');
+    final updated = <String>[];
+    var inserted = false;
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+
+      if (trimmed.startsWith(prefix)) {
+        if (!inserted) {
+          updated.add('$prefix $value');
+          inserted = true;
+        }
+        continue;
+      }
+
+      if (!inserted && trimmed.startsWith('[Event ')) {
+        updated.add('$prefix $value');
+        inserted = true;
+      }
+
+      updated.add(line);
+    }
+
+    if (!inserted) {
+      updated.insert(0, '$prefix $value');
+    }
+
+    return updated.join('\n');
+  }
+
+  int _countPgnGames(String pgnContent) {
+    try {
+      final parsedGames = PgnGame.parseMultiGamePgn(pgnContent);
+      if (parsedGames.isNotEmpty) {
+        return parsedGames.length;
+      }
+    } catch (_) {
+      // Fall through to the header-based heuristic below.
+    }
+
+    final headerCount = RegExp(r'^\s*\[Event\s+"', multiLine: true)
+        .allMatches(pgnContent)
+        .length;
+    if (headerCount > 0) {
+      return headerCount;
+    }
+    return pgnContent.trim().isEmpty ? 0 : 1;
   }
 }

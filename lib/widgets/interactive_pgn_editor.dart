@@ -36,7 +36,7 @@ class PgnMove {
       san: san ?? this.san,
       comment: comment ?? this.comment,
       children: children ?? this.children,
-      id: this.id,
+      id: id,
     );
   }
 }
@@ -54,10 +54,6 @@ class PgnEditorController {
 
   void addMove(String san) {
     _state?.addMove(san);
-  }
-
-  void syncToPosition(String fen) {
-    _state?._syncToPosition(fen);
   }
 
   /// Sync editor to a specific move index with given move list
@@ -142,7 +138,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   // Workflow state
   String _workingPgn = '';
-  bool _hasUnsavedChanges = false;
   
   // Flag to prevent callback loops when syncing from external source (controller)
   bool _isSyncingFromExternal = false;
@@ -254,7 +249,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         _currentPath = List.from(_currentPath)..add(added);
       }
 
-      _hasUnsavedChanges = true;
       _updatePosition();
       _generateWorkingPgn();
     });
@@ -298,10 +292,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       _currentMoveIndex,
       _currentLineSan,
     );
-  }
-
-  void _syncToPosition(String fen) {
-    // No-op for now as tree navigation is complex
   }
 
   void _syncToMoveHistory(List<String> moves, int moveIndex) {
@@ -545,7 +535,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           _updatePosition();
         }
         
-        _hasUnsavedChanges = true;
         _hideContextMenu();
         _generateWorkingPgn();
       });
@@ -611,7 +600,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           if (_roots.indexOf(target) > 0) {
             _roots.remove(target);
             _roots.insert(0, target);
-            _hasUnsavedChanges = true;
             _generateWorkingPgn();
           }
         } else {
@@ -619,7 +607,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           if (parent.children.indexOf(target) > 0) {
             parent.children.remove(target);
             parent.children.insert(0, target);
-            _hasUnsavedChanges = true;
             _generateWorkingPgn();
           }
         }
@@ -651,7 +638,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
            _currentPath[pathIdx] = newMove;
         }
         
-        _hasUnsavedChanges = true;
         _generateWorkingPgn();
       });
     }
@@ -667,9 +653,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     try {
       await _saveToRepertoireFile(repertoireName, _workingPgn);
-      setState(() {
-        _hasUnsavedChanges = false;
-      });
 
       // Notify parent to append to in-memory tree
       final moves = _currentLineSan;
@@ -686,20 +669,27 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   
   Future<String?> _showAddToRepertoireDialog() async {
     final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add to Repertoire'),
-        content: TextField(controller: controller),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
+    try {
+      return await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Add to Repertoire'),
+          content: TextField(controller: controller),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
   }
 
   Future<void> _saveToRepertoireFile(String repertoireName, String pgn) async {
@@ -710,16 +700,75 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     
     // Repertoire files live in the repertoires/ subdirectory
     final filename = 'repertoires/$repertoireName.pgn';
-    String currentContent = await StorageFactory.instance.readRepertoirePgn(filename) ?? '';
+    final currentContent =
+        await StorageFactory.instance.readRepertoirePgn(filename) ?? '';
     
     // Use user-provided title, falling back to "Repertoire Line"
     final title = _titleController.text.trim().isNotEmpty
         ? _titleController.text.trim()
         : 'Repertoire Line';
-    
-    final entry = '\n[Event "$title"]\n[Date "${DateTime.now().toIso8601String()}"]\n\n$pgn\n';
-    
+
+    final normalizedColor =
+        (widget.repertoireColor ?? 'White').trim().toLowerCase();
+    final whiteHeader = normalizedColor == 'black' ? 'Training' : 'Me';
+    final blackHeader = normalizedColor == 'black' ? 'Me' : 'Training';
+    final splitPgn = _splitWorkingPgn(pgn);
+    final extraHeaders = splitPgn.headers.where((line) => !_isManagedHeader(line));
+    final entryLines = <String>[
+      '[Event "$title"]',
+      '[Date "${DateTime.now().toIso8601String()}"]',
+      '[White "$whiteHeader"]',
+      '[Black "$blackHeader"]',
+      '[Result "*"]',
+      ...extraHeaders,
+      '',
+    ];
+    if (splitPgn.moveText.isNotEmpty) {
+      entryLines.add(splitPgn.moveText);
+    }
+
+    final separator = currentContent.trimRight().isEmpty ? '' : '\n\n';
+    final entry = '$separator${entryLines.join('\n')}\n';
+
     await StorageFactory.instance.saveRepertoirePgn(filename, currentContent + entry);
+  }
+
+  ({List<String> headers, String moveText}) _splitWorkingPgn(String pgn) {
+    final headers = <String>[];
+    final moveLines = <String>[];
+    var readingHeaders = true;
+
+    for (final rawLine in pgn.split('\n')) {
+      final line = rawLine.trim();
+      if (line.isEmpty) {
+        if (readingHeaders && headers.isNotEmpty) {
+          readingHeaders = false;
+        }
+        continue;
+      }
+
+      if (readingHeaders && line.startsWith('[') && line.endsWith(']')) {
+        headers.add(line);
+        continue;
+      }
+
+      readingHeaders = false;
+      moveLines.add(line);
+    }
+
+    return (
+      headers: headers,
+      moveText: moveLines.join(' ').trim(),
+    );
+  }
+
+  bool _isManagedHeader(String line) {
+    final trimmed = line.trimLeft();
+    return trimmed.startsWith('[Event ') ||
+        trimmed.startsWith('[Date ') ||
+        trimmed.startsWith('[White ') ||
+        trimmed.startsWith('[Black ') ||
+        trimmed.startsWith('[Result ');
   }
 
   void _clearLine() {
@@ -760,11 +809,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                         contentPadding: const EdgeInsets.symmetric(vertical: 2),
                       ),
                       style: TextStyle(fontSize: 12, color: Colors.grey[300]),
-                      onChanged: (_) {
-                        setState(() {
-                          _hasUnsavedChanges = true;
-                        });
-                      },
                     ),
                     Divider(height: 1, color: Colors.grey[800]),
                     const SizedBox(height: 4),

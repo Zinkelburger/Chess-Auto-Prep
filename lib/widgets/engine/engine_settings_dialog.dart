@@ -14,17 +14,14 @@ import '../../services/engine/stockfish_pool.dart';
 /// Show the engine settings dialog.
 ///
 /// [settings] is the singleton [EngineSettings] instance.
-/// [onSettingsChanged] fires after the dialog closes (or after the
-/// probability starting-moves field is committed) so the parent can
-/// invalidate the analysis cache and restart.
 /// [currentProbabilityStartMoves] seeds the text field.
 /// [onProbabilityStartMovesChanged] fires when the field value changes.
-void showEngineSettingsDialog({
+Future<void> showEngineSettingsDialog({
   required BuildContext context,
   required EngineSettings settings,
   required String currentProbabilityStartMoves,
   required ValueChanged<String> onProbabilityStartMovesChanged,
-}) {
+}) async {
   final probController =
       TextEditingController(text: currentProbabilityStartMoves);
 
@@ -32,19 +29,20 @@ void showEngineSettingsDialog({
   String? oauthUrl;
   bool oauthWaiting = false;
 
-  showDialog(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setDialogState) {
-        final lichess = LichessAuthService();
+  try {
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final lichess = LichessAuthService();
 
-        return AlertDialog(
-          title: const Text('Analysis Settings'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          return AlertDialog(
+            title: const Text('Analysis Settings'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                 // ── Lichess Account ──
                 _buildLichessSection(
                   context: context,
@@ -239,25 +237,28 @@ void showEngineSettingsDialog({
                   'Leave empty for initial position',
                   style: TextStyle(color: Colors.grey[600], fontSize: 11),
                 ),
-              ],
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                final newStartMoves = probController.text;
-                if (newStartMoves != currentProbabilityStartMoves) {
-                  onProbabilityStartMovesChanged(newStartMoves);
-                }
-                Navigator.pop(context);
-              },
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    ),
-  );
+            actions: [
+              TextButton(
+                onPressed: () {
+                  final newStartMoves = probController.text;
+                  if (newStartMoves != currentProbabilityStartMoves) {
+                    onProbabilityStartMovesChanged(newStartMoves);
+                  }
+                  Navigator.pop(context);
+                },
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  } finally {
+    probController.dispose();
+  }
 }
 
 // ── Private helpers ──────────────────────────────────────────────────────
@@ -276,9 +277,9 @@ Widget _buildLichessSection({
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.08),
+        color: Colors.green.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.green.withOpacity(0.25)),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [
@@ -306,12 +307,13 @@ Widget _buildLichessSection({
 
   // ── OAuth URL has been generated — show link + copy button ──
   if (oauthUrl != null) {
+    final authLink = oauthUrl;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.06),
+        color: Colors.blue.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -349,9 +351,9 @@ Widget _buildLichessSection({
 
           // Clickable link
           InkWell(
-            onTap: () => LichessAuthService.openUrl(oauthUrl!),
+            onTap: () => LichessAuthService.openUrl(authLink),
             child: Text(
-              oauthUrl!,
+              authLink,
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.blue[400],
@@ -369,7 +371,7 @@ Widget _buildLichessSection({
             height: 30,
             child: OutlinedButton.icon(
               onPressed: () {
-                Clipboard.setData(ClipboardData(text: oauthUrl!));
+                Clipboard.setData(ClipboardData(text: authLink));
                 showAppSnackBar(context, AppMessages.linkCopied);
               },
               icon: const Icon(Icons.copy, size: 14),
@@ -392,7 +394,7 @@ Widget _buildLichessSection({
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.withOpacity(0.25)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.25)),
       ),
       child: Row(
         children: [

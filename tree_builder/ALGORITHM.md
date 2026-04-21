@@ -154,10 +154,12 @@ building resumes from unexplored leaves. Nodes with children or marked
 **Evals are cached.** Every evaluation is stored in SQLite so re-runs skip
 already-evaluated positions. The DB also caches Lichess explorer responses.
 
-**Transposition detection.** A FenMap (hash table, FEN → canonical
-TreeNode*) tracks every position that has been fully expanded during the
-build.  The map starts at 4096 buckets and doubles when the load factor
-exceeds 0.75, so lookups stay O(1).
+**Transposition detection.** A FenMap (hash table, canonical 4-field FEN
+→ canonical TreeNode*) tracks every position that has been fully expanded
+during the build.  The key ignores halfmove/fullmove counters so the same
+chess position reached on a different move number still hits the same
+transposition entry.  The map starts at 4096 buckets and doubles when the
+load factor exceeds 0.75, so lookups stay O(1).
 
 When a position is reached via a different move order, the transposition
 node is linked into a **circular equivalence ring** with the canonical
@@ -179,12 +181,9 @@ resolves all links in a single pass afterwards.  The global node-ID
 counter is also synced to `max(loaded_id) + 1` so resume doesn't create
 collisions.
 
-**Known limitation:** Expectimax value borrowing from the canonical node depends on
-DFS traversal order — the canonical node must be processed *before* its
-transposition leaves.  This holds in the common case (canonical was
-expanded first, so it's in an earlier branch), but is not guaranteed
-after reordering or manual edits.  When borrowing fails silently, the
-transposition leaf gets a raw leaf value instead of the canonical's deeper one.
+The expectimax pass runs twice, so transposition leaves reliably borrow
+`expectimax_value` from the canonical node even after a load-from-JSON or
+other subtree reordering.  Total cost stays linear in tree size.
 
 **Known limitation:** Transposition leaves keep the cumulative probability
 of the path that discovered them.  If a higher-probability path reaches
@@ -264,7 +263,7 @@ Save results to JSON tree, repertoire JSON, and optionally PGN.
 ### Concept
 
 Every node gets a single value **V** in [0, 1] — its **practical win
-probability** — computed in one bottom-up DFS pass.  V naturally
+probability** — computed in two linear bottom-up passes.  V naturally
 incorporates opponent mistake tendencies at every level.
 
 **V = 0.500** means dead equal (50% expected win rate).  **V = 0.534**

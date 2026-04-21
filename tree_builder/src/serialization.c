@@ -136,7 +136,7 @@ static char* tree_to_json_internal(const Tree *tree, const SerializationOptions 
     
     /* Tree metadata */
     cJSON_AddStringToObject(root, "format", "opening_tree");
-    cJSON_AddNumberToObject(root, "version", 3.0);
+    cJSON_AddNumberToObject(root, "version", 4.0);
     cJSON_AddNumberToObject(root, "total_nodes", (double)tree->total_nodes);
     cJSON_AddNumberToObject(root, "max_depth", tree->max_depth_reached);
     cJSON_AddBoolToObject(root, "build_complete", tree->build_complete);
@@ -437,10 +437,9 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
 
     /* Parse explored flag (backward compat: infer from children) */
     cJSON *expl = cJSON_GetObjectItem(obj, "explored");
-    if (expl) {
+    bool explored_explicit = expl != NULL;
+    if (explored_explicit) {
         node->explored = cJSON_IsTrue(expl);
-    } else {
-        node->explored = (node->children_count > 0);
     }
 
     /* Parse prune reason */
@@ -479,6 +478,10 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
                 node_add_child(node, child);
             }
         }
+    }
+
+    if (!explored_explicit && node->children_count > 0) {
+        node->explored = true;
     }
     
     return node;
@@ -712,7 +715,7 @@ bool tree_export_dot(const Tree *tree, const char *filename, int max_depth) {
 /**
  * Internal recursive PGN line collection
  */
-static void collect_pgn_lines(TreeNode *node, char *current_line, size_t line_len,
+static void collect_pgn_lines(TreeNode *node, char *current_line,
                                FILE *file, int move_num, bool is_white) {
     if (!node) return;
     
@@ -727,7 +730,7 @@ static void collect_pgn_lines(TreeNode *node, char *current_line, size_t line_le
                      current_line, node->move_san);
         }
     } else {
-        strncpy(new_line, current_line, sizeof(new_line) - 1);
+        snprintf(new_line, sizeof(new_line), "%s", current_line);
     }
     
     if (node->children_count == 0) {
@@ -738,8 +741,8 @@ static void collect_pgn_lines(TreeNode *node, char *current_line, size_t line_le
         int next_move_num = is_white ? move_num : move_num + 1;
         
         for (size_t i = 0; i < node->children_count; i++) {
-            collect_pgn_lines(node->children[i], new_line, strlen(new_line),
-                              file, next_move_num, !is_white);
+            collect_pgn_lines(node->children[i], new_line, file,
+                              next_move_num, !is_white);
         }
     }
 }
@@ -772,7 +775,7 @@ bool tree_export_pgn(const Tree *tree, const char *filename, bool include_variat
     
     /* Collect and write all lines */
     char line[4096] = "";
-    collect_pgn_lines(tree->root, line, 0, file, 1, tree->root->is_white_to_move);
+    collect_pgn_lines(tree->root, line, file, 1, tree->root->is_white_to_move);
     
     fclose(file);
     return true;

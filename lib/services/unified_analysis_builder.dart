@@ -8,8 +8,8 @@ import '../models/position_analysis.dart';
 import '../utils/fen_utils.dart';
 
 /// Builds both [PositionAnalysis] and [OpeningTree] in a single pass over the
-/// PGN list, eliminating the redundant parsing and mainline traversal that
-/// occurred when [FenMapBuilder] and [OpeningTreeBuilder] ran independently.
+/// PGN list, eliminating the redundant parsing and mainline traversal from the
+/// old two-pass analysis/tree pipeline.
 ///
 /// Use [buildInIsolate] to run the work off the UI thread with per-game
 /// progress reporting.
@@ -208,9 +208,10 @@ class UnifiedAnalysisBuilder {
     // ── User result from their perspective ──
 
     final double userResult;
-    if (result.contains('1-0')) {
+    final normalizedResult = result.trim();
+    if (normalizedResult == '1-0') {
       userResult = isUserWhite ? 1.0 : 0.0;
-    } else if (result.contains('0-1')) {
+    } else if (normalizedResult == '0-1') {
       userResult = isUserWhite ? 0.0 : 1.0;
     } else {
       userResult = 0.5;

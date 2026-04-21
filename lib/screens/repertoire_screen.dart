@@ -7,8 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:provider/provider.dart';
 
-import 'dart:io' as io;
-
 import '../core/app_state.dart';
 import '../core/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
@@ -16,13 +14,14 @@ import '../models/engine_settings.dart';
 import '../models/repertoire_line.dart';
 import '../services/analysis_service.dart';
 import '../services/engine/stockfish_pool.dart';
-import '../services/generation/tree_serialization.dart';
 import '../services/repertoire_service.dart';
 import '../utils/app_messages.dart';
 import '../utils/chess_utils.dart' show uciToSan;
-import '../widgets/build_tree_widget.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
+import '../features/eval_tree/controllers/eval_tree_controller.dart';
+import '../features/eval_tree/widgets/eval_tree_tab.dart';
+import '../widgets/app_mode_menu_button.dart';
 import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/opening_tree_widget.dart';
 import '../widgets/repertoire_lines_browser.dart';
@@ -50,13 +49,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   final PgnEditorController _pgnEditorController = PgnEditorController();
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
-  final GlobalKey<BuildTreeWidgetState> _buildTreeKey =
-      GlobalKey<BuildTreeWidgetState>();
   bool _isGenerating = false;
   bool _isGenerationPaused = false;
 
-  BuildTree? _buildTree;
-  bool _isLoadingTree = false;
+  BuildTree? _generatedTree;
+  EvalTreeController? _evalTreeController;
 
   bool _boardFlipped = false;
 
@@ -106,7 +103,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         if (currentId != null && currentId != _lastRepertoireId) {
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
-          _buildTree = null;
+          _generatedTree = null;
           EngineSettings().probabilityStartMoves = _controller.rootMoves;
         }
 
@@ -168,7 +165,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     // Loading state
     if (_controller.isLoading) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Repertoire Builder')),
+        appBar: _buildAppBar(
+          title: const Text('Repertoire Builder'),
+        ),
         body: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -185,7 +184,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     // No repertoire selected
     if (_controller.currentRepertoire == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Repertoire Builder')),
+        appBar: _buildAppBar(
+          title: const Text('Repertoire Builder'),
+          showSelectRepertoireAction: true,
+        ),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -208,128 +210,89 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     // Has repertoire selected - show repertoire UI
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Repertoire Builder', style: TextStyle(fontSize: 16)),
-            _buildRepertoireSubtitle(),
-          ],
-        ),
-        actions: [
-          if (_isGenerating)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _isGenerationPaused
-                        ? Colors.amber[800]
-                        : Colors.orange[900],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!_isGenerationPaused)
-                        const SizedBox(
-                          width: 12, height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white,
-                          ),
-                        )
-                      else
-                        const Icon(Icons.pause, size: 12, color: Colors.white),
-                      const SizedBox(width: 6),
-                      Text(
-                        _isGenerationPaused ? 'Paused' : 'Building...',
-                        style: const TextStyle(
-                            fontSize: 11, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          IconButton(
-            icon: const Icon(Icons.library_books),
-            tooltip: 'Select Repertoire',
-            onPressed: _isGenerating ? null : _showRepertoireSelection,
-          ),
-        ],
+      appBar: _buildAppBar(
+        title: _buildRepertoireTitle(),
+        showSelectRepertoireAction: true,
       ),
       body: Focus(
         autofocus: true,
-        onKeyEvent: _isGenerating ? null : (node, event) {
-          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        onKeyEvent: _isGenerating
+            ? null
+            : (node, event) {
+                if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-          // Ctrl+Shift+V - Paste FEN from clipboard
-          if (event.logicalKey == LogicalKeyboardKey.keyV &&
-              HardwareKeyboard.instance.isControlPressed &&
-              HardwareKeyboard.instance.isShiftPressed) {
-            _pastePositionFromClipboard();
-            return KeyEventResult.handled;
-          }
+                // Ctrl+Shift+V - Paste FEN from clipboard
+                if (event.logicalKey == LogicalKeyboardKey.keyV &&
+                    HardwareKeyboard.instance.isControlPressed &&
+                    HardwareKeyboard.instance.isShiftPressed) {
+                  _pastePositionFromClipboard();
+                  return KeyEventResult.handled;
+                }
 
-          // 'F' key - Flip the board (only if not typing in a text field)
-          if (event.logicalKey == LogicalKeyboardKey.keyF &&
-              !HardwareKeyboard.instance.isControlPressed &&
-              !HardwareKeyboard.instance.isShiftPressed &&
-              !HardwareKeyboard.instance.isAltPressed) {
-            final primaryFocus = FocusManager.instance.primaryFocus;
-            final isTextInput = primaryFocus?.context?.widget is EditableText;
-            if (!isTextInput) {
-              setState(() {
-                _boardFlipped = !_boardFlipped;
-              });
-              return KeyEventResult.handled;
-            }
-          }
+                // 'F' key - Flip the board (only if not typing in a text field)
+                if (event.logicalKey == LogicalKeyboardKey.keyF &&
+                    !HardwareKeyboard.instance.isControlPressed &&
+                    !HardwareKeyboard.instance.isShiftPressed &&
+                    !HardwareKeyboard.instance.isAltPressed) {
+                  final primaryFocus = FocusManager.instance.primaryFocus;
+                  final isTextInput =
+                      primaryFocus?.context?.widget is EditableText;
+                  if (!isTextInput) {
+                    setState(() {
+                      _boardFlipped = !_boardFlipped;
+                    });
+                    return KeyEventResult.handled;
+                  }
+                }
 
-          // PGN Tab (Index 2) - PGN Editor handles navigation
-          if (_tabController.index == 2) {
-            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-              _pgnEditorController.goBack();
-              return KeyEventResult.handled;
-            } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-              _pgnEditorController.goForward();
-              return KeyEventResult.handled;
-            }
-          }
-          // Tree Tab (Index 0) or Lines Tab (Index 3)
-          else if (_tabController.index == 0 || _tabController.index == 3) {
-            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-              _controller.goBack();
-              return KeyEventResult.handled;
-            } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-              _controller.goForward();
-              return KeyEventResult.handled;
-            }
-          }
-          // Engine Tab (Index 1)
-          else if (_tabController.index == 1) {
-            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-              _controller.goBack();
-              return KeyEventResult.handled;
-            } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-              _controller.goForward();
-              return KeyEventResult.handled;
-            }
-          }
-          // Eval Tree Tab (Index 5)
-          else if (_tabController.index == 5) {
-            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-              _buildTreeKey.currentState?.goBack();
-              return KeyEventResult.handled;
-            } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-              _buildTreeKey.currentState?.goForward();
-              return KeyEventResult.handled;
-            }
-          }
-          
-          return KeyEventResult.ignored;
-        },
+                // PGN Tab (Index 2) - PGN Editor handles navigation
+                if (_tabController.index == 2) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                    _pgnEditorController.goBack();
+                    return KeyEventResult.handled;
+                  } else if (event.logicalKey ==
+                      LogicalKeyboardKey.arrowRight) {
+                    _pgnEditorController.goForward();
+                    return KeyEventResult.handled;
+                  }
+                }
+                // Tree Tab (Index 0) or Lines Tab (Index 3)
+                else if (_tabController.index == 0 ||
+                    _tabController.index == 3) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                    _controller.goBack();
+                    return KeyEventResult.handled;
+                  } else if (event.logicalKey ==
+                      LogicalKeyboardKey.arrowRight) {
+                    _controller.goForward();
+                    return KeyEventResult.handled;
+                  }
+                }
+                // Engine Tab (Index 1)
+                else if (_tabController.index == 1) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                    _controller.goBack();
+                    return KeyEventResult.handled;
+                  } else if (event.logicalKey ==
+                      LogicalKeyboardKey.arrowRight) {
+                    _controller.goForward();
+                    return KeyEventResult.handled;
+                  }
+                }
+                // Eval Tree Tab (Index 5)
+                else if (_tabController.index == 5) {
+                  if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                    _evalTreeController?.goParent();
+                    return KeyEventResult.handled;
+                  } else if (event.logicalKey ==
+                      LogicalKeyboardKey.arrowRight) {
+                    _evalTreeController?.goPreferredChild();
+                    return KeyEventResult.handled;
+                  }
+                }
+
+                return KeyEventResult.ignored;
+              },
         child: Row(
           children: [
             // Left panel - Chess board (60% of width)
@@ -373,7 +336,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                               children: [
                                 if (!_isGenerationPaused)
                                   const SizedBox(
-                                    width: 36, height: 36,
+                                    width: 36,
+                                    height: 36,
                                     child: CircularProgressIndicator(
                                         strokeWidth: 3),
                                   )
@@ -388,8 +352,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                                   style: Theme.of(context)
                                       .textTheme
                                       .titleMedium
-                                      ?.copyWith(
-                                          fontWeight: FontWeight.w600),
+                                      ?.copyWith(fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
@@ -496,13 +459,27 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                           isScrollable: true,
                           tabAlignment: TabAlignment.start,
                           tabs: const [
-                            Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
-                            Tab(text: 'Engine', icon: Icon(Icons.developer_board, size: 16)),
-                            Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
-                            Tab(text: 'Lines', icon: Icon(Icons.library_books, size: 16)),
-                            Tab(text: 'Generate', icon: Icon(Icons.auto_awesome, size: 16)),
-                            Tab(text: 'Eval Tree', icon: Icon(Icons.insights, size: 16)),
-                            Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
+                            Tab(
+                                text: 'Tree',
+                                icon: Icon(Icons.account_tree, size: 16)),
+                            Tab(
+                                text: 'Engine',
+                                icon: Icon(Icons.developer_board, size: 16)),
+                            Tab(
+                                text: 'PGN',
+                                icon: Icon(Icons.description, size: 16)),
+                            Tab(
+                                text: 'Lines',
+                                icon: Icon(Icons.library_books, size: 16)),
+                            Tab(
+                                text: 'Generate',
+                                icon: Icon(Icons.auto_awesome, size: 16)),
+                            Tab(
+                                text: 'Eval Tree',
+                                icon: Icon(Icons.insights, size: 16)),
+                            Tab(
+                                text: 'Actions',
+                                icon: Icon(Icons.settings, size: 16)),
                           ],
                         ),
                       ),
@@ -535,17 +512,97 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     );
   }
 
-  Widget _buildRepertoireSubtitle() {
+  PreferredSizeWidget _buildAppBar({
+    required Widget title,
+    bool showSelectRepertoireAction = false,
+  }) {
+    return AppBar(
+      titleSpacing: 16,
+      title: title,
+      actions: [
+        if (_isGenerating) _buildGenerationStatusChip(),
+        const AppModeMenuButton(),
+        if (showSelectRepertoireAction) _buildSelectRepertoireButton(),
+      ],
+    );
+  }
+
+  Widget _buildRepertoireTitle() {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Repertoire Builder',
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleMedium,
+        ),
+        _buildRepertoireSubtitle(theme),
+      ],
+    );
+  }
+
+  Widget _buildGenerationStatusChip() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: _isGenerationPaused ? Colors.amber[800] : Colors.orange[900],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!_isGenerationPaused)
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              else
+                const Icon(Icons.pause, size: 12, color: Colors.white),
+              const SizedBox(width: 6),
+              Text(
+                _isGenerationPaused ? 'Paused' : 'Building...',
+                style: const TextStyle(fontSize: 11, color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectRepertoireButton() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Center(
+        child: TextButton.icon(
+          onPressed: _isGenerating ? null : _showRepertoireSelection,
+          icon: const Icon(Icons.library_books),
+          label: const Text('Select Repertoire'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRepertoireSubtitle(ThemeData theme) {
     if (_controller.currentRepertoire == null) return const SizedBox.shrink();
 
-    final name =
-        _controller.currentRepertoire!['name'] as String? ?? 'Unknown';
-    final gameCount =
-        _controller.currentRepertoire!['gameCount'] as int? ?? 0;
+    final name = _controller.currentRepertoire!['name'] as String? ?? 'Unknown';
+    final gameCount = _controller.currentRepertoire!['gameCount'] as int? ?? 0;
 
     return Text(
       '$name • $gameCount game${gameCount == 1 ? '' : 's'}',
-      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.normal),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodySmall,
     );
   }
 
@@ -614,13 +671,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           Expanded(
             child: InteractivePgnEditor(
               // Force recreation when selected line or starting FEN changes
-              key: ValueKey('${_controller.selectedPgnLine?.id ?? 'no_selection'}_${_controller.startingFen ?? 'standard'}'),
+              key: ValueKey(
+                  '${_controller.selectedPgnLine?.id ?? 'no_selection'}_${_controller.startingFen ?? 'standard'}'),
               controller: _pgnEditorController,
               // Load selected line PGN or default to repertoire PGN
               initialPgn: _getInitialPgnForEditor(),
               // Pass current repertoire name and color
-              currentRepertoireName: _controller.currentRepertoire?['name'] as String?,
-              repertoireColor: _controller.currentRepertoire?['color'] as String?,
+              currentRepertoireName:
+                  _controller.currentRepertoire?['name'] as String?,
+              repertoireColor:
+                  _controller.isRepertoireWhite ? 'White' : 'Black',
               moveHistory: _controller.moveHistory,
               currentMoveIndex: _controller.currentMoveIndex,
               // Pass starting FEN for custom positions (e.g., pasted via Ctrl+Shift+V)
@@ -659,7 +719,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       child: UnifiedEnginePane(
         fen: _controller.fen,
         isActive: _tabController.index == 1 && !_isGenerating,
-        isUserTurn: _controller.position.turn == (_controller.isRepertoireWhite ? Side.white : Side.black),
+        isUserTurn: _controller.position.turn ==
+            (_controller.isRepertoireWhite ? Side.white : Side.black),
         currentMoveSequence: _controller.currentMoveSequence,
         isWhiteRepertoire: _controller.isRepertoireWhite,
         onMoveSelected: (uciMove) {
@@ -671,8 +732,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onSetRoot: _controller.rootMoves.isEmpty
             ? () async {
                 await _controller.setRootPosition();
-                EngineSettings().probabilityStartMoves =
-                    _controller.rootMoves;
+                EngineSettings().probabilityStartMoves = _controller.rootMoves;
                 if (mounted) setState(() {});
               }
             : null,
@@ -707,11 +767,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       },
       onTreeBuilt: (tree) {
         if (!mounted) return;
-        setState(() => _buildTree = tree);
+        setState(() => _generatedTree = tree);
       },
     );
   }
-  
+
   Widget _buildOpeningTreeTab() {
     if (_controller.openingTree == null) {
       return Container(
@@ -745,8 +805,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               repertoireLines: _controller.repertoireLines,
               currentMoveSequence: _controller.currentMoveSequence,
               onMoveSelected: (move) {
-                 // Handle tree move selection
-                 _controller.userSelectedTreeMove(move);
+                // Handle tree move selection
+                _controller.userSelectedTreeMove(move);
               },
               onGoBack: () => _controller.goBack(),
               onGoForward: () => _controller.goForward(),
@@ -758,11 +818,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               },
             ),
           ),
-          
+
           // Lines browser section
           if (_controller.repertoireLines.isNotEmpty) ...[
             const Divider(height: 1),
-            
+
             // Quick access header with expand button
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -784,14 +844,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   if (_controller.currentMoveSequence.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: Colors.blue[800],
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
                         '${_getMatchingLinesCount()} matching',
-                        style: const TextStyle(fontSize: 10, color: Colors.white),
+                        style:
+                            const TextStyle(fontSize: 10, color: Colors.white),
                       ),
                     ),
                   ],
@@ -801,12 +863,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                     tooltip: 'Open full browser',
                     onPressed: _showFullLinesBrowser,
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
                   ),
                 ],
               ),
             ),
-            
+
             // Inline compact browser
             Expanded(
               flex: 2,
@@ -822,11 +885,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       ),
     );
   }
-  
+
   int _getMatchingLinesCount() {
     final currentMoves = _controller.currentMoveSequence;
     if (currentMoves.isEmpty) return _controller.repertoireLines.length;
-    
+
     return _controller.repertoireLines.where((line) {
       if (currentMoves.length > line.moves.length) return false;
       for (int i = 0; i < currentMoves.length; i++) {
@@ -835,7 +898,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       return true;
     }).length;
   }
-  
+
   void _selectLine(RepertoireLine line) {
     _controller.loadPgnLine(line);
     _tabController.animateTo(2);
@@ -856,7 +919,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       }
     }
   }
-  
+
   void _showFullLinesBrowser() {
     showDialog(
       context: context,
@@ -870,139 +933,24 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildEvalTreeTab() {
-    if (_buildTree == null) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.insights, size: 64, color: Colors.grey[400]),
-              const SizedBox(height: 16),
-              const Text(
-                'No eval tree loaded',
-                style: TextStyle(color: Colors.grey, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Generate a repertoire tree in the Generate tab,\n'
-                'or load a previously saved tree from file.',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _isLoadingTree ? null : _tryLoadBuildTree,
-                icon: _isLoadingTree
-                    ? const SizedBox(
-                        width: 16, height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.file_open),
-                label: Text(_isLoadingTree ? 'Loading...' : 'Load from file'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final playAsWhite =
-        _buildTree!.configSnapshot['play_as_white'] as bool? ??
-            _controller.isRepertoireWhite;
-
-    return Column(
-      children: [
-        // Summary bar
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.insights, size: 16, color: Colors.grey[400]),
-              const SizedBox(width: 8),
-              Text(
-                '${_buildTree!.totalNodes} nodes • '
-                'depth ${_buildTree!.maxDepthReached}',
-                style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-              ),
-              const Spacer(),
-              SizedBox(
-                height: 28,
-                child: TextButton.icon(
-                  onPressed: _tryLoadBuildTree,
-                  icon: Icon(Icons.refresh, size: 14, color: Colors.grey[400]),
-                  label: Text(
-                    'Reload',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-                  ),
-                ),
-              ),
-              SizedBox(
-                height: 28,
-                child: TextButton.icon(
-                  onPressed: () => setState(() => _buildTree = null),
-                  icon: Icon(Icons.close, size: 14, color: Colors.grey[400]),
-                  label: Text(
-                    'Close',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: BuildTreeWidget(
-            key: _buildTreeKey,
-            tree: _buildTree!,
-            playAsWhite: playAsWhite,
-            onPositionSelected: (fen) {
-              _controller.setPositionFromFen(fen);
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _tryLoadBuildTree() async {
-    final filePath = _controller.currentRepertoire?['filePath'] as String?;
-    if (filePath == null || filePath.isEmpty) return;
-
-    final treePath = '${filePath.replaceAll('.pgn', '')}_tree.json';
-    final file = io.File(treePath);
-
-    if (!await file.exists()) {
-      if (mounted) {
-        showAppSnackBar(
-          context,
-          'No tree file found. Generate a tree first.',
+    return EvalTreeTab(
+      currentRepertoire: _controller.currentRepertoire,
+      isWhiteRepertoire: _controller.isRepertoireWhite,
+      generatedTree: _generatedTree,
+      onPositionSelected: (selection) {
+        final synced = _controller.setPositionFromMoveHistory(
+          fen: selection.fen,
+          moves: selection.fullMovePathSan,
+          startingFen: selection.startingFen,
         );
-      }
-      return;
-    }
-
-    setState(() => _isLoadingTree = true);
-
-    try {
-      final json = await file.readAsString();
-      final tree = deserializeTree(json);
-      if (mounted) {
-        setState(() {
-          _buildTree = tree;
-          _isLoadingTree = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoadingTree = false);
-        showAppSnackBar(context, 'Failed to load tree: $e', isError: true);
-      }
-    }
+        if (!synced) {
+          _controller.setPositionFromFen(selection.fen);
+        }
+      },
+      onControllerReady: (controller) {
+        _evalTreeController = controller;
+      },
+    );
   }
 
   Widget _buildActionsTab() {
@@ -1026,7 +974,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                     side: BorderSide(
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.3),
                     ),
                   ),
                   child: ListTile(
@@ -1041,10 +992,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                         color: Theme.of(context).colorScheme.onPrimaryContainer,
                       ),
                     ),
-                    title: const Text('Coverage Calculator',
+                    title: const Text(
+                      'Coverage Calculator',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    subtitle: const Text('Analyze repertoire coverage with Lichess data'),
+                    subtitle: const Text(
+                        'Analyze repertoire coverage with Lichess data'),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: _showCoverageCalculator,
                   ),
@@ -1054,7 +1007,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   child: ListTile(
                     leading: const Icon(Icons.expand_more, color: Colors.blue),
                     title: const Text('Expand Repertoire'),
-                    subtitle: const Text('Add variations using Lichess database'),
+                    subtitle:
+                        const Text('Add variations using Lichess database'),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: _expandRepertoire,
                   ),
@@ -1072,9 +1026,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 const SizedBox(height: 8),
                 Card(
                   child: ListTile(
-                    leading: const Icon(Icons.sports_esports, color: Colors.orange),
+                    leading:
+                        const Icon(Icons.sports_esports, color: Colors.orange),
                     title: const Text('Expand via Quiz'),
-                    subtitle: const Text('Play against database to build repertoire'),
+                    subtitle:
+                        const Text('Play against database to build repertoire'),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: _expandViaQuiz,
                   ),
@@ -1082,7 +1038,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 const SizedBox(height: 8),
                 Card(
                   child: ListTile(
-                    leading: const Icon(Icons.upload_file, color: Colors.purple),
+                    leading:
+                        const Icon(Icons.upload_file, color: Colors.purple),
                     title: const Text('Import PGN'),
                     subtitle: const Text('Add games to current repertoire'),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
@@ -1125,7 +1082,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     } catch (e) {
       debugPrint('Clipboard read failed: $e');
       if (mounted) {
-        showAppSnackBar(context, AppMessages.clipboardReadFailed, isError: true);
+        showAppSnackBar(context, AppMessages.clipboardReadFailed,
+            isError: true);
       }
     }
   }
@@ -1192,7 +1150,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .outline
+                      .withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -1265,7 +1226,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Feature Not Implemented'),
-        content: Text('$featureName feature will be implemented in the future.'),
+        content:
+            Text('$featureName feature will be implemented in the future.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

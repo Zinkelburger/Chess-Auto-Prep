@@ -12,14 +12,28 @@ import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/main.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
+Future<void> _pumpDesktopSizedWidget(
+  WidgetTester tester,
+  Widget widget,
+) async {
+  tester.view.physicalSize = const Size(1600, 1000);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+
+  await tester.pumpWidget(widget);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('App loads without crashing', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const ChessAutoPrepApp());
+    await _pumpDesktopSizedWidget(tester, const ChessAutoPrepApp());
 
     // Verify that main screen elements are present
-    expect(find.text('Chess Auto Prep'), findsOneWidget);
-    expect(find.text('No tactics loaded'), findsOneWidget);
+    expect(find.text('Tactics'), findsOneWidget);
+    expect(find.text('Import Games'), findsOneWidget);
   });
 
   group('ChessBoardWidget Tests', () {
@@ -30,7 +44,8 @@ void main() {
     });
 
     testWidgets('renders initial chess position correctly', (WidgetTester tester) async {
-      await tester.pumpWidget(
+      await _pumpDesktopSizedWidget(
+        tester,
         MaterialApp(
           home: Scaffold(
             body: ChessBoardWidget(position: testPosition),
@@ -40,15 +55,17 @@ void main() {
 
       // Should render without errors
       expect(find.byType(ChessBoardWidget), findsOneWidget);
-
-      // Should have 32 pieces in starting position
-      expect(find.byType(Container), findsWidgets);
+      expect(
+        tester.widget<ChessBoardWidget>(find.byType(ChessBoardWidget)).position.fen,
+        contains('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'),
+      );
     });
 
     testWidgets('handles piece selection', (WidgetTester tester) async {
       String? selectedSquare;
 
-      await tester.pumpWidget(
+      await _pumpDesktopSizedWidget(
+        tester,
         MaterialApp(
           home: Scaffold(
             body: ChessBoardWidget(
@@ -80,7 +97,8 @@ void main() {
     });
 
     testWidgets('shows legal moves when piece is selected', (WidgetTester tester) async {
-      await tester.pumpWidget(
+      await _pumpDesktopSizedWidget(
+        tester,
         MaterialApp(
           home: Scaffold(
             body: ChessBoardWidget(position: testPosition),
@@ -106,7 +124,8 @@ void main() {
     testWidgets('allows making legal moves', (WidgetTester tester) async {
       CompletedMove? lastMove;
 
-      await tester.pumpWidget(
+      await _pumpDesktopSizedWidget(
+        tester,
         MaterialApp(
           home: Scaffold(
             body: ChessBoardWidget(

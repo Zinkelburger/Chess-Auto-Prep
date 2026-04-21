@@ -2,7 +2,7 @@
 ///
 /// Handles:
 ///   • Persistent TCP connections (keep-alive) to avoid per-request TLS overhead
-///   • Polite 300 ms minimum gap between requests
+///   • A small minimum gap between requests to stay polite to the API
 ///   • 429 detection with exponential backoff (60 s, 120 s, 240 s …)
 ///   • Automatic auth-header injection
 ///   • Configurable retry on transient errors
@@ -89,7 +89,7 @@ class LichessApiClient {
     if (_profilingLogger != null) {
       _profilingLogger!(line);
     } else if (kDebugMode) {
-      print(line);
+      debugPrint(line);
     }
   }
 
@@ -121,7 +121,7 @@ class LichessApiClient {
       final wait = _earliestNextRequest.difference(now);
       backoffMs = wait.inMilliseconds;
       if (kDebugMode) {
-        print('[LichessAPI] Backoff active — waiting ${wait.inSeconds}s');
+        debugPrint('[LichessAPI] Backoff active — waiting ${wait.inSeconds}s');
       }
       await Future.delayed(wait);
     }
@@ -141,7 +141,7 @@ class LichessApiClient {
     final backoff = _baseBackoffSeconds * (1 << attempt);
     _earliestNextRequest = DateTime.now().add(Duration(seconds: backoff));
     if (kDebugMode) {
-      print('[LichessAPI] 429 — backing off ${backoff}s  '
+      debugPrint('[LichessAPI] 429 — backing off ${backoff}s  '
           '(attempt ${attempt + 1}/$maxRetries)  '
           'Retry-After: ${response.headers['retry-after'] ?? 'none'}');
     }
@@ -193,7 +193,7 @@ class LichessApiClient {
         _profile('GET error attempt=${attempt + 1}/${maxRetries + 1} '
             'elapsed=${attemptSw.elapsedMilliseconds}ms err=$e');
         if (kDebugMode) {
-          print('[LichessAPI] GET error (attempt ${attempt + 1}): $e');
+          debugPrint('[LichessAPI] GET error (attempt ${attempt + 1}): $e');
         }
         if (attempt < maxRetries) {
           await Future.delayed(const Duration(seconds: 2));
@@ -252,7 +252,7 @@ class LichessApiClient {
         _profile('POST error attempt=${attempt + 1}/${maxRetries + 1} '
             'elapsed=${attemptSw.elapsedMilliseconds}ms err=$e');
         if (kDebugMode) {
-          print('[LichessAPI] POST error (attempt ${attempt + 1}): $e');
+          debugPrint('[LichessAPI] POST error (attempt ${attempt + 1}): $e');
         }
         if (attempt < maxRetries) {
           await Future.delayed(const Duration(seconds: 2));
@@ -302,7 +302,7 @@ class LichessApiClient {
     }
     if (response.statusCode != 200) {
       if (kDebugMode) {
-        print(
+        debugPrint(
             '[LichessAPI] Explorer HTTP ${response.statusCode} for $fenShort…');
       }
       _profile('Explorer HTTP ${response.statusCode} fen=$fenShort '

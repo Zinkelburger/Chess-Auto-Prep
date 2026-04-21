@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 
 import 'core/app_state.dart';
 import 'screens/main_screen.dart';
-import 'services/tactics_service.dart';
-import 'services/pgn_service.dart';
 
 import 'services/browser_extension_server/browser_extension_server_factory.dart';
 
@@ -40,9 +38,6 @@ class ChessAutoPrepApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        Provider(create: (_) => TacticsService()),
-        Provider(create: (_) => PgnService()),
-
         ChangeNotifierProvider(
           create: (_) {
             final appState = AppState();
@@ -57,8 +52,10 @@ class ChessAutoPrepApp extends StatelessWidget {
           colorScheme: const ColorScheme.dark(
             surface: Color(0xFF121212),
             onSurface: Colors.white,
-            primary: Color(0xFF404040),
-            onPrimary: Colors.white,
+            primary: Colors.white,
+            onPrimary: Color(0xFF121212),
+            primaryContainer: Color(0xFF2A2A2A),
+            onPrimaryContainer: Colors.white,
             secondary: Color(0xFF606060),
             onSecondary: Colors.white,
           ),
@@ -76,6 +73,17 @@ class ChessAutoPrepApp extends StatelessWidget {
           textButtonTheme: TextButtonThemeData(
             style: TextButton.styleFrom(
               foregroundColor: Colors.white,
+            ),
+          ),
+          outlinedButtonTheme: OutlinedButtonThemeData(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+            ),
+          ),
+          filledButtonTheme: FilledButtonThemeData(
+            style: FilledButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: const Color(0xFF404040),
             ),
           ),
           snackBarTheme: SnackBarThemeData(

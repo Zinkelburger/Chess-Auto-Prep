@@ -1,5 +1,6 @@
 /// Player selection screen for analysis.
 library;
+
 ///
 /// Pushed as a full-screen route from [AnalysisScreen]. Lists every cached
 /// player game-set and lets the user select one, re-download, or delete.
@@ -48,7 +49,17 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Select Player to Analyze')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text('Select Player to Analyze'),
+        actions: [
+          IconButton(
+            tooltip: 'Back',
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.arrow_back),
+          ),
+        ],
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _buildBody(),
@@ -361,6 +372,8 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
         Navigator.of(context).pop(); // close progress dialog
         showAppSnackBar(context, AppMessages.genericError, isError: true);
       }
+    } finally {
+      progress.dispose();
     }
   }
 }

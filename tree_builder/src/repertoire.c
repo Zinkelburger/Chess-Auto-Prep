@@ -140,9 +140,11 @@ static void build_repertoire_recursive(TreeNode *node, Tree *tree,
         if (winner.child && *num_moves < max_moves) {
             TreeNode *best_child = winner.child;
             RepertoireMove *rm = &out_moves[*num_moves];
-            strncpy(rm->fen, node->fen, sizeof(rm->fen) - 1);
-            strncpy(rm->move_san, best_child->move_san, sizeof(rm->move_san) - 1);
-            strncpy(rm->move_uci, best_child->move_uci, sizeof(rm->move_uci) - 1);
+            snprintf(rm->fen, sizeof(rm->fen), "%s", node->fen);
+            snprintf(rm->move_san, sizeof(rm->move_san), "%s",
+                     best_child->move_san);
+            snprintf(rm->move_uci, sizeof(rm->move_uci), "%s",
+                     best_child->move_uci);
             rm->composite_score = winner.expectimax_value;
             rm->depth = node->depth;
             rm->probability = node->cumulative_probability;
@@ -232,8 +234,12 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                 next->depth = current.depth + 1;
                 memcpy(next->moves_san, current.moves_san, sizeof(current.moves_san));
                 memcpy(next->moves_uci, current.moves_uci, sizeof(current.moves_uci));
-                strncpy(next->moves_san[current.depth], selected->move_san, 15);
-                strncpy(next->moves_uci[current.depth], selected->move_uci, 15);
+                snprintf(next->moves_san[current.depth],
+                         sizeof(next->moves_san[current.depth]),
+                         "%s", selected->move_san);
+                snprintf(next->moves_uci[current.depth],
+                         sizeof(next->moves_uci[current.depth]),
+                         "%s", selected->move_uci);
                 stack_top++;
                 pushed_any = true;
             }
@@ -248,8 +254,12 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                     next->depth = current.depth + 1;
                     memcpy(next->moves_san, current.moves_san, sizeof(current.moves_san));
                     memcpy(next->moves_uci, current.moves_uci, sizeof(current.moves_uci));
-                    strncpy(next->moves_san[current.depth], child->move_san, 15);
-                    strncpy(next->moves_uci[current.depth], child->move_uci, 15);
+                    snprintf(next->moves_san[current.depth],
+                             sizeof(next->moves_san[current.depth]),
+                             "%s", child->move_san);
+                    snprintf(next->moves_uci[current.depth],
+                             sizeof(next->moves_uci[current.depth]),
+                             "%s", child->move_uci);
                     stack_top++;
                     pushed_any = true;
                 }

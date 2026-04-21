@@ -1,87 +1,16 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/chess_game.dart';
 import 'storage/storage_factory.dart';
 
 class PgnService {
-  Future<List<ChessGameModel>> loadPgnFiles() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pgn'],
-      allowMultiple: true,
-      withData: kIsWeb, // Important for web!
-    );
-
-    if (result == null) return [];
-
-    final games = <ChessGameModel>[];
-
-    for (final file in result.files) {
-      String content = '';
-      if (kIsWeb) {
-        // On web, bytes are available
-        if (file.bytes != null) {
-          content = String.fromCharCodes(file.bytes!);
-        }
-      } else {
-        // On desktop/mobile, path is available
-        if (file.path != null) {
-          // Use File from dart:io conditionally?
-          // Since we can't import dart:io, we can't use File(file.path!) easily without conditional import.
-          // However, we are in a refactor where we removed dart:io.
-          // We can use a helper or trust that io_storage_service logic handles things, 
-          // but picking arbitrary files isn't covered by StorageService interface yet.
-          
-          // Actually, we can assume this won't be called on Web if we structure it right,
-          // OR we can use a conditional import stub for File reading.
-          // But simpler: just import 'dart:io' ONLY if not web? No, conditional import is better.
-          //
-          // For now, let's skip implementation for file path reading on IO if we want to compile on Web.
-          // To make it compile on Web, we CANNOT have `File(path).readAsString()` unless `File` comes from `dart:io`.
-          //
-          // Solution: Move arbitrary file reading to StorageService or a new helper class.
-          // But StorageService is for app data.
-          //
-          // Let's implement a quick helper here using `cross_file` concept or just handle bytes if available.
-          // FilePicker can return bytes on IO too if `withData: true` is set.
-          // But that loads huge files into memory.
-          //
-          // Let's try to set `withData: true` for everyone for now as PGNs are text and usually small enough.
-          // If not, we need a platform interface.
-        }
-      }
-      
-      // If we didn't get content from bytes (e.g. IO without withData), try reading path via StorageService helper?
-      // StorageService doesn't have "read arbitrary file".
-      // Let's rely on `withData: true` for now to solve the compilation issue.
-      
-      if (content.isNotEmpty) {
-        final parsedGames = parsePgnContent(content);
-        games.addAll(parsedGames);
-      }
-    }
-
-    return games;
-  }
-
-  Future<List<ChessGameModel>> loadPgnFromDirectory(String directoryPath) async {
-    if (kIsWeb) {
-      print('Directory loading not supported on Web');
-      return [];
-    }
-    // This method strictly requires dart:io Directory/File.
-    // We can stub it or return empty.
-    return []; 
-  }
-
   List<ChessGameModel> parsePgnContent(String content) {
     final games = <ChessGameModel>[];
     final gameTexts = content.split('\n\n').where((text) => text.trim().isNotEmpty);
 
     String currentGame = '';
     for (final text in gameTexts) {
-      currentGame += text + '\n\n';
+      currentGame += '$text\n\n';
 
       // Check if this completes a game (contains result)
       if (_containsGameResult(currentGame)) {
@@ -139,11 +68,16 @@ class PgnService {
     }
 
     if (newGames.isEmpty) {
-      print('No new games to import - all games already exist');
+      if (kDebugMode) {
+        debugPrint('No new games to import - all games already exist');
+      }
       return;
     }
 
-    print('Importing ${newGames.length} new games (${games.length - newGames.length} duplicates skipped)');
+    if (kDebugMode) {
+      debugPrint('Importing ${newGames.length} new games '
+          '(${games.length - newGames.length} duplicates skipped)');
+    }
 
     // Combine existing and new games
     final allGames = [...existingGames, ...newGames];

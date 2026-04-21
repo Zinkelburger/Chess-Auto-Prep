@@ -6,10 +6,12 @@
  * opponent-move nodes we use exactly one distribution source — Maia's
  * policy head (default) or the Lichess explorer — with no blending,
  * no renormalization, and a tail term in the expectimax pass to
- * account for uncovered probability mass.  Branching budgets
- * (`our_multipv`, `opp_mass_target`, `opp_max_children`) are constant
- * at every depth so the MAX/CHANCE operators see a stable action
- * space.  A smaller action space at deeper plies would make MAX
+ * account for uncovered probability mass.  Branching budgets are
+ * stable across the tree: non-root our-move nodes use the configured
+ * `our_multipv`, the root widens to at least 10 lines so the opening
+ * position can try more offbeat ideas, and opponent-side caps
+ * (`opp_mass_target`, `opp_max_children`) stay constant at every depth.
+ * A smaller action space at deeper plies would make MAX
  * monotonically under-estimate our achievable V (fewer candidates
  * can only lower the max), and would similarly truncate the CHANCE
  * sum toward the eval-based tail — both pushing V systematically
@@ -62,6 +64,15 @@ static double elapsed_ms(const struct timespec *start) {
 #define STATS_INC(cfg, field)  do { if ((cfg)->stats) (cfg)->stats->field++; } while(0)
 #define STATS_ADD(cfg, field, v) do { if ((cfg)->stats) (cfg)->stats->field += (v); } while(0)
 
+#define ROOT_MULTIPV_FLOOR 10
+
+static int multipv_count_for_node(const TreeConfig *config, const TreeNode *node) {
+    if (!config) return ROOT_MULTIPV_FLOOR;
+    if (node && node->depth == 0 && config->our_multipv < ROOT_MULTIPV_FLOOR)
+        return ROOT_MULTIPV_FLOOR;
+    return config->our_multipv;
+}
+
 
 /* ========== Event log ========== */
 
@@ -92,7 +103,7 @@ static void emit_event(const TreeConfig *cfg, const char *event,
 }
 
 
-/* ========== FEN Map (transposition table — FEN → canonical TreeNode*) ========== */
+/* ========== FEN Map (transposition table — canonical FEN → TreeNode*) ========== */
 
 #define FEN_MAP_INITIAL_BUCKETS 4096
 #define FEN_MAP_LOAD_FACTOR     0.75
@@ -108,6 +119,24 @@ typedef struct FenMap {
     size_t num_buckets;
     size_t count;
 } FenMap;
+
+/* Use a 4-field FEN key so move counters do not block transposition hits. */
+static void canonicalize_fen_key(const char *fen, char *out, size_t out_len) {
+    if (!out || out_len == 0) return;
+    if (!fen) {
+        out[0] = '\0';
+        return;
+    }
+
+    snprintf(out, out_len, "%s", fen);
+    int spaces = 0;
+    for (char *p = out; *p; p++) {
+        if (*p == ' ' && ++spaces == 4) {
+            *p = '\0';
+            return;
+        }
+    }
+}
 
 static uint32_t fen_hash(const char *fen, size_t num_buckets) {
     uint32_t hash = 2166136261u;
@@ -164,22 +193,28 @@ static void fen_map_resize(FenMap *map) {
 /** Look up the canonical node for a FEN.  Returns NULL if not present. */
 static TreeNode *fen_map_get(const FenMap *map, const char *fen) {
     if (!map) return NULL;
-    uint32_t idx = fen_hash(fen, map->num_buckets);
+    char key[MAX_FEN_LENGTH];
+    canonicalize_fen_key(fen, key, sizeof(key));
+    uint32_t idx = fen_hash(key, map->num_buckets);
     for (FenMapEntry *e = map->buckets[idx]; e; e = e->next) {
-        if (strcmp(e->fen, fen) == 0) return e->node;
+        if (strcmp(e->fen, key) == 0) return e->node;
     }
     return NULL;
 }
 
 /** Insert a FEN → node mapping.  No-op if the FEN is already present. */
 static void fen_map_put(FenMap *map, const char *fen, TreeNode *node) {
-    if (!map || fen_map_get(map, fen)) return;
+    if (!map) return;
+
+    char key[MAX_FEN_LENGTH];
+    canonicalize_fen_key(fen, key, sizeof(key));
+    if (fen_map_get(map, key)) return;
     if ((double)map->count / (double)map->num_buckets >= FEN_MAP_LOAD_FACTOR)
         fen_map_resize(map);
-    uint32_t idx = fen_hash(fen, map->num_buckets);
+    uint32_t idx = fen_hash(key, map->num_buckets);
     FenMapEntry *e = (FenMapEntry *)malloc(sizeof(FenMapEntry));
     if (!e) return;
-    e->fen = strdup(fen);
+    e->fen = strdup(key);
     e->node = node;
     e->next = map->buckets[idx];
     map->buckets[idx] = e;
@@ -563,8 +598,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
                             LichessExplorer *explorer) {
     /* 0. Lichess eval DB shortcut.  If the community DB has this position
      *    at a depth at least our eval_depth and the eval is outside our
-     *    window, we can prune without ever running MultiPV-5 — the single
-     *    most expensive call per our-node.  If it's inside the window we
+     *    window, we can prune without ever running the node's MultiPV search
+     *    — the single most expensive call per our-node.  If it's inside the window we
      *    still need MultiPV for the candidate list, but the node's eval
      *    comes from the (usually deeper) DB row and replaces the line-0
      *    eval that MultiPV would otherwise assign. */
@@ -604,8 +639,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
         }
     }
 
-    /* 1. Run Stockfish MultiPV (constant across depths), with DB cache */
-    int mpv_count = config->our_multipv;
+    /* 1. Run Stockfish MultiPV, widening the root to try more ideas. */
+    int mpv_count = multipv_count_for_node(config, node);
     MultiPVJob mpv;
     bool mpv_from_cache = false;
 
@@ -1621,8 +1656,17 @@ void tree_print_stats(const Tree *tree) {
     printf("\nConfiguration:\n");
     printf("  Min probability: %.4f%%\n", tree->config.min_probability * 100.0);
     printf("  Max depth: %d ply\n", tree->config.max_depth);
-    printf("  Our MultiPV: %d (constant, eval-loss filter %dcp)\n",
-           tree->config.our_multipv, tree->config.max_eval_loss_cp);
+    {
+        int root_multipv = multipv_count_for_node(&tree->config, tree->root);
+        if (root_multipv == tree->config.our_multipv) {
+            printf("  Our MultiPV: %d (eval-loss filter %dcp)\n",
+                   tree->config.our_multipv, tree->config.max_eval_loss_cp);
+        } else {
+            printf("  Our MultiPV: root %d, others %d (eval-loss filter %dcp)\n",
+                   root_multipv, tree->config.our_multipv,
+                   tree->config.max_eval_loss_cp);
+        }
+    }
     printf("  Opponent: max %d children, mass target %.0f%%\n",
            tree->config.opp_max_children,
            tree->config.opp_mass_target * 100.0);

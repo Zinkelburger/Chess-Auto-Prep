@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../widgets/chess_board_widget.dart';
+import '../widgets/app_mode_menu_button.dart';
 import '../widgets/tactics_control_panel.dart';
 
 import '../services/analysis_service.dart';
@@ -52,84 +53,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     return Consumer<AppState>(
       builder: (context, appState, child) {
         return Scaffold(
-          appBar: AppBar(
-            title: const Text('Chess Auto Prep'),
-            actions: [
-              // Mode selector (disabled during repertoire generation)
-              PopupMenuButton<AppMode>(
-                icon: const Icon(Icons.view_module),
-                tooltip: appState.isRepertoireGenerating
-                    ? 'Locked — repertoire generation in progress'
-                    : 'Select Mode',
-                enabled: !appState.isRepertoireGenerating,
-                onSelected: (mode) {
-                  appState.setMode(mode);
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: AppMode.tactics,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.psychology),
-                        const SizedBox(width: 12),
-                        const Text('Tactics'),
-                        if (appState.currentMode == AppMode.tactics)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 12),
-                            child: Icon(Icons.check, size: 16, color: Colors.green),
-                          ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: AppMode.positionAnalysis,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.analytics),
-                        const SizedBox(width: 12),
-                        const Text('Player Analysis'),
-                        if (appState.currentMode == AppMode.positionAnalysis)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 12),
-                            child: Icon(Icons.check, size: 16, color: Colors.green),
-                          ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: AppMode.repertoire,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.library_books),
-                        const SizedBox(width: 12),
-                        const Text('Repertoire Builder'),
-                        if (appState.currentMode == AppMode.repertoire)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 12),
-                            child: Icon(Icons.check, size: 16, color: Colors.green),
-                          ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: AppMode.repertoireTrainer,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.school),
-                        const SizedBox(width: 12),
-                        const Text('Repertoire Trainer'),
-                        if (appState.currentMode == AppMode.repertoireTrainer)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 12),
-                            child: Icon(Icons.check, size: 16, color: Colors.green),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
           body: _buildBodyForMode(appState),
         );
       },
@@ -139,9 +62,15 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget _buildBodyForMode(AppState appState) {
     switch (appState.currentMode) {
       case AppMode.tactics:
-        return _buildTacticsLayout(appState);
+        return SafeArea(
+          bottom: false,
+          child: _buildTacticsLayout(appState),
+        );
       case AppMode.positionAnalysis:
-        return const AnalysisScreen();
+        return const SafeArea(
+          bottom: false,
+          child: AnalysisScreen(),
+        );
       case AppMode.repertoire:
         return const RepertoireScreen();
       case AppMode.repertoireTrainer:
@@ -152,39 +81,64 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildTacticsLayout(AppState appState) {
-    return Row(
+    final theme = Theme.of(context);
+
+    return Column(
       children: [
-        // Left panel - Chess board (60% of width)
-        Expanded(
-          flex: 6,
-          child: Container(
-            padding: const EdgeInsets.all(16.0),
-            child: ChessBoardWidget(
-              position: appState.currentPosition,
-              flipped: appState.boardFlipped,
-              onPieceSelected: (square) {
-                // Handle piece selection
-              },
-              onMove: (move) {
-                // Use UCI from CompletedMove and send to validation
-                appState.onMoveAttempted(move.uci);
-              },
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerLow,
+            border: Border(
+              bottom: BorderSide(color: theme.dividerColor),
             ),
           ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text('Tactics', style: theme.textTheme.titleMedium),
+              ),
+              const AppModeMenuButton(),
+            ],
+          ),
         ),
-
-        // Divider
-        Container(
-          width: 1,
-          color: Colors.grey[300],
-        ),
-
-        // Right panel - Tabbed control panel (40% of width)
         Expanded(
-          flex: 4,
-          child: Container(
-            padding: const EdgeInsets.all(8.0),
-            child: const TacticsControlPanel(),
+          child: Row(
+            children: [
+              // Left panel - Chess board (60% of width)
+              Expanded(
+                flex: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(16.0),
+                  child: ChessBoardWidget(
+                    position: appState.currentPosition,
+                    flipped: appState.boardFlipped,
+                    onPieceSelected: (square) {
+                      // Handle piece selection
+                    },
+                    onMove: (move) {
+                      // Use UCI from CompletedMove and send to validation
+                      appState.onMoveAttempted(move.uci);
+                    },
+                  ),
+                ),
+              ),
+
+              // Divider
+              Container(
+                width: 1,
+                color: Colors.grey[300],
+              ),
+
+              // Right panel - Tabbed control panel (40% of width)
+              Expanded(
+                flex: 4,
+                child: Container(
+                  padding: const EdgeInsets.all(8.0),
+                  child: const TacticsControlPanel(),
+                ),
+              ),
+            ],
           ),
         ),
       ],

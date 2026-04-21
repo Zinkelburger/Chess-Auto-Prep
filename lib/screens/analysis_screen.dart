@@ -2,9 +2,9 @@
 library;
 
 ///
-/// Designed to be embedded as the `body` of [MainScreen]'s Scaffold (no
-/// Scaffold of its own) so the main app bar with the mode selector stays
-/// visible and there is no double-AppBar nesting.
+/// Designed to be embedded as the `body` of [MainScreen]'s Scaffold while
+/// providing its own compact toolbar so the mode switcher stays available
+/// without an extra app-wide app bar.
 ///
 /// Layout: toolbar row  ➜  three-panel [PositionAnalysisWidget].
 
@@ -20,6 +20,7 @@ import '../services/analysis_games_service.dart';
 import '../services/engine_weakness_service.dart';
 import '../services/unified_analysis_builder.dart';
 import '../widgets/engine_weakness_dialog.dart';
+import '../widgets/app_mode_menu_button.dart';
 import '../widgets/position_analysis_widget.dart';
 import 'player_selection_screen.dart';
 
@@ -173,6 +174,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             tooltip: 'Select Player',
             onPressed: _showPlayerSelection,
           ),
+          const SizedBox(width: 4),
+          const AppModeMenuButton(),
         ],
       ),
     );
@@ -459,8 +462,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           _openingTree = whiteTree;
           _whiteTree = whiteTree;
           _playerIsWhite = true;
-          _isAnalyzing = false;
-          _analysisPhase = '';
+          _isAnalyzing = true;
+          _analysisPhase = 'Analyzing as Black';
           _analysisCurrent = 0;
           _analysisTotal = 0;
         });
@@ -471,7 +474,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
       final (_, blackTree) = await blackFuture;
       if (mounted) {
-        setState(() => _blackTree = blackTree);
+        setState(() {
+          _blackTree = blackTree;
+          _isAnalyzing = false;
+          _analysisPhase = '';
+          _analysisCurrent = 0;
+          _analysisTotal = 0;
+        });
       }
     } catch (e) {
       if (mounted) {

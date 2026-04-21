@@ -13,6 +13,7 @@ import '../models/repertoire_move_progress.dart';
 import '../models/repertoire_review_history_entry.dart';
 import '../services/repertoire_review_service.dart';
 import '../services/repertoire_service.dart';
+import '../widgets/app_mode_menu_button.dart';
 import '../widgets/chess_board_widget.dart';
 import 'repertoire_selection_screen.dart';
 
@@ -245,6 +246,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     });
 
     await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
   }
 
   Future<void> _prepareUserMove(int moveIndex) async {
@@ -274,6 +276,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
       _currentMoveIndex++;
       await Future.delayed(const Duration(milliseconds: 350));
+      if (!mounted) return;
       _advanceToNextUserTurn();
     } else {
       _updateMoveProgress(_currentLine!, _currentMoveIndex, wasCorrect: false);
@@ -378,7 +381,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Repertoire Trainer'),
+        titleSpacing: 16,
+        title: _buildAppBarTitle(),
         actions: [
           if (_repertoire != null)
             IconButton(
@@ -386,14 +390,45 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
               icon: const Icon(Icons.refresh),
               onPressed: _loadRepertoire,
             ),
-          IconButton(
-            tooltip: 'Select repertoire',
-            icon: const Icon(Icons.library_books),
-            onPressed: _selectRepertoire,
+          const AppModeMenuButton(),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Center(
+              child: Tooltip(
+                message: 'Select repertoire',
+                child: TextButton.icon(
+                  onPressed: _selectRepertoire,
+                  icon: const Icon(Icons.library_books),
+                  label: const Text('Select Repertoire'),
+                ),
+              ),
             ),
+          ),
         ],
       ),
       body: _buildBody(),
+    );
+  }
+
+  Widget _buildAppBarTitle() {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Repertoire Trainer',
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.titleMedium,
+        ),
+        if (_repertoire != null)
+          Text(
+            _repertoire!['name'] as String? ?? 'Unknown repertoire',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall,
+          ),
+      ],
     );
   }
 
@@ -416,7 +451,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error, size: 64, color: Colors.red),
+            const Icon(Icons.error, size: 64, color: Colors.red),
             const SizedBox(height: 12),
             Text(_error!, textAlign: TextAlign.center),
             const SizedBox(height: 12),
@@ -666,7 +701,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
               overflow: TextOverflow.ellipsis,
             ),
             trailing: Text(
-              '${learnedMoves}/${line.moves.length}',
+              '$learnedMoves/${line.moves.length}',
               style: TextStyle(
                 color: learnedMoves == line.moves.length ? Colors.green : Colors.blueGrey,
                 fontWeight: FontWeight.w600,
@@ -742,7 +777,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
-          '${i + 1}:${streak}/3',
+          '${i + 1}:$streak/3',
           style: const TextStyle(fontSize: 11, color: Colors.white),
         ),
       ));
