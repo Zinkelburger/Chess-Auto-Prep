@@ -397,7 +397,10 @@ class RepertoireController with ChangeNotifier {
 
     try {
       final service = RepertoireService();
-      _repertoireLines = service.parseRepertoirePgn(_repertoirePgn!);
+      _repertoireLines = service.parseRepertoirePgn(
+        _repertoirePgn!,
+        trainingColor: _isRepertoireWhite ? 'white' : 'black',
+      );
       debugPrint(
           'Parsed ${_repertoireLines.length} repertoire lines for PGN browser');
     } catch (e) {
