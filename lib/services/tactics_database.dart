@@ -8,9 +8,11 @@ class TacticsDatabase {
   Set<String> analyzedGameIds = {}; // Track which games have been analyzed
   ReviewSession currentSession = ReviewSession();
   int sessionPositionIndex = 0;
+  Future<void> _pendingWrite = Future<void>.value();
 
   /// Load positions from CSV file
   Future<int> loadPositions() async {
+    await _pendingWrite;
     positions.clear();
     analyzedGameIds.clear();
 
@@ -73,12 +75,16 @@ class TacticsDatabase {
 
   /// Save analyzed game IDs to storage
   Future<void> _saveAnalyzedGameIds() async {
-    try {
-      await StorageFactory.instance.saveAnalyzedGameIds(analyzedGameIds.toList());
-      print('Saved ${analyzedGameIds.length} analyzed game IDs');
-    } catch (e) {
-      print('Error saving analyzed game IDs: $e');
-    }
+    await _enqueueWrite(() async {
+      try {
+        await StorageFactory.instance.saveAnalyzedGameIds(
+          analyzedGameIds.toList(),
+        );
+        print('Saved ${analyzedGameIds.length} analyzed game IDs');
+      } catch (e) {
+        print('Error saving analyzed game IDs: $e');
+      }
+    });
   }
 
   /// Mark a game as analyzed (even if no blunders found)
@@ -106,8 +112,10 @@ class TacticsDatabase {
   /// Clear analyzed games tracking (for re-analysis)
   Future<void> clearAnalyzedGames() async {
     analyzedGameIds.clear();
-    await StorageFactory.instance.saveAnalyzedGameIds([]);
-    print('Cleared analyzed games tracking');
+    await _enqueueWrite(() async {
+      await StorageFactory.instance.saveAnalyzedGameIds([]);
+      print('Cleared analyzed games tracking');
+    });
   }
 
   /// Create a TacticsPosition from a CSV row.
@@ -127,31 +135,33 @@ class TacticsDatabase {
 
   /// Save positions back to CSV
   Future<void> savePositions() async {
-    try {
-      // Create CSV data
-      final List<List<dynamic>> csvData = [
-        // Header row — must match toCsvRow() column order exactly.
-        [
-          'fen', 'game_white', 'game_black', 'game_result', 'game_date',
-          'game_id', 'game_url', 'position_context', 'user_move', 'correct_line',
-          'mistake_type', 'mistake_analysis', 'review_count',
-          'success_count', 'last_reviewed', 'time_to_solve', 'hints_used',
-          'opponent_best_response',
-        ]
-      ];
+    await _enqueueWrite(() async {
+      try {
+        // Create CSV data
+        final List<List<dynamic>> csvData = [
+          // Header row — must match toCsvRow() column order exactly.
+          [
+            'fen', 'game_white', 'game_black', 'game_result', 'game_date',
+            'game_id', 'game_url', 'position_context', 'user_move',
+            'correct_line', 'mistake_type', 'mistake_analysis',
+            'review_count', 'success_count', 'last_reviewed',
+            'time_to_solve', 'hints_used', 'opponent_best_response',
+          ]
+        ];
 
-      // Data rows
-      for (final pos in positions) {
-        csvData.add(pos.toCsvRow());
+        // Data rows
+        for (final pos in positions) {
+          csvData.add(pos.toCsvRow());
+        }
+
+        final csv = const ListToCsvConverter().convert(csvData);
+        await StorageFactory.instance.saveTacticsCsv(csv);
+
+        print('Saved ${positions.length} tactics positions to storage');
+      } catch (e) {
+        print('Error saving positions: $e');
       }
-
-      final csv = const ListToCsvConverter().convert(csvData);
-      await StorageFactory.instance.saveTacticsCsv(csv);
-
-      print('Saved ${positions.length} tactics positions to storage');
-    } catch (e) {
-      print('Error saving positions: $e');
-    }
+    });
   }
 
   /// Clear all positions from database
@@ -238,6 +248,7 @@ class TacticsDatabase {
         analyzedGameIds.add(position.gameId);
       }
       await savePositions();
+      await _saveAnalyzedGameIds();
     }
   }
 
@@ -259,6 +270,12 @@ class TacticsDatabase {
       await _saveAnalyzedGameIds();
       print('Added $added new positions (${newPositions.length - added} duplicates skipped)');
     }
+  }
+
+  Future<void> _enqueueWrite(Future<void> Function() operation) {
+    final next = _pendingWrite.then((_) => operation());
+    _pendingWrite = next.catchError((_) {});
+    return next;
   }
 }
 

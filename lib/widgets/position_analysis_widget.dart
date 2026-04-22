@@ -7,6 +7,8 @@
 /// games list and PGN viewer always stay in sync.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
@@ -104,37 +106,90 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
     return Focus(
       autofocus: true,
       onKeyEvent: _onKeyEvent,
-      child: Row(
-        children: [
-          // ── Left panel: FEN list or loading state ──
-          SizedBox(width: 300, child: _buildLeftPanel()),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 720) {
+            return Column(
+              children: [
+                Expanded(flex: 4, child: _buildBoardPane()),
+                Container(height: 1, color: Colors.grey[700]),
+                Expanded(flex: 5, child: _buildStackedPanels()),
+              ],
+            );
+          }
 
-          Container(width: 1, color: Colors.grey[700]),
-
-          // ── Centre panel: chess board ──
-          Expanded(
-            flex: 3,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: AspectRatio(
-                  aspectRatio: 1.0,
-                  child: ChessBoardWidget(
-                    position: _currentBoard ?? _startingPosition,
-                    flipped: widget.playerIsWhite != null
-                        ? !widget.playerIsWhite!
-                        : false,
-                    onMove: _onBoardMove,
+          if (constraints.maxWidth < 1100) {
+            return Column(
+              children: [
+                Expanded(flex: 4, child: _buildBoardPane()),
+                Container(height: 1, color: Colors.grey[700]),
+                Expanded(
+                  flex: 5,
+                  child: Row(
+                    children: [
+                      Expanded(child: _buildLeftPanel()),
+                      Container(width: 1, color: Colors.grey[700]),
+                      Expanded(child: _buildRightPanel()),
+                    ],
                   ),
                 ),
-              ),
+              ],
+            );
+          }
+
+          final leftWidth = math.min(320.0, constraints.maxWidth * 0.26);
+          final rightWidth = math.min(380.0, constraints.maxWidth * 0.3);
+
+          return Row(
+            children: [
+              SizedBox(width: leftWidth, child: _buildLeftPanel()),
+              Container(width: 1, color: Colors.grey[700]),
+              Expanded(child: _buildBoardPane()),
+              Container(width: 1, color: Colors.grey[700]),
+              SizedBox(width: rightWidth, child: _buildRightPanel()),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBoardPane() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: AspectRatio(
+          aspectRatio: 1.0,
+          child: ChessBoardWidget(
+            position: _currentBoard ?? _startingPosition,
+            flipped: widget.playerIsWhite != null ? !widget.playerIsWhite! : false,
+            onMove: _onBoardMove,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStackedPanels() {
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          const TabBar(
+            isScrollable: true,
+            tabs: [
+              Tab(text: 'Positions'),
+              Tab(text: 'Details'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _buildLeftPanel(),
+                _buildRightPanel(),
+              ],
             ),
           ),
-
-          Container(width: 1, color: Colors.grey[700]),
-
-          // ── Right panel: tabs ──
-          SizedBox(width: 350, child: _buildRightPanel()),
         ],
       ),
     );
@@ -225,6 +280,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       children: [
         TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Move Tree'),
             Tab(text: 'Games'),

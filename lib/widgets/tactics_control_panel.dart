@@ -26,6 +26,7 @@ class TacticsControlPanel extends StatefulWidget {
 
 class _TacticsControlPanelState extends State<TacticsControlPanel>
     with TickerProviderStateMixin {
+  AppState? _appState;
 
   // Core components
   late TacticsDatabase _database;
@@ -94,11 +95,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Initialize controllers from AppState and reset board
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final appState = context.read<AppState>();
+        final appState = _appState ?? context.read<AppState>();
         _lichessUserController.text = appState.lichessUsername ?? '';
         _chessComUserController.text = appState.chesscomUsername ?? '';
-        
-        context.read<AppState>().setMoveAttemptedCallback(_onMoveAttempted);
+
+        appState.setMoveAttemptedCallback(_onMoveAttempted);
         _resetBoardToStart();
       }
     });
@@ -137,7 +138,14 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _appState ??= context.read<AppState>();
+  }
+
+  @override
   void dispose() {
+    _appState?.setMoveAttemptedCallback(null);
     _focusNode.dispose();
     _tabController.dispose();
     _lichessUserController.dispose();
@@ -487,118 +495,120 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                     const Text('Import Games', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
                     
-                    // Lichess Row
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: _lichessUserController,
-                            decoration: const InputDecoration(
-                              labelText: 'Lichess Username',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (value) {
-                              context.read<AppState>().setLichessUsername(value);
-                            },
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  controller: _lichessUserController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Lichess Username',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (value) {
+                                    context.read<AppState>().setLichessUsername(value);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 120,
+                                child: TextField(
+                                  controller: _lichessCountController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Recent Games',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: _importStatus == null && _importFieldsValid ? _importLichess : null,
+                                child: const Text('Import'),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 100,
-                          child: TextField(
-                            controller: _lichessCountController,
-                            decoration: const InputDecoration(
-                              labelText: 'Recent Games',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            keyboardType: TextInputType.number,
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  controller: _chessComUserController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Chess.com Username',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  onChanged: (value) {
+                                    context.read<AppState>().setChesscomUsername(value);
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 120,
+                                child: TextField(
+                                  controller: _chessComCountController,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Recent Games',
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: _importStatus == null && _importFieldsValid ? _importChessCom : null,
+                                child: const Text('Import'),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: _importStatus == null && _importFieldsValid ? _importLichess : null,
-                          child: const Text('Import'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Chess.com Row
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: _chessComUserController,
-                            decoration: const InputDecoration(
-                              labelText: 'Chess.com Username',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (value) {
-                              context.read<AppState>().setChesscomUsername(value);
-                            },
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              SizedBox(
+                                width: 140,
+                                child: TextField(
+                                  controller: _stockfishDepthController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Stockfish Depth',
+                                    border: const OutlineInputBorder(),
+                                    isDense: true,
+                                    errorText: _depthError,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  onChanged: _validateDepth,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                width: 100,
+                                child: TextField(
+                                  controller: _coresController,
+                                  enabled: TacticsImportService.isParallelAvailable,
+                                  decoration: InputDecoration(
+                                    labelText: 'Cores',
+                                    border: const OutlineInputBorder(),
+                                    isDense: true,
+                                    errorText: _coresError,
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  onChanged: _validateCores,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 100,
-                          child: TextField(
-                            controller: _chessComCountController,
-                            decoration: const InputDecoration(
-                              labelText: 'Recent Games',
-                              border: OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: _importStatus == null && _importFieldsValid ? _importChessCom : null,
-                          child: const Text('Import'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Stockfish Depth + Cores + Max Load Row
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 140,
-                          child: TextField(
-                            controller: _stockfishDepthController,
-                            decoration: InputDecoration(
-                              labelText: 'Stockfish Depth',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                              errorText: _depthError,
-                            ),
-                            keyboardType: TextInputType.number,
-                            onChanged: _validateDepth,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 100,
-                          child: TextField(
-                            controller: _coresController,
-                            enabled: TacticsImportService.isParallelAvailable,
-                            decoration: InputDecoration(
-                              labelText: 'Cores',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                              errorText: _coresError,
-                            ),
-                            keyboardType: TextInputType.number,
-                            onChanged: _validateCores,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -655,8 +665,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               
             // Database management buttons (always visible, disabled when empty/importing)
             const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 16,
+              runSpacing: 8,
               children: [
                 Tooltip(
                   message: _database.positions.isEmpty
@@ -1009,7 +1021,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       final isWhiteToMove = pos.positionContext.contains('White');
       appState.setBoardFlipped(!isWhiteToMove);
 
-      setState(() {}); // refresh highlight
+      setState(() => _currentPosition = pos);
     } catch (e) {
       debugPrint('Load position failed: $e');
       if (mounted) {
@@ -1339,6 +1351,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     } catch (e) {
       debugPrint('Lichess import failed: $e');
       if (mounted) {
+        setState(() => _importStatus = null);
         showAppSnackBar(context, AppMessages.importFailed, isError: true);
       }
     } finally {
@@ -1394,6 +1407,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     } catch (e) {
       debugPrint('Chess.com import failed: $e');
       if (mounted) {
+        setState(() => _importStatus = null);
         showAppSnackBar(context, AppMessages.importFailed, isError: true);
       }
     } finally {

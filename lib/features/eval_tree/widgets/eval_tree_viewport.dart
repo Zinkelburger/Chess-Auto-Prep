@@ -109,7 +109,9 @@ class _EvalTreeViewportState extends State<EvalTreeViewport> {
       return;
     }
 
-    final layoutNode = widget.frame.tryNode(targetNodeId);
+    final layoutNode = widget.frame.tryNode(targetNodeId) ??
+        widget.frame.tryNode(widget.frame.selectedNodeId) ??
+        widget.frame.tryNode(widget.frame.rootNodeId);
     if (layoutNode == null) {
       _lastHandledFocusRequestId = requestId;
       widget.controller.clearFocusRequest();

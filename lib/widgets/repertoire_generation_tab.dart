@@ -23,6 +23,7 @@ class RepertoireGenerationTab extends StatefulWidget {
   final void Function(bool paused) onPauseChanged;
   final void Function(List<String> moves, String title, String pgn) onLineSaved;
   final void Function(BuildTree tree)? onTreeBuilt;
+  final VoidCallback? onTreeReset;
 
   const RepertoireGenerationTab({
     super.key,
@@ -34,6 +35,7 @@ class RepertoireGenerationTab extends StatefulWidget {
     required this.onPauseChanged,
     required this.onLineSaved,
     this.onTreeBuilt,
+    this.onTreeReset,
   });
 
   @override
@@ -49,7 +51,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   // ── Controllers ────────────────────────────────────────────────────────
 
   final TextEditingController _cutoffCtrl = TextEditingController(text: '0.01');
-  final TextEditingController _depthCtrl = TextEditingController(text: '10');
+  final TextEditingController _maxPlyCtrl = TextEditingController(text: '10');
   final TextEditingController _engineDepthCtrl =
       TextEditingController(text: '20');
   final TextEditingController _evalGuardCtrl =
@@ -85,7 +87,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   String _status = 'Idle';
   int _nodes = 0;
   int _lines = 0;
-  int _depth = 0;
+  int _ply = 0;
   int _engineCalls = 0;
   int _engineCacheHits = 0;
   int _maiaCalls = 0;
@@ -121,7 +123,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   @override
   void dispose() {
     _cutoffCtrl.dispose();
-    _depthCtrl.dispose();
+    _maxPlyCtrl.dispose();
     _engineDepthCtrl.dispose();
     _evalGuardCtrl.dispose();
     _minEvalCtrl.dispose();
@@ -254,7 +256,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           _cutoffCtrl.text,
           fallbackPercent: 0.01,
         ),
-        maxDepth: int.tryParse(_depthCtrl.text.trim()) ?? 10,
+        maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 10,
         evalDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
         maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 50,
         minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
@@ -265,7 +267,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         maiaOnly: _maiaOnly,
         ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 5,
         oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 6,
-        oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.85,
+        oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.95,
         useLichessDb: _useLichessDb,
         useMasters: _useMasters,
         relativeEval: _relativeEval,
@@ -288,7 +290,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           : 'Phase 1: Building tree...';
       _nodes = existingTree?.totalNodes ?? 0;
       _lines = 0;
-      _depth = existingTree?.maxDepthReached ?? 0;
+      _ply = existingTree?.maxPlyReached ?? 0;
       _engineCalls = 0;
       _engineCacheHits = 0;
       _maiaCalls = 0;
@@ -297,6 +299,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     });
     _pendingPgnBuffer.clear();
     _pendingPgnLines = 0;
+    widget.onTreeReset?.call();
     widget.onGeneratingChanged(true);
 
     try {
@@ -308,7 +311,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         onProgress: (p) {
           if (!mounted) return;
           _nodes = p.totalNodes;
-          _depth = p.currentDepth;
+          _ply = p.currentPly;
           _engineCalls = p.engineCalls;
           _engineCacheHits = p.engineCacheHits;
           _maiaCalls = p.maiaCalls;
@@ -576,7 +579,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             runSpacing: 4,
             children: [
               _statChip('Lines', '$_lines'),
-              _statChip('d', '$_depth'),
+              _statChip('Ply', '$_ply'),
               _statChip('Eng', '$_engineCalls'),
               if (_engineCacheHits > 0)
                 _statChip('Cached', '$_engineCacheHits'),
@@ -664,7 +667,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             runSpacing: 8,
             children: [
               _numField(_cutoffCtrl, 'Cum Prob Cutoff (%)'),
-              _numField(_depthCtrl, 'Max Depth Ply'),
+              _numField(_maxPlyCtrl, 'Max Ply'),
               _numField(_engineDepthCtrl, 'Engine Depth'),
               _numField(_evalGuardCtrl, 'Max Eval Loss (cp)'),
               _numField(_minEvalCtrl, 'Min Eval For Us (cp)'),
@@ -787,7 +790,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   const SizedBox(height: 4),
                   Text(
                     '${_savedPartialTree!.totalNodes} nodes, '
-                    'depth ${_savedPartialTree!.maxDepthReached}',
+                    'max ply ${_savedPartialTree!.maxPlyReached}',
                     style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                   ),
                   const SizedBox(height: 8),
@@ -883,7 +886,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           Text(_status, style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 8),
           const Text(
-            'Two-phase: builds full tree with constant-depth MultiPV +'
+            'Two-phase: builds the full tree with constant MultiPV at each ply +'
             ' single-source opponent moves, then computes expectimax'
             ' and selects repertoire lines.',
             style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -935,22 +938,27 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         _minEvalCtrl.text = isWhite ? '0' : '-100';
         _evalGuardCtrl.text = '30';
         _noveltyWeightCtrl.text = '0';
+        break;
       case BuildPreset.practical:
         _minEvalCtrl.text = isWhite ? '-25' : '-200';
         _evalGuardCtrl.text = '50';
         _noveltyWeightCtrl.text = '0';
+        break;
       case BuildPreset.tricky:
         _minEvalCtrl.text = isWhite ? '-50' : '-250';
         _evalGuardCtrl.text = '75';
         _noveltyWeightCtrl.text = '0';
+        break;
       case BuildPreset.traps:
         _minEvalCtrl.text = isWhite ? '-100' : '-300';
         _evalGuardCtrl.text = '100';
         _noveltyWeightCtrl.text = '0';
+        break;
       case BuildPreset.fresh:
         _minEvalCtrl.text = isWhite ? '-25' : '-200';
         _evalGuardCtrl.text = '40';
         _noveltyWeightCtrl.text = '60';
+        break;
       case BuildPreset.none:
         break;
     }

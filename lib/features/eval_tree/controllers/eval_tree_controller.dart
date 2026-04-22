@@ -10,7 +10,7 @@ enum EvalTreeMetricDisplayMode {
 class EvalTreeController extends ChangeNotifier {
   EvalTreeSnapshot? _snapshot;
   int? _selectedNodeId;
-  int _visibleDepth = 1;
+  int _visiblePly = 1;
   bool _showAncestorSpine = true;
   int _maxDisplayNodes = 400;
   EvalTreeMetricDisplayMode _metricDisplayMode = EvalTreeMetricDisplayMode.cpl;
@@ -24,7 +24,7 @@ class EvalTreeController extends ChangeNotifier {
   EvalTreeSnapshot? get snapshot => _snapshot;
   bool get hasSnapshot => _snapshot != null;
 
-  int get visibleDepth => _visibleDepth;
+  int get visiblePly => _visiblePly;
   bool get showAncestorSpine => _showAncestorSpine;
   int get maxDisplayNodes => _maxDisplayNodes;
   EvalTreeMetricDisplayMode get metricDisplayMode => _metricDisplayMode;
@@ -64,7 +64,7 @@ class EvalTreeController extends ChangeNotifier {
   void clearSnapshot() {
     _snapshot = null;
     _selectedNodeId = null;
-    _visibleDepth = 1;
+    _visiblePly = 1;
     _showAncestorSpine = true;
     _metricDisplayMode = EvalTreeMetricDisplayMode.cpl;
     _focusTargetNodeId = null;
@@ -124,10 +124,10 @@ class EvalTreeController extends ChangeNotifier {
     _focusResetZoom = false;
   }
 
-  void setVisibleDepth(int depth) {
-    final clamped = depth.clamp(1, 8);
-    if (_visibleDepth == clamped) return;
-    _visibleDepth = clamped;
+  void setVisiblePly(int ply) {
+    final clamped = ply.clamp(1, 8);
+    if (_visiblePly == clamped) return;
+    _visiblePly = clamped;
     _requestFocus(selectedNodeId);
     notifyListeners();
   }

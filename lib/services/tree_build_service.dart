@@ -1,7 +1,7 @@
 /// Two-phase tree builder — builds a persistent [BuildTree] with engine
 /// evaluations on every node, matching the C tree_builder algorithm.
 ///
-/// Phase 1 (this service): DFS build with constant-depth MultiPV at
+/// Phase 1 (this service): DFS build with constant MultiPV at each ply
 /// our-move nodes, single-source opponent moves (Maia OR Lichess), eval-
 /// window pruning, and transposition detection.
 ///
@@ -103,7 +103,7 @@ class TreeBuildService {
         fen: rootFen,
         moveSan: '',
         moveUci: '',
-        depth: 0,
+        ply: 0,
         isWhiteToMove: isWhiteToMove,
         nodeId: _nextNodeId++,
       );
@@ -123,7 +123,7 @@ class TreeBuildService {
         final rootEvalUs = tree.root.evalForUs(cfg.playAsWhite);
         cfg = TreeBuildConfig(
           startFen: cfg.startFen, playAsWhite: cfg.playAsWhite,
-          minProbability: cfg.minProbability, maxDepth: cfg.maxDepth,
+          minProbability: cfg.minProbability, maxPly: cfg.maxPly,
           maxNodes: cfg.maxNodes, evalDepth: cfg.evalDepth,
           ourMultipv: cfg.ourMultipv,
           maxEvalLossCp: cfg.maxEvalLossCp,
@@ -168,7 +168,7 @@ class TreeBuildService {
     _buildSw.stop();
 
     _log('Build complete: ${tree.totalNodes} nodes, '
-        'depth ${tree.maxDepthReached}, '
+        'ply ${tree.maxPlyReached}, '
         '${_buildSw.elapsedMilliseconds}ms');
 
     return tree;
@@ -202,7 +202,7 @@ class TreeBuildService {
       if (!_isBuilding || isCancelled()) return;
     }
 
-    if (node.depth >= config.maxDepth) return;
+    if (node.ply >= config.maxPly) return;
     if (node.cumulativeProbability < config.minProbability) return;
     if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) return;
 
@@ -388,7 +388,7 @@ class TreeBuildService {
         }
       }
 
-      _emitProgress(tree, child.depth, child.fen, onProgress);
+      _emitProgress(tree, child.ply, child.fen, onProgress);
     }
 
     // Populate maia_frequency on our-move children.  C gates this on
@@ -507,7 +507,7 @@ class TreeBuildService {
       childrenAdded++;
       massCovered += prob;
 
-      _emitProgress(tree, child.depth, child.fen, onProgress);
+      _emitProgress(tree, child.ply, child.fen, onProgress);
     }
   }
 
@@ -567,7 +567,7 @@ class TreeBuildService {
       childrenAdded++;
       massCovered += prob;
 
-      _emitProgress(tree, child.depth, child.fen, onProgress);
+      _emitProgress(tree, child.ply, child.fen, onProgress);
     }
   }
 
@@ -648,7 +648,7 @@ class TreeBuildService {
       fen: fen,
       moveSan: san,
       moveUci: uci,
-      depth: parent.depth + 1,
+      ply: parent.ply + 1,
       isWhiteToMove: isWhiteToMove,
       nodeId: _nextNodeId++,
       parent: parent,
@@ -656,8 +656,8 @@ class TreeBuildService {
     parent.children.add(child);
     tree.registerNode(child);
     tree.totalNodes++;
-    if (child.depth > tree.maxDepthReached) {
-      tree.maxDepthReached = child.depth;
+    if (child.ply > tree.maxPlyReached) {
+      tree.maxPlyReached = child.ply;
     }
     return child;
   }
@@ -685,7 +685,7 @@ class TreeBuildService {
       _evalCache.getEvalCpWhite(fen, minDepth: minDepth);
 
   void _emitProgress(
-    BuildTree tree, int depth, String? fen,
+    BuildTree tree, int ply, String? fen,
     void Function(BuildProgress) onProgress,
   ) {
     if (tree.totalNodes - _lastProgressNodes < 5 &&
@@ -696,8 +696,8 @@ class TreeBuildService {
 
     onProgress(BuildProgress(
       totalNodes: tree.totalNodes,
-      currentDepth: depth,
-      maxDepthReached: tree.maxDepthReached,
+      currentPly: ply,
+      maxPlyReached: tree.maxPlyReached,
       currentFen: fen,
       elapsedMs: _buildSw.elapsedMilliseconds,
       engineCalls: _stats.sfMultipvCalls +
@@ -706,7 +706,7 @@ class TreeBuildService {
       maiaCalls: _stats.maiaEvals,
       lichessQueries: _stats.lichessQueries,
       lichessCacheHits: _stats.lichessCacheHits,
-      message: '${tree.totalNodes}n d=$depth '
+      message: '${tree.totalNodes}n ply=$ply '
           'eng=${_stats.sfMultipvCalls + _stats.sfSingleCalls + _stats.sfBatchCalls} '
           'maia=${_stats.maiaEvals}',
     ));

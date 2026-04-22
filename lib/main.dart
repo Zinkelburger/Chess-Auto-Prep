@@ -93,7 +93,6 @@ class ChessAutoPrepApp extends StatelessWidget {
               fontSize: 15,
             ),
             behavior: SnackBarBehavior.floating,
-            width: 400,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),

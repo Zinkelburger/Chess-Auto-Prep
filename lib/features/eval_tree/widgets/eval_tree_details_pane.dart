@@ -180,7 +180,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
               ],
             ),
           ],
-          if (currentNode.subtreeDepth > 0 ||
+          if (currentNode.subtreePly > 0 ||
               currentNode.pruneKind != EvalTreePruneKind.none ||
               (currentNode.trapScore ?? 0) > 0.05) ...[
             const SizedBox(height: 4),
@@ -188,10 +188,10 @@ class EvalTreeDetailsPane extends StatelessWidget {
               spacing: 10,
               runSpacing: 4,
               children: [
-                if (currentNode.subtreeDepth > 0)
+                if (currentNode.subtreePly > 0)
                   _statBadge(
                     'Subtree',
-                    '${currentNode.subtreeDepth} ply',
+                    '${currentNode.subtreePly} ply',
                     Colors.grey[400]!,
                   ),
                 if ((currentNode.trapScore ?? 0) > 0.05)

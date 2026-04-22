@@ -2,8 +2,10 @@
 /// Similar to openingtree.com's interface
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
+import '../utils/app_messages.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
 
 class OpeningTreeWidget extends StatefulWidget {
@@ -173,6 +175,20 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                       onPressed: sortedChildren.isNotEmpty
                           ? () => widget.onGoForward?.call()
                           : null,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: IconButton(
+                      icon: Icon(Icons.copy, size: 16, color: Colors.grey[400]),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Copy FEN',
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: currentNode.fen));
+                        showAppSnackBar(context, AppMessages.fenCopied);
+                      },
                     ),
                   ),
                 ],

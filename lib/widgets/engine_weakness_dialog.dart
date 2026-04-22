@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/analysis_player_info.dart';
 import '../models/engine_settings.dart';
 import '../models/opening_tree.dart';
 import '../services/engine/stockfish_pool.dart';
@@ -18,6 +19,8 @@ class EngineWeaknessConfig {
   final int whiteCp;
   final int blackCp;
   final int workers;
+  final bool redownload;
+  final int monthsBack;
 
   const EngineWeaknessConfig({
     required this.depth,
@@ -25,17 +28,21 @@ class EngineWeaknessConfig {
     required this.whiteCp,
     required this.blackCp,
     required this.workers,
+    this.redownload = true,
+    this.monthsBack = 6,
   });
 }
 
 class EngineWeaknessConfigDialog extends StatefulWidget {
   final OpeningTree? whiteTree;
   final OpeningTree? blackTree;
+  final AnalysisPlayerInfo? playerInfo;
 
   const EngineWeaknessConfigDialog({
     super.key,
     this.whiteTree,
     this.blackTree,
+    this.playerInfo,
   });
 
   @override
@@ -50,6 +57,8 @@ class _EngineWeaknessConfigDialogState
   late final TextEditingController _whiteCpCtrl;
   late final TextEditingController _blackCpCtrl;
   late final TextEditingController _workersCtrl;
+  late final TextEditingController _monthsCtrl;
+  bool _redownload = true;
 
   @override
   void initState() {
@@ -60,6 +69,9 @@ class _EngineWeaknessConfigDialogState
     _whiteCpCtrl = TextEditingController(text: '-50');
     _blackCpCtrl = TextEditingController(text: '100');
     _workersCtrl = TextEditingController(text: '${settings.workers}');
+    _monthsCtrl = TextEditingController(
+      text: '${widget.playerInfo?.monthsBack ?? 6}',
+    );
   }
 
   @override
@@ -69,6 +81,7 @@ class _EngineWeaknessConfigDialogState
     _whiteCpCtrl.dispose();
     _blackCpCtrl.dispose();
     _workersCtrl.dispose();
+    _monthsCtrl.dispose();
     super.dispose();
   }
 
@@ -100,6 +113,8 @@ class _EngineWeaknessConfigDialogState
       whiteCp: int.tryParse(_whiteCpCtrl.text) ?? -50,
       blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
       workers: int.tryParse(_workersCtrl.text) ?? EngineSettings().workers,
+      redownload: _redownload,
+      monthsBack: int.tryParse(_monthsCtrl.text) ?? 6,
     ));
   }
 
@@ -143,6 +158,35 @@ class _EngineWeaknessConfigDialogState
                   fontStyle: FontStyle.italic,
                 ),
               ),
+              if (widget.playerInfo != null) ...[
+                const Divider(height: 24),
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: () => setState(() => _redownload = !_redownload),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Checkbox(
+                            value: _redownload,
+                            onChanged: (v) =>
+                                setState(() => _redownload = v!),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Re-download from '
+                            '${widget.playerInfo!.platformDisplayName}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    if (_redownload) _field('Months', _monthsCtrl, 64),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
               Text(
                 '$_positionCount positions will be evaluated'

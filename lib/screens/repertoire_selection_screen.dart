@@ -20,6 +20,7 @@ class RepertoireSelectionScreen extends StatefulWidget {
 class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
   List<Map<String, dynamic>> _repertoires = [];
   bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -28,7 +29,10 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
   }
 
   Future<void> _loadRepertoires() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
 
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -67,11 +71,16 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
       setState(() {
         _repertoires = repertoires;
         _isLoading = false;
+        _loadError = null;
       });
     } catch (e) {
       debugPrint('Load repertoires failed: $e');
       if (!mounted) return;
-      setState(() => _isLoading = false);
+      setState(() {
+        _repertoires = [];
+        _isLoading = false;
+        _loadError = 'Could not load repertoires.\n$e';
+      });
     }
   }
 
@@ -105,6 +114,31 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
   }
 
   Widget _buildBody() {
+    if (_loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                _loadError!,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _loadRepertoires,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_repertoires.isEmpty) {
       return Center(
         child: Column(

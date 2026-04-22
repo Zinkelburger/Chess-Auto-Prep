@@ -24,7 +24,7 @@ class EvalTreeNodeSnapshot {
   final double? localCpl;
   final double? trapScore;
   final int subtreeSize;
-  final int subtreeDepth;
+  final int subtreePly;
   final EvalTreePruneKind pruneKind;
   final int? pruneEvalCp;
   final int totalGames;
@@ -47,7 +47,7 @@ class EvalTreeNodeSnapshot {
     required this.localCpl,
     required this.trapScore,
     required this.subtreeSize,
-    required this.subtreeDepth,
+    required this.subtreePly,
     required this.pruneKind,
     required this.pruneEvalCp,
     required this.totalGames,

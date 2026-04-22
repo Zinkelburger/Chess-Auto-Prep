@@ -27,7 +27,7 @@ class RepertoireSelector {
   }
 
   int _selectRecursive(BuildTreeNode node) {
-    if (node.depth >= config.maxDepth) return 0;
+    if (node.ply >= config.maxPly) return 0;
     if (node.cumulativeProbability < config.minProbability) return 0;
 
     // Transposition resolution: if this node is a childless transposition
@@ -37,7 +37,7 @@ class RepertoireSelector {
     if (resolved.children.isEmpty) return 0;
 
     // Eval-window guard (skip root)
-    if (node.depth > 0 && node.hasEngineEval) {
+    if (node.ply > 0 && node.hasEngineEval) {
       final evalUs = node.evalForUs(config.playAsWhite);
       if (evalUs <= config.minEvalCp || evalUs >= config.maxEvalCp) return 0;
     }

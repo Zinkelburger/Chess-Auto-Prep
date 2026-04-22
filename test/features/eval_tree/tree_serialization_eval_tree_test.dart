@@ -19,7 +19,7 @@ void main() {
     expect(restoredE4.moveSan, e4.moveSan);
     expect(restoredE4.isRepertoireMove, isTrue);
     expect(restoredE4.repertoireScore, closeTo(e4.expectimaxValue, 0.001));
-    expect(restoredE4.subtreeDepth, e4.subtreeDepth);
+    expect(restoredE4.subtreePly, e4.subtreePly);
     expect(restoredE4.trapScore, closeTo(e4.trapScore, 0.001));
   });
 

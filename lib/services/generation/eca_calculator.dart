@@ -54,22 +54,22 @@ class ExpectimaxCalculator {
       _computeLocalCpl(node);
     }
 
-    // Subtree depth + opponent plies (diagnostics)
+    // Subtree ply count + opponent plies (diagnostics)
     if (node.children.isEmpty) {
-      node.subtreeDepth = 0;
+      node.subtreePly = 0;
       node.subtreeOppPlies = 0;
     } else {
-      int maxSd = 0;
+      int maxPly = 0;
       int maxOpp = 0;
       for (final child in node.children) {
-        final sd = child.subtreeDepth + 1;
-        if (sd > maxSd) maxSd = sd;
+        final childPly = child.subtreePly + 1;
+        if (childPly > maxPly) maxPly = childPly;
 
         int opp = child.subtreeOppPlies;
         if (!isOurMove) opp += 1;
         if (opp > maxOpp) maxOpp = opp;
       }
-      node.subtreeDepth = maxSd;
+      node.subtreePly = maxPly;
       node.subtreeOppPlies = maxOpp;
     }
 
@@ -82,7 +82,7 @@ class ExpectimaxCalculator {
           canonical.children.isNotEmpty) {
         node.expectimaxValue = canonical.expectimaxValue;
         node.localCpl = canonical.localCpl;
-        node.subtreeDepth = canonical.subtreeDepth;
+        node.subtreePly = canonical.subtreePly;
         node.subtreeOppPlies = canonical.subtreeOppPlies;
         node.hasExpectimax = true;
         count++;

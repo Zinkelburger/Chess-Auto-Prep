@@ -600,13 +600,14 @@ class RepertoireController with ChangeNotifier {
         : (moves.length >= 3
             ? 'Line: ${moves.take(3).join(' ')}'
             : 'Repertoire Line ${index + 1}');
+    final startPosition = service.extractStartPositionFromPgn(pgn);
 
     _repertoireLines.add(RepertoireLine(
       id: id,
       name: name,
       moves: moves,
       color: _isRepertoireWhite ? 'white' : 'black',
-      startPosition: Chess.initial,
+      startPosition: startPosition,
       fullPgn: pgn,
     ));
 

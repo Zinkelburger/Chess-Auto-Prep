@@ -1,8 +1,7 @@
-import 'dart:io' as io;
-
 import 'package:flutter/material.dart';
 
 import '../../../models/build_tree_node.dart';
+import '../services/eval_tree_file_loader.dart';
 import '../../../services/generation/tree_serialization.dart';
 import '../../../utils/tree_colors.dart';
 import '../adapters/eval_tree_snapshot_adapter.dart';
@@ -44,6 +43,7 @@ class EvalTreeTab extends StatefulWidget {
   final Map<String, dynamic>? currentRepertoire;
   final bool isWhiteRepertoire;
   final BuildTree? generatedTree;
+  final int treeResetCounter;
   final ValueChanged<EvalTreePositionSelection>? onPositionSelected;
   final ValueChanged<EvalTreeController?>? onControllerReady;
 
@@ -52,6 +52,7 @@ class EvalTreeTab extends StatefulWidget {
     required this.currentRepertoire,
     required this.isWhiteRepertoire,
     required this.generatedTree,
+    required this.treeResetCounter,
     this.onPositionSelected,
     this.onControllerReady,
   });
@@ -94,9 +95,14 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     final newPath = widget.currentRepertoire?['filePath'] as String?;
     if (oldPath != newPath) {
       _dismissed = false;
-      _lastNotifiedNodeId = null;
-      _clearTreeState(notifySelection: false);
+      _clearTreeState();
       _restoreInitialTree();
+      return;
+    }
+
+    if (oldWidget.treeResetCounter != widget.treeResetCounter) {
+      _dismissed = false;
+      _clearTreeState();
       return;
     }
 
@@ -229,7 +235,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
   }
 
   Widget _buildSummaryBar(BuildContext context, EvalTreeSnapshot snapshot) {
-    final maxDepth = _tree?.maxDepthReached ?? snapshot.root.subtreeDepth;
+    final maxPly = _tree?.maxPlyReached ?? snapshot.root.subtreePly;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -242,7 +248,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
         children: [
           Icon(Icons.insights, size: 16, color: Colors.grey[400]),
           Text(
-            '${snapshot.nodeCount} nodes • depth $maxDepth',
+            '${snapshot.nodeCount} nodes • max ply $maxPly',
             style: TextStyle(fontSize: 11, color: Colors.grey[400]),
           ),
           SizedBox(
@@ -263,7 +269,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
                 setState(() {
                   _dismissed = true;
                 });
-                _clearTreeState(notifySelection: false);
+                _clearTreeState();
               },
               icon: Icon(Icons.close, size: 14, color: Colors.grey[400]),
               label: Text(
@@ -328,11 +334,21 @@ class _EvalTreeTabState extends State<EvalTreeTab>
       return;
     }
 
-    final file = io.File(path);
-    if (!await file.exists()) {
-      if (!autoLoad && mounted) {
+    if (!isEvalTreeFileAccessSupported) {
+      if (mounted) {
         setState(() {
-          _error = 'No tree file found. Generate a tree first.';
+          _error = evalTreeFileAccessUnsupportedReason;
+        });
+      }
+      return;
+    }
+
+    if (!await evalTreeFileExists(path)) {
+      if (mounted) {
+        setState(() {
+          _error = autoLoad
+              ? 'No saved tree file found for this repertoire yet.'
+              : 'No tree file found. Generate a tree first.';
         });
       }
       return;
@@ -346,7 +362,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     }
 
     try {
-      final json = await file.readAsString();
+      final json = await readEvalTreeFile(path);
       final tree = deserializeTree(json);
       if (!mounted) return;
       _setTree(tree, resetView: true);
@@ -373,7 +389,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     _controller.loadSnapshot(snapshot, resetView: resetView);
   }
 
-  void _clearTreeState({required bool notifySelection}) {
+  void _clearTreeState() {
     setState(() {
       _tree = null;
       _snapshot = null;
@@ -381,9 +397,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
       _error = null;
     });
     _controller.clearSnapshot();
-    if (notifySelection) {
-      _lastNotifiedNodeId = null;
-    }
+    _lastNotifiedNodeId = null;
   }
 
   void _handleControllerChanged() {

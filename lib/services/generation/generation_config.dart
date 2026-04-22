@@ -20,7 +20,7 @@ class TreeBuildConfig {
 
   // ── Traversal limits ──
   final double minProbability;
-  final int maxDepth;
+  final int maxPly;
   final int maxNodes;
 
   // ── Engine ──
@@ -59,7 +59,7 @@ class TreeBuildConfig {
     required this.startFen,
     required this.playAsWhite,
     this.minProbability = 0.0001,
-    this.maxDepth = 10,
+    this.maxPly = 10,
     this.maxNodes = 0,
     this.evalDepth = 20,
     this.ourMultipv = 5,
@@ -89,7 +89,7 @@ class TreeBuildConfig {
       startFen: startFen,
       playAsWhite: json['play_as_white'] as bool? ?? true,
       minProbability: (json['min_probability'] as num?)?.toDouble() ?? 0.0001,
-      maxDepth: (json['max_depth'] as num?)?.toInt() ?? 10,
+      maxPly: (json['max_depth'] as num?)?.toInt() ?? 10,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
       evalDepth: (json['eval_depth'] as num?)?.toInt() ?? 20,
       ourMultipv: (json['our_multipv'] as num?)?.toInt() ?? 5,
@@ -129,25 +129,31 @@ class TreeBuildConfig {
       case BuildPreset.solid:
         newMinEval = playAsWhite ? 0 : -100;
         newMaxEvalLoss = 30;
+        break;
       case BuildPreset.practical:
         newMinEval = playAsWhite ? -25 : -200;
         newMaxEvalLoss = 50;
+        break;
       case BuildPreset.tricky:
         newMinEval = playAsWhite ? -50 : -250;
         newMaxEvalLoss = 75;
+        break;
       case BuildPreset.traps:
         newMinEval = playAsWhite ? -100 : -300;
         newMaxEvalLoss = 100;
+        break;
       case BuildPreset.fresh:
+        newMinEval = playAsWhite ? -25 : -200;
         newNovelty = 60;
         newMaxEvalLoss = 40;
+        break;
       case BuildPreset.none:
         break;
     }
 
     return TreeBuildConfig(
       startFen: startFen, playAsWhite: playAsWhite,
-      minProbability: minProbability, maxDepth: maxDepth,
+      minProbability: minProbability, maxPly: maxPly,
       maxNodes: maxNodes, evalDepth: evalDepth,
       ourMultipv: ourMultipv,
       maxEvalLossCp: newMaxEvalLoss,
@@ -165,7 +171,7 @@ class TreeBuildConfig {
   Map<String, dynamic> toJson() => {
     'play_as_white': playAsWhite,
     'min_probability': minProbability,
-    'max_depth': maxDepth,
+    'max_depth': maxPly,
     'max_nodes': maxNodes,
     'eval_depth': evalDepth,
     'our_multipv': ourMultipv,

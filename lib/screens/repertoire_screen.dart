@@ -53,6 +53,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   bool _isGenerationPaused = false;
 
   BuildTree? _generatedTree;
+  int _generatedTreeResetCounter = 0;
   EvalTreeController? _evalTreeController;
 
   bool _boardFlipped = false;
@@ -69,7 +70,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       if (!settled) return;
 
       // Engine tab selected while generating -> pause generation first.
-      if (_tabController.index == 1 && _isGenerating) {
+      if (_tabController.index == 1 &&
+          _isGenerating &&
+          !_isGenerationPaused) {
         _generationTabKey.currentState?.togglePause();
       }
 
@@ -104,6 +107,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
           _generatedTree = null;
+          _generatedTreeResetCounter++;
           EngineSettings().probabilityStartMoves = _controller.rootMoves;
         }
 
@@ -216,7 +220,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       ),
       body: Focus(
         autofocus: true,
-        onKeyEvent: _isGenerating
+        onKeyEvent: _isGenerating && !_isGenerationPaused
             ? null
             : (node, event) {
                 if (event is! KeyDownEvent) return KeyEventResult.ignored;
@@ -293,221 +297,240 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
                 return KeyEventResult.ignored;
               },
-        child: Row(
-          children: [
-            // Left panel - Chess board (60% of width)
-            Expanded(
-              flex: 6,
-              child: Stack(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 1100;
+
+            if (isCompact) {
+              return Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(16.0),
-                    child: ChessBoardWidget(
-                      key: ValueKey(_controller.fen),
-                      position: _controller.position,
-                      flipped: _boardFlipped,
-                      onPieceSelected: (square) {},
-                      onMove: (CompletedMove move) {
-                        _handleMove(move);
-                      },
-                    ),
-                  ),
-                  // Board overlay during generation
-                  if (_isGenerating)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 32, vertical: 24),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.surface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: _isGenerationPaused
-                                    ? Colors.amber[700]!
-                                    : Colors.orange[800]!,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (!_isGenerationPaused)
-                                  const SizedBox(
-                                    width: 36,
-                                    height: 36,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 3),
-                                  )
-                                else
-                                  Icon(Icons.pause_circle_filled,
-                                      size: 36, color: Colors.amber[400]),
-                                const SizedBox(height: 14),
-                                Text(
-                                  _isGenerationPaused
-                                      ? 'Generation Paused'
-                                      : 'Generating Repertoire...',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'All other features are locked.\n'
-                                  'Please leave this running.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey[400],
-                                    height: 1.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 18),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (!_isGenerationPaused)
-                                      FilledButton.icon(
-                                        onPressed: () {
-                                          _generationTabKey.currentState
-                                              ?.togglePause();
-                                        },
-                                        style: FilledButton.styleFrom(
-                                          backgroundColor: Colors.amber[800],
-                                        ),
-                                        icon: const Icon(Icons.pause,
-                                            color: Colors.white),
-                                        label: const Text(
-                                          'Pause',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    if (_isGenerationPaused) ...[
-                                      FilledButton.icon(
-                                        onPressed: () {
-                                          _generationTabKey.currentState
-                                              ?.togglePause();
-                                        },
-                                        style: FilledButton.styleFrom(
-                                          backgroundColor: Colors.green[700],
-                                        ),
-                                        icon: const Icon(Icons.play_arrow,
-                                            color: Colors.white),
-                                        label: const Text(
-                                          'Resume',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      FilledButton.icon(
-                                        onPressed: () {
-                                          _generationTabKey.currentState
-                                              ?.cancelGeneration();
-                                        },
-                                        style: FilledButton.styleFrom(
-                                          backgroundColor: Colors.red[700],
-                                        ),
-                                        icon: const Icon(Icons.stop,
-                                            color: Colors.white),
-                                        label: const Text(
-                                          'Cancel',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  Expanded(flex: 4, child: _buildBoardPane()),
+                  const Divider(height: 1, thickness: 1),
+                  Expanded(flex: 5, child: _buildTabbedPane()),
                 ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(
+                  flex: 6,
+                  child: _buildBoardPane(),
+                ),
+                const VerticalDivider(width: 1, thickness: 1),
+                Expanded(
+                  flex: 4,
+                  child: _buildTabbedPane(),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBoardPane() {
+    return Stack(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16.0),
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: ChessBoardWidget(
+                key: ValueKey(_controller.fen),
+                position: _controller.position,
+                flipped: _boardFlipped,
+                onPieceSelected: (square) {},
+                onMove: (CompletedMove move) {
+                  _handleMove(move);
+                },
               ),
             ),
-
-            // Divider
-            const VerticalDivider(width: 1, thickness: 1),
-
-            // Right panel - Tabbed content (40% of width)
-            Expanded(
-              flex: 4,
-              child: Container(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  children: [
-                    // Tab bar — disabled (grayed out) during generation
-                    IgnorePointer(
-                      ignoring: _isGenerating,
-                      child: Opacity(
-                        opacity: _isGenerating ? 0.35 : 1.0,
-                        child: TabBar(
-                          controller: _tabController,
-                          isScrollable: true,
-                          tabAlignment: TabAlignment.start,
-                          tabs: const [
-                            Tab(
-                                text: 'Tree',
-                                icon: Icon(Icons.account_tree, size: 16)),
-                            Tab(
-                                text: 'Engine',
-                                icon: Icon(Icons.developer_board, size: 16)),
-                            Tab(
-                                text: 'PGN',
-                                icon: Icon(Icons.description, size: 16)),
-                            Tab(
-                                text: 'Lines',
-                                icon: Icon(Icons.library_books, size: 16)),
-                            Tab(
-                                text: 'Generate',
-                                icon: Icon(Icons.auto_awesome, size: 16)),
-                            Tab(
-                                text: 'Eval Tree',
-                                icon: Icon(Icons.insights, size: 16)),
-                            Tab(
-                                text: 'Actions',
-                                icon: Icon(Icons.settings, size: 16)),
-                          ],
+          ),
+        ),
+        if (_isGenerating)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.6),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 24,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _isGenerationPaused
+                          ? Colors.amber[700]!
+                          : Colors.orange[800]!,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!_isGenerationPaused)
+                        const SizedBox(
+                          width: 36,
+                          height: 36,
+                          child: CircularProgressIndicator(strokeWidth: 3),
+                        )
+                      else
+                        Icon(
+                          Icons.pause_circle_filled,
+                          size: 36,
+                          color: Colors.amber[400],
+                        ),
+                      const SizedBox(height: 14),
+                      Text(
+                        _isGenerationPaused
+                            ? 'Generation Paused'
+                            : 'Generating Repertoire...',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _isGenerationPaused
+                            ? 'Resume to continue building, or switch tabs to inspect the current position.'
+                            : 'All other features are locked.\nPlease leave this running.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[400],
+                          height: 1.5,
                         ),
                       ),
-                    ),
-                    // Tab views
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        physics: _isGenerating
-                            ? const NeverScrollableScrollPhysics()
-                            : null,
+                      const SizedBox(height: 18),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        alignment: WrapAlignment.center,
                         children: [
-                          _buildOpeningTreeTab(),
-                          _KeepAliveTab(child: _buildEngineTab()),
-                          _buildPgnTab(),
-                          _buildLinesTab(),
-                          _KeepAliveTab(child: _buildGenerateTab()),
-                          _buildEvalTreeTab(),
-                          _buildActionsTab(),
+                          if (!_isGenerationPaused)
+                            FilledButton.icon(
+                              onPressed: () {
+                                _generationTabKey.currentState?.togglePause();
+                              },
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.amber[800],
+                              ),
+                              icon: const Icon(Icons.pause, color: Colors.white),
+                              label: const Text(
+                                'Pause',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          if (_isGenerationPaused) ...[
+                            FilledButton.icon(
+                              onPressed: () {
+                                _generationTabKey.currentState?.togglePause();
+                              },
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.green[700],
+                              ),
+                              icon: const Icon(
+                                Icons.play_arrow,
+                                color: Colors.white,
+                              ),
+                              label: const Text(
+                                'Resume',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            FilledButton.icon(
+                              onPressed: () {
+                                _generationTabKey.currentState?.cancelGeneration();
+                              },
+                              style: FilledButton.styleFrom(
+                                backgroundColor: Colors.red[700],
+                              ),
+                              icon: const Icon(Icons.stop, color: Colors.white),
+                              label: const Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTabbedPane() {
+    return Container(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        children: [
+          IgnorePointer(
+            ignoring: _isGenerating && !_isGenerationPaused,
+            child: Opacity(
+              opacity: _isGenerating && !_isGenerationPaused ? 0.35 : 1.0,
+              child: TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: const [
+                  Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
+                  Tab(
+                    text: 'Engine',
+                    icon: Icon(Icons.developer_board, size: 16),
+                  ),
+                  Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
+                  Tab(
+                    text: 'Lines',
+                    icon: Icon(Icons.library_books, size: 16),
+                  ),
+                  Tab(
+                    text: 'Generate',
+                    icon: Icon(Icons.auto_awesome, size: 16),
+                  ),
+                  Tab(text: 'Eval Tree', icon: Icon(Icons.insights, size: 16)),
+                  Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              physics: _isGenerating && !_isGenerationPaused
+                  ? const NeverScrollableScrollPhysics()
+                  : null,
+              children: [
+                _buildOpeningTreeTab(),
+                _KeepAliveTab(child: _buildEngineTab()),
+                _buildPgnTab(),
+                _buildLinesTab(),
+                _KeepAliveTab(child: _buildGenerateTab()),
+                _buildEvalTreeTab(),
+                _buildActionsTab(),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -580,14 +603,22 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildSelectRepertoireButton() {
+    final compact = MediaQuery.sizeOf(context).width < 760;
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Center(
-        child: TextButton.icon(
-          onPressed: _isGenerating ? null : _showRepertoireSelection,
-          icon: const Icon(Icons.library_books),
-          label: const Text('Select Repertoire'),
-        ),
+        child: compact
+            ? IconButton(
+                tooltip: 'Select repertoire',
+                onPressed: _isGenerating ? null : _showRepertoireSelection,
+                icon: const Icon(Icons.library_books),
+              )
+            : TextButton.icon(
+                onPressed: _isGenerating ? null : _showRepertoireSelection,
+                icon: const Icon(Icons.library_books),
+                label: const Text('Select Repertoire'),
+              ),
       ),
     );
   }
@@ -718,7 +749,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       padding: const EdgeInsets.all(8.0),
       child: UnifiedEnginePane(
         fen: _controller.fen,
-        isActive: _tabController.index == 1 && !_isGenerating,
+        isActive:
+            _tabController.index == 1 && (!_isGenerating || _isGenerationPaused),
         isUserTurn: _controller.position.turn ==
             (_controller.isRepertoireWhite ? Side.white : Side.black),
         currentMoveSequence: _controller.currentMoveSequence,
@@ -764,6 +796,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       },
       onLineSaved: (moves, title, pgn) {
         _controller.appendNewLine(moves, title, pgn);
+      },
+      onTreeReset: () {
+        if (!mounted) return;
+        setState(() {
+          _generatedTree = null;
+          _generatedTreeResetCounter++;
+        });
       },
       onTreeBuilt: (tree) {
         if (!mounted) return;
@@ -937,6 +976,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       currentRepertoire: _controller.currentRepertoire,
       isWhiteRepertoire: _controller.isRepertoireWhite,
       generatedTree: _generatedTree,
+      treeResetCounter: _generatedTreeResetCounter,
       onPositionSelected: (selection) {
         final synced = _controller.setPositionFromMoveHistory(
           fen: selection.fen,

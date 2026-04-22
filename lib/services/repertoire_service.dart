@@ -70,13 +70,14 @@ class RepertoireService {
         // Create the repertoire line
         final lineName = _generateLineName(game, gameIndex);
         final lineId = _extractLineId(game, mainlineMoves, gameIndex);
+        final startPosition = extractStartPosition(game);
 
         lines.add(RepertoireLine(
           id: lineId,
           name: lineName,
           moves: mainlineMoves,
           color: trainingColor,
-          startPosition: Chess.initial,
+          startPosition: startPosition,
           fullPgn: gameText,
           comments: comments,
           variations: variations,
@@ -91,6 +92,28 @@ class RepertoireService {
     }
 
     return lines;
+  }
+
+  Position extractStartPositionFromPgn(String pgnText) {
+    try {
+      final game = PgnGame.parsePgn(pgnText);
+      return extractStartPosition(game);
+    } catch (_) {
+      return Chess.initial;
+    }
+  }
+
+  Position extractStartPosition(PgnGame game) {
+    final fen = game.headers['FEN']?.trim();
+    if (fen == null || fen.isEmpty) {
+      return Chess.initial;
+    }
+
+    try {
+      return Chess.fromSetup(Setup.parseFen(fen));
+    } catch (_) {
+      return Chess.initial;
+    }
   }
 
   String? _extractRepertoireColor(String content) {
