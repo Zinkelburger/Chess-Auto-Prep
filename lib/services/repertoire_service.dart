@@ -11,24 +11,36 @@ import '../models/repertoire_line.dart';
 import 'storage/storage_factory.dart';
 
 class RepertoireService {
-  /// Parses a repertoire PGN file and extracts all trainable lines
-  Future<List<RepertoireLine>> parseRepertoireFile(String filePath) async {
-    // filePath is expected to be a key or filename for StorageService
-    // On desktop it might be a full path, but readRepertoirePgn handles both logic
-    // via StorageService implementations.
+  /// Parses a repertoire PGN file and extracts all trainable lines.
+  ///
+  /// If [trainingColor] is provided ('white' or 'black') it is used directly;
+  /// otherwise the colour is read from the file's `// Color:` comment.
+  Future<List<RepertoireLine>> parseRepertoireFile(
+    String filePath, {
+    String? trainingColor,
+  }) async {
     final content = await StorageFactory.instance.readRepertoirePgn(filePath);
     
     if (content == null) {
       throw Exception('Repertoire file not found: $filePath');
     }
 
-    return parseRepertoirePgn(content);
+    return parseRepertoirePgn(content, trainingColor: trainingColor);
   }
 
-  /// Parses repertoire PGN content and extracts trainable lines
-  List<RepertoireLine> parseRepertoirePgn(String pgnContent) {
+  /// Parses repertoire PGN content and extracts trainable lines.
+  ///
+  /// [trainingColor] ('white' or 'black') is used when the caller already
+  /// knows the side.  Otherwise the colour is read from the `// Color:`
+  /// comment that every app-created repertoire file contains.
+  /// Falls back to 'white' if neither source provides a colour.
+  List<RepertoireLine> parseRepertoirePgn(
+    String pgnContent, {
+    String? trainingColor,
+  }) {
     final lines = <RepertoireLine>[];
-    final defaultTrainingColor = _extractRepertoireColor(pgnContent);
+    final resolvedColor =
+        trainingColor ?? _extractRepertoireColor(pgnContent) ?? 'white';
 
     // Split PGN into individual games/sections
     final games = _splitPgnIntoGames(pgnContent);
@@ -45,10 +57,7 @@ class RepertoireService {
 
         if (mainlineMoves.isEmpty) continue;
 
-        final trainingColor = _determineTrainingColor(
-          game,
-          defaultTrainingColor: defaultTrainingColor,
-        );
+        final color = resolvedColor;
 
         // Extract comments from the parsed game
         final comments = <String, String>{};
@@ -76,7 +85,7 @@ class RepertoireService {
           id: lineId,
           name: lineName,
           moves: mainlineMoves,
-          color: trainingColor,
+          color: color,
           startPosition: startPosition,
           fullPgn: gameText,
           comments: comments,
@@ -136,29 +145,6 @@ class RepertoireService {
     return null;
   }
 
-  String _determineTrainingColor(
-    PgnGame game, {
-    String? defaultTrainingColor,
-  }) {
-    final whitePlayer = game.headers['White'] ?? '';
-    final blackPlayer = game.headers['Black'] ?? '';
-
-    if (_looksLikeTrainingSide(blackPlayer)) {
-      return 'black';
-    }
-    if (_looksLikeTrainingSide(whitePlayer)) {
-      return 'white';
-    }
-
-    return defaultTrainingColor ?? 'black';
-  }
-
-  bool _looksLikeTrainingSide(String playerName) {
-    final lower = playerName.toLowerCase();
-    return lower.contains('me') ||
-        lower.contains('repertoire') ||
-        lower.contains('training');
-  }
 
   /// Splits PGN content into individual games
   List<String> _splitPgnIntoGames(String content) {
