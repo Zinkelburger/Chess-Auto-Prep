@@ -39,4 +39,22 @@ void main() {
     expect(controller.fen, fen);
     expect(controller.startingFen, startingFen);
   });
+
+  test('appendNewLine preserves custom start positions from PGN headers', () {
+    final controller = RepertoireController();
+    const startingFen =
+        'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+    final pgn = [
+      '[Event "Training Line"]',
+      '[FEN "$startingFen"]',
+      '[SetUp "1"]',
+      '',
+      '2. Nf3 *',
+    ].join('\n');
+
+    controller.appendNewLine(['Nf3'], 'Custom line', pgn);
+
+    expect(controller.repertoireLines, hasLength(1));
+    expect(controller.repertoireLines.single.startPosition.fen, startingFen);
+  });
 }

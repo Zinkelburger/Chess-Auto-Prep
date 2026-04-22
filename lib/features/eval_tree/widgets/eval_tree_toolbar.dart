@@ -80,8 +80,10 @@ class EvalTreeToolbar extends StatelessWidget {
                   ),
                 ],
                 selected: {controller.metricDisplayMode},
-                onSelectionChanged: (selection) =>
-                    controller.setMetricDisplayMode(selection.first),
+                onSelectionChanged: (selection) {
+                  if (selection.isEmpty) return;
+                  controller.setMetricDisplayMode(selection.first);
+                },
                 showSelectedIcon: false,
                 style: ButtonStyle(
                   visualDensity: VisualDensity.compact,
@@ -117,18 +119,18 @@ class EvalTreeToolbar extends StatelessWidget {
                     thumbColor: Colors.blue[300],
                   ),
                   child: Slider(
-                    value: controller.visibleDepth.toDouble(),
+                    value: controller.visiblePly.toDouble(),
                     min: 1,
                     max: 8,
                     divisions: 7,
-                    label: '${controller.visibleDepth}',
+                    label: '${controller.visiblePly} ply',
                     onChanged: (value) =>
-                        controller.setVisibleDepth(value.round()),
+                        controller.setVisiblePly(value.round()),
                   ),
                 ),
               ),
               Text(
-                '${controller.visibleDepth}',
+                '${controller.visiblePly} ply',
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.grey[400],

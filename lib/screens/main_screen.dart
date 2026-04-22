@@ -20,6 +20,15 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
+  static const List<AppMode> _supportedModes = [
+    AppMode.tactics,
+    AppMode.positionAnalysis,
+    AppMode.repertoire,
+    AppMode.repertoireTrainer,
+  ];
+
+  final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
+
   @override
   void initState() {
     super.initState();
@@ -52,19 +61,40 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Consumer<AppState>(
       builder: (context, appState, child) {
+        final activeMode = _normalizeMode(appState.currentMode);
+        _modeViews[activeMode] ??= _createModeView(activeMode);
+
         return Scaffold(
-          body: _buildBodyForMode(appState),
+          body: IndexedStack(
+            index: _supportedModes.indexOf(activeMode),
+            children: [
+              for (final mode in _supportedModes)
+                _modeViews[mode] ?? const SizedBox.shrink(),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildBodyForMode(AppState appState) {
-    switch (appState.currentMode) {
+  AppMode _normalizeMode(AppMode mode) {
+    switch (mode) {
+      case AppMode.pgnViewer:
+        return AppMode.tactics;
       case AppMode.tactics:
-        return SafeArea(
+      case AppMode.positionAnalysis:
+      case AppMode.repertoire:
+      case AppMode.repertoireTrainer:
+        return mode;
+    }
+  }
+
+  Widget _createModeView(AppMode mode) {
+    switch (mode) {
+      case AppMode.tactics:
+        return const SafeArea(
           bottom: false,
-          child: _buildTacticsLayout(appState),
+          child: _TacticsModeView(),
         );
       case AppMode.positionAnalysis:
         return const SafeArea(
@@ -75,74 +105,116 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return const RepertoireScreen();
       case AppMode.repertoireTrainer:
         return const RepertoireTrainingScreen();
-      default:
-        return _buildTacticsLayout(appState);
+      case AppMode.pgnViewer:
+        return const SafeArea(
+          bottom: false,
+          child: _TacticsModeView(),
+        );
     }
   }
+}
 
-  Widget _buildTacticsLayout(AppState appState) {
+class _TacticsModeView extends StatelessWidget {
+  const _TacticsModeView();
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
     final theme = Theme.of(context);
 
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerLow,
-            border: Border(
-              bottom: BorderSide(color: theme.dividerColor),
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text('Tactics', style: theme.textTheme.titleMedium),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 960;
+
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerLow,
+                border: Border(
+                  bottom: BorderSide(color: theme.dividerColor),
+                ),
               ),
-              const AppModeMenuButton(),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Row(
-            children: [
-              // Left panel - Chess board (60% of width)
-              Expanded(
-                flex: 6,
-                child: Container(
-                  padding: const EdgeInsets.all(16.0),
-                  child: ChessBoardWidget(
-                    position: appState.currentPosition,
-                    flipped: appState.boardFlipped,
-                    onPieceSelected: (square) {
-                      // Handle piece selection
-                    },
-                    onMove: (move) {
-                      // Use UCI from CompletedMove and send to validation
-                      appState.onMoveAttempted(move.uci);
-                    },
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Tactics', style: theme.textTheme.titleMedium),
                   ),
-                ),
+                  const AppModeMenuButton(),
+                ],
               ),
-
-              // Divider
-              Container(
-                width: 1,
-                color: Colors.grey[300],
-              ),
-
-              // Right panel - Tabbed control panel (40% of width)
-              Expanded(
-                flex: 4,
-                child: Container(
-                  padding: const EdgeInsets.all(8.0),
-                  child: const TacticsControlPanel(),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+            ),
+            Expanded(
+              child: isCompact
+                  ? Column(
+                      children: [
+                        Expanded(
+                          flex: 5,
+                          child: _TacticsBoardPane(appState: appState),
+                        ),
+                        const Divider(height: 1, thickness: 1),
+                        const Expanded(
+                          flex: 6,
+                          child: Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: TacticsControlPanel(),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(
+                          flex: 6,
+                          child: _TacticsBoardPane(appState: appState),
+                        ),
+                        Container(
+                          width: 1,
+                          color: Colors.grey[300],
+                        ),
+                        const Expanded(
+                          flex: 4,
+                          child: Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: TacticsControlPanel(),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
+}
 
+class _TacticsBoardPane extends StatelessWidget {
+  const _TacticsBoardPane({required this.appState});
+
+  final AppState appState;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: ChessBoardWidget(
+            position: appState.currentPosition,
+            flipped: appState.boardFlipped,
+            onPieceSelected: (square) {
+              // Handle piece selection
+            },
+            onMove: (move) {
+              // Use UCI from CompletedMove and send to validation
+              appState.onMoveAttempted(move.uci);
+            },
+          ),
+        ),
+      ),
+    );
+  }
 }

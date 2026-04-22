@@ -26,6 +26,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   final AnalysisGamesService _gamesService = AnalysisGamesService();
   List<AnalysisPlayerInfo> _cachedPlayers = [];
   bool _isLoading = true;
+  String? _loadError;
 
   @override
   void initState() {
@@ -34,13 +35,28 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   }
 
   Future<void> _loadCachedPlayers() async {
-    setState(() => _isLoading = true);
-    final players = await _gamesService.getAllCachedPlayers();
-    if (mounted) {
-      setState(() {
-        _cachedPlayers = players;
-        _isLoading = false;
-      });
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+
+    try {
+      final players = await _gamesService.getAllCachedPlayers();
+      if (mounted) {
+        setState(() {
+          _cachedPlayers = players;
+          _isLoading = false;
+          _loadError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _cachedPlayers = [];
+          _isLoading = false;
+          _loadError = 'Could not load saved players.\n$e';
+        });
+      }
     }
   }
 
@@ -72,6 +88,31 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
   }
 
   Widget _buildBody() {
+    if (_loadError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                _loadError!,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: _loadCachedPlayers,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_cachedPlayers.isEmpty) {
       return Center(
         child: Column(

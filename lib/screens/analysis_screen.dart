@@ -95,6 +95,57 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   Widget _buildToolbar(BuildContext context) {
     final theme = Theme.of(context);
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Player Analysis', style: theme.textTheme.titleMedium),
+        if (_currentPlayer != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              _metadataSubtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+      ],
+    );
+
+    final controls = <Widget>[
+      if (_evalRunning) _buildEvalProgress(theme),
+      if (_currentPlayer != null)
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(
+              value: true,
+              label: Text('White'),
+              icon: Icon(Icons.circle_outlined, size: 16),
+            ),
+            ButtonSegment(
+              value: false,
+              label: Text('Black'),
+              icon: Icon(Icons.circle, size: 16),
+            ),
+          ],
+          selected: {_playerIsWhite},
+          onSelectionChanged: (selection) {
+            if (selection.isEmpty) return;
+            final chosen = selection.first;
+            if (chosen != _playerIsWhite) {
+              setState(() => _playerIsWhite = chosen);
+              _loadColorAnalysis();
+            }
+          },
+        ),
+      if (_openingTree != null && !_isAnalyzing && !_evalRunning)
+        TextButton.icon(
+          icon: const Icon(Icons.psychology, size: 18),
+          label: Text(_hasEvals ? 'Re-analyze' : 'Weaknesses'),
+          onPressed: _showWeaknessConfig,
+        ),
+    ];
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -102,81 +153,56 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         color: theme.colorScheme.surfaceContainerLow,
         border: Border(bottom: BorderSide(color: theme.dividerColor)),
       ),
-      child: Row(
-        children: [
-          // ── Title + metadata ──
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 1000;
+
+          if (!isCompact) {
+            return Row(
               children: [
-                Text('Player Analysis', style: theme.textTheme.titleMedium),
-                if (_currentPlayer != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      _metadataSubtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
+                Expanded(child: titleBlock),
+                for (final control in controls) ...[
+                  control,
+                  const SizedBox(width: 12),
+                ],
+                IconButton(
+                  icon: const Icon(Icons.person_search),
+                  tooltip: 'Select Player',
+                  onPressed: _showPlayerSelection,
+                ),
+                const SizedBox(width: 4),
+                const AppModeMenuButton(),
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: titleBlock),
+                  IconButton(
+                    icon: const Icon(Icons.person_search),
+                    tooltip: 'Select Player',
+                    onPressed: _showPlayerSelection,
                   ),
-              ],
-            ),
-          ),
-
-          // ── Engine eval progress (shown while running) ──
-          if (_evalRunning) ...[
-            _buildEvalProgress(theme),
-            const SizedBox(width: 12),
-          ],
-
-          // ── White / Black toggle ──
-          if (_currentPlayer != null) ...[
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(
-                  value: true,
-                  label: Text('White'),
-                  icon: Icon(Icons.circle_outlined, size: 16),
-                ),
-                ButtonSegment(
-                  value: false,
-                  label: Text('Black'),
-                  icon: Icon(Icons.circle, size: 16),
+                  const SizedBox(width: 4),
+                  const AppModeMenuButton(),
+                ],
+              ),
+              if (controls.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: controls,
                 ),
               ],
-              selected: {_playerIsWhite},
-              onSelectionChanged: (selection) {
-                final chosen = selection.first;
-                if (chosen != _playerIsWhite) {
-                  setState(() => _playerIsWhite = chosen);
-                  _loadColorAnalysis();
-                }
-              },
-            ),
-            const SizedBox(width: 8),
-          ],
-
-          // ── Engine weakness analysis button ──
-          if (_openingTree != null && !_isAnalyzing && !_evalRunning) ...[
-            TextButton.icon(
-              icon: const Icon(Icons.psychology, size: 18),
-              label: Text(_hasEvals ? 'Re-analyze' : 'Weaknesses'),
-              onPressed: _showWeaknessConfig,
-            ),
-            const SizedBox(width: 8),
-          ],
-
-          // ── Player selection ──
-          IconButton(
-            icon: const Icon(Icons.person_search),
-            tooltip: 'Select Player',
-            onPressed: _showPlayerSelection,
-          ),
-          const SizedBox(width: 4),
-          const AppModeMenuButton(),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -283,6 +309,98 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
+  // ── Re-download games ───────────────────────────────────────────
+
+  /// Downloads all games for the given month range and returns `true` on
+  /// success.
+  Future<bool> _redownloadGames(int monthsBack) async {
+    final player = _currentPlayer;
+    if (player == null) return false;
+
+    _cancelEvalAnalysis();
+
+    final progress = ValueNotifier<String>('Downloading games…');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: ValueListenableBuilder<String>(
+            valueListenable: progress,
+            builder: (_, message, __) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(message, textAlign: TextAlign.center),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final String pgns;
+
+      if (player.platform == 'chesscom') {
+        pgns = await _gamesService.downloadChesscomGames(
+          player.username,
+          maxGames: player.maxGames,
+          monthsBack: monthsBack,
+          onProgress: (msg) => progress.value = msg,
+        );
+      } else {
+        pgns = await _gamesService.downloadLichessGames(
+          player.username,
+          maxGames: player.maxGames,
+          monthsBack: monthsBack,
+          onProgress: (msg) => progress.value = msg,
+        );
+      }
+
+      if (pgns.isEmpty) {
+        if (mounted) {
+          Navigator.of(context).pop();
+          _showError('No games found for ${player.username}.');
+        }
+        return false;
+      }
+
+      progress.value = 'Saving…';
+
+      final updated = await _gamesService.saveAnalysisGames(
+        pgns,
+        platform: player.platform,
+        username: player.username,
+        maxGames: player.maxGames,
+        monthsBack: monthsBack,
+      );
+
+      if (mounted) Navigator.of(context).pop();
+
+      setState(() {
+        _currentPlayer = updated;
+        _positionAnalysis = null;
+        _openingTree = null;
+        _whiteTree = null;
+        _blackTree = null;
+        _playerIsWhite = true;
+        _engineEvals = [];
+      });
+
+      return true;
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        _showError('Re-download failed: $e');
+      }
+      return false;
+    }
+  }
+
   // ── Engine weakness analysis ─────────────────────────────────────
 
   Future<void> _showWeaknessConfig() async {
@@ -293,12 +411,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       builder: (_) => EngineWeaknessConfigDialog(
         whiteTree: _whiteTree,
         blackTree: _blackTree,
+        playerInfo: _currentPlayer,
       ),
     );
 
-    if (config != null && mounted) {
-      _runWeaknessAnalysis(config);
+    if (config == null || !mounted) return;
+
+    if (config.redownload) {
+      final ok = await _redownloadGames(config.monthsBack);
+      if (!ok) return;
+      await _analyzeBothColors();
+      if (!mounted) return;
     }
+
+    _runWeaknessAnalysis(config);
   }
 
   Future<void> _runWeaknessAnalysis(EngineWeaknessConfig config) async {

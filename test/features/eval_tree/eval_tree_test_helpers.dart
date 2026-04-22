@@ -7,7 +7,7 @@ BuildTree makeEvalTreeTestTree() {
     required String fen,
     required String moveSan,
     required String moveUci,
-    required int depth,
+    required int ply,
     required bool isWhiteToMove,
     BuildTreeNode? parent,
   }) {
@@ -15,7 +15,7 @@ BuildTree makeEvalTreeTestTree() {
       fen: fen,
       moveSan: moveSan,
       moveUci: moveUci,
-      depth: depth,
+      ply: ply,
       isWhiteToMove: isWhiteToMove,
       nodeId: nextNodeId++,
       parent: parent,
@@ -26,7 +26,7 @@ BuildTree makeEvalTreeTestTree() {
     fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
     moveSan: '',
     moveUci: '',
-    depth: 0,
+    ply: 0,
     isWhiteToMove: true,
   )
     ..engineEvalCp = 25
@@ -39,7 +39,7 @@ BuildTree makeEvalTreeTestTree() {
     fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1',
     moveSan: 'd4',
     moveUci: 'd2d4',
-    depth: 1,
+    ply: 1,
     isWhiteToMove: false,
     parent: root,
   )
@@ -56,7 +56,7 @@ BuildTree makeEvalTreeTestTree() {
     fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1',
     moveSan: 'e4',
     moveUci: 'e2e4',
-    depth: 1,
+    ply: 1,
     isWhiteToMove: false,
     parent: root,
   )
@@ -77,7 +77,7 @@ BuildTree makeEvalTreeTestTree() {
     fen: 'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6 0 2',
     moveSan: 'd5',
     moveUci: 'd7d5',
-    depth: 2,
+    ply: 2,
     isWhiteToMove: true,
     parent: d4,
   )
@@ -95,7 +95,7 @@ BuildTree makeEvalTreeTestTree() {
     fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq c6 0 2',
     moveSan: 'c5',
     moveUci: 'c7c5',
-    depth: 2,
+    ply: 2,
     isWhiteToMove: true,
     parent: e4,
   )
@@ -111,7 +111,7 @@ BuildTree makeEvalTreeTestTree() {
     fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2',
     moveSan: 'e5',
     moveUci: 'e7e5',
-    depth: 2,
+    ply: 2,
     isWhiteToMove: true,
     parent: e4,
   )
@@ -129,7 +129,7 @@ BuildTree makeEvalTreeTestTree() {
     fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
     moveSan: 'Nf3',
     moveUci: 'g1f3',
-    depth: 3,
+    ply: 3,
     isWhiteToMove: false,
     parent: e5,
   )
@@ -146,7 +146,7 @@ BuildTree makeEvalTreeTestTree() {
     fen: 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2',
     moveSan: 'Bc4',
     moveUci: 'f1c4',
-    depth: 3,
+    ply: 3,
     isWhiteToMove: false,
     parent: e5,
   )
@@ -162,7 +162,7 @@ BuildTree makeEvalTreeTestTree() {
   final tree = BuildTree(
     root: root,
     totalNodes: root.countSubtree(),
-    maxDepthReached: 3,
+    maxPlyReached: 3,
     buildComplete: true,
     configSnapshot: const {'play_as_white': true},
   );

@@ -79,14 +79,15 @@ class AnalysisGamesService {
       cutoff = DateTime(now.year, now.month - monthsBack + 1);
     }
 
+    final isDateMode = cutoff != null;
+
     // Walk backwards from the most recent archive.
     for (int i = archives.length - 1; i >= 0; i--) {
       // In game-count mode, stop once we have enough.
-      if (monthsBack == null && allGames.length >= maxGames) break;
+      if (!isDateMode && allGames.length >= maxGames) break;
 
-      // In months mode, skip archives outside the requested date range.
+      // In date-based modes, skip archives outside the requested range.
       if (cutoff != null) {
-        // Parse year/month from the archive URL (e.g. .../games/2025/07).
         final parts = archives[i].split('/');
         if (parts.length >= 2) {
           final year = int.tryParse(parts[parts.length - 2]);
@@ -97,7 +98,7 @@ class AnalysisGamesService {
         }
       }
 
-      if (monthsBack != null) {
+      if (isDateMode) {
         onProgress?.call(
           'Fetching archive ${archives.length - i}… '
           '(${allGames.length} games so far)',
@@ -113,7 +114,7 @@ class AnalysisGamesService {
         final response = await http.get(Uri.parse('${archives[i]}/pgn'));
         if (response.statusCode == 200 && response.body.isNotEmpty) {
           for (final game in splitPgnIntoGames(response.body)) {
-            if (monthsBack == null && allGames.length >= maxGames) break;
+            if (!isDateMode && allGames.length >= maxGames) break;
             if (!_isBulletGame(game)) allGames.add(game);
           }
         }
@@ -154,7 +155,6 @@ class AnalysisGamesService {
     };
 
     if (monthsBack != null) {
-      // Calculate a timestamp N months ago (approximate: 30 days/month).
       final since = DateTime.now()
           .subtract(Duration(days: monthsBack * 30))
           .millisecondsSinceEpoch;

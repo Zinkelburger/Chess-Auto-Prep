@@ -174,7 +174,8 @@ class EvalTreeLayoutEngine {
     return EvalTreeLayoutFrame(
       rootNodeId: rootNodeId,
       selectedNodeId: selectedNodeId,
-      hitDisplayCap: visibleNodeIds.length >= controller.maxDisplayNodes,
+      hitDisplayCap: visibleNodeIds.length >= controller.maxDisplayNodes &&
+          snapshot.nodeCount > visibleNodeIds.length,
       canvasSize: canvasSize,
       contentBounds: contentBounds,
       nodesById: shiftedNodes,
@@ -209,7 +210,7 @@ class EvalTreeLayoutEngine {
     _addDescendants(
       snapshot,
       selectedNodeId,
-      controller.visibleDepth,
+      controller.visiblePly,
       descendantBudget,
       visibleNodeIds,
     );
@@ -232,11 +233,11 @@ class EvalTreeLayoutEngine {
   static void _addDescendants(
     EvalTreeSnapshot snapshot,
     int nodeId,
-    int remainingDepth,
+    int remainingPly,
     int budget,
     Set<int> visibleNodeIds,
   ) {
-    if (remainingDepth <= 0 || budget <= 0) return;
+    if (remainingPly <= 0 || budget <= 0) return;
 
     final node = snapshot.node(nodeId);
     if (node.childIds.isEmpty) return;
@@ -254,7 +255,7 @@ class EvalTreeLayoutEngine {
       }
     }
 
-    if (remainingDepth == 1 ||
+    if (remainingPly == 1 ||
         remainingBudget <= 0 ||
         visibleChildren.isEmpty) {
       return;
@@ -293,7 +294,7 @@ class EvalTreeLayoutEngine {
       _addDescendants(
         snapshot,
         childId,
-        remainingDepth - 1,
+        remainingPly - 1,
         childBudgets[childId] ?? 0,
         visibleNodeIds,
       );
@@ -337,7 +338,7 @@ class EvalTreeLayoutEngine {
   static void _positionNode(
     int nodeId,
     double left,
-    int depth,
+    int ply,
     EvalTreeController controller,
     Map<int, List<int>> visibleChildren,
     Map<int, Size> nodeSizes,
@@ -348,7 +349,7 @@ class EvalTreeLayoutEngine {
     final nodeSize = nodeSizes[nodeId]!;
     final subtreeWidth = subtreeWidths[nodeId]!;
     final nodeLeft = left + (subtreeWidth - nodeSize.width) / 2;
-    final position = Offset(nodeLeft, depth * config.verticalGap);
+    final position = Offset(nodeLeft, ply * config.verticalGap);
     positionedNodes[nodeId] = EvalTreeLayoutNode(
       nodeId: nodeId,
       position: position,
@@ -372,7 +373,7 @@ class EvalTreeLayoutEngine {
       _positionNode(
         childId,
         childLeft,
-        depth + 1,
+        ply + 1,
         controller,
         visibleChildren,
         nodeSizes,

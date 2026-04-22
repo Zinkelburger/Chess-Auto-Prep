@@ -16,7 +16,7 @@ void main() {
 
     controller.loadSnapshot(snapshot);
     expect(controller.selectedNodeId, snapshot.rootNodeId);
-    expect(controller.visibleDepth, 1);
+    expect(controller.visiblePly, 1);
     expect(controller.showAncestorSpine, isTrue);
     expect(controller.metricDisplayMode, EvalTreeMetricDisplayMode.cpl);
 
@@ -30,12 +30,12 @@ void main() {
     expect(controller.goParent(), isTrue);
     expect(controller.selectedNodeId, e4.id);
 
-    controller.setVisibleDepth(6);
+    controller.setVisiblePly(6);
     controller.setAncestorSpine(false);
     controller.setMaxDisplayNodes(120);
     controller.setMetricDisplayMode(EvalTreeMetricDisplayMode.eval);
 
-    expect(controller.visibleDepth, 6);
+    expect(controller.visiblePly, 6);
     expect(controller.showAncestorSpine, isFalse);
     expect(controller.maxDisplayNodes, 120);
     expect(controller.metricDisplayMode, EvalTreeMetricDisplayMode.eval);

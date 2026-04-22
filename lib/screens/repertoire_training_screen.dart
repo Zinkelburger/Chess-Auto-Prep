@@ -379,6 +379,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final compactActions = MediaQuery.sizeOf(context).width < 760;
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
@@ -396,11 +398,16 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             child: Center(
               child: Tooltip(
                 message: 'Select repertoire',
-                child: TextButton.icon(
-                  onPressed: _selectRepertoire,
-                  icon: const Icon(Icons.library_books),
-                  label: const Text('Select Repertoire'),
-                ),
+                child: compactActions
+                    ? IconButton(
+                        onPressed: _selectRepertoire,
+                        icon: const Icon(Icons.library_books),
+                      )
+                    : TextButton.icon(
+                        onPressed: _selectRepertoire,
+                        icon: const Icon(Icons.library_books),
+                        label: const Text('Select Repertoire'),
+                      ),
               ),
             ),
           ),
@@ -473,18 +480,34 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       );
     }
 
-    return Row(
-      children: [
-        Expanded(
-          flex: 6,
-          child: _buildBoardPane(),
-        ),
-        Container(width: 1, color: Colors.grey[300]),
-        Expanded(
-          flex: 4,
-          child: _buildRightPane(),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 1000;
+
+        if (isCompact) {
+          return Column(
+            children: [
+              Expanded(flex: 4, child: _buildBoardPane()),
+              Container(height: 1, color: Colors.grey[300]),
+              Expanded(flex: 5, child: _buildRightPane()),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              flex: 6,
+              child: _buildBoardPane(),
+            ),
+            Container(width: 1, color: Colors.grey[300]),
+            Expanded(
+              flex: 4,
+              child: _buildRightPane(),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -498,12 +521,17 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           _buildLineHeader(entry),
           const SizedBox(height: 12),
           Expanded(
-            child: ChessBoardWidget(
-              key: ValueKey(_session.fen),
-              position: _session.position,
-              flipped: _boardFlipped,
-              enableUserMoves: _waitingForUser,
-              onMove: _handleUserMove,
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: ChessBoardWidget(
+                  key: ValueKey(_session.fen),
+                  position: _session.position,
+                  flipped: _boardFlipped,
+                  enableUserMoves: _waitingForUser,
+                  onMove: _handleUserMove,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -552,7 +580,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-                Expanded(
+        Expanded(
           child: Text(
             _feedback ?? 'Follow the prompts and play the move.',
             style: TextStyle(
@@ -563,7 +591,15 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             ),
           ),
         ),
-        if (_lineFinished) _buildRatingButtons(),
+        if (_lineFinished) ...[
+          const SizedBox(width: 12),
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: _buildRatingButtons(),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -598,6 +634,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       children: [
         TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Move'),
             Tab(text: 'PGN'),

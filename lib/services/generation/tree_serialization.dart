@@ -19,7 +19,7 @@ String serializeTree(BuildTree tree) {
     'format': 'opening_tree',
     'version': 4,
     'total_nodes': tree.totalNodes,
-    'max_depth': tree.maxDepthReached,
+    'max_depth': tree.maxPlyReached,
     'build_complete': tree.buildComplete,
     'config': tree.configSnapshot,
     if (tree.startMoves.isNotEmpty) 'start_moves': tree.startMoves,
@@ -31,7 +31,7 @@ String serializeTree(BuildTree tree) {
 Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   final obj = <String, dynamic>{
     'id': node.nodeId,
-    'depth': node.depth,
+    'depth': node.ply,
   };
 
   if (node.moveSan.isNotEmpty) obj['move_san'] = node.moveSan;
@@ -53,7 +53,7 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   if (node.hasExpectimax) {
     obj['local_cpl'] = node.localCpl;
     obj['expectimax_value'] = node.expectimaxValue;
-    obj['subtree_depth'] = node.subtreeDepth;
+    obj['subtree_depth'] = node.subtreePly;
     obj['subtree_opp_plies'] = node.subtreeOppPlies;
   }
 
@@ -124,7 +124,7 @@ BuildTree deserializeTree(String jsonStr, {FenMap? fenMap}) {
   final tree = BuildTree(
     root: root,
     totalNodes: totalNodes,
-    maxDepthReached: (data['max_depth'] as num?)?.toInt() ?? 0,
+    maxPlyReached: (data['max_depth'] as num?)?.toInt() ?? 0,
     buildComplete: data['build_complete'] as bool? ?? true,
     startMoves: data['start_moves'] as String? ?? '',
     configSnapshot: configData,
@@ -162,8 +162,8 @@ BuildTreeNode _nodeFromJson(
     fen: fen,
     moveSan: obj['move_san'] as String? ?? '',
     moveUci: obj['move_uci'] as String? ?? '',
-    depth: (obj['depth'] as num?)?.toInt() ??
-        (parent != null ? parent.depth + 1 : 0),
+    ply: (obj['depth'] as num?)?.toInt() ??
+        (parent != null ? parent.ply + 1 : 0),
     isWhiteToMove: isWhiteToMove,
     nodeId: nodeId,
     parent: parent,
@@ -190,7 +190,7 @@ BuildTreeNode _nodeFromJson(
   }
 
   if (obj.containsKey('subtree_depth')) {
-    node.subtreeDepth = (obj['subtree_depth'] as num).toInt();
+    node.subtreePly = (obj['subtree_depth'] as num).toInt();
   }
   if (obj.containsKey('subtree_opp_plies')) {
     node.subtreeOppPlies = (obj['subtree_opp_plies'] as num).toInt();

@@ -27,7 +27,7 @@ class BuildTreeNode {
   final String fen;
   final String moveSan;
   final String moveUci;
-  final int depth;
+  final int ply;
   final bool isWhiteToMove;
   final int nodeId;
 
@@ -71,8 +71,8 @@ class BuildTreeNode {
   /// Practical win probability in [0, 1], computed via expectimax.
   double expectimaxValue = 0.0;
 
-  /// Max ply depth below this node (0 for leaves).
-  int subtreeDepth = 0;
+  /// Max ply count below this node (0 for leaves).
+  int subtreePly = 0;
 
   /// Actual count of opponent-move levels in the subtree (diagnostics).
   int subtreeOppPlies = 0;
@@ -105,7 +105,7 @@ class BuildTreeNode {
     required this.fen,
     required this.moveSan,
     required this.moveUci,
-    required this.depth,
+    required this.ply,
     required this.isWhiteToMove,
     required this.nodeId,
     this.parent,
@@ -155,7 +155,7 @@ class BuildTreeNode {
 
   @override
   String toString() =>
-      'BuildTreeNode(d=$depth, ${moveSan.isEmpty ? "root" : moveSan}, '
+      'BuildTreeNode(ply=$ply, ${moveSan.isEmpty ? "root" : moveSan}, '
       'eval=${engineEvalCp ?? "?"}, '
       'cumP=${(cumulativeProbability * 100).toStringAsFixed(2)}%)';
 }
@@ -165,7 +165,7 @@ class BuildTreeNode {
 class BuildTree {
   BuildTreeNode root;
   int totalNodes;
-  int maxDepthReached;
+  int maxPlyReached;
   bool buildComplete;
 
   /// SAN move sequence from standard start that leads to [root].
@@ -182,7 +182,7 @@ class BuildTree {
   BuildTree({
     required this.root,
     this.totalNodes = 1,
-    this.maxDepthReached = 0,
+    this.maxPlyReached = 0,
     this.buildComplete = false,
     this.startMoves = '',
     this.configSnapshot = const {},
@@ -238,8 +238,8 @@ class BuildTree {
 
 class BuildProgress {
   final int totalNodes;
-  final int currentDepth;
-  final int maxDepthReached;
+  final int currentPly;
+  final int maxPlyReached;
   final String? currentFen;
   final int elapsedMs;
 
@@ -254,8 +254,8 @@ class BuildProgress {
 
   const BuildProgress({
     required this.totalNodes,
-    required this.currentDepth,
-    this.maxDepthReached = 0,
+    required this.currentPly,
+    this.maxPlyReached = 0,
     this.currentFen,
     this.elapsedMs = 0,
     this.engineCalls = 0,

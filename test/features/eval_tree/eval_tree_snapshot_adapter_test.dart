@@ -25,7 +25,7 @@ void main() {
 
     expect(firstChild.repertoireScore, closeTo(0.63, 0.001));
     expect(firstChild.evalForUsCp, 30);
-    expect(firstChild.subtreeDepth, 2);
+    expect(firstChild.subtreePly, 2);
     expect(firstChild.trapScore, closeTo(0.32, 0.001));
     expect(snapshot.startMovesSan, ['d4', 'd5']);
 

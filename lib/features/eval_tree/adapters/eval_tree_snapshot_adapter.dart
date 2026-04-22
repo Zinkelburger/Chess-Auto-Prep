@@ -23,14 +23,14 @@ class EvalTreeSnapshotAdapter {
     Map<int, EvalTreeNodeSnapshot> nodesById,
   ) {
     var derivedSubtreeSize = 1;
-    var derivedSubtreeDepth = 0;
+    var derivedSubtreePly = 0;
 
     for (final child in node.children) {
       final childMetrics = _visitNode(child, playAsWhite, nodesById);
       derivedSubtreeSize += childMetrics.subtreeSize;
-      final candidateDepth = childMetrics.subtreeDepth + 1;
-      if (candidateDepth > derivedSubtreeDepth) {
-        derivedSubtreeDepth = candidateDepth;
+      final candidatePly = childMetrics.subtreePly + 1;
+      if (candidatePly > derivedSubtreePly) {
+        derivedSubtreePly = candidatePly;
       }
     }
 
@@ -59,9 +59,9 @@ class EvalTreeSnapshotAdapter {
       localCpl: localCpl,
       trapScore: node.trapScore >= 0.0 ? node.trapScore : null,
       subtreeSize: node.subtreeSize > 0 ? node.subtreeSize : derivedSubtreeSize,
-      subtreeDepth: node.subtreeDepth > 0 || node.children.isEmpty
-          ? node.subtreeDepth
-          : derivedSubtreeDepth,
+      subtreePly: node.subtreePly > 0 || node.children.isEmpty
+          ? node.subtreePly
+          : derivedSubtreePly,
       pruneKind: _mapPruneKind(node.pruneReason),
       pruneEvalCp: node.pruneEvalCp,
       totalGames: node.totalGames,
@@ -69,9 +69,9 @@ class EvalTreeSnapshotAdapter {
 
     return _DerivedNodeMetrics(
       subtreeSize: node.subtreeSize > 0 ? node.subtreeSize : derivedSubtreeSize,
-      subtreeDepth: node.subtreeDepth > 0 || node.children.isEmpty
-          ? node.subtreeDepth
-          : derivedSubtreeDepth,
+      subtreePly: node.subtreePly > 0 || node.children.isEmpty
+          ? node.subtreePly
+          : derivedSubtreePly,
     );
   }
 
@@ -99,10 +99,10 @@ class EvalTreeSnapshotAdapter {
 
 class _DerivedNodeMetrics {
   final int subtreeSize;
-  final int subtreeDepth;
+  final int subtreePly;
 
   const _DerivedNodeMetrics({
     required this.subtreeSize,
-    required this.subtreeDepth,
+    required this.subtreePly,
   });
 }
