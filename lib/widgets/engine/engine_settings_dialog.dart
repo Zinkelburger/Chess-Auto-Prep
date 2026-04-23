@@ -21,6 +21,7 @@ Future<void> showEngineSettingsDialog({
   required EngineSettings settings,
   required String currentProbabilityStartMoves,
   required ValueChanged<String> onProbabilityStartMovesChanged,
+  bool compact = false,
 }) async {
   final probController =
       TextEditingController(text: currentProbabilityStartMoves);
@@ -43,6 +44,7 @@ Future<void> showEngineSettingsDialog({
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                if (!compact) ...[
                 // ── Lichess Account ──
                 _buildLichessSection(
                   context: context,
@@ -108,6 +110,7 @@ Future<void> showEngineSettingsDialog({
                 const SizedBox(height: 6),
                 const Divider(height: 1),
                 const SizedBox(height: 6),
+                ],
 
                 // ── Stockfish Engine ──
                 Row(
@@ -117,14 +120,17 @@ Future<void> showEngineSettingsDialog({
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: Colors.grey[400])),
+                    if (!compact) ...[
                     const SizedBox(width: 8),
                     Text(
                       '${EngineSettings.systemCores} cores',
                       style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                     ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
+                if (!compact) ...[
                 _buildNumberField(
                   label: 'Workers',
                   value: settings.workers,
@@ -144,6 +150,18 @@ Future<void> showEngineSettingsDialog({
                     style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
                 ),
+                ],
+                if (compact)
+                _buildNumberField(
+                  label: 'Threads',
+                  value: settings.inlineThreads,
+                  min: 1,
+                  max: EngineSettings.systemCores,
+                  onChanged: (v) {
+                    settings.inlineThreads = v;
+                    setDialogState(() {});
+                  },
+                ),
                 _buildNumberField(
                   label: 'Eval Depth',
                   value: settings.depth,
@@ -154,6 +172,7 @@ Future<void> showEngineSettingsDialog({
                     setDialogState(() {});
                   },
                 ),
+                if (!compact)
                 _buildNumberField(
                   label: 'Difficulty Depth',
                   value: settings.easeDepth,
@@ -165,7 +184,7 @@ Future<void> showEngineSettingsDialog({
                   },
                 ),
                 _buildNumberField(
-                  label: 'MultiPV',
+                  label: compact ? 'Lines' : 'Multiple lines',
                   value: settings.multiPv,
                   min: 1,
                   max: 10,
@@ -174,6 +193,7 @@ Future<void> showEngineSettingsDialog({
                     setDialogState(() {});
                   },
                 ),
+                if (!compact)
                 _buildNumberField(
                   label: 'Max Moves',
                   value: settings.maxAnalysisMoves,
@@ -185,6 +205,7 @@ Future<void> showEngineSettingsDialog({
                   },
                 ),
 
+                if (!compact) ...[
                 const SizedBox(height: 6),
                 const Divider(height: 1),
                 const SizedBox(height: 6),
@@ -237,6 +258,7 @@ Future<void> showEngineSettingsDialog({
                   'Leave empty for initial position',
                   style: TextStyle(color: Colors.grey[600], fontSize: 11),
                 ),
+                ],
                 ],
               ),
             ),

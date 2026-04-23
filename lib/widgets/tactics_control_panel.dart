@@ -15,6 +15,7 @@ import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import 'pgn_viewer_widget.dart';
+import 'pgn_with_engine.dart';
 
 /// Tactics training control panel with import, review, and analysis.
 class TacticsControlPanel extends StatefulWidget {
@@ -797,7 +798,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       isWhiteToPlay = positionContext.contains('White');
     }
 
-    return PgnViewerWidget(
+    return PgnWithEngine(
       key: ValueKey('analysis_${_currentPosition!.gameId}'),
       gameId: _currentPosition!.gameId,
       moveNumber: moveNumber,

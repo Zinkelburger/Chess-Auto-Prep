@@ -49,6 +49,18 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
+  /// Threads for the inline (PGN) engine worker.  Uses a single Stockfish
+  /// process so more threads = faster search on one position.
+  int _inlineThreads = 1;
+  int get inlineThreads => _inlineThreads;
+  set inlineThreads(int value) {
+    final clamped = value.clamp(1, systemCores);
+    if (clamped != _inlineThreads) {
+      _inlineThreads = clamped;
+      notifyListeners();
+    }
+  }
+
   /// Maximum total moves to display in the analysis table.
   /// Stockfish MultiPV lines fill guaranteed slots; remaining slots are
   /// filled by the highest-probability Maia + DB candidates.
@@ -136,6 +148,7 @@ class EngineSettings with ChangeNotifier {
     _depth = 20;
     _easeDepth = 18;
     _multiPv = 3;
+    _inlineThreads = 1;
     _maxAnalysisMoves = 8;
     _showStockfish = true;
     _showMaia = true;
