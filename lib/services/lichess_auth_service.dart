@@ -21,6 +21,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class LichessAuthService extends ChangeNotifier {
   // ── Configuration ──────────────────────────────────────────────────
@@ -156,11 +157,28 @@ class LichessAuthService extends ChangeNotifier {
 
     // Start local callback server to receive the OAuth redirect
     await _stopCallbackServer();
+    // Bind to IPv6 loopback with v6Only=false so the OS accepts both
+    // IPv4 (127.0.0.1) and IPv6 (::1) connections — browsers may resolve
+    // `localhost` to either. Fall back to IPv4-only if IPv6 is unavailable.
     try {
       _callbackServer = await HttpServer.bind(
-        InternetAddress.loopbackIPv4,
+        InternetAddress.loopbackIPv6,
         _callbackPort,
+        v6Only: false,
       );
+    } on SocketException {
+      try {
+        _callbackServer = await HttpServer.bind(
+          InternetAddress.loopbackIPv4,
+          _callbackPort,
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          print('[LichessAuth] Failed to bind callback server on '
+              'port $_callbackPort: $e');
+        }
+        rethrow;
+      }
     } catch (e) {
       if (kDebugMode) {
         print('[LichessAuth] Failed to bind callback server on '
@@ -428,13 +446,10 @@ class LichessAuthService extends ChangeNotifier {
 
   /// Open a URL in the default system browser.
   static Future<void> openUrl(String url) async {
+    final uri = Uri.parse(url);
     try {
-      if (Platform.isLinux) {
-        await Process.run('xdg-open', [url]);
-      } else if (Platform.isMacOS) {
-        await Process.run('open', [url]);
-      } else if (Platform.isWindows) {
-        await Process.run('start', [url], runInShell: true);
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        if (kDebugMode) print('[LichessAuth] launchUrl returned false for $url');
       }
     } catch (e) {
       if (kDebugMode) print('[LichessAuth] Failed to open URL: $e');
