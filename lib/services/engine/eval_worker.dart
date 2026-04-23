@@ -82,9 +82,9 @@ class EvalWorker {
     );
   }
 
-  Future<void> init({int hashMb = 128}) async {
+  Future<void> init({int hashMb = 128, int threads = 1}) async {
     await engine.waitForReady();
-    engine.sendCommand('setoption name Threads value 1');
+    engine.sendCommand('setoption name Threads value $threads');
     engine.sendCommand('setoption name Hash value $hashMb');
     _readyCompleter = Completer<void>();
     engine.sendCommand('isready');

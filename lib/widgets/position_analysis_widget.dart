@@ -21,6 +21,7 @@ import '../widgets/games_list_widget.dart';
 import '../widgets/opening_tree_widget.dart';
 import 'chess_board_widget.dart';
 import 'pgn_viewer_widget.dart';
+import 'pgn_with_engine.dart';
 
 class PositionAnalysisWidget extends StatefulWidget {
   final PositionAnalysis? analysis;
@@ -357,7 +358,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
       );
     }
 
-    return PgnViewerWidget(
+    return PgnWithEngine(
       pgnText: _selectedGame!.pgnText!,
       controller: _pgnController,
       initialFen: _currentFen,
