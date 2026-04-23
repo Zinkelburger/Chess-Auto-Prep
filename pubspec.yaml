@@ -3,7 +3,7 @@ description: Chess tactics trainer and PGN analyzer
 
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.3.0
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
