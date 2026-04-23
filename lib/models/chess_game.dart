@@ -31,8 +31,9 @@ class ChessGameModel {
     final moveLines = <String>[];
 
     bool inHeaders = true;
-    for (final line in lines) {
-      if (line.trim().isEmpty) continue;
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty) continue;
 
       if (inHeaders && line.startsWith('[') && line.endsWith(']')) {
         final match = RegExp(r'\[(\w+)\s+"([^"]+)"\]').firstMatch(line);

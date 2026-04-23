@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'storage_service.dart';
 
@@ -14,7 +15,7 @@ class IOStorageService implements StorageService {
 
   Future<File> _getFile(String filename) async {
     final directory = await getApplicationDocumentsDirectory();
-    return File('${directory.path}/$filename');
+    return File(p.join(directory.path, filename));
   }
 
   @override
@@ -91,7 +92,7 @@ class IOStorageService implements StorageService {
   Future<String?> readRepertoirePgn(String filename) async {
     try {
       File file;
-      if (filename.startsWith('/')) {
+      if (p.isAbsolute(filename)) {
         file = File(filename);
       } else {
         file = await _getFile(filename);

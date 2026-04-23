@@ -38,6 +38,7 @@ class RepertoireService {
     String pgnContent, {
     String? trainingColor,
   }) {
+    pgnContent = _stripBom(pgnContent);
     final lines = <RepertoireLine>[];
     final resolvedColor =
         trainingColor ?? _extractRepertoireColor(pgnContent) ?? 'white';
@@ -236,6 +237,7 @@ class RepertoireService {
   ({String preamble, List<String> games}) _splitPgnDocumentPreservingPreamble(
     String content,
   ) {
+    content = _stripBom(content);
     final lines = content.split('\n');
     final preambleLines = <String>[];
     final games = <String>[];
@@ -305,6 +307,10 @@ class RepertoireService {
     final trimmed = raw.replaceAll('=', '');
     return 'line_${trimmed.length > 22 ? trimmed.substring(0, 22) : trimmed}';
   }
+
+  /// Strip a leading UTF-8 BOM if present (common in Windows-exported files).
+  static String _stripBom(String s) =>
+      s.startsWith('\uFEFF') ? s.substring(1) : s;
 
   /// Creates training questions from repertoire lines for a specific color
   List<TrainingQuestion> createTrainingQuestions(

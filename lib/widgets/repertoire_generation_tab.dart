@@ -3,6 +3,7 @@ library;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/build_tree_node.dart';
 import '../services/generation/eca_calculator.dart';
@@ -151,9 +152,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   String? _partialTreePath() {
     final filePath = widget.currentRepertoire?['filePath'] as String?;
     if (filePath == null || filePath.isEmpty) return null;
-    final base = filePath.toLowerCase().endsWith('.pgn')
-        ? filePath.substring(0, filePath.length - 4)
-        : filePath;
+    final base = p.withoutExtension(filePath);
     return '${base}_partial_tree.json';
   }
 
@@ -397,9 +396,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       // Save tree JSON alongside PGN
       try {
         final treeJson = serializeTree(tree);
-        final base = filePath.toLowerCase().endsWith('.pgn')
-            ? filePath.substring(0, filePath.length - 4)
-            : filePath;
+        final base = p.withoutExtension(filePath);
         await File('${base}_tree.json').writeAsString(treeJson);
       } catch (_) {
         // Tree JSON save is best-effort

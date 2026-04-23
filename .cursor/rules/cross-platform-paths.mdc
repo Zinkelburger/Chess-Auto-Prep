@@ -1,0 +1,47 @@
+---
+description: Cross-platform file path handling for Windows, macOS, and Linux compatibility
+globs: "**/*.dart"
+alwaysApply: false
+---
+
+# Cross-Platform Path Handling
+
+This app targets Windows, macOS, and Linux. All file system code must work on all three.
+
+## Rules
+
+1. **Never check for absolute paths with `startsWith('/')`** — this misses Windows paths like `C:\...`. Use `p.isAbsolute(path)` from `package:path`.
+
+2. **Never split paths with `split('/')`** to extract filenames or directories. Use `package:path` helpers:
+   - `p.basename(path)` — filename with extension
+   - `p.basenameWithoutExtension(path)` — filename without extension
+   - `p.dirname(path)` — parent directory
+   - `p.extension(path)` — file extension
+
+3. **Prefer `p.join()`** over string interpolation for building paths:
+   ```dart
+   // BAD
+   final file = File('${directory.path}/repertoires/$name.pgn');
+
+   // GOOD
+   final file = File(p.join(directory.path, 'repertoires', '$name.pgn'));
+   ```
+
+4. **Import convention**: `import 'package:path/path.dart' as p;`
+
+5. **`Platform.pathSeparator`** is acceptable when you specifically need the OS separator character, but `package:path` functions are preferred.
+
+6. **Forward slashes in string interpolation** (e.g. `'${dir.path}/file'`) are tolerated because Dart's `File`/`Directory` APIs accept `/` on Windows — but `p.join()` is still preferred for clarity.
+
+7. **Use `p.withoutExtension()`** to strip file extensions instead of manual `substring` math:
+   ```dart
+   // BAD
+   final base = filePath.substring(0, filePath.length - 4);
+
+   // GOOD
+   final base = p.withoutExtension(filePath);
+   ```
+
+8. **Use `.replaceAll('.pgn', '')` sparingly** — prefer `p.basenameWithoutExtension()` when extracting a name from a filename.
+
+9. **URL paths and FEN strings always use `/`** — these are not filesystem paths and should not use `package:path`.

@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:dartchess/dartchess.dart' hide File;
 
@@ -112,7 +113,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
     
     try {
       final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory('${directory.path}/repertoires');
+      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
       
       // Create directory if it doesn't exist
       if (!await repertoireDir.exists()) {
@@ -124,12 +125,12 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
       final repertoires = <Map<String, dynamic>>[];
       
       await for (final file in repertoireDir.list()) {
-        if (file is File && file.path.endsWith('.pgn')) {
+        if (file is File && file.path.toLowerCase().endsWith('.pgn')) {
           final stat = await file.stat();
           final content = await file.readAsString();
           final lineCount = _countGamesInPgn(content);
-          final fileName = file.path.split(Platform.pathSeparator).last;
-          final name = fileName.replaceAll('.pgn', '');
+          final fileName = p.basename(file.path);
+          final name = p.basenameWithoutExtension(file.path);
           
           // Extract color metadata from PGN comments (e.g., "// Color: White")
           final color = _extractRepertoireColor(content);
@@ -180,16 +181,16 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
       }
       
       // Sanitize filename
-      targetFilename = targetFilename.split(Platform.pathSeparator).last;
-      if (!targetFilename.endsWith('.pgn')) {
+      targetFilename = p.basename(targetFilename);
+      if (!targetFilename.toLowerCase().endsWith('.pgn')) {
         targetFilename = '$targetFilename.pgn';
       }
       
       final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory('${directory.path}/repertoires');
+      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
       await repertoireDir.create(recursive: true);
       
-      final targetFile = File('${repertoireDir.path}${Platform.pathSeparator}$targetFilename');
+      final targetFile = File(p.join(repertoireDir.path, targetFilename));
       
       // Check for duplicates
       if (await _isDuplicate(data, targetFile)) {
@@ -209,7 +210,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
       await _appendToFile(targetFile, pgnGame);
       
       final lineCount = await _countGamesInFile(targetFile);
-      final name = targetFilename.replaceAll('.pgn', '');
+      final name = p.basenameWithoutExtension(targetFilename);
       
       debugPrint('[BrowserExtensionServer] Added line to $targetFilename (total: $lineCount)');
       
@@ -232,12 +233,12 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
     
     try {
       final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory('${directory.path}/repertoires');
+      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
       
       int repertoireCount = 0;
       if (await repertoireDir.exists()) {
         await for (final file in repertoireDir.list()) {
-          if (file is File && file.path.endsWith('.pgn')) {
+          if (file is File && file.path.toLowerCase().endsWith('.pgn')) {
             repertoireCount++;
           }
         }

@@ -280,9 +280,8 @@ class TacticsImportService {
     
     for (final line in lines) {
       result.add(line);
-      // Insert GameId after the last header line (lines starting with '[')
-      if (!addedGameId && line.startsWith('[') && line.endsWith(']')) {
-        // Check if next non-empty line is not a header
+      final trimmed = line.trim();
+      if (!addedGameId && trimmed.startsWith('[') && trimmed.endsWith(']')) {
         final nextIndex = lines.indexOf(line) + 1;
         if (nextIndex < lines.length) {
           final nextLine = lines[nextIndex].trim();

@@ -1,4 +1,5 @@
 import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:convert';
@@ -19,7 +20,7 @@ class AnalysisGamesService {
   /// Resolve (and create if needed) the on-disk directory for analysis data.
   Future<Directory> _getAnalysisDirectory() async {
     final appDir = await getApplicationDocumentsDirectory();
-    final analysisDir = Directory('${appDir.path}/$_analysisGamesDir');
+    final analysisDir = Directory(p.join(appDir.path, _analysisGamesDir));
     if (!await analysisDir.exists()) {
       await analysisDir.create(recursive: true);
     }
@@ -206,7 +207,7 @@ class AnalysisGamesService {
     final gameCount = splitPgnIntoGames(pgns).length;
 
     // Write PGN.
-    await File('${directory.path}/$key.pgn').writeAsString(pgns);
+    await File(p.join(directory.path, '$key.pgn')).writeAsString(pgns);
 
     // Write metadata.
     final info = AnalysisPlayerInfo(
@@ -217,7 +218,7 @@ class AnalysisGamesService {
       downloadedAt: DateTime.now(),
       gameCount: gameCount,
     );
-    await File('${directory.path}/$key.json')
+    await File(p.join(directory.path, '$key.json'))
         .writeAsString(json.encode(info.toJson()));
 
     // Invalidate stale cached analysis so it gets rebuilt on next view.
@@ -234,7 +235,7 @@ class AnalysisGamesService {
         platform: platform,
         username: username,
       ).playerKey;
-      final file = File('${directory.path}/$key.pgn');
+      final file = File(p.join(directory.path, '$key.pgn'));
       return await file.exists() ? file.readAsString() : null;
     } catch (_) {
       return null;
@@ -292,7 +293,7 @@ class AnalysisGamesService {
       '_black_analysis.json',
       '_engine_evals.json',
     ]) {
-      final file = File('${directory.path}/$key$suffix');
+      final file = File(p.join(directory.path, '$key$suffix'));
       if (await file.exists()) await file.delete();
     }
   }
@@ -313,7 +314,7 @@ class AnalysisGamesService {
     ).playerKey;
     final colour = isWhite ? 'white' : 'black';
 
-    await File('${directory.path}/${key}_${colour}_analysis.json')
+    await File(p.join(directory.path, '${key}_${colour}_analysis.json'))
         .writeAsString(json.encode(analysisData));
   }
 
@@ -331,7 +332,7 @@ class AnalysisGamesService {
       ).playerKey;
       final colour = isWhite ? 'white' : 'black';
       final file =
-          File('${directory.path}/${key}_${colour}_analysis.json');
+          File(p.join(directory.path, '${key}_${colour}_analysis.json'));
 
       if (!await file.exists()) return null;
       return json.decode(await file.readAsString()) as Map<String, dynamic>;
@@ -350,7 +351,7 @@ class AnalysisGamesService {
 
     for (final colour in ['white', 'black']) {
       final file =
-          File('${directory.path}/${key}_${colour}_analysis.json');
+          File(p.join(directory.path, '${key}_${colour}_analysis.json'));
       if (await file.exists()) await file.delete();
     }
   }
@@ -369,7 +370,7 @@ class AnalysisGamesService {
       username: username,
     ).playerKey;
 
-    await File('${directory.path}/${key}_engine_evals.json')
+    await File(p.join(directory.path, '${key}_engine_evals.json'))
         .writeAsString(json.encode(evals));
   }
 
@@ -384,7 +385,7 @@ class AnalysisGamesService {
         platform: platform,
         username: username,
       ).playerKey;
-      final file = File('${directory.path}/${key}_engine_evals.json');
+      final file = File(p.join(directory.path, '${key}_engine_evals.json'));
 
       if (!await file.exists()) return null;
       return json.decode(await file.readAsString()) as List<dynamic>;
@@ -400,6 +401,7 @@ class AnalysisGamesService {
   /// This is a static utility so callers outside the service can reuse it
   /// without duplicating the logic.
   static List<String> splitPgnIntoGames(String pgn) {
+    if (pgn.startsWith('\uFEFF')) pgn = pgn.substring(1);
     final games = <String>[];
     final lines = pgn.split('\n');
     final buffer = StringBuffer();

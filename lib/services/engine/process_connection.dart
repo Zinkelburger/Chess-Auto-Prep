@@ -139,17 +139,21 @@ class ProcessConnection implements EngineConnection {
     final proc = _process;
     _process = null;
     if (proc != null) {
-      // Ask Stockfish to exit gracefully, then SIGTERM.
-      // Schedule a SIGKILL fallback in case it doesn't respond.
       try {
         proc.stdin.writeln('quit');
       } catch (_) {}
-      proc.kill(); // SIGTERM
-      Future.delayed(const Duration(seconds: 2), () {
-        try {
-          proc.kill(ProcessSignal.sigkill);
-        } catch (_) {} // already exited — ignore
-      });
+      proc.kill(); // SIGTERM on POSIX, TerminateProcess on Windows
+      if (!Platform.isWindows) {
+        // On POSIX, the initial kill() sends SIGTERM which the process may
+        // ignore. Schedule a SIGKILL fallback. On Windows, kill() already
+        // does a hard termination so this is unnecessary (and sigkill would
+        // throw).
+        Future.delayed(const Duration(seconds: 2), () {
+          try {
+            proc.kill(ProcessSignal.sigkill);
+          } catch (_) {}
+        });
+      }
     }
     _stdoutController.close();
   }

@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../utils/app_messages.dart';
@@ -36,7 +37,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
     try {
       final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory('${directory.path}/repertoires');
+      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
 
       // Create repertoires directory if it doesn't exist
       if (!await repertoireDir.exists()) {
@@ -45,12 +46,12 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
       final files = await repertoireDir
           .list()
-          .where((file) => file.path.endsWith('.pgn'))
+          .where((file) => file.path.toLowerCase().endsWith('.pgn'))
           .toList();
       final repertoires = <Map<String, dynamic>>[];
 
       for (final file in files) {
-        final fileName = file.path.split('/').last.replaceAll('.pgn', '');
+        final fileName = p.basenameWithoutExtension(file.path);
         final stat = await file.stat();
         final content = await File(file.path).readAsString();
         final gameCount = _countGamesInPgn(content);
@@ -451,13 +452,13 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
   }) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory('${directory.path}/repertoires');
+      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
 
       if (!await repertoireDir.exists()) {
         await repertoireDir.create(recursive: true);
       }
 
-      final file = File('${repertoireDir.path}/$name.pgn');
+      final file = File(p.join(repertoireDir.path, '$name.pgn'));
 
       if (await file.exists()) {
         if (mounted) {
@@ -581,9 +582,9 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     if (result != null && result.isNotEmpty) {
       try {
         final directory = await getApplicationDocumentsDirectory();
-        final repertoireDir = Directory('${directory.path}/repertoires');
+        final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
         final oldFile = File(filePath);
-        final newFile = File('${repertoireDir.path}/$result.pgn');
+        final newFile = File(p.join(repertoireDir.path, '$result.pgn'));
 
         if (await newFile.exists()) {
           if (mounted) {

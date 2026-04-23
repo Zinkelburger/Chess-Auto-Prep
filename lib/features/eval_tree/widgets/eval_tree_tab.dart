@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../models/build_tree_node.dart';
 import '../services/eval_tree_file_loader.dart';
@@ -424,9 +425,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     if (filePath == null || filePath.isEmpty) {
       return null;
     }
-    final base = filePath.toLowerCase().endsWith('.pgn')
-        ? filePath.substring(0, filePath.length - 4)
-        : filePath;
+    final base = p.withoutExtension(filePath);
     return '${base}_tree.json';
   }
 }

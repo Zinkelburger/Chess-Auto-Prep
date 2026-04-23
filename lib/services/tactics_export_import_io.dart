@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -9,7 +10,7 @@ Future<void> exportCsvContent(String content, String filename, int positionCount
   if (Platform.isAndroid || Platform.isIOS) {
     // Create a temporary file for sharing
     final tempDir = await getTemporaryDirectory();
-    final tempFile = File('${tempDir.path}/$filename');
+    final tempFile = File(p.join(tempDir.path, filename));
     await tempFile.writeAsString(content);
 
     final result = await Share.shareXFiles(
