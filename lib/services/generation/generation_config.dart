@@ -1,12 +1,13 @@
 /// Configuration and output types for repertoire generation.
 library;
 
-// ── Presets ──────────────────────────────────────────────────────────────
+// ── Selection mode ──────────────────────────────────────────────────────
 
-/// Preset modes that adjust eval tolerance and novelty weight.
-/// Matches the C tree_builder's --solid / --practical / --tricky /
-/// --traps / --fresh presets.
-enum BuildPreset { none, solid, practical, tricky, traps, fresh }
+enum SelectionMode {
+  expectimax,
+  engineOnly,
+  dbWinRateOnly,
+}
 
 // ── Two-phase tree build config (matches C tree_builder) ────────────────
 
@@ -52,6 +53,7 @@ class TreeBuildConfig {
   final bool maiaOnly;
 
   // ── Expectimax / repertoire selection ──
+  final SelectionMode selectionMode;
   final double leafConfidence;
   final int noveltyWeight;
 
@@ -77,6 +79,7 @@ class TreeBuildConfig {
     this.maiaElo = 2200,
     this.maiaMinProb = 0.05,
     this.maiaOnly = true,
+    this.selectionMode = SelectionMode.expectimax,
     this.leafConfidence = 1.0,
     this.noveltyWeight = 0,
   });
@@ -107,6 +110,7 @@ class TreeBuildConfig {
       maiaElo: (json['maia_elo'] as num?)?.toInt() ?? 2200,
       maiaMinProb: (json['maia_min_prob'] as num?)?.toDouble() ?? 0.05,
       maiaOnly: json['maia_only'] as bool? ?? true,
+      selectionMode: _parseSelectionMode(json['selection_mode'] as String?),
       leafConfidence: (json['leaf_confidence'] as num?)?.toDouble() ?? 1.0,
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
     );
@@ -117,55 +121,6 @@ class TreeBuildConfig {
 
   /// Convert a white-perspective centipawn score to "our" perspective.
   int toOurPerspective(int whiteCp) => playAsWhite ? whiteCp : -whiteCp;
-
-  /// Apply a preset, filling only fields the user hasn't overridden.
-  TreeBuildConfig withPreset(BuildPreset preset) {
-    if (preset == BuildPreset.none) return this;
-    int newMinEval = minEvalCp;
-    int newMaxEvalLoss = maxEvalLossCp;
-    int newNovelty = noveltyWeight;
-
-    switch (preset) {
-      case BuildPreset.solid:
-        newMinEval = playAsWhite ? 0 : -100;
-        newMaxEvalLoss = 30;
-        break;
-      case BuildPreset.practical:
-        newMinEval = playAsWhite ? -25 : -200;
-        newMaxEvalLoss = 50;
-        break;
-      case BuildPreset.tricky:
-        newMinEval = playAsWhite ? -50 : -250;
-        newMaxEvalLoss = 75;
-        break;
-      case BuildPreset.traps:
-        newMinEval = playAsWhite ? -100 : -300;
-        newMaxEvalLoss = 100;
-        break;
-      case BuildPreset.fresh:
-        newMinEval = playAsWhite ? -25 : -200;
-        newNovelty = 60;
-        newMaxEvalLoss = 40;
-        break;
-      case BuildPreset.none:
-        break;
-    }
-
-    return TreeBuildConfig(
-      startFen: startFen, playAsWhite: playAsWhite,
-      minProbability: minProbability, maxPly: maxPly,
-      maxNodes: maxNodes, evalDepth: evalDepth,
-      ourMultipv: ourMultipv,
-      maxEvalLossCp: newMaxEvalLoss,
-      oppMaxChildren: oppMaxChildren, oppMassTarget: oppMassTarget,
-      minEvalCp: newMinEval, maxEvalCp: maxEvalCp,
-      relativeEval: relativeEval,
-      useLichessDb: useLichessDb, useMasters: useMasters,
-      ratingRange: ratingRange, speeds: speeds, minGames: minGames,
-      maiaElo: maiaElo, maiaMinProb: maiaMinProb, maiaOnly: maiaOnly,
-      leafConfidence: leafConfidence, noveltyWeight: newNovelty,
-    );
-  }
 
   /// Serialise to a JSON-compatible map for tree file metadata.
   Map<String, dynamic> toJson() => {
@@ -189,7 +144,19 @@ class TreeBuildConfig {
     'maia_elo': maiaElo,
     'maia_min_prob': maiaMinProb,
     'maia_only': maiaOnly,
+    'selection_mode': selectionMode.name,
     'leaf_confidence': leafConfidence,
     'novelty_weight': noveltyWeight,
   };
+}
+
+SelectionMode _parseSelectionMode(String? value) {
+  switch (value) {
+    case 'engineOnly':
+      return SelectionMode.engineOnly;
+    case 'dbWinRateOnly':
+      return SelectionMode.dbWinRateOnly;
+    default:
+      return SelectionMode.expectimax;
+  }
 }

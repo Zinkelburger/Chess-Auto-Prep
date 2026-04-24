@@ -46,7 +46,7 @@ class RepertoireSelector {
     int count = 0;
 
     if (isOurMove) {
-      final winner = ecaCalc.scoreOurMoveChildren(resolved);
+      final winner = _pickOurMove(resolved);
       if (winner != null) {
         winner.child.isRepertoireMove = true;
         winner.child.repertoireScore = winner.expectimaxValue;
@@ -61,6 +61,66 @@ class RepertoireSelector {
     }
 
     return count;
+  }
+
+  ScoredChild? _pickOurMove(BuildTreeNode node) {
+    switch (config.selectionMode) {
+      case SelectionMode.engineOnly:
+        return _pickByEngineEval(node);
+      case SelectionMode.dbWinRateOnly:
+        return _pickByDbWinRate(node);
+      case SelectionMode.expectimax:
+        return ecaCalc.scoreOurMoveChildren(node);
+    }
+  }
+
+  /// Engine-only: pick the child with the best engine eval for us,
+  /// respecting the max-eval-loss filter.
+  ScoredChild? _pickByEngineEval(BuildTreeNode node) {
+    if (node.children.isEmpty) return null;
+
+    int bestCp = -100000;
+    BuildTreeNode? bestChild;
+
+    for (final child in node.children) {
+      if (!child.hasEngineEval) continue;
+      final cpUs = child.evalForUs(config.playAsWhite);
+      if (cpUs > bestCp) {
+        bestCp = cpUs;
+        bestChild = child;
+      }
+    }
+
+    if (bestChild == null) return null;
+    return ScoredChild(
+      child: bestChild,
+      expectimaxValue: bestChild.expectimaxValue,
+    );
+  }
+
+  /// DB-win-rate-only: pick the child with the highest database win rate.
+  ScoredChild? _pickByDbWinRate(BuildTreeNode node) {
+    if (node.children.isEmpty) return null;
+
+    double bestWr = -1.0;
+    BuildTreeNode? bestChild;
+
+    for (final child in node.children) {
+      if (child.totalGames == 0) continue;
+      final wr = config.playAsWhite ? child.winRate : 1.0 - child.winRate;
+      if (wr > bestWr) {
+        bestWr = wr;
+        bestChild = child;
+      }
+    }
+
+    // Fallback: if no children have DB data, pick by engine eval
+    if (bestChild == null) return _pickByEngineEval(node);
+
+    return ScoredChild(
+      child: bestChild,
+      expectimaxValue: bestChild.expectimaxValue,
+    );
   }
 
   /// If [node] is a childless transposition leaf, find the canonical node

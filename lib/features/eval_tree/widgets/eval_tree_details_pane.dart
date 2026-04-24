@@ -142,10 +142,27 @@ class EvalTreeDetailsPane extends StatelessWidget {
             children: [
               if (evalCp != null)
                 _statBadge('Eval', _formatEval(evalCp), evalColor(evalCp)),
-              _statBadge(
-                'Reach',
-                '${(currentNode.cumulativeProbability * 100).toStringAsFixed(2)}%',
-                Colors.blue[300]!,
+              Tooltip(
+                richMessage: const TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Likelihood\n',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    TextSpan(
+                      text:
+                          'Probability of reaching this position, based on\n'
+                          'how often opponents play each reply (from the\n'
+                          'Lichess database). 100% at the root, decreasing\n'
+                          'as the line gets more specific.',
+                    ),
+                  ],
+                ),
+                child: _statBadge(
+                  'Likelihood',
+                  '${(currentNode.cumulativeProbability * 100).toStringAsFixed(2)}%',
+                  Colors.blue[300]!,
+                ),
               ),
               if (currentNode.ease != null)
                 _statBadge(
@@ -363,10 +380,26 @@ class EvalTreeDetailsPane extends StatelessWidget {
                     trapColor(child.trapScore ?? 0),
                   ),
                 if (isRepertoire && child.repertoireScore != 0)
-                  _miniStat(
-                    'score',
-                    child.repertoireScore.toStringAsFixed(2),
-                    Colors.amber[300]!,
+                  Tooltip(
+                    richMessage: const TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Practical Win Probability\n',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextSpan(
+                          text:
+                              'Combines engine eval with how often opponents\n'
+                              'play each response (from the Lichess database).\n'
+                              '1.0 = winning, 0.0 = losing.',
+                        ),
+                      ],
+                    ),
+                    child: _miniStat(
+                      'score',
+                      child.repertoireScore.toStringAsFixed(2),
+                      Colors.amber[300]!,
+                    ),
                   ),
               ],
             ),

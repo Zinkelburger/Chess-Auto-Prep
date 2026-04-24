@@ -430,4 +430,50 @@ class RepertoireService {
     await file.writeAsString('${sections.join('\n\n').trimRight()}\n');
     return true;
   }
+
+  /// Replaces the full PGN content of an existing line identified by [lineId].
+  ///
+  /// This is the in-place edit counterpart of [updateLineTitle].  The caller
+  /// provides the complete new PGN text (headers + move text) which replaces
+  /// the old game entry on disk.
+  Future<bool> updateLineContent(
+    String filePath,
+    String lineId,
+    String newGamePgn,
+  ) async {
+    final file = io.File(filePath);
+    if (!await file.exists()) return false;
+
+    final content = await file.readAsString();
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    final games = List<String>.from(document.games);
+
+    int? matchIndex;
+    for (int i = 0; i < games.length; i++) {
+      try {
+        final game = PgnGame.parsePgn(games[i]);
+        final moves = game.moves.mainline().map((n) => n.san).toList();
+        final id = _extractLineId(game, moves, i);
+        if (id == lineId) {
+          matchIndex = i;
+          break;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+
+    if (matchIndex == null) return false;
+
+    games[matchIndex] = newGamePgn.trimRight();
+
+    final sections = <String>[];
+    if (document.preamble.isNotEmpty) {
+      sections.add(document.preamble);
+    }
+    sections.addAll(games);
+
+    await file.writeAsString('${sections.join('\n\n').trimRight()}\n');
+    return true;
+  }
 }
