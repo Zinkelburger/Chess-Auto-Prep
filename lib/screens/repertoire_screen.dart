@@ -18,6 +18,7 @@ import '../services/repertoire_service.dart';
 import '../utils/app_messages.dart';
 import '../utils/chess_utils.dart' show uciToSan;
 import '../widgets/chess_board_widget.dart';
+import '../services/coverage_service.dart';
 import '../widgets/coverage_calculator_widget.dart';
 import '../features/eval_tree/controllers/eval_tree_controller.dart';
 import '../features/eval_tree/widgets/eval_tree_tab.dart';
@@ -27,7 +28,10 @@ import '../widgets/opening_tree_widget.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
+import '../widgets/traps_browser.dart';
 import '../widgets/unified_engine_pane.dart';
+import '../models/trap_line_info.dart';
+import '../services/generation/trap_extractor.dart';
 import 'repertoire_selection_screen.dart';
 import 'repertoire_training_screen.dart';
 
@@ -58,27 +62,26 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   bool _boardFlipped = false;
 
+  List<TrapLineInfo> _traps = [];
+  bool _trapsFileExists = false;
+
+  CoverageResult? _coverageResult;
+  bool _isCoverageRunning = false;
+
   String? _lastRepertoireId;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 7, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _tabController.addListener(() {
       final settled = _tabController.indexIsChanging ||
           _tabController.animation?.value == _tabController.index;
       if (!settled) return;
 
       // Engine tab selected while generating -> pause generation first.
-      if (_tabController.index == 1 &&
-          _isGenerating &&
-          !_isGenerationPaused) {
+      if (_tabController.index == 1 && _isGenerating && !_isGenerationPaused) {
         _generationTabKey.currentState?.togglePause();
-      }
-
-      // Leaving engine tab -> hard-cancel analysis to avoid overlap.
-      if (_tabController.index != 1) {
-        AnalysisService().cancel();
       }
 
       setState(() {});
@@ -108,7 +111,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           _boardFlipped = !_controller.isRepertoireWhite;
           _generatedTree = null;
           _generatedTreeResetCounter++;
+          _coverageResult = null;
           EngineSettings().probabilityStartMoves = _controller.rootMoves;
+          _loadTraps(currentId);
         }
 
         if (_controller.needsColorSelection) {
@@ -260,9 +265,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                     return KeyEventResult.handled;
                   }
                 }
-                // Tree Tab (Index 0) or Lines Tab (Index 3)
+                // Tree Tab (Index 0), Lines Tab (Index 3), or Traps Tab (Index 6)
                 else if (_tabController.index == 0 ||
-                    _tabController.index == 3) {
+                    _tabController.index == 3 ||
+                    _tabController.index == 6) {
                   if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
                     _controller.goBack();
                     return KeyEventResult.handled;
@@ -421,7 +427,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                               style: FilledButton.styleFrom(
                                 backgroundColor: Colors.amber[800],
                               ),
-                              icon: const Icon(Icons.pause, color: Colors.white),
+                              icon:
+                                  const Icon(Icons.pause, color: Colors.white),
                               label: const Text(
                                 'Pause',
                                 style: TextStyle(
@@ -452,7 +459,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                             ),
                             FilledButton.icon(
                               onPressed: () {
-                                _generationTabKey.currentState?.cancelGeneration();
+                                _generationTabKey.currentState
+                                    ?.cancelGeneration();
                               },
                               style: FilledButton.styleFrom(
                                 backgroundColor: Colors.red[700],
@@ -492,23 +500,35 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 controller: _tabController,
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
-                tabs: const [
-                  Tab(text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
-                  Tab(
+                tabs: [
+                  const Tab(
+                      text: 'Tree', icon: Icon(Icons.account_tree, size: 16)),
+                  const Tab(
                     text: 'Engine',
                     icon: Icon(Icons.developer_board, size: 16),
                   ),
-                  Tab(text: 'PGN', icon: Icon(Icons.description, size: 16)),
-                  Tab(
+                  const Tab(
+                      text: 'PGN', icon: Icon(Icons.description, size: 16)),
+                  const Tab(
                     text: 'Lines',
                     icon: Icon(Icons.library_books, size: 16),
                   ),
-                  Tab(
+                  const Tab(
                     text: 'Generate',
                     icon: Icon(Icons.auto_awesome, size: 16),
                   ),
-                  Tab(text: 'Eval Tree', icon: Icon(Icons.insights, size: 16)),
-                  Tab(text: 'Actions', icon: Icon(Icons.settings, size: 16)),
+                  const Tab(
+                      text: 'Eval Tree', icon: Icon(Icons.insights, size: 16)),
+                  Tab(
+                    text: 'Traps',
+                    icon: Icon(
+                      Icons.warning_amber_rounded,
+                      size: 16,
+                      color: _traps.isNotEmpty ? Colors.orange[400] : null,
+                    ),
+                  ),
+                  const Tab(
+                      text: 'Actions', icon: Icon(Icons.settings, size: 16)),
                 ],
               ),
             ),
@@ -520,12 +540,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   ? const NeverScrollableScrollPhysics()
                   : null,
               children: [
-                _buildOpeningTreeTab(),
+                _KeepAliveTab(child: _buildOpeningTreeTab()),
                 _KeepAliveTab(child: _buildEngineTab()),
                 _buildPgnTab(),
-                _buildLinesTab(),
+                _KeepAliveTab(child: _buildLinesTab()),
                 _KeepAliveTab(child: _buildGenerateTab()),
                 _buildEvalTreeTab(),
+                _KeepAliveTab(child: _buildTrapsTab()),
                 _buildActionsTab(),
               ],
             ),
@@ -667,11 +688,84 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       lines: _controller.repertoireLines,
       currentMoveSequence: _controller.currentMoveSequence,
       isExpanded: true,
+      coverageResult: _coverageResult,
+      onCoveragePressed: _showCoverageCalculator,
+      isCoverageRunning: _isCoverageRunning,
       onLineSelected: (line) {
         _controller.loadPgnLine(line);
         _tabController.animateTo(2);
       },
       onLineRenamed: _renameLine,
+    );
+  }
+
+  Future<void> _loadTraps(String filePath) async {
+    final traps = await TrapExtractor.loadFromFile(filePath);
+    if (mounted) {
+      setState(() {
+        _trapsFileExists = traps != null;
+        _traps = traps ?? [];
+      });
+    }
+  }
+
+  Widget _buildTrapsTab() {
+    if (_traps.isEmpty) {
+      final hasGenerated = _trapsFileExists;
+      return Container(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                hasGenerated
+                    ? Icons.check_circle_outline
+                    : Icons.warning_amber_rounded,
+                size: 64,
+                color: hasGenerated ? Colors.green[400] : Colors.grey[600],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                hasGenerated ? 'No traps found' : 'No traps available',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[400],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                hasGenerated
+                    ? 'The tree was too shallow or no positions met the '
+                        'trap thresholds. Try a deeper build (more plies) '
+                        'to find tricky positions.'
+                    : 'Generate a repertoire to see traps',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[500],
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed:
+                    _isGenerating ? null : () => _tabController.animateTo(4),
+                icon: const Icon(Icons.auto_awesome),
+                label: Text(hasGenerated ? 'Generate Again' : 'Go to Generate'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return TrapsBrowser(
+      traps: _traps,
+      currentMoveSequence: _controller.currentMoveSequence,
+      onTrapSelected: (trap) {
+        _controller.loadMoveSequence(trap.movesSan);
+      },
     );
   }
 
@@ -729,10 +823,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 // Keep for backward compatibility but defer to onMoveStateChanged
               },
               onPgnChanged: (pgn) {
-                // Clear selected line when user edits
-                if (_controller.selectedPgnLine != null) {
-                  _controller.clearSelectedPgnLine();
-                }
+                // No longer clear the selected line on every PGN change —
+                // edits to an existing line should keep it selected so
+                // auto-save knows which line to update.
+              },
+              isEditingExistingLine: _controller.selectedPgnLine != null,
+              onLineEdited: (updatedPgn) {
+                _controller.updateSelectedLineContent(updatedPgn);
               },
               onLineSaved: (moves, title, pgn) {
                 _controller.appendNewLine(moves, title, pgn);
@@ -749,8 +846,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       padding: const EdgeInsets.all(8.0),
       child: UnifiedEnginePane(
         fen: _controller.fen,
-        isActive:
-            _tabController.index == 1 && (!_isGenerating || _isGenerationPaused),
+        isActive: !_isGenerating || _isGenerationPaused,
         isUserTurn: _controller.position.turn ==
             (_controller.isRepertoireWhite ? Side.white : Side.black),
         currentMoveSequence: _controller.currentMoveSequence,
@@ -788,6 +884,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         context.read<AppState>().setRepertoireGenerating(generating);
         if (generating) {
           _tabController.animateTo(4);
+        } else {
+          // Reload traps after generation completes
+          final fp = _controller.currentRepertoire?['filePath'] as String?;
+          if (fp != null) _loadTraps(fp);
         }
       },
       onPauseChanged: (paused) {
@@ -1008,52 +1108,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           Expanded(
             child: ListView(
               children: [
-                // Coverage Calculator - Featured action
-                Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary
-                          .withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.analytics_outlined,
-                        color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                    title: const Text(
-                      'Coverage Calculator',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: const Text(
-                        'Analyze repertoire coverage with Lichess data'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: _showCoverageCalculator,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.expand_more, color: Colors.blue),
-                    title: const Text('Expand Repertoire'),
-                    subtitle:
-                        const Text('Add variations using Lichess database'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: _expandRepertoire,
-                  ),
-                ),
-                const SizedBox(height: 8),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.quiz, color: Colors.green),
@@ -1067,21 +1121,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 Card(
                   child: ListTile(
                     leading:
-                        const Icon(Icons.sports_esports, color: Colors.orange),
-                    title: const Text('Expand via Quiz'),
-                    subtitle:
-                        const Text('Play against database to build repertoire'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: _expandViaQuiz,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Card(
-                  child: ListTile(
-                    leading:
                         const Icon(Icons.upload_file, color: Colors.purple),
-                    title: const Text('Import PGN'),
-                    subtitle: const Text('Add games to current repertoire'),
+                    title: const Text('Add Lines'),
+                    subtitle: const Text('Import PGN lines into repertoire'),
                     trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: _importPgn,
                   ),
@@ -1167,65 +1209,60 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _controller.userPlayedMove(move.san);
   }
 
-  void _showCoverageCalculator() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.9,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        builder: (context, scrollController) => Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.only(top: 12, bottom: 8),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .outline
-                      .withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              // Close button row
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              // Coverage Calculator Widget - root is auto-detected
-              Expanded(
-                child: CoverageCalculatorWidget(
-                  openingTree: _controller.openingTree,
-                  isWhiteRepertoire: _controller.isRepertoireWhite,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Future<void> _showCoverageCalculator() async {
+    final config = await showCoverageConfigDialog(context);
+    if (config == null || !mounted) return;
 
-  void _expandRepertoire() {
-    _showFeatureNotImplemented('Expand Repertoire');
+    if (_controller.openingTree == null) {
+      showAppSnackBar(context, 'No repertoire tree loaded');
+      return;
+    }
+
+    setState(() {
+      _isCoverageRunning = true;
+      _coverageResult = null;
+    });
+
+    // Switch to Lines tab so user sees progress
+    _tabController.animateTo(3);
+
+    final service = CoverageService(
+      database: config.database,
+      ratings: config.ratingsString,
+      speeds: config.speedsString,
+      useMaia: config.useMaia,
+      maiaElo: config.maiaElo,
+    );
+
+    try {
+      final result = await service.analyzeOpeningTree(
+        _controller.openingTree!,
+        targetPercent: config.targetPercent,
+        isWhiteRepertoire: _controller.isRepertoireWhite,
+        onProgress: (message, progress) {
+          // Could show a snackbar or overlay, but Lines tab will update once done
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _coverageResult = result;
+          _isCoverageRunning = false;
+        });
+        showAppSnackBar(
+          context,
+          'Coverage: ${result.coveragePercent.toStringAsFixed(1)}% covered, '
+          '${result.tooShallowLeaves.length} shallow, '
+          '${result.tooDeepLeaves.length} deep, '
+          '${result.unaccountedMoves.length} unaccounted moves',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isCoverageRunning = false);
+        showAppSnackBar(context, 'Coverage analysis failed: $e');
+      }
+    }
   }
 
   void _trainRepertoire() {
@@ -1238,10 +1275,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         ),
       ),
     );
-  }
-
-  void _expandViaQuiz() {
-    _showFeatureNotImplemented('Expand via Quiz');
   }
 
   Future<void> _importPgn() async {
@@ -1257,24 +1290,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     showAppSnackBar(
       context,
-      'Imported $added game${added == 1 ? '' : 's'} into repertoire.',
-    );
-  }
-
-  void _showFeatureNotImplemented(String featureName) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Feature Not Implemented'),
-        content:
-            Text('$featureName feature will be implemented in the future.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+      'Added $added line${added == 1 ? '' : 's'} to repertoire.',
     );
   }
 }

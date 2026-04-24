@@ -557,12 +557,66 @@ class RepertoireController with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Load a raw move sequence onto the board (e.g. from trap lines).
+  void loadMoveSequence(List<String> moves) {
+    _selectedPgnLine = null;
+    _moveHistory = List.from(moves);
+    _currentMoveIndex = moves.isEmpty ? -1 : moves.length - 1;
+    _rebuildPosition();
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
   RepertoireLine? _selectedPgnLine;
   RepertoireLine? get selectedPgnLine => _selectedPgnLine;
 
   void clearSelectedPgnLine() {
     _selectedPgnLine = null;
     notifyListeners();
+  }
+
+  /// Persist edits (comments, moves, variations) made to the currently
+  /// selected line back to the PGN file on disk and update in-memory state.
+  Future<bool> updateSelectedLineContent(String newPgn) async {
+    if (_selectedPgnLine == null || _currentRepertoire == null) return false;
+    final filePath = _currentRepertoire!['filePath'] as String?;
+    if (filePath == null || filePath.isEmpty) return false;
+
+    final lineId = _selectedPgnLine!.id;
+    final service = RepertoireService();
+    final success = await service.updateLineContent(filePath, lineId, newPgn);
+    if (!success) return false;
+
+    // Update the in-memory line so the Lines browser reflects changes
+    // without a full reload.
+    final idx = _repertoireLines.indexWhere((l) => l.id == lineId);
+    if (idx != -1) {
+      final old = _repertoireLines[idx];
+      final parsed = PgnGame.parsePgn(newPgn);
+      final newMoves = parsed.moves.mainline().map((n) => n.san).toList();
+      final comments = <String, String>{};
+      final moveNodes = parsed.moves.mainline().toList();
+      for (int i = 0; i < moveNodes.length; i++) {
+        final node = moveNodes[i];
+        if (node.comments != null && node.comments!.isNotEmpty) {
+          final c = node.comments!.join(' ').trim();
+          if (c.isNotEmpty) comments[i.toString()] = c;
+        }
+      }
+      _repertoireLines[idx] = RepertoireLine(
+        id: old.id,
+        name: old.name,
+        moves: newMoves,
+        color: old.color,
+        startPosition: service.extractStartPositionFromPgn(newPgn),
+        fullPgn: newPgn,
+        comments: comments,
+      );
+      _selectedPgnLine = _repertoireLines[idx];
+    }
+
+    notifyListeners();
+    return true;
   }
 
   String? _extractHeaderValue(String line) =>

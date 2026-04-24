@@ -11,9 +11,13 @@ import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
 import '../services/generation/repertoire_selector.dart';
+import '../services/generation/trap_extractor.dart';
 import '../services/generation/tree_ease.dart';
 import '../services/generation/tree_serialization.dart';
+import '../services/coverage_service.dart';
 import '../services/tree_build_service.dart';
+import 'lichess_db_info_icon.dart';
+import 'lichess_db_selector.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
@@ -56,7 +60,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final TextEditingController _engineDepthCtrl =
       TextEditingController(text: '20');
   final TextEditingController _evalGuardCtrl =
-      TextEditingController(text: '50');
+      TextEditingController(text: '30');
   late final TextEditingController _minEvalCtrl;
   late final TextEditingController _maxEvalCtrl;
   final TextEditingController _maiaEloCtrl =
@@ -68,18 +72,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       TextEditingController(text: '6');
   final TextEditingController _oppMassTargetCtrl =
       TextEditingController(text: '0.95');
-  final TextEditingController _noveltyWeightCtrl =
-      TextEditingController(text: '0');
   final TextEditingController _leafConfidenceCtrl =
       TextEditingController(text: '1.0');
 
-  bool _useLichessDb = false;
-  bool _useMasters = false;
-  bool _maiaOnly = true;
+  // null = Maia only; non-null = override with that Lichess DB
+  LichessDatabase? _lichessDbOverride;
   bool _relativeEval = false;
-  BuildPreset _preset = BuildPreset.none;
-  bool _applyingPreset = false;
+  bool _preferNovelties = false;
 
+  // Lichess Players sub-options (shown when opponent source is lichessPlayers)
+  final TextEditingController _lichessMinGamesCtrl =
+      TextEditingController(text: '10');
+  final Set<String> _lichessSpeeds = {'blitz', 'rapid', 'classical'};
+  final Set<String> _lichessRatings = {'2000', '2200', '2500'};
+
+  SelectionMode _selectionMode = SelectionMode.expectimax;
   bool _showAdvanced = false;
   bool _isGenerating = false;
   bool _cancelRequested = false;
@@ -103,22 +110,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   void initState() {
     super.initState();
     _minEvalCtrl = TextEditingController(
-      text: widget.isWhiteRepertoire ? '0' : '-200',
+      text: widget.isWhiteRepertoire ? '0' : '-100',
     );
     _maxEvalCtrl = TextEditingController(
       text: widget.isWhiteRepertoire ? '200' : '100',
     );
-    _evalGuardCtrl.addListener(_onPresetFieldEdited);
-    _minEvalCtrl.addListener(_onPresetFieldEdited);
-    _noveltyWeightCtrl.addListener(_onPresetFieldEdited);
     _checkForPartialTree();
-  }
-
-  void _onPresetFieldEdited() {
-    if (_applyingPreset) return;
-    if (_preset != BuildPreset.none && mounted) {
-      setState(() => _preset = BuildPreset.none);
-    }
   }
 
   @override
@@ -130,10 +127,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _minEvalCtrl.dispose();
     _maxEvalCtrl.dispose();
     _maiaEloCtrl.dispose();
+    _lichessMinGamesCtrl.dispose();
     _multipvCtrl.dispose();
     _oppMaxChildrenCtrl.dispose();
     _oppMassTargetCtrl.dispose();
-    _noveltyWeightCtrl.dispose();
     _leafConfidenceCtrl.dispose();
     super.dispose();
   }
@@ -257,20 +254,24 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         ),
         maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 10,
         evalDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
-        maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 50,
+        maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
         minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
-            (widget.isWhiteRepertoire ? 0 : -200),
+            (widget.isWhiteRepertoire ? 0 : -100),
         maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ??
             (widget.isWhiteRepertoire ? 200 : 100),
         maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
-        maiaOnly: _maiaOnly,
+        maiaOnly: _lichessDbOverride == null,
         ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 5,
         oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 6,
         oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.95,
-        useLichessDb: _useLichessDb,
-        useMasters: _useMasters,
+        useLichessDb: _lichessDbOverride != null,
+        useMasters: _lichessDbOverride == LichessDatabase.masters,
+        speeds: _lichessSpeeds.join(','),
+        ratingRange: (_lichessRatings.toList()..sort()).join(','),
+        minGames: int.tryParse(_lichessMinGamesCtrl.text.trim()) ?? 10,
         relativeEval: _relativeEval,
-        noveltyWeight: int.tryParse(_noveltyWeightCtrl.text.trim()) ?? 0,
+        selectionMode: _selectionMode,
+        noveltyWeight: _preferNovelties ? 60 : 0,
         leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
       );
     }
@@ -400,6 +401,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         await File('${base}_tree.json').writeAsString(treeJson);
       } catch (_) {
         // Tree JSON save is best-effort
+      }
+
+      // Post-processing: extract and save trap lines (always write the file
+      // so the UI can distinguish "never generated" from "no traps found").
+      try {
+        final trapExtractor = TrapExtractor(
+          playAsWhite: config.playAsWhite,
+        );
+        final trapLines = trapExtractor.extract(tree);
+        await TrapExtractor.saveToFile(trapLines, filePath);
+      } catch (_) {
+        // Trap extraction is best-effort
       }
 
       await _deletePartialTree();
@@ -612,52 +625,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           ),
           const SizedBox(height: 8),
 
-          // Preset selector
-          DropdownButtonFormField<BuildPreset>(
-            value: _preset,
-            decoration: const InputDecoration(
-              labelText: 'Preset',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: BuildPreset.none,
-                child: Text('None (manual config)'),
-              ),
-              DropdownMenuItem(
-                value: BuildPreset.solid,
-                child: Text('Solid — tight eval, strict quality'),
-              ),
-              DropdownMenuItem(
-                value: BuildPreset.practical,
-                child: Text('Practical — balanced tolerance'),
-              ),
-              DropdownMenuItem(
-                value: BuildPreset.tricky,
-                child: Text('Tricky — wider tolerance, speculative'),
-              ),
-              DropdownMenuItem(
-                value: BuildPreset.traps,
-                child: Text('Traps — widest tolerance, trap hunting'),
-              ),
-              DropdownMenuItem(
-                value: BuildPreset.fresh,
-                child: Text('Fresh — sound but unusual moves'),
-              ),
-            ],
-            onChanged: _isGenerating
-                ? null
-                : (v) {
-                    if (v != null)
-                      setState(() {
-                        _preset = v;
-                        _applyPresetToControllers(v);
-                      });
-                  },
-          ),
-          const SizedBox(height: 8),
-
           // Main config fields
           Wrap(
             spacing: 8,
@@ -674,37 +641,102 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           ),
           const SizedBox(height: 8),
 
-          // Opponent source: strict either/or (radio behavior)
+          // Opponent move source
           Row(
             children: [
-              const Text('Opponent moves: ', style: TextStyle(fontSize: 13)),
-              const SizedBox(width: 8),
-              ChoiceChip(
-                label: const Text('Maia'),
-                selected: _maiaOnly,
-                onSelected: _isGenerating
-                    ? null
-                    : (_) {
-                        setState(() {
-                          _maiaOnly = true;
-                          _useLichessDb = false;
-                        });
-                      },
+              const Text('Opponent moves: Maia',
+                  style: TextStyle(fontSize: 13)),
+              const SizedBox(width: 4),
+              Tooltip(
+                message:
+                    'Maia neural network is the default opponent model.\n'
+                    'You can override this with a Lichess database\n'
+                    '(Players or Masters) in the Advanced section below.\n'
+                    'When a Lichess DB is selected, Maia is still used\n'
+                    'as a fallback for positions with no DB data.',
+                child: Icon(Icons.info_outline,
+                    size: 16, color: Colors.grey[500]),
               ),
-              const SizedBox(width: 6),
-              ChoiceChip(
-                label: const Text('Lichess'),
-                selected: _useLichessDb,
-                onSelected: _isGenerating
+              if (_lichessDbOverride != null) ...[
+                const SizedBox(width: 8),
+                Chip(
+                  label: Text(
+                    _lichessDbOverride == LichessDatabase.masters
+                        ? 'Overridden: Lichess Masters'
+                        : 'Overridden: Lichess Players',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                  deleteIcon: const Icon(Icons.close, size: 14),
+                  onDeleted: _isGenerating
+                      ? null
+                      : () => setState(
+                          () => _lichessDbOverride = null),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+
+          // Prefer novelties
+          Row(
+            children: [
+              Checkbox(
+                value: _preferNovelties,
+                onChanged: _isGenerating
                     ? null
-                    : (_) {
-                        setState(() {
-                          _useLichessDb = true;
-                          _maiaOnly = false;
-                        });
-                      },
+                    : (v) => setState(() => _preferNovelties = v ?? false),
+              ),
+              GestureDetector(
+                onTap: _isGenerating
+                    ? null
+                    : () => setState(
+                        () => _preferNovelties = !_preferNovelties),
+                child: const Text(
+                  'Prefer novelties',
+                  style: TextStyle(fontSize: 13),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Tooltip(
+                message:
+                    'Favor less-played moves that are still sound.\n'
+                    'Uses Maia/Lichess frequency data to boost unusual lines.',
+                child: Icon(Icons.info_outline,
+                    size: 16, color: Colors.grey[500]),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+
+          // Selection mode
+          DropdownButtonFormField<SelectionMode>(
+            value: _selectionMode,
+            decoration: const InputDecoration(
+              labelText: 'Selection Mode',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: SelectionMode.expectimax,
+                child: Text('Expectimax (Stockfish + Maia)'),
+              ),
+              DropdownMenuItem(
+                value: SelectionMode.engineOnly,
+                child: Text('Engine only (best Stockfish eval)'),
+              ),
+              DropdownMenuItem(
+                value: SelectionMode.dbWinRateOnly,
+                child: Text('DB win rate only (no engine selection)'),
+              ),
+            ],
+            onChanged: _isGenerating
+                ? null
+                : (v) {
+                    if (v != null) setState(() => _selectionMode = v);
+                  },
           ),
           const SizedBox(height: 4),
 
@@ -735,9 +767,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 _numField(_oppMassTargetCtrl, 'Opp Mass Target',
                     tooltip:
                         'Stop adding opponent moves after this probability mass is covered'),
-                _numField(_noveltyWeightCtrl, 'Novelty Weight (0-100)',
-                    tooltip:
-                        'Boost for less-played moves; higher prefers unusual lines'),
                 _numField(_leafConfidenceCtrl, 'Leaf Confidence (0-1)',
                     tooltip:
                         'Trust in engine eval at leaves; lower blends toward 0.5'),
@@ -748,13 +777,81 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               children: [
                 _toggleSwitch('Relative Eval', _relativeEval, (v) {
                   setState(() => _relativeEval = v);
-                }),
-                const SizedBox(width: 12),
-                _toggleSwitch('Masters DB', _useMasters, (v) {
-                  setState(() => _useMasters = v);
-                }),
+                },
+                    tooltip:
+                        'Shift the Min/Max Eval window relative to the root\n'
+                        "position's engine eval instead of using absolute cp values."),
+                const LichessDbInfoIcon(size: 14),
               ],
             ),
+            const SizedBox(height: 12),
+
+            // Lichess DB override
+            Row(
+              children: [
+                const Text('Opponent DB override',
+                    style: TextStyle(fontSize: 13)),
+                const SizedBox(width: 4),
+                Tooltip(
+                  message:
+                      'Override Maia with a Lichess database for opponent\n'
+                      'move frequencies. Maia remains the fallback for\n'
+                      'positions with no database data.',
+                  child: Icon(Icons.info_outline,
+                      size: 16, color: Colors.grey[500]),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('None (Maia only)'),
+                  selected: _lichessDbOverride == null,
+                  onSelected: _isGenerating
+                      ? null
+                      : (_) => setState(() => _lichessDbOverride = null),
+                ),
+                const SizedBox(width: 4),
+                ChoiceChip(
+                  label: const Text('Lichess DB'),
+                  selected: _lichessDbOverride != null,
+                  onSelected: _isGenerating
+                      ? null
+                      : (_) => setState(() =>
+                          _lichessDbOverride ??= LichessDatabase.lichess),
+                ),
+              ],
+            ),
+            if (_lichessDbOverride != null) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: LichessDbSelector(
+                  database: _lichessDbOverride!,
+                  onDatabaseChanged: (db) => setState(() {
+                    final wasMasters =
+                        _lichessDbOverride == LichessDatabase.masters;
+                    final isMasters = db == LichessDatabase.masters;
+                    _lichessDbOverride = db;
+                    if (wasMasters != isMasters) {
+                      _lichessMinGamesCtrl.text = isMasters ? '4' : '10';
+                    }
+                  }),
+                  selectedSpeeds: _lichessSpeeds,
+                  onSpeedsChanged: (s) => setState(() {
+                    _lichessSpeeds
+                      ..clear()
+                      ..addAll(s);
+                  }),
+                  selectedRatings: _lichessRatings,
+                  onRatingsChanged: (r) => setState(() {
+                    _lichessRatings
+                      ..clear()
+                      ..addAll(r);
+                  }),
+                  minGamesController: _lichessMinGamesCtrl,
+                  enabled: !_isGenerating,
+                  compact: true,
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 8),
 
@@ -882,11 +979,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           const SizedBox(height: 8),
           Text(_status, style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 8),
-          const Text(
-            'Two-phase: builds the full tree with constant MultiPV at each ply +'
-            ' single-source opponent moves, then computes expectimax'
-            ' and selects repertoire lines.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
+          Text(
+            _selectionModeDescription(),
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ],
       ),
@@ -912,8 +1007,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     return Tooltip(message: tooltip, child: field);
   }
 
-  Widget _toggleSwitch(String label, bool value, ValueChanged<bool> onChanged) {
-    return Row(
+  Widget _toggleSwitch(String label, bool value, ValueChanged<bool> onChanged,
+      {String? tooltip}) {
+    final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(label, style: const TextStyle(fontSize: 13)),
@@ -924,42 +1020,24 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         ),
       ],
     );
+    if (tooltip == null) return row;
+    return Tooltip(message: tooltip, child: row);
   }
 
-  void _applyPresetToControllers(BuildPreset preset) {
-    if (preset == BuildPreset.none) return;
-    _applyingPreset = true;
-    final isWhite = widget.isWhiteRepertoire;
-    switch (preset) {
-      case BuildPreset.solid:
-        _minEvalCtrl.text = isWhite ? '0' : '-100';
-        _evalGuardCtrl.text = '30';
-        _noveltyWeightCtrl.text = '0';
-        break;
-      case BuildPreset.practical:
-        _minEvalCtrl.text = isWhite ? '-25' : '-200';
-        _evalGuardCtrl.text = '50';
-        _noveltyWeightCtrl.text = '0';
-        break;
-      case BuildPreset.tricky:
-        _minEvalCtrl.text = isWhite ? '-50' : '-250';
-        _evalGuardCtrl.text = '75';
-        _noveltyWeightCtrl.text = '0';
-        break;
-      case BuildPreset.traps:
-        _minEvalCtrl.text = isWhite ? '-100' : '-300';
-        _evalGuardCtrl.text = '100';
-        _noveltyWeightCtrl.text = '0';
-        break;
-      case BuildPreset.fresh:
-        _minEvalCtrl.text = isWhite ? '-25' : '-200';
-        _evalGuardCtrl.text = '40';
-        _noveltyWeightCtrl.text = '60';
-        break;
-      case BuildPreset.none:
-        break;
+
+  String _selectionModeDescription() {
+    switch (_selectionMode) {
+      case SelectionMode.expectimax:
+        return 'Two-phase: builds the full tree with constant MultiPV at each ply'
+            ' + single-source opponent moves, then computes expectimax'
+            ' and selects repertoire lines.';
+      case SelectionMode.engineOnly:
+        return 'Builds the full tree, then selects moves purely by engine eval.'
+            ' Ignores opponent frequency / win-rate data for selection.';
+      case SelectionMode.dbWinRateOnly:
+        return 'Builds the full tree, then selects moves by database win rate.'
+            ' Falls back to engine eval when no DB data is available.';
     }
-    _applyingPreset = false;
   }
 
   double _parsePercentToFraction(

@@ -55,8 +55,8 @@ class EvalTreeToolbar extends StatelessWidget {
             icon:
                 controller.showAncestorSpine ? Icons.account_tree : Icons.park,
             tooltip: controller.showAncestorSpine
-                ? 'Hide ancestor spine'
-                : 'Show ancestor spine',
+                ? 'Hide path to root'
+                : 'Show path to root',
             onPressed: controller.toggleAncestorSpine,
             active: controller.showAncestorSpine,
           ),
@@ -94,6 +94,43 @@ class EvalTreeToolbar extends StatelessWidget {
                   textStyle: const WidgetStatePropertyAll(
                     TextStyle(fontSize: 10),
                   ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Tooltip(
+                richMessage: TextSpan(
+                  children: controller.metricDisplayMode ==
+                          EvalTreeMetricDisplayMode.cpl
+                      ? const [
+                          TextSpan(
+                            text: 'Centipawn Loss (CPL)\n',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(
+                            text:
+                                'How many centipawns the opponent loses compared\n'
+                                'to the best engine move. Higher CPL = the opponent\n'
+                                'is more likely to blunder in this position.\n\n'
+                                'Shown on your moves only.',
+                          ),
+                        ]
+                      : const [
+                          TextSpan(
+                            text: 'Engine Eval\n',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(
+                            text:
+                                'Position evaluation in pawns from your perspective.\n'
+                                '+1.0 means you are up roughly one pawn.\n'
+                                'Negative values mean the opponent is better.',
+                          ),
+                        ],
+                ),
+                child: Icon(
+                  Icons.info_outline,
+                  size: 14,
+                  color: Colors.grey[500],
                 ),
               ),
             ],

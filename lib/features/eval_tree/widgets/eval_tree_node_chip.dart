@@ -21,6 +21,16 @@ class EvalTreeNodeChip extends StatelessWidget {
     required this.onTap,
   });
 
+  String _tooltipMessage() {
+    final label = EvalTreeLayoutEngine.secondaryLabelForNode(
+      snapshot,
+      node,
+      metricDisplayMode,
+    );
+    if (label != null && label.isNotEmpty) return label;
+    return node.displayLabel;
+  }
+
   @override
   Widget build(BuildContext context) {
     final secondaryLabel = EvalTreeLayoutEngine.secondaryLabelForNode(
@@ -42,7 +52,7 @@ class EvalTreeNodeChip extends StatelessWidget {
             : Colors.transparent;
 
     return Tooltip(
-      message: node.fen,
+      message: _tooltipMessage(),
       waitDuration: const Duration(milliseconds: 300),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,

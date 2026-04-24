@@ -2,6 +2,8 @@
 /// Allows real-time editing, move addition, variation management, and commenting
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
@@ -99,6 +101,13 @@ class InteractivePgnEditor extends StatefulWidget {
   /// append to the in-memory tree without a full reload.
   final Function(List<String> moves, String title, String pgn)? onLineSaved;
 
+  /// Called when the user edits an existing line (adds moves, comments, etc.)
+  /// so the caller can persist changes back to disk.
+  final Function(String updatedPgn)? onLineEdited;
+
+  /// Whether the editor is showing an existing line being edited in-place.
+  final bool isEditingExistingLine;
+
   const InteractivePgnEditor({
     super.key,
     this.onPositionChanged,
@@ -112,6 +121,8 @@ class InteractivePgnEditor extends StatefulWidget {
     this.currentMoveIndex = -1,
     this.startingFen,
     this.onLineSaved,
+    this.onLineEdited,
+    this.isEditingExistingLine = false,
   });
 
   @override
@@ -142,6 +153,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // Flag to prevent callback loops when syncing from external source (controller)
   bool _isSyncingFromExternal = false;
 
+  // Debounced auto-save for existing line edits
+  Timer? _autoSaveTimer;
+  static const _autoSaveDelay = Duration(milliseconds: 800);
+
   @override
   void initState() {
     super.initState();
@@ -164,6 +179,16 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   @override
   void didUpdateWidget(InteractivePgnEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.initialPgn != oldWidget.initialPgn) {
+      _flushAutoSave();
+      _roots = [];
+      _currentPath = [];
+      if (widget.initialPgn != null && widget.initialPgn!.isNotEmpty) {
+        _loadInitialPgn(widget.initialPgn!);
+      }
+      _syncToMoveHistory(widget.moveHistory, widget.currentMoveIndex);
+      return;
+    }
     if (!_listsEqual(widget.moveHistory, oldWidget.moveHistory) ||
         widget.currentMoveIndex != oldWidget.currentMoveIndex) {
       _syncToMoveHistory(widget.moveHistory, widget.currentMoveIndex);
@@ -180,10 +205,21 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   @override
   void dispose() {
+    _autoSaveTimer?.cancel();
+    _flushAutoSave();
     widget.controller?._unbindState();
     _commentController.dispose();
     _titleController.dispose();
     super.dispose();
+  }
+
+  void _flushAutoSave() {
+    if (_autoSaveTimer?.isActive ?? false) {
+      _autoSaveTimer!.cancel();
+      if (widget.isEditingExistingLine && _workingPgn.isNotEmpty) {
+        widget.onLineEdited?.call(_buildFullPgnForSave());
+      }
+    }
   }
 
   void _loadInitialPgn(String pgn) {
@@ -378,6 +414,47 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     }
     _workingPgn = buffer.toString().trim();
     widget.onPgnChanged?.call(_workingPgn);
+    _scheduleAutoSave();
+  }
+
+  void _scheduleAutoSave() {
+    if (!widget.isEditingExistingLine || _isSyncingFromExternal) return;
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(_autoSaveDelay, () {
+      if (!mounted) return;
+      if (_workingPgn.isNotEmpty) {
+        final fullPgn = _buildFullPgnForSave();
+        widget.onLineEdited?.call(fullPgn);
+      }
+    });
+  }
+
+  String _buildFullPgnForSave() {
+    final title = _titleController.text.trim().isNotEmpty
+        ? _titleController.text.trim()
+        : 'Repertoire Line';
+    final normalizedColor =
+        (widget.repertoireColor ?? 'White').trim().toLowerCase();
+    final whiteHeader = normalizedColor == 'black' ? 'Training' : 'Me';
+    final blackHeader = normalizedColor == 'black' ? 'Me' : 'Training';
+
+    final splitPgn = _splitWorkingPgn(_workingPgn);
+    final extraHeaders =
+        splitPgn.headers.where((line) => !_isManagedHeader(line));
+
+    final lines = <String>[
+      '[Event "$title"]',
+      '[Date "${DateTime.now().toIso8601String().split('T').first}"]',
+      '[White "$whiteHeader"]',
+      '[Black "$blackHeader"]',
+      '[Result "*"]',
+      ...extraHeaders,
+      '',
+    ];
+    if (splitPgn.moveText.isNotEmpty) {
+      lines.add(splitPgn.moveText);
+    }
+    return lines.join('\n');
   }
 
   void _writePgnTree(StringBuffer buffer, List<PgnMove> siblings) {
@@ -414,7 +491,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     
     buffer.write('${main.san} ');
     if (main.comment != null && main.comment!.isNotEmpty) {
-      buffer.write('{${main.comment}} ');
+      buffer.write('{${_sanitizeComment(main.comment!)}} ');
     }
 
     // Write variations (siblings 1..n)
@@ -430,7 +507,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       final variant = siblings[i];
       buffer.write('${variant.san} ');
       if (variant.comment != null && variant.comment!.isNotEmpty) {
-        buffer.write('{${variant.comment}} ');
+        buffer.write('{${_sanitizeComment(variant.comment!)}} ');
       }
       
       // Continue variation line
@@ -906,11 +983,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (isWhite) {
       widgets.add(Text('$moveNumber. ', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)));
     } else if (isFirstMove) {
-      // Black's first move needs the "X..." notation
       widgets.add(Text('$moveNumber... ', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)));
     }
     
     widgets.add(_buildSingleMoveWidget(main));
+
+    if (main.comment != null && main.comment!.isNotEmpty) {
+      widgets.add(_buildInlineComment(main.comment!));
+    }
     
     // Check for variations (siblings 1+)
     if (siblings.length > 1) {
@@ -925,6 +1005,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
          }
          
          widgets.add(_buildSingleMoveWidget(variant));
+
+         if (variant.comment != null && variant.comment!.isNotEmpty) {
+           widgets.add(_buildInlineComment(variant.comment!));
+         }
          
          // Recursively build the rest of the variation
          widgets.addAll(_buildMoveWidgets(variant.children, isWhite ? moveNumber : moveNumber + 1, !isWhite));
@@ -939,9 +1023,29 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     return widgets;
   }
 
+  /// Strip curly braces from comment text so it can't break PGN structure.
+  static String _sanitizeComment(String comment) =>
+      comment.replaceAll('{', '').replaceAll('}', '');
+
+  Widget _buildInlineComment(String comment) {
+    final sanitized = _sanitizeComment(comment);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Text(
+        '{$sanitized}',
+        style: TextStyle(
+          fontSize: 11,
+          fontStyle: FontStyle.italic,
+          color: Colors.green[300]?.withValues(alpha: 0.85),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSingleMoveWidget(PgnMove move) {
     final isSelected = move.id == _selectedMoveId;
     final isCurrent = _currentPath.any((m) => m.id == move.id);
+    final hasComment = move.comment != null && move.comment!.isNotEmpty;
     
     Color textColor = Colors.blue[300]!;
     Color? bgColor;
@@ -962,13 +1066,27 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           borderRadius: BorderRadius.circular(2),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: Text(
-          move.san,
-          style: TextStyle(
-            color: textColor,
-            fontWeight: isSelected || isCurrent ? FontWeight.bold : FontWeight.normal,
-            decoration: TextDecoration.underline,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              move.san,
+              style: TextStyle(
+                color: textColor,
+                fontWeight: isSelected || isCurrent ? FontWeight.bold : FontWeight.normal,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+            if (hasComment)
+              Padding(
+                padding: const EdgeInsets.only(left: 1),
+                child: Icon(
+                  Icons.chat_bubble,
+                  size: 8,
+                  color: Colors.green[400]?.withValues(alpha: 0.7),
+                ),
+              ),
+          ],
         ),
       ),
     );

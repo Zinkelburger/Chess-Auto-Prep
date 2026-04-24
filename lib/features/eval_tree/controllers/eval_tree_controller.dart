@@ -134,14 +134,14 @@ class EvalTreeController extends ChangeNotifier {
 
   void toggleAncestorSpine() {
     _showAncestorSpine = !_showAncestorSpine;
-    _requestFocus(selectedNodeId, resetZoom: true);
+    _requestFocus(selectedNodeId);
     notifyListeners();
   }
 
   void setAncestorSpine(bool value) {
     if (_showAncestorSpine == value) return;
     _showAncestorSpine = value;
-    _requestFocus(selectedNodeId, resetZoom: true);
+    _requestFocus(selectedNodeId);
     notifyListeners();
   }
 
