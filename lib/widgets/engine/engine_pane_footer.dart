@@ -10,6 +10,7 @@ import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/probability_service.dart';
 import '../../utils/chess_utils.dart' show formatCount, uciToSan;
+import '../lichess_db_info_icon.dart';
 
 class EnginePaneFooter extends StatelessWidget {
   final EngineSettings settings;
@@ -136,10 +137,12 @@ class EnginePaneFooter extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Cumulative DB ',
+                        'Cumulative DB',
                         style:
                             TextStyle(fontSize: 15, color: Colors.grey[500]),
                       ),
+                      const LichessDbInfoIcon(size: 13),
+                      const SizedBox(width: 2),
                       Text(
                         '${cumulative.toStringAsFixed(1)}%',
                         style: TextStyle(

@@ -323,7 +323,7 @@ class TreeBuildService {
     // source, so the explorer data is available anyway).
     ExplorerResponse? lichess;
     if (!config.maiaOnly) {
-      lichess = await _getDbData(node.fen);
+      lichess = await _getDbData(node.fen, config);
     }
 
     if (lichess != null) {
@@ -444,6 +444,12 @@ class TreeBuildService {
       await _addOpponentChildrenFromLichess(
         tree: tree, node: node, config: config, onProgress: onProgress,
       );
+      // Fall back to Maia when the Lichess DB has no data for this position
+      if (node.children.isEmpty) {
+        await _addOpponentChildrenFromMaia(
+          tree: tree, node: node, config: config, onProgress: onProgress,
+        );
+      }
     }
 
     if (node.children.isEmpty) return;
@@ -468,7 +474,7 @@ class TreeBuildService {
     required TreeBuildConfig config,
     required void Function(BuildProgress) onProgress,
   }) async {
-    final response = await _getDbData(node.fen);
+    final response = await _getDbData(node.fen, config);
     if (response == null || response.totalGames == 0) return;
 
     final totalW = response.moves.fold(0, (s, m) => s + m.white);
@@ -662,15 +668,23 @@ class TreeBuildService {
     return child;
   }
 
-  Future<ExplorerResponse?> _getDbData(String fen) async {
-    if (_dbCache.containsKey(fen)) {
+  Future<ExplorerResponse?> _getDbData(
+    String fen, TreeBuildConfig config,
+  ) async {
+    final cacheKey = '${config.useMasters ? "m" : "l"}|$fen';
+    if (_dbCache.containsKey(cacheKey)) {
       _stats.dbExplorerHits++;
-      return _dbCache[fen];
+      return _dbCache[cacheKey];
     }
     _stats.dbExplorerMisses++;
     _stats.lichessQueries++;
-    final data = await _probabilityService.getProbabilitiesForFen(fen);
-    _dbCache[fen] = data;
+    final data = await _probabilityService.getProbabilitiesForFen(
+      fen,
+      speeds: config.speeds,
+      ratings: config.ratingRange,
+      useMasters: config.useMasters,
+    );
+    _dbCache[cacheKey] = data;
     return data;
   }
 
