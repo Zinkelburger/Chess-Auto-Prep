@@ -46,8 +46,10 @@ class ProbabilityService {
     required String variant,
     required String speeds,
     required String ratings,
+    bool useMasters = false,
   }) {
-    return '$variant|$speeds|$ratings|$fen';
+    final db = useMasters ? 'masters' : 'lichess';
+    return '$db|$variant|$speeds|$ratings|$fen';
   }
 
   final ValueNotifier<double> cumulativeProbability = ValueNotifier(100.0);
@@ -92,12 +94,14 @@ class ProbabilityService {
     String variant = 'standard',
     String speeds = 'blitz,rapid,classical',
     String ratings = '1800,2000,2200,2500',
+    bool useMasters = false,
   }) async {
     final key = _cacheKey(
       fen,
       variant: variant,
       speeds: speeds,
       ratings: ratings,
+      useMasters: useMasters,
     );
     if (_cache.containsKey(key)) {
       currentPosition.value = _cache[key];
@@ -114,6 +118,7 @@ class ProbabilityService {
         variant: variant,
         speeds: speeds,
         ratings: ratings,
+        useMasters: useMasters,
       );
 
       currentPosition.value = result;
@@ -134,12 +139,14 @@ class ProbabilityService {
     String variant = 'standard',
     String speeds = 'blitz,rapid,classical',
     String ratings = '1800,2000,2200,2500',
+    bool useMasters = false,
   }) {
     return _fetchInternal(
       fen,
       variant: variant,
       speeds: speeds,
       ratings: ratings,
+      useMasters: useMasters,
     );
   }
 
@@ -243,12 +250,14 @@ class ProbabilityService {
     String variant = 'standard',
     String speeds = 'blitz,rapid,classical',
     String ratings = '1800,2000,2200,2500',
+    bool useMasters = false,
   }) async {
     final key = _cacheKey(
       fen,
       variant: variant,
       speeds: speeds,
       ratings: ratings,
+      useMasters: useMasters,
     );
     if (_cache.containsKey(key)) return _cache[key];
 
@@ -258,6 +267,7 @@ class ProbabilityService {
       variant: variant,
       speeds: speeds,
       ratings: ratings,
+      useMasters: useMasters,
     );
     final ms = sw.elapsedMilliseconds;
 

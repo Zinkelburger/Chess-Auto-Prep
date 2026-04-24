@@ -273,22 +273,33 @@ class LichessApiClient {
   /// Returns a fully-parsed [ExplorerResponse] on success, or `null` when
   /// the request fails or all retries are exhausted.  Rate-limiting,
   /// retries, and auth are handled by [get].
+  ///
+  /// When [useMasters] is true, queries the masters database (titled player
+  /// OTB games) instead of the regular Lichess database.  The masters
+  /// endpoint ignores speed/rating filters.
   Future<ExplorerResponse?> fetchExplorer(
     String fen, {
     String variant = 'standard',
     String speeds = 'blitz,rapid,classical',
     String ratings = '2000,2200,2500',
+    bool useMasters = false,
   }) async {
     final totalSw = Stopwatch()..start();
     final fenShort =
         fen.contains(' ') ? fen.substring(0, fen.indexOf(' ')) : fen;
 
     final encodedFen = Uri.encodeComponent(fen);
-    final url = Uri.parse('https://explorer.lichess.ovh/lichess?'
-        'variant=$variant&'
-        'speeds=$speeds&'
-        'ratings=$ratings&'
-        'fen=$encodedFen');
+    final Uri url;
+    if (useMasters) {
+      url = Uri.parse('https://explorer.lichess.ovh/masters?'
+          'fen=$encodedFen');
+    } else {
+      url = Uri.parse('https://explorer.lichess.ovh/lichess?'
+          'variant=$variant&'
+          'speeds=$speeds&'
+          'ratings=$ratings&'
+          'fen=$encodedFen');
+    }
 
     _profile('Explorer start fen=$fenShort');
     final getSw = Stopwatch()..start();

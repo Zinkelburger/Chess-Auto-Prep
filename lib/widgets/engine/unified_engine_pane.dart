@@ -12,6 +12,7 @@ import '../../services/probability_service.dart';
 import '../../utils/chess_utils.dart';
 import 'engine_settings_dialog.dart';
 import 'engine_pane_footer.dart';
+import '../lichess_db_info_icon.dart';
 
 /// Lightweight stopwatch helper for timestamped performance logging.
 Stopwatch? _perfWatch;
@@ -467,10 +468,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isActive) {
-      return const Center(child: Text('Analysis paused'));
-    }
-
     return Column(
       children: [
         _buildSettingsBar(),
@@ -666,11 +663,18 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           ),
           if (_settings.showProbability)
             SizedBox(
-              width: 46,
-              child: Tooltip(
-                message: 'Database probability$gameCountStr',
-                child: Text('DB',
-                    style: headerStyle, textAlign: TextAlign.right),
+              width: 60,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const LichessDbInfoIcon(size: 12),
+                  Tooltip(
+                    message: 'Database probability$gameCountStr',
+                    child: Text('DB',
+                        style: headerStyle, textAlign: TextAlign.right),
+                  ),
+                ],
               ),
             ),
           if (_settings.showMaia)
