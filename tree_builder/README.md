@@ -7,13 +7,13 @@ producing a focused repertoire tree with evaluations on every node.
 
 ## Architecture
 
-**Single interleaved DFS** — no separate build/eval/discovery stages:
+**Single interleaved BFS (FIFO queue)** — no separate build/eval/discovery stages:
 
 - **Our-move nodes**: Stockfish MultiPV (constant count at every depth) →
-  eval-loss filter → (optional Lichess enrichment for SAN/win rates)
+  eval-loss filter → (optional Lichess enrichment for SAN/win rates) → enqueue children
 - **Opponent-move nodes**: one source only — pure Maia (default) OR pure
   Lichess (`--lichess`). Probabilities are kept raw; the missing mass is
-  accounted for by an eval-based tail term during expectimax.
+  accounted for by an eval-based tail term during expectimax. Children are enqueued breadth-first.
 - **No depth-based tapering** — branching budgets (`our_multipv`,
   `opp_mass_target`, `opp_max_children`) are constant at every ply.
   Tapering would silently bias the MAX/CHANCE operators; depth pruning

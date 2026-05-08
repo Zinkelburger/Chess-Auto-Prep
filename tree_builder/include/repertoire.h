@@ -39,8 +39,8 @@ typedef struct RepertoireConfig {
     int novelty_weight;             /* 0-100: boost for rarely-played moves at our-move nodes (0=off) */
     
     /* Eval-window pruning (stop exploring lines outside this range) */
-    int min_eval_cp;                 /* Stop DFS if our eval drops below this (default: -50) */
-    int max_eval_cp;                 /* Stop DFS if our eval exceeds this (default: 300, already winning) */
+    int min_eval_cp;                 /* Prune branch if our eval drops below this (default: -50) */
+    int max_eval_cp;                 /* Prune branch if our eval exceeds this (default: 300, already winning) */
     int max_eval_loss_cp;            /* Our-move candidates must be within this of best (default: 50) */
     bool relative_eval;              /* If true, min/max_eval_cp are relative to root position eval */
 

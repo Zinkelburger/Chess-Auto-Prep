@@ -1,9 +1,9 @@
 /**
  * tree.c - Opening Tree Implementation
  *
- * Single interleaved DFS.  At our-move nodes Stockfish MultiPV finds
- * candidates and the eval-loss filter prunes immediately.  At
- * opponent-move nodes we use exactly one distribution source — Maia's
+ * Single interleaved BFS (FIFO queue).  At our-move nodes Stockfish
+ * MultiPV finds candidates and the eval-loss filter prunes immediately.
+ * At opponent-move nodes we use exactly one distribution source — Maia's
  * policy head (default) or the Lichess explorer — with no blending,
  * no renormalization, and a tail term in the expectimax pass to
  * account for uncovered probability mass.  Branching budgets are
@@ -23,7 +23,7 @@
  * Stockfish twice on the same FEN:
  *   - Opponent-move nodes need an eval ONLY for the window-prune check
  *     (Maia/Lichess provide the policy, not a score).  That eval is
- *     the single-PV `ensure_eval` in `build_recursive`.
+ *     the single-PV `ensure_eval` in `build_process_node`.
  *   - Our-move nodes run MultiPV for candidate generation anyway, so
  *     the node's own eval is taken from MultiPV line 0 and the window
  *     check is deferred into `build_our_move` (after MultiPV).  This
@@ -577,25 +577,144 @@ static bool query_maia_cached(const TreeConfig *config, const char *fen,
 }
 
 
-/* ========== Interleaved build ========== */
+/* ========== Interleaved build (BFS queue) ========== */
 
-static void build_recursive(Tree *tree, TreeNode *node,
-                             const TreeConfig *config,
-                             LichessExplorer *explorer);
+typedef struct BuildQueue {
+    TreeNode **buf;
+    size_t head;
+    size_t tail;
+    size_t cap;
+} BuildQueue;
+
+static void build_queue_init(BuildQueue *q) {
+    q->buf = NULL;
+    q->head = 0;
+    q->tail = 0;
+    q->cap = 0;
+}
+
+static void build_queue_free(BuildQueue *q) {
+    free(q->buf);
+    build_queue_init(q);
+}
+
+static bool build_queue_push(BuildQueue *q, TreeNode *n) {
+    if (q->tail >= q->cap) {
+        size_t new_cap = q->cap ? q->cap * 2 : 256;
+        TreeNode **nb = realloc(q->buf, new_cap * sizeof(TreeNode *));
+        if (!nb) return false;
+        q->buf = nb;
+        q->cap = new_cap;
+    }
+    q->buf[q->tail++] = n;
+    return true;
+}
+
+static TreeNode *build_queue_pop(BuildQueue *q) {
+    for (;;) {
+        if (q->head >= q->tail)
+            return NULL;
+        if (q->head > 1024 && q->head * 2 > q->tail) {
+            size_t len = q->tail - q->head;
+            memmove(q->buf, q->buf + q->head, len * sizeof(TreeNode *));
+            q->head = 0;
+            q->tail = len;
+            continue;
+        }
+        return q->buf[q->head++];
+    }
+}
+
+/** Append all children in sibling order (matches former DFS order). */
+static void build_queue_push_children(BuildQueue *q, Tree *tree, TreeNode *node) {
+    if (!tree->is_building) return;
+    for (size_t i = 0; i < node->children_count; i++) {
+        if (!tree->is_building) break;
+        if (!build_queue_push(q, node->children[i])) {
+            fprintf(stderr, "Error: out of memory expanding build queue\n");
+            tree->is_building = false;
+            break;
+        }
+    }
+}
+
+static void count_depth_layer(TreeNode *node, int target_depth,
+                              int *total, int *unexplored) {
+    if (node->depth == target_depth) {
+        (*total)++;
+        if (!node->explored)
+            (*unexplored)++;
+        return;
+    }
+    for (size_t i = 0; i < node->children_count; i++)
+        count_depth_layer(node->children[i], target_depth, total, unexplored);
+}
+
+static void emit_build_progress(Tree *tree, const TreeConfig *config) {
+    if (!config->progress_callback) return;
+
+    static struct timespec start_time;
+    static int last_printed = -1;
+    static bool started = false;
+
+    if (!started || tree->total_nodes <= 1) {
+        clock_gettime(CLOCK_MONOTONIC, &start_time);
+        started = true;
+        last_printed = -1;
+    }
+    if ((int)tree->total_nodes - last_printed < 50) return;
+    last_printed = (int)tree->total_nodes;
+
+    int d = tree->max_depth_reached;
+    int total_at = 0, unexplored_at = 0;
+    count_depth_layer(tree->root, d, &total_at, &unexplored_at);
+
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    double elapsed_s = (now.tv_sec - start_time.tv_sec)
+                     + (now.tv_nsec - start_time.tv_nsec) / 1e9;
+    double rate = (elapsed_s > 0.5) ? tree->total_nodes / (elapsed_s / 60.0) : 0;
+    int eta = (rate > 0 && unexplored_at > 0)
+            ? (int)(unexplored_at * 60.0 / rate + 0.5)
+            : 0;
+
+    BuildProgressInfo info = {
+        .total_nodes       = (int)tree->total_nodes,
+        .current_depth     = d,
+        .max_depth_config  = config->max_depth,
+        .total_at_depth    = total_at,
+        .unexplored_at_depth = unexplored_at,
+        .nodes_per_minute  = rate,
+        .eta_depth_seconds = eta,
+    };
+    config->progress_callback(&info);
+}
+
+static void build_process_node(Tree *tree, TreeNode *node,
+                               const TreeConfig *config,
+                               LichessExplorer *explorer, BuildQueue *q);
+
+static void build_our_move(Tree *tree, TreeNode *node,
+                            const TreeConfig *config,
+                            LichessExplorer *explorer, BuildQueue *q);
+
+static void build_opponent_move(Tree *tree, TreeNode *node,
+                                 const TreeConfig *config,
+                                 LichessExplorer *explorer, BuildQueue *q);
 
 /**
- * OUR MOVE: Stockfish MultiPV → window prune → eval filter → recurse.
+ * OUR MOVE: Stockfish MultiPV → window prune → eval filter → enqueue children.
  *
  * Also queries Lichess for SAN notation and win-rate enrichment.
  *
- * The window-prune step lives here (rather than in `build_recursive`) so
+ * The window-prune step lives here (rather than in `build_process_node`) so
  * that MultiPV's line-0 eval doubles as the node's engine eval — otherwise
  * we'd pay an extra single-PV Stockfish call on the same FEN just to gate
  * the MultiPV call that follows.
  */
 static void build_our_move(Tree *tree, TreeNode *node,
                             const TreeConfig *config,
-                            LichessExplorer *explorer) {
+                            LichessExplorer *explorer, BuildQueue *q) {
     /* 0. Lichess eval DB shortcut.  If the community DB has this position
      *    at a depth at least our eval_depth and the eval is outside our
      *    window, we can prune without ever running the node's MultiPV search
@@ -682,7 +801,7 @@ static void build_our_move(Tree *tree, TreeNode *node,
                          mpv.lines[0].eval_cp, mpv.lines[0].depth_reached);
     }
 
-    /* 2. Eval-window pruning (deferred from build_recursive — see header
+    /* 2. Eval-window pruning (deferred from build_process_node — see header
      *    comment).  If we're outside the window, mark the reason for
      *    PGN annotation / post-build cleanup and stop before branching. */
     {
@@ -788,8 +907,7 @@ static void build_our_move(Tree *tree, TreeNode *node,
         }
 
         added++;
-        if (config->progress_callback)
-            config->progress_callback(tree->total_nodes, child->depth, child->fen);
+        emit_build_progress(tree, config);
     }
 
     /* 5. Populate maia_frequency for novelty scoring.
@@ -816,11 +934,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
         }
     }
 
-    /* 6. Recurse into children */
-    for (size_t i = 0; i < node->children_count; i++) {
-        if (!tree->is_building) break;
-        build_recursive(tree, node->children[i], config, explorer);
-    }
+    /* 6. Enqueue children for breadth-first continuation */
+    build_queue_push_children(q, tree, node);
 }
 
 
@@ -835,14 +950,14 @@ static void build_our_move(Tree *tree, TreeNode *node,
  * for the uncovered mass so the result stays unbiased.
  *
  * Children are NOT pre-evaluated here.  Every opponent-move child is an
- * our-move node; when it recurses it will run MultiPV, whose line-0 eval
+ * our-move node; when it is dequeued it will run MultiPV, whose line-0 eval
  * becomes both the node's eval and the basis for its own window-prune
  * check (see `build_our_move`).  Pre-evaluating with a single-PV call
  * would duplicate the work the MultiPV call does anyway.
  */
 static void build_opponent_move(Tree *tree, TreeNode *node,
                                  const TreeConfig *config,
-                                 LichessExplorer *explorer) {
+                                 LichessExplorer *explorer, BuildQueue *q) {
     char san_buf[MAX_MOVE_LENGTH];
     double mass_target = config->opp_mass_target;
     int children_added = 0;
@@ -890,9 +1005,7 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
             children_added++;
             mass_covered += prob;
 
-            if (config->progress_callback)
-                config->progress_callback(tree->total_nodes,
-                                          child->depth, child->fen);
+            emit_build_progress(tree, config);
         }
     } else {
         /* ---------- Pure Lichess path ---------- */
@@ -956,9 +1069,7 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
             children_added++;
             mass_covered += prob;
 
-            if (config->progress_callback)
-                config->progress_callback(tree->total_nodes,
-                                          child->depth, child->fen);
+            emit_build_progress(tree, config);
         }
     }
 
@@ -975,20 +1086,17 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
      * Pre-evaluating would be a redundant single-PV pass on positions
      * that are about to be searched again at the same depth. */
 
-    /* Recurse into children */
-    for (size_t i = 0; i < node->children_count; i++) {
-        if (!tree->is_building) break;
-        build_recursive(tree, node->children[i], config, explorer);
-    }
+    /* Enqueue children for breadth-first continuation */
+    build_queue_push_children(q, tree, node);
 }
 
 
 /**
- * Main recursive build — the single DFS that builds the tree.
+ * Process one dequeued node — the BFS worker that builds the tree.
  *
  * At each node:
  *   1. Check stop conditions (depth, cumP, interrupt)
- *   2. Resume support (skip explored nodes, recurse into existing children)
+ *   2. Resume support (already-expanded nodes: FenMap + enqueue children)
  *   3. For opponent-move nodes only: ensure eval and do the window-prune
  *      check.  Our-move nodes defer this to `build_our_move` so the eval
  *      can be harvested from the MultiPV call we're about to run anyway
@@ -997,9 +1105,9 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
  *      nodes into a circular ring via next_equivalent)
  *   5. Dispatch to build_our_move or build_opponent_move
  */
-static void build_recursive(Tree *tree, TreeNode *node,
-                             const TreeConfig *config,
-                             LichessExplorer *explorer) {
+static void build_process_node(Tree *tree, TreeNode *node,
+                               const TreeConfig *config,
+                               LichessExplorer *explorer, BuildQueue *q) {
     if (!tree->is_building) return;
     if (node->depth >= config->max_depth) {
         emit_event(config, "skip", node->depth, "-", "reason=max_depth");
@@ -1017,13 +1125,12 @@ static void build_recursive(Tree *tree, TreeNode *node,
 
     FenMap *fmap = (FenMap *)tree->expanded_fens;
 
-    /* Resume: skip nodes that were already explored */
+    /* Resume: already expanded — register FEN and enqueue children only */
     if (node->children_count > 0) {
         emit_event(config, "resume", node->depth, "-",
                    "children=%zu", node->children_count);
         fen_map_put(fmap, node->fen, node);
-        for (size_t i = 0; i < node->children_count; i++)
-            build_recursive(tree, node->children[i], config, explorer);
+        build_queue_push_children(q, tree, node);
         return;
     }
     if (node->explored) return;
@@ -1078,9 +1185,9 @@ static void build_recursive(Tree *tree, TreeNode *node,
     node->explored = true;
 
     if (is_our_move)
-        build_our_move(tree, node, config, explorer);
+        build_our_move(tree, node, config, explorer, q);
     else
-        build_opponent_move(tree, node, config, explorer);
+        build_opponent_move(tree, node, config, explorer, q);
 
     emit_event(config, "expanded", node->depth, nt,
                "children=%zu total=%zu", node->children_count, tree->total_nodes);
@@ -1133,7 +1240,19 @@ bool tree_build(Tree *tree, const char *start_fen,
 
     tree->expanded_fens = fen_map_create();
 
-    build_recursive(tree, tree->root, &tree->config, explorer);
+    BuildQueue bq;
+    build_queue_init(&bq);
+    if (!build_queue_push(&bq, tree->root)) {
+        fprintf(stderr, "Error: out of memory for build queue\n");
+        tree->is_building = false;
+    } else {
+        while (tree->is_building) {
+            TreeNode *n = build_queue_pop(&bq);
+            if (!n) break;
+            build_process_node(tree, n, &tree->config, explorer, &bq);
+        }
+    }
+    build_queue_free(&bq);
 
     fen_map_destroy((FenMap *)tree->expanded_fens);
     tree->expanded_fens = NULL;
@@ -1164,7 +1283,7 @@ static void remove_child_at(TreeNode *parent, size_t idx) {
  * Returns the number of nodes removed.
  *
  * A pruned our-move canonical can still be a member of a live
- * equivalence ring (FenMap insertion in build_recursive happens
+ * equivalence ring (FenMap insertion in build_process_node happens
  * before build_our_move runs its eval-window check, so transposition
  * siblings may have already joined the ring by the time the canonical
  * is marked PRUNE_EVAL_TOO_LOW).  node_destroy handles the unlink

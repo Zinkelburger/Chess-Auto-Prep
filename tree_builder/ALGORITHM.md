@@ -3,11 +3,13 @@
 ## Overview
 
 The tree builder generates chess opening repertoires through a single
-interleaved DFS that builds the tree and evaluates positions simultaneously:
+interleaved BFS (FIFO queue) that builds the tree and evaluates positions
+simultaneously:
 
-1. **Building** the move tree by querying Lichess Explorer, Maia, and Stockfish
-   together — engine MultiPV for our-move candidates, Lichess DB + Maia
-   supplement for opponent responses, with eval-window pruning at every node
+1. **Building** the move tree breadth-first by querying Lichess Explorer, Maia,
+   and Stockfish together — engine MultiPV for our-move candidates, Lichess DB
+   + Maia supplement for opponent responses, with eval-window pruning at every
+   node
 2. Computing **expectimax values** — propagating practical win probabilities
    bottom-up through the tree
 3. **Selecting** repertoire moves using expectimax values
@@ -27,7 +29,7 @@ evaluations. Locate and start the Stockfish engine pool
 
 ### Stage 1: Build Opening Tree (Interleaved)
 
-A single DFS builds the tree by interleaving Lichess explorer queries with
+A single BFS builds the tree by interleaving Lichess explorer queries with
 Stockfish evaluation. At each node, the algorithm dispatches based on whose
 move it is:
 
@@ -61,7 +63,7 @@ move it is:
    each child's predicted human play probability as `maia_frequency`.
    This inference goes through the DB-cached Maia wrapper so resumed
    builds don't pay for it twice.
-7. **Recurse** into each child.
+7. **Enqueue** each child on the build FIFO (breadth-first continuation).
 
 #### Opponent-Move Nodes (single source — Maia OR Lichess)
 
@@ -88,7 +90,7 @@ Either way, the selection loop is the same:
    `Σ pᵢ` is usually < 1 (we deliberately don't cover 100%); the
    expectimax pass treats the uncovered mass as a tail term evaluated
    by the engine eval at this node.
-5. **Recurse** into each child.  Children are NOT batch-evaluated up
+5. **Enqueue** each child on the build FIFO.  Children are NOT batch-evaluated up
    front: every opponent-move child is an our-move node, and its
    `build_our_move` pass will run MultiPV on that FEN at the same
    depth anyway.  A batch single-PV pre-eval would be strictly
@@ -429,7 +431,7 @@ formula runs.  The canonical's V already has `leaf_confidence` baked in
 at its own leaves, so transposition leaves do not re-apply the discount.
 
 The expectimax pass runs **twice** (`tree_calculate_expectimax`) so the
-borrow is robust to DFS order.  In a single pass, a transposition leaf
+borrow is robust to post-order traversal order during expectimax.  In a single pass, a transposition leaf
 visited before its canonical would fall through to the leaf formula and
 pollute the values propagated up through its ancestors.  The first pass
 guarantees every canonical has `has_expectimax = true`; the second pass
@@ -472,7 +474,7 @@ novelty cannot promote objectively bad moves.  The raw
 upward in the tree — novelty only affects the local argmax choice.
 
 At opponent-move nodes, all children above the probability threshold are
-recursed into.  The DFS also stops at eval-window boundaries.
+expanded and enqueued.  The builder also stops at eval-window boundaries.
 
 ### Line Extraction (unchanged)
 
@@ -600,7 +602,7 @@ the novelty weight to 80.
   mode the novelty signal comes from Maia predictions (approximate);
   `--lichess` gives novelty based on real game data.
 
-- **`min/max_eval_cp`**: "What eval range should we explore?" Stops the DFS
+- **`min/max_eval_cp`**: "What eval range should we explore?" Stops expanding a branch
   when positions are too bad (lost cause) or too good (already winning,
   no need to study further). Applied during the build as inline pruning.
 
@@ -657,7 +659,7 @@ tree_builder/
 ```
                     ┌─────────────────────────────┐
                     │   Single Interleaved Build   │
-                    │          (DFS)               │
+                    │          (BFS)               │
                     └─────┬──────────┬─────────────┘
                           │          │
            ┌──────────────┘          └──────────────┐
@@ -725,13 +727,13 @@ engine's verdict.  At smaller `leaf_conf`, V is pulled toward the 0.5
 "we don't know" prior rather than toward 0 (certain loss), which is
 what an uncertainty discount should actually do.
 
-### DFS Order Bias on Interrupted Builds
+### BFS and interrupted builds
 
-The build is DFS, so earlier children are fully explored before later
-ones.  If interrupted (SIGINT), earlier children have deeper subtrees
-and accumulate more expectimax signal.  Resume partially mitigates this, but
-any time-limited build has an inherent bias toward first-explored
-branches.
+The build uses a FIFO queue, so shallow plies are expanded across the whole
+tree before deeper work.  If interrupted (SIGINT), partial trees are more
+evenly developed than under depth-first order.  Resume continues from the
+saved tree and queue reconstruction (already-expanded nodes enqueue their
+children only).
 
 ### Transposition Leaf Values
 
@@ -742,7 +744,7 @@ of how the path to reach it differs.  In practice this is minor since
 transposition leaves are a small fraction of candidates.
 
 `tree_calculate_expectimax` runs the recursion twice so the borrow is
-robust to DFS traversal order (see *Transposition Handling* above).
+robust to post-order traversal order within the expectimax passes (see *Transposition Handling* above).
 Total cost is 2·O(n) — still linear in tree size, and dominated by
 the build phase's Stockfish/Maia inferences by several orders of
 magnitude.

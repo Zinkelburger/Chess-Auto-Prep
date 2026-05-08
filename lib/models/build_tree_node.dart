@@ -238,32 +238,33 @@ class BuildTree {
 
 class BuildProgress {
   final int totalNodes;
-  final int currentPly;
   final int maxPlyReached;
-  final String? currentFen;
+  final int maxPlyConfig;
   final int elapsedMs;
+  final double? nodesPerMinute;
 
-  // Counters
-  final int engineCalls;
-  final int engineCacheHits;
-  final int maiaCalls;
-  final int lichessQueries;
-  final int lichessCacheHits;
+  /// Deepest ply being worked on.
+  final int currentDepth;
 
-  final String message;
+  /// Nodes at [currentDepth] that have not been expanded yet.
+  final int unexploredAtDepth;
+
+  /// Total nodes at [currentDepth] (explored + unexplored).
+  final int totalAtDepth;
+
+  /// Estimated seconds to finish all unexplored nodes at [currentDepth].
+  final int? etaDepthSeconds;
 
   const BuildProgress({
     required this.totalNodes,
-    required this.currentPly,
     this.maxPlyReached = 0,
-    this.currentFen,
+    this.maxPlyConfig = 20,
     this.elapsedMs = 0,
-    this.engineCalls = 0,
-    this.engineCacheHits = 0,
-    this.maiaCalls = 0,
-    this.lichessQueries = 0,
-    this.lichessCacheHits = 0,
-    required this.message,
+    this.nodesPerMinute,
+    this.currentDepth = 0,
+    this.unexploredAtDepth = 0,
+    this.totalAtDepth = 0,
+    this.etaDepthSeconds,
   });
 }
 
