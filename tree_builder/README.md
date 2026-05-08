@@ -82,6 +82,8 @@ The `<name>` argument is the base name for all output files:
 | `-t, --threads <N>` | Parallel Stockfish engines | 4 |
 | `-S, --stockfish <path>` | Stockfish binary path | auto-detect |
 | `-n, --name <name>` | Repertoire name (shown in PGN headers) | |
+| `--build-now` | Use existing partial tree as-is, skip to repertoire generation | |
+| `--skip-build` | Skip tree building entirely (requires existing complete tree) | |
 | `-v, --verbose` | Verbose progress | |
 
 ### Our-Move Candidates (Engine-Driven)
@@ -132,6 +134,21 @@ Resume an interrupted build:
 ```bash
 ./bin/tree_builder -c b -v modern_benoni  # resumes from modern_benoni.tree.json
 ```
+
+Use a partial tree as-is (skip building, go straight to repertoire generation):
+```bash
+./bin/tree_builder -c b --build-now modern_benoni
+```
+
+Resume to a specific depth, then stop:
+```bash
+./bin/tree_builder -c b --ply 8 modern_benoni  # resumes, stops at ply 8
+```
+
+> **Tip:** Because the build is BFS (breadth-first), stopping early still gives
+> you a complete tree at the shallower plies. You can always run `--build-now`
+> on a partial tree to get repertoire lines from whatever depth you've reached
+> so far, or resume later with a higher `--ply` to go deeper.
 
 ## API (Library Usage)
 

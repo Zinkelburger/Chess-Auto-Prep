@@ -92,6 +92,7 @@ static void print_usage(const char *prog_name) {
     printf("  -D, --database <path>  SQLite database path [default: <name>.db]\n");
     printf("  -L, --load <file>      Load tree from a different JSON file\n");
     printf("  --skip-build           Skip tree building (use existing tree)\n");
+    printf("  --build-now            Use existing partial tree as-is (skip to repertoire generation)\n");
     printf("\n");
     printf("Our-move candidates (engine-driven):\n");
     printf("  --our-multipv <N>      MultiPV count away from root [default: 5; root uses max(N,10)]\n");
@@ -145,6 +146,7 @@ static void print_usage(const char *prog_name) {
     printf("  %s -c b -f \"FEN\" -n \"Modern Benoni\" modern_benoni\n", prog_name);
     printf("  %s -c w --moves \"e4 d5 exd5 Qxd5\" scandinavian\n", prog_name);
     printf("  %s -c b -v modern_benoni   # resumes from modern_benoni.tree.json\n", prog_name);
+    printf("  %s -c b --build-now modern_benoni  # use partial tree as-is, generate lines\n", prog_name);
     printf("\n");
 }
 
@@ -319,6 +321,7 @@ int main(int argc, char *argv[]) {
     bool verbose = false;
     bool use_masters = false;
     bool skip_build = false;
+    bool build_now = false;
     bool find_traps = false;
     bool find_traps_in_repertoire = false;
     const char *lichess_token = NULL;
@@ -369,6 +372,7 @@ int main(int argc, char *argv[]) {
         {"name",             required_argument, 0, 'n'},
         {"masters",          no_argument,       0, 'm'},
         {"skip-build",       no_argument,       0, 1001},
+        {"build-now",        no_argument,       0, 1002},
         {"traps",            no_argument,       0, 1004},
         {"traps-in-repertoire", no_argument,    0, 1005},
         {"token",            required_argument, 0, 1006},
@@ -442,6 +446,7 @@ int main(int argc, char *argv[]) {
             case 'v': verbose = true; break;
             case 'h': print_usage(argv[0]); return 0;
             case 1001: skip_build = true; break;
+            case 1002: build_now = true; skip_build = true; break;
             case 1004: mode_id = 4; find_traps = true; break;
             case 1005: find_traps_in_repertoire = true; break;
             case 1006: lichess_token = optarg; break;
@@ -788,7 +793,7 @@ int main(int argc, char *argv[]) {
 
     const char *tree_source = load_tree_file ? load_tree_file : tree_path;
 
-    if (load_tree_file || (!skip_build && access(tree_path, F_OK) == 0)) {
+    if (load_tree_file || build_now || (!skip_build && access(tree_path, F_OK) == 0)) {
         tree = tree_load(tree_source);
         if (tree) {
             tree->config.play_as_white = play_as_white;
@@ -808,9 +813,16 @@ int main(int argc, char *argv[]) {
                        tree_source, tree->total_nodes);
                 printf("  Build already complete — skipping.\n\n");
                 needs_build = false;
+            } else if (tree->max_depth_reached >= max_depth) {
+                printf("[1/4] Tree loaded from %s (%zu nodes, depth %d >= target %d)\n",
+                       tree_source, tree->total_nodes,
+                       tree->max_depth_reached, max_depth);
+                printf("  Tree already meets target depth — using as-is.\n\n");
+                needs_build = false;
             } else {
-                printf("[1/4] Resuming tree build from %s (%zu nodes, incomplete)\n",
-                       tree_source, tree->total_nodes);
+                printf("[1/4] Resuming tree build from %s (%zu nodes, depth %d, target %d)\n",
+                       tree_source, tree->total_nodes,
+                       tree->max_depth_reached, max_depth);
                 printf("  Continuing from unexplored leaves...\n");
             }
         } else if (load_tree_file) {
@@ -823,8 +835,9 @@ int main(int argc, char *argv[]) {
     }
 
     if (skip_build && !tree) {
-        printf("[1/4] Skipped tree building (--skip-build)\n");
-        fprintf(stderr, "Error: No tree available.\n");
+        printf("[1/4] Skipped tree building (%s)\n",
+               build_now ? "--build-now" : "--skip-build");
+        fprintf(stderr, "Error: No tree available. Run a build first.\n");
         if (engine_pool) engine_pool_destroy(engine_pool);
         if (maia) maia_destroy(maia);
         rdb_close(db);
