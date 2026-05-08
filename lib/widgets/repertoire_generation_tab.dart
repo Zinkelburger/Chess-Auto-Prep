@@ -95,12 +95,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   String _status = 'Idle';
   int _nodes = 0;
   int _lines = 0;
-  int _ply = 0;
-  int _engineCalls = 0;
-  int _engineCacheHits = 0;
-  int _maiaCalls = 0;
-  int _lichessQueries = 0;
   int _elapsedMs = 0;
+  int _maxPlyConfig = 20;
+  double? _nodesPerMinute;
+  int _currentDepth = 0;
+  int _unexploredAtDepth = 0;
+  int _totalAtDepth = 0;
+  int? _etaDepthSec;
   DateTime _lastProgressUpdate = DateTime(0);
   final StringBuffer _pendingPgnBuffer = StringBuffer();
   int _pendingPgnLines = 0;
@@ -200,6 +201,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         _isPaused = false;
         _isGenerating = false;
         _status = reason ?? 'Cancelled ($_nodes nodes)';
+        _nodesPerMinute = null;
+        _etaDepthSec = null;
       });
     }
     widget.onPauseChanged(false);
@@ -290,12 +293,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           : 'Phase 1: Building tree...';
       _nodes = existingTree?.totalNodes ?? 0;
       _lines = 0;
-      _ply = existingTree?.maxPlyReached ?? 0;
-      _engineCalls = 0;
-      _engineCacheHits = 0;
-      _maiaCalls = 0;
-      _lichessQueries = 0;
       _elapsedMs = 0;
+      _nodesPerMinute = null;
+      _currentDepth = existingTree?.maxPlyReached ?? 0;
+      _unexploredAtDepth = 0;
+      _totalAtDepth = 0;
+      _etaDepthSec = null;
     });
     _pendingPgnBuffer.clear();
     _pendingPgnLines = 0;
@@ -311,13 +314,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         onProgress: (p) {
           if (!mounted) return;
           _nodes = p.totalNodes;
-          _ply = p.currentPly;
-          _engineCalls = p.engineCalls;
-          _engineCacheHits = p.engineCacheHits;
-          _maiaCalls = p.maiaCalls;
-          _lichessQueries = p.lichessQueries;
+          _maxPlyConfig = p.maxPlyConfig;
           _elapsedMs = p.elapsedMs;
-          _status = 'Building: ${p.message}';
+          _nodesPerMinute = p.nodesPerMinute;
+          _currentDepth = p.currentDepth;
+          _unexploredAtDepth = p.unexploredAtDepth;
+          _totalAtDepth = p.totalAtDepth;
+          _etaDepthSec = p.etaDepthSeconds;
 
           final now = DateTime.now();
           if (now.difference(_lastProgressUpdate).inMilliseconds < 150) return;
@@ -423,6 +426,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               '$selectedCount repertoire moves, '
               '$_lines lines. '
               '(ease=$easeCount, expectimax=$ecaCount)';
+          _nodesPerMinute = null;
+          _etaDepthSec = null;
         });
       }
     } catch (e) {
@@ -542,11 +547,24 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   // ── UI ─────────────────────────────────────────────────────────────────
 
+  static String _formatEta(int sec) {
+    if (sec < 60) return '${sec}s';
+    if (sec < 3600) return '${(sec / 60).ceil()}m';
+    final h = sec ~/ 3600;
+    final m = ((sec % 3600) / 60).ceil();
+    return '${h}h ${m}m';
+  }
+
   Widget _buildProgressDisplay() {
     final secs = _elapsedMs / 1000.0;
     final elapsed = secs >= 60
         ? '${(secs / 60).floor()}m ${(secs % 60).toStringAsFixed(0)}s'
         : '${secs.toStringAsFixed(1)}s';
+
+    final explored = _totalAtDepth - _unexploredAtDepth;
+    final rateStr = _nodesPerMinute != null
+        ? '${_nodesPerMinute!.toStringAsFixed(0)} nodes/min'
+        : null;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -557,6 +575,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Row 1: total nodes + elapsed
           Row(
             children: [
               if (_isGenerating && !_isPaused)
@@ -576,6 +595,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (rateStr != null) ...[
+                const SizedBox(width: 10),
+                Text(
+                  rateStr,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                ),
+              ],
               const Spacer(),
               Text(
                 elapsed,
@@ -583,29 +609,26 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 12,
-            runSpacing: 4,
-            children: [
-              _statChip('Lines', '$_lines'),
-              _statChip('Ply', '$_ply'),
-              _statChip('Eng', '$_engineCalls'),
-              if (_engineCacheHits > 0)
-                _statChip('Cached', '$_engineCacheHits'),
-              if (_maiaCalls > 0) _statChip('Maia', '$_maiaCalls'),
-              if (_lichessQueries > 0) _statChip('Lichess', '$_lichessQueries'),
-            ],
-          ),
+          // Row 2: depth progress + ETA
+          if (_isGenerating && _currentDepth > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              () {
+                final parts = <String>[
+                  'Depth $_currentDepth/$_maxPlyConfig',
+                  '$explored / $_totalAtDepth explored',
+                  if (_unexploredAtDepth > 0)
+                    '$_unexploredAtDepth remaining',
+                  if (_etaDepthSec != null)
+                    '~${_formatEta(_etaDepthSec!)}',
+                ];
+                return parts.join(' · ');
+              }(),
+              style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+            ),
+          ],
         ],
       ),
-    );
-  }
-
-  Widget _statChip(String label, String value) {
-    return Text(
-      '$label: $value',
-      style: const TextStyle(fontSize: 13),
     );
   }
 

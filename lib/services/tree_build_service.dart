@@ -1,15 +1,17 @@
 /// Two-phase tree builder — builds a persistent [BuildTree] with engine
 /// evaluations on every node, matching the C tree_builder algorithm.
 ///
-/// Phase 1 (this service): DFS build with constant MultiPV at each ply
-/// our-move nodes, single-source opponent moves (Maia OR Lichess), eval-
-/// window pruning, and transposition detection.
+/// Phase 1 (this service): BFS build (FIFO queue) with constant MultiPV at
+/// each ply our-move nodes, single-source opponent moves (Maia OR Lichess),
+/// eval-window pruning, and transposition detection — matches C tree_builder.
 ///
 /// Phase 2 (separate calculators): ease, expectimax, and repertoire
 /// selection run on the completed tree.
 library;
 
 import 'dart:async';
+import 'dart:collection' show Queue;
+
 import 'package:flutter/foundation.dart';
 
 import '../models/build_tree_node.dart';
@@ -38,6 +40,9 @@ class TreeBuildService {
   late Stopwatch _buildSw;
 
   int _lastProgressNodes = 0;
+
+  /// [BuildTree.totalNodes] when Phase 1 starts (after optional root eval).
+  int _buildStartTotalNodes = 0;
 
   BuildTree? _currentTree;
   BuildTree? get currentTree => _currentTree;
@@ -74,6 +79,7 @@ class TreeBuildService {
     _stats = BuildStats();
     _buildSw = Stopwatch()..start();
     _lastProgressNodes = 0;
+    _buildStartTotalNodes = 0;
 
     var cfg = config;
     _isPaused = false;
@@ -143,12 +149,13 @@ class TreeBuildService {
       }
     }
 
+    _buildStartTotalNodes = tree.totalNodes;
+
     final fenMap = FenMap();
 
     try {
-      await _buildRecursive(
+      await _buildBfsLoop(
         tree: tree,
-        node: tree.root,
         config: cfg,
         fenMap: fenMap,
         isCancelled: isCancelled,
@@ -176,7 +183,7 @@ class TreeBuildService {
 
   void stopBuild() {
     _isBuilding = false;
-    // If paused, unblock the DFS so it can exit cleanly
+    // If paused, unblock the BFS loop so it can exit cleanly
     if (_isPaused) {
       _isPaused = false;
       _pauseCompleter?.complete();
@@ -184,15 +191,42 @@ class TreeBuildService {
     }
   }
 
-  // ── Core DFS ───────────────────────────────────────────────────────────
+  // ── BFS build loop ─────────────────────────────────────────────────────
 
-  Future<void> _buildRecursive({
+  Future<void> _buildBfsLoop({
+    required BuildTree tree,
+    required TreeBuildConfig config,
+    required FenMap fenMap,
+    required bool Function() isCancelled,
+    required void Function(BuildProgress) onProgress,
+  }) async {
+    final queue = Queue<BuildTreeNode>()..add(tree.root);
+    while (_isBuilding && !isCancelled() && queue.isNotEmpty) {
+      if (_isPaused && _pauseCompleter != null) {
+        await _pauseCompleter!.future;
+        if (!_isBuilding || isCancelled()) return;
+      }
+      final node = queue.removeFirst();
+      await _processBuildNode(
+        tree: tree,
+        node: node,
+        config: config,
+        fenMap: fenMap,
+        isCancelled: isCancelled,
+        onProgress: onProgress,
+        queue: queue,
+      );
+    }
+  }
+
+  Future<void> _processBuildNode({
     required BuildTree tree,
     required BuildTreeNode node,
     required TreeBuildConfig config,
     required FenMap fenMap,
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
+    required Queue<BuildTreeNode> queue,
   }) async {
     if (!_isBuilding || isCancelled()) return;
 
@@ -206,14 +240,12 @@ class TreeBuildService {
     if (node.cumulativeProbability < config.minProbability) return;
     if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) return;
 
-    // Resume: skip nodes that already have children
+    // Resume: skip nodes that already have children — enqueue them only
     if (node.children.isNotEmpty) {
       fenMap.putCanonical(node.fen, node);
       for (final child in node.children) {
-        await _buildRecursive(
-          tree: tree, node: child, config: config,
-          fenMap: fenMap, isCancelled: isCancelled, onProgress: onProgress,
-        );
+        if (!_isBuilding || isCancelled()) break;
+        queue.add(child);
       }
       return;
     }
@@ -224,7 +256,7 @@ class TreeBuildService {
     // Opponent-move nodes: ensure eval + window prune BEFORE expansion.
     // Our-move nodes skip this — their eval comes from MultiPV line 0
     // inside _buildOurMove, which also does its own window check.
-    // This matches C's build_recursive where ensure_eval + window is
+    // This matches C's build_process_node where ensure_eval + window is
     // gated on `!is_our_move`.
     if (!isOurMove) {
       await _ensureEval(node, config);
@@ -258,18 +290,28 @@ class TreeBuildService {
 
     if (isOurMove) {
       await _buildOurMove(
-        tree: tree, node: node, config: config, fenMap: fenMap,
-        isCancelled: isCancelled, onProgress: onProgress,
+        tree: tree,
+        node: node,
+        config: config,
+        fenMap: fenMap,
+        isCancelled: isCancelled,
+        onProgress: onProgress,
+        queue: queue,
       );
     } else {
       await _buildOpponentMove(
-        tree: tree, node: node, config: config, fenMap: fenMap,
-        isCancelled: isCancelled, onProgress: onProgress,
+        tree: tree,
+        node: node,
+        config: config,
+        fenMap: fenMap,
+        isCancelled: isCancelled,
+        onProgress: onProgress,
+        queue: queue,
       );
     }
   }
 
-  // ── Our move: Stockfish MultiPV → eval filter → recurse ───────────────
+  // ── Our move: Stockfish MultiPV → eval filter → enqueue children ───────
 
   Future<void> _buildOurMove({
     required BuildTree tree,
@@ -278,6 +320,7 @@ class TreeBuildService {
     required FenMap fenMap,
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
+    required Queue<BuildTreeNode> queue,
   }) async {
     final mpvCount = config.ourMultipv;
     final isWhiteToMove = node.fen.split(' ')[1] == 'w';
@@ -302,7 +345,7 @@ class TreeBuildService {
       _cacheEvalWhite(node.fen, topCp, config.evalDepth);
     }
 
-    // Eval-window pruning (deferred from _buildRecursive so the eval
+    // Eval-window pruning (deferred from _processBuildNode so the eval
     // comes from MultiPV line 0, avoiding an extra single-PV call).
     if (node.hasEngineEval) {
       final evalUs = node.evalForUs(config.playAsWhite);
@@ -388,7 +431,7 @@ class TreeBuildService {
         }
       }
 
-      _emitProgress(tree, child.ply, child.fen, onProgress);
+      _emitProgress(tree, child.ply, child.fen, onProgress, config.maxPly);
     }
 
     // Populate maia_frequency on our-move children.  C gates this on
@@ -416,17 +459,13 @@ class TreeBuildService {
       }
     }
 
-    // Recurse into children
     for (final child in List.of(node.children)) {
       if (!_isBuilding || isCancelled()) break;
-      await _buildRecursive(
-        tree: tree, node: child, config: config,
-        fenMap: fenMap, isCancelled: isCancelled, onProgress: onProgress,
-      );
+      queue.add(child);
     }
   }
 
-  // ── Opponent move: single source (Maia OR Lichess) → recurse ─────────
+  // ── Opponent move: single source (Maia OR Lichess) → enqueue children ──
 
   Future<void> _buildOpponentMove({
     required BuildTree tree,
@@ -435,6 +474,7 @@ class TreeBuildService {
     required FenMap fenMap,
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
+    required Queue<BuildTreeNode> queue,
   }) async {
     if (config.maiaOnly) {
       await _addOpponentChildrenFromMaia(
@@ -457,14 +497,11 @@ class TreeBuildService {
     // Probabilities are kept RAW (Σ pᵢ ≤ 1).  The expectimax tail term
     // accounts for uncovered mass; renormalizing would silently bias V.
 
-    // Recurse — eval-window check + ensureEval happen inside _buildRecursive,
-    // so no separate batch-eval pass is needed here.
+    // Enqueue children — eval-window check + ensureEval happen in
+    // _processBuildNode, so no separate batch-eval pass is needed here.
     for (final child in List.of(node.children)) {
       if (!_isBuilding || isCancelled()) break;
-      await _buildRecursive(
-        tree: tree, node: child, config: config,
-        fenMap: fenMap, isCancelled: isCancelled, onProgress: onProgress,
-      );
+      queue.add(child);
     }
   }
 
@@ -513,7 +550,7 @@ class TreeBuildService {
       childrenAdded++;
       massCovered += prob;
 
-      _emitProgress(tree, child.ply, child.fen, onProgress);
+      _emitProgress(tree, child.ply, child.fen, onProgress, config.maxPly);
     }
   }
 
@@ -573,7 +610,7 @@ class TreeBuildService {
       childrenAdded++;
       massCovered += prob;
 
-      _emitProgress(tree, child.ply, child.fen, onProgress);
+      _emitProgress(tree, child.ply, child.fen, onProgress, config.maxPly);
     }
   }
 
@@ -701,6 +738,7 @@ class TreeBuildService {
   void _emitProgress(
     BuildTree tree, int ply, String? fen,
     void Function(BuildProgress) onProgress,
+    int maxPlyConfig,
   ) {
     if (tree.totalNodes - _lastProgressNodes < 5 &&
         tree.totalNodes > 2) {
@@ -708,22 +746,68 @@ class TreeBuildService {
     }
     _lastProgressNodes = tree.totalNodes;
 
+    final elapsedMs = _buildSw.elapsedMilliseconds;
+    final d = tree.maxPlyReached;
+
+    int totalAtDepth = 0;
+    int unexploredAtDepth = 0;
+    _countDepthLayer(tree.root, d, (total, unexplored) {
+      totalAtDepth = total;
+      unexploredAtDepth = unexplored;
+    });
+
+    double? nodesPerMinute;
+    int? etaDepthSeconds;
+
+    final elapsedMin = elapsedMs / 60000.0;
+    final deltaNodes = tree.totalNodes - _buildStartTotalNodes;
+    if (elapsedMs >= 500 && elapsedMin > 0 && deltaNodes >= 1) {
+      nodesPerMinute = deltaNodes / elapsedMin;
+      if (nodesPerMinute > 0 && unexploredAtDepth > 0) {
+        etaDepthSeconds =
+            (unexploredAtDepth * 60.0 / nodesPerMinute).round().clamp(1, 86400 * 7);
+      }
+    }
+
     onProgress(BuildProgress(
       totalNodes: tree.totalNodes,
-      currentPly: ply,
-      maxPlyReached: tree.maxPlyReached,
-      currentFen: fen,
-      elapsedMs: _buildSw.elapsedMilliseconds,
-      engineCalls: _stats.sfMultipvCalls +
-          _stats.sfSingleCalls + _stats.sfBatchCalls,
-      engineCacheHits: _stats.dbEvalHits,
-      maiaCalls: _stats.maiaEvals,
-      lichessQueries: _stats.lichessQueries,
-      lichessCacheHits: _stats.lichessCacheHits,
-      message: '${tree.totalNodes}n ply=$ply '
-          'eng=${_stats.sfMultipvCalls + _stats.sfSingleCalls + _stats.sfBatchCalls} '
-          'maia=${_stats.maiaEvals}',
+      maxPlyReached: d,
+      maxPlyConfig: maxPlyConfig,
+      elapsedMs: elapsedMs,
+      nodesPerMinute: nodesPerMinute,
+      currentDepth: d,
+      unexploredAtDepth: unexploredAtDepth,
+      totalAtDepth: totalAtDepth,
+      etaDepthSeconds: etaDepthSeconds,
     ));
+  }
+
+  static void _countDepthLayer(
+    BuildTreeNode node,
+    int targetPly,
+    void Function(int total, int unexplored) callback,
+  ) {
+    int total = 0;
+    int unexplored = 0;
+    _walkDepthLayer(node, targetPly, (n) {
+      total++;
+      if (!n.explored) unexplored++;
+    });
+    callback(total, unexplored);
+  }
+
+  static void _walkDepthLayer(
+    BuildTreeNode node,
+    int targetPly,
+    void Function(BuildTreeNode) visitor,
+  ) {
+    if (node.ply == targetPly) {
+      visitor(node);
+      return;
+    }
+    for (final c in node.children) {
+      _walkDepthLayer(c, targetPly, visitor);
+    }
   }
 
   int _findMaxNodeId(BuildTreeNode node) {

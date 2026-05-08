@@ -107,8 +107,8 @@ static void print_usage(const char *prog_name) {
     printf("  --maia-min-prob <P>    Skip Maia moves below this [default: 0.05]\n");
     printf("\n");
     printf("Eval window pruning:\n");
-    printf("  --min-eval <cp>        Stop DFS if our eval drops below this [default: color-dependent]\n");
-    printf("  --max-eval <cp>        Stop DFS if our eval exceeds this [default: color-dependent]\n");
+    printf("  --min-eval <cp>        Prune branch if our eval drops below this [default: color-dependent]\n");
+    printf("  --max-eval <cp>        Prune branch if our eval exceeds this [default: color-dependent]\n");
     printf("  --relative             Make --min-eval/--max-eval relative to root eval\n");
     printf("\n");
     printf("Preset modes (eval tolerance + novelty; omitted flags keep defaults):\n");
@@ -149,33 +149,37 @@ static void print_usage(const char *prog_name) {
 }
 
 
-static void progress_callback(int nodes_built, int current_depth,
-                                const char *current_fen) {
-    static int last_printed = -1;
-    static struct timespec start_time;
-    static bool started = false;
+static char *format_eta(int sec, char *buf, size_t len) {
+    if (sec < 60)
+        snprintf(buf, len, "%ds", sec);
+    else if (sec < 3600)
+        snprintf(buf, len, "%dm", (sec + 59) / 60);
+    else
+        snprintf(buf, len, "%dh %dm", sec / 3600, ((sec % 3600) + 59) / 60);
+    return buf;
+}
 
-    if (!started || nodes_built <= 1) {
-        clock_gettime(CLOCK_MONOTONIC, &start_time);
-        started = true;
-        last_printed = -1;
-    }
-    if (nodes_built - last_printed < 50) return;
+static void progress_callback(const BuildProgressInfo *info) {
+    char eta_buf[32];
+    const char *eta = info->eta_depth_seconds > 0
+        ? format_eta(info->eta_depth_seconds, eta_buf, sizeof(eta_buf))
+        : NULL;
 
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    double elapsed_s = (now.tv_sec - start_time.tv_sec)
-                     + (now.tv_nsec - start_time.tv_nsec) / 1e9;
-    double rate = (elapsed_s > 0.5) ? nodes_built / (elapsed_s / 60.0) : 0;
+    int explored = info->total_at_depth - info->unexplored_at_depth;
 
-    int em = (int)(elapsed_s / 60);
-    int es = (int)elapsed_s % 60;
+    printf("\r\033[K  [Build] %d nodes | depth %d/%d | %.0f/min | "
+           "%d/%d explored",
+           info->total_nodes,
+           info->current_depth, info->max_depth_config,
+           info->nodes_per_minute,
+           explored, info->total_at_depth);
 
-    printf("\r\033[K  [Build] %d nodes | %.0f/min | %dm%02ds | depth %d | %s",
-           nodes_built, rate, em, es, current_depth,
-           current_fen ? current_fen : "");
+    if (info->unexplored_at_depth > 0)
+        printf(" | %d remaining", info->unexplored_at_depth);
+    if (eta)
+        printf(" | ~%s", eta);
+
     fflush(stdout);
-    last_printed = nodes_built;
 }
 
 static void pipeline_progress(const char *stage, int current, int total) {

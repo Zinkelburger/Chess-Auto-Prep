@@ -2,11 +2,12 @@
  * tree.h - Opening Tree Builder
  *
  * Builds and manages the complete opening tree structure in a single
- * interleaved DFS so branches can be pruned immediately by eval window.
+ * interleaved BFS (FIFO queue) so shallow plies finish before deeper
+ * work; branches are still pruned immediately by eval window at each node.
  *
- * At OUR-move nodes:     Stockfish MultiPV → eval-loss filter → recurse
+ * At OUR-move nodes:     Stockfish MultiPV → eval-loss filter → enqueue children
  * At OPPONENT nodes:     single source — pure Maia (default) or pure
- *                        Lichess (`maia_only = false`) → recurse
+ *                        Lichess (`maia_only = false`) → enqueue children
  */
 
 #ifndef TREE_H
@@ -62,9 +63,22 @@ typedef struct BuildStats {
 } BuildStats;
 
 /**
+ * BuildProgressInfo — passed to the progress callback with all relevant metrics.
+ */
+typedef struct BuildProgressInfo {
+    int total_nodes;
+    int current_depth;
+    int max_depth_config;
+    int total_at_depth;
+    int unexplored_at_depth;
+    double nodes_per_minute;
+    int eta_depth_seconds;
+} BuildProgressInfo;
+
+/**
  * TreeConfig - Configuration for tree building
  *
- * The build is a single DFS pass that queries Lichess and Stockfish
+ * The build is a single BFS pass that queries Lichess and Stockfish
  * together, creating nodes with evaluations inline and pruning
  * immediately when positions leave the eval window.
  */
@@ -133,8 +147,8 @@ typedef struct TreeConfig {
     bool   maia_only;               /* Pure Maia for opponent moves (else pure Lichess) */
     bool   populate_maia_frequency; /* Run Maia at our-move nodes for novelty */
 
-    /* Progress callback */
-    void (*progress_callback)(int nodes_built, int current_depth, const char *current_fen);
+    /* Progress callback (see BuildProgressInfo below) */
+    void (*progress_callback)(const struct BuildProgressInfo *info);
 
     /* Build instrumentation (optional, caller-owned) */
     BuildStats *stats;
