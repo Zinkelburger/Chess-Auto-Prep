@@ -173,7 +173,8 @@ class BuildTree {
   String startMoves;
 
   /// Config snapshot used for serialization and re-scoring.
-  final Map<String, dynamic> configSnapshot;
+  /// Updated when resuming a partial build with a new target depth.
+  Map<String, dynamic> configSnapshot;
 
   /// O(1) node lookup by [BuildTreeNode.nodeId].
   /// Populated by [computeMetadata] or during build via [registerNode].

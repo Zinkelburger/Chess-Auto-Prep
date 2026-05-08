@@ -163,7 +163,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         final json = await file.readAsString();
         final tree = deserializeTree(json);
         if (!tree.buildComplete && mounted) {
-          setState(() => _savedPartialTree = tree);
+          setState(() {
+            final md = tree.configSnapshot['max_depth'];
+            if (md is num) {
+              _maxPlyCtrl.text = md.toInt().toString();
+            }
+            _savedPartialTree = tree;
+          });
         }
       } catch (_) {}
     } else if (_savedPartialTree != null && mounted) {
@@ -232,6 +238,40 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   // ── Tree build generation ─────────────────────────────────────────────
 
+  /// Current form values as a [TreeBuildConfig] (used for new builds and
+  /// for [maxPly] when resuming a partial tree).
+  TreeBuildConfig _treeBuildConfigFromControls() {
+    return TreeBuildConfig(
+      startFen: widget.fen,
+      playAsWhite: widget.isWhiteRepertoire,
+      minProbability: _parsePercentToFraction(
+        _cutoffCtrl.text,
+        fallbackPercent: 0.01,
+      ),
+      maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 10,
+      evalDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
+      maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
+      minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
+          (widget.isWhiteRepertoire ? 0 : -100),
+      maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ??
+          (widget.isWhiteRepertoire ? 200 : 100),
+      maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
+      maiaOnly: _lichessDbOverride == null,
+      ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 5,
+      oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 6,
+      oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.95,
+      useLichessDb: _lichessDbOverride != null,
+      useMasters: _lichessDbOverride == LichessDatabase.masters,
+      speeds: _lichessSpeeds.join(','),
+      ratingRange: (_lichessRatings.toList()..sort()).join(','),
+      minGames: int.tryParse(_lichessMinGamesCtrl.text.trim()) ?? 10,
+      relativeEval: _relativeEval,
+      selectionMode: _selectionMode,
+      noveltyWeight: _preferNovelties ? 60 : 0,
+      leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
+    );
+  }
+
   Future<void> _startTreeBuild({BuildTree? existingTree}) async {
     if (_isGenerating) return;
     final gen = ++_buildGeneration;
@@ -243,40 +283,15 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
     final TreeBuildConfig config;
     if (existingTree != null) {
-      config = TreeBuildConfig.fromJson(
+      final saved = TreeBuildConfig.fromJson(
         existingTree.configSnapshot,
         startFen: existingTree.root.fen,
       );
+      final ui = _treeBuildConfigFromControls();
+      config = saved.copyWith(maxPly: ui.maxPly);
+      existingTree.configSnapshot = Map<String, dynamic>.from(config.toJson());
     } else {
-      config = TreeBuildConfig(
-        startFen: widget.fen,
-        playAsWhite: widget.isWhiteRepertoire,
-        minProbability: _parsePercentToFraction(
-          _cutoffCtrl.text,
-          fallbackPercent: 0.01,
-        ),
-        maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 10,
-        evalDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
-        maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
-        minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
-            (widget.isWhiteRepertoire ? 0 : -100),
-        maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ??
-            (widget.isWhiteRepertoire ? 200 : 100),
-        maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
-        maiaOnly: _lichessDbOverride == null,
-        ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 5,
-        oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 6,
-        oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.95,
-        useLichessDb: _lichessDbOverride != null,
-        useMasters: _lichessDbOverride == LichessDatabase.masters,
-        speeds: _lichessSpeeds.join(','),
-        ratingRange: (_lichessRatings.toList()..sort()).join(','),
-        minGames: int.tryParse(_lichessMinGamesCtrl.text.trim()) ?? 10,
-        relativeEval: _relativeEval,
-        selectionMode: _selectionMode,
-        noveltyWeight: _preferNovelties ? 60 : 0,
-        leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
-      );
+      config = _treeBuildConfigFromControls();
     }
 
     if (existingTree == null) {
@@ -306,35 +321,53 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     widget.onGeneratingChanged(true);
 
     try {
-      // Phase 1: Build tree
-      final tree = await _buildService.build(
-        config: config,
-        isCancelled: () => _cancelRequested,
-        existingTree: existingTree,
-        onProgress: (p) {
-          if (!mounted) return;
-          _nodes = p.totalNodes;
-          _maxPlyConfig = p.maxPlyConfig;
-          _elapsedMs = p.elapsedMs;
-          _nodesPerMinute = p.nodesPerMinute;
-          _currentDepth = p.currentDepth;
-          _unexploredAtDepth = p.unexploredAtDepth;
-          _totalAtDepth = p.totalAtDepth;
-          _etaDepthSec = p.etaDepthSeconds;
+      // If the tree already reaches the target depth, skip Phase 1
+      // entirely and use what we have — BFS guarantees shallower plies
+      // are complete, so the tree is usable as-is.
+      final bool skipBuild = existingTree != null &&
+          existingTree.maxPlyReached >= config.maxPly;
 
-          final now = DateTime.now();
-          if (now.difference(_lastProgressUpdate).inMilliseconds < 150) return;
-          _lastProgressUpdate = now;
-          setState(() {});
-        },
-      );
-
-      if (_cancelRequested) {
+      final BuildTree tree;
+      if (skipBuild) {
+        tree = existingTree;
         if (mounted) {
-          setState(
-              () => _status = 'Build cancelled. ${tree.totalNodes} nodes.');
+          setState(() => _status =
+              'Tree already at depth ${existingTree.maxPlyReached}, '
+              'skipping build...');
         }
-        return;
+      } else {
+        // Phase 1: Build tree
+        tree = await _buildService.build(
+          config: config,
+          isCancelled: () => _cancelRequested,
+          existingTree: existingTree,
+          onProgress: (p) {
+            if (!mounted) return;
+            _nodes = p.totalNodes;
+            _maxPlyConfig = p.maxPlyConfig;
+            _elapsedMs = p.elapsedMs;
+            _nodesPerMinute = p.nodesPerMinute;
+            _currentDepth = p.currentDepth;
+            _unexploredAtDepth = p.unexploredAtDepth;
+            _totalAtDepth = p.totalAtDepth;
+            _etaDepthSec = p.etaDepthSeconds;
+
+            final now = DateTime.now();
+            if (now.difference(_lastProgressUpdate).inMilliseconds < 150) {
+              return;
+            }
+            _lastProgressUpdate = now;
+            setState(() {});
+          },
+        );
+
+        if (_cancelRequested) {
+          if (mounted) {
+            setState(
+                () => _status = 'Build cancelled. ${tree.totalNodes} nodes.');
+          }
+          return;
+        }
       }
 
       // Phase 2a: Ease
@@ -907,19 +940,29 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   const SizedBox(height: 4),
                   Text(
                     '${_savedPartialTree!.totalNodes} nodes, '
-                    'max ply ${_savedPartialTree!.maxPlyReached}',
+                    'depth ${_savedPartialTree!.maxPlyReached}',
                     style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       FilledButton.icon(
+                        onPressed: () {
+                          _maxPlyCtrl.text =
+                              _savedPartialTree!.maxPlyReached.toString();
+                          _startTreeBuild(existingTree: _savedPartialTree!);
+                        },
+                        icon: const Icon(Icons.check),
+                        label: const Text('Build Lines Now'),
+                      ),
+                      OutlinedButton.icon(
                         onPressed: () =>
                             _startTreeBuild(existingTree: _savedPartialTree!),
                         icon: const Icon(Icons.play_arrow),
                         label: const Text('Resume Build'),
                       ),
-                      const SizedBox(width: 8),
                       OutlinedButton.icon(
                         onPressed: () {
                           _deletePartialTree();
