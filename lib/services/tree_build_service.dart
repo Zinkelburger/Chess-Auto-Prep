@@ -37,9 +37,15 @@ class TreeBuildService {
   final Map<String, ExplorerResponse?> _dbCache = {};
 
   late BuildStats _stats;
-  late Stopwatch _buildSw;
+  Stopwatch _buildSw = Stopwatch();
 
   int _lastProgressNodes = 0;
+
+  /// True while Phase 1 BFS is running ([build] in progress).
+  bool get isBuilding => _isBuilding;
+
+  /// Phase 1 active-build elapsed time; stops advancing while [pauseBuild] holds.
+  int get buildElapsedMs => _buildSw.elapsedMilliseconds;
 
   /// [BuildTree.totalNodes] when Phase 1 starts (after optional root eval).
   int _buildStartTotalNodes = 0;
