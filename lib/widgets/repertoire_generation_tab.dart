@@ -1,5 +1,6 @@
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -103,6 +104,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   int _totalAtDepth = 0;
   int? _etaDepthSec;
   DateTime _lastProgressUpdate = DateTime(0);
+  Timer? _uiPulseTimer;
   final StringBuffer _pendingPgnBuffer = StringBuffer();
   int _pendingPgnLines = 0;
   BuildTree? _savedPartialTree;
@@ -133,7 +135,38 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _oppMaxChildrenCtrl.dispose();
     _oppMassTargetCtrl.dispose();
     _leafConfidenceCtrl.dispose();
+    _stopUiPulse();
     super.dispose();
+  }
+
+  static const Duration _uiPulseInterval = Duration(milliseconds: 250);
+
+  void _startUiPulse() {
+    _stopUiPulse();
+    _uiPulseTimer = Timer.periodic(_uiPulseInterval, (_) => _onUiPulse());
+  }
+
+  void _stopUiPulse() {
+    _uiPulseTimer?.cancel();
+    _uiPulseTimer = null;
+  }
+
+  /// Keeps the UI isolate scheduling frames while generation runs so elapsed
+  /// time (and other labels) advance smoothly between sparse [onProgress] calls.
+  void _onUiPulse() {
+    if (!mounted) {
+      _stopUiPulse();
+      return;
+    }
+    if (!_isGenerating) {
+      _stopUiPulse();
+      return;
+    }
+    setState(() {
+      if (_buildService.isBuilding) {
+        _elapsedMs = _buildService.buildElapsedMs;
+      }
+    });
   }
 
   @override
@@ -211,6 +244,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         _etaDepthSec = null;
       });
     }
+    _stopUiPulse();
     widget.onPauseChanged(false);
     widget.onGeneratingChanged(false);
     _checkForPartialTree();
@@ -319,6 +353,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _pendingPgnLines = 0;
     widget.onTreeReset?.call();
     widget.onGeneratingChanged(true);
+    _startUiPulse();
 
     try {
       // If the tree already reaches the target depth, skip Phase 1
@@ -476,6 +511,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         setState(() => _isGenerating = false);
         widget.onGeneratingChanged(false);
       }
+      _stopUiPulse();
       _checkForPartialTree();
     }
   }
