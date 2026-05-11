@@ -85,8 +85,8 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           final movesString = line.moves.join(' ').toLowerCase();
 
           return lineName.contains(searchTerm) ||
-                 lineTitle.contains(searchTerm) ||
-                 movesString.contains(searchTerm);
+              lineTitle.contains(searchTerm) ||
+              movesString.contains(searchTerm);
         }
 
         return true;
@@ -111,7 +111,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
 
   bool _isExactPositionMatch(RepertoireLine line, List<String> currentMoves) {
     return line.moves.length >= currentMoves.length &&
-           pgn_utils.lineMatchesPosition(line, currentMoves);
+        pgn_utils.lineMatchesPosition(line, currentMoves);
   }
 
   String _extractEventTitle(String pgn) => pgn_utils.extractEventTitle(pgn);
@@ -157,7 +157,8 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     width: 32,
                     height: 32,
                     child: IconButton(
-                      icon: Icon(Icons.arrow_back, size: 18, color: Colors.grey[400]),
+                      icon: Icon(Icons.arrow_back,
+                          size: 18, color: Colors.grey[400]),
                       padding: EdgeInsets.zero,
                       tooltip: 'Back',
                       onPressed: currentNode.parent != null
@@ -169,7 +170,8 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     width: 32,
                     height: 32,
                     child: IconButton(
-                      icon: Icon(Icons.arrow_forward, size: 18, color: Colors.grey[400]),
+                      icon: Icon(Icons.arrow_forward,
+                          size: 18, color: Colors.grey[400]),
                       padding: EdgeInsets.zero,
                       tooltip: 'Forward',
                       onPressed: sortedChildren.isNotEmpty
@@ -262,7 +264,8 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.library_books, size: 14, color: Colors.grey[400]),
+                    Icon(Icons.library_books,
+                        size: 14, color: Colors.grey[400]),
                     const SizedBox(width: 6),
                     Text(
                       'Search Repertoire Lines',
@@ -280,13 +283,16 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                   decoration: InputDecoration(
                     hintText: 'Type to filter lines...',
                     hintStyle: TextStyle(color: Colors.grey[500], fontSize: 11),
-                    prefixIcon: Icon(Icons.search, size: 16, color: Colors.grey[500]),
+                    prefixIcon:
+                        Icon(Icons.search, size: 16, color: Colors.grey[500]),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
-                            icon: Icon(Icons.clear, size: 16, color: Colors.grey[500]),
+                            icon: Icon(Icons.clear,
+                                size: 16, color: Colors.grey[500]),
                             onPressed: () => _searchController.clear(),
                             padding: const EdgeInsets.all(4),
-                            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                            constraints: const BoxConstraints(
+                                minWidth: 24, minHeight: 24),
                           )
                         : null,
                     border: OutlineInputBorder(
@@ -405,7 +411,8 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
 
   Widget _buildMoveItem(OpeningTreeNode node) {
     final totalGames = widget.tree.currentNode.gamesPlayed;
-    final playedPercent = totalGames > 0 ? (node.gamesPlayed / totalGames * 100) : 0.0;
+    final playedPercent =
+        totalGames > 0 ? (node.gamesPlayed / totalGames * 100) : 0.0;
 
     // Color based on win rate
     Color winRateColor;
@@ -509,9 +516,12 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
 
   /// Build a visual win rate bar similar to openingtree.com
   Widget _buildWinRateBar(OpeningTreeNode node) {
-    final winPercent = node.gamesPlayed > 0 ? node.wins / node.gamesPlayed : 0.0;
-    final drawPercent = node.gamesPlayed > 0 ? node.draws / node.gamesPlayed : 0.0;
-    final lossPercent = node.gamesPlayed > 0 ? node.losses / node.gamesPlayed : 0.0;
+    final winPercent =
+        node.gamesPlayed > 0 ? node.wins / node.gamesPlayed : 0.0;
+    final drawPercent =
+        node.gamesPlayed > 0 ? node.draws / node.gamesPlayed : 0.0;
+    final lossPercent =
+        node.gamesPlayed > 0 ? node.losses / node.gamesPlayed : 0.0;
 
     return Container(
       height: 16,

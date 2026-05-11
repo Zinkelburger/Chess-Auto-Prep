@@ -5,7 +5,8 @@ class EngineEvaluation {
   final List<String> pv; // Best line (UCI format)
   final int nodes;
   final int nps;
-  final List<int>? wdl; // Win/Draw/Loss probabilities [wins, draws, losses] per 1000
+  final List<int>?
+      wdl; // Win/Draw/Loss probabilities [wins, draws, losses] per 1000
 
   EngineEvaluation({
     this.depth = 0,
@@ -40,7 +41,7 @@ class EngineEvaluation {
     }
     return '...';
   }
-  
+
   EngineEvaluation copyWith({
     int? depth,
     int? scoreCp,
@@ -61,8 +62,3 @@ class EngineEvaluation {
     );
   }
 }
-
-
-
-
-

@@ -29,7 +29,8 @@ class OpeningTreeBuilder {
     final pgnGames = PgnGame.parseMultiGamePgn(fullPgnText);
 
     for (final game in pgnGames) {
-      _processGame(tree, game, usernameLower, userIsWhite, maxDepth, strictPlayerMatching);
+      _processGame(tree, game, usernameLower, userIsWhite, maxDepth,
+          strictPlayerMatching);
     }
 
     return tree;
@@ -38,7 +39,8 @@ class OpeningTreeBuilder {
   /// Check if a player name matches any known repertoire player pattern
   static bool _isRepertoirePlayer(String playerName) {
     final lowerName = playerName.toLowerCase();
-    return _repertoirePlayerPatterns.any((pattern) => lowerName.contains(pattern));
+    return _repertoirePlayerPatterns
+        .any((pattern) => lowerName.contains(pattern));
   }
 
   static void _processGame(
@@ -63,8 +65,10 @@ class OpeningTreeBuilder {
       isUserWhiteInGame = userIsWhiteFilter ?? true;
     } else {
       // 2. Identify User - match by username OR any repertoire player pattern
-      final whiteIsUser = white.contains(usernameLower) || _isRepertoirePlayer(white);
-      final blackIsUser = black.contains(usernameLower) || _isRepertoirePlayer(black);
+      final whiteIsUser =
+          white.contains(usernameLower) || _isRepertoirePlayer(white);
+      final blackIsUser =
+          black.contains(usernameLower) || _isRepertoirePlayer(black);
 
       // For repertoire files, if neither matches, try to infer from userIsWhiteFilter
       if (whiteIsUser && !blackIsUser) {

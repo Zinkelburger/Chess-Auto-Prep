@@ -6,7 +6,8 @@ import 'storage/storage_factory.dart';
 class PgnService {
   List<ChessGameModel> parsePgnContent(String content) {
     final games = <ChessGameModel>[];
-    final gameTexts = content.split('\n\n').where((text) => text.trim().isNotEmpty);
+    final gameTexts =
+        content.split('\n\n').where((text) => text.trim().isNotEmpty);
 
     String currentGame = '';
     for (final text in gameTexts) {
@@ -39,9 +40,9 @@ class PgnService {
 
   bool _containsGameResult(String gameText) {
     return gameText.contains('1-0') ||
-           gameText.contains('0-1') ||
-           gameText.contains('1/2-1/2') ||
-           gameText.contains('*');
+        gameText.contains('0-1') ||
+        gameText.contains('1/2-1/2') ||
+        gameText.contains('*');
   }
 
   Future<void> saveImportedGames(List<ChessGameModel> games) async {
@@ -107,10 +108,11 @@ class PgnService {
     List<ChessGameModel> games,
     String playerName,
   ) async {
-    return games.where((game) =>
-      game.white.toLowerCase().contains(playerName.toLowerCase()) ||
-      game.black.toLowerCase().contains(playerName.toLowerCase())
-    ).toList();
+    return games
+        .where((game) =>
+            game.white.toLowerCase().contains(playerName.toLowerCase()) ||
+            game.black.toLowerCase().contains(playerName.toLowerCase()))
+        .toList();
   }
 
   Future<List<ChessGameModel>> filterGamesByTimeControl(

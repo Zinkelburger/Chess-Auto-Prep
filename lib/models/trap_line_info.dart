@@ -96,7 +96,8 @@ class TrapLineInfo {
 
   /// Human-readable summary matching the C output format.
   String get summary {
-    final surplus = '${trickSurplus >= 0 ? "+" : ""}${(trickSurplus * 100).toStringAsFixed(1)}%';
+    final surplus =
+        '${trickSurplus >= 0 ? "+" : ""}${(trickSurplus * 100).toStringAsFixed(1)}%';
     return 'Trick surplus $surplus (V=${(expectimaxValue * 100).toStringAsFixed(1)}% '
         'wp=${(wpEval * 100).toStringAsFixed(1)}%) | '
         'Trap ${(trapScore * 100).toStringAsFixed(0)}% | '

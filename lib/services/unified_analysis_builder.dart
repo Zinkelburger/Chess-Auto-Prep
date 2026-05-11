@@ -232,12 +232,11 @@ class UnifiedAnalysisBuilder {
       // -- FEN map: link game + record stats for positions before the move --
       _linkGameToFen(fenToGameIndices, position.fen, gameIndex);
 
-      final bool isUserTurn =
-          (position.turn == Side.white && isUserWhite) ||
+      final bool isUserTurn = (position.turn == Side.white && isUserWhite) ||
           (position.turn == Side.black && isUserBlack);
       if (isUserTurn) {
-        _updateStats(stats, fenToGameIndices, position.fen, userResult,
-            gameIndex);
+        _updateStats(
+            stats, fenToGameIndices, position.fen, userResult, gameIndex);
       }
 
       // -- Parse and apply move --

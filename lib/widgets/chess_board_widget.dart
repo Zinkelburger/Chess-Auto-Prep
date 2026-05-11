@@ -76,9 +76,9 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
             : constraints.maxHeight;
         final squareSize = boardSize / 8;
 
-    return SizedBox(
-      width: boardSize,
-      height: boardSize,
+        return SizedBox(
+          width: boardSize,
+          height: boardSize,
           child: GestureDetector(
             onPanStart: (details) {
               if (!widget.enableUserMoves) return;
@@ -106,15 +106,18 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                 CustomPaint(
                   painter: _BoardPainter(
                     selectedSquare: selectedSquare,
-                    highlightedSquares: {...widget.highlightedSquares, ..._internalHighlights},
+                    highlightedSquares: {
+                      ...widget.highlightedSquares,
+                      ..._internalHighlights
+                    },
                     flipped: widget.flipped,
                   ),
                   size: Size(boardSize, boardSize),
                 ),
-
                 ..._buildPieceWidgets(boardSize, squareSize),
-
-                if (_isDragging && _draggedPiece != null && _currentDragPosition != null)
+                if (_isDragging &&
+                    _draggedPiece != null &&
+                    _currentDragPosition != null)
                   _buildDraggedPiece(squareSize),
               ],
             ),
@@ -218,7 +221,9 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   }
 
   void _onPanEnd(DragEndDetails details, double squareSize) {
-    if (_isDragging && _dragStartSquare != null && _currentDragPosition != null) {
+    if (_isDragging &&
+        _dragStartSquare != null &&
+        _currentDragPosition != null) {
       final col = (_currentDragPosition!.dx / squareSize).floor();
       final row = (_currentDragPosition!.dy / squareSize).floor();
 
@@ -306,7 +311,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
   void didUpdateWidget(covariant ChessBoardWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (widget.position != oldWidget.position || widget.flipped != oldWidget.flipped) {
+    if (widget.position != oldWidget.position ||
+        widget.flipped != oldWidget.flipped) {
       _resetDragState();
     }
   }
@@ -332,7 +338,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       final piece = widget.position.board.pieceAt(fromSq);
       final isPromotion = piece?.role == Role.pawn &&
           ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
-           (piece.color == Side.black && toSq ~/ 8 == 0));
+              (piece.color == Side.black && toSq ~/ 8 == 0));
 
       final move = NormalMove(
         from: fromSq,
@@ -366,7 +372,6 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     });
   }
 }
-
 
 /// Simple piece widget that renders SVG pieces
 class _PieceWidget extends StatelessWidget {
@@ -436,9 +441,11 @@ class _BoardPainter extends CustomPainter {
         canvas.drawRect(rect, Paint()..color = color);
 
         if (highlightedSquares.contains(square) && square != selectedSquare) {
-          canvas.drawRect(rect, Paint()
-            ..color = _ChessBoardWidgetState.highlightColor
-            ..blendMode = BlendMode.multiply);
+          canvas.drawRect(
+              rect,
+              Paint()
+                ..color = _ChessBoardWidgetState.highlightColor
+                ..blendMode = BlendMode.multiply);
         }
       }
     }

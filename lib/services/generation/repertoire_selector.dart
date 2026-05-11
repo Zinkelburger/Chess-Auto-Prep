@@ -129,7 +129,9 @@ class RepertoireSelector {
   BuildTreeNode _resolveTransposition(BuildTreeNode node) {
     if (node.children.isNotEmpty || fenMap == null) return node;
     final canonical = fenMap!.getCanonical(node.fen);
-    if (canonical != null && canonical != node && canonical.children.isNotEmpty) {
+    if (canonical != null &&
+        canonical != node &&
+        canonical.children.isNotEmpty) {
       return canonical;
     }
     return node;

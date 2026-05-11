@@ -94,9 +94,8 @@ class EvalWorker {
   /// Run MultiPV analysis on a position. Returns when bestmove arrives.
   /// Calls [onProgress] on each info update for progressive UI.
   Future<DiscoveryResult> runDiscovery(
-    String fen, int depth, int multiPv, bool isWhiteToMove,
-    {void Function(DiscoveryResult)? onProgress}
-  ) async {
+      String fen, int depth, int multiPv, bool isWhiteToMove,
+      {void Function(DiscoveryResult)? onProgress}) async {
     stop();
 
     _discoveryIsWhiteToMove = isWhiteToMove;

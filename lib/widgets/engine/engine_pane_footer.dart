@@ -62,15 +62,13 @@ class EnginePaneFooter extends StatelessWidget {
                     children: [
                       Text(
                         'Difficulty ',
-                        style: TextStyle(
-                            fontSize: 15, color: Colors.grey[500]),
+                        style: TextStyle(fontSize: 15, color: Colors.grey[500]),
                       ),
                       if (isAnalyzing)
                         const SizedBox(
                           width: 14,
                           height: 14,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 1.5),
+                          child: CircularProgressIndicator(strokeWidth: 1.5),
                         )
                       else
                         Text(
@@ -95,7 +93,8 @@ class EnginePaneFooter extends StatelessWidget {
                     ..sort((a, b) => b.value.compareTo(a.value));
                   final top = sorted.first;
                   final topSan = uciToSan(fen, top.key);
-                  topMoveExtra = '\n$topSan, ${(top.value * 100).toStringAsFixed(0)}% chance';
+                  topMoveExtra =
+                      '\n$topSan, ${(top.value * 100).toStringAsFixed(0)}% chance';
                 }
 
                 return Tooltip(
@@ -108,8 +107,7 @@ class EnginePaneFooter extends StatelessWidget {
                     children: [
                       Text(
                         'Difficulty ',
-                        style:
-                            TextStyle(fontSize: 15, color: Colors.grey[500]),
+                        style: TextStyle(fontSize: 15, color: Colors.grey[500]),
                       ),
                       Text(
                         difficulty.toStringAsFixed(1),
@@ -126,7 +124,6 @@ class EnginePaneFooter extends StatelessWidget {
             ),
             const SizedBox(width: 20),
           ],
-
           if (settings.showProbability) ...[
             ValueListenableBuilder<double>(
               valueListenable: probabilityService.cumulativeProbability,
@@ -138,8 +135,7 @@ class EnginePaneFooter extends StatelessWidget {
                     children: [
                       Text(
                         'Cumulative DB',
-                        style:
-                            TextStyle(fontSize: 15, color: Colors.grey[500]),
+                        style: TextStyle(fontSize: 15, color: Colors.grey[500]),
                       ),
                       const LichessDbInfoIcon(size: 13),
                       const SizedBox(width: 2),
@@ -163,8 +159,8 @@ class EnginePaneFooter extends StatelessWidget {
                 child: TextButton.icon(
                   onPressed: onSetRoot,
                   icon: const Icon(Icons.my_location, size: 14),
-                  label: const Text('Set as root',
-                      style: TextStyle(fontSize: 11)),
+                  label:
+                      const Text('Set as root', style: TextStyle(fontSize: 11)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     minimumSize: Size.zero,
@@ -174,9 +170,7 @@ class EnginePaneFooter extends StatelessWidget {
               ),
             ],
           ],
-
           const Spacer(),
-
           if (settings.showProbability)
             ValueListenableBuilder<ExplorerResponse?>(
               valueListenable: probabilityService.currentPosition,

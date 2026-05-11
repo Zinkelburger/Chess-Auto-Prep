@@ -5,7 +5,8 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Native (mobile/desktop) implementation for exporting CSV
-Future<void> exportCsvContent(String content, String filename, int positionCount) async {
+Future<void> exportCsvContent(
+    String content, String filename, int positionCount) async {
   // On mobile, use share sheet
   if (Platform.isAndroid || Platform.isIOS) {
     // Create a temporary file for sharing
@@ -42,15 +43,3 @@ Future<void> exportCsvContent(String content, String filename, int positionCount
     }
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-

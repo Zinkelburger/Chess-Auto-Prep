@@ -16,18 +16,19 @@ int _pgnMoveIdCounter = 0;
 class PgnMove {
   final String san;
   final String? comment;
-  final List<PgnMove> children; // First child is mainline, subsequent are variations
-  
+  final List<PgnMove>
+      children; // First child is mainline, subsequent are variations
+
   // Helper to identify this move instance in the tree
-  final int id; 
+  final int id;
 
   PgnMove({
     required this.san,
     this.comment,
     List<PgnMove>? children,
     int? id,
-  }) : children = children ?? [],
-       id = id ?? _pgnMoveIdCounter++;
+  })  : children = children ?? [],
+        id = id ?? _pgnMoveIdCounter++;
 
   PgnMove copyWith({
     String? san,
@@ -85,6 +86,7 @@ class PgnEditorController {
 
 class InteractivePgnEditor extends StatefulWidget {
   final Function(Position)? onPositionChanged;
+
   /// Called when move state changes - reports current move index and full move list
   final Function(int moveIndex, List<String> moves)? onMoveStateChanged;
   final String? initialPgn;
@@ -94,8 +96,10 @@ class InteractivePgnEditor extends StatefulWidget {
   final String? repertoireColor; // "White" or "Black"
   final List<String> moveHistory;
   final int currentMoveIndex;
+
   /// Starting FEN if different from standard position (for custom positions)
   final String? startingFen;
+
   /// Called after a line is successfully saved to the repertoire file.
   /// Provides the moves list, title, and full PGN so the caller can
   /// append to the in-memory tree without a full reload.
@@ -134,13 +138,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   Position _currentPosition = Chess.initial;
   List<PgnMove> _roots = []; // The root moves (usually 1, e.g. 1. e4)
   List<PgnMove> _currentPath = []; // The path of moves to the current position
-  
+
   // Derived state for compatibility/display
   List<String> get _currentLineSan => _currentPath.map((m) => m.san).toList();
-  int get _currentMoveIndex => _currentPath.isEmpty ? -1 : _currentPath.length - 1;
+  int get _currentMoveIndex =>
+      _currentPath.isEmpty ? -1 : _currentPath.length - 1;
 
   // UI state — derived from _currentPath so it can never go stale
-  int? get _selectedMoveId => _currentPath.isNotEmpty ? _currentPath.last.id : null;
+  int? get _selectedMoveId =>
+      _currentPath.isNotEmpty ? _currentPath.last.id : null;
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   bool _showingContextMenu = false;
@@ -149,7 +155,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   // Workflow state
   String _workingPgn = '';
-  
+
   // Flag to prevent callback loops when syncing from external source (controller)
   bool _isSyncingFromExternal = false;
 
@@ -167,7 +173,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (widget.initialPgn != null && widget.initialPgn!.isNotEmpty) {
       _loadInitialPgn(widget.initialPgn!);
     }
-    
+
     // Sync to initial move history if provided
     if (widget.moveHistory.isNotEmpty || widget.currentMoveIndex != -1) {
       _syncToMoveHistory(widget.moveHistory, widget.currentMoveIndex);
@@ -274,7 +280,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         final parent = _currentPath.last;
         _addToSiblingList(parent.children, newMove);
       }
-      
+
       // Advance path to include the new move
       if (_currentPath.isEmpty) {
         final added = _roots.firstWhere((m) => m.san == san);
@@ -323,7 +329,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   void _notifyMoveStateChanged() {
     // Don't notify if we're syncing from external source (prevents loops)
     if (_isSyncingFromExternal) return;
-    
+
     widget.onMoveStateChanged?.call(
       _currentMoveIndex,
       _currentLineSan,
@@ -332,15 +338,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   void _syncToMoveHistory(List<String> moves, int moveIndex) {
     if (!mounted) return;
-    
+
     // Mark that we're syncing from external source to prevent callback loops
     _isSyncingFromExternal = true;
-    
+
     setState(() {
       // Reset to root
       _currentPath = [];
       var currentSiblings = _roots;
-      
+
       for (int i = 0; i < moves.length; i++) {
         final san = moves[i];
         // Find or create
@@ -351,16 +357,16 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             break;
           }
         }
-        
+
         if (match == null) {
           match = PgnMove(san: san);
           currentSiblings.add(match);
         }
-        
+
         _currentPath.add(match);
         currentSiblings = match.children;
       }
-      
+
       // Now truncate path if moveIndex is less than full history
       if (moveIndex < _currentPath.length - 1) {
         if (moveIndex == -1) {
@@ -369,18 +375,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           _currentPath = _currentPath.sublist(0, moveIndex + 1);
         }
       }
-      
+
       _updatePositionWithoutCallback();
       _generateWorkingPgn();
-      
-      _commentController.text = _currentPath.isNotEmpty
-          ? (_currentPath.last.comment ?? '')
-          : '';
+
+      _commentController.text =
+          _currentPath.isNotEmpty ? (_currentPath.last.comment ?? '') : '';
     });
-    
+
     _isSyncingFromExternal = false;
   }
-  
+
   /// Update position without triggering external callbacks (used during sync)
   void _updatePositionWithoutCallback() {
     Position position;
@@ -401,14 +406,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   void _generateWorkingPgn() {
     final buffer = StringBuffer();
-    
+
     // Add FEN header if we have a custom starting position
     if (widget.startingFen != null) {
       buffer.writeln('[FEN "${widget.startingFen}"]');
       buffer.writeln('[SetUp "1"]');
       buffer.writeln();
     }
-    
+
     if (_roots.isNotEmpty) {
       _writePgnTree(buffer, _roots);
     }
@@ -459,11 +464,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   void _writePgnTree(StringBuffer buffer, List<PgnMove> siblings) {
     if (siblings.isEmpty) return;
-    
+
     // Determine starting move number and side to move from FEN
     int startMoveNumber = 1;
     bool startIsWhite = true;
-    
+
     if (widget.startingFen != null) {
       final fenParts = widget.startingFen!.split(' ');
       if (fenParts.length >= 2) {
@@ -473,22 +478,25 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         startMoveNumber = int.tryParse(fenParts[5]) ?? 1;
       }
     }
-    
-    _writeNodes(buffer, siblings, startMoveNumber, startIsWhite, isFirstMove: true);
+
+    _writeNodes(buffer, siblings, startMoveNumber, startIsWhite,
+        isFirstMove: true);
   }
 
-  void _writeNodes(StringBuffer buffer, List<PgnMove> siblings, int moveNumber, bool isWhite, {bool isFirstMove = false}) {
+  void _writeNodes(
+      StringBuffer buffer, List<PgnMove> siblings, int moveNumber, bool isWhite,
+      {bool isFirstMove = false}) {
     if (siblings.isEmpty) return;
 
     final main = siblings[0];
-    
+
     // Write main move - move number for White, or "X..." for Black on first move
     if (isWhite) {
       buffer.write('$moveNumber. ');
     } else if (isFirstMove) {
       buffer.write('$moveNumber... ');
     }
-    
+
     buffer.write('${main.san} ');
     if (main.comment != null && main.comment!.isNotEmpty) {
       buffer.write('{${_sanitizeComment(main.comment!)}} ');
@@ -503,21 +511,23 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       } else {
         buffer.write('$moveNumber... ');
       }
-      
+
       final variant = siblings[i];
       buffer.write('${variant.san} ');
       if (variant.comment != null && variant.comment!.isNotEmpty) {
         buffer.write('{${_sanitizeComment(variant.comment!)}} ');
       }
-      
+
       // Continue variation line
-      _writeNodes(buffer, variant.children, isWhite ? moveNumber : moveNumber + 1, !isWhite);
-      
+      _writeNodes(buffer, variant.children,
+          isWhite ? moveNumber : moveNumber + 1, !isWhite);
+
       buffer.write(') ');
     }
 
     // Continue main line
-    _writeNodes(buffer, main.children, isWhite ? moveNumber : moveNumber + 1, !isWhite);
+    _writeNodes(
+        buffer, main.children, isWhite ? moveNumber : moveNumber + 1, !isWhite);
   }
 
   void _goToMove(int moveId) {
@@ -526,13 +536,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       setState(() {
         _currentPath = path;
         _updatePosition();
-        
+
         _commentController.text = path.last.comment ?? '';
       });
     }
   }
-  
-  bool _findPathRecursive(List<PgnMove> nodes, int targetId, List<PgnMove> currentPath) {
+
+  bool _findPathRecursive(
+      List<PgnMove> nodes, int targetId, List<PgnMove> currentPath) {
     for (final node in nodes) {
       currentPath.add(node);
       if (node.id == targetId) {
@@ -587,7 +598,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       _contextMenuMoveId = null;
     });
   }
-  
+
   void _addComment() {
     _hideContextMenu();
     FocusScope.of(context).requestFocus();
@@ -595,7 +606,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   void _deleteFromHere() {
     if (_contextMenuMoveId == null) return;
-    
+
     final path = <PgnMove>[];
     if (_findPathRecursive(_roots, _contextMenuMoveId!, path)) {
       setState(() {
@@ -605,30 +616,30 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           final parent = path[path.length - 2];
           parent.children.remove(path.last);
         }
-        
+
         final index = _currentPath.indexOf(path.last);
         if (index != -1) {
           _currentPath = _currentPath.sublist(0, index);
           _updatePosition();
         }
-        
+
         _hideContextMenu();
         _generateWorkingPgn();
       });
     }
   }
-  
+
   void _copyPgnFromHere() {
     if (_contextMenuMoveId == null) return;
-    
+
     final path = <PgnMove>[];
     if (_findPathRecursive(_roots, _contextMenuMoveId!, path)) {
       final buffer = StringBuffer();
-      
+
       // Determine starting move number and side from FEN
       int startMoveNumber = 1;
       bool startIsWhite = true;
-      
+
       if (widget.startingFen != null) {
         final fenParts = widget.startingFen!.split(' ');
         if (fenParts.length >= 2) {
@@ -638,7 +649,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           startMoveNumber = int.tryParse(fenParts[5]) ?? 1;
         }
       }
-      
+
       // Calculate current move number based on path position
       int moveNumber = startMoveNumber;
       bool isWhite = startIsWhite;
@@ -650,15 +661,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           moveNumber++;
         }
       }
-      
+
       if (!isWhite) {
         buffer.write('$moveNumber... ');
       } else {
         buffer.write('$moveNumber. ');
       }
-      
+
       _writeNodes(buffer, [path.last], moveNumber, isWhite);
-      
+
       Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
       showAppSnackBar(context, AppMessages.pgnCopied);
     }
@@ -671,7 +682,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final path = <PgnMove>[];
     if (_findPathRecursive(_roots, _contextMenuMoveId!, path)) {
       final target = path.last;
-      
+
       setState(() {
         if (path.length == 1) {
           if (_roots.indexOf(target) > 0) {
@@ -694,35 +705,35 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   void _updateSelectedMoveComment(String comment) {
     if (_selectedMoveId == null) return;
-    
+
     final path = <PgnMove>[];
     if (_findPathRecursive(_roots, _selectedMoveId!, path)) {
       setState(() {
         final target = path.last;
         final newMove = target.copyWith(comment: comment);
-        
+
         if (path.length == 1) {
-           final idx = _roots.indexOf(target);
-           if (idx != -1) _roots[idx] = newMove;
+          final idx = _roots.indexOf(target);
+          if (idx != -1) _roots[idx] = newMove;
         } else {
-           final parent = path[path.length - 2];
-           final idx = parent.children.indexOf(target);
-           if (idx != -1) parent.children[idx] = newMove;
+          final parent = path[path.length - 2];
+          final idx = parent.children.indexOf(target);
+          if (idx != -1) parent.children[idx] = newMove;
         }
-        
+
         final pathIdx = _currentPath.indexOf(target);
         if (pathIdx != -1) {
-           _currentPath[pathIdx] = newMove;
+          _currentPath[pathIdx] = newMove;
         }
-        
+
         _generateWorkingPgn();
       });
     }
   }
-  
+
   Future<void> _addToRepertoire() async {
-     if (_workingPgn.isEmpty) return;
-     String? repertoireName = widget.currentRepertoireName;
+    if (_workingPgn.isEmpty) return;
+    String? repertoireName = widget.currentRepertoireName;
     if (repertoireName == null || repertoireName.isEmpty) {
       repertoireName = await _showAddToRepertoireDialog();
       if (repertoireName == null) return;
@@ -735,15 +746,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       final moves = _currentLineSan;
       final title = _titleController.text.trim();
       widget.onLineSaved?.call(moves, title, _workingPgn);
-
     } catch (e) {
       debugPrint('Save to repertoire failed: $e');
       if (mounted) {
-        showAppSnackBar(context, AppMessages.saveToRepertoireFailed, isError: true);
+        showAppSnackBar(context, AppMessages.saveToRepertoireFailed,
+            isError: true);
       }
     }
   }
-  
+
   Future<String?> _showAddToRepertoireDialog() async {
     final controller = TextEditingController();
     try {
@@ -774,12 +785,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     // Note: This logic previously used dart:io append mode.
     // StorageService read/write implies full overwrite.
     // So we read, append, write.
-    
+
     // Repertoire files live in the repertoires/ subdirectory
     final filename = 'repertoires/$repertoireName.pgn';
     final currentContent =
         await StorageFactory.instance.readRepertoirePgn(filename) ?? '';
-    
+
     // Use user-provided title, falling back to "Repertoire Line"
     final title = _titleController.text.trim().isNotEmpty
         ? _titleController.text.trim()
@@ -790,7 +801,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final whiteHeader = normalizedColor == 'black' ? 'Training' : 'Me';
     final blackHeader = normalizedColor == 'black' ? 'Me' : 'Training';
     final splitPgn = _splitWorkingPgn(pgn);
-    final extraHeaders = splitPgn.headers.where((line) => !_isManagedHeader(line));
+    final extraHeaders =
+        splitPgn.headers.where((line) => !_isManagedHeader(line));
     final entryLines = <String>[
       '[Event "$title"]',
       '[Date "${DateTime.now().toIso8601String()}"]',
@@ -807,7 +819,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final separator = currentContent.trimRight().isEmpty ? '' : '\n\n';
     final entry = '$separator${entryLines.join('\n')}\n';
 
-    await StorageFactory.instance.saveRepertoirePgn(filename, currentContent + entry);
+    await StorageFactory.instance
+        .saveRepertoirePgn(filename, currentContent + entry);
   }
 
   ({List<String> headers, String moveText}) _splitWorkingPgn(String pgn) {
@@ -849,12 +862,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   void _clearLine() {
-      setState(() {
-        _roots.clear();
-        _currentPath.clear();
-        _workingPgn = '';
-        _updatePosition();
-      });
+    setState(() {
+      _roots.clear();
+      _currentPath.clear();
+      _workingPgn = '';
+      _updatePosition();
+    });
   }
 
   @override
@@ -880,7 +893,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                       controller: _titleController,
                       decoration: InputDecoration(
                         hintText: 'Title',
-                        hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        hintStyle:
+                            TextStyle(color: Colors.grey[600], fontSize: 12),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(vertical: 2),
@@ -901,7 +915,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                       controller: _commentController,
                       decoration: InputDecoration(
                         hintText: 'Add comment',
-                        hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                        hintStyle:
+                            TextStyle(color: Colors.grey[600], fontSize: 12),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(vertical: 4),
@@ -915,14 +930,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             ),
             const SizedBox(height: 8),
             // Workflow buttons
-             Row(
+            Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _roots.isNotEmpty ? _addToRepertoire : null,
                     icon: const Icon(Icons.add_box),
                     label: const Text('Add to Repertoire'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green[700]),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green[700]),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -931,7 +947,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                     onPressed: _roots.isNotEmpty ? _clearLine : null,
                     icon: const Icon(Icons.clear),
                     label: const Text('Clear Line'),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red[700]),
                   ),
                 ),
               ],
@@ -950,11 +967,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
       );
     }
-    
+
     // Determine starting move number and side to move from FEN
     int startMoveNumber = 1;
     bool startIsWhite = true;
-    
+
     if (widget.startingFen != null) {
       final fenParts = widget.startingFen!.split(' ');
       if (fenParts.length >= 2) {
@@ -964,62 +981,73 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         startMoveNumber = int.tryParse(fenParts[5]) ?? 1;
       }
     }
-    
+
     // Recursive rendering
     return Wrap(
       spacing: 2,
       runSpacing: 4,
-      children: _buildMoveWidgets(_roots, startMoveNumber, startIsWhite, isFirstMove: true),
+      children: _buildMoveWidgets(_roots, startMoveNumber, startIsWhite,
+          isFirstMove: true),
     );
   }
-  
-  List<Widget> _buildMoveWidgets(List<PgnMove> siblings, int moveNumber, bool isWhite, {bool isFirstMove = false}) {
+
+  List<Widget> _buildMoveWidgets(
+      List<PgnMove> siblings, int moveNumber, bool isWhite,
+      {bool isFirstMove = false}) {
     final widgets = <Widget>[];
     if (siblings.isEmpty) return widgets;
-    
+
     final main = siblings[0];
-    
+
     // Main move - show move number for White, or "X..." for Black on first move
     if (isWhite) {
-      widgets.add(Text('$moveNumber. ', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)));
+      widgets.add(Text('$moveNumber. ',
+          style: const TextStyle(
+              color: Colors.grey, fontWeight: FontWeight.bold)));
     } else if (isFirstMove) {
-      widgets.add(Text('$moveNumber... ', style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)));
+      widgets.add(Text('$moveNumber... ',
+          style: const TextStyle(
+              color: Colors.grey, fontWeight: FontWeight.bold)));
     }
-    
+
     widgets.add(_buildSingleMoveWidget(main));
 
     if (main.comment != null && main.comment!.isNotEmpty) {
       widgets.add(_buildInlineComment(main.comment!));
     }
-    
+
     // Check for variations (siblings 1+)
     if (siblings.length > 1) {
-       for (int i = 1; i < siblings.length; i++) {
-         widgets.add(const Text(' ( ', style: TextStyle(color: Colors.grey)));
-         
-         final variant = siblings[i];
-         if (isWhite) {
-            widgets.add(Text('$moveNumber. ', style: const TextStyle(color: Colors.grey)));
-         } else {
-            widgets.add(Text('$moveNumber... ', style: const TextStyle(color: Colors.grey)));
-         }
-         
-         widgets.add(_buildSingleMoveWidget(variant));
+      for (int i = 1; i < siblings.length; i++) {
+        widgets.add(const Text(' ( ', style: TextStyle(color: Colors.grey)));
 
-         if (variant.comment != null && variant.comment!.isNotEmpty) {
-           widgets.add(_buildInlineComment(variant.comment!));
-         }
-         
-         // Recursively build the rest of the variation
-         widgets.addAll(_buildMoveWidgets(variant.children, isWhite ? moveNumber : moveNumber + 1, !isWhite));
-         
-         widgets.add(const Text(' ) ', style: TextStyle(color: Colors.grey)));
-       }
+        final variant = siblings[i];
+        if (isWhite) {
+          widgets.add(Text('$moveNumber. ',
+              style: const TextStyle(color: Colors.grey)));
+        } else {
+          widgets.add(Text('$moveNumber... ',
+              style: const TextStyle(color: Colors.grey)));
+        }
+
+        widgets.add(_buildSingleMoveWidget(variant));
+
+        if (variant.comment != null && variant.comment!.isNotEmpty) {
+          widgets.add(_buildInlineComment(variant.comment!));
+        }
+
+        // Recursively build the rest of the variation
+        widgets.addAll(_buildMoveWidgets(
+            variant.children, isWhite ? moveNumber : moveNumber + 1, !isWhite));
+
+        widgets.add(const Text(' ) ', style: TextStyle(color: Colors.grey)));
+      }
     }
-    
+
     // Continue main line
-    widgets.addAll(_buildMoveWidgets(main.children, isWhite ? moveNumber : moveNumber + 1, !isWhite));
-    
+    widgets.addAll(_buildMoveWidgets(
+        main.children, isWhite ? moveNumber : moveNumber + 1, !isWhite));
+
     return widgets;
   }
 
@@ -1046,7 +1074,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final isSelected = move.id == _selectedMoveId;
     final isCurrent = _currentPath.any((m) => m.id == move.id);
     final hasComment = move.comment != null && move.comment!.isNotEmpty;
-    
+
     Color textColor = Colors.blue[300]!;
     Color? bgColor;
     if (isSelected) {
@@ -1056,7 +1084,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       textColor = Colors.orange;
       bgColor = Colors.grey[800];
     }
-    
+
     return GestureDetector(
       onTap: () => _goToMove(move.id),
       onSecondaryTapDown: (d) => _showContextMenu(move.id, d.globalPosition),
@@ -1073,7 +1101,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
               move.san,
               style: TextStyle(
                 color: textColor,
-                fontWeight: isSelected || isCurrent ? FontWeight.bold : FontWeight.normal,
+                fontWeight: isSelected || isCurrent
+                    ? FontWeight.bold
+                    : FontWeight.normal,
                 decoration: TextDecoration.underline,
               ),
             ),
@@ -1091,19 +1121,20 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       ),
     );
   }
-  
+
   Widget _buildContextMenu() {
     String moveName = 'Move';
     final path = <PgnMove>[];
-    if (_contextMenuMoveId != null && _findPathRecursive(_roots, _contextMenuMoveId!, path)) {
+    if (_contextMenuMoveId != null &&
+        _findPathRecursive(_roots, _contextMenuMoveId!, path)) {
       moveName = path.last.san;
     }
 
     return Positioned.fill(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _hideContextMenu, 
-        onSecondaryTap: _hideContextMenu, 
+        onTap: _hideContextMenu,
+        onSecondaryTap: _hideContextMenu,
         child: Stack(
           children: [
             Positioned(
@@ -1121,7 +1152,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           border: Border(
                             bottom: BorderSide(color: Colors.grey[700]!),

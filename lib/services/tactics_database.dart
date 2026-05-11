@@ -18,7 +18,7 @@ class TacticsDatabase {
 
     try {
       final content = await StorageFactory.instance.readTacticsCsv();
-      
+
       if (content == null || content.isEmpty) {
         // No CSV found, try to load analyzed games list (legacy or empty state)
         await _loadAnalyzedGameIds();
@@ -97,7 +97,8 @@ class TacticsDatabase {
 
   /// Mark multiple games as analyzed
   Future<void> markGamesAnalyzed(Iterable<String> gameIds) async {
-    final newIds = gameIds.where((id) => id.isNotEmpty && !analyzedGameIds.contains(id));
+    final newIds =
+        gameIds.where((id) => id.isNotEmpty && !analyzedGameIds.contains(id));
     if (newIds.isNotEmpty) {
       analyzedGameIds.addAll(newIds);
       await _saveAnalyzedGameIds();
@@ -141,11 +142,24 @@ class TacticsDatabase {
         final List<List<dynamic>> csvData = [
           // Header row — must match toCsvRow() column order exactly.
           [
-            'fen', 'game_white', 'game_black', 'game_result', 'game_date',
-            'game_id', 'game_url', 'position_context', 'user_move',
-            'correct_line', 'mistake_type', 'mistake_analysis',
-            'review_count', 'success_count', 'last_reviewed',
-            'time_to_solve', 'hints_used', 'opponent_best_response',
+            'fen',
+            'game_white',
+            'game_black',
+            'game_result',
+            'game_date',
+            'game_id',
+            'game_url',
+            'position_context',
+            'user_move',
+            'correct_line',
+            'mistake_type',
+            'mistake_analysis',
+            'review_count',
+            'success_count',
+            'last_reviewed',
+            'time_to_solve',
+            'hints_used',
+            'opponent_best_response',
           ]
         ];
 
@@ -202,7 +216,8 @@ class TacticsDatabase {
     // Update only the stats that changed — copyWith preserves everything else.
     final updatedPosition = position.copyWith(
       reviewCount: position.reviewCount + 1,
-      successCount: position.successCount + (result == TacticsResult.correct ? 1 : 0),
+      successCount:
+          position.successCount + (result == TacticsResult.correct ? 1 : 0),
       lastReviewed: DateTime.now(),
       timeToSolve: timeTaken,
       hintsUsed: position.hintsUsed + hintsUsed,
@@ -268,7 +283,8 @@ class TacticsDatabase {
     if (added > 0) {
       await savePositions();
       await _saveAnalyzedGameIds();
-      print('Added $added new positions (${newPositions.length - added} duplicates skipped)');
+      print(
+          'Added $added new positions (${newPositions.length - added} duplicates skipped)');
     }
   }
 
@@ -296,7 +312,6 @@ class ReviewSession {
   double totalTime = 0.0;
   DateTime startTime = DateTime.now();
 
-  double get accuracy => positionsAttempted > 0
-      ? positionsCorrect / positionsAttempted
-      : 0.0;
+  double get accuracy =>
+      positionsAttempted > 0 ? positionsCorrect / positionsAttempted : 0.0;
 }

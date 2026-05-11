@@ -3,13 +3,13 @@ library;
 
 /// Per-move analysis result combining eval and ease.
 class MoveAnalysisResult {
-  final int? scoreCp;     // White perspective
-  final int? scoreMate;   // White perspective
-  final List<String> pv;  // Full PV (move + continuation)
+  final int? scoreCp; // White perspective
+  final int? scoreMate; // White perspective
+  final List<String> pv; // Full PV (move + continuation)
   final double? moveEase; // Ease of resulting position
   final int depth;
-  final String? topResponseUci;   // Most likely opponent reply (UCI)
-  final double? topResponseProb;  // Probability of that reply (0–1)
+  final String? topResponseUci; // Most likely opponent reply (UCI)
+  final double? topResponseProb; // Probability of that reply (0–1)
 
   MoveAnalysisResult({
     this.scoreCp,

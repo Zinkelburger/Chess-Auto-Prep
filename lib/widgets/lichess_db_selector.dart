@@ -18,7 +18,15 @@ const _speedOptions = <(String label, String value)>[
 ];
 
 const _ratingBuckets = [
-  '400', '1000', '1200', '1400', '1600', '1800', '2000', '2200', '2500',
+  '400',
+  '1000',
+  '1200',
+  '1400',
+  '1600',
+  '1800',
+  '2000',
+  '2200',
+  '2500',
 ];
 
 /// All-in-one Lichess DB selection widget.
@@ -78,8 +86,7 @@ class LichessDbSelector extends StatelessWidget {
             if (compact)
               const Padding(
                 padding: EdgeInsets.only(right: 8),
-                child:
-                    Text('Database:', style: TextStyle(fontSize: 13)),
+                child: Text('Database:', style: TextStyle(fontSize: 13)),
               ),
             const LichessDbInfoIcon(size: 14),
           ],
@@ -99,9 +106,8 @@ class LichessDbSelector extends StatelessWidget {
             ),
           ],
           selected: {database},
-          onSelectionChanged: enabled
-              ? (s) => onDatabaseChanged(s.first)
-              : null,
+          onSelectionChanged:
+              enabled ? (s) => onDatabaseChanged(s.first) : null,
         ),
 
         // Speed & rating filters (only for the Lichess player DB)
@@ -118,8 +124,7 @@ class LichessDbSelector extends StatelessWidget {
           SizedBox(
             width: 140,
             child: Tooltip(
-              message:
-                  'Minimum games for a move to be considered.\n'
+              message: 'Minimum games for a move to be considered.\n'
                   'Lower values include rarer moves, higher values\n'
                   'give more reliable statistics.',
               child: TextField(
@@ -160,8 +165,8 @@ class LichessDbSelector extends StatelessWidget {
           children: _speedOptions.map((opt) {
             final isSelected = selectedSpeeds.contains(opt.$2);
             return FilterChip(
-              label: Text(opt.$1,
-                  style: TextStyle(fontSize: compact ? 11 : 12)),
+              label:
+                  Text(opt.$1, style: TextStyle(fontSize: compact ? 11 : 12)),
               selected: isSelected,
               onSelected: enabled
                   ? (v) {
@@ -175,9 +180,8 @@ class LichessDbSelector extends StatelessWidget {
                     }
                   : null,
               visualDensity: compact ? VisualDensity.compact : null,
-              materialTapTargetSize: compact
-                  ? MaterialTapTargetSize.shrinkWrap
-                  : null,
+              materialTapTargetSize:
+                  compact ? MaterialTapTargetSize.shrinkWrap : null,
             );
           }).toList(),
         ),
@@ -195,8 +199,7 @@ class LichessDbSelector extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w600)),
         if (compact)
           Tooltip(
-            message:
-                'Rating buckets to include.\n'
+            message: 'Rating buckets to include.\n'
                 'Each value is the lower bound of a Lichess rating bracket.',
             child: Text('Ratings:',
                 style: TextStyle(fontSize: 12, color: Colors.grey[400])),
@@ -208,8 +211,7 @@ class LichessDbSelector extends StatelessWidget {
           children: _ratingBuckets.map((r) {
             final isSelected = selectedRatings.contains(r);
             return FilterChip(
-              label:
-                  Text(r, style: TextStyle(fontSize: compact ? 11 : 12)),
+              label: Text(r, style: TextStyle(fontSize: compact ? 11 : 12)),
               selected: isSelected,
               onSelected: enabled
                   ? (v) {
@@ -223,9 +225,8 @@ class LichessDbSelector extends StatelessWidget {
                     }
                   : null,
               visualDensity: compact ? VisualDensity.compact : null,
-              materialTapTargetSize: compact
-                  ? MaterialTapTargetSize.shrinkWrap
-                  : null,
+              materialTapTargetSize:
+                  compact ? MaterialTapTargetSize.shrinkWrap : null,
             );
           }).toList(),
         ),

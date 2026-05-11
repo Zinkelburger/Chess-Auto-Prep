@@ -28,7 +28,8 @@ class RepertoireTrainingScreen extends StatefulWidget {
   });
 
   @override
-  State<RepertoireTrainingScreen> createState() => _RepertoireTrainingScreenState();
+  State<RepertoireTrainingScreen> createState() =>
+      _RepertoireTrainingScreenState();
 }
 
 class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
@@ -170,8 +171,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     RepertoireLine? initial;
 
     if (widget.startLineId != null) {
-      initial =
-          _lines.firstWhere((l) => l.id == widget.startLineId, orElse: () => _lines.first);
+      initial = _lines.firstWhere((l) => l.id == widget.startLineId,
+          orElse: () => _lines.first);
     } else if (_dueQueue.isNotEmpty) {
       initial = _dueQueue.first;
     } else {
@@ -254,7 +255,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     setState(() {
       _waitingForUser = true;
       _currentAnnotation = _currentLine!.comments[moveIndex.toString()];
-      _feedback = 'Your move (${_isWhiteMoveIndex(moveIndex) ? "White" : "Black"})';
+      _feedback =
+          'Your move (${_isWhiteMoveIndex(moveIndex) ? "White" : "Black"})';
     });
   }
 
@@ -362,7 +364,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
     int nextIndex = 0;
     if (_currentLine != null) {
-      final currentOrderIndex = _lines.indexWhere((l) => l.id == _currentLine!.id);
+      final currentOrderIndex =
+          _lines.indexWhere((l) => l.id == _currentLine!.id);
       for (int i = 1; i <= _lines.length; i++) {
         final candidateIndex = (currentOrderIndex + i) % _lines.length;
         final candidate = _lines[candidateIndex];
@@ -515,9 +518,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     final entry = _reviewMap[_currentLine!.id];
     return Container(
       padding: const EdgeInsets.all(12),
-            child: Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+        children: [
           _buildLineHeader(entry),
           const SizedBox(height: 12),
           Expanded(
@@ -544,14 +547,14 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   Widget _buildLineHeader(RepertoireReviewEntry? entry) {
     return Card(
       elevation: 1,
-                  child: Padding(
+      child: Padding(
         padding: const EdgeInsets.all(12),
-                    child: Column(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
+          children: [
+            Text(
               _currentLine!.name,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
@@ -560,19 +563,19 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             ),
             if (entry != null) ...[
               const SizedBox(height: 4),
-                          Text(
+              Text(
                 entry.isDue
                     ? 'Due now • Difficulty ${entry.difficulty.toStringAsFixed(2)}'
                     : 'Next review ${entry.dueDateUtc}',
-                            style: TextStyle(
+                style: TextStyle(
                   color: entry.isDue ? Colors.orange[700] : Colors.green[700],
                   fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -608,7 +611,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     final hasMistake = _lineHadMistake;
     return Wrap(
       spacing: 8,
-                  children: [
+      children: [
         OutlinedButton(
           onPressed: () => _rateLine(ReviewRating.again),
           child: const Text('Again'),
@@ -621,7 +624,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           onPressed: hasMistake ? null : () => _rateLine(ReviewRating.good),
           child: const Text('Good'),
         ),
-                      FilledButton(
+        FilledButton(
           onPressed: hasMistake ? null : () => _rateLine(ReviewRating.easy),
           child: const Text('Easy'),
         ),
@@ -664,10 +667,10 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
     return Padding(
       padding: const EdgeInsets.all(12),
-            child: Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+        children: [
+          Text(
             'Current Move',
             style: Theme.of(context).textTheme.titleMedium,
           ),
@@ -675,24 +678,26 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                    san != null ? '${isWhiteMove ? moveNumber : '...'} $san' : 'Line complete',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    san != null
+                        ? '${isWhiteMove ? moveNumber : '...'} $san'
+                        : 'Line complete',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   if (_currentAnnotation != null) ...[
                     const SizedBox(height: 6),
-                        Text(
+                    Text(
                       _currentAnnotation!,
                       style: const TextStyle(color: Colors.black87),
-                          ),
-                        ],
-                      ],
                     ),
-                  ),
-                ),
+                  ],
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 12),
           Text(
             'Learned moves: $learnedCount / $totalMoves (need 3 correct per move)',
@@ -740,7 +745,9 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             trailing: Text(
               '$learnedMoves/${line.moves.length}',
               style: TextStyle(
-                color: learnedMoves == line.moves.length ? Colors.green : Colors.blueGrey,
+                color: learnedMoves == line.moves.length
+                    ? Colors.green
+                    : Colors.blueGrey,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -764,7 +771,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     );
   }
 
-  void _updateMoveProgress(RepertoireLine line, int moveIndex, {required bool wasCorrect}) {
+  void _updateMoveProgress(RepertoireLine line, int moveIndex,
+      {required bool wasCorrect}) {
     final key = '${line.id}:$moveIndex';
     final existing = _moveProgressMap[key];
     if (wasCorrect) {
@@ -821,5 +829,4 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     }
     return Wrap(children: items);
   }
-
 }

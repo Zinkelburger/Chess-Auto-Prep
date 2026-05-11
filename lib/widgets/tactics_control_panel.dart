@@ -44,16 +44,19 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   DateTime? _startTime;
   String _feedback = '';
   bool _showSolution = false;
-  bool _autoAdvance = true;  // Auto-advance setting (matches Python default)
+  bool _autoAdvance = true; // Auto-advance setting (matches Python default)
   String? _importStatus;
   bool _isImporting = false;
   int _newPositionsFound = 0;
   TacticsImportService? _activeImport;
 
   // Multi-move tactic state
-  int _currentMoveIndex = 0;      // Index into correctLine for next expected user move
-  String? _currentTacticFen;      // Board FEN before the current user move (for reset)
-  bool _waitingForOpponent = false; // True while opponent response is being animated
+  int _currentMoveIndex =
+      0; // Index into correctLine for next expected user move
+  String?
+      _currentTacticFen; // Board FEN before the current user move (for reset)
+  bool _waitingForOpponent =
+      false; // True while opponent response is being animated
 
   // Import controllers
   late TextEditingController _lichessUserController;
@@ -253,7 +256,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // a — Analyze / Reset (same as the combined button)
     if (key == LogicalKeyboardKey.keyA) {
       final appState = context.read<AppState>();
-      final isAtStartingPosition = appState.currentPosition.fen == _currentPosition!.fen;
+      final isAtStartingPosition =
+          appState.currentPosition.fen == _currentPosition!.fen;
       if (isAtStartingPosition) {
         _onAnalyze();
       } else {
@@ -301,17 +305,20 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   Row(
                     children: [
                       if (_isImporting)
-                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      if (_isImporting)
-                        const SizedBox(width: 12),
+                        const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                      if (_isImporting) const SizedBox(width: 12),
                       if (!_isImporting)
-                        Icon(Icons.check_circle_outline, size: 16, color: Colors.green[400]),
-                      if (!_isImporting)
-                        const SizedBox(width: 8),
+                        Icon(Icons.check_circle_outline,
+                            size: 16, color: Colors.green[400]),
+                      if (!_isImporting) const SizedBox(width: 8),
                       Expanded(child: Text(_importStatus!)),
                       if (_activeImport != null)
                         IconButton(
-                          icon: const Icon(Icons.stop_circle_outlined, size: 20),
+                          icon:
+                              const Icon(Icons.stop_circle_outlined, size: 20),
                           tooltip: 'Cancel analysis',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
@@ -355,7 +362,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                     message: 'space',
                     child: ElevatedButton(
                       onPressed: _toggleSolution,
-                      child: Text(_showSolution ? 'Hide Solution' : 'Show Solution'),
+                      child: Text(
+                          _showSolution ? 'Hide Solution' : 'Show Solution'),
                     ),
                   ),
                 ),
@@ -364,7 +372,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   child: Builder(
                     builder: (context) {
                       final appState = context.watch<AppState>();
-                      final isAtStartingPosition = _positionSolved || appState.currentPosition.fen == _currentPosition!.fen;
+                      final isAtStartingPosition = _positionSolved ||
+                          appState.currentPosition.fen == _currentPosition!.fen;
                       if (isAtStartingPosition) {
                         return _shortcutTooltip(
                           message: 'a',
@@ -493,9 +502,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Import Games', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Text('Import Games',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
-                    
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 520),
                       child: Column(
@@ -512,7 +522,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                                     isDense: true,
                                   ),
                                   onChanged: (value) {
-                                    context.read<AppState>().setLichessUsername(value);
+                                    context
+                                        .read<AppState>()
+                                        .setLichessUsername(value);
                                   },
                                 ),
                               ),
@@ -531,7 +543,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                               ),
                               const SizedBox(width: 8),
                               ElevatedButton(
-                                onPressed: _importStatus == null && _importFieldsValid ? _importLichess : null,
+                                onPressed:
+                                    _importStatus == null && _importFieldsValid
+                                        ? _importLichess
+                                        : null,
                                 child: const Text('Import'),
                               ),
                             ],
@@ -549,7 +564,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                                     isDense: true,
                                   ),
                                   onChanged: (value) {
-                                    context.read<AppState>().setChesscomUsername(value);
+                                    context
+                                        .read<AppState>()
+                                        .setChesscomUsername(value);
                                   },
                                 ),
                               ),
@@ -568,7 +585,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                               ),
                               const SizedBox(width: 8),
                               ElevatedButton(
-                                onPressed: _importStatus == null && _importFieldsValid ? _importChessCom : null,
+                                onPressed:
+                                    _importStatus == null && _importFieldsValid
+                                        ? _importChessCom
+                                        : null,
                                 child: const Text('Import'),
                               ),
                             ],
@@ -595,7 +615,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                                 width: 100,
                                 child: TextField(
                                   controller: _coresController,
-                                  enabled: TacticsImportService.isParallelAvailable,
+                                  enabled:
+                                      TacticsImportService.isParallelAvailable,
                                   decoration: InputDecoration(
                                     labelText: 'Cores',
                                     border: const OutlineInputBorder(),
@@ -625,20 +646,22 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onPressed: _onStartSession,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.all(16),
-                    backgroundColor: _isImporting 
-                        ? Colors.green[700] 
+                    backgroundColor: _isImporting
+                        ? Colors.green[700]
                         : Theme.of(context).colorScheme.primaryContainer,
                   ),
-                  icon: Icon(_isImporting ? Icons.play_circle : Icons.play_arrow),
+                  icon:
+                      Icon(_isImporting ? Icons.play_circle : Icons.play_arrow),
                   label: Text(
-                    _isImporting 
+                    _isImporting
                         ? 'Start Training Now (${_database.positions.length} positions)'
                         : 'Start Practice Session (${_database.positions.length} positions)',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
-            
+
             // Info text during import
             if (_isImporting && _database.positions.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -663,7 +686,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                 ),
               ),
             ],
-              
+
             // Database management buttons (always visible, disabled when empty/importing)
             const SizedBox(height: 8),
             Wrap(
@@ -687,9 +710,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                 ),
                 const SizedBox(width: 16),
                 Tooltip(
-                  message: _database.positions.isEmpty
-                      ? 'No tactics to browse'
-                      : '',
+                  message:
+                      _database.positions.isEmpty ? 'No tactics to browse' : '',
                   child: TextButton.icon(
                     onPressed: _database.positions.isNotEmpty
                         ? () => _tabController.animateTo(1)
@@ -701,7 +723,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               ],
             ),
           ],
-
         ],
       ),
     );
@@ -739,7 +760,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         const SizedBox(height: 12),
 
         // Game info
-        Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}', style: const TextStyle(fontSize: 14)),
+        Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}',
+            style: const TextStyle(fontSize: 14)),
 
         // Show the move that was played and what it allows
         if (pos.userMove.isNotEmpty) ...[
@@ -848,13 +870,16 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             children: [
               Text(
                 '${_database.positions.length} tactics',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
               const Spacer(),
               TextButton.icon(
                 onPressed: _confirmClearDatabase,
-                icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                label: const Text('Clear All', style: TextStyle(color: Colors.red)),
+                icon: const Icon(Icons.delete_outline,
+                    size: 16, color: Colors.red),
+                label: const Text('Clear All',
+                    style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -896,7 +921,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           SizedBox(width: 8),
           Expanded(flex: 2, child: Text('Played → Best', style: headerStyle)),
           SizedBox(width: 8),
-          SizedBox(width: 60, child: Text('Stats', style: headerStyle, textAlign: TextAlign.right)),
+          SizedBox(
+              width: 60,
+              child: Text('Stats',
+                  style: headerStyle, textAlign: TextAlign.right)),
         ],
       ),
     );
@@ -904,15 +932,21 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   Widget _buildBrowseRow(int index) {
     final pos = _database.positions[index];
-    final isSelected = _currentPosition != null && _currentPosition!.fen == pos.fen;
+    final isSelected =
+        _currentPosition != null && _currentPosition!.fen == pos.fen;
 
     return InkWell(
       onTap: () => _selectTacticFromBrowse(index),
       child: Container(
         decoration: BoxDecoration(
           color: isSelected
-              ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
-              : (index.isEven ? Colors.transparent : Colors.white.withValues(alpha: 0.02)),
+              ? Theme.of(context)
+                  .colorScheme
+                  .primaryContainer
+                  .withValues(alpha: 0.3)
+              : (index.isEven
+                  ? Colors.transparent
+                  : Colors.white.withValues(alpha: 0.02)),
           border: Border(
             bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
           ),
@@ -923,7 +957,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             // Delete button
             IconButton(
               onPressed: () => _deleteTactic(index),
-              icon: Icon(Icons.close, size: 16, color: Colors.red.withValues(alpha: 0.6)),
+              icon: Icon(Icons.close,
+                  size: 16, color: Colors.red.withValues(alpha: 0.6)),
               tooltip: 'Delete tactic',
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               padding: EdgeInsets.zero,
@@ -1043,7 +1078,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           '${pos.positionContext}',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -1070,7 +1107,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           'This cannot be undone.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Clear All', style: TextStyle(color: Colors.red)),
@@ -1094,7 +1133,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   Future<void> _showEditDialog(int index) async {
     final pos = _database.positions[index];
 
-    final correctLineCtrl = TextEditingController(text: pos.correctLine.join(' | '));
+    final correctLineCtrl =
+        TextEditingController(text: pos.correctLine.join(' | '));
     final mistakeTypeCtrl = TextEditingController(text: pos.mistakeType);
     final analysisCtrl = TextEditingController(text: pos.mistakeAnalysis);
 
@@ -1116,9 +1156,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                 _readOnlyField('You Played', pos.userMove),
                 _readOnlyField('Game ID', pos.gameId),
                 if (pos.reviewCount > 0)
-                  _readOnlyField('Stats', '${pos.successCount}/${pos.reviewCount} (${(pos.successRate * 100).toStringAsFixed(0)}%)'),
+                  _readOnlyField('Stats',
+                      '${pos.successCount}/${pos.reviewCount} (${(pos.successRate * 100).toStringAsFixed(0)}%)'),
                 const SizedBox(height: 16),
-                const Text('Editable fields', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const Text('Editable fields',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 const SizedBox(height: 8),
 
                 // Editable fields
@@ -1156,8 +1199,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save')),
         ],
       ),
     );
@@ -1191,7 +1238,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         children: [
           SizedBox(
             width: 80,
-            child: Text('$label:', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            child: Text('$label:',
+                style: const TextStyle(color: Colors.grey, fontSize: 12)),
           ),
           Expanded(
             child: SelectableText(
@@ -1212,7 +1260,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     appState.setBoardFlipped(false);
   }
 
-
   /// Re-sync the PGN viewer's highlighted move to the current tactic position.
   void _syncPgnToCurrentTactic() {
     if (_currentPosition == null) return;
@@ -1229,20 +1276,20 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   void _resetAnalysis() {
     if (_currentPosition == null) return;
-    
+
     // Clear ephemeral moves and re-sync PGN highlight to tactic position.
     // Skip the redundant board update — we set the board explicitly below.
     _skipNextPositionChanged = true;
     _syncPgnToCurrentTactic();
     _skipNextPositionChanged = false;
-    
+
     // Reset the board to the initial tactic position
     final appState = context.read<AppState>();
     try {
       final position = Chess.fromSetup(Setup.parseFen(_currentPosition!.fen));
       appState.setCurrentPosition(position);
     } catch (_) {}
-    
+
     // Reset solved state, feedback, and multi-move tracking
     setState(() {
       _positionSolved = false;
@@ -1311,8 +1358,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final importService = _activeImport = TacticsImportService();
     final username = _lichessUserController.text.trim();
     final count = int.tryParse(_lichessCountController.text) ?? 20;
-    final depth = (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
-    final cores = (int.tryParse(_coresController.text) ?? 1).clamp(1, TacticsImportService.availableCores);
+    final depth =
+        (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
+    final cores = (int.tryParse(_coresController.text) ?? 1)
+        .clamp(1, TacticsImportService.availableCores);
 
     if (username.isEmpty) {
       _showUsernameRequired('Lichess');
@@ -1328,7 +1377,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     try {
       // Initialize the import service (loads analyzed game IDs)
       await importService.initialize();
-      
+
       final positions = await importService.importGamesFromLichess(
         username,
         maxGames: count,
@@ -1367,8 +1416,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     final importService = _activeImport = TacticsImportService();
     final username = _chessComUserController.text.trim();
     final count = int.tryParse(_chessComCountController.text) ?? 20;
-    final depth = (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
-    final cores = (int.tryParse(_coresController.text) ?? 1).clamp(1, TacticsImportService.availableCores);
+    final depth =
+        (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
+    final cores = (int.tryParse(_coresController.text) ?? 1)
+        .clamp(1, TacticsImportService.availableCores);
 
     if (username.isEmpty) {
       _showUsernameRequired('Chess.com');
@@ -1384,7 +1435,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     try {
       // Initialize the import service (loads analyzed game IDs)
       await importService.initialize();
-      
+
       final positions = await importService.importGamesFromChessCom(
         username,
         maxGames: count,
@@ -1418,10 +1469,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       }
     }
   }
-  
+
   Future<void> _handleImportResults(List<TacticsPosition> _) async {
     await _loadPositions();
-    
+
     if (mounted) {
       setState(() {
         _importStatus = _newPositionsFound == 0
@@ -1511,7 +1562,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   /// Refresh _currentPosition from the database so displayed stats are up to date
   void _refreshCurrentPosition() {
     if (_currentPosition == null) return;
-    final index = _database.positions.indexWhere((p) => p.fen == _currentPosition!.fen);
+    final index =
+        _database.positions.indexWhere((p) => p.fen == _currentPosition!.fen);
     if (index != -1) {
       setState(() {
         _currentPosition = _database.positions[index];
@@ -1533,7 +1585,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       } catch (e) {
         debugPrint('Copy FEN failed: $e');
         if (mounted) {
-          showAppSnackBar(context, AppMessages.clipboardWriteFailed, isError: true);
+          showAppSnackBar(context, AppMessages.clipboardWriteFailed,
+              isError: true);
         }
       }
     }
@@ -1669,11 +1722,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Only record on first attempt per position encounter (binary: first-try = success)
     if (!_attemptRecorded) {
       _attemptRecorded = true;
-      _database.recordAttempt(
+      _database
+          .recordAttempt(
         _currentPosition!,
         TacticsResult.correct,
         timeTaken,
-      ).then((_) {
+      )
+          .then((_) {
         if (mounted) {
           _refreshCurrentPosition();
         }
@@ -1710,11 +1765,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Only record on first attempt per position encounter (binary: first-try wrong = failure)
     if (!_attemptRecorded && _currentPosition != null) {
       _attemptRecorded = true;
-      _database.recordAttempt(
+      _database
+          .recordAttempt(
         _currentPosition!,
         TacticsResult.incorrect,
         timeTaken,
-      ).then((_) {
+      )
+          .then((_) {
         if (mounted) {
           _refreshCurrentPosition();
         }
@@ -1755,13 +1812,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Session Complete'),
-        content: Text(
-          'Great work!\n\n'
-          'Positions attempted: ${session.positionsAttempted}\n'
-          'Correct: ${session.positionsCorrect}\n'
-          'Incorrect: ${session.positionsIncorrect}\n'
-          'Accuracy: ${(session.accuracy * 100).toStringAsFixed(1)}%'
-        ),
+        content: Text('Great work!\n\n'
+            'Positions attempted: ${session.positionsAttempted}\n'
+            'Correct: ${session.positionsCorrect}\n'
+            'Incorrect: ${session.positionsIncorrect}\n'
+            'Accuracy: ${(session.accuracy * 100).toStringAsFixed(1)}%'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -1866,8 +1921,7 @@ class _DelayedTooltipState extends State<_DelayedTooltip>
             child: Material(
               color: Colors.transparent,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.grey[900],
                   borderRadius: BorderRadius.circular(4),
@@ -1910,18 +1964,3 @@ class _DelayedTooltipState extends State<_DelayedTooltip>
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

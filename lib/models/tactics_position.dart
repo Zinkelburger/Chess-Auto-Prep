@@ -1,11 +1,11 @@
 /// TacticsPosition model - fully compatible with Python's TacticsPosition
 class TacticsPosition {
   final String fen;
-  final String userMove;           // The move the user actually played (mistake)
-  final List<String> correctLine;  // The correct continuation moves
-  final String mistakeType;        // "?" or "??" or "?!"
-  final String mistakeAnalysis;    // Full analysis from Lichess
-  final String positionContext;    // "Move X, Color to play"
+  final String userMove; // The move the user actually played (mistake)
+  final List<String> correctLine; // The correct continuation moves
+  final String mistakeType; // "?" or "??" or "?!"
+  final String mistakeAnalysis; // Full analysis from Lichess
+  final String positionContext; // "Move X, Color to play"
   final String gameWhite;
   final String gameBlack;
   final String gameResult;
@@ -13,11 +13,12 @@ class TacticsPosition {
   final String gameId;
   final String gameUrl;
   final DateTime? lastReviewed;
-  final int reviewCount;           // Number of times reviewed
-  final int successCount;          // Number of times solved correctly
-  final double timeToSolve;        // Time taken to solve (seconds)
-  final int hintsUsed;             // Number of hints used
-  final String opponentBestResponse; // Opponent's best reply after user's bad move
+  final int reviewCount; // Number of times reviewed
+  final int successCount; // Number of times solved correctly
+  final double timeToSolve; // Time taken to solve (seconds)
+  final int hintsUsed; // Number of hints used
+  final String
+      opponentBestResponse; // Opponent's best reply after user's bad move
 
   const TacticsPosition({
     required this.fen,
@@ -75,7 +76,8 @@ class TacticsPosition {
       gameDate: gameDate ?? this.gameDate,
       gameId: gameId ?? this.gameId,
       gameUrl: gameUrl ?? this.gameUrl,
-      lastReviewed: clearLastReviewed ? null : (lastReviewed ?? this.lastReviewed),
+      lastReviewed:
+          clearLastReviewed ? null : (lastReviewed ?? this.lastReviewed),
       reviewCount: reviewCount ?? this.reviewCount,
       successCount: successCount ?? this.successCount,
       timeToSolve: timeToSolve ?? this.timeToSolve,
@@ -96,7 +98,8 @@ class TacticsPosition {
       : 'Improve on the mistake - find the best move';
   String get gameSource => '$gameWhite vs $gameBlack';
   int get moveNumber => _extractMoveNumber(positionContext);
-  String get playerToMove => positionContext.contains('White') ? 'white' : 'black';
+  String get playerToMove =>
+      positionContext.contains('White') ? 'white' : 'black';
 
   int _extractMoveNumber(String context) {
     final match = RegExp(r'Move (\d+)').firstMatch(context);
@@ -109,7 +112,8 @@ class TacticsPosition {
   /// Create from CSV row (18 columns; tolerates legacy 17-column rows).
   factory TacticsPosition.fromCsv(List<dynamic> row) {
     if (row.length < 17) {
-      throw ArgumentError('Not enough CSV values for TacticsPosition (need ≥17, got ${row.length})');
+      throw ArgumentError(
+          'Not enough CSV values for TacticsPosition (need ≥17, got ${row.length})');
     }
 
     return TacticsPosition(
@@ -122,7 +126,8 @@ class TacticsPosition {
       gameUrl: row[6].toString(),
       positionContext: row[7].toString(),
       userMove: row[8].toString(),
-      correctLine: row[9].toString().split('|').where((s) => s.isNotEmpty).toList(),
+      correctLine:
+          row[9].toString().split('|').where((s) => s.isNotEmpty).toList(),
       mistakeType: row[10].toString(),
       mistakeAnalysis: row[11].toString(),
       reviewCount: int.tryParse(row[12].toString()) ?? 0,
@@ -140,8 +145,14 @@ class TacticsPosition {
   /// Create from JSON - for backward compatibility with Lichess import
   factory TacticsPosition.fromJson(Map<String, dynamic> json) {
     final correctLine = json['correct_line'] is String
-        ? (json['correct_line'] as String).split('|').where((s) => s.isNotEmpty).toList()
-        : (json['correct_line'] as List<dynamic>?)?.map((e) => e as String).toList() ?? [];
+        ? (json['correct_line'] as String)
+            .split('|')
+            .where((s) => s.isNotEmpty)
+            .toList()
+        : (json['correct_line'] as List<dynamic>?)
+                ?.map((e) => e as String)
+                .toList() ??
+            [];
 
     return TacticsPosition(
       fen: json['fen'] as String,
@@ -150,13 +161,17 @@ class TacticsPosition {
       mistakeType: json['mistake_type'] ?? '?',
       mistakeAnalysis: json['mistake_analysis'] ?? json['description'] ?? '',
       positionContext: json['position_context'] ?? 'Move 1, White to play',
-      gameWhite: json['game_white'] ?? json['game_source']?.split(' vs ')?.first ?? '',
-      gameBlack: json['game_black'] ?? json['game_source']?.split(' vs ')?.last ?? '',
+      gameWhite:
+          json['game_white'] ?? json['game_source']?.split(' vs ')?.first ?? '',
+      gameBlack:
+          json['game_black'] ?? json['game_source']?.split(' vs ')?.last ?? '',
       gameResult: json['game_result'] ?? '*',
       gameDate: json['game_date'] ?? '',
       gameId: json['game_id'] ?? '',
       gameUrl: json['game_url'] ?? '',
-      lastReviewed: json['last_reviewed'] != null ? DateTime.tryParse(json['last_reviewed']) : null,
+      lastReviewed: json['last_reviewed'] != null
+          ? DateTime.tryParse(json['last_reviewed'])
+          : null,
       reviewCount: json['review_count'] as int? ?? 0,
       successCount: json['success_count'] as int? ?? 0,
       timeToSolve: json['time_to_solve'] as double? ?? 0.0,

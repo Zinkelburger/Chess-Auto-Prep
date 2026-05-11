@@ -50,14 +50,3 @@ class RepertoireMoveProgress {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-

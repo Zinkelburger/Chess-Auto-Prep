@@ -20,7 +20,7 @@ class RepertoireService {
     String? trainingColor,
   }) async {
     final content = await StorageFactory.instance.readRepertoirePgn(filePath);
-    
+
     if (content == null) {
       throw Exception('Repertoire file not found: $filePath');
     }
@@ -54,7 +54,8 @@ class RepertoireService {
         final game = PgnGame.parsePgn(gameText);
 
         // Extract mainline moves (this excludes variations in parentheses)
-        final mainlineMoves = game.moves.mainline().map((node) => node.san).toList();
+        final mainlineMoves =
+            game.moves.mainline().map((node) => node.san).toList();
 
         if (mainlineMoves.isEmpty) continue;
 
@@ -92,7 +93,6 @@ class RepertoireService {
           comments: comments,
           variations: variations,
         ));
-
       } catch (e) {
         if (kDebugMode) {
           debugPrint('Error parsing game $gameIndex: $e');
@@ -146,7 +146,6 @@ class RepertoireService {
     return null;
   }
 
-
   /// Splits PGN content into individual games
   List<String> _splitPgnIntoGames(String content) {
     final games = <String>[];
@@ -174,7 +173,8 @@ class RepertoireService {
       } else if (trimmedLine.isNotEmpty) {
         // Handle PGN without headers (just moves)
         if (!inGame) {
-          currentGame = '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n';
+          currentGame =
+              '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n';
           inGame = true;
         }
         currentGame += '$line\n';
@@ -195,11 +195,15 @@ class RepertoireService {
 
     if (opening.isNotEmpty && opening != '?') {
       return opening;
-    } else if (event.isNotEmpty && event != '?' && event != 'Repertoire Line' && event != 'Edited Line') {
+    } else if (event.isNotEmpty &&
+        event != '?' &&
+        event != 'Repertoire Line' &&
+        event != 'Edited Line') {
       return event;
     } else {
       // Generate name from first few moves
-      final moves = game.moves.mainline().take(3).map((node) => node.san).toList();
+      final moves =
+          game.moves.mainline().take(3).map((node) => node.san).toList();
       if (moves.isNotEmpty) {
         return 'Line: ${moves.join(' ')}';
       } else {
@@ -313,10 +317,8 @@ class RepertoireService {
       s.startsWith('\uFEFF') ? s.substring(1) : s;
 
   /// Creates training questions from repertoire lines for a specific color
-  List<TrainingQuestion> createTrainingQuestions(
-    List<RepertoireLine> lines,
-    {String? colorFilter}
-  ) {
+  List<TrainingQuestion> createTrainingQuestions(List<RepertoireLine> lines,
+      {String? colorFilter}) {
     final questions = <TrainingQuestion>[];
 
     for (final line in lines) {
@@ -330,7 +332,7 @@ class RepertoireService {
         // Check if this move is played by the training color
         final isWhiteMove = moveIndex % 2 == 0;
         final shouldIncludeMove = (line.color == 'white' && isWhiteMove) ||
-                                  (line.color == 'black' && !isWhiteMove);
+            (line.color == 'black' && !isWhiteMove);
 
         if (shouldIncludeMove) {
           try {
@@ -363,7 +365,9 @@ class RepertoireService {
     }
 
     if (openingOnly == true) {
-      filtered = filtered.where((q) => q.moveIndex < 20).toList(); // First 10 moves per side
+      filtered = filtered
+          .where((q) => q.moveIndex < 20)
+          .toList(); // First 10 moves per side
     }
 
     return filtered;
@@ -380,7 +384,8 @@ class RepertoireService {
   ///
   /// Finds the game matching [lineId] by re-parsing the file, then rewrites
   /// the [Event] header with [newTitle].
-  Future<bool> updateLineTitle(String filePath, String lineId, String newTitle) async {
+  Future<bool> updateLineTitle(
+      String filePath, String lineId, String newTitle) async {
     final file = io.File(filePath);
     if (!await file.exists()) return false;
 

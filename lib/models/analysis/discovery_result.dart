@@ -5,8 +5,8 @@ library;
 class DiscoveryLine {
   final int pvNumber;
   final int depth;
-  final int? scoreCp;     // White-normalized
-  final int? scoreMate;   // White-normalized
+  final int? scoreCp; // White-normalized
+  final int? scoreMate; // White-normalized
   final List<String> pv;
   final int nodes;
   final int nps;

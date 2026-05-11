@@ -36,7 +36,8 @@ class ExtractedLine {
   ///
   /// Pass [startFen] when the line starts from a non-standard position so
   /// the emitted PGN includes a correct `[FEN]` / `[SetUp]` header.
-  String toPgn({required bool rootWhiteToMove, String? event, String? startFen}) {
+  String toPgn(
+      {required bool rootWhiteToMove, String? event, String? startFen}) {
     final sb = StringBuffer();
 
     if (event != null) sb.writeln('[Event "$event"]');
@@ -46,7 +47,9 @@ class ExtractedLine {
     sb.writeln('[Result "*"]');
     const standardStartpos =
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    if (startFen != null && startFen.isNotEmpty && startFen != standardStartpos) {
+    if (startFen != null &&
+        startFen.isNotEmpty &&
+        startFen != standardStartpos) {
       sb.writeln('[FEN "$startFen"]');
       sb.writeln('[SetUp "1"]');
     }
@@ -62,8 +65,7 @@ class ExtractedLine {
       sb.write('${movesSan[j]} ');
     }
 
-    if (leafPruneReason == PruneReason.evalTooHigh &&
-        leafPruneEvalCp != null) {
+    if (leafPruneReason == PruneReason.evalTooHigh && leafPruneEvalCp != null) {
       sb.write('{Already winning '
           '(${leafPruneEvalCp! >= 0 ? "+" : ""}${(leafPruneEvalCp! / 100).toStringAsFixed(1)}); '
           'no further preparation needed} ');
@@ -111,9 +113,8 @@ class LineExtractor {
     bool pushedAny = false;
 
     if (isOurMove) {
-      final selected = resolved.children
-          .where((c) => c.isRepertoireMove)
-          .firstOrNull;
+      final selected =
+          resolved.children.where((c) => c.isRepertoireMove).firstOrNull;
       if (selected != null) {
         pushedAny = true;
         _extractDfs(
@@ -168,7 +169,9 @@ class LineExtractor {
   BuildTreeNode _resolveTransposition(BuildTreeNode node) {
     if (node.children.isNotEmpty || fenMap == null) return node;
     final canonical = fenMap!.getCanonical(node.fen);
-    if (canonical != null && canonical != node && canonical.children.isNotEmpty) {
+    if (canonical != null &&
+        canonical != node &&
+        canonical.children.isNotEmpty) {
       return canonical;
     }
     return node;

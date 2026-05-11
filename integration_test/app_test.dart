@@ -99,7 +99,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();
 
-      expect(getAppState(tester).currentMode, equals(AppMode.repertoireTrainer));
+      expect(
+          getAppState(tester).currentMode, equals(AppMode.repertoireTrainer));
     });
   });
 

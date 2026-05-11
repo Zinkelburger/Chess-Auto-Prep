@@ -316,8 +316,8 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
       .length;
   int get _unaccountedCount =>
       _lineCoverage.values.where((i) => i.unaccountedMoves.isNotEmpty).length;
-  int get _totalUnaccountedMoves => _lineCoverage.values
-      .fold(0, (sum, i) => sum + i.unaccountedMoves.length);
+  int get _totalUnaccountedMoves =>
+      _lineCoverage.values.fold(0, (sum, i) => sum + i.unaccountedMoves.length);
 
   // ── Build ──────────────────────────────────────────────────────────────
 
@@ -365,8 +365,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
           const SizedBox(width: 4),
           Text('|', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
           const SizedBox(width: 4),
-          _buildCoverageStat(
-              'Deep', pct(_deepCount), const Color(0xFF42A5F5)),
+          _buildCoverageStat('Deep', pct(_deepCount), const Color(0xFF42A5F5)),
           if (_totalUnaccountedMoves > 0) ...[
             const Spacer(),
             Row(

@@ -150,8 +150,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     TextSpan(
-                      text:
-                          'Probability of reaching this position, based on\n'
+                      text: 'Probability of reaching this position, based on\n'
                           'how often opponents play each reply (from the\n'
                           'Lichess database). 100% at the root, decreasing\n'
                           'as the line gets more specific.',

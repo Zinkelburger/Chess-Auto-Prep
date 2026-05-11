@@ -7,7 +7,7 @@ import 'process_connection_factory.dart';
 bool get isStockfishAvailable => true;
 
 Future<EngineConnection?> createStockfishConnection() async {
-  if (defaultTargetPlatform == TargetPlatform.android || 
+  if (defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS) {
     // Use package:stockfish for Mobile (FFI)
     print('Using Stockfish Package (FFI) for mobile');
@@ -18,15 +18,3 @@ Future<EngineConnection?> createStockfishConnection() async {
     return ProcessConnection.create();
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-

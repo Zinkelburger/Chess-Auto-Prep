@@ -72,7 +72,8 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange[400]),
+          Icon(Icons.warning_amber_rounded,
+              size: 16, color: Colors.orange[400]),
           const SizedBox(width: 8),
           Text(
             '$count trap${count == 1 ? '' : 's'}',

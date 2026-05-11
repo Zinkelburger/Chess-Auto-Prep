@@ -89,20 +89,17 @@ class EngineWeaknessService {
         if (_cancelled) return;
 
         final fenParts = fullFen.split(' ');
-        final isWhiteToMove =
-            fenParts.length >= 2 && fenParts[1] == 'w';
+        final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
 
         int evalWhiteCp;
         int? evalWhiteMate;
 
         if (eval.scoreMate != null) {
-          evalWhiteMate =
-              isWhiteToMove ? eval.scoreMate! : -eval.scoreMate!;
+          evalWhiteMate = isWhiteToMove ? eval.scoreMate! : -eval.scoreMate!;
           evalWhiteCp = evalWhiteMate > 0 ? 10000 : -10000;
         } else {
-          evalWhiteCp = isWhiteToMove
-              ? (eval.scoreCp ?? 0)
-              : -(eval.scoreCp ?? 0);
+          evalWhiteCp =
+              isWhiteToMove ? (eval.scoreCp ?? 0) : -(eval.scoreCp ?? 0);
         }
 
         final result = EngineWeaknessResult(
@@ -130,7 +127,8 @@ class EngineWeaknessService {
         failedCount++;
         if (kDebugMode && failedPositions.length < 5) {
           failedPositions.add(node.getMovePathString());
-          debugPrint('[Eval] Failed to evaluate ${node.getMovePathString()}: $e');
+          debugPrint(
+              '[Eval] Failed to evaluate ${node.getMovePathString()}: $e');
         }
       }
 
@@ -146,7 +144,8 @@ class EngineWeaknessService {
     await Future.wait(futures);
 
     if (!_cancelled && results.isEmpty && failedCount > 0) {
-      throw Exception('Engine evaluation failed for all $failedCount positions.');
+      throw Exception(
+          'Engine evaluation failed for all $failedCount positions.');
     }
     if (kDebugMode && failedCount > 0) {
       debugPrint('[Eval] Failed on $failedCount/$total positions'

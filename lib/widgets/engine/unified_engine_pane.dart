@@ -22,6 +22,7 @@ void _perfLog(String msg) {
   final ms = _perfWatch!.elapsedMilliseconds;
   print('[Perf ${ms.toString().padLeft(6)}ms] $msg');
 }
+
 void _perfReset() {
   _perfWatch = Stopwatch()..start();
 }
@@ -33,12 +34,12 @@ class _MergedMove {
   int? stockfishCp;
   int? stockfishMate;
   List<String> fullPv = []; // Full PV from Stockfish (including this move)
-  double? maiaProb;    // 0.0 – 1.0
-  double? dbProb;      // 0 – 100 (percentage)
-  double? moveEase;    // 0.0 – 1.0 (ease of resulting position)
-  String? topResponseUci;   // Most likely opponent reply (UCI)
-  double? topResponseProb;  // Probability of that reply (0–1)
-  int? stockfishRank;  // 1-based rank from Stockfish MultiPV
+  double? maiaProb; // 0.0 – 1.0
+  double? dbProb; // 0 – 100 (percentage)
+  double? moveEase; // 0.0 – 1.0 (ease of resulting position)
+  String? topResponseUci; // Most likely opponent reply (UCI)
+  double? topResponseProb; // Probability of that reply (0–1)
+  int? stockfishRank; // 1-based rank from Stockfish MultiPV
 
   _MergedMove({required this.uci});
 
@@ -156,8 +157,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
     final fenChanged = widget.fen != oldWidget.fen;
     final becameActive = !oldWidget.isActive;
-    final moveSeqChanged = !_listEquals(
-        widget.currentMoveSequence, oldWidget.currentMoveSequence);
+    final moveSeqChanged =
+        !_listEquals(widget.currentMoveSequence, oldWidget.currentMoveSequence);
 
     if (fenChanged || becameActive) {
       _runAnalysis();
@@ -242,9 +243,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           )
         : Future.value(const DiscoveryResult());
 
-    final maiaFuture = useMaia
-        ? _runMaiaAnalysis()
-        : Future.value(<String, double>{});
+    final maiaFuture =
+        useMaia ? _runMaiaAnalysis() : Future.value(<String, double>{});
 
     final dbFuture = useDb ? _fetchDbData() : Future.value(null);
 
@@ -556,8 +556,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
                       return Text(
                         'Initializing...',
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.grey[400]),
+                        style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                         overflow: TextOverflow.ellipsis,
                       );
                     },
@@ -641,9 +640,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     );
 
     final dbData = _probabilityService.currentPosition.value;
-    final gameCountStr = dbData != null
-        ? ' (${formatCount(dbData.totalGames)})'
-        : '';
+    final gameCountStr =
+        dbData != null ? ' (${formatCount(dbData.totalGames)})' : '';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -655,7 +653,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           ),
           SizedBox(
             width: 58,
-            child: Text('EVAL', style: headerStyle, textAlign: TextAlign.center),
+            child:
+                Text('EVAL', style: headerStyle, textAlign: TextAlign.center),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -690,8 +689,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
             SizedBox(
               width: 76,
               child: Tooltip(
-                message:
-                    'How hard the next move is after playing this (0–5)\n'
+                message: 'How hard the next move is after playing this (0–5)\n'
                     'Higher = opponent struggles to find good replies',
                 child: Text('DIFFICULTY',
                     style: headerStyle, textAlign: TextAlign.right),
@@ -839,8 +837,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                     textAlign: TextAlign.right,
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight:
-                          displayDifficulty != null ? FontWeight.w500 : FontWeight.normal,
+                      fontWeight: displayDifficulty != null
+                          ? FontWeight.w500
+                          : FontWeight.normal,
                       color: displayDifficulty != null
                           ? Colors.amber[300]
                           : Colors.grey[700],

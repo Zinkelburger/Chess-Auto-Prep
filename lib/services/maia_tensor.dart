@@ -26,8 +26,8 @@ class MaiaTensor {
       _allMoves = movesMap.map((key, value) => MapEntry(key, value as int));
 
       final Map<String, dynamic> movesRevMap = json.decode(movesRevJson);
-      _allMovesReversed =
-          movesRevMap.map((key, value) => MapEntry(int.parse(key), value as String));
+      _allMovesReversed = movesRevMap
+          .map((key, value) => MapEntry(int.parse(key), value as String));
 
       _initialized = true;
     } catch (e) {
@@ -41,8 +41,18 @@ class MaiaTensor {
   static Float32List boardToMaia3Tokens(String fen) {
     final piecePlacement = fen.split(' ')[0];
     const pieceTypes = [
-      'P', 'N', 'B', 'R', 'Q', 'K',
-      'p', 'n', 'b', 'r', 'q', 'k'
+      'P',
+      'N',
+      'B',
+      'R',
+      'Q',
+      'K',
+      'p',
+      'n',
+      'b',
+      'r',
+      'q',
+      'k'
     ];
 
     final tensor = Float32List(64 * 12);
@@ -108,7 +118,12 @@ class MaiaTensor {
                 (piece.color == Side.black && toSq ~/ 8 == 0));
 
         if (isPromotion) {
-          for (final role in [Role.queen, Role.rook, Role.bishop, Role.knight]) {
+          for (final role in [
+            Role.queen,
+            Role.rook,
+            Role.bishop,
+            Role.knight
+          ]) {
             final promoChar = _roleToUciChar(role);
             final uci = '$fromStr$toStr$promoChar';
             if (_allMoves.containsKey(uci)) {
@@ -159,8 +174,7 @@ class MaiaTensor {
 
     final mirroredActiveColor = activeColor == 'w' ? 'b' : 'w';
     final mirroredCastling = _swapCastlingRights(castling);
-    final mirroredEnPassant =
-        enPassant != '-' ? _mirrorSquare(enPassant) : '-';
+    final mirroredEnPassant = enPassant != '-' ? _mirrorSquare(enPassant) : '-';
 
     return '$mirroredPosition $mirroredActiveColor $mirroredCastling $mirroredEnPassant $halfmove $fullmove';
   }

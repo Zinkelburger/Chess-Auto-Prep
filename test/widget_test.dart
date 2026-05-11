@@ -27,6 +27,15 @@ Future<void> _pumpDesktopSizedWidget(
   await tester.pumpAndSettle();
 }
 
+/// Center of [square] in board-local coordinates (e.g. `e2`), not flipped.
+Offset _boardLocalCenterForSquare(String square, double squareSize) {
+  final file = square.codeUnitAt(0) - 97;
+  final rank = int.parse(square[1]);
+  final col = file;
+  final row = 8 - rank;
+  return Offset((col + 0.5) * squareSize, (row + 0.5) * squareSize);
+}
+
 void main() {
   testWidgets('App loads without crashing', (WidgetTester tester) async {
     await _pumpDesktopSizedWidget(tester, const ChessAutoPrepApp());
@@ -43,7 +52,8 @@ void main() {
       testPosition = Chess.initial;
     });
 
-    testWidgets('renders initial chess position correctly', (WidgetTester tester) async {
+    testWidgets('renders initial chess position correctly',
+        (WidgetTester tester) async {
       await _pumpDesktopSizedWidget(
         tester,
         MaterialApp(
@@ -56,7 +66,10 @@ void main() {
       // Should render without errors
       expect(find.byType(ChessBoardWidget), findsOneWidget);
       expect(
-        tester.widget<ChessBoardWidget>(find.byType(ChessBoardWidget)).position.fen,
+        tester
+            .widget<ChessBoardWidget>(find.byType(ChessBoardWidget))
+            .position
+            .fen,
         contains('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'),
       );
     });
@@ -82,13 +95,10 @@ void main() {
       final chessBoardFinder = find.byType(ChessBoardWidget);
       expect(chessBoardFinder, findsOneWidget);
 
-      final chessBoardWidget = tester.widget<ChessBoardWidget>(chessBoardFinder);
       final renderBox = tester.renderObject(chessBoardFinder) as RenderBox;
       final size = renderBox.size;
-
-      // Calculate position of e2 square (file e = 4, rank 2 = 1 from bottom)
       final squareSize = size.width / 8;
-      final e2Position = Offset(4 * squareSize + squareSize / 2, 6 * squareSize + squareSize / 2);
+      final e2Position = _boardLocalCenterForSquare('e2', squareSize);
 
       await tester.tapAt(tester.getTopLeft(chessBoardFinder) + e2Position);
       await tester.pump();
@@ -96,29 +106,35 @@ void main() {
       expect(selectedSquare, equals('e2'));
     });
 
-    testWidgets('shows legal moves when piece is selected', (WidgetTester tester) async {
+    testWidgets(
+        'does not complete a move when destination is illegal after selection',
+        (WidgetTester tester) async {
+      var moveCount = 0;
+
       await _pumpDesktopSizedWidget(
         tester,
         MaterialApp(
           home: Scaffold(
-            body: ChessBoardWidget(position: testPosition),
+            body: ChessBoardWidget(
+              position: testPosition,
+              onMove: (_) => moveCount++,
+            ),
           ),
         ),
       );
 
-      // Find and tap e2 square
       final chessBoardFinder = find.byType(ChessBoardWidget);
       final renderBox = tester.renderObject(chessBoardFinder) as RenderBox;
-      final size = renderBox.size;
-      final squareSize = size.width / 8;
+      final squareSize = renderBox.size.width / 8;
+      final origin = tester.getTopLeft(chessBoardFinder);
 
-      // Tap e2 (white pawn)
-      final e2Position = Offset(4 * squareSize + squareSize / 2, 6 * squareSize + squareSize / 2);
-      await tester.tapAt(tester.getTopLeft(chessBoardFinder) + e2Position);
+      await tester.tapAt(origin + _boardLocalCenterForSquare('e2', squareSize));
+      await tester.pump();
+      // e5 is empty but not a legal single step for the e2 pawn.
+      await tester.tapAt(origin + _boardLocalCenterForSquare('e5', squareSize));
       await tester.pump();
 
-      // Check if the chess board widget has highlighted squares
-      expect(find.byType(ChessBoardWidget), findsOneWidget);
+      expect(moveCount, 0);
     });
 
     testWidgets('allows making legal moves', (WidgetTester tester) async {
@@ -140,19 +156,19 @@ void main() {
 
       final chessBoardFinder = find.byType(ChessBoardWidget);
       final renderBox = tester.renderObject(chessBoardFinder) as RenderBox;
-      final size = renderBox.size;
-      final squareSize = size.width / 8;
+      final squareSize = renderBox.size.width / 8;
+      final origin = tester.getTopLeft(chessBoardFinder);
 
-      // Select e2 pawn
-      final e2Position = Offset(4 * squareSize + squareSize / 2, 6 * squareSize + squareSize / 2);
-      await tester.tapAt(tester.getTopLeft(chessBoardFinder) + e2Position);
+      await tester.tapAt(origin + _boardLocalCenterForSquare('e2', squareSize));
+      await tester.pump();
+      await tester.tapAt(origin + _boardLocalCenterForSquare('e4', squareSize));
       await tester.pump();
 
-      // Move to e4
-      final e4Position = Offset(4 * squareSize + squareSize / 2, 4 * squareSize + squareSize / 2);
-      await tester.tapAt(tester.getTopLeft(chessBoardFinder) + e4Position);
-      await tester.pump();
+      expect(lastMove, isNotNull);
+      expect(lastMove!.from, 'e2');
+      expect(lastMove!.to, 'e4');
+      expect(lastMove!.uci, 'e2e4');
+      expect(lastMove!.san, 'e4');
     });
   });
-
 }

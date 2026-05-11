@@ -44,221 +44,225 @@ Future<void> showEngineSettingsDialog({
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                if (!compact) ...[
-                // ── Lichess Account ──
-                _buildLichessSection(
-                  context: context,
-                  lichess: lichess,
-                  oauthUrl: oauthUrl,
-                  oauthWaiting: oauthWaiting,
-                  onStartOAuth: () async {
-                    final url = await lichess.startOAuthFlow();
-                    setDialogState(() {
-                      oauthUrl = url;
-                      oauthWaiting = true;
-                    });
-                    LichessAuthService.openUrl(url);
-                    final success = await lichess.waitForCallback();
-                    setDialogState(() {
-                      oauthWaiting = false;
-                      if (success) oauthUrl = null;
-                    });
-                  },
-                  onLogout: () async {
-                    await lichess.logout();
-                    setDialogState(() {
-                      oauthUrl = null;
-                      oauthWaiting = false;
-                    });
-                  },
-                ),
+                  if (!compact) ...[
+                    // ── Lichess Account ──
+                    _buildLichessSection(
+                      context: context,
+                      lichess: lichess,
+                      oauthUrl: oauthUrl,
+                      oauthWaiting: oauthWaiting,
+                      onStartOAuth: () async {
+                        final url = await lichess.startOAuthFlow();
+                        setDialogState(() {
+                          oauthUrl = url;
+                          oauthWaiting = true;
+                        });
+                        LichessAuthService.openUrl(url);
+                        final success = await lichess.waitForCallback();
+                        setDialogState(() {
+                          oauthWaiting = false;
+                          if (success) oauthUrl = null;
+                        });
+                      },
+                      onLogout: () async {
+                        await lichess.logout();
+                        setDialogState(() {
+                          oauthUrl = null;
+                          oauthWaiting = false;
+                        });
+                      },
+                    ),
 
-                const SizedBox(height: 8),
-                const Divider(height: 1),
-                const SizedBox(height: 6),
+                    const SizedBox(height: 8),
+                    const Divider(height: 1),
+                    const SizedBox(height: 6),
 
-                // ── Sources ──
-                Text('Sources',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[400])),
-                const SizedBox(height: 2),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 0,
-                  children: [
-                    _buildCompactToggle('Stockfish', settings.showStockfish, (v) {
-                      settings.showStockfish = v;
-                      setDialogState(() {});
-                    }),
-                    _buildCompactToggle('Maia', settings.showMaia, (v) {
-                      settings.showMaia = v;
-                      setDialogState(() {});
-                    }),
-                    _buildCompactToggle('Difficulty', settings.showDifficulty, (v) {
-                      settings.showDifficulty = v;
-                      setDialogState(() {});
-                    }),
-                    _buildCompactToggle('Probability', settings.showProbability, (v) {
-                      settings.showProbability = v;
-                      setDialogState(() {});
-                    }),
-                  ],
-                ),
-
-                const SizedBox(height: 6),
-                const Divider(height: 1),
-                const SizedBox(height: 6),
-                ],
-
-                // ── Stockfish Engine ──
-                Row(
-                  children: [
-                    Text('Stockfish Engine',
+                    // ── Sources ──
+                    Text('Sources',
                         style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: Colors.grey[400])),
-                    if (!compact) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      '${EngineSettings.systemCores} cores',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    const SizedBox(height: 2),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 0,
+                      children: [
+                        _buildCompactToggle('Stockfish', settings.showStockfish,
+                            (v) {
+                          settings.showStockfish = v;
+                          setDialogState(() {});
+                        }),
+                        _buildCompactToggle('Maia', settings.showMaia, (v) {
+                          settings.showMaia = v;
+                          setDialogState(() {});
+                        }),
+                        _buildCompactToggle(
+                            'Difficulty', settings.showDifficulty, (v) {
+                          settings.showDifficulty = v;
+                          setDialogState(() {});
+                        }),
+                        _buildCompactToggle(
+                            'Probability', settings.showProbability, (v) {
+                          settings.showProbability = v;
+                          setDialogState(() {});
+                        }),
+                      ],
                     ),
-                    ],
+
+                    const SizedBox(height: 6),
+                    const Divider(height: 1),
+                    const SizedBox(height: 6),
                   ],
-                ),
-                const SizedBox(height: 4),
-                if (!compact) ...[
-                _buildNumberField(
-                  label: 'Workers',
-                  value: settings.workers,
-                  min: 1,
-                  max: EngineSettings.systemCores,
-                  onChanged: (v) {
-                    settings.workers = v;
-                    setDialogState(() {});
-                  },
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(left: 4, bottom: 2),
-                  child: Text(
-                    '${settings.workers} × '
-                    '$kPoolHashPerWorkerMb MB = '
-                    '${settings.workers * kPoolHashPerWorkerMb} MB hash',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+
+                  // ── Stockfish Engine ──
+                  Row(
+                    children: [
+                      Text('Stockfish Engine',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[400])),
+                      if (!compact) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          '${EngineSettings.systemCores} cores',
+                          style:
+                              TextStyle(fontSize: 11, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ],
                   ),
-                ),
-                ],
-                if (compact)
-                _buildNumberField(
-                  label: 'Threads',
-                  value: settings.inlineThreads,
-                  min: 1,
-                  max: EngineSettings.systemCores,
-                  onChanged: (v) {
-                    settings.inlineThreads = v;
-                    setDialogState(() {});
-                  },
-                ),
-                _buildNumberField(
-                  label: 'Eval Depth',
-                  value: settings.depth,
-                  min: 1,
-                  max: 99,
-                  onChanged: (v) {
-                    settings.depth = v;
-                    setDialogState(() {});
-                  },
-                ),
-                if (!compact)
-                _buildNumberField(
-                  label: 'Difficulty Depth',
-                  value: settings.easeDepth,
-                  min: 1,
-                  max: 99,
-                  onChanged: (v) {
-                    settings.easeDepth = v;
-                    setDialogState(() {});
-                  },
-                ),
-                _buildNumberField(
-                  label: compact ? 'Lines' : 'Multiple lines',
-                  value: settings.multiPv,
-                  min: 1,
-                  max: 10,
-                  onChanged: (v) {
-                    settings.multiPv = v;
-                    setDialogState(() {});
-                  },
-                ),
-                if (!compact)
-                _buildNumberField(
-                  label: 'Max Moves',
-                  value: settings.maxAnalysisMoves,
-                  min: 3,
-                  max: 20,
-                  onChanged: (v) {
-                    settings.maxAnalysisMoves = v;
-                    setDialogState(() {});
-                  },
-                ),
-
-                if (!compact) ...[
-                const SizedBox(height: 6),
-                const Divider(height: 1),
-                const SizedBox(height: 6),
-
-                // ── Maia ──
-                Text('Maia',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[400])),
-                const SizedBox(height: 2),
-                _buildNumberField(
-                  label: 'Maia Elo',
-                  value: settings.maiaElo,
-                  min: 600,
-                  max: 2400,
-                  step: 100,
-                  onChanged: (v) {
-                    settings.maiaElo = v;
-                    setDialogState(() {});
-                  },
-                ),
-
-                const SizedBox(height: 6),
-                const Divider(height: 1),
-                const SizedBox(height: 6),
-
-                // ── Root Position ──
-                Text('Root position (starting moves)',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[400])),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: probController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'e.g., 1. d4 d5 2. c4',
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 10),
+                  const SizedBox(height: 4),
+                  if (!compact) ...[
+                    _buildNumberField(
+                      label: 'Workers',
+                      value: settings.workers,
+                      min: 1,
+                      max: EngineSettings.systemCores,
+                      onChanged: (v) {
+                        settings.workers = v;
+                        setDialogState(() {});
+                      },
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, bottom: 2),
+                      child: Text(
+                        '${settings.workers} × '
+                        '$kPoolHashPerWorkerMb MB = '
+                        '${settings.workers * kPoolHashPerWorkerMb} MB hash',
+                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                      ),
+                    ),
+                  ],
+                  if (compact)
+                    _buildNumberField(
+                      label: 'Threads',
+                      value: settings.inlineThreads,
+                      min: 1,
+                      max: EngineSettings.systemCores,
+                      onChanged: (v) {
+                        settings.inlineThreads = v;
+                        setDialogState(() {});
+                      },
+                    ),
+                  _buildNumberField(
+                    label: 'Eval Depth',
+                    value: settings.depth,
+                    min: 1,
+                    max: 99,
+                    onChanged: (v) {
+                      settings.depth = v;
+                      setDialogState(() {});
+                    },
                   ),
-                  style: const TextStyle(
-                      fontFamily: 'monospace', fontSize: 13),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Leave empty for initial position',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                ),
-                ],
+                  if (!compact)
+                    _buildNumberField(
+                      label: 'Difficulty Depth',
+                      value: settings.easeDepth,
+                      min: 1,
+                      max: 99,
+                      onChanged: (v) {
+                        settings.easeDepth = v;
+                        setDialogState(() {});
+                      },
+                    ),
+                  _buildNumberField(
+                    label: compact ? 'Lines' : 'Multiple lines',
+                    value: settings.multiPv,
+                    min: 1,
+                    max: 10,
+                    onChanged: (v) {
+                      settings.multiPv = v;
+                      setDialogState(() {});
+                    },
+                  ),
+                  if (!compact)
+                    _buildNumberField(
+                      label: 'Max Moves',
+                      value: settings.maxAnalysisMoves,
+                      min: 3,
+                      max: 20,
+                      onChanged: (v) {
+                        settings.maxAnalysisMoves = v;
+                        setDialogState(() {});
+                      },
+                    ),
+
+                  if (!compact) ...[
+                    const SizedBox(height: 6),
+                    const Divider(height: 1),
+                    const SizedBox(height: 6),
+
+                    // ── Maia ──
+                    Text('Maia',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[400])),
+                    const SizedBox(height: 2),
+                    _buildNumberField(
+                      label: 'Maia Elo',
+                      value: settings.maiaElo,
+                      min: 600,
+                      max: 2400,
+                      step: 100,
+                      onChanged: (v) {
+                        settings.maiaElo = v;
+                        setDialogState(() {});
+                      },
+                    ),
+
+                    const SizedBox(height: 6),
+                    const Divider(height: 1),
+                    const SizedBox(height: 6),
+
+                    // ── Root Position ──
+                    Text('Root position (starting moves)',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[400])),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: probController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'e.g., 1. d4 d5 2. c4',
+                        isDense: true,
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      ),
+                      style: const TextStyle(
+                          fontFamily: 'monospace', fontSize: 13),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Leave empty for initial position',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -473,25 +477,21 @@ Widget _buildNumberField({
     padding: const EdgeInsets.symmetric(vertical: 2),
     child: Row(
       children: [
-        Expanded(
-            child: Text(label,
-                style: const TextStyle(fontSize: 13))),
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
         IconButton(
           icon: const Icon(Icons.remove, size: 18),
           onPressed: value > min
               ? () => onChanged((value - step).clamp(min, max))
               : null,
           padding: EdgeInsets.zero,
-          constraints:
-              const BoxConstraints(minWidth: 32, minHeight: 32),
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         ),
         SizedBox(
           width: 50,
           child: Text(
             value.toString(),
             textAlign: TextAlign.center,
-            style: const TextStyle(
-                fontWeight: FontWeight.bold, fontSize: 14),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
         ),
         IconButton(
@@ -500,8 +500,7 @@ Widget _buildNumberField({
               ? () => onChanged((value + step).clamp(min, max))
               : null,
           padding: EdgeInsets.zero,
-          constraints:
-              const BoxConstraints(minWidth: 32, minHeight: 32),
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         ),
       ],
     ),

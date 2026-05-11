@@ -84,22 +84,19 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
               const Divider(height: 24),
               LichessDbSelector(
                 database: _database,
-                onDatabaseChanged: (db) =>
-                    setState(() => _database = db),
+                onDatabaseChanged: (db) => setState(() => _database = db),
                 selectedSpeeds: _selectedSpeeds,
-                onSpeedsChanged: (s) =>
-                    setState(() {
-                      _selectedSpeeds
-                        ..clear()
-                        ..addAll(s);
-                    }),
+                onSpeedsChanged: (s) => setState(() {
+                  _selectedSpeeds
+                    ..clear()
+                    ..addAll(s);
+                }),
                 selectedRatings: _selectedRatings,
-                onRatingsChanged: (r) =>
-                    setState(() {
-                      _selectedRatings
-                        ..clear()
-                        ..addAll(r);
-                    }),
+                onRatingsChanged: (r) => setState(() {
+                  _selectedRatings
+                    ..clear()
+                    ..addAll(r);
+                }),
               ),
               const Divider(height: 24),
               _buildMaiaSection(theme),
@@ -146,7 +143,8 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Target Threshold',
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+            style: theme.textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
         Text(
           'Stop expanding once a position has less than this chance of being reached from the root.',
@@ -162,8 +160,10 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
             decoration: InputDecoration(
               suffixText: '%',
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
             ),
             style: const TextStyle(fontSize: 13),
             onChanged: (value) {
@@ -190,7 +190,8 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
           children: [
             Expanded(
               child: Text('Maia Fallback',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600)),
             ),
             Switch(
               value: _useMaia && maiaAvailable,
@@ -219,8 +220,10 @@ class _CoverageConfigDialogState extends State<_CoverageConfigDialog> {
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                   style: const TextStyle(fontSize: 13),
                   onChanged: (value) {

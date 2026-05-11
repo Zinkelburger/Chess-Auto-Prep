@@ -125,11 +125,13 @@ class CoverageResult {
   }
 
   /// All leaves regardless of category
-  List<LeafNode> get allLeaves => [...coveredLeaves, ...tooShallowLeaves, ...tooDeepLeaves];
+  List<LeafNode> get allLeaves =>
+      [...coveredLeaves, ...tooShallowLeaves, ...tooDeepLeaves];
 }
 
 /// Progress callback for coverage analysis
-typedef CoverageProgressCallback = void Function(String message, double progress);
+typedef CoverageProgressCallback = void Function(
+    String message, double progress);
 
 /// Coverage Calculator Service
 class CoverageService {
@@ -222,8 +224,7 @@ class CoverageService {
 
     if (response.statusCode != 200) return null;
 
-    final result =
-        response.body.isNotEmpty ? _parseJson(response.body) : null;
+    final result = response.body.isNotEmpty ? _parseJson(response.body) : null;
     if (result != null) _cache[cacheKey] = result;
     return result;
   }
@@ -242,8 +243,8 @@ class CoverageService {
     final data = await getPositionData(fen);
     if (data == null) return 0;
     return (data['white'] as int? ?? 0) +
-           (data['black'] as int? ?? 0) +
-           (data['draws'] as int? ?? 0);
+        (data['black'] as int? ?? 0) +
+        (data['draws'] as int? ?? 0);
   }
 
   Future<List<Map<String, dynamic>>> getMovesWithCounts(String fen) async {
@@ -284,17 +285,15 @@ class CoverageService {
     final (rootMoves, effectiveRootFen) = findRepertoireRoot(tree);
 
     onProgress?.call(
-      'Root: ${rootMoves.isEmpty ? "Starting position" : rootMoves.join(" ")}',
-      0.02
-    );
+        'Root: ${rootMoves.isEmpty ? "Starting position" : rootMoves.join(" ")}',
+        0.02);
 
     final rootGameCount = await getGameCount(effectiveRootFen);
     final targetGameCount = (rootGameCount * targetPercent / 100).round();
 
     onProgress?.call(
-      'Root: ${_formatNumber(rootGameCount)} games → Target: ${_formatNumber(targetGameCount)} (${targetPercent.toStringAsFixed(1)}%)',
-      0.05
-    );
+        'Root: ${_formatNumber(rootGameCount)} games → Target: ${_formatNumber(targetGameCount)} (${targetPercent.toStringAsFixed(1)}%)',
+        0.05);
 
     final startingMoves = rootMoves;
     final leaves = <LeafNode>[];
@@ -314,12 +313,17 @@ class CoverageService {
 
     onProgress?.call('Found ${leaves.length} leaf positions', 0.6);
 
-    final coveredLeaves = leaves.where((l) => l.category == LeafCategory.covered).toList();
-    final tooShallowLeaves = leaves.where((l) => l.category == LeafCategory.tooShallow).toList();
-    final tooDeepLeaves = leaves.where((l) => l.category == LeafCategory.tooDeep).toList();
+    final coveredLeaves =
+        leaves.where((l) => l.category == LeafCategory.covered).toList();
+    final tooShallowLeaves =
+        leaves.where((l) => l.category == LeafCategory.tooShallow).toList();
+    final tooDeepLeaves =
+        leaves.where((l) => l.category == LeafCategory.tooDeep).toList();
 
-    final totalCoveredGames = coveredLeaves.fold(0, (sum, l) => sum + l.gameCount);
-    final totalShallowGames = tooShallowLeaves.fold(0, (sum, l) => sum + l.gameCount);
+    final totalCoveredGames =
+        coveredLeaves.fold(0, (sum, l) => sum + l.gameCount);
+    final totalShallowGames =
+        tooShallowLeaves.fold(0, (sum, l) => sum + l.gameCount);
     final totalDeepGames = tooDeepLeaves.fold(0, (sum, l) => sum + l.gameCount);
 
     onProgress?.call('Calculating unaccounted moves...', 0.7);
@@ -332,7 +336,8 @@ class CoverageService {
       onProgress,
     );
 
-    final totalUnaccountedGames = unaccountedMoves.fold(0, (sum, m) => sum + m.gameCount);
+    final totalUnaccountedGames =
+        unaccountedMoves.fold(0, (sum, m) => sum + m.gameCount);
 
     onProgress?.call('Analysis complete!', 1.0);
 
@@ -388,8 +393,8 @@ class CoverageService {
       final isGameOver = position.isGameOver;
       final belowThreshold = gameCount <= targetGameCount || isGameOver;
 
-      final effectiveFirstBelow = firstBelowThresholdPly ??
-          (belowThreshold ? currentPly : null);
+      final effectiveFirstBelow =
+          firstBelowThresholdPly ?? (belowThreshold ? currentPly : null);
 
       LeafCategory category;
       String reason;
@@ -405,14 +410,16 @@ class CoverageService {
         }
       } else if (!belowThreshold) {
         category = LeafCategory.tooShallow;
-        reason = 'Too shallow (${_formatNumber(gameCount)} > ${_formatNumber(targetGameCount)} target)';
+        reason =
+            'Too shallow (${_formatNumber(gameCount)} > ${_formatNumber(targetGameCount)} target)';
       } else if (effectiveFirstBelow != null &&
-                 currentPly - effectiveFirstBelow >= tooDeepThresholdPly) {
+          currentPly - effectiveFirstBelow >= tooDeepThresholdPly) {
         category = LeafCategory.tooDeep;
         reason = '${currentPly - effectiveFirstBelow} ply past threshold';
       } else {
         category = LeafCategory.covered;
-        reason = 'Covered (${_formatNumber(gameCount)} ≤ ${_formatNumber(targetGameCount)} target)';
+        reason =
+            'Covered (${_formatNumber(gameCount)} ≤ ${_formatNumber(targetGameCount)} target)';
       }
 
       leaves.add(LeafNode(
@@ -421,9 +428,8 @@ class CoverageService {
         gameCount: gameCount,
         category: category,
         reason: reason,
-        excessPly: effectiveFirstBelow != null
-            ? currentPly - effectiveFirstBelow
-            : 0,
+        excessPly:
+            effectiveFirstBelow != null ? currentPly - effectiveFirstBelow : 0,
       ));
     } else {
       // Check game count at this intermediate node to track threshold crossing
@@ -468,7 +474,8 @@ class CoverageService {
     for (final entry in allPositions.entries) {
       checked++;
       if (checked % 10 == 0) {
-        onProgress?.call('Checking unaccounted ($checked/$total)...', 0.7 + (0.25 * checked / total));
+        onProgress?.call('Checking unaccounted ($checked/$total)...',
+            0.7 + (0.25 * checked / total));
       }
 
       Chess position = Chess.initial;
@@ -482,7 +489,8 @@ class CoverageService {
       }
 
       final isWhiteTurn = position.turn == Side.white;
-      final isMyTurn = (isWhiteRepertoire && isWhiteTurn) || (!isWhiteRepertoire && !isWhiteTurn);
+      final isMyTurn = (isWhiteRepertoire && isWhiteTurn) ||
+          (!isWhiteRepertoire && !isWhiteTurn);
       if (isMyTurn) continue;
 
       final node = _findNodeByFen(tree, entry.key);
@@ -495,15 +503,20 @@ class CoverageService {
       final apiMoves = await getMovesWithCounts(fen);
 
       if (apiMoves.isNotEmpty) {
-        final totalGames = apiMoves.fold<int>(0, (s, m) =>
-            s + (m['white'] as int? ?? 0) + (m['black'] as int? ?? 0) + (m['draws'] as int? ?? 0));
+        final totalGames = apiMoves.fold<int>(
+            0,
+            (s, m) =>
+                s +
+                (m['white'] as int? ?? 0) +
+                (m['black'] as int? ?? 0) +
+                (m['draws'] as int? ?? 0));
 
         for (final moveData in apiMoves) {
           final moveSan = moveData['san'] as String?;
           if (moveSan != null && !repertoireMoves.contains(moveSan)) {
             final moveGames = (moveData['white'] as int? ?? 0) +
-                             (moveData['black'] as int? ?? 0) +
-                             (moveData['draws'] as int? ?? 0);
+                (moveData['black'] as int? ?? 0) +
+                (moveData['draws'] as int? ?? 0);
             final prob = totalGames > 0 ? moveGames / totalGames : 0.0;
             result.add(UnaccountedMove(
               parentMoves: List<String>.from(entry.value),
@@ -514,7 +527,9 @@ class CoverageService {
             ));
           }
         }
-      } else if (useMaia && MaiaFactory.isAvailable && MaiaFactory.instance != null) {
+      } else if (useMaia &&
+          MaiaFactory.isAvailable &&
+          MaiaFactory.instance != null) {
         // Maia fallback when Lichess DB has no data
         try {
           final maiaResult = await MaiaFactory.instance!.evaluate(fen, maiaElo);
@@ -563,7 +578,8 @@ class CoverageService {
 
   String get cacheStats {
     final total = _cacheHits + _cacheMisses;
-    final hitRate = total > 0 ? (_cacheHits / total * 100).toStringAsFixed(1) : '0.0';
+    final hitRate =
+        total > 0 ? (_cacheHits / total * 100).toStringAsFixed(1) : '0.0';
     return 'Cache: $_cacheHits hits, $_cacheMisses misses ($hitRate% hit rate), $_apiCalls API calls';
   }
 

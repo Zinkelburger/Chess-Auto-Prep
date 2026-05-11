@@ -9,8 +9,10 @@ class WebStorageService implements StorageService {
   static const String _importedGamesKey = 'imported_games_pgn';
   static const String _repertoirePrefix = 'repertoire_';
   static const String _repertoireReviewsKey = 'repertoire_reviews_csv';
-  static const String _repertoireReviewHistoryKey = 'repertoire_review_history_csv';
-  static const String _repertoireMoveProgressKey = 'repertoire_move_progress_csv';
+  static const String _repertoireReviewHistoryKey =
+      'repertoire_review_history_csv';
+  static const String _repertoireMoveProgressKey =
+      'repertoire_move_progress_csv';
 
   @override
   Future<String?> readTacticsCsv() async {
