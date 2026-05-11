@@ -48,7 +48,8 @@ class TacticsExportImport {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
-        withData: true, // Important for web and mobile to get file content directly
+        withData:
+            true, // Important for web and mobile to get file content directly
       );
 
       if (result == null || result.files.isEmpty) {

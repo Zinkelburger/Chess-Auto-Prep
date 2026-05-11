@@ -134,9 +134,12 @@ class TreeBuildService {
       if (tree.root.hasEngineEval) {
         final rootEvalUs = tree.root.evalForUs(cfg.playAsWhite);
         cfg = TreeBuildConfig(
-          startFen: cfg.startFen, playAsWhite: cfg.playAsWhite,
-          minProbability: cfg.minProbability, maxPly: cfg.maxPly,
-          maxNodes: cfg.maxNodes, evalDepth: cfg.evalDepth,
+          startFen: cfg.startFen,
+          playAsWhite: cfg.playAsWhite,
+          minProbability: cfg.minProbability,
+          maxPly: cfg.maxPly,
+          maxNodes: cfg.maxNodes,
+          evalDepth: cfg.evalDepth,
           ourMultipv: cfg.ourMultipv,
           maxEvalLossCp: cfg.maxEvalLossCp,
           oppMaxChildren: cfg.oppMaxChildren,
@@ -144,10 +147,13 @@ class TreeBuildService {
           minEvalCp: cfg.minEvalCp + rootEvalUs,
           maxEvalCp: cfg.maxEvalCp + rootEvalUs,
           relativeEval: cfg.relativeEval,
-          useLichessDb: cfg.useLichessDb, useMasters: cfg.useMasters,
+          useLichessDb: cfg.useLichessDb,
+          useMasters: cfg.useMasters,
           ratingRange: cfg.ratingRange,
-          speeds: cfg.speeds, minGames: cfg.minGames,
-          maiaElo: cfg.maiaElo, maiaMinProb: cfg.maiaMinProb,
+          speeds: cfg.speeds,
+          minGames: cfg.minGames,
+          maiaElo: cfg.maiaElo,
+          maiaMinProb: cfg.maiaMinProb,
           maiaOnly: cfg.maiaOnly,
           leafConfidence: cfg.leafConfidence,
           noveltyWeight: cfg.noveltyWeight,
@@ -387,9 +393,8 @@ class TreeBuildService {
 
     for (final line in discovery.lines) {
       if (line.moveUci.isEmpty) continue;
-      final evalLoss = isWhiteToMove
-          ? bestCp - line.effectiveCp
-          : line.effectiveCp - bestCp;
+      final evalLoss =
+          isWhiteToMove ? bestCp - line.effectiveCp : line.effectiveCp - bestCp;
       if (evalLoss > config.maxEvalLossCp) continue;
 
       final childFen = playUciMove(node.fen, line.moveUci);
@@ -401,9 +406,8 @@ class TreeBuildService {
       // Get SAN from Lichess data or compute it
       String san = line.moveUci;
       if (lichess != null) {
-        final lichessMove = lichess.moves
-            .where((m) => m.uci == line.moveUci)
-            .firstOrNull;
+        final lichessMove =
+            lichess.moves.where((m) => m.uci == line.moveUci).firstOrNull;
         if (lichessMove != null) {
           san = lichessMove.san;
         }
@@ -416,22 +420,24 @@ class TreeBuildService {
       final childEvalStm = isWhiteToMove ? -line.effectiveCp : line.effectiveCp;
 
       final child = _makeChild(
-        parent: node, fen: childFen, san: san, uci: line.moveUci, tree: tree,
+        parent: node,
+        fen: childFen,
+        san: san,
+        uci: line.moveUci,
+        tree: tree,
       );
       if (child == null) continue;
 
       child.moveProbability = 1.0;
       child.cumulativeProbability = node.cumulativeProbability;
       child.engineEvalCp = childEvalStm;
-      _cacheEvalWhite(childFen,
-          childIsWhite ? childEvalStm : -childEvalStm,
+      _cacheEvalWhite(childFen, childIsWhite ? childEvalStm : -childEvalStm,
           config.evalDepth);
 
       // Enrich with Lichess stats
       if (lichess != null) {
-        final lm = lichess.moves
-            .where((m) => m.uci == line.moveUci)
-            .firstOrNull;
+        final lm =
+            lichess.moves.where((m) => m.uci == line.moveUci).firstOrNull;
         if (lm != null) {
           child.setLichessStats(lm.white, lm.black, lm.draws);
         }
@@ -449,7 +455,8 @@ class TreeBuildService {
         node.children.isNotEmpty) {
       try {
         final maiaResult = await MaiaFactory.instance!.evaluate(
-          node.fen, config.maiaElo,
+          node.fen,
+          config.maiaElo,
         );
         _stats.maiaEvals++;
         if (maiaResult.policy.isNotEmpty) {
@@ -484,16 +491,25 @@ class TreeBuildService {
   }) async {
     if (config.maiaOnly) {
       await _addOpponentChildrenFromMaia(
-        tree: tree, node: node, config: config, onProgress: onProgress,
+        tree: tree,
+        node: node,
+        config: config,
+        onProgress: onProgress,
       );
     } else {
       await _addOpponentChildrenFromLichess(
-        tree: tree, node: node, config: config, onProgress: onProgress,
+        tree: tree,
+        node: node,
+        config: config,
+        onProgress: onProgress,
       );
       // Fall back to Maia when the Lichess DB has no data for this position
       if (node.children.isEmpty) {
         await _addOpponentChildrenFromMaia(
-          tree: tree, node: node, config: config, onProgress: onProgress,
+          tree: tree,
+          node: node,
+          config: config,
+          onProgress: onProgress,
         );
       }
     }
@@ -531,8 +547,7 @@ class TreeBuildService {
 
     for (final move in response.moves) {
       if (move.total < config.minGames) continue;
-      if (config.oppMaxChildren > 0 &&
-          childrenAdded >= config.oppMaxChildren) {
+      if (config.oppMaxChildren > 0 && childrenAdded >= config.oppMaxChildren) {
         break;
       }
       if (massTarget > 0.0 && massCovered >= massTarget) break;
@@ -545,8 +560,11 @@ class TreeBuildService {
       if (childFen == null) continue;
 
       final child = _makeChild(
-        parent: node, fen: childFen, san: move.san,
-        uci: move.uci, tree: tree,
+        parent: node,
+        fen: childFen,
+        san: move.san,
+        uci: move.uci,
+        tree: tree,
       );
       if (child == null) continue;
 
@@ -572,7 +590,8 @@ class TreeBuildService {
     final MaiaResult maiaResult;
     try {
       maiaResult = await MaiaFactory.instance!.evaluate(
-        node.fen, config.maiaElo,
+        node.fen,
+        config.maiaElo,
       );
     } catch (e) {
       _log('Maia eval failed: $e');
@@ -593,8 +612,7 @@ class TreeBuildService {
       final uci = entry.key;
       final prob = entry.value;
       if (prob < config.maiaMinProb) continue;
-      if (config.oppMaxChildren > 0 &&
-          childrenAdded >= config.oppMaxChildren) {
+      if (config.oppMaxChildren > 0 && childrenAdded >= config.oppMaxChildren) {
         break;
       }
       if (massTarget > 0.0 && massCovered >= massTarget) break;
@@ -607,7 +625,11 @@ class TreeBuildService {
 
       final san = uciToSan(node.fen, uci);
       final child = _makeChild(
-        parent: node, fen: childFen, san: san, uci: uci, tree: tree,
+        parent: node,
+        fen: childFen,
+        san: san,
+        uci: uci,
+        tree: tree,
       );
       if (child == null) continue;
 
@@ -622,8 +644,7 @@ class TreeBuildService {
 
   // ── Ensure eval (returns full result for bestmove reuse) ───────────────
 
-  Future<void> _ensureEval(
-      BuildTreeNode node, TreeBuildConfig config) async {
+  Future<void> _ensureEval(BuildTreeNode node, TreeBuildConfig config) async {
     if (node.hasEngineEval) return;
 
     final cached = await _getCachedEvalWhite(node.fen, config.evalDepth);
@@ -642,7 +663,8 @@ class TreeBuildService {
 
     node.engineEvalCp = result.effectiveCp;
     final isWhiteStm = node.fen.split(' ')[1] == 'w';
-    _cacheEvalWhite(node.fen,
+    _cacheEvalWhite(
+        node.fen,
         isWhiteStm ? result.effectiveCp : -result.effectiveCp,
         config.evalDepth);
   }
@@ -712,7 +734,8 @@ class TreeBuildService {
   }
 
   Future<ExplorerResponse?> _getDbData(
-    String fen, TreeBuildConfig config,
+    String fen,
+    TreeBuildConfig config,
   ) async {
     final cacheKey = '${config.useMasters ? "m" : "l"}|$fen';
     if (_dbCache.containsKey(cacheKey)) {
@@ -742,12 +765,13 @@ class TreeBuildService {
       _evalCache.getEvalCpWhite(fen, minDepth: minDepth);
 
   void _emitProgress(
-    BuildTree tree, int ply, String? fen,
+    BuildTree tree,
+    int ply,
+    String? fen,
     void Function(BuildProgress) onProgress,
     int maxPlyConfig,
   ) {
-    if (tree.totalNodes - _lastProgressNodes < 5 &&
-        tree.totalNodes > 2) {
+    if (tree.totalNodes - _lastProgressNodes < 5 && tree.totalNodes > 2) {
       return;
     }
     _lastProgressNodes = tree.totalNodes;
@@ -770,8 +794,9 @@ class TreeBuildService {
     if (elapsedMs >= 500 && elapsedMin > 0 && deltaNodes >= 1) {
       nodesPerMinute = deltaNodes / elapsedMin;
       if (nodesPerMinute > 0 && unexploredAtDepth > 0) {
-        etaDepthSeconds =
-            (unexploredAtDepth * 60.0 / nodesPerMinute).round().clamp(1, 86400 * 7);
+        etaDepthSeconds = (unexploredAtDepth * 60.0 / nodesPerMinute)
+            .round()
+            .clamp(1, 86400 * 7);
       }
     }
 

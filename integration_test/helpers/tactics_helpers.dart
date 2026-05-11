@@ -46,20 +46,25 @@ Future<void> importAndWaitForPositions(
       return;
     }
   }
-  fail('Start button never appeared after importing $gameCount games for $username');
+  fail(
+      'Start button never appeared after importing $gameCount games for $username');
 }
 
 /// Tap the start-session button (whichever variant is visible).
+///
+/// The button text toggles between "Start Practice Session" and
+/// "Start Training Now" depending on import state, so we re-evaluate the
+/// finder after pumping to avoid stale references.
 Future<void> tapStartSession(WidgetTester tester) async {
-  final startPractice = find.textContaining('Start Practice Session');
-  final startTraining = find.textContaining('Start Training Now');
-  final buttonToTap = startPractice.evaluate().isNotEmpty
-      ? startPractice
-      : startTraining;
+  Finder _currentButton() {
+    final startPractice = find.textContaining('Start Practice Session');
+    if (startPractice.evaluate().isNotEmpty) return startPractice;
+    return find.textContaining('Start Training Now');
+  }
 
-  await tester.ensureVisible(buttonToTap);
+  await tester.ensureVisible(_currentButton());
   await tester.pumpAndSettle();
-  await tester.tap(buttonToTap);
+  await tester.tap(_currentButton());
   await tester.pumpAndSettle();
 }
 
@@ -144,6 +149,7 @@ Future<void> expectTacticCompleted(WidgetTester tester) async {
     correctFeedback.evaluate().isNotEmpty ||
         nextShowSolution.evaluate().isNotEmpty,
     isTrue,
-    reason: 'Expected "Correct!" or auto-advance (Show Solution). Found neither.',
+    reason:
+        'Expected "Correct!" or auto-advance (Show Solution). Found neither.',
   );
 }

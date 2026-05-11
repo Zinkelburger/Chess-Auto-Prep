@@ -88,11 +88,13 @@ class ChessGameModel {
         .replaceAll(RegExp(r'\{[^}]*\}'), '') // Remove comments
         .replaceAll(RegExp(r'\([^)]*\)'), '') // Remove variations
         .replaceAll(RegExp(r'\d+\.'), '') // Remove move numbers
-        .replaceAll(RegExp(r'[*1-9]/[*1-9]-[*1-9]/[*1-9]'), '') // Remove results
+        .replaceAll(
+            RegExp(r'[*1-9]/[*1-9]-[*1-9]/[*1-9]'), '') // Remove results
         .trim();
 
     for (final move in cleanText.split(RegExp(r'\s+'))) {
-      if (move.isNotEmpty && !RegExp(r'^[*1-9]/[*1-9]-[*1-9]/[*1-9]$').hasMatch(move)) {
+      if (move.isNotEmpty &&
+          !RegExp(r'^[*1-9]/[*1-9]-[*1-9]/[*1-9]$').hasMatch(move)) {
         moves.add(move);
       }
     }

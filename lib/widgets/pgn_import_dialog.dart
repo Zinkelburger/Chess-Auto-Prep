@@ -304,7 +304,8 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.3)),
+                  top: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: 0.3)),
                 ),
               ),
               child: Row(

@@ -20,7 +20,8 @@ class RepertoireReviewService {
     final csv = await _storage.readRepertoireReviewsCsv();
     if (csv == null || csv.trim().isEmpty) return [];
 
-    final lines = csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
+    final lines =
+        csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
     if (lines.isEmpty) return [];
 
     final rows = lines.first.trim() == _header ? lines.sublist(1) : lines;
@@ -38,10 +39,14 @@ class RepertoireReviewService {
   Future<List<RepertoireReviewHistoryEntry>> loadHistory() async {
     final csv = await _storage.readRepertoireReviewHistoryCsv();
     if (csv == null || csv.trim().isEmpty) return [];
-    final lines = csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
+    final lines =
+        csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
     if (lines.isEmpty) return [];
-    final rows = lines.first.trim() == _historyHeader ? lines.sublist(1) : lines;
-    return rows.map((row) => RepertoireReviewHistoryEntry.fromCsvRow(row)).toList();
+    final rows =
+        lines.first.trim() == _historyHeader ? lines.sublist(1) : lines;
+    return rows
+        .map((row) => RepertoireReviewHistoryEntry.fromCsvRow(row))
+        .toList();
   }
 
   Future<void> appendHistory(List<RepertoireReviewHistoryEntry> entries) async {
@@ -57,9 +62,11 @@ class RepertoireReviewService {
   Future<List<RepertoireMoveProgress>> loadMoveProgress() async {
     final csv = await _storage.readRepertoireMoveProgressCsv();
     if (csv == null || csv.trim().isEmpty) return [];
-    final lines = csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
+    final lines =
+        csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
     if (lines.isEmpty) return [];
-    final rows = lines.first.trim() == _moveProgressHeader ? lines.sublist(1) : lines;
+    final rows =
+        lines.first.trim() == _moveProgressHeader ? lines.sublist(1) : lines;
     return rows.map((row) => RepertoireMoveProgress.fromCsvRow(row)).toList();
   }
 
@@ -78,7 +85,9 @@ class RepertoireReviewService {
     required List<RepertoireReviewEntry> existing,
   }) {
     final merged = <RepertoireReviewEntry>[];
-    final existingMap = {for (final e in existing) '${e.repertoireId}:${e.lineId}': e};
+    final existingMap = {
+      for (final e in existing) '${e.repertoireId}:${e.lineId}': e
+    };
 
     for (final line in lines) {
       final key = '$repertoireId:${line.id}';
@@ -152,8 +161,8 @@ class RepertoireReviewService {
     );
   }
 
-  Map<String, RepertoireMoveProgress> indexMoveProgress(List<RepertoireMoveProgress> items) {
+  Map<String, RepertoireMoveProgress> indexMoveProgress(
+      List<RepertoireMoveProgress> items) {
     return {for (final i in items) '${i.lineId}:${i.moveIndex}': i};
   }
 }
-

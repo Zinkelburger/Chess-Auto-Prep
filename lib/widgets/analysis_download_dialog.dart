@@ -24,8 +24,7 @@ class AnalysisDownloadDialog extends StatefulWidget {
   });
 
   @override
-  State<AnalysisDownloadDialog> createState() =>
-      _AnalysisDownloadDialogState();
+  State<AnalysisDownloadDialog> createState() => _AnalysisDownloadDialogState();
 }
 
 class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {

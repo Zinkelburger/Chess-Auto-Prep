@@ -263,7 +263,8 @@ void main() {
 
     group('navigateToFen', () {
       test('navigates to FEN in tree', () {
-        const e4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+        const e4Fen =
+            'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
         final success = tree.navigateToFen(e4Fen);
 
         expect(success, isTrue);
@@ -272,7 +273,8 @@ void main() {
 
       test('returns false for FEN not in tree', () {
         // A FEN that looks valid but isn't in our test tree
-        const invalidFen = 'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6 0 2';
+        const invalidFen =
+            'rnbqkbnr/ppp1pppp/8/3p4/3P4/8/PPP1PPPP/RNBQKBNR w KQkq d6 0 2';
         final success = tree.navigateToFen(invalidFen);
 
         expect(success, isFalse);

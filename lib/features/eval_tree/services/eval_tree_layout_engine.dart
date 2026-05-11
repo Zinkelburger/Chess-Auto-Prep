@@ -255,9 +255,7 @@ class EvalTreeLayoutEngine {
       }
     }
 
-    if (remainingPly == 1 ||
-        remainingBudget <= 0 ||
-        visibleChildren.isEmpty) {
+    if (remainingPly == 1 || remainingBudget <= 0 || visibleChildren.isEmpty) {
       return;
     }
 

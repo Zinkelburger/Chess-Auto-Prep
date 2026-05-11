@@ -72,8 +72,7 @@ class ExplorerResponse {
       final d = move['draws'] as int? ?? 0;
       final b = move['black'] as int? ?? 0;
       final moveTotal = w + d + b;
-      final playRate =
-          totalGames > 0 ? (moveTotal / totalGames) * 100 : 0.0;
+      final playRate = totalGames > 0 ? (moveTotal / totalGames) * 100 : 0.0;
 
       moves.add(ExplorerMove(
         san: move['san'] as String? ?? '',

@@ -82,9 +82,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         if (_isAnalyzing)
           LinearProgressIndicator(
             minHeight: 2,
-            value: _analysisTotal > 0
-                ? _analysisCurrent / _analysisTotal
-                : null,
+            value:
+                _analysisTotal > 0 ? _analysisCurrent / _analysisTotal : null,
           )
         else
           const Divider(height: 2, thickness: 2),
@@ -443,9 +442,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         blackTree: _blackTree,
         minOccurrences: config.minGames,
         depth: config.depth,
-        
         onProgress: (c, t) {
-          if (mounted) setState(() { _evalCompleted = c; _evalTotal = t; });
+          if (mounted)
+            setState(() {
+              _evalCompleted = c;
+              _evalTotal = t;
+            });
         },
       );
 
@@ -545,8 +547,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       );
       if (data != null && mounted) {
         _engineEvals = data
-            .map((e) =>
-                EngineWeaknessResult.fromJson(e as Map<String, dynamic>))
+            .map(
+                (e) => EngineWeaknessResult.fromJson(e as Map<String, dynamic>))
             .toList();
         _mergeEvalsIntoAnalysis();
       }
@@ -576,8 +578,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
       // Launch both colours concurrently in separate isolates.
       // Only White reports progress (Black runs silently in background).
-      final whiteFuture = _buildAnalysis(player, pgnList, true,
-          onProgress: _onBuildProgress);
+      final whiteFuture =
+          _buildAnalysis(player, pgnList, true, onProgress: _onBuildProgress);
       final blackFuture = _buildAnalysis(player, pgnList, false);
 
       final (whiteAnalysis, whiteTree) = await whiteFuture;
@@ -636,7 +638,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       if (pgnList == null) return;
 
       final (analysis, tree) = await _buildAnalysis(
-        player, pgnList, _playerIsWhite,
+        player,
+        pgnList,
+        _playerIsWhite,
         onProgress: _onBuildProgress,
       );
 

@@ -84,22 +84,22 @@ String toAlgebraic(Square square) => square.name;
 
 /// Role to uppercase character for SVG asset filenames (e.g. Role.pawn → 'P').
 String roleChar(Role role) => switch (role) {
-  Role.pawn => 'P',
-  Role.knight => 'N',
-  Role.bishop => 'B',
-  Role.rook => 'R',
-  Role.queen => 'Q',
-  Role.king => 'K',
-};
+      Role.pawn => 'P',
+      Role.knight => 'N',
+      Role.bishop => 'B',
+      Role.rook => 'R',
+      Role.queen => 'Q',
+      Role.king => 'K',
+    };
 
 /// Parse a promotion character ('q','r','b','n') into a [Role].
 Role? parsePromotionRole(String char) => switch (char.toLowerCase()) {
-  'q' => Role.queen,
-  'r' => Role.rook,
-  'b' => Role.bishop,
-  'n' => Role.knight,
-  _ => null,
-};
+      'q' => Role.queen,
+      'r' => Role.rook,
+      'b' => Role.bishop,
+      'n' => Role.knight,
+      _ => null,
+    };
 
 // ── Number formatting helpers ────────────────────────────────────────────
 

@@ -51,8 +51,7 @@ class PositionAnalysisWidget extends StatefulWidget {
   });
 
   @override
-  State<PositionAnalysisWidget> createState() =>
-      _PositionAnalysisWidgetState();
+  State<PositionAnalysisWidget> createState() => _PositionAnalysisWidgetState();
 }
 
 class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
@@ -163,7 +162,8 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
           aspectRatio: 1.0,
           child: ChessBoardWidget(
             position: _currentBoard ?? _startingPosition,
-            flipped: widget.playerIsWhite != null ? !widget.playerIsWhite! : false,
+            flipped:
+                widget.playerIsWhite != null ? !widget.playerIsWhite! : false,
             onMove: _onBoardMove,
           ),
         ),
@@ -330,8 +330,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
               icon: const Icon(Icons.arrow_back, size: 16),
               label: const Text('Back', style: TextStyle(fontSize: 12)),
               style: TextButton.styleFrom(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),

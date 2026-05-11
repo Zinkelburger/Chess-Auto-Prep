@@ -250,10 +250,7 @@ class PositionAnalysis {
   /// are present.
   List<GameInfo> getGamesForFen(String fen) {
     final indices = fenToGameIndices[normalizeFen(fen)] ?? [];
-    return indices
-        .where((i) => i < games.length)
-        .map((i) => games[i])
-        .toList();
+    return indices.where((i) => i < games.length).map((i) => games[i]).toList();
   }
 
   /// Get positions sorted by various criteria.
@@ -265,9 +262,8 @@ class PositionAnalysis {
     int minGames = 3,
     String sortBy = 'win_rate',
   }) {
-    var filtered = positionStats.values
-        .where((stats) => stats.games >= minGames)
-        .toList();
+    var filtered =
+        positionStats.values.where((stats) => stats.games >= minGames).toList();
 
     if (sortBy == 'eval_bad_white') {
       filtered = filtered.where((s) => s.hasEval).toList();
@@ -324,10 +320,12 @@ class PositionAnalysis {
             .toList() ??
         [];
 
-    final fenToGameIndicesMap = (json['fenToGameIndices'] as Map<String, dynamic>?)?.map(
-          (key, value) => MapEntry(key, (value as List<dynamic>).cast<int>()),
-        ) ??
-        {};
+    final fenToGameIndicesMap =
+        (json['fenToGameIndices'] as Map<String, dynamic>?)?.map(
+              (key, value) =>
+                  MapEntry(key, (value as List<dynamic>).cast<int>()),
+            ) ??
+            {};
 
     return PositionAnalysis(
       positionStats: positionStatsMap,

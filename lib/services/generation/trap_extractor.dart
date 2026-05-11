@@ -69,9 +69,8 @@ class TrapExtractor {
     }
 
     // Only opponent-move nodes with at least 2 children
-    final isOpponentMove = playAsWhite
-        ? !node.isWhiteToMove
-        : node.isWhiteToMove;
+    final isOpponentMove =
+        playAsWhite ? !node.isWhiteToMove : node.isWhiteToMove;
     if (!isOpponentMove) return;
     if (node.children.length < 2) return;
 

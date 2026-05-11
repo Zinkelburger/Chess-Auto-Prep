@@ -62,9 +62,8 @@ void showAppSnackBar(
         textAlign: TextAlign.center,
       ),
       width: screenWidth < 500 ? screenWidth * 0.85 : 400,
-      duration: isError
-          ? const Duration(days: 365)
-          : const Duration(seconds: 3),
+      duration:
+          isError ? const Duration(days: 365) : const Duration(seconds: 3),
       backgroundColor: isError ? Colors.red[800] : null,
       showCloseIcon: isError,
       closeIconColor: Colors.white70,

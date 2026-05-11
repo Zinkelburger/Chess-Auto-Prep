@@ -359,16 +359,16 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       // If the tree already reaches the target depth, skip Phase 1
       // entirely and use what we have — BFS guarantees shallower plies
       // are complete, so the tree is usable as-is.
-      final bool skipBuild = existingTree != null &&
-          existingTree.maxPlyReached >= config.maxPly;
+      final bool skipBuild =
+          existingTree != null && existingTree.maxPlyReached >= config.maxPly;
 
       final BuildTree tree;
       if (skipBuild) {
         tree = existingTree;
         if (mounted) {
-          setState(() => _status =
-              'Tree already at depth ${existingTree.maxPlyReached}, '
-              'skipping build...');
+          setState(() =>
+              _status = 'Tree already at depth ${existingTree.maxPlyReached}, '
+                  'skipping build...');
         }
       } else {
         // Phase 1: Build tree
@@ -686,10 +686,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 final parts = <String>[
                   'Depth $_currentDepth/$_maxPlyConfig',
                   '$explored / $_totalAtDepth explored',
-                  if (_unexploredAtDepth > 0)
-                    '$_unexploredAtDepth remaining',
-                  if (_etaDepthSec != null)
-                    '~${_formatEta(_etaDepthSec!)}',
+                  if (_unexploredAtDepth > 0) '$_unexploredAtDepth remaining',
+                  if (_etaDepthSec != null) '~${_formatEta(_etaDepthSec!)}',
                 ];
                 return parts.join(' · ');
               }(),
@@ -740,14 +738,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   style: TextStyle(fontSize: 13)),
               const SizedBox(width: 4),
               Tooltip(
-                message:
-                    'Maia neural network is the default opponent model.\n'
+                message: 'Maia neural network is the default opponent model.\n'
                     'You can override this with a Lichess database\n'
                     '(Players or Masters) in the Advanced section below.\n'
                     'When a Lichess DB is selected, Maia is still used\n'
                     'as a fallback for positions with no DB data.',
-                child: Icon(Icons.info_outline,
-                    size: 16, color: Colors.grey[500]),
+                child:
+                    Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
               ),
               if (_lichessDbOverride != null) ...[
                 const SizedBox(width: 8),
@@ -761,8 +758,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   deleteIcon: const Icon(Icons.close, size: 14),
                   onDeleted: _isGenerating
                       ? null
-                      : () => setState(
-                          () => _lichessDbOverride = null),
+                      : () => setState(() => _lichessDbOverride = null),
                   visualDensity: VisualDensity.compact,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -783,8 +779,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               GestureDetector(
                 onTap: _isGenerating
                     ? null
-                    : () => setState(
-                        () => _preferNovelties = !_preferNovelties),
+                    : () =>
+                        setState(() => _preferNovelties = !_preferNovelties),
                 child: const Text(
                   'Prefer novelties',
                   style: TextStyle(fontSize: 13),
@@ -792,11 +788,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               ),
               const SizedBox(width: 4),
               Tooltip(
-                message:
-                    'Favor less-played moves that are still sound.\n'
+                message: 'Favor less-played moves that are still sound.\n'
                     'Uses Maia/Lichess frequency data to boost unusual lines.',
-                child: Icon(Icons.info_outline,
-                    size: 16, color: Colors.grey[500]),
+                child:
+                    Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
               ),
             ],
           ),
@@ -906,8 +901,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   selected: _lichessDbOverride != null,
                   onSelected: _isGenerating
                       ? null
-                      : (_) => setState(() =>
-                          _lichessDbOverride ??= LichessDatabase.lichess),
+                      : (_) => setState(
+                          () => _lichessDbOverride ??= LichessDatabase.lichess),
                 ),
               ],
             ),
@@ -1125,7 +1120,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     if (tooltip == null) return row;
     return Tooltip(message: tooltip, child: row);
   }
-
 
   String _selectionModeDescription() {
     switch (_selectionMode) {

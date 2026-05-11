@@ -6,15 +6,3 @@ bool get isStockfishAvailable => false;
 Future<EngineConnection?> createStockfishConnection() async {
   throw UnsupportedError('Stockfish not available on this platform');
 }
-
-
-
-
-
-
-
-
-
-
-
-

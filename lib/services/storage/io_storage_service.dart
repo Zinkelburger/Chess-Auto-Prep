@@ -10,8 +10,10 @@ class IOStorageService implements StorageService {
   static const String _analyzedGamesFileName = 'analyzed_games.txt';
   static const String _importedGamesFileName = 'imported_games.pgn';
   static const String _repertoireReviewsFileName = 'repertoire_reviews.csv';
-  static const String _repertoireReviewHistoryFileName = 'repertoire_review_history.csv';
-  static const String _repertoireMoveProgressFileName = 'repertoire_move_progress.csv';
+  static const String _repertoireReviewHistoryFileName =
+      'repertoire_review_history.csv';
+  static const String _repertoireMoveProgressFileName =
+      'repertoire_move_progress.csv';
 
   Future<File> _getFile(String filename) async {
     final directory = await getApplicationDocumentsDirectory();
@@ -97,7 +99,7 @@ class IOStorageService implements StorageService {
       } else {
         file = await _getFile(filename);
       }
-      
+
       if (await file.exists()) {
         return await file.readAsString();
       }

@@ -128,10 +128,14 @@ class OpeningTree {
   /// FEN to node mapping for quick lookup
   final Map<String, List<OpeningTreeNode>> fenToNodes;
 
-  OpeningTree({OpeningTreeNode? root, Map<String, List<OpeningTreeNode>>? fenToNodes})
+  OpeningTree(
+      {OpeningTreeNode? root, Map<String, List<OpeningTreeNode>>? fenToNodes})
       : fenToNodes = fenToNodes ?? {} {
     // Ensure root and currentNode point to the same object
-    final rootNode = root ?? OpeningTreeNode(move: '', fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+    final rootNode = root ??
+        OpeningTreeNode(
+            move: '',
+            fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
     this.root = rootNode;
     currentNode = rootNode;
   }
@@ -263,8 +267,7 @@ class OpeningTree {
     // Serialise fenToNodes as fen → list of node IDs.
     final fenIndex = <String, List<int>>{};
     for (final entry in fenToNodes.entries) {
-      fenIndex[entry.key] =
-          entry.value.map((n) => nodeToId[n] ?? -1).toList();
+      fenIndex[entry.key] = entry.value.map((n) => nodeToId[n] ?? -1).toList();
     }
 
     return {'nodes': nodes, 'fenToNodes': fenIndex};

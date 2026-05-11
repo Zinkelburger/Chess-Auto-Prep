@@ -8,7 +8,8 @@ import 'engine_connection.dart';
 
 class ProcessConnection implements EngineConnection {
   Process? _process;
-  final StreamController<String> _stdoutController = StreamController<String>.broadcast();
+  final StreamController<String> _stdoutController =
+      StreamController<String>.broadcast();
   StreamSubscription? _processSubscription;
   bool _isDisposed = false;
 
@@ -75,9 +76,9 @@ class ProcessConnection implements EngineConnection {
     try {
       final executablePath = await resolveExecutablePath();
       print('Starting Stockfish from: $executablePath');
-      
+
       _process = await Process.start(executablePath, []);
-      
+
       _processSubscription = _process!.stdout
           .transform(utf8.decoder)
           .transform(const LineSplitter())
@@ -86,7 +87,6 @@ class ProcessConnection implements EngineConnection {
           _stdoutController.add(line);
         }
       });
-
     } catch (e) {
       print('Error starting Stockfish process: $e');
       rethrow;

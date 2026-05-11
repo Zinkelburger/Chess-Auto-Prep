@@ -8,11 +8,11 @@ import 'services/browser_extension_server/browser_extension_server_factory.dart'
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Start the browser extension server on desktop platforms
   // This allows the Lichess browser extension to add lines to repertoires
   _startBrowserExtensionServer();
-  
+
   runApp(const ChessAutoPrepApp());
 }
 

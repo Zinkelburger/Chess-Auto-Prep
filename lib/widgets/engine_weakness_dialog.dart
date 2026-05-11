@@ -170,8 +170,7 @@ class _EngineWeaknessConfigDialogState
                         children: [
                           Checkbox(
                             value: _redownload,
-                            onChanged: (v) =>
-                                setState(() => _redownload = v!),
+                            onChanged: (v) => setState(() => _redownload = v!),
                           ),
                           const SizedBox(width: 4),
                           Text(
@@ -252,15 +251,13 @@ class _EngineWeaknessConfigDialogState
           child: TextField(
             controller: ctrl,
             style: const TextStyle(fontSize: 13),
-            keyboardType:
-                const TextInputType.numberWithOptions(signed: true),
+            keyboardType: const TextInputType.numberWithOptions(signed: true),
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[\d-]')),
             ],
             decoration: const InputDecoration(
               isDense: true,
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               border: OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() {}),

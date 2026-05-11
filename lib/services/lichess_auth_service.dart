@@ -32,8 +32,7 @@ class LichessAuthService extends ChangeNotifier {
   /// Port for the local HTTP callback server.
   static const int _callbackPort = 8919;
 
-  static const String _redirectUri =
-      'http://localhost:$_callbackPort/callback';
+  static const String _redirectUri = 'http://localhost:$_callbackPort/callback';
 
   /// OAuth scopes requested.
   ///
@@ -120,8 +119,7 @@ class LichessAuthService extends ChangeNotifier {
     await prefs.setBool(_keyIsPat, _isPat);
 
     if (_tokenExpiry != null) {
-      await prefs.setInt(
-          _keyTokenExpiry, _tokenExpiry!.millisecondsSinceEpoch);
+      await prefs.setInt(_keyTokenExpiry, _tokenExpiry!.millisecondsSinceEpoch);
     } else {
       await prefs.remove(_keyTokenExpiry);
     }
@@ -332,7 +330,8 @@ class LichessAuthService extends ChangeNotifier {
     if (_isPat) return _accessToken; // PATs don't expire
 
     if (_isTokenExpired) {
-      if (kDebugMode) print('[LichessAuth] Token expired — please log in again');
+      if (kDebugMode)
+        print('[LichessAuth] Token expired — please log in again');
       await _clearTokens();
       return null;
     }
@@ -449,7 +448,8 @@ class LichessAuthService extends ChangeNotifier {
     final uri = Uri.parse(url);
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-        if (kDebugMode) print('[LichessAuth] launchUrl returned false for $url');
+        if (kDebugMode)
+          print('[LichessAuth] launchUrl returned false for $url');
       }
     } catch (e) {
       if (kDebugMode) print('[LichessAuth] Failed to open URL: $e');

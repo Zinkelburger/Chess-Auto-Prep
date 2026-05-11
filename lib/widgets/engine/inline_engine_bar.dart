@@ -61,7 +61,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     super.didUpdateWidget(oldWidget);
     if (!_engineEnabled || !widget.isActive) return;
 
-    if (widget.fen != oldWidget.fen || (!oldWidget.isActive && widget.isActive)) {
+    if (widget.fen != oldWidget.fen ||
+        (!oldWidget.isActive && widget.isActive)) {
       _runDiscovery();
     }
   }
@@ -205,9 +206,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                 ? Text(
                     _isSearching
                         ? 'Depth ${_discovery.depth} • '
-                          '${formatNodes(_discovery.nodes)} nodes'
+                            '${formatNodes(_discovery.nodes)} nodes'
                         : '${_discovery.lines.length} lines • '
-                          'depth ${_discovery.depth}',
+                            'depth ${_discovery.depth}',
                     style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                     overflow: TextOverflow.ellipsis,
                   )

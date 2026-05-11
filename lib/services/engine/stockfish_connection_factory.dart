@@ -10,19 +10,7 @@ class StockfishConnectionFactory {
   static Future<EngineConnection?> create() async {
     return platform.createStockfishConnection();
   }
-  
+
   /// Check if Stockfish is available on this platform
   static bool get isAvailable => platform.isStockfishAvailable;
 }
-
-
-
-
-
-
-
-
-
-
-
-

@@ -74,8 +74,7 @@ class StockfishPool {
   Future<void> warmUp() async {
     await ensureWorkers();
     if (_workers.isEmpty) return;
-    const startpos =
-        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const startpos = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     try {
       await Future.wait([
         for (final w in _workers) w.evaluateFen(startpos, 10),
@@ -152,7 +151,10 @@ class StockfishPool {
     final w = await acquire();
     try {
       return await w.runDiscovery(
-        fen, depth, multiPv, isWhiteToMove,
+        fen,
+        depth,
+        multiPv,
+        isWhiteToMove,
         onProgress: onProgress,
       );
     } finally {

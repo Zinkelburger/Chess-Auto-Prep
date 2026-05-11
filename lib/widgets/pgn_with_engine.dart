@@ -54,9 +54,8 @@ class _PgnWithEngineState extends State<PgnWithEngine> {
         const Divider(height: 1),
         Expanded(
           child: PgnViewerWidget(
-            key: widget.key != null
-                ? ValueKey('pgn_inner_${widget.key}')
-                : null,
+            key:
+                widget.key != null ? ValueKey('pgn_inner_${widget.key}') : null,
             gameId: widget.gameId,
             pgnText: widget.pgnText,
             moveNumber: widget.moveNumber,

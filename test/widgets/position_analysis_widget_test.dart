@@ -4,7 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/widgets/position_analysis_widget.dart';
 
 void main() {
-  testWidgets('stacks analysis panes cleanly on narrow layouts', (tester) async {
+  testWidgets('stacks analysis panes cleanly on narrow layouts',
+      (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(

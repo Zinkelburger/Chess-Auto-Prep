@@ -113,7 +113,6 @@ class _FenListWidgetState extends State<FenListWidget> {
             textAlign: TextAlign.center,
           ),
         ),
-
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
@@ -141,7 +140,6 @@ class _FenListWidgetState extends State<FenListWidget> {
             ],
           ),
         ),
-
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
@@ -169,9 +167,7 @@ class _FenListWidgetState extends State<FenListWidget> {
             ],
           ),
         ),
-
         const Divider(height: 1),
-
         Expanded(child: _buildPositionsList()),
       ],
     );
@@ -215,9 +211,8 @@ class _FenListWidgetState extends State<FenListWidget> {
 
     Color? backgroundColor;
     if (showingEval && stats.hasEval) {
-      final bad = widget.playerIsWhite
-          ? (stats.evalCp! < -50)
-          : (stats.evalCp! > 100);
+      final bad =
+          widget.playerIsWhite ? (stats.evalCp! < -50) : (stats.evalCp! > 100);
       if (bad) {
         backgroundColor = Colors.red.withValues(alpha: 0.15);
       }
@@ -229,9 +224,7 @@ class _FenListWidgetState extends State<FenListWidget> {
       }
     }
 
-    final evalTag = stats.hasEval
-        ? '  [${stats.evalDisplay}]'
-        : '';
+    final evalTag = stats.hasEval ? '  [${stats.evalDisplay}]' : '';
 
     return ListTile(
       selected: isSelected,
@@ -243,15 +236,13 @@ class _FenListWidgetState extends State<FenListWidget> {
       title: Text(
         showingEval && stats.hasEval
             ? '#$rank: ${stats.evalDisplay}  '
-              '(${stats.winRatePercent.toStringAsFixed(0)}% in ${stats.games}g)'
+                '(${stats.winRatePercent.toStringAsFixed(0)}% in ${stats.games}g)'
             : '#$rank: ${stats.winRatePercent.toStringAsFixed(1)}%$evalTag '
-              '(${stats.wins}-${stats.losses}-${stats.draws} in ${stats.games})',
+                '(${stats.wins}-${stats.losses}-${stats.draws} in ${stats.games})',
         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       ),
       subtitle: Text(
-        stats.fen.length > 40
-            ? '${stats.fen.substring(0, 40)}...'
-            : stats.fen,
+        stats.fen.length > 40 ? '${stats.fen.substring(0, 40)}...' : stats.fen,
         style: const TextStyle(fontSize: 10, fontFamily: 'monospace'),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,

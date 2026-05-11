@@ -93,7 +93,8 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
           child: const SizedBox.expand(),
         ),
         Positioned(
-          left: (widget.anchor.left - 180).clamp(8.0, MediaQuery.of(context).size.width - 280),
+          left: (widget.anchor.left - 180)
+              .clamp(8.0, MediaQuery.of(context).size.width - 280),
           top: widget.anchor.bottom + 4,
           child: Material(
             elevation: 8,
@@ -118,7 +119,8 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
                   Text(
                     'Database features require a Lichess account. '
                     'Log in to enable database queries.',
-                    style: TextStyle(fontSize: 12, color: textColor, height: 1.4),
+                    style:
+                        TextStyle(fontSize: 12, color: textColor, height: 1.4),
                   ),
                   const SizedBox(height: 10),
                   SizedBox(
@@ -134,7 +136,9 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
                             )
                           : const Icon(Icons.login, size: 16),
                       label: Text(
-                        _oauthInProgress ? 'Waiting for browser...' : 'Log into Lichess',
+                        _oauthInProgress
+                            ? 'Waiting for browser...'
+                            : 'Log into Lichess',
                         style: const TextStyle(fontSize: 12),
                       ),
                       style: ElevatedButton.styleFrom(
