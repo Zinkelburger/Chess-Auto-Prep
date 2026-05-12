@@ -92,6 +92,7 @@ class RepertoireService {
           fullPgn: gameText,
           comments: comments,
           variations: variations,
+          headers: Map<String, String>.from(game.headers),
         ));
       } catch (e) {
         if (kDebugMode) {
@@ -471,6 +472,114 @@ class RepertoireService {
     if (matchIndex == null) return false;
 
     games[matchIndex] = newGamePgn.trimRight();
+
+    final sections = <String>[];
+    if (document.preamble.isNotEmpty) {
+      sections.add(document.preamble);
+    }
+    sections.addAll(games);
+
+    await file.writeAsString('${sections.join('\n\n').trimRight()}\n');
+    return true;
+  }
+
+  /// Writes spaced-repetition metadata into PGN headers for a specific line.
+  /// Headers used: [LastReview], [Difficulty], [Interval], [DueDate],
+  /// [PassCount], [FailCount]. Unknown headers are ignored by standard PGN
+  /// parsers, making this forward/backward compatible.
+  Future<bool> updateLineReviewHeaders(
+    String filePath,
+    String lineId, {
+    required DateTime? lastReview,
+    required double difficulty,
+    required double intervalDays,
+    required DateTime? dueDate,
+    required int passCount,
+    required int failCount,
+  }) async {
+    final file = io.File(filePath);
+    if (!await file.exists()) return false;
+
+    final content = await file.readAsString();
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    final games = List<String>.from(document.games);
+
+    int? matchIndex;
+    for (int i = 0; i < games.length; i++) {
+      try {
+        final game = PgnGame.parsePgn(games[i]);
+        final moves = game.moves.mainline().map((n) => n.san).toList();
+        final id = _extractLineId(game, moves, i);
+        if (id == lineId) {
+          matchIndex = i;
+          break;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+
+    if (matchIndex == null) return false;
+
+    // Parse existing headers + move text
+    final gameText = games[matchIndex];
+    final headerPattern = RegExp(r'^\[(\w+)\s+"([^"]*)"\]', multiLine: true);
+    final headers = <String, String>{};
+    String moveText = '';
+
+    final lines = gameText.split('\n');
+    final headerLines = <String>[];
+    bool pastHeaders = false;
+    final moveLines = <String>[];
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (!pastHeaders && headerPattern.hasMatch(trimmed)) {
+        final match = headerPattern.firstMatch(trimmed)!;
+        headers[match.group(1)!] = match.group(2)!;
+        headerLines.add(trimmed);
+      } else {
+        pastHeaders = true;
+        moveLines.add(line);
+      }
+    }
+    moveText = moveLines.join('\n').trim();
+
+    // Update review headers
+    String fmtDate(DateTime? d) =>
+        d == null ? '' : d.toUtc().toIso8601String();
+    headers['LastReview'] = fmtDate(lastReview);
+    headers['Difficulty'] = difficulty.toStringAsFixed(2);
+    headers['Interval'] = intervalDays.toStringAsFixed(2);
+    headers['DueDate'] = fmtDate(dueDate);
+    headers['PassCount'] = passCount.toString();
+    headers['FailCount'] = failCount.toString();
+
+    // Rebuild game text with updated headers
+    final buffer = StringBuffer();
+    // Standard headers first (Event, Site, etc), then custom
+    const standardOrder = [
+      'Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result',
+      'FEN', 'SetUp', 'ECO', 'Opening',
+      'LineID', 'LineId', 'Id', 'Line', 'Guid',
+    ];
+    final written = <String>{};
+    for (final key in standardOrder) {
+      if (headers.containsKey(key)) {
+        buffer.writeln('[$key "${headers[key]}"]');
+        written.add(key);
+      }
+    }
+    // Custom/review headers
+    for (final entry in headers.entries) {
+      if (!written.contains(entry.key)) {
+        buffer.writeln('[${entry.key} "${entry.value}"]');
+      }
+    }
+    buffer.writeln();
+    buffer.write(moveText);
+
+    games[matchIndex] = buffer.toString().trimRight();
 
     final sections = <String>[];
     if (document.preamble.isNotEmpty) {

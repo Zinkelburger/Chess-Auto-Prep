@@ -25,6 +25,11 @@ class AppState extends ChangeNotifier {
   bool? _initialBoardFlipped;
   final PgnService _pgnService = PgnService();
 
+  /// Pending repertoire path for builder<->trainer seamless switching.
+  /// Set before switching modes; consumed by the target screen on activation.
+  String? pendingRepertoirePath;
+  String? pendingLineId;
+
   AppMode get currentMode => _currentMode;
   List<ChessGameModel> get loadedGames => _loadedGames;
   Position get currentPosition => _currentPosition;
@@ -45,6 +50,22 @@ class AppState extends ChangeNotifier {
 
   void setMode(AppMode mode) {
     _currentMode = mode;
+    notifyListeners();
+  }
+
+  /// Switch to trainer with a specific repertoire and optional line.
+  void switchToTrainer({required String repertoirePath, String? lineId}) {
+    pendingRepertoirePath = repertoirePath;
+    pendingLineId = lineId;
+    _currentMode = AppMode.repertoireTrainer;
+    notifyListeners();
+  }
+
+  /// Switch to builder with a specific repertoire and optional line to focus.
+  void switchToBuilder({required String repertoirePath, String? lineId}) {
+    pendingRepertoirePath = repertoirePath;
+    pendingLineId = lineId;
+    _currentMode = AppMode.repertoire;
     notifyListeners();
   }
 

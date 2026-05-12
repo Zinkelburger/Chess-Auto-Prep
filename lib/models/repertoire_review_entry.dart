@@ -11,6 +11,8 @@ class RepertoireReviewEntry {
   DateTime? dueDateUtc;
   String lastRating;
   DateTime? lastReviewedUtc;
+  int passCount;
+  int failCount;
 
   RepertoireReviewEntry({
     required this.repertoireId,
@@ -21,6 +23,8 @@ class RepertoireReviewEntry {
     this.dueDateUtc,
     this.lastRating = '',
     this.lastReviewedUtc,
+    this.passCount = 0,
+    this.failCount = 0,
   });
 
   bool get isNew => lastRating.isEmpty;
@@ -37,6 +41,8 @@ class RepertoireReviewEntry {
     DateTime? dueDateUtc,
     String? lastRating,
     DateTime? lastReviewedUtc,
+    int? passCount,
+    int? failCount,
   }) {
     return RepertoireReviewEntry(
       repertoireId: repertoireId,
@@ -47,6 +53,8 @@ class RepertoireReviewEntry {
       dueDateUtc: dueDateUtc ?? this.dueDateUtc,
       lastRating: lastRating ?? this.lastRating,
       lastReviewedUtc: lastReviewedUtc ?? this.lastReviewedUtc,
+      passCount: passCount ?? this.passCount,
+      failCount: failCount ?? this.failCount,
     );
   }
 
@@ -69,6 +77,8 @@ class RepertoireReviewEntry {
       dueDateUtc: due,
       lastRating: cells[6],
       lastReviewedUtc: reviewed,
+      passCount: cells.length > 8 ? (int.tryParse(cells[8]) ?? 0) : 0,
+      failCount: cells.length > 9 ? (int.tryParse(cells[9]) ?? 0) : 0,
     );
   }
 
@@ -88,6 +98,8 @@ class RepertoireReviewEntry {
       dueStr,
       lastRating,
       reviewedStr,
+      passCount.toString(),
+      failCount.toString(),
     ].join(',');
   }
 

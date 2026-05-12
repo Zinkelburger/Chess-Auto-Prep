@@ -13,6 +13,8 @@ class RepertoireLine {
   final String fullPgn; // Original PGN for reference
   final Map<String, String> comments; // Move comments keyed by move index
   final List<String> variations; // Sub-variations as strings for reference
+  /// Raw PGN headers — includes review metadata like LastReview, Difficulty, etc.
+  final Map<String, String> headers;
 
   RepertoireLine({
     required this.id,
@@ -23,6 +25,7 @@ class RepertoireLine {
     required this.fullPgn,
     this.comments = const {},
     this.variations = const [],
+    this.headers = const {},
   });
 
   /// Creates a training question at the specified move index
