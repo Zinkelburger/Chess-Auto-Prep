@@ -8,7 +8,7 @@ import 'storage/storage_factory.dart';
 
 class RepertoireReviewService {
   static const _header =
-      'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,last_rating,last_reviewed_utc';
+      'repertoire_id,line_id,line_name,difficulty,interval_days,due_utc,last_rating,last_reviewed_utc,pass_count,fail_count';
   static const _historyHeader =
       'repertoire_id,line_id,timestamp_utc,rating,had_mistake,session_type';
   static const _moveProgressHeader =
@@ -24,7 +24,8 @@ class RepertoireReviewService {
         csv.split('\n').where((line) => line.trim().isNotEmpty).toList();
     if (lines.isEmpty) return [];
 
-    final rows = lines.first.trim() == _header ? lines.sublist(1) : lines;
+    final firstLine = lines.first.trim();
+    final rows = firstLine.startsWith('repertoire_id,') ? lines.sublist(1) : lines;
     return rows.map((row) => RepertoireReviewEntry.fromCsvRow(row)).toList();
   }
 
@@ -70,9 +71,23 @@ class RepertoireReviewService {
     return rows.map((row) => RepertoireMoveProgress.fromCsvRow(row)).toList();
   }
 
-  Future<void> saveMoveProgress(List<RepertoireMoveProgress> entries) async {
+  /// Save move progress for a specific repertoire, merging with other
+  /// repertoires' data already on disk.
+  Future<void> saveMoveProgress(
+    List<RepertoireMoveProgress> entries, {
+    String? repertoireId,
+  }) async {
+    List<RepertoireMoveProgress> all;
+    if (repertoireId != null) {
+      final existing = await loadMoveProgress();
+      final others =
+          existing.where((e) => e.repertoireId != repertoireId).toList();
+      all = [...others, ...entries];
+    } else {
+      all = entries;
+    }
     final buffer = StringBuffer()..writeln(_moveProgressHeader);
-    for (final entry in entries) {
+    for (final entry in all) {
       buffer.writeln(entry.toCsvRow());
     }
     await _storage.saveRepertoireMoveProgressCsv(buffer.toString());
@@ -93,18 +108,35 @@ class RepertoireReviewService {
       final key = '$repertoireId:${line.id}';
       final current = existingMap[key];
       if (current != null) {
-        // Keep name fresh if it changed
         merged.add(current.copyWith(lineName: line.name));
       } else {
-        merged.add(RepertoireReviewEntry(
-          repertoireId: repertoireId,
-          lineId: line.id,
-          lineName: line.name,
-        ));
+        // Seed from PGN headers if available (forward/backward compatible)
+        merged.add(_entryFromPgnHeaders(repertoireId, line));
       }
     }
 
     return merged;
+  }
+
+  RepertoireReviewEntry _entryFromPgnHeaders(
+      String repertoireId, RepertoireLine line) {
+    final h = line.headers;
+    DateTime? parseDate(String? s) {
+      if (s == null || s.isEmpty) return null;
+      return DateTime.tryParse(s);
+    }
+
+    return RepertoireReviewEntry(
+      repertoireId: repertoireId,
+      lineId: line.id,
+      lineName: line.name,
+      difficulty: double.tryParse(h['Difficulty'] ?? '') ?? 2.5,
+      intervalDays: double.tryParse(h['Interval'] ?? '') ?? 0.0,
+      dueDateUtc: parseDate(h['DueDate']),
+      lastReviewedUtc: parseDate(h['LastReview']),
+      passCount: int.tryParse(h['PassCount'] ?? '') ?? 0,
+      failCount: int.tryParse(h['FailCount'] ?? '') ?? 0,
+    );
   }
 
   /// Return lines that are due (or new) in the original order.

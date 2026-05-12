@@ -33,7 +33,6 @@ import '../widgets/unified_engine_pane.dart';
 import '../models/trap_line_info.dart';
 import '../services/generation/trap_extractor.dart';
 import 'repertoire_selection_screen.dart';
-import 'repertoire_training_screen.dart';
 
 // -------------------------------------------------------------------
 // REPERTOIRE SCREEN WIDGET
@@ -99,6 +98,43 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         _showRepertoireSelection();
       }
     });
+
+    // 4. Listen for mode switches that pass a repertoire/line to load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final appState = context.read<AppState>();
+      appState.addListener(_onAppStateChanged);
+    });
+  }
+
+  void _onAppStateChanged() {
+    final appState = context.read<AppState>();
+    if (appState.currentMode == AppMode.repertoire &&
+        appState.pendingRepertoirePath != null) {
+      final path = appState.pendingRepertoirePath!;
+      final lineId = appState.pendingLineId;
+      appState.pendingRepertoirePath = null;
+      appState.pendingLineId = null;
+
+      // Load the requested repertoire if different from current
+      final currentPath = _controller.currentRepertoire?['filePath'] as String?;
+      if (currentPath != path) {
+        _controller.setRepertoire({'filePath': path, 'name': path.split('/').last.replaceAll('.pgn', '')});
+      }
+      // If a specific line was requested, navigate to it once loaded
+      if (lineId != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final line = _controller.repertoireLines
+              .where((l) => l.id == lineId)
+              .firstOrNull;
+          if (line != null) {
+            _controller.loadPgnLine(line);
+            _tabController.animateTo(2); // PGN tab
+          }
+        });
+      }
+    }
   }
 
   // 3. The listener that calls setState
@@ -165,6 +201,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     // and are only killed when leaving the repertoire builder.
     AnalysisService().dispose();
     StockfishPool().dispose();
+
+    try {
+      context.read<AppState>().removeListener(_onAppStateChanged);
+    } catch (_) {}
 
     super.dispose();
   }
@@ -1267,14 +1307,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _trainRepertoire() {
     if (_controller.currentRepertoire == null) return;
+    final filePath = _controller.currentRepertoire!['filePath'] as String?;
+    if (filePath == null) return;
 
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => RepertoireTrainingScreen(
-          repertoire: _controller.currentRepertoire!,
-        ),
-      ),
-    );
+    context.read<AppState>().switchToTrainer(repertoirePath: filePath);
   }
 
   Future<void> _importPgn() async {
