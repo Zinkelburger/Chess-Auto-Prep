@@ -30,6 +30,12 @@ class InlineEngineBar extends StatefulWidget {
     this.isActive = true,
   });
 
+  /// Whether the engine is currently enabled (static, shared across instances).
+  static bool get isEngineEnabled => _InlineEngineBarState._engineEnabled;
+
+  /// Toggle engine on/off from outside (e.g. keyboard shortcut).
+  static void toggleEngine() => _InlineEngineBarState.toggleEngineExternal();
+
   @override
   State<InlineEngineBar> createState() => _InlineEngineBarState();
 }
@@ -38,6 +44,17 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   final EngineSettings _settings = EngineSettings();
 
   static bool _engineEnabled = false;
+
+  static final _externalToggleNotifier = <VoidCallback>[];
+
+  /// Toggle engine on/off from outside (e.g. keyboard shortcut).
+  /// Any mounted InlineEngineBar will pick up the change on next build.
+  static void toggleEngineExternal() {
+    _engineEnabled = !_engineEnabled;
+    for (final cb in _externalToggleNotifier) {
+      cb();
+    }
+  }
 
   int _generation = 0;
   DiscoveryResult _discovery = const DiscoveryResult();
@@ -51,9 +68,15 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   void initState() {
     super.initState();
     _settings.addListener(_onSettingsChanged);
+    _externalToggleNotifier.add(_onExternalToggle);
     if (_engineEnabled && widget.isActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _runDiscovery());
     }
+  }
+
+  void _onExternalToggle() {
+    if (!mounted) return;
+    _toggleEngine(_engineEnabled);
   }
 
   @override
@@ -70,6 +93,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   @override
   void dispose() {
     _generation++;
+    _externalToggleNotifier.remove(_onExternalToggle);
     _settings.removeListener(_onSettingsChanged);
     _disposeWorker();
     super.dispose();
@@ -212,9 +236,12 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                     style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                     overflow: TextOverflow.ellipsis,
                   )
-                : Text(
-                    'Engine',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                : Tooltip(
+                    message: 'Toggle engine (E)',
+                    child: Text(
+                      'Engine',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
                   ),
           ),
           if (_engineEnabled)

@@ -1,0 +1,535 @@
+/// Controller that runs Stockfish through every mainline position of a game
+/// and collects per-move evaluations for charting and move classification.
+///
+/// Uses the [StockfishPool] to evaluate multiple positions in parallel,
+/// significantly speeding up full-game analysis.
+///
+/// Uses Lichess-style winning-chance model for move classification:
+/// - Blunder (??): winning chance swing >= 0.30
+/// - Mistake (?):  winning chance swing >= 0.20
+/// - Inaccuracy (?!): winning chance swing >= 0.10
+///
+/// Persists analysis results as standard `[%eval]` comments in PGN, matching
+/// the Lichess export format. On subsequent loads, analysis is restored from
+/// these annotations without re-running the engine.
+library;
+
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart';
+
+import 'engine/stockfish_pool.dart';
+import 'maia_factory.dart';
+
+// ---------------------------------------------------------------------------
+// Data models
+// ---------------------------------------------------------------------------
+
+/// Eval at a single ply (after the move is played).
+class MoveEval {
+  final int ply; // 1-based: 1 = after White's first move
+  final String san;
+  final String fenBefore;
+  final String fenAfter;
+  final int? scoreCp; // White-normalized centipawns
+  final int? scoreMate; // White-normalized mate-in-N
+  final double winningChance; // White's winning chance in [-1, 1]
+  final MoveClassification classification;
+  final double? maiaProb; // MAIA's predicted probability of this move (0-1)
+  final List<String> bestLine; // Engine's preferred continuation (SAN)
+
+  const MoveEval({
+    required this.ply,
+    required this.san,
+    required this.fenBefore,
+    required this.fenAfter,
+    this.scoreCp,
+    this.scoreMate,
+    required this.winningChance,
+    this.classification = MoveClassification.normal,
+    this.maiaProb,
+    this.bestLine = const [],
+  });
+
+  bool get isWhiteMove => ply % 2 == 1;
+
+  int get effectiveCp {
+    if (scoreMate != null) {
+      return scoreMate! > 0
+          ? 10000 - scoreMate!.abs()
+          : -(10000 - scoreMate!.abs());
+    }
+    return scoreCp ?? 0;
+  }
+
+  /// Format as a Lichess-compatible `[%eval]` comment value.
+  String toEvalComment() {
+    if (scoreMate != null) return '#$scoreMate';
+    if (scoreCp != null) {
+      final v = scoreCp! / 100.0;
+      return v.toStringAsFixed(2);
+    }
+    return '0.00';
+  }
+}
+
+enum MoveClassification { normal, interesting, inaccuracy, mistake, blunder }
+
+// ---------------------------------------------------------------------------
+// Winning-chance model (Lichess logistic)
+// ---------------------------------------------------------------------------
+
+/// Lichess-style centipawn-to-winning-chance conversion.
+///
+/// Uses the logistic model from lila's ui/lib/src/ceval/winningChances.ts:
+/// `2 / (1 + exp(-0.00368208 * cp)) - 1`
+/// Clamps CP to [-1000, 1000], maps mate to pseudo-CP.
+double cpToWinningChance(int? cp, int? mate) {
+  double effectiveCp;
+  if (mate != null) {
+    if (mate > 0) {
+      effectiveCp = (10000 - mate.abs()).toDouble();
+    } else {
+      effectiveCp = -(10000 - mate.abs()).toDouble();
+    }
+  } else {
+    effectiveCp = (cp ?? 0).toDouble();
+  }
+  effectiveCp = effectiveCp.clamp(-1000, 1000);
+  return 2.0 / (1.0 + math.exp(-0.00368208 * effectiveCp)) - 1.0;
+}
+
+/// Classify a move based on the change in winning chances.
+MoveClassification classifyMove(double delta) {
+  if (delta >= 0.30) return MoveClassification.blunder;
+  if (delta >= 0.20) return MoveClassification.mistake;
+  if (delta >= 0.10) return MoveClassification.inaccuracy;
+  return MoveClassification.normal;
+}
+
+// ---------------------------------------------------------------------------
+// PGN eval comment parsing
+// ---------------------------------------------------------------------------
+
+final _evalCommentRe = RegExp(r'\[%eval\s+(#?[+-]?\d+\.?\d*)\]');
+
+({int? cp, int? mate})? _parseEvalComment(String comment) {
+  final match = _evalCommentRe.firstMatch(comment);
+  if (match == null) return null;
+  final raw = match.group(1)!;
+  if (raw.startsWith('#')) {
+    final mate = int.tryParse(raw.substring(1));
+    if (mate != null) return (cp: null, mate: mate);
+    return null;
+  }
+  final cpFloat = double.tryParse(raw);
+  if (cpFloat != null) return (cp: (cpFloat * 100).round(), mate: null);
+  return null;
+}
+
+String _setEvalInComment(String comment, String evalValue) {
+  final token = '[%eval $evalValue]';
+  if (_evalCommentRe.hasMatch(comment)) {
+    return comment.replaceFirst(_evalCommentRe, token);
+  }
+  final trimmed = comment.trim();
+  if (trimmed.isEmpty) return token;
+  return '$token $trimmed';
+}
+
+// MAIA probability persistence: [%maia 0.03]
+final _maiaCommentRe = RegExp(r'\[%maia\s+(\d+\.?\d*)\]');
+
+double? _parseMaiaComment(String comment) {
+  final match = _maiaCommentRe.firstMatch(comment);
+  if (match == null) return null;
+  return double.tryParse(match.group(1)!);
+}
+
+String _setMaiaInComment(String comment, double prob) {
+  final token = '[%maia ${prob.toStringAsFixed(3)}]';
+  if (_maiaCommentRe.hasMatch(comment)) {
+    return comment.replaceFirst(_maiaCommentRe, token);
+  }
+  final trimmed = comment.trim();
+  if (trimmed.isEmpty) return token;
+  return '$trimmed $token';
+}
+
+// ---------------------------------------------------------------------------
+// Controller
+// ---------------------------------------------------------------------------
+
+class GameAnalysisController extends ChangeNotifier {
+  List<MoveEval> _evals = [];
+  List<MoveEval> get evals => _evals;
+
+  double _startWinChance = 0.0;
+  double get startWinChance => _startWinChance;
+
+  bool _isAnalyzing = false;
+  bool get isAnalyzing => _isAnalyzing;
+
+  int _totalMoves = 0;
+  int get totalMoves => _totalMoves;
+
+  int _analyzedMoves = 0;
+  int get analyzedMoves => _analyzedMoves;
+
+  int _depth = 18;
+  int get depth => _depth;
+  set depth(int value) {
+    _depth = value.clamp(8, 30);
+    notifyListeners();
+  }
+
+  bool _isCancelled = false;
+
+  // ── Loading cached analysis from PGN ────────────────────────────────────
+
+  bool tryLoadFromPgn(String pgnText) {
+    _evals = [];
+
+    try {
+      final parsed = PgnGame.parsePgn(pgnText);
+      final mainline = parsed.moves.mainline().toList();
+      if (mainline.isEmpty) return false;
+
+      Position pos = Chess.initial;
+      final results = <MoveEval>[];
+      int missingCount = 0;
+
+      for (int i = 0; i < mainline.length; i++) {
+        final moveData = mainline[i];
+        final fenBefore = pos.fen;
+        final move = pos.parseSan(moveData.san);
+        if (move == null) break;
+        pos = pos.play(move);
+        final fenAfter = pos.fen;
+
+        ({int? cp, int? mate})? evalData;
+        double? maiaProb;
+        if (moveData.comments != null) {
+          for (final c in moveData.comments!) {
+            evalData ??= _parseEvalComment(c);
+            maiaProb ??= _parseMaiaComment(c);
+          }
+        }
+
+        if (evalData == null) {
+          missingCount++;
+          if (missingCount > 2) return false;
+          continue;
+        }
+
+        final winChance = cpToWinningChance(evalData.cp, evalData.mate);
+        results.add(MoveEval(
+          ply: i + 1,
+          san: moveData.san,
+          fenBefore: fenBefore,
+          fenAfter: fenAfter,
+          scoreCp: evalData.cp,
+          scoreMate: evalData.mate,
+          winningChance: winChance,
+          maiaProb: maiaProb,
+        ));
+      }
+
+      if (results.length < mainline.length - 2) return false;
+
+      _startWinChance = cpToWinningChance(0, null);
+      double prevWinChance = _startWinChance;
+
+      final classified = <MoveEval>[];
+      for (final e in results) {
+        final delta = e.isWhiteMove
+            ? (prevWinChance - e.winningChance)
+            : (e.winningChance - prevWinChance);
+        var classification = classifyMove(delta.clamp(0.0, 1.0));
+
+        if (classification == MoveClassification.normal &&
+            e.maiaProb != null &&
+            e.maiaProb! < 0.05) {
+          classification = MoveClassification.interesting;
+        }
+
+        classified.add(MoveEval(
+          ply: e.ply,
+          san: e.san,
+          fenBefore: e.fenBefore,
+          fenAfter: e.fenAfter,
+          scoreCp: e.scoreCp,
+          scoreMate: e.scoreMate,
+          winningChance: e.winningChance,
+          maiaProb: e.maiaProb,
+          classification: classification,
+        ));
+        prevWinChance = e.winningChance;
+      }
+
+      _evals = classified;
+      _totalMoves = mainline.length;
+      _analyzedMoves = classified.length;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[GameAnalysis] Failed to load cached: $e');
+      return false;
+    }
+  }
+
+  void clearEvals() {
+    _evals = [];
+    _totalMoves = 0;
+    _analyzedMoves = 0;
+    _startWinChance = 0.0;
+    notifyListeners();
+  }
+
+  // ── Running engine analysis (parallel via StockfishPool) ────────────────
+
+  /// Analyze a full game using the StockfishPool for parallel evaluation.
+  /// Positions are dispatched in batches matching the pool's worker count.
+  Future<void> analyzeGame(
+    String pgnText, {
+    int? analysisDepth,
+    ValueChanged<String>? onAnnotatedMovetext,
+  }) async {
+    if (_isAnalyzing) cancel();
+
+    _evals = [];
+    _analyzedMoves = 0;
+    _isAnalyzing = true;
+    _isCancelled = false;
+    notifyListeners();
+
+    final useDepth = analysisDepth ?? _depth;
+    final pool = StockfishPool();
+
+    try {
+      final parsed = PgnGame.parsePgn(pgnText);
+      final mainline = parsed.moves.mainline().toList();
+      _totalMoves = mainline.length;
+      notifyListeners();
+
+      if (mainline.isEmpty) {
+        _isAnalyzing = false;
+        notifyListeners();
+        return;
+      }
+
+      await pool.ensureWorkers();
+      if (_isCancelled) return;
+
+      final workerCount = pool.workerCount;
+      if (workerCount == 0) {
+        _isAnalyzing = false;
+        notifyListeners();
+        return;
+      }
+
+      // Pre-compute all FENs along the mainline so we can batch-evaluate
+      Position pos = Chess.initial;
+      final positions = <({String fenBefore, String fenAfter, bool isWhiteToMove, PgnNodeData moveData, String moveUci})>[];
+      for (final moveData in mainline) {
+        final fenBefore = pos.fen;
+        final move = pos.parseSan(moveData.san);
+        if (move == null) break;
+        final uci = move.uci;
+        pos = pos.play(move);
+        positions.add((
+          fenBefore: fenBefore,
+          fenAfter: pos.fen,
+          isWhiteToMove: pos.turn == Side.white,
+          moveData: moveData,
+          moveUci: uci,
+        ));
+      }
+
+      // Evaluate starting position
+      final startResult = await pool.evaluateFen(
+          'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', useDepth);
+      if (_isCancelled) return;
+      _startWinChance =
+          cpToWinningChance(startResult.scoreCp, startResult.scoreMate);
+
+      // Initialize MAIA
+      final maia = MaiaFactory.instance;
+      bool maiaReady = false;
+      if (maia != null) {
+        try {
+          await maia.initialize();
+          maiaReady = true;
+        } catch (_) {}
+      }
+
+      final whiteElo = int.tryParse(parsed.headers['WhiteElo'] ?? '') ?? 2200;
+      final blackElo = int.tryParse(parsed.headers['BlackElo'] ?? '') ?? 2200;
+
+      double prevWinChance = _startWinChance;
+
+      // Process in parallel batches — classify incrementally
+      final batchSize = workerCount;
+      for (int batchStart = 0; batchStart < positions.length; batchStart += batchSize) {
+        if (_isCancelled) break;
+
+        final batchEnd = (batchStart + batchSize).clamp(0, positions.length);
+        final batch = positions.sublist(batchStart, batchEnd);
+
+        // Fire off Stockfish evals concurrently
+        final futures = <Future<EvalResult>>[];
+        for (final p in batch) {
+          futures.add(pool.evaluateFen(p.fenAfter, useDepth));
+        }
+
+        final results = await Future.wait(futures);
+        if (_isCancelled) break;
+
+        for (int j = 0; j < results.length; j++) {
+          if (_isCancelled) break;
+          final p = batch[j];
+          final result = results[j];
+          final globalIdx = batchStart + j;
+          final ply = globalIdx + 1;
+
+          final whiteNormCp = p.isWhiteToMove
+              ? result.scoreCp
+              : _negateCp(result.scoreCp);
+          final whiteNormMate = p.isWhiteToMove
+              ? result.scoreMate
+              : _negateMate(result.scoreMate);
+          final winChance = cpToWinningChance(whiteNormCp, whiteNormMate);
+
+          final bestLine = _uciPvToSan(p.fenAfter, result.pv);
+
+          // Classify immediately
+          final isWhiteMove = ply % 2 == 1;
+          final delta = isWhiteMove
+              ? (prevWinChance - winChance)
+              : (winChance - prevWinChance);
+          var classification = classifyMove(delta.clamp(0.0, 1.0));
+
+          // Run MAIA for this position
+          double? maiaProb;
+          if (maiaReady) {
+            try {
+              final elo = isWhiteMove ? whiteElo : blackElo;
+              final maiaResult = await maia!.evaluate(p.fenBefore, elo);
+              maiaProb = maiaResult.policy[p.moveUci] ?? 0.0;
+              _injectMaiaComment(p.moveData, maiaProb);
+            } catch (_) {}
+          }
+
+          if (classification == MoveClassification.normal &&
+              maiaProb != null &&
+              maiaProb < 0.05) {
+            classification = MoveClassification.interesting;
+          }
+
+          final eval = MoveEval(
+            ply: ply,
+            san: p.moveData.san,
+            fenBefore: p.fenBefore,
+            fenAfter: p.fenAfter,
+            scoreCp: whiteNormCp,
+            scoreMate: whiteNormMate,
+            winningChance: winChance,
+            bestLine: bestLine,
+            classification: classification,
+            maiaProb: maiaProb,
+          );
+          _evals.add(eval);
+          _injectEvalComment(p.moveData, eval);
+          prevWinChance = winChance;
+        }
+
+        _analyzedMoves = _evals.length;
+        notifyListeners();
+      }
+
+      if (!_isCancelled && onAnnotatedMovetext != null) {
+        final annotated =
+            _rebuildMovetext(mainline, parsed.headers['Result']);
+        onAnnotatedMovetext(annotated);
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[GameAnalysis] Error: $e');
+    } finally {
+      _isAnalyzing = false;
+      notifyListeners();
+    }
+  }
+
+  void _injectEvalComment(PgnNodeData moveData, MoveEval eval) {
+    final evalValue = eval.toEvalComment();
+    if (moveData.comments != null && moveData.comments!.isNotEmpty) {
+      moveData.comments![0] =
+          _setEvalInComment(moveData.comments!.first, evalValue);
+    } else {
+      moveData.comments = ['[%eval $evalValue]'];
+    }
+  }
+
+  void _injectMaiaComment(PgnNodeData moveData, double prob) {
+    if (moveData.comments != null && moveData.comments!.isNotEmpty) {
+      moveData.comments![0] =
+          _setMaiaInComment(moveData.comments!.first, prob);
+    } else {
+      moveData.comments = ['[%maia ${prob.toStringAsFixed(3)}]'];
+    }
+  }
+
+  String _rebuildMovetext(List<PgnNodeData> mainline, String? result) {
+    final buf = StringBuffer();
+    var moveNum = 1;
+    var isWhite = true;
+    for (final move in mainline) {
+      if (isWhite) buf.write('$moveNum. ');
+      buf.write('${move.san} ');
+      if (move.comments != null && move.comments!.isNotEmpty) {
+        for (final c in move.comments!) {
+          if (c.isNotEmpty) buf.write('{$c} ');
+        }
+      }
+      if (!isWhite) moveNum++;
+      isWhite = !isWhite;
+    }
+    if (result != null && result != '*') buf.write(result);
+    return buf.toString().trim();
+  }
+
+  void cancel() {
+    _isCancelled = true;
+    StockfishPool().stopAll();
+  }
+
+  /// Convert a UCI PV to a list of SAN strings by walking the position forward.
+  List<String> _uciPvToSan(String fen, List<String> uciMoves) {
+    if (uciMoves.isEmpty) return const [];
+    try {
+      Position pos = Chess.fromSetup(Setup.parseFen(fen));
+      final san = <String>[];
+      for (final uci in uciMoves.take(8)) {
+        final move = Move.parse(uci);
+        if (move == null) break;
+        final (newPos, sanStr) = pos.makeSan(move);
+        san.add(sanStr);
+        pos = newPos;
+      }
+      return san;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  int? _negateCp(int? cp) => cp != null ? -cp : null;
+  int? _negateMate(int? mate) => mate != null ? -mate : null;
+
+  @override
+  void dispose() {
+    cancel();
+    super.dispose();
+  }
+}

@@ -9,6 +9,7 @@ import '../widgets/tactics_control_panel.dart';
 import '../services/analysis_service.dart';
 import '../services/engine/stockfish_pool.dart';
 import 'analysis_screen.dart';
+import 'pgn_viewer_screen.dart';
 import 'repertoire_screen.dart';
 import 'repertoire_training_screen.dart';
 
@@ -25,6 +26,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     AppMode.positionAnalysis,
     AppMode.repertoire,
     AppMode.repertoireTrainer,
+    AppMode.pgnViewer,
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
@@ -77,17 +79,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 
-  AppMode _normalizeMode(AppMode mode) {
-    switch (mode) {
-      case AppMode.pgnViewer:
-        return AppMode.tactics;
-      case AppMode.tactics:
-      case AppMode.positionAnalysis:
-      case AppMode.repertoire:
-      case AppMode.repertoireTrainer:
-        return mode;
-    }
-  }
+  AppMode _normalizeMode(AppMode mode) => mode;
 
   Widget _createModeView(AppMode mode) {
     switch (mode) {
@@ -106,10 +98,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       case AppMode.repertoireTrainer:
         return const RepertoireTrainingScreen();
       case AppMode.pgnViewer:
-        return const SafeArea(
-          bottom: false,
-          child: _TacticsModeView(),
-        );
+        return const PgnViewerScreen();
     }
   }
 }

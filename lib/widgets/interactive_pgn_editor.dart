@@ -1056,7 +1056,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       comment.replaceAll('{', '').replaceAll('}', '');
 
   Widget _buildInlineComment(String comment) {
-    final sanitized = _sanitizeComment(comment);
+    final sanitized = _sanitizeComment(comment)
+        .replaceAll(RegExp(r'\[%maia [^\]]+\]'), '')
+        .replaceAll(RegExp(r'\[%eval [^\]]+\]'), '')
+        .replaceAll(RegExp(r'\[%clk [^\]]+\]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (sanitized.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Text(
