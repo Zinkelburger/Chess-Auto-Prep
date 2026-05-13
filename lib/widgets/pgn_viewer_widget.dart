@@ -311,11 +311,15 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   String _buildGameInfo(PgnGame game) {
     final white = game.headers['White'] ?? '?';
     final black = game.headers['Black'] ?? '?';
+    final wElo = game.headers['WhiteElo'];
+    final bElo = game.headers['BlackElo'];
+    final wStr = wElo != null && wElo.isNotEmpty && wElo != '?' ? '$white ($wElo)' : white;
+    final bStr = bElo != null && bElo.isNotEmpty && bElo != '?' ? '$black ($bElo)' : black;
     final event = game.headers['Event'] ?? '';
     final date = game.headers['Date'] ?? '';
     final result = game.headers['Result'] ?? '';
 
-    return '$white vs $black\n$event • $date • $result';
+    return '$wStr vs $bStr\n$event • $date • $result';
   }
 
   void _jumpToMove(int moveNumber, bool isWhiteToPlay) {
@@ -665,6 +669,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   String _filterComment(String comment) {
     comment = comment.replaceAll(RegExp(r'\[%eval [^\]]+\]'), '');
     comment = comment.replaceAll(RegExp(r'\[%clk [^\]]+\]'), '');
+    comment = comment.replaceAll(RegExp(r'\[%maia [^\]]+\]'), '');
     comment = comment.replaceAll(
         RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)'), '');
     comment = comment.replaceAll(

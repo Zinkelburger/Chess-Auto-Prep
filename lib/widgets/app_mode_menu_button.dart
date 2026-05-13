@@ -47,6 +47,12 @@ class AppModeMenuButton extends StatelessWidget {
               label: 'Repertoire Trainer',
               isSelected: appState.currentMode == AppMode.repertoireTrainer,
             ),
+            _buildMenuItem(
+              mode: AppMode.pgnViewer,
+              icon: Icons.menu_book,
+              label: 'PGN Viewer',
+              isSelected: appState.currentMode == AppMode.pgnViewer,
+            ),
           ],
         );
       },
