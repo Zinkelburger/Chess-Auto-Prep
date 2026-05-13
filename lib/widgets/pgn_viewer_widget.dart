@@ -51,8 +51,10 @@ class PgnViewerController {
     _state = state;
   }
 
-  void _detach() {
-    _state = null;
+  void _detach(_PgnViewerWidgetState state) {
+    if (_state == state) {
+      _state = null;
+    }
   }
 
   void goBack() {
@@ -84,6 +86,21 @@ class PgnViewerController {
     state._clearAnalysis();
     state._jumpToMove(moveNumber, isWhiteToPlay);
   }
+
+  /// Delete an analysis node (variation) by its ID.
+  /// Cannot delete main-line moves.
+  void deleteAnalysisNode(int nodeId) {
+    _state?._deleteAnalysisNode(nodeId);
+  }
+
+  /// Whether the viewer currently has any analysis (ephemeral) variations.
+  bool get hasAnalysis => _state?._analysisRoots.isNotEmpty ?? false;
+
+  /// Get the current main-line move index (0-based ply).
+  int get mainLineIndex => _state?._mainLineIndex ?? 0;
+
+  /// Total number of main-line moves.
+  int get mainLineLength => _state?._moveHistory.length ?? 0;
 }
 
 class PgnViewerWidget extends StatefulWidget {
@@ -103,6 +120,14 @@ class PgnViewerWidget extends StatefulWidget {
   /// to the very start or end of the game is not useful.
   final bool showStartEndButtons;
 
+  /// Called when a user long-presses / right-clicks an analysis (ephemeral)
+  /// move. Provides the node ID so the parent can show a context menu.
+  final Function(int nodeId, Offset globalPosition)? onAnalysisNodeAction;
+
+  /// Called when the user edits a move comment. The argument is the full
+  /// rebuilt movetext string (everything after headers) with updated comments.
+  final ValueChanged<String>? onCommentsChanged;
+
   const PgnViewerWidget({
     super.key,
     this.gameId,
@@ -113,6 +138,8 @@ class PgnViewerWidget extends StatefulWidget {
     this.controller,
     this.initialFen,
     this.showStartEndButtons = true,
+    this.onAnalysisNodeAction,
+    this.onCommentsChanged,
   });
 
   @override
@@ -148,7 +175,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   @override
   void dispose() {
-    widget.controller?._detach();
+    widget.controller?._detach(this);
     super.dispose();
   }
 
@@ -535,6 +562,106 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     _analysisPath = [];
   }
 
+  // ── Move comment editing ──
+
+  int? _editingCommentIndex; // mainline ply index being edited, or null
+
+  void _startEditingComment(int moveIndex) {
+    setState(() => _editingCommentIndex = moveIndex);
+  }
+
+  void _saveComment(int moveIndex, String newComment) {
+    if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
+    final moveData = _moveHistory[moveIndex];
+    final trimmed = newComment.trim();
+
+    setState(() {
+      if (trimmed.isEmpty) {
+        moveData.comments?.clear();
+      } else {
+        if (moveData.comments == null || moveData.comments!.isEmpty) {
+          moveData.comments = [trimmed];
+        } else {
+          moveData.comments![0] = trimmed;
+        }
+      }
+      _editingCommentIndex = null;
+    });
+
+    _notifyCommentsChanged();
+  }
+
+  void _cancelEditingComment() {
+    setState(() => _editingCommentIndex = null);
+  }
+
+  void _notifyCommentsChanged() {
+    if (widget.onCommentsChanged == null || _moveHistory.isEmpty) return;
+    // Rebuild movetext from _moveHistory with comments
+    final buf = StringBuffer();
+    var moveNum = 1;
+    var isWhite = true;
+    for (final move in _moveHistory) {
+      if (isWhite) buf.write('$moveNum. ');
+      buf.write('${move.san} ');
+      if (move.comments != null && move.comments!.isNotEmpty) {
+        for (final c in move.comments!) {
+          if (c.isNotEmpty) buf.write('{$c} ');
+        }
+      }
+      if (!isWhite) moveNum++;
+      isWhite = !isWhite;
+    }
+    // Append result if available
+    final result = _game?.headers['Result'];
+    if (result != null && result != '*') buf.write(result);
+    widget.onCommentsChanged!(buf.toString().trim());
+  }
+
+  /// Delete an analysis node and its subtree by ID.
+  void _deleteAnalysisNode(int nodeId) {
+    setState(() {
+      // Try removing from roots first
+      final lengthBefore = _analysisRoots.length;
+      _analysisRoots.removeWhere((n) => n.id == nodeId);
+      final removedFromRoots = _analysisRoots.length < lengthBefore;
+
+      if (_analysisRoots.isEmpty) {
+        _resetAnalysisState();
+        return;
+      }
+
+      // Otherwise, find and remove from parent's children
+      if (!removedFromRoots) {
+        _removeNodeRecursive(_analysisRoots, nodeId);
+      }
+
+      // If current path includes the deleted node, truncate
+      final idx = _analysisPath.indexWhere((n) => n.id == nodeId);
+      if (idx != -1) {
+        if (idx == 0) {
+          _analysisPath = [];
+          _goToMainLineMove(_analysisBranchPoint);
+        } else {
+          _analysisPath = _analysisPath.sublist(0, idx);
+          _goToAnalysisNode(_analysisPath.last);
+        }
+      }
+    });
+  }
+
+  bool _removeNodeRecursive(List<AnalysisNode> nodes, int targetId) {
+    for (final node in nodes) {
+      final removed = node.children.where((c) => c.id == targetId).toList();
+      if (removed.isNotEmpty) {
+        node.children.removeWhere((c) => c.id == targetId);
+        return true;
+      }
+      if (_removeNodeRecursive(node.children, targetId)) return true;
+    }
+    return false;
+  }
+
   String _filterComment(String comment) {
     comment = comment.replaceAll(RegExp(r'\[%eval [^\]]+\]'), '');
     comment = comment.replaceAll(RegExp(r'\[%clk [^\]]+\]'), '');
@@ -619,23 +746,23 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                 IconButton(
                   onPressed: _canGoBack ? _goToStart : null,
                   icon: const Icon(Icons.skip_previous),
-                  tooltip: 'Start',
+                  tooltip: 'Start (Home)',
                 ),
               IconButton(
                 onPressed: _canGoBack ? _goBack : null,
                 icon: const Icon(Icons.chevron_left),
-                tooltip: 'Back',
+                tooltip: 'Back (←)',
               ),
               IconButton(
                 onPressed: _canGoForward ? _goForward : null,
                 icon: const Icon(Icons.chevron_right),
-                tooltip: 'Forward',
+                tooltip: 'Forward (→)',
               ),
               if (widget.showStartEndButtons)
                 IconButton(
                   onPressed: _canGoForward ? _goToEnd : null,
                   icon: const Icon(Icons.skip_next),
-                  tooltip: 'End',
+                  tooltip: 'End (End)',
                 ),
             ],
           ),
@@ -647,11 +774,26 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   Widget _buildPgnDisplay() {
     if (_moveHistory.isEmpty && _analysisRoots.isEmpty) return const SizedBox();
 
+    final children = <Widget>[];
     final spans = <InlineSpan>[];
     var moveNumber = 1;
     var isWhiteTurn = true;
 
-    // Handle analysis branching from before the first move (start position)
+    final baseStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 14,
+      color: Colors.grey[300],
+    );
+
+    void flushSpans() {
+      if (spans.isNotEmpty) {
+        children.add(RichText(
+          text: TextSpan(style: baseStyle, children: List.of(spans)),
+        ));
+        spans.clear();
+      }
+    }
+
     if (_analysisRoots.isNotEmpty && _analysisBranchPoint == 0) {
       spans.addAll(_buildAnalysisSpans());
     }
@@ -668,42 +810,100 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         ));
       }
 
-      // Highlight current move
       final isCurrentMove = i == _mainLineIndex - 1 && _analysisPath.isEmpty;
       final isBranchPoint =
           i == _analysisBranchPoint - 1 && _analysisRoots.isNotEmpty;
 
-      spans.add(
-        TextSpan(
-          text: san,
-          style: TextStyle(
-            color: isCurrentMove
-                ? Colors.white
-                : (isBranchPoint ? Colors.blue[200] : Colors.blue[300]),
-            fontWeight: (isCurrentMove || isBranchPoint)
-                ? FontWeight.bold
-                : FontWeight.normal,
-            backgroundColor: isCurrentMove ? Colors.blue[700] : null,
+      final canEditComments = widget.onCommentsChanged != null;
+
+      if (canEditComments) {
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: GestureDetector(
+              onTap: () => _onMainLineMoveClicked(i),
+              onLongPressStart: (_) => _startEditingComment(i),
+              onSecondaryTapDown: (_) => _startEditingComment(i),
+              child: Text(
+                san,
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                  color: isCurrentMove
+                      ? Colors.white
+                      : (isBranchPoint ? Colors.blue[200] : Colors.blue[300]),
+                  fontWeight: (isCurrentMove || isBranchPoint)
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                  backgroundColor: isCurrentMove ? Colors.blue[700] : null,
+                ),
+              ),
+            ),
           ),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () => _onMainLineMoveClicked(i),
-        ),
-      );
+        );
+      } else {
+        spans.add(
+          TextSpan(
+            text: san,
+            style: TextStyle(
+              color: isCurrentMove
+                  ? Colors.white
+                  : (isBranchPoint ? Colors.blue[200] : Colors.blue[300]),
+              fontWeight: (isCurrentMove || isBranchPoint)
+                  ? FontWeight.bold
+                  : FontWeight.normal,
+              backgroundColor: isCurrentMove ? Colors.blue[700] : null,
+            ),
+            recognizer: TapGestureRecognizer()
+              ..onTap = () => _onMainLineMoveClicked(i),
+          ),
+        );
+      }
 
       spans.add(const TextSpan(text: ' '));
 
-      if (moveData.comments != null && moveData.comments!.isNotEmpty) {
+      // Inline comment editor
+      if (_editingCommentIndex == i) {
+        flushSpans();
+        children.add(_CommentEditor(
+          initialText: _rawComment(moveData),
+          onSave: (text) => _saveComment(i, text),
+          onCancel: _cancelEditingComment,
+        ));
+      } else if (moveData.comments != null &&
+          moveData.comments!.isNotEmpty) {
         final comment = _filterComment(moveData.comments!.first);
         if (comment.isNotEmpty) {
-          spans.add(TextSpan(
-            text: '{$comment} ',
-            style: const TextStyle(
-                color: Colors.green, fontStyle: FontStyle.italic),
-          ));
+          if (canEditComments) {
+            spans.add(
+              WidgetSpan(
+                alignment: PlaceholderAlignment.baseline,
+                baseline: TextBaseline.alphabetic,
+                child: GestureDetector(
+                  onTap: () => _startEditingComment(i),
+                  child: Text(
+                    '{$comment} ',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                      color: Colors.green,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          } else {
+            spans.add(TextSpan(
+              text: '{$comment} ',
+              style: const TextStyle(
+                  color: Colors.green, fontStyle: FontStyle.italic),
+            ));
+          }
         }
       }
 
-      // Insert analysis variations inline after branch point
       if (_analysisRoots.isNotEmpty && i == _analysisBranchPoint - 1) {
         spans.addAll(_buildAnalysisSpans());
       }
@@ -714,22 +914,22 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       isWhiteTurn = !isWhiteTurn;
     }
 
-    // If branch point is at end of game
     if (_analysisRoots.isNotEmpty &&
         _analysisBranchPoint >= _moveHistory.length) {
       spans.addAll(_buildAnalysisSpans());
     }
 
-    return RichText(
-      text: TextSpan(
-        style: TextStyle(
-          fontFamily: 'monospace',
-          fontSize: 14,
-          color: Colors.grey[300],
-        ),
-        children: spans,
-      ),
+    flushSpans();
+
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children,
     );
+  }
+
+  String _rawComment(PgnNodeData moveData) {
+    if (moveData.comments == null || moveData.comments!.isEmpty) return '';
+    return moveData.comments!.first;
   }
 
   /// Build spans for the entire analysis tree with proper nesting
@@ -787,18 +987,45 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final isCurrentNode =
         _analysisPath.isNotEmpty && _analysisPath.last.id == node.id;
 
-    spans.add(
-      TextSpan(
-        text: node.san,
-        style: TextStyle(
-          color: isCurrentNode ? Colors.white : Colors.orange[300],
-          fontWeight: isCurrentNode ? FontWeight.bold : FontWeight.normal,
-          backgroundColor: isCurrentNode ? Colors.orange[700] : null,
+    if (widget.onAnalysisNodeAction != null) {
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: GestureDetector(
+            onTap: () => _goToAnalysisNode(node),
+            onSecondaryTapDown: (details) =>
+                widget.onAnalysisNodeAction!(node.id, details.globalPosition),
+            onLongPressStart: (details) =>
+                widget.onAnalysisNodeAction!(node.id, details.globalPosition),
+            child: Text(
+              node.san,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 14,
+                color: isCurrentNode ? Colors.white : Colors.orange[300],
+                fontWeight:
+                    isCurrentNode ? FontWeight.bold : FontWeight.normal,
+                backgroundColor: isCurrentNode ? Colors.orange[700] : null,
+              ),
+            ),
+          ),
         ),
-        recognizer: TapGestureRecognizer()
-          ..onTap = () => _goToAnalysisNode(node),
-      ),
-    );
+      );
+    } else {
+      spans.add(
+        TextSpan(
+          text: node.san,
+          style: TextStyle(
+            color: isCurrentNode ? Colors.white : Colors.orange[300],
+            fontWeight: isCurrentNode ? FontWeight.bold : FontWeight.normal,
+            backgroundColor: isCurrentNode ? Colors.orange[700] : null,
+          ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () => _goToAnalysisNode(node),
+        ),
+      );
+    }
 
     spans.add(const TextSpan(text: ' '));
 
@@ -834,5 +1061,91 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     }
 
     return spans;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Inline comment editor widget — shown in place of a comment in the move list
+// ---------------------------------------------------------------------------
+class _CommentEditor extends StatefulWidget {
+  final String initialText;
+  final ValueChanged<String> onSave;
+  final VoidCallback onCancel;
+
+  const _CommentEditor({
+    required this.initialText,
+    required this.onSave,
+    required this.onCancel,
+  });
+
+  @override
+  State<_CommentEditor> createState() => _CommentEditorState();
+}
+
+class _CommentEditorState extends State<_CommentEditor> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.green.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.comment, size: 16, color: Colors.green),
+          const SizedBox(width: 6),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              autofocus: true,
+              maxLines: null,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.green,
+                fontStyle: FontStyle.italic,
+              ),
+              decoration: const InputDecoration(
+                isDense: true,
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                border: InputBorder.none,
+                hintText: 'Add comment...',
+                hintStyle: TextStyle(color: Colors.green, fontSize: 13),
+              ),
+              onSubmitted: (v) => widget.onSave(v),
+            ),
+          ),
+          IconButton(
+            onPressed: () => widget.onSave(_controller.text),
+            icon: const Icon(Icons.check, size: 18, color: Colors.green),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+          ),
+          IconButton(
+            onPressed: widget.onCancel,
+            icon: Icon(Icons.close, size: 18, color: Colors.grey[500]),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+          ),
+        ],
+      ),
+    );
   }
 }
