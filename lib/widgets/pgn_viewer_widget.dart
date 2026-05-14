@@ -179,11 +179,21 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     super.dispose();
   }
 
+  static final _headerLineRe = RegExp(r'^\s*\[.*\]\s*$', multiLine: true);
+
+  static String _stripHeaders(String pgn) =>
+      pgn.replaceAll(_headerLineRe, '').trim();
+
   @override
   void didUpdateWidget(PgnViewerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.gameId != oldWidget.gameId ||
-        widget.pgnText != oldWidget.pgnText) {
+    final gameIdChanged = widget.gameId != oldWidget.gameId;
+    final pgnChanged = widget.pgnText != oldWidget.pgnText;
+
+    if (gameIdChanged ||
+        (pgnChanged &&
+            _stripHeaders(widget.pgnText ?? '') !=
+                _stripHeaders(oldWidget.pgnText ?? ''))) {
       _loadGame();
     } else if (widget.moveNumber != oldWidget.moveNumber ||
         widget.isWhiteToPlay != oldWidget.isWhiteToPlay) {

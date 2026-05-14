@@ -231,6 +231,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final perspectiveRaw = entries.isNotEmpty
         ? (entries.first.headers['StudyPerspective'] ?? '')
         : '';
+    var perspective = _Perspective.fromHeaderValue(perspectiveRaw);
+
+    // No explicit perspective saved — auto-detect the protagonist.
+    if (perspectiveRaw.trim().isEmpty && entries.length >= 2) {
+      final protagonist = _detectProtagonistFrom(entries);
+      if (protagonist != null) {
+        perspective = _Perspective(
+          mode: _PerspectiveMode.player,
+          playerName: protagonist,
+        );
+      }
+    }
+
     setState(() {
       _filePath = path;
       _allGames = entries;
@@ -238,7 +251,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _hasActiveFilters = false;
       _sortMode = _SortMode.fileOrder;
       _currentGameIndex = 0;
-      _perspective = _Perspective.fromHeaderValue(perspectiveRaw);
+      _perspective = perspective;
     });
     _addToRecentFiles(path);
     _loadCurrentGame(); // also reclaims focus
@@ -325,10 +338,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   /// Detect a likely "protagonist" by looking at the first few games.
   /// If one player appears in all of them, they're probably the focus.
-  String? _detectProtagonist() {
-    if (_allGames.length < 2) return null;
-    final sample = _allGames.take(math.min(4, _allGames.length));
-    // Collect all player names from the sample
+  String? _detectProtagonist() => _detectProtagonistFrom(_allGames);
+
+  static String? _detectProtagonistFrom(List<_PgnGameEntry> games) {
+    if (games.length < 2) return null;
+    final sample = games.take(math.min(4, games.length));
     final counts = <String, int>{};
     for (final g in sample) {
       final w = g.headers['White'];
@@ -340,7 +354,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         counts[b] = (counts[b] ?? 0) + 1;
       }
     }
-    // If someone appears in every sampled game, they're the protagonist
     final sampleSize = sample.length;
     for (final entry in counts.entries) {
       if (entry.value >= sampleSize) return entry.key;
@@ -1081,7 +1094,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         const Divider(height: 1),
         Expanded(
           child: PgnViewerWidget(
-            key: ValueKey('game_${_currentGameIndex}_${game.pgnText.hashCode}'),
+            key: ValueKey('game_$_currentGameIndex'),
             pgnText: game.pgnText,
             controller: _pgnController,
             onPositionChanged: _onPositionChanged,
