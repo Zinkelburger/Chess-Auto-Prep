@@ -10,7 +10,6 @@ yarn-error.log*
 *.env
 
 # Data files
-*.pgn
 game_cache/
 imported_games/
 tactics_positions.csv
@@ -86,9 +85,7 @@ tree_builder/*.o
 tree_builder/*.json
 .lichess_token
 
-# Shared reference artefacts — un-ignore so these are usable across
-# machines despite the broad patterns above.
-!tree_builder/analysis_10ply.pgn
+# Shared reference artefacts
 !tree_builder/analysis_10ply.tree.json
 !tree_builder/analysis_10ply.db
 
