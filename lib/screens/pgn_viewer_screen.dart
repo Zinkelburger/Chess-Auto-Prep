@@ -25,6 +25,7 @@ import '../widgets/app_mode_menu_button.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/game_analysis_chart.dart';
+import '../services/default_pgn_service.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn_slice_dialog.dart';
 
@@ -130,12 +131,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   static const _recentFilesKey = 'pgn_viewer_recent_files';
   static const _maxRecentFiles = 10;
 
+  // Bundled collections discovered on disk
+  List<io.File> _collectionFiles = [];
+  String? _collectionsDir;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _analysisController.addListener(_onAnalysisUpdate);
     _loadRecentFiles();
+    _loadCollections();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<AppState>().addListener(_onAppStateChanged);
@@ -159,6 +165,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       if (await io.File(f).exists()) existing.add(f);
     }
     if (mounted) setState(() => _recentFiles = existing);
+  }
+
+  Future<void> _loadCollections() async {
+    final dir = await DefaultPgnService.collectionsPath;
+    final files = await DefaultPgnService.listCollections();
+    if (mounted) {
+      setState(() {
+        _collectionsDir = dir;
+        _collectionFiles = files;
+      });
+    }
   }
 
   Future<void> _addToRecentFiles(String path) async {
@@ -205,12 +222,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   // -----------------------------------------------------------------------
 
   Future<void> _pickFile() async {
-    // Start in the directory of the last opened file if available
     String? initialDir;
     if (_filePath != null) {
       initialDir = io.File(_filePath!).parent.path;
     } else if (_recentFiles.isNotEmpty) {
       initialDir = io.File(_recentFiles.first).parent.path;
+    } else if (_collectionsDir != null) {
+      initialDir = _collectionsDir;
     }
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -1036,6 +1054,54 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 icon: const Icon(Icons.folder_open),
                 label: const Text('Open PGN File'),
               ),
+              if (_collectionFiles.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text(
+                  'Collections',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final file in _collectionFiles)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: InkWell(
+                      onTap: () => _loadFile(file.path),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.grey[800]!),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('♔', style: TextStyle(fontSize: 14)),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                file.path
+                                    .split(io.Platform.pathSeparator)
+                                    .last
+                                    .replaceAll('.pgn', ''),
+                                style: TextStyle(
+                                  color: Colors.blue[300],
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
               if (_recentFiles.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 Text(

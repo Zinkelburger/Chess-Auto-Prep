@@ -5,13 +5,13 @@ import 'core/app_state.dart';
 import 'screens/main_screen.dart';
 
 import 'services/browser_extension_server/browser_extension_server_factory.dart';
+import 'services/default_pgn_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Start the browser extension server on desktop platforms
-  // This allows the Lichess browser extension to add lines to repertoires
   _startBrowserExtensionServer();
+  DefaultPgnService.ensureExtracted();
 
   runApp(const ChessAutoPrepApp());
 }
