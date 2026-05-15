@@ -1,12 +1,16 @@
 """SQLite schema and database helpers for TWIC position indexing."""
 
 import hashlib
+import re
 import secrets
 import sqlite3
 import time
 from pathlib import Path
 
 DEFAULT_DB = Path(__file__).parent / "positions.db"
+
+AUTH_TOKEN_TTL = 30 * 24 * 3600   # 30 days
+EMAIL_TOKEN_TTL = 7 * 24 * 3600  # 7 days
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
@@ -49,20 +53,24 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
-    label       TEXT,
-    fen         TEXT,
-    zobrist_hash INTEGER,
-    player      TEXT,
-    white       TEXT,
-    black       TEXT,
-    exclude_site TEXT,
-    site        TEXT,
-    min_elo     INTEGER,
-    eco         TEXT,
-    active      INTEGER DEFAULT 1,
-    created_at  REAL
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    label         TEXT,
+    fen           TEXT,
+    zobrist_hash  INTEGER,
+    player        TEXT,
+    white         TEXT,
+    black         TEXT,
+    exclude_site  TEXT,
+    site          TEXT,
+    min_elo       INTEGER,
+    max_elo       INTEGER,
+    eco           TEXT,
+    time_control  TEXT,
+    result        TEXT,
+    event         TEXT,
+    active        INTEGER DEFAULT 1,
+    created_at    REAL
 );
 
 CREATE TABLE IF NOT EXISTS notifications_sent (
@@ -113,10 +121,12 @@ def validate_fen(fen: str) -> None:
 
 
 def get_db(path: Path = DEFAULT_DB) -> sqlite3.Connection:
-    db = sqlite3.connect(str(path))
+    db = sqlite3.connect(str(path), timeout=30)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA synchronous=NORMAL")
+    db.execute("PRAGMA busy_timeout=30000")
+    db.execute("PRAGMA foreign_keys=ON")
     db.executescript(SCHEMA)
     _run_migrations(db)
     return db
@@ -128,6 +138,13 @@ def _run_migrations(db: sqlite3.Connection):
     if "lichess_url" not in cols:
         db.execute("ALTER TABLE games ADD COLUMN lichess_url TEXT")
         db.commit()
+
+    sub_cols = {row[1] for row in db.execute("PRAGMA table_info(subscriptions)").fetchall()}
+    for col, typ in [("time_control", "TEXT"), ("result", "TEXT"),
+                     ("max_elo", "INTEGER"), ("event", "TEXT")]:
+        if col not in sub_cols:
+            db.execute(f"ALTER TABLE subscriptions ADD COLUMN {col} {typ}")
+    db.commit()
 
     user_cols = {row[1] for row in db.execute("PRAGMA table_info(users)").fetchall()}
     if "auth_token_expires_at" not in user_cols:
@@ -287,10 +304,6 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-AUTH_TOKEN_TTL = 30 * 24 * 3600   # 30 days
-EMAIL_TOKEN_TTL = 7 * 24 * 3600  # 7 days
-
-
 def create_email_token(db: sqlite3.Connection, user_id: int, purpose: str,
                        subscription_id: int | None = None,
                        ttl: int = EMAIL_TOKEN_TTL) -> str:
@@ -363,15 +376,21 @@ def add_subscription(db: sqlite3.Connection, user_id: int, *,
                      player: str | None = None, white: str | None = None,
                      black: str | None = None, exclude_site: str | None = None,
                      site: str | None = None, min_elo: int | None = None,
-                     eco: str | None = None, active: bool = True) -> dict:
+                     max_elo: int | None = None, eco: str | None = None,
+                     time_control: str | None = None,
+                     result: str | None = None,
+                     event: str | None = None,
+                     active: bool = True) -> dict:
     zobrist = _compute_sub_zobrist(fen)
     cur = db.execute(
         """INSERT INTO subscriptions
            (user_id, label, fen, zobrist_hash, player, white, black,
-            exclude_site, site, min_elo, eco, active, created_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            exclude_site, site, min_elo, max_elo, eco, time_control,
+            result, event, active, created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (user_id, label, fen, zobrist, player, white, black,
-         exclude_site, site, min_elo, eco, int(active), time.time()),
+         exclude_site, site, min_elo, max_elo, eco, time_control,
+         result, event, int(active), time.time()),
     )
     db.commit()
     return dict(db.execute("SELECT * FROM subscriptions WHERE id = ?",
@@ -463,10 +482,20 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+_TIME_CONTROL_KEYWORDS = {
+    "classical": None,  # default — exclude rapid/blitz
+    "rapid": ["Rapid"],
+    "blitz": ["Blitz"],
+}
+
+
 def build_game_filters(*, white: str | None = None, black: str | None = None,
                        player: str | None = None, exclude_site: str | None = None,
                        site: str | None = None, min_elo: int | None = None,
-                       eco: str | None = None,
+                       max_elo: int | None = None, eco: str | None = None,
+                       time_control: str | None = None,
+                       result: str | None = None,
+                       event: str | None = None,
                        twic_number: int | None = None) -> tuple[list[str], list]:
     """Build reusable SQL WHERE fragments and params for game filtering.
 
@@ -482,8 +511,19 @@ def build_game_filters(*, white: str | None = None, black: str | None = None,
         clauses.append("g.black LIKE ? ESCAPE '\\'")
         params.append(f"%{_escape_like(black)}%")
     if player:
-        clauses.append("(g.white LIKE ? ESCAPE '\\' OR g.black LIKE ? ESCAPE '\\')")
-        params.extend([f"%{_escape_like(player)}%", f"%{_escape_like(player)}%"])
+        words = [w.strip() for w in re.split(r'[\s,]+', player) if w.strip()]
+        if len(words) == 1:
+            clauses.append("(g.white LIKE ? ESCAPE '\\' OR g.black LIKE ? ESCAPE '\\')")
+            params.extend([f"%{_escape_like(words[0])}%", f"%{_escape_like(words[0])}%"])
+        else:
+            # Multi-word: each word must appear in the same name field
+            white_parts = " AND ".join("g.white LIKE ? ESCAPE '\\'" for _ in words)
+            black_parts = " AND ".join("g.black LIKE ? ESCAPE '\\'" for _ in words)
+            clauses.append(f"(({white_parts}) OR ({black_parts}))")
+            for w in words:
+                params.append(f"%{_escape_like(w)}%")
+            for w in words:
+                params.append(f"%{_escape_like(w)}%")
     if exclude_site:
         clauses.append("g.site NOT LIKE ? ESCAPE '\\'")
         params.append(f"%{_escape_like(exclude_site)}%")
@@ -493,9 +533,40 @@ def build_game_filters(*, white: str | None = None, black: str | None = None,
     if min_elo:
         clauses.append("(g.white_elo >= ? OR g.black_elo >= ?)")
         params.extend([min_elo, min_elo])
+    if max_elo:
+        clauses.append("(g.white_elo <= ? AND g.black_elo <= ?)")
+        params.extend([max_elo, max_elo])
     if eco:
         clauses.append("g.eco LIKE ? ESCAPE '\\'")
         params.append(f"{_escape_like(eco)}%")
+    if time_control:
+        tc_parts = [t.strip().lower() for t in time_control.split(",") if t.strip()]
+        if tc_parts and set(tc_parts) != {"classical", "rapid", "blitz"}:
+            include = []
+            exclude_rapid = "rapid" not in tc_parts
+            exclude_blitz = "blitz" not in tc_parts
+            if "classical" in tc_parts and (exclude_rapid or exclude_blitz):
+                excl = []
+                if exclude_rapid:
+                    excl.append("g.event NOT LIKE '%Rapid%'")
+                if exclude_blitz:
+                    excl.append("g.event NOT LIKE '%Blitz%'")
+                include.append(f"({' AND '.join(excl)})")
+            if "rapid" in tc_parts:
+                include.append("g.event LIKE '%Rapid%'")
+            if "blitz" in tc_parts:
+                include.append("g.event LIKE '%Blitz%'")
+            if include:
+                clauses.append(f"({' OR '.join(include)})")
+    if result:
+        results = [r.strip() for r in result.split(",") if r.strip()]
+        if results and set(results) != {"1-0", "0-1", "1/2-1/2"}:
+            placeholders = ",".join("?" * len(results))
+            clauses.append(f"g.result IN ({placeholders})")
+            params.extend(results)
+    if event:
+        clauses.append("g.event LIKE ? ESCAPE '\\'")
+        params.append(f"%{_escape_like(event)}%")
     if twic_number is not None:
         clauses.append("g.twic_number = ?")
         params.append(twic_number)

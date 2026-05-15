@@ -1,0 +1,11 @@
+[Unit]
+Description=TWIC weekly ingestion and notification job
+
+[Service]
+Type=oneshot
+User=twic
+Group=twic
+WorkingDirectory=/opt/twic-position-finder
+EnvironmentFile=/opt/twic-position-finder/.env
+ExecStart=/opt/twic-position-finder/venv/bin/python weekly.py
+TimeoutStartSec=600

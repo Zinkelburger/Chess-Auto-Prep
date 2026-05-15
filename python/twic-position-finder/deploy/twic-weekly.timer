@@ -1,0 +1,9 @@
+[Unit]
+Description=Run TWIC weekly job every Monday at noon UTC
+
+[Timer]
+OnCalendar=Mon *-*-* 12:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

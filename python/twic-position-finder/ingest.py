@@ -74,7 +74,11 @@ def ingest_pgn(db, pgn_path: Path, twic_number: int | None = None) -> int:
 
 
 def ingest_file(db_path: Path, pgn_path: Path, twic_number: int | None = None):
-    """Ingest a single PGN file."""
+    """Ingest a single PGN file.
+
+    If a partial ingest from a previous crash is detected, the incomplete
+    data is purged before re-ingesting from scratch.
+    """
     if twic_number is None:
         twic_number = parse_twic_number(pgn_path.name)
 
@@ -84,13 +88,40 @@ def ingest_file(db_path: Path, pgn_path: Path, twic_number: int | None = None):
             "SELECT COUNT(*) FROM games WHERE twic_number = ?", (twic_number,)
         ).fetchone()[0]
         if existing > 0:
-            print(f"TWIC #{twic_number} already ingested ({existing} games), skipping.")
-            db.close()
-            return
+            expected = _count_games_in_pgn(pgn_path)
+            if expected is not None and existing < expected * 0.9:
+                print(f"TWIC #{twic_number}: only {existing}/{expected} games — "
+                      f"purging partial ingest and re-ingesting.")
+                game_ids = [r[0] for r in db.execute(
+                    "SELECT id FROM games WHERE twic_number = ?", (twic_number,)
+                ).fetchall()]
+                if game_ids:
+                    placeholders = ",".join("?" * len(game_ids))
+                    db.execute(f"DELETE FROM positions WHERE game_id IN ({placeholders})",
+                               game_ids)
+                    db.execute("DELETE FROM games WHERE twic_number = ?", (twic_number,))
+                db.commit()
+            else:
+                print(f"TWIC #{twic_number} already ingested ({existing} games), skipping.")
+                db.close()
+                return
 
     print(f"Ingesting {pgn_path.name} ...")
     ingest_pgn(db, pgn_path, twic_number)
     db.close()
+
+
+def _count_games_in_pgn(pgn_path: Path) -> int | None:
+    """Quick count of games by counting [Event lines. Returns None on error."""
+    try:
+        count = 0
+        with open(pgn_path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.startswith("[Event "):
+                    count += 1
+        return count
+    except OSError:
+        return None
 
 
 def ingest_latest(db_path: Path, start_from: int | None = None) -> list[int]:

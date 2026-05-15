@@ -1,0 +1,22 @@
+[Unit]
+Description=TWIC Position Finder API
+After=network.target
+
+[Service]
+Type=simple
+User=twic
+Group=twic
+WorkingDirectory=/opt/twic-position-finder
+EnvironmentFile=/opt/twic-position-finder/.env
+ExecStart=/opt/twic-position-finder/venv/bin/uvicorn server:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/twic-position-finder
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

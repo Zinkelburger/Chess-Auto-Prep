@@ -1,5 +1,7 @@
 """Weekly job: ingest latest TWIC, match subscriptions, import to Lichess, send emails."""
 
+import logging
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -12,12 +14,16 @@ from query import find_games
 from ingest import ingest_latest
 from lichess import import_games_batch
 from email_sender import build_email_html, build_email_text, send_ses_email
+from export_events import export_all as export_static_data
+
+log = logging.getLogger("twic.weekly")
 
 
 def match_subscription(db, sub: dict, twic_number: int) -> list[dict]:
     """Find games matching a subscription, limited to a specific TWIC issue."""
     filter_kwargs = {}
-    for key in ("white", "black", "player", "exclude_site", "site", "min_elo", "eco"):
+    for key in ("white", "black", "player", "exclude_site", "site",
+                "min_elo", "max_elo", "eco", "time_control", "result", "event"):
         if sub.get(key):
             filter_kwargs[key] = sub[key]
 
@@ -26,7 +32,7 @@ def match_subscription(db, sub: dict, twic_number: int) -> list[dict]:
                            limit=200, **filter_kwargs)
     elif filter_kwargs:
         clauses, params = build_game_filters(twic_number=twic_number, **filter_kwargs)
-        sql = "SELECT g.* FROM games g"
+        sql = "SELECT g.*, NULL AS match_ply, NULL AS match_fen FROM games g"
         if clauses:
             sql += " WHERE " + " AND ".join(clauses)
         sql += " LIMIT 200"
@@ -45,26 +51,44 @@ def run_weekly(db_path: Path | None = None, dry_run: bool = False,
     db_path = db_path or Path(__file__).parent / "positions.db"
 
     # Step 1: Ingest latest TWIC
-    print("=" * 60)
-    print("STEP 1: Ingesting latest TWIC files")
-    print("=" * 60)
+    log.info("=" * 60)
+    log.info("STEP 1: Ingesting latest TWIC files")
+    log.info("=" * 60)
     new_issues = ingest_latest(db_path, start_from)
 
     if not new_issues:
-        print("No new TWIC issues. Nothing to do.")
+        log.info("No new TWIC issues. Nothing to do.")
         return
 
     db = get_db(db_path)
 
-    # Step 2: Match subscriptions against ALL newly-ingested issues
-    print(f"\n{'=' * 60}")
-    print(f"STEP 2: Matching subscriptions against TWIC #{', #'.join(map(str, new_issues))}")
-    print("=" * 60)
+    try:
+        _run_match_and_notify(db, new_issues, dry_run)
+    finally:
+        removed = cleanup_expired_email_tokens(db)
+        if removed:
+            log.info("Cleaned up %d expired email token(s)", removed)
+        db.commit()
+        db.close()
+
+    try:
+        export_static_data(db_path)
+        log.info("Exported updated events.json + players.json for frontend")
+    except Exception:
+        log.exception("Failed to export static JSON files (non-fatal)")
+
+    log.info("Weekly run complete.")
+
+
+def _run_match_and_notify(db, new_issues: list[int], dry_run: bool):
+    """Steps 2–4: match, import, email."""
+    # Step 2: Match subscriptions
+    log.info("STEP 2: Matching subscriptions against TWIC #%s",
+             ", #".join(map(str, new_issues)))
 
     subs = get_all_active_subscriptions(db)
-    print(f"  {len(subs)} active subscription(s) from verified users")
+    log.info("  %d active subscription(s) from verified users", len(subs))
 
-    # Group matches by user email
     user_matches: dict[str, list[tuple[dict, list[dict]]]] = defaultdict(list)
 
     for sub in subs:
@@ -72,37 +96,38 @@ def run_weekly(db_path: Path | None = None, dry_run: bool = False,
         for twic_num in new_issues:
             all_matches.extend(match_subscription(db, sub, twic_num))
         if all_matches:
-            print(f"  Sub #{sub['id']} ({sub.get('label','')}) -> {len(all_matches)} game(s)")
+            log.info("  Sub #%d (%s) -> %d game(s)",
+                     sub["id"], sub.get("label", ""), len(all_matches))
             user_matches[sub["email"]].append((sub, all_matches))
         else:
-            print(f"  Sub #{sub['id']} ({sub.get('label','')}) -> no matches")
+            log.info("  Sub #%d (%s) -> no matches",
+                     sub["id"], sub.get("label", ""))
 
     if not user_matches:
-        print("\nNo matches found for any subscription. Done.")
-        db.close()
+        log.info("No matches found for any subscription. Done.")
         return
 
-    # Step 3: Import to Lichess
-    print(f"\n{'=' * 60}")
-    print("STEP 3: Importing matched games to Lichess")
-    print("=" * 60)
+    # Step 3: Import to Lichess (skip in dry-run)
+    log.info("STEP 3: Importing matched games to Lichess")
 
-    all_matched_games = {}
-    for email, sub_matches in user_matches.items():
-        for sub, games in sub_matches:
-            for g in games:
-                if g["id"] not in all_matched_games:
-                    all_matched_games[g["id"]] = g
+    lichess_urls: dict[int, str] = {}
+    if dry_run:
+        log.info("  [DRY RUN] Skipping Lichess import")
+    else:
+        all_matched_games = {}
+        for email, sub_matches in user_matches.items():
+            for sub, games in sub_matches:
+                for g in games:
+                    if g["id"] not in all_matched_games:
+                        all_matched_games[g["id"]] = g
 
-    unique_games = list(all_matched_games.values())
-    print(f"  {len(unique_games)} unique game(s) to import")
-    lichess_urls = import_games_batch(unique_games, db)
-    print(f"  {len(lichess_urls)} game(s) imported to Lichess")
+        unique_games = list(all_matched_games.values())
+        log.info("  %d unique game(s) to import", len(unique_games))
+        lichess_urls = import_games_batch(unique_games, db)
+        log.info("  %d game(s) imported to Lichess", len(lichess_urls))
 
     # Step 4: Send emails
-    print(f"\n{'=' * 60}")
-    print("STEP 4: Sending notification emails")
-    print("=" * 60)
+    log.info("STEP 4: Sending notification emails")
 
     twic_label = ", #".join(map(str, new_issues))
 
@@ -123,38 +148,44 @@ def run_weekly(db_path: Path | None = None, dry_run: bool = False,
                                     unsub_token=unsub_token)
 
             if dry_run:
-                print(f"  [DRY RUN] Would email {email}: {subject}")
+                log.info("  [DRY RUN] Would email %s: %s", email, subject)
                 preview_path = Path(__file__).parent / "email_preview.html"
                 preview_path.write_text(html)
-                print(f"  Preview saved to {preview_path}")
+                log.info("  Preview saved to %s", preview_path)
             else:
                 ok = send_ses_email(email, subject, html, text)
                 if ok:
-                    print(f"  Emailed {email}: {subject}")
+                    log.info("  Emailed %s: %s", email, subject)
+                    for g in games:
+                        record_notification(
+                            db, sub["id"], g["id"],
+                            g.get("twic_number") or new_issues[-1],
+                        )
                 else:
-                    print(f"  FAILED to email {email}: {subject}")
-
-                for g in games:
-                    record_notification(db, sub["id"], g["id"],
-                                        g.get("twic_number", new_issues[-1]))
-
-    removed = cleanup_expired_email_tokens(db)
-    if removed:
-        print(f"  Cleaned up {removed} expired email token(s)")
-
-    db.commit()
-    db.close()
-    print(f"\nWeekly run complete.")
+                    log.error("  FAILED to email %s: %s (will retry next run)",
+                              email, subject)
 
 
 if __name__ == "__main__":
     import argparse
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+    )
+
     parser = argparse.ArgumentParser(description="Weekly TWIC ingestion and notification job")
     parser.add_argument("--db", type=Path, default=Path(__file__).parent / "positions.db")
     parser.add_argument("--dry-run", action="store_true",
-                        help="Don't send emails, just print what would be sent and save HTML preview")
+                        help="Don't send emails or import to Lichess, just preview")
     parser.add_argument("--from", dest="start", type=int, default=None,
                         help="Start TWIC download from this number")
     args = parser.parse_args()
 
-    run_weekly(args.db, dry_run=args.dry_run, start_from=args.start)
+    try:
+        run_weekly(args.db, dry_run=args.dry_run, start_from=args.start)
+    except Exception:
+        log.exception("Weekly run failed")
+        sys.exit(1)
