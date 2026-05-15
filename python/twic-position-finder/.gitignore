@@ -4,3 +4,5 @@
 __pycache__/
 *.pyc
 .env
+data/
+email_preview_*.html

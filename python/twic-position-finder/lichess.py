@@ -38,20 +38,21 @@ _MAX_RETRIES = 3
 def import_game(pgn_text: str, token: str | None = None) -> str | None:
     """Import a PGN to Lichess and return the game URL.
 
-    Returns None if import fails (no token, rate limited, etc.).
+    Works without a token (anonymous import). If a token is provided,
+    the game is associated with that Lichess account.
     """
     global _last_request_time
 
     token = token or _get_token()
-    if not token:
-        return None
 
     for attempt in range(_MAX_RETRIES):
         elapsed = time.time() - _last_request_time
         if elapsed < _MIN_INTERVAL:
             time.sleep(_MIN_INTERVAL - elapsed)
 
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"Accept": "application/json"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         data = {"pgn": pgn_text}
 
         try:
@@ -64,6 +65,11 @@ def import_game(pgn_text: str, token: str | None = None) -> str | None:
                 if game_id:
                     return f"{LICHESS_API_BASE}/{game_id}"
                 return None
+            elif resp.status_code == 401 and token:
+                print("  Lichess token rejected, retrying anonymously")
+                token = None
+                headers.pop("Authorization", None)
+                continue
             elif resp.status_code == 429:
                 wait = 60 * (attempt + 1)
                 print(f"  Lichess rate limited, waiting {wait}s (attempt {attempt + 1}/{_MAX_RETRIES})...")

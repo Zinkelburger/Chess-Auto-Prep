@@ -538,16 +538,20 @@ export function tacticsApp() {
       const correct = this.currentTactic?.correct_line?.[0]?.toLowerCase() || '';
       const played = uci.toLowerCase();
       
-      if (played === correct || correct.startsWith(played) || played.startsWith(correct)) {
+      // Exact match, or match ignoring promotion suffix (auto-queen is acceptable)
+      const correctBase = correct.slice(0, 4);
+      const playedBase = played.slice(0, 4);
+      const isMatch = played === correct
+        || (playedBase === correctBase && played.length === 4 && correct.length === 5);
+      
+      if (isMatch) {
         this.solved = true;
         
-        // Get the SAN notation for the correct move
         const correctSan = this.getFirstMoveSan();
         this.setMessage(`${correctSan} is correct`, 'correct');
         
         this.board.setInteractive(false);
         
-        // Auto-next after delay
         if (this.autoNext) {
           setTimeout(() => this.nextTactic(), 1200);
         }

@@ -8,16 +8,22 @@ import chess
 from models import get_db, signed_zobrist, build_game_filters
 
 
-def _strip_move_counters(fen: str) -> str:
-    """Return FEN with halfmove clock and fullmove number removed (for comparison)."""
+def _position_key(fen: str) -> str:
+    """Extract the positional core of a FEN: board + side to move + castling.
+
+    Ignores en passant square, halfmove clock, and fullmove number so that
+    the same board position matches regardless of move number or transposition.
+    """
     parts = fen.split()
-    return " ".join(parts[:4])
+    return " ".join(parts[:3])
 
 
 def find_games(db, fen: str, *, white: str | None = None,
                black: str | None = None, player: str | None = None,
                exclude_site: str | None = None, site: str | None = None,
-               min_elo: int | None = None, eco: str | None = None,
+               min_elo: int | None = None, max_elo: int | None = None,
+               eco: str | None = None, time_control: str | None = None,
+               result: str | None = None, event: str | None = None,
                twic_number: int | None = None,
                limit: int = 100) -> list[dict]:
     """Find games whose mainline passes through the given FEN position.
@@ -26,7 +32,7 @@ def find_games(db, fen: str, *, white: str | None = None,
     """
     board = chess.Board(fen)
     target_hash = signed_zobrist(board)
-    target_fen_prefix = _strip_move_counters(board.fen())
+    target_key = _position_key(board.fen())
 
     sql = """
         SELECT g.*, p.ply AS match_ply, p.fen AS match_fen
@@ -38,7 +44,9 @@ def find_games(db, fen: str, *, white: str | None = None,
 
     clauses, filter_params = build_game_filters(
         white=white, black=black, player=player, exclude_site=exclude_site,
-        site=site, min_elo=min_elo, eco=eco, twic_number=twic_number,
+        site=site, min_elo=min_elo, max_elo=max_elo, eco=eco,
+        time_control=time_control, result=result, event=event,
+        twic_number=twic_number,
     )
     for clause in clauses:
         sql += f" AND {clause}"
@@ -52,7 +60,7 @@ def find_games(db, fen: str, *, white: str | None = None,
 
     results = []
     for row in rows:
-        if _strip_move_counters(row["match_fen"]) != target_fen_prefix:
+        if _position_key(row["match_fen"]) != target_key:
             continue
         results.append(dict(row))
         if len(results) >= limit:
@@ -71,9 +79,10 @@ def move_tree(db, fen: str, **filters) -> dict:
     """
     board = chess.Board(fen)
     target_hash = signed_zobrist(board)
+    target_key = _position_key(board.fen())
 
     sql = """
-        SELECT next_p.move_uci,
+        SELECT next_p.move_uci, cur_p.fen AS cur_fen,
                g.white, g.black, g.result, g.id AS game_id,
                g.white_elo, g.black_elo
         FROM positions cur_p
@@ -92,7 +101,10 @@ def move_tree(db, fen: str, **filters) -> dict:
 
     sql += " LIMIT 10000"
 
-    rows = db.execute(sql, params).fetchall()
+    rows = [
+        r for r in db.execute(sql, params).fetchall()
+        if _position_key(r["cur_fen"]) == target_key
+    ]
 
     tree: dict = {}
     for row in rows:

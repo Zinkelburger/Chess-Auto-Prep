@@ -22,6 +22,7 @@ from models import (
     add_subscription, get_subscriptions, delete_subscription,
     deactivate_subscription, validate_fen, rotate_auth_token, revoke_auth_token,
     count_user_subscriptions, create_email_token, consume_email_token,
+    cleanup_expired_email_tokens,
 )
 from query import find_games, move_tree
 from email_sender import send_verification_email, send_login_email, build_email_html
@@ -57,10 +58,19 @@ app.add_middleware(
 
 bearer_scheme = HTTPBearer()
 
+_last_token_cleanup = 0.0
+_TOKEN_CLEANUP_INTERVAL = 6 * 3600  # every 6 hours
+
 
 def db():
+    global _last_token_cleanup
     conn = get_db(DB_PATH)
     try:
+        if time.time() - _last_token_cleanup > _TOKEN_CLEANUP_INTERVAL:
+            _last_token_cleanup = time.time()
+            removed = cleanup_expired_email_tokens(conn)
+            if removed:
+                log.info("Cleaned up %d expired email token(s)", removed)
         yield conn
     finally:
         conn.close()
@@ -134,7 +144,11 @@ class SubscribeRequest(BaseModel):
     exclude_site: str | None = None
     site: str | None = None
     min_elo: int | None = None
+    max_elo: int | None = None
     eco: str | None = None
+    time_control: str | None = None
+    result: str | None = None
+    event: str | None = None
 
 
 @app.post("/api/subscribe")
@@ -166,8 +180,9 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
         label=req.label, fen=req.fen, player=req.player,
         white=req.white, black=req.black,
         exclude_site=req.exclude_site, site=req.site,
-        min_elo=req.min_elo, eco=req.eco,
-        active=False,
+        min_elo=req.min_elo, max_elo=req.max_elo, eco=req.eco,
+        time_control=req.time_control, result=req.result,
+        event=req.event, active=False,
     )
     send_verification_email(req.email, user["verify_token"])
     return {"status": "verification_sent",
@@ -325,10 +340,13 @@ if DEBUG:
         if not user:
             raise HTTPException(404, "User not found")
         if not user.get("verified"):
-            from models import verify_user as _verify
-            _verify(conn, user["verify_token"])  # won't work (hash), so force it
-            conn.execute("UPDATE users SET verified = 1, verified_at = ? WHERE id = ?",
-                         (time.time(), user["id"]))
+            conn.execute(
+                "UPDATE users SET verified = 1, verified_at = ?, verify_token = NULL "
+                "WHERE id = ?",
+                (time.time(), user["id"]),
+            )
+            from models import activate_user_subscriptions
+            activate_user_subscriptions(conn, user["id"])
             conn.commit()
         login_token = create_email_token(conn, user["id"], "login")
         return {"login_url": f"{FRONTEND_ORIGIN}/dashboard?token={login_token}",
@@ -363,7 +381,11 @@ def query_position(
     exclude_site: str | None = None,
     site: str | None = None,
     min_elo: int | None = None,
+    max_elo: int | None = None,
     eco: str | None = None,
+    time_control: str | None = None,
+    result: str | None = None,
+    event: str | None = None,
     limit: int = 50,
     conn=Depends(db),
 ):
@@ -376,7 +398,9 @@ def query_position(
 
     games = find_games(
         conn, fen, white=white, black=black, player=player,
-        exclude_site=exclude_site, site=site, min_elo=min_elo, eco=eco,
+        exclude_site=exclude_site, site=site, min_elo=min_elo,
+        max_elo=max_elo, eco=eco, time_control=time_control,
+        result=result,
         limit=limit,
     )
     safe = [{k: v for k, v in g.items() if k != "pgn_text"} for g in games]
@@ -404,6 +428,22 @@ def query_tree(
         filters["exclude_site"] = exclude_site
     tree = move_tree(conn, fen, **filters)
     return {"fen": fen, "moves": tree}
+
+
+@app.get("/api/events")
+@limiter.limit("10/minute")
+def list_events(request: Request, q: str | None = None, conn=Depends(db)):
+    """Return distinct event names from TWIC data for autocomplete/validation."""
+    if q:
+        rows = conn.execute(
+            "SELECT DISTINCT event FROM games WHERE event LIKE ? ORDER BY event LIMIT 200",
+            (f"%{q}%",),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT DISTINCT event FROM games ORDER BY event LIMIT 500"
+        ).fetchall()
+    return {"events": [r["event"] for r in rows if r["event"]]}
 
 
 @app.get("/api/stats")

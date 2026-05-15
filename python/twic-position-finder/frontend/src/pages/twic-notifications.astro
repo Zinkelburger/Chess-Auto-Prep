@@ -28,8 +28,12 @@ import Base from '../layouts/Base.astro';
       </div>
       <div class="form-grid">
         <div class="form-row">
-          <label for="sub-player">Player name</label>
-          <input type="text" id="sub-player" placeholder="Magnus Carlsen" />
+          <label for="sub-player">Player name <span style="color:var(--text-dim); font-weight:normal;">(search by last name)</span></label>
+          <div style="position:relative;">
+            <input type="text" id="sub-player" placeholder="Carlsen" autocomplete="off" />
+            <span id="player-status" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:1.1rem; display:none;"></span>
+          </div>
+          <div id="player-matches" style="display:none; margin-top:6px; font-size:0.85rem; color:var(--text-dim); max-height:120px; overflow-y:auto;"></div>
         </div>
         <div class="form-row">
           <label for="sub-eco">ECO Code</label>
@@ -41,12 +45,44 @@ import Base from '../layouts/Base.astro';
           <label for="sub-min-elo">Minimum Elo</label>
           <input type="text" id="sub-min-elo" inputmode="numeric" pattern="[0-9]*" placeholder="2400" />
         </div>
-        <div class="form-row" style="display:flex; align-items:end; padding-bottom:2px;">
-          <label class="checkbox-label">
-            <input type="checkbox" id="sub-exclude-chess-com" />
-            <span>Exclude online games (i.e. chess.com)</span>
-          </label>
+        <div class="form-row">
+          <label for="sub-max-elo">Maximum Elo</label>
+          <input type="text" id="sub-max-elo" inputmode="numeric" pattern="[0-9]*" placeholder="2800" />
         </div>
+      </div>
+
+      <div class="form-row">
+        <label>Time Control</label>
+        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+          <label class="checkbox-label"><input type="checkbox" id="tc-classical" checked /><span>Classical</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="tc-rapid" /><span>Rapid</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="tc-blitz" /><span>Blitz</span></label>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label>Result</label>
+        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+          <label class="checkbox-label"><input type="checkbox" id="res-white" checked /><span>1-0</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="res-black" checked /><span>0-1</span></label>
+          <label class="checkbox-label"><input type="checkbox" id="res-draw" checked /><span>½-½</span></label>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label for="sub-event">Event name <span style="color:var(--text-dim); font-weight:normal;">(optional, e.g. "Grand Chess Tour")</span></label>
+        <div style="position:relative;">
+          <input type="text" id="sub-event" placeholder="Grand Chess Tour" autocomplete="off" />
+          <span id="event-status" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:1.1rem; display:none;"></span>
+        </div>
+        <div id="event-matches" style="display:none; margin-top:6px; font-size:0.85rem; color:var(--text-dim); max-height:120px; overflow-y:auto;"></div>
+      </div>
+
+      <div class="form-row" style="display:flex; align-items:end; padding-bottom:2px;">
+        <label class="checkbox-label">
+          <input type="checkbox" id="sub-exclude-chess-com" />
+          <span>Exclude online games (i.e. chess.com)</span>
+        </label>
       </div>
 
       {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && (
@@ -95,6 +131,18 @@ import Base from '../layouts/Base.astro';
 
     const excludeChessCom = (document.getElementById('sub-exclude-chess-com') as HTMLInputElement).checked;
 
+    const tcParts: string[] = [];
+    if ((document.getElementById('tc-classical') as HTMLInputElement).checked) tcParts.push('classical');
+    if ((document.getElementById('tc-rapid') as HTMLInputElement).checked) tcParts.push('rapid');
+    if ((document.getElementById('tc-blitz') as HTMLInputElement).checked) tcParts.push('blitz');
+    const timeControl = tcParts.length > 0 && tcParts.length < 3 ? tcParts.join(',') : undefined;
+
+    const resParts: string[] = [];
+    if ((document.getElementById('res-white') as HTMLInputElement).checked) resParts.push('1-0');
+    if ((document.getElementById('res-black') as HTMLInputElement).checked) resParts.push('0-1');
+    if ((document.getElementById('res-draw') as HTMLInputElement).checked) resParts.push('1/2-1/2');
+    const result = resParts.length > 0 && resParts.length < 3 ? resParts.join(',') : undefined;
+
     const body: Record<string, unknown> = {
       email: (document.getElementById('sub-email') as HTMLInputElement).value.trim(),
       cf_turnstile_token: turnstileResponse,
@@ -103,6 +151,10 @@ import Base from '../layouts/Base.astro';
       player: val('sub-player'),
       eco: val('sub-eco'),
       min_elo: numVal('sub-min-elo'),
+      max_elo: numVal('sub-max-elo'),
+      time_control: timeControl,
+      result: result,
+      event: val('sub-event'),
       exclude_site: excludeChessCom ? 'chess.com' : undefined,
     };
 
@@ -136,6 +188,91 @@ import Base from '../layouts/Base.astro';
       submitBtn.textContent = 'Subscribe';
     }
   });
+
+  // Static autocomplete (shipped with the site, no API calls).
+  // Splits the query into words so "Magnus Carlsen" matches "Carlsen,Magnus"
+  // and "Carlsen" alone matches "Carlsen,M".
+  function setupAutocomplete(
+    jsonUrl: string,
+    inputId: string,
+    statusId: string,
+    matchesId: string,
+    label: string,
+    minChars = 2,
+  ) {
+    let dataset: string[] = [];
+    fetch(jsonUrl).then(r => r.json()).then((d: string[]) => { dataset = d; }).catch(() => {});
+
+    let timer: ReturnType<typeof setTimeout>;
+    const input = document.getElementById(inputId) as HTMLInputElement;
+    const status = document.getElementById(statusId)!;
+    const matchBox = document.getElementById(matchesId)!;
+
+    function matchesQuery(entry: string, words: string[]): boolean {
+      const lower = entry.toLowerCase();
+      return words.every(w => lower.includes(w));
+    }
+
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const raw = input.value.trim();
+      if (!raw || raw.length < minChars || !dataset.length) {
+        status.style.display = 'none';
+        matchBox.style.display = 'none';
+        return;
+      }
+      timer = setTimeout(() => {
+        const words = raw.toLowerCase().split(/[\s,]+/).filter(w => w.length > 0);
+        const matches = dataset.filter(e => matchesQuery(e, words));
+        status.style.display = 'inline';
+        if (matches.length > 0) {
+          status.textContent = '✓';
+          status.style.color = '#4caf50';
+          status.title = `Matches ${matches.length} ${label}(s) in TWIC`;
+          matchBox.style.display = 'block';
+          matchBox.innerHTML = matches.slice(0, 10)
+            .map(e => `<div style="padding:2px 0; cursor:pointer;" class="ac-item">✓ ${e}</div>`)
+            .join('')
+            + (matches.length > 10 ? `<div style="padding:2px 0; font-style:italic;">…and ${matches.length - 10} more</div>` : '');
+          matchBox.querySelectorAll('.ac-item').forEach(el => {
+            el.addEventListener('click', () => {
+              input.value = el.textContent!.replace(/^✓\s*/, '');
+              input.dispatchEvent(new Event('input'));
+            });
+          });
+        } else {
+          status.textContent = '✗';
+          status.style.color = '#f44336';
+          status.title = `No matching ${label}s in TWIC data`;
+          matchBox.style.display = 'block';
+          if (label === 'player' && words.length > 1) {
+            // Try just the longest word (likely the last name) as a fallback hint
+            const longest = words.reduce((a, b) => a.length >= b.length ? a : b);
+            const fallback = dataset.filter(e => e.toLowerCase().includes(longest));
+            if (fallback.length > 0) {
+              matchBox.innerHTML =
+                `<div style="color:#f44336; margin-bottom:6px;">No exact match — TWIC often abbreviates first names. Try just "<strong>${longest}</strong>":</div>`
+                + fallback.slice(0, 8).map(e => `<div style="padding:2px 0; cursor:pointer;" class="ac-item">✓ ${e}</div>`).join('')
+                + (fallback.length > 8 ? `<div style="padding:2px 0; font-style:italic;">…and ${fallback.length - 8} more</div>` : '');
+              matchBox.querySelectorAll('.ac-item').forEach(el => {
+                el.addEventListener('click', () => {
+                  input.value = el.textContent!.replace(/^✓\s*/, '');
+                  input.dispatchEvent(new Event('input'));
+                });
+              });
+            } else {
+              matchBox.innerHTML = '<div style="color:#f44336;">No matching players in TWIC data</div>';
+            }
+          } else {
+            matchBox.innerHTML = `<div style="color:#f44336;">No matching ${label}s in TWIC data</div>`;
+          }
+        }
+      }, 300);
+    });
+  }
+
+  setupAutocomplete('/events.json', 'sub-event', 'event-status', 'event-matches', 'event');
+  setupAutocomplete('/players.json', 'sub-player', 'player-status', 'player-matches', 'player');
 
   document.getElementById('login-form')!.addEventListener('submit', async (e) => {
     e.preventDefault();
