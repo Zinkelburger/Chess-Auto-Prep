@@ -258,6 +258,28 @@ const currentPath = Astro.url.pathname;
     cursor: not-allowed;
   }
 
+  /* ── Tooltip trigger ──────────────── */
+
+  .tooltip-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: var(--border);
+    color: var(--text-dim);
+    font-size: 0.65rem;
+    font-weight: 700;
+    cursor: help;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+  .tooltip-trigger:hover {
+    background: var(--text-dim);
+    color: var(--bg);
+  }
+
   /* ── Subscription action buttons ──────────────── */
 
   .sub-action-btn {
