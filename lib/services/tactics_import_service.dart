@@ -41,7 +41,7 @@ class TacticsImportService {
   /// Whether parallel multi-core analysis is available (desktop only).
   static bool get isParallelAvailable => parallel.isParallelAnalysisAvailable;
 
-  /// Number of logical CPU cores on this machine (1 on web).
+  /// Number of logical CPU cores on this machine.
   static int get availableCores => parallel.availableProcessors;
 
   // Lichess winning chances formula (from scalachess)
@@ -530,7 +530,14 @@ class TacticsImportService {
     }
 
     final positions = <TacticsPosition>[];
-    Position pos = Chess.initial;
+    final setupFlag = game.headers['SetUp'] ?? game.headers['Setup'] ?? '';
+    final fenHeader = game.headers['FEN'] ?? '';
+    Position pos;
+    if (setupFlag == '1' && fenHeader.isNotEmpty) {
+      pos = Chess.fromSetup(Setup.parseFen(fenHeader));
+    } else {
+      pos = Chess.initial;
+    }
     int moveNumber = 1;
 
     for (final san in moves) {

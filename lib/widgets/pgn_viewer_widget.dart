@@ -163,6 +163,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       []; // Root moves of analysis (alternatives at branch point)
   List<AnalysisNode> _analysisPath = []; // Current path through analysis tree
 
+  final List<TapGestureRecognizer> _gestureRecognizers = [];
+
   @override
   bool get wantKeepAlive => true;
 
@@ -175,6 +177,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   @override
   void dispose() {
+    for (final r in _gestureRecognizers) {
+      r.dispose();
+    }
+    _gestureRecognizers.clear();
     widget.controller?._detach(this);
     super.dispose();
   }
@@ -323,8 +329,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final black = game.headers['Black'] ?? '?';
     final wElo = game.headers['WhiteElo'];
     final bElo = game.headers['BlackElo'];
-    final wStr = wElo != null && wElo.isNotEmpty && wElo != '?' ? '$white ($wElo)' : white;
-    final bStr = bElo != null && bElo.isNotEmpty && bElo != '?' ? '$black ($bElo)' : black;
+    final wStr = wElo != null && wElo.isNotEmpty && wElo != '?'
+        ? '$white ($wElo)'
+        : white;
+    final bStr = bElo != null && bElo.isNotEmpty && bElo != '?'
+        ? '$black ($bElo)'
+        : black;
     final event = game.headers['Event'] ?? '';
     final date = game.headers['Date'] ?? '';
     final result = game.headers['Result'] ?? '';
@@ -676,18 +686,24 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     return false;
   }
 
+  static final _evalRe = RegExp(r'\[%eval [^\]]+\]');
+  static final _clkRe = RegExp(r'\[%clk [^\]]+\]');
+  static final _maiaRe = RegExp(r'\[%maia [^\]]+\]');
+  static final _scoreArrowRe =
+      RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)');
+  static final _classificationRe = RegExp(
+      r'(Inaccuracy|Mistake|Blunder|Good move|Excellent move|Best move)\.[^.]*\.');
+  static final _wasBestRe = RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?');
+  static final _whitespaceRe = RegExp(r'\s+');
+
   String _filterComment(String comment) {
-    comment = comment.replaceAll(RegExp(r'\[%eval [^\]]+\]'), '');
-    comment = comment.replaceAll(RegExp(r'\[%clk [^\]]+\]'), '');
-    comment = comment.replaceAll(RegExp(r'\[%maia [^\]]+\]'), '');
-    comment = comment.replaceAll(
-        RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)'), '');
-    comment = comment.replaceAll(
-        RegExp(
-            r'(Inaccuracy|Mistake|Blunder|Good move|Excellent move|Best move)\.[^.]*\.'),
-        '');
-    comment = comment.replaceAll(RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?'), '');
-    comment = comment.replaceAll(RegExp(r'\s+'), ' ').trim();
+    comment = comment.replaceAll(_evalRe, '');
+    comment = comment.replaceAll(_clkRe, '');
+    comment = comment.replaceAll(_maiaRe, '');
+    comment = comment.replaceAll(_scoreArrowRe, '');
+    comment = comment.replaceAll(_classificationRe, '');
+    comment = comment.replaceAll(_wasBestRe, '');
+    comment = comment.replaceAll(_whitespaceRe, ' ').trim();
 
     if (comment.isEmpty || comment == '.,;!?') {
       return '';
@@ -786,8 +802,19 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     );
   }
 
+  TapGestureRecognizer _createTapRecognizer(VoidCallback onTap) {
+    final r = TapGestureRecognizer()..onTap = onTap;
+    _gestureRecognizers.add(r);
+    return r;
+  }
+
   Widget _buildPgnDisplay() {
     if (_moveHistory.isEmpty && _analysisRoots.isEmpty) return const SizedBox();
+
+    for (final r in _gestureRecognizers) {
+      r.dispose();
+    }
+    _gestureRecognizers.clear();
 
     final children = <Widget>[];
     final spans = <InlineSpan>[];
@@ -870,8 +897,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                   : FontWeight.normal,
               backgroundColor: isCurrentMove ? Colors.blue[700] : null,
             ),
-            recognizer: TapGestureRecognizer()
-              ..onTap = () => _onMainLineMoveClicked(i),
+            recognizer: _createTapRecognizer(() => _onMainLineMoveClicked(i)),
           ),
         );
       }
@@ -886,8 +912,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           onSave: (text) => _saveComment(i, text),
           onCancel: _cancelEditingComment,
         ));
-      } else if (moveData.comments != null &&
-          moveData.comments!.isNotEmpty) {
+      } else if (moveData.comments != null && moveData.comments!.isNotEmpty) {
         final comment = _filterComment(moveData.comments!.first);
         if (comment.isNotEmpty) {
           if (canEditComments) {
@@ -1019,8 +1044,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                 fontFamily: 'monospace',
                 fontSize: 14,
                 color: isCurrentNode ? Colors.white : Colors.orange[300],
-                fontWeight:
-                    isCurrentNode ? FontWeight.bold : FontWeight.normal,
+                fontWeight: isCurrentNode ? FontWeight.bold : FontWeight.normal,
                 backgroundColor: isCurrentNode ? Colors.orange[700] : null,
               ),
             ),
@@ -1036,8 +1060,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
             fontWeight: isCurrentNode ? FontWeight.bold : FontWeight.normal,
             backgroundColor: isCurrentNode ? Colors.orange[700] : null,
           ),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () => _goToAnalysisNode(node),
+          recognizer: _createTapRecognizer(() => _goToAnalysisNode(node)),
         ),
       );
     }

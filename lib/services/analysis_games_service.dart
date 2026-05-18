@@ -1,11 +1,11 @@
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:convert';
 
 import '../models/analysis_player_info.dart';
 import 'lichess_api_client.dart';
+import 'storage/app_paths.dart';
 
 /// Service for downloading and managing games for position analysis.
 ///
@@ -15,16 +15,31 @@ import 'lichess_api_client.dart';
 ///   • `<key>.json` – [AnalysisPlayerInfo] metadata
 ///   • `<key>_white_analysis.json` / `<key>_black_analysis.json` – cached analysis
 class AnalysisGamesService {
-  static const String _analysisGamesDir = 'analysis_games';
+  Future<void> _writeAtomically(File target, String content) async {
+    final parent = target.parent;
+    if (!await parent.exists()) {
+      await parent.create(recursive: true);
+    }
+    final tmp = File(
+      p.join(
+        parent.path,
+        '.${p.basename(target.path)}.${DateTime.now().microsecondsSinceEpoch}.tmp',
+      ),
+    );
+    await tmp.writeAsString(content, flush: true);
+    try {
+      await tmp.rename(target.path);
+    } on FileSystemException {
+      if (await target.exists()) {
+        await target.delete();
+      }
+      await tmp.rename(target.path);
+    }
+  }
 
   /// Resolve (and create if needed) the on-disk directory for analysis data.
   Future<Directory> _getAnalysisDirectory() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final analysisDir = Directory(p.join(appDir.path, _analysisGamesDir));
-    if (!await analysisDir.exists()) {
-      await analysisDir.create(recursive: true);
-    }
-    return analysisDir;
+    return AppPaths.analysisGamesDirectory(create: true);
   }
 
   // ── Downloads ──────────────────────────────────────────────────────
@@ -207,7 +222,7 @@ class AnalysisGamesService {
     final gameCount = splitPgnIntoGames(pgns).length;
 
     // Write PGN.
-    await File(p.join(directory.path, '$key.pgn')).writeAsString(pgns);
+    await _writeAtomically(File(p.join(directory.path, '$key.pgn')), pgns);
 
     // Write metadata.
     final info = AnalysisPlayerInfo(
@@ -218,8 +233,10 @@ class AnalysisGamesService {
       downloadedAt: DateTime.now(),
       gameCount: gameCount,
     );
-    await File(p.join(directory.path, '$key.json'))
-        .writeAsString(json.encode(info.toJson()));
+    await _writeAtomically(
+      File(p.join(directory.path, '$key.json')),
+      json.encode(info.toJson()),
+    );
 
     // Invalidate stale cached analysis so it gets rebuilt on next view.
     await clearCachedAnalysis(platform, username);
@@ -314,8 +331,10 @@ class AnalysisGamesService {
     ).playerKey;
     final colour = isWhite ? 'white' : 'black';
 
-    await File(p.join(directory.path, '${key}_${colour}_analysis.json'))
-        .writeAsString(json.encode(analysisData));
+    await _writeAtomically(
+      File(p.join(directory.path, '${key}_${colour}_analysis.json')),
+      json.encode(analysisData),
+    );
   }
 
   /// Load cached analysis for a player + colour. Returns `null` on miss.
@@ -370,8 +389,10 @@ class AnalysisGamesService {
       username: username,
     ).playerKey;
 
-    await File(p.join(directory.path, '${key}_engine_evals.json'))
-        .writeAsString(json.encode(evals));
+    await _writeAtomically(
+      File(p.join(directory.path, '${key}_engine_evals.json')),
+      json.encode(evals),
+    );
   }
 
   /// Load engine weakness results. Returns `null` on miss.

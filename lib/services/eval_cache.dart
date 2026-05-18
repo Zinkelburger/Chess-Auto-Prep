@@ -14,8 +14,8 @@ import 'dart:io' show Directory, Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'storage/app_paths.dart';
 
 class EvalCache {
   static final EvalCache instance = EvalCache._();
@@ -67,7 +67,7 @@ class EvalCache {
 
   Future<String> _dbDirectory() async {
     try {
-      final dir = await getApplicationSupportDirectory();
+      final dir = await AppPaths.supportDirectory();
       return dir.path;
     } catch (_) {
       final fallback = Directory.systemTemp.createTempSync('chess_auto_prep');

@@ -159,6 +159,103 @@ String _setMaiaInComment(String comment, double prob) {
 }
 
 // ---------------------------------------------------------------------------
+// Isolate-safe top-level parser for cached evals (used by compute())
+// ---------------------------------------------------------------------------
+
+({List<MoveEval> evals, double startWinChance, int totalMoves})?
+    _parseCachedEvals(String pgnText) {
+  final parsed = PgnGame.parsePgn(pgnText);
+  final mainline = parsed.moves.mainline().toList();
+  if (mainline.isEmpty) return null;
+
+  final setupFlag = parsed.headers['SetUp'] ?? parsed.headers['Setup'] ?? '';
+  final fenHeader = parsed.headers['FEN'] ?? '';
+  Position pos;
+  if (setupFlag == '1' && fenHeader.isNotEmpty) {
+    pos = Chess.fromSetup(Setup.parseFen(fenHeader));
+  } else {
+    pos = Chess.initial;
+  }
+
+  final results = <MoveEval>[];
+  int missingCount = 0;
+
+  for (int i = 0; i < mainline.length; i++) {
+    final moveData = mainline[i];
+    final fenBefore = pos.fen;
+    final move = pos.parseSan(moveData.san);
+    if (move == null) break;
+    pos = pos.play(move);
+    final fenAfter = pos.fen;
+
+    ({int? cp, int? mate})? evalData;
+    double? maiaProb;
+    if (moveData.comments != null) {
+      for (final c in moveData.comments!) {
+        evalData ??= _parseEvalComment(c);
+        maiaProb ??= _parseMaiaComment(c);
+      }
+    }
+
+    if (evalData == null) {
+      missingCount++;
+      if (missingCount > 2) return null;
+      continue;
+    }
+
+    final winChance = cpToWinningChance(evalData.cp, evalData.mate);
+    results.add(MoveEval(
+      ply: i + 1,
+      san: moveData.san,
+      fenBefore: fenBefore,
+      fenAfter: fenAfter,
+      scoreCp: evalData.cp,
+      scoreMate: evalData.mate,
+      winningChance: winChance,
+      maiaProb: maiaProb,
+    ));
+  }
+
+  if (results.length < mainline.length - 2) return null;
+
+  final startWinChance = cpToWinningChance(0, null);
+  double prevWinChance = startWinChance;
+
+  final classified = <MoveEval>[];
+  for (final e in results) {
+    final delta = e.isWhiteMove
+        ? (prevWinChance - e.winningChance)
+        : (e.winningChance - prevWinChance);
+    var classification = classifyMove(delta.clamp(0.0, 1.0));
+
+    if (classification == MoveClassification.normal &&
+        e.maiaProb != null &&
+        e.maiaProb! < 0.05) {
+      classification = MoveClassification.interesting;
+    }
+
+    classified.add(MoveEval(
+      ply: e.ply,
+      san: e.san,
+      fenBefore: e.fenBefore,
+      fenAfter: e.fenAfter,
+      scoreCp: e.scoreCp,
+      scoreMate: e.scoreMate,
+      winningChance: e.winningChance,
+      maiaProb: e.maiaProb,
+      classification: classification,
+    ));
+    prevWinChance = e.winningChance;
+  }
+
+  return (
+    evals: classified,
+    startWinChance: startWinChance,
+    totalMoves: mainline.length,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Controller
 // ---------------------------------------------------------------------------
 
@@ -189,89 +286,17 @@ class GameAnalysisController extends ChangeNotifier {
 
   // ── Loading cached analysis from PGN ────────────────────────────────────
 
-  bool tryLoadFromPgn(String pgnText) {
+  Future<bool> tryLoadFromPgn(String pgnText) async {
     _evals = [];
 
     try {
-      final parsed = PgnGame.parsePgn(pgnText);
-      final mainline = parsed.moves.mainline().toList();
-      if (mainline.isEmpty) return false;
+      final result = await compute(_parseCachedEvals, pgnText);
+      if (result == null) return false;
 
-      Position pos = Chess.initial;
-      final results = <MoveEval>[];
-      int missingCount = 0;
-
-      for (int i = 0; i < mainline.length; i++) {
-        final moveData = mainline[i];
-        final fenBefore = pos.fen;
-        final move = pos.parseSan(moveData.san);
-        if (move == null) break;
-        pos = pos.play(move);
-        final fenAfter = pos.fen;
-
-        ({int? cp, int? mate})? evalData;
-        double? maiaProb;
-        if (moveData.comments != null) {
-          for (final c in moveData.comments!) {
-            evalData ??= _parseEvalComment(c);
-            maiaProb ??= _parseMaiaComment(c);
-          }
-        }
-
-        if (evalData == null) {
-          missingCount++;
-          if (missingCount > 2) return false;
-          continue;
-        }
-
-        final winChance = cpToWinningChance(evalData.cp, evalData.mate);
-        results.add(MoveEval(
-          ply: i + 1,
-          san: moveData.san,
-          fenBefore: fenBefore,
-          fenAfter: fenAfter,
-          scoreCp: evalData.cp,
-          scoreMate: evalData.mate,
-          winningChance: winChance,
-          maiaProb: maiaProb,
-        ));
-      }
-
-      if (results.length < mainline.length - 2) return false;
-
-      _startWinChance = cpToWinningChance(0, null);
-      double prevWinChance = _startWinChance;
-
-      final classified = <MoveEval>[];
-      for (final e in results) {
-        final delta = e.isWhiteMove
-            ? (prevWinChance - e.winningChance)
-            : (e.winningChance - prevWinChance);
-        var classification = classifyMove(delta.clamp(0.0, 1.0));
-
-        if (classification == MoveClassification.normal &&
-            e.maiaProb != null &&
-            e.maiaProb! < 0.05) {
-          classification = MoveClassification.interesting;
-        }
-
-        classified.add(MoveEval(
-          ply: e.ply,
-          san: e.san,
-          fenBefore: e.fenBefore,
-          fenAfter: e.fenAfter,
-          scoreCp: e.scoreCp,
-          scoreMate: e.scoreMate,
-          winningChance: e.winningChance,
-          maiaProb: e.maiaProb,
-          classification: classification,
-        ));
-        prevWinChance = e.winningChance;
-      }
-
-      _evals = classified;
-      _totalMoves = mainline.length;
-      _analyzedMoves = classified.length;
+      _evals = result.evals;
+      _startWinChance = result.startWinChance;
+      _totalMoves = result.totalMoves;
+      _analyzedMoves = result.evals.length;
       notifyListeners();
       return true;
     } catch (e) {
@@ -330,9 +355,22 @@ class GameAnalysisController extends ChangeNotifier {
         return;
       }
 
-      // Pre-compute all FENs along the mainline so we can batch-evaluate
-      Position pos = Chess.initial;
-      final positions = <({String fenBefore, String fenAfter, bool isWhiteToMove, PgnNodeData moveData, String moveUci})>[];
+      final setupFlag =
+          parsed.headers['SetUp'] ?? parsed.headers['Setup'] ?? '';
+      final fenHeader = parsed.headers['FEN'] ?? '';
+      Position pos;
+      if (setupFlag == '1' && fenHeader.isNotEmpty) {
+        pos = Chess.fromSetup(Setup.parseFen(fenHeader));
+      } else {
+        pos = Chess.initial;
+      }
+      final positions = <({
+        String fenBefore,
+        String fenAfter,
+        bool isWhiteToMove,
+        PgnNodeData moveData,
+        String moveUci
+      })>[];
       for (final moveData in mainline) {
         final fenBefore = pos.fen;
         final move = pos.parseSan(moveData.san);
@@ -348,9 +386,10 @@ class GameAnalysisController extends ChangeNotifier {
         ));
       }
 
-      // Evaluate starting position
-      final startResult = await pool.evaluateFen(
-          'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', useDepth);
+      final startFen = (setupFlag == '1' && fenHeader.isNotEmpty)
+          ? fenHeader
+          : 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+      final startResult = await pool.evaluateFen(startFen, useDepth);
       if (_isCancelled) return;
       _startWinChance =
           cpToWinningChance(startResult.scoreCp, startResult.scoreMate);
@@ -372,7 +411,9 @@ class GameAnalysisController extends ChangeNotifier {
 
       // Process in parallel batches — classify incrementally
       final batchSize = workerCount;
-      for (int batchStart = 0; batchStart < positions.length; batchStart += batchSize) {
+      for (int batchStart = 0;
+          batchStart < positions.length;
+          batchStart += batchSize) {
         if (_isCancelled) break;
 
         final batchEnd = (batchStart + batchSize).clamp(0, positions.length);
@@ -394,9 +435,8 @@ class GameAnalysisController extends ChangeNotifier {
           final globalIdx = batchStart + j;
           final ply = globalIdx + 1;
 
-          final whiteNormCp = p.isWhiteToMove
-              ? result.scoreCp
-              : _negateCp(result.scoreCp);
+          final whiteNormCp =
+              p.isWhiteToMove ? result.scoreCp : _negateCp(result.scoreCp);
           final whiteNormMate = p.isWhiteToMove
               ? result.scoreMate
               : _negateMate(result.scoreMate);
@@ -450,12 +490,11 @@ class GameAnalysisController extends ChangeNotifier {
       }
 
       if (!_isCancelled && onAnnotatedMovetext != null) {
-        final annotated =
-            _rebuildMovetext(mainline, parsed.headers['Result']);
+        final annotated = _rebuildMovetext(mainline, parsed.headers['Result']);
         onAnnotatedMovetext(annotated);
       }
-    } catch (e) {
-      if (kDebugMode) debugPrint('[GameAnalysis] Error: $e');
+    } catch (e, st) {
+      debugPrint('[GameAnalysis] Error: $e\n$st');
     } finally {
       _isAnalyzing = false;
       notifyListeners();
@@ -474,8 +513,7 @@ class GameAnalysisController extends ChangeNotifier {
 
   void _injectMaiaComment(PgnNodeData moveData, double prob) {
     if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-      moveData.comments![0] =
-          _setMaiaInComment(moveData.comments!.first, prob);
+      moveData.comments![0] = _setMaiaInComment(moveData.comments!.first, prob);
     } else {
       moveData.comments = ['[%maia ${prob.toStringAsFixed(3)}]'];
     }

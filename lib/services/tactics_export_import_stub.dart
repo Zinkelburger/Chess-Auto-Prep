@@ -1,7 +1,6 @@
-/// Stub implementation - should never be called
-/// Platform-specific implementations are in:
-/// - tactics_export_import_io.dart (mobile/desktop)
-/// - tactics_export_import_web.dart (web)
+/// Stub implementation - should never be called.
+/// Native implementation is in tactics_export_import_io.dart.
+library;
 
 Future<void> exportCsvContent(
     String content, String filename, int positionCount) async {

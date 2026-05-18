@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'engine_connection.dart';
+import '../storage/app_paths.dart';
 
 class ProcessConnection implements EngineConnection {
   Process? _process;
@@ -47,7 +47,7 @@ class ProcessConnection implements EngineConnection {
       throw UnsupportedError('Unsupported desktop platform');
     }
 
-    final dir = await getApplicationSupportDirectory();
+    final dir = await AppPaths.supportDirectory();
     final file = File(p.join(dir.path, binaryName));
 
     if (!await file.exists()) {
@@ -87,6 +87,9 @@ class ProcessConnection implements EngineConnection {
           _stdoutController.add(line);
         }
       });
+
+      // Drain stderr to prevent buffer fill-up that can stall the process.
+      _process!.stderr.drain<void>();
     } catch (e) {
       print('Error starting Stockfish process: $e');
       rethrow;

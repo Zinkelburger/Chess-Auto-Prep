@@ -1,0 +1,96 @@
+[Event "Repertoire Line"]
+[Site "Lichess Opening Builder"]
+[Date "2025.10.16"]
+[Round "?"]
+[White "Opponent"]
+[Black "My Repertoire"]
+[Result "*"]
+[FEN "rnbqkb1r/pppp1ppp/4pn2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3"]
+[SetUp "1"]
+
+{ Line Probability: 0.17% | Expected Value: +48.9cp } 3... Bb4 4. Nf3 Ne4 5. Qc2 f5 *
+
+[Event "Repertoire Line"]
+[Site "Lichess Opening Builder"]
+[Date "2025.10.16"]
+[Round "?"]
+[White "Opponent"]
+[Black "My Repertoire"]
+[Result "*"]
+[FEN "rnbqkb1r/pppp1ppp/4pn2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3"]
+[SetUp "1"]
+
+{ Line Probability: 0.12% | Expected Value: +22.0cp } 3... Bb4 4. Bd2 Bxc3 5. Bxc3 Ne4 6. Qc2 f5 *
+
+[Event "Repertoire Line"]
+[Site "Lichess Opening Builder"]
+[Date "2025.10.16"]
+[Round "?"]
+[White "Opponent"]
+[Black "My Repertoire"]
+[Result "*"]
+[FEN "rnbqkb1r/pppp1ppp/4pn2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3"]
+[SetUp "1"]
+
+{ Line Probability: 1.51% | Expected Value: +11.2cp } 3... Bb4 4. Qc2 d5 *
+
+[Event "Repertoire Line"]
+[Site "Lichess Opening Builder"]
+[Date "2025.10.16"]
+[Round "?"]
+[White "Opponent"]
+[Black "My Repertoire"]
+[Result "*"]
+[FEN "rnbqkb1r/pppp1ppp/4pn2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3"]
+[SetUp "1"]
+
+{ Line Probability: 1.03% | Expected Value: +10.4cp } 3... Bb4 4. Bg5 h6 *
+
+[Event "Repertoire Line"]
+[Site "Lichess Opening Builder"]
+[Date "2025.10.16"]
+[Round "?"]
+[White "Opponent"]
+[Black "My Repertoire"]
+[Result "*"]
+[FEN "rnbqkb1r/pppp1ppp/4pn2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3"]
+[SetUp "1"]
+
+{ Line Probability: 0.30% | Expected Value: +6.5cp } 3... d5 4. Nf3 Be7 5. e3 O-O *
+
+[Event "Repertoire Line"]
+[Site "Lichess Opening Builder"]
+[Date "2025.10.16"]
+[Round "?"]
+[White "Opponent"]
+[Black "My Repertoire"]
+[Result "*"]
+[FEN "rnbqkb1r/pppp1ppp/4pn2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3"]
+[SetUp "1"]
+
+{ Line Probability: 0.47% | Expected Value: +1.6cp } 3... Bb4 4. Bd2 c5 *
+
+[Event "Repertoire Line"]
+[Site "Lichess Opening Builder"]
+[Date "2025.10.16"]
+[Round "?"]
+[White "Opponent"]
+[Black "My Repertoire"]
+[Result "*"]
+[FEN "rnbqkb1r/pppp1ppp/4pn2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3"]
+[SetUp "1"]
+
+{ Line Probability: 1.05% | Expected Value: +1.1cp } 3... Bb4 4. Qc2 c5 *
+
+[Event "Repertoire Line"]
+[Site "Lichess Opening Builder"]
+[Date "2025.10.16"]
+[Round "?"]
+[White "Opponent"]
+[Black "My Repertoire"]
+[Result "*"]
+[FEN "rnbqkb1r/pppp1ppp/4pn2/8/2PP4/2N5/PP2PPPP/R1BQKBNR b KQkq - 1 3"]
+[SetUp "1"]
+
+{ Line Probability: 0.23% | Expected Value: +0.2cp } 3... d5 4. Bg5 Be7 5. e3 O-O 6. Nf3 h6 7. Bh4 b6 *
+

@@ -1,5 +1,5 @@
 /// Stub implementation of the Browser Extension Server
-/// Used on platforms that don't support the server (mobile, web)
+/// Used on platforms that don't support the server.
 library;
 
 import 'browser_extension_server.dart';

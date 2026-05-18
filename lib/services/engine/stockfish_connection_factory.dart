@@ -1,7 +1,6 @@
 import 'engine_connection.dart';
 import 'stockfish_connection_stub.dart'
-    if (dart.library.io) 'stockfish_connection_native.dart'
-    if (dart.library.html) 'stockfish_connection_web.dart' as platform;
+    if (dart.library.io) 'stockfish_connection_native.dart' as platform;
 
 /// Factory for creating the appropriate Stockfish connection based on platform
 class StockfishConnectionFactory {

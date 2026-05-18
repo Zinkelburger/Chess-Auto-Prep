@@ -14,6 +14,16 @@ import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
 
+// ---------------------------------------------------------------------------
+// Isolate-safe top-level helper for parsing repertoire lines (used by compute)
+// ---------------------------------------------------------------------------
+
+List<RepertoireLine> _parseRepertoireInIsolate(
+    ({String pgn, String color}) args) {
+  final service = RepertoireService();
+  return service.parseRepertoirePgn(args.pgn, trainingColor: args.color);
+}
+
 /// Manages repertoire state and acts as the single source of truth.
 /// All UI components should derive their chess position from this class.
 class RepertoireController with ChangeNotifier {
@@ -396,10 +406,11 @@ class RepertoireController with ChangeNotifier {
     }
 
     try {
-      final service = RepertoireService();
-      _repertoireLines = service.parseRepertoirePgn(
-        _repertoirePgn!,
-        trainingColor: _isRepertoireWhite ? 'white' : 'black',
+      final pgn = _repertoirePgn!;
+      final color = _isRepertoireWhite ? 'white' : 'black';
+      _repertoireLines = await compute(
+        _parseRepertoireInIsolate,
+        (pgn: pgn, color: color),
       );
       debugPrint(
           'Parsed ${_repertoireLines.length} repertoire lines for PGN browser');

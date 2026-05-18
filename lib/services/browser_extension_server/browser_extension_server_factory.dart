@@ -1,11 +1,9 @@
 /// Factory for creating platform-appropriate BrowserExtensionServer
-/// Uses conditional imports to select the right implementation
 library;
 
 import 'browser_extension_server.dart';
-import 'browser_extension_server_io.dart'
-    if (dart.library.html) 'browser_extension_server_stub.dart'
-    if (dart.library.js_interop) 'browser_extension_server_stub.dart';
+import 'browser_extension_server_stub.dart'
+    if (dart.library.io) 'browser_extension_server_io.dart';
 
 export 'browser_extension_server.dart';
 

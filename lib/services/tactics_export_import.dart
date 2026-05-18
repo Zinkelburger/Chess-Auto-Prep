@@ -4,12 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'tactics_database.dart';
 import 'storage/storage_factory.dart';
 
-// Conditional imports for platform-specific features
 import 'tactics_export_import_stub.dart'
-    if (dart.library.io) 'tactics_export_import_io.dart'
-    if (dart.library.html) 'tactics_export_import_web.dart' as platform;
+    if (dart.library.io) 'tactics_export_import_io.dart' as platform;
 
-/// Service for exporting/importing tactics on all platforms
+/// Service for exporting/importing tactics on supported native platforms.
 /// Addresses the limitation that mobile users can't directly access app files
 class TacticsExportImport {
   final TacticsDatabase _database;
@@ -19,7 +17,6 @@ class TacticsExportImport {
   /// Export tactics to a file that users can share/save
   /// On mobile: Opens share sheet
   /// On desktop: Opens file picker to choose save location
-  /// On web: Triggers browser download
   Future<void> exportTactics() async {
     try {
       // Get the current CSV content
@@ -35,21 +32,19 @@ class TacticsExportImport {
         _database.positions.length,
       );
     } catch (e) {
-      print('Error exporting tactics: $e');
+      debugPrint('Error exporting tactics: $e');
       rethrow;
     }
   }
 
-  /// Import tactics from a CSV file
-  /// Uses file picker on all platforms with withData: true for web compatibility
+  /// Import tactics from a CSV file.
   Future<int> importTactics() async {
     try {
-      // Let user pick a CSV file - withData: true ensures bytes are available on all platforms
+      // Keep withData enabled so file content is always available from picker.
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
-        withData:
-            true, // Important for web and mobile to get file content directly
+        withData: true,
       );
 
       if (result == null || result.files.isEmpty) {
@@ -71,7 +66,7 @@ class TacticsExportImport {
 
       return importedCount;
     } catch (e) {
-      print('Error importing tactics: $e');
+      debugPrint('Error importing tactics: $e');
       rethrow;
     }
   }
@@ -93,7 +88,7 @@ class TacticsExportImport {
 
     final stats = <String, dynamic>{
       'file_exists': fileExists,
-      'storage_type': kIsWeb ? 'localStorage' : 'file',
+      'storage_type': 'file',
       'positions_count': _database.positions.length,
       'total_reviews': _database.positions.fold<int>(
         0,

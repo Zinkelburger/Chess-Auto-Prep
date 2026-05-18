@@ -30,6 +30,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
+  AppState? _appState;
+  AppMode? _lastMode;
 
   @override
   void initState() {
@@ -38,13 +40,36 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final appState = Provider.of<AppState>(context, listen: false);
+      _appState = appState;
+      _lastMode = appState.currentMode;
+      appState.addListener(_onAppStateChanged);
       appState.loadUsernames();
       appState.loadSavedGames();
     });
   }
 
+  void _onAppStateChanged() {
+    final appState = _appState;
+    if (appState == null) return;
+    final currentMode = appState.currentMode;
+    final previousMode = _lastMode;
+
+    if (previousMode == AppMode.repertoire &&
+        currentMode != AppMode.repertoire) {
+      _disposeEngineResources();
+    }
+
+    _lastMode = currentMode;
+  }
+
+  void _disposeEngineResources() {
+    AnalysisService().dispose();
+    StockfishPool().dispose();
+  }
+
   @override
   void dispose() {
+    _appState?.removeListener(_onAppStateChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -54,8 +79,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.detached) {
       // App is shutting down — send 'quit' to every Stockfish process
       // so we don't leave orphan OS processes behind.
-      AnalysisService().dispose();
-      StockfishPool().dispose();
+      _disposeEngineResources();
     }
   }
 
@@ -63,7 +87,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Consumer<AppState>(
       builder: (context, appState, child) {
-        final activeMode = _normalizeMode(appState.currentMode);
+        final activeMode = appState.currentMode;
         _modeViews[activeMode] ??= _createModeView(activeMode);
 
         return Scaffold(
@@ -78,8 +102,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       },
     );
   }
-
-  AppMode _normalizeMode(AppMode mode) => mode;
 
   Widget _createModeView(AppMode mode) {
     switch (mode) {

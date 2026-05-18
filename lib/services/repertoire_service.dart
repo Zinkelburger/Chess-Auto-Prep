@@ -11,6 +11,24 @@ import '../models/repertoire_line.dart';
 import 'storage/storage_factory.dart';
 
 class RepertoireService {
+  Future<void> _writeAtomically(io.File target, String content) async {
+    final parent = target.parent;
+    if (!await parent.exists()) {
+      await parent.create(recursive: true);
+    }
+    final tmp =
+        io.File('${target.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
+    await tmp.writeAsString(content, flush: true);
+    try {
+      await tmp.rename(target.path);
+    } on io.FileSystemException {
+      if (await target.exists()) {
+        await target.delete();
+      }
+      await tmp.rename(target.path);
+    }
+  }
+
   /// Parses a repertoire PGN file and extracts all trainable lines.
   ///
   /// If [trainingColor] is provided ('white' or 'black') it is used directly;
@@ -433,7 +451,7 @@ class RepertoireService {
     }
     sections.addAll(games);
 
-    await file.writeAsString('${sections.join('\n\n').trimRight()}\n');
+    await _writeAtomically(file, '${sections.join('\n\n').trimRight()}\n');
     return true;
   }
 
@@ -479,7 +497,7 @@ class RepertoireService {
     }
     sections.addAll(games);
 
-    await file.writeAsString('${sections.join('\n\n').trimRight()}\n');
+    await _writeAtomically(file, '${sections.join('\n\n').trimRight()}\n');
     return true;
   }
 
@@ -587,7 +605,7 @@ class RepertoireService {
     }
     sections.addAll(games);
 
-    await file.writeAsString('${sections.join('\n\n').trimRight()}\n');
+    await _writeAtomically(file, '${sections.join('\n\n').trimRight()}\n');
     return true;
   }
 }
