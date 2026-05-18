@@ -269,7 +269,8 @@ import Base from '../layouts/Base.astro';
       return v ? parseInt(v) : undefined;
     };
 
-    const turnstileResponse = (window as any).turnstile?.getResponse() || '';
+    let turnstileResponse = '';
+    try { turnstileResponse = (window as any).turnstile?.getResponse() || ''; } catch { }
     const excludeChessCom = (document.getElementById('sub-exclude-chess-com') as HTMLInputElement).checked;
 
     const tcParts: string[] = [];
@@ -321,11 +322,11 @@ import Base from '../layouts/Base.astro';
         activeFilters.clear();
         container.innerHTML = '';
         addFilter('fen');
-        if ((window as any).turnstile) (window as any).turnstile.reset();
+        try { (window as any).turnstile?.reset(); } catch { }
       } else {
         alertEl.className = 'alert alert-error';
         alertEl.textContent = data.detail || 'Something went wrong';
-        if ((window as any).turnstile) (window as any).turnstile.reset();
+        try { (window as any).turnstile?.reset(); } catch { }
       }
     } catch (err) {
       console.error('[TWIC Subscribe] Network error:', err);
