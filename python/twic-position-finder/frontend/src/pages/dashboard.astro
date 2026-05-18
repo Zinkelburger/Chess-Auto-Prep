@@ -347,7 +347,7 @@ import Base from '../layouts/Base.astro';
       if (sub.latest_twic && sub.latest_game_count > 0) {
         dlBtn.textContent = `Download TWIC #${sub.latest_twic} PGN (${sub.latest_game_count} games)`;
       } else {
-        dlBtn.textContent = 'No games yet';
+        dlBtn.textContent = 'PGN: 0 games';
         dlBtn.disabled = true;
       }
       dlBtn.addEventListener('click', () => downloadPgn(sub.id, sub.label));
