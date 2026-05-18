@@ -1,0 +1,625 @@
+
+
+    Close
+    Chessable
+    Home
+    All Courses
+    Your Wishlist
+    Created by You
+    How To
+    Classroom
+    Forums
+    Merchandise
+    Saved Positions
+    Difficult Moves
+    Go
+    Opening Explorer
+    Analysis Board
+    Import PGN
+    Setup Position
+    Create a Course
+    Puzzle Connect
+    Rubies
+    1,220
+    Ruby Store
+    Help
+
+Lifetime Repertoires: Srinath's Classical Sicilian
+Lifetime Repertoires: Srinath's Classical Sicilian
+ChaptersReference Games
+Previous chapter
+Filter by video
+Zhao, Zong Yuan vs. Narayanan, Srinath, Gold Coast op 2018
+1.e4 c5 2.Nf3 d6 3.d4 Nf6 4.Nc3 cxd4 5.Nxd4 Nc6 6.Bg5 e6 7.Qd2 a6 8.O-O-O Be7 9.f4 Bd7 10.Nf3 b5 11.Bxf6 gxf6 12.Kb1 Qb6 13.f5 O-O-O 14.g3 Kb8 15.fxe6 fxe6 16.Bh3 Rhe8 17.Ne2 Ne5 18.Nfd4 Nc4 19.Qh6 e5 20.Bxd7 Rxd7 21.Nf5 b4 22.Nc1 Qc6 23.Qh5 Rc8 24.Qe2 Bd8 25.Rd3 a5 26.Rhd1 a4 27.Rd5 Ka8 28.R1d3 Bb6 29.c3 Ba7 30.Ka1 a3 31.bxa3 Nxa3 32.Nxd6 Rb8 33.c4 Bd4+ 34.R3xd4 exd4 35.c5 b3 36.Nxb3 Ra7 37.Qd3 Qa4 38.Rf5 Nb5 39.Rf2 Nc3 40.Nc1 Qd1 0-1
+Reference
+View
+Wei, Yi vs. Stocek, Jiri, Batumi ol 2018
+1.e4 c5 2.Nf3 Nc6 3.Nc3 d6 4.d4 cxd4 5.Nxd4 Nf6 6.Bg5 e6 7.Qd2 a6 8.O-O-O Be7 9.f4 Bd7 10.Nf3 b5 11.Bxf6 gxf6 12.Kb1 Qb6 13.g3 b4 14.Ne2 a5 15.f5 e5 16.Nc1 Rc8 17.Qd5 Na7 18.Nd2 Bc6 19.Qd3 a4 20.Nc4 Qc5 21.Qf3 Nb5 22.Qe3 Nd4 23.Bd3 d5 24.Nd2 a3 25.exd5 Bxd5 26.Ne4 Qc6 27.Nb3 O-O 28.Rhe1 Nxc2 29.Qh6 Bxb3 30.Ng5 Bxa2+ 31.Kc1 Nxe1+ 32.Kd2 Nf3+ 0-1
+Reference
+View
+Remizov, Yaroslav vs. Gutenev, Alexander, Urals ch 2019
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.Bg5 e6 7.Qd2 a6 8.O-O-O Bd7 9.f4 Be7 10.Nf3 b5 11.e5 b4 12.exf6 bxc3 13.Qxc3 gxf6 14.f5 e5 15.Be3 d5 16.Rxd5 Nb4 17.Bc4 Nxd5 18.Bxd5 Rc8 19.Qb3 O-O 20.Rd1 Qe8 21.Qd3 Kh8 22.Qxa6 Bxf5 23.Rd2 Bd7 24.Be4 Be6 25.Nh4 Rc4 26.Bd5 Rxh4 27.Bc6 Qc8 28.Qa7 Bb4 0-1
+Reference
+View
+Gonzalez, Bolivar Ribeiro vs. Braakhuis, Wilfried FR, ICCF email 2007
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 Nc6 7.Qd2 e6 8.O-O-O Bd7 9.f4 Be7 10.Nf3 b5 11.e5 b4 12.exd6 bxc3 13.Qxc3 Bf8 14.f5 Qa5 15.Bxf6 gxf6 16.Qxf6 Rg8 17.fxe6 fxe6 18.Bc4 Bg7 19.Qh4 Rb8 20.Bb3 Qf5 21.Nd4 Qf6 22.Qh5+ Qf7 23.Qxf7+ Kxf7 24.Nxc6 Bxc6 25.Rhe1 Bd7 26.Re2 Bf6 27.c3 Rb6 28.g3 h5 0-1
+Reference
+View
+Pranjic, Mitja vs. Vecek, Marjan, ICCF email 2021
+1.e4 c5 2.Nc3 Nc6 3.Nge2 Nf6 4.d4 cxd4 5.Nxd4 d6 6.Bg5 a6 7.Qd2 e6 8.O-O-O Bd7 9.f4 b5 10.a3 Be7 11.Nf3 Qa5 12.Kb1 h6 13.Bh4 Rd8 14.Qe1 Rb8 15.e5 dxe5 16.Nxe5 b4 17.Nxd7 Nxd7 18.Bxe7 bxc3 19.Bb4 Nxb4 20.Qxc3 Nf6 21.axb4 Qxb4 22.Qc6+ Kf8 23.Qd6+ Ke8 24.Qxb4 Rxb4 25.f5 Nd5 26.Kc1 Ne3 27.Rd3 Nxf5 28.Ra3 Ke7 29.Bxa6 Rhb8 30.b3 Ra8 31.Kb2 Rd4 32.Bb7 Rxa3 33.Kxa3 Ne3 34.c4 Kd6 35.Kb4 e5 36.Kc3 f5 37.Bf3 g5 38.Re1 f4 39.h3 Kc5 40.Ra1 Kb6 41.Re1 1/2-1/2
+Reference
+View
+Fees, Dennis A vs. Sciallero, Vittorio, ICCF email 2013
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 e6 7.f4 h6 8.Bxf6 Qxf6 9.Qd2 Nc6 10.Nf3 Qd8 11.O-O-O Bd7 12.Kb1 Be7 13.g4 b5 14.h4 Qb6 15.Ne2 Rc8 16.Ned4 e5 17.Nf5 Bxf5 18.gxf5 O-O 19.Rg1 Bf6 20.Be2 Kh8 21.fxe5 dxe5 22.Bd3 Rfd8 23.Qe1 Qc5 24.Qe2 Nb4 25.h5 Nxd3 26.Rxd3 Rxd3 27.Qxd3 Rd8 28.Qe2 Kh7 29.a3 a5 30.Rc1 Qc6 31.c4 b4 32.c5 Bg5 33.Nxg5+ hxg5 34.axb4 axb4 35.Qc4 Rd4 36.Qxf7 Qxe4+ 37.Ka2 b3+ 38.Kxb3 Rb4+ 39.Ka2 Ra4+ 40.Kb3 Qb4+ 41.Kc2 Qxc5+ 42.Kb1 Qd6 43.Qe6 Qd3+ 44.Rc2 Qf1+ 45.Rc1 Qd3+ 46.Rc2 Ra6 47.Qxe5 Rc6 48.Qe2 Qxf5 49.Kc1 Re6 50.Qf2 Qe4 51.Rc7 Kh6 52.Rc8 Kxh5 53.Qh2+ Kg6 54.Qc2 Qxc2+ 55.Kxc2 Rd6 56.b4 g4 0-1
+Reference
+View
+Popov, Vladimir Valentinov vs. Kurbasov, Sergey Aleksandrovich, ICCF email 2013
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 Nc6 7.Qd2 Bd7 8.O-O-O e6 9.f4 Be7 10.Nb3 b5 11.Bxf6 gxf6 12.Kb1 b4 13.Ne2 a5 14.f5 Qb6 15.Qh6 a4 16.Nbd4 Nxd4 17.Nxd4 e5 18.Nf3 Bc6 19.Bd3 a3 20.b3 Qc5 21.Qd2 Rg8 22.g3 Rd8 23.Qc1 Rg4 24.Rhe1 Bf8 25.Qd2 Rd7 26.Ng1 d5 27.exd5 Bxd5 28.Rf1 Bc6 29.Qc1 Rgd4 30.Ne2 R4d6 31.Rde1 Kd8 32.Rg1 Bd5 0-1
+Reference
+View
+Vignesh, NR. vs. Narayanan, Srinath, India TCh 2020
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bg5 e6 7.Qd2 a6 8.O-O-O Be7 9.f3 O-O 10.h4 Nxd4 11.Qxd4 b5 12.Kb1 Bb7 13.e5 dxe5 14.Qxe5 Qb8 15.Qe3 Rc8 16.Bxf6 Bxf6 17.Ne4 Be7 18.Bd3 Bd5 19.Ng5 h6 20.Bh7+ Kf8 21.Rxd5 exd5 22.Ne6+ fxe6 23.Qxe6 Bb4 24.c3 Qf4 25.Qg8+ Ke7 26.Re1+ Kd6 27.Qe6+ Kc7 28.g3 Qf6 29.cxb4 Qxe6 30.Rxe6 Re8 31.Rg6 Re7 32.Rg4 Rf8 33.f4 g5 34.Bd3 gxf4 35.gxf4 h5 36.Rg6 Rxf4 37.Rxa6 Re1+ 38.Kc2 Re3 39.Bxb5 Rf2+ 40.Kd1 Rh3 41.Be2 Rxh4 42.b5 Rh1+ 43.Kd2 Rhh2 44.Re6 Rxe2+ 45.Rxe2 Rxe2+ 46.Kxe2 h4 0-1
+Reference
+View
+Born, Carlos Rodrigo vs. Matsuura, Everaldo, Florianopolis zt 2017
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.Bg5 e6 7.Qd2 Be7 8.O-O-O O-O 9.f3 Nxd4 10.Qxd4 a6 11.Kb1 Qc7 12.g4 b5 13.h4 Bb7 14.Bd3 b4 15.Ne2 d5 16.exd5 Bxd5 17.Qe3 Bc5 18.Qd2 Nd7 19.Rhf1 Ne5 20.Be4 Bxe4 21.fxe4 Nxg4 22.Nc1 f6 23.Bf4 e5 24.Qg2 h5 25.Bd2 a5 26.Rf5 g6 27.Rf3 Rac8 28.Rg3 Bf2 29.Rxg4 Qxc2+ 30.Ka1 hxg4 31.Nd3 Bd4 32.Qxg4 Kh7 33.h5 g5 34.h6 Kh8 35.Qf3 a4 36.Qf1 a3 37.Bc1 axb2+ 0-1
+Reference
+View
+Hellers, Ferdinand vs. Narayanan, Srinath, Titled Tuesday 2020
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bg5 e6 7.Qd2 a6 8.O-O-O Be7 9.f3 O-O 10.h4 Nxd4 11.Qxd4 b5 12.h5 h6 13.Be3 Qa5 14.Kb1 b4 15.Ne2 e5 16.Qd2 Be6 17.Nc1 d5 18.Nb3 Qc7 19.exd5 Nxd5 20.Bd3 a5 21.Qf2 Rac8 22.Be4 Nxe3 23.Qxe3 a4 24.Nc1 a3 25.b3 f5 26.Bd3 Qc3 0-1
+Reference
+View
+Pogoskin, Roman vs. Kryakvin, Dmitry, Alushta blitz op 2023
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bg5 e6 7.Qd2 Be7 8.O-O-O O-O 9.Kb1 a6 10.f3 Nxd4 11.Qxd4 b5 12.Bxf6 Bxf6 13.Qxd6 Qxd6 14.Rxd6 Bb7 15.Rd7 Rab8 16.Nd1 Rfd8 17.Rxd8+ Rxd8 18.Bd3 Be5 19.g3 g5 20.Re1 h5 21.Nf2 Kg7 22.Kc1 f6 23.Nh3 Bc7 24.Ng1 h4 25.gxh4 gxh4 26.h3 Bf4+ 27.Kd1 Kh6 28.Ne2 Be5 29.c3 Rxd3+ 0-1
+Reference
+View
+Vivante Sowter, John vs. Thompson, Brian, ICCF email 2016
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 e6 7.f4 Qc7 8.Bxf6 gxf6 9.Qd2 Nc6 10.O-O-O Bd7 11.Kb1 Nxd4 12.Qxd4 Be7 13.f5 Qc5 14.Qd2 h5 15.h4 O-O-O 16.Be2 Kb8 17.Bf3 Rc8 18.Rhe1 Rc7 19.Re3 Bf8 20.Qe2 Bh6 21.Red3 Bf4 22.Bxh5 Be5 23.Bxf7 exf5 24.h5 fxe4 25.Qxe4 Bc6 26.Qg6 Qb6 27.a3 Be8 28.Bxe8 Rxc3 29.Rxc3 Bxc3 30.b3 Be5 31.Bf7 Qa5 32.Qd3 Qxa3 33.c3 1/2-1/2
+Reference
+View
+Lizarzaburu, Odilo Blanco vs. Gilabert Mallol, Estanislao, ICCF email 2010
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 e6 7.f4 Qc7 8.Bxf6 gxf6 9.Qd2 Nc6 10.O-O-O Bd7 11.Kb1 Nxd4 12.Qxd4 Be7 13.Be2 Qc5 14.Qd2 O-O-O 15.Bf3 Kb8 16.f5 h5 17.h4 Rc8 18.Rhe1 Rc7 19.Re3 Bf8 20.Qe2 Bh6 21.Red3 Bf4 22.Bxh5 Be5 23.Bxf7 exf5 24.g3 fxe4 25.Qxe4 Bc6 26.Bd5 Bxd5 27.Qxd5 Qxd5 28.Nxd5 Rg7 29.Rh1 Bxg3 30.c3 Rxh4 1/2-1/2
+Reference
+View
+Petruzzelli, Raffaele vs. Laghetti, Gaetano, ICCF email 2012
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 e6 7.f4 Qc7 8.Bxf6 gxf6 9.Qd2 Nc6 10.O-O-O Bd7 11.Kb1 Nxd4 12.Qxd4 Be7 13.f5 Qc5 14.Qd2 h5 15.Ne2 O-O-O 16.Nf4 Bf8 17.fxe6 fxe6 18.Ng6 Rg8 19.Nxf8 Rdxf8 20.Qxd6 Qxd6 21.Rxd6 Kc7 22.Rd2 Bc6 23.Bc4 Bxe4 24.Rg1 Re8 25.Bd3 Rd8 26.Re1 f5 27.Ree2 Rg4 28.Bxe4 Rxd2 29.Rxd2 Rxe4 30.c3 h4 31.Kc2 Re1 32.Rf2 Kd6 33.Kd2 Rh1 34.h3 Ke5 35.c4 f4 36.c5 Kf5 37.Kd3 e5 0-1
+Reference
+View
+Kilpatrick, Callum vs. Lalic, Bogdan, London 2007
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bg5 e6 7.Qd2 a6 8.f4 h6 9.Bxf6 Qxf6 10.Nf3 g5 11.fxg5 hxg5 12.Qxg5 Qxg5 13.Nxg5 Ke7 14.Nf3 b5 15.O-O-O Bb7 16.Bd3 Bg7 17.Ne2 Ne5 18.Nxe5 Bxe5 19.h3 Rag8 20.g4 d5 21.exd5 Bxd5 22.Rhf1 Bg2 23.Rg1 Bxh3 24.g5 Rh5 25.g6 f5 26.a4 bxa4 27.Bxa6 Bg4 28.Bb5 Rxg6 29.Rd7+ Kf6 30.Nd4 Rgh6 31.Bxa4 Rh1 32.Rxh1 Rxh1+ 33.Kd2 Rd1+ 34.Kc3 f4 35.Kc4 f3 36.Nxf3 Bxf3 37.Rxd1 Bxd1 38.b4 Ke7 39.Kd3 Bd6 40.Kd2 Bg4 41.c3 Bf4+ 42.Kd3 Bf5+ 43.Kd4 Kd6 44.c4 Be5+ 45.Ke3 Bc3 46.c5+ Ke5 47.c6 Kd6 48.b5 e5 49.Kf3 Ba5 50.Kg3 Kc5 0-1
+Reference
+View
+Yoo, Christopher Woojin vs. Maghsoodloo, Parham, Sharjah Masters 2023
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bg5 e6 7.Qd3 Bd7 8.Ndb5 Nb4 9.Qd1 Qb8 10.Bf4 e5 11.Bg5 a6 12.Bxf6 gxf6 13.Na3 b5 14.Nab1 Bg7 15.a3 Nc6 16.Nd5 f5 17.Nbc3 O-O 18.exf5 Bxf5 19.g4 Bg6 20.Bg2 Qa7 21.h4 Nd4 22.Ne4 f5 23.h5 Bf7 24.Ng5 e4 25.h6 Be5 26.Nc3 Bc4 27.Nh3 Rae8 28.gxf5 Nf3+ 29.Bxf3 exf3 30.Kd2 Qxf2+ 31.Kc1 Qe3+ 32.Kb1 Bd4 33.Rg1+ Kh8 34.Rg4 Bxc3 35.bxc3 Qxc3 36.Qd4+ Qxd4 37.Rxd4 Rxf5 38.Rxd6 f2 39.Nxf2 Rxf2 40.Rxa6 b4 41.Rc6 b3 42.Rxc4 bxc2+ 43.Rxc2 Rb8+ 44.Kc1 Rf1+ 0-1
+Reference
+View
+Gharamian, Tigran vs. Bacrot, Etienne, France Ch 2022
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bg5 e6 7.Qd3 Bd7 8.Ndb5 Nb4 9.Qd1 Qb8 10.Bf4 e5 11.Bg5 a6 12.Bxf6 gxf6 13.Na3 b5 14.Nab1 Bg7 15.a3 Nc6 16.Nd5 f5 17.Nbc3 O-O 18.exf5 Bxf5 19.g4 Bg6 20.h4 Nd4 21.Ne7+ Kh8 22.Nxg6+ fxg6 23.Bg2 e4 24.Rh3 d5 25.Nxd5 Qe5 26.Ne3 Rad8 27.c3 Qf4 0-1
+Reference
+View
+Tologontegin, Semetey vs. Samant, Aditya S, Asian Continental blitz op 2022
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bg5 e6 7.Qd3 Bd7 8.Ndb5 Nb4 9.Qd1 Qb8 10.a3 Nc6 11.Bxf6 gxf6 12.Qd2 a6 13.Nd4 h5 14.f4 Qa7 15.Nf3 b5 16.Bd3 Qc5 17.Qf2 Qxf2+ 18.Kxf2 Be7 19.Rhe1 Bd8 20.Rad1 Bb6+ 21.Kf1 Ke7 22.Nd5+ exd5 23.exd5+ Ne5 24.fxe5 fxe5 25.Nh4 Rhg8 26.Bf5 Rac8 27.c3 Rc4 28.Bxd7 Rxh4 29.Bh3 Rf4+ 30.Ke2 Rf2+ 31.Kd3 Rxb2 32.Rb1 Ra2 33.Ra1 Rxa1 34.Rxa1 f5 35.a4 e4+ 36.Kd2 Kf6 37.axb5 axb5 38.Rf1 Rg5 39.Rb1 f4 40.Rxb5 Bc5 41.Rb8 Rxd5+ 42.Ke2 Be3 43.Rb2 Rd3 44.Rc2 Ke5 45.Bc8 Bc5 46.Bb7 h4 47.h3 Rg3 48.Kf1 f3 49.gxf3 exf3 50.Bxf3 Rxf3+ 51.Kg2 Rg3+ 52.Kh2 Kd5 53.c4+ Kd4 54.Rf2 Re3 55.Rf4+ Re4 0-1
+Reference
+View
+Huschenbeth, Niclas vs. Bacrot, Etienne, Spain TCh 2020
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.Bg5 e6 7.Qd3 Bd7 8.Bxf6 Qxf6 9.Ndb5 O-O-O 10.Nxd6+ Kb8 11.Nc4 Qf4 12.Qg3 g5 13.Bd3 Bc5 14.Qxf4+ gxf4 15.g3 f3 16.e5 Bd4 17.Be4 Nxe5 18.Nxe5 Bxe5 19.Bxf3 Bc8 20.Rd1 Rxd1+ 21.Kxd1 f5 22.Be2 Bd4 23.f4 h5 24.Rf1 h4 25.g4 Rd8 26.Ke1 Be3 27.gxf5 exf5 28.Rf3 Bc1 29.Nd1 Rd4 30.Bd3 Rxf4 31.Ke2 Rd4 32.Bxf5 Rd2+ 33.Ke1 Bxf5 34.Rxf5 Rxh2 35.Nf2 Bxb2 36.Rd5 Rg2 37.Kf1 Rg8 38.Nd3 Bc3 39.Rd7 Kc8 40.Rh7 Rh8 41.Rf7 h3 42.Kg1 Ba5 43.Nf4 Bc7 44.Kh1 Bd6 45.Rf6 Kd7 46.Rf7+ Kc6 47.Rf6 Rh4 48.Nd3 Re4 49.Rf2 a5 0-1
+Reference
+View
+Borgaonkar, Akshay vs. Harshavardhan, GB., India Ch 2022
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bg5 e6 7.Qd3 Bd7 8.O-O-O a6 9.Qg3 h6 10.Be3 Nxd4 11.Rxd4 e5 12.Rb4 b5 13.Be2 Rc8 14.Bd3 Be6 15.Nd5 Bxd5 16.exd5 Nxd5 17.Rb3 g6 18.h4 h5 19.Qf3 Nxe3 20.fxe3 Be7 21.Qf2 d5 22.e4 d4 23.Kb1 Qd6 24.Qe2 Qe6 25.g3 Kf8 26.Rf1 Rc6 27.Qf2 Kg7 28.Be2 Rf8 29.Qg2 f5 30.Rbf3 Rxc2 31.exf5 Qc6 32.fxg6 Rf6 33.Bxb5 Rxg2 34.Bxc6 Rxc6 35.Rf7+ Kxg6 36.Rxe7 Re2 37.a3 Rf6 38.Rd1 Rff2 39.Rb7 Kf5 40.Ka1 Ke4 41.Rc1 d3 42.Kb1 Ke3 43.Rb3 e4 44.a4 Rf5 45.Rbc3 Kf2 46.b4 Re1 47.Kb2 Rxc1 48.Kxc1 Ke2 49.Kb2 d2 50.Rc2 Ke1 0-1
+Reference
+View
+Anokhin, Yury vs. Czerniawski, Andrew, ICCF email 2015
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 a6 6.Bg5 e6 7.Qf3 Bd7 8.O-O-O Nc6 9.Qg3 h6 10.Be3 Nxd4 11.Rxd4 e5 12.Rd3 Rc8 13.f3 b5 14.Kb1 Qc7 15.Rd2 Be6 16.Bd3 Qb7 17.Bf1 Rxc3 18.bxc3 Qc6 19.c4 bxc4 20.c3 Be7 21.Be2 O-O 22.Rb2 Nh5 23.Qf2 d5 24.Rb6 Qa8 25.Ka1 Nf4 26.Bxf4 exf4 27.Qd4 Bd8 28.Rb2 Bf6 29.e5 Be7 30.Rd1 Rc8 31.g4 Ba3 32.Rdb1 g5 33.Bd1 Bc5 34.Qxc5 Rxc5 35.Rb8+ Rc8 36.Rxa8 Rxa8 37.Rb6 a5 38.Kb2 Rd8 39.Kc2 h5 40.h3 d4 41.Rc6 d3+ 42.Kc1 Rc8 43.Ba4 Rxc6 44.Bxc6 hxg4 45.hxg4 Kf8 46.Kd2 Ke7 47.Kc1 Kd8 48.Kd1 Kc7 49.Be8 Kb6 50.Kd2 Kc5 51.Ke1 Kd5 52.Ba4 Kxe5 53.Be8 f5 54.gxf5 Kxf5 55.Bh5 Kf6 56.Kf2 g4 57.fxg4 Kg5 58.Be8 Bxg4 59.Ke1 Kh4 60.Bf7 Kg3 61.Bxc4 Bf5 0-1
+Reference
+View
+Perez Ponsa, Federico vs. Warmerdam, Max, AI Cup Play In rapid 2023
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bg5 e6 7.Bb5 Bd7 8.Qd3 Qb6 9.O-O-O Nxd4 10.Bxd7+ Nxd7 11.Qxd4 Qxd4 12.Rxd4 a6 13.Rhd1 Rc8 14.Bh4 h5 15.f3 Ne5 16.Bg3 b5 17.a4 h4 18.Bxe5 dxe5 19.Rd7 b4 20.Ne2 h3 21.g3 Bc5 22.Kb1 O-O 23.Ng1 Bxg1 24.Rxg1 f5 25.Rd2 fxe4 26.fxe4 Rf3 27.Re1 Kf7 28.Ree2 Ke7 29.Ka2 g5 30.Re1 Rxc2 31.Rxc2 b3+ 32.Kb1 bxc2+ 33.Kxc2 Rf2+ 34.Kc3 Rxh2 35.b4 Rg2 36.b5 axb5 37.axb5 h2 38.b6 Rxg3+ 39.Kc2 Rg2+ 40.Kc3 Rg1 41.b7 Rxe1 42.b8=Q Rc1+ 43.Kd2 h1=Q 0-1
+Reference
+View
+Malakhov, Igor vs. Kryakvin, Dmitry, Russian Ch rapid 2018
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bc4 e6 7.Bb3 Be7 8.O-O O-O 9.Be3 Bd7 10.f4 Nxd4 11.Bxd4 Bc6 12.Qe2 b5 13.Nxb5 Bxb5 14.Qxb5 Nxe4 15.f5 e5 16.Be3 Bg5 17.Qe2 Bxe3+ 18.Qxe3 Nf6 19.Rad1 Qc7 20.h3 a5 21.Rf2 a4 22.Bd5 Ra5 23.Bf3 e4 24.Be2 Qxc2 25.Rxd6 Qxb2 26.g4 Qe5 27.Rd4 h6 28.Bd1 Rd5 29.Rfd2 Rfd8 30.Rxd5 Nxd5 31.Qe1 Ra8 32.Bf3 Nf6 33.Bg2 Rb8 34.Re2 Rb2 35.Kh1 a3 36.Bf1 Kh7 37.Rg2 e3 38.Re2 Ne4 39.Kg2 Nc3 0-1
+Reference
+View
+Danin, Alexandre vs. Kryakvin, Dmitry, Kolomna rapid op 2018
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bc4 e6 7.Be3 Be7 8.Bb3 O-O 9.O-O Bd7 10.f4 Nxd4 11.Bxd4 Bc6 12.Qe2 b5 13.Nxb5 Bxb5 14.Qxb5 Nxe4 15.f5 e5 16.Be3 Bg5 17.Bxg5 Qxg5 18.Qe2 Nf6 19.Rad1 Rad8 20.Bd5 Rfe8 21.Bc6 Re7 22.c4 e4 23.b4 h5 24.a4 Ng4 25.Rd4 Ne5 26.f6 Nf3+ 27.Rxf3 exf3 28.Qxf3 Qc1+ 29.Rd1 Re1+ 30.Rxe1 Qxe1+ 31.Qf1 Qxb4 32.Bd5 Re8 33.Kf2 Qb2+ 34.Kg3 Qxf6 0-1
+Reference
+View
+Abdrlauf, Elham vs. Kucuksari, Kaan, Rilton Cup 2023
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bc4 e6 7.Be3 Bd7 8.Bb3 Nxd4 9.Qxd4 Be7 10.O-O-O O-O 11.f4 Bc6 12.h3 Nd7 13.Qc4 Rc8 14.Rhf1 Qa5 15.f5 b5 16.Qe2 Nc5 17.f6 Nxb3+ 18.axb3 Bxf6 19.Rxf6 b4 20.Na4 gxf6 21.Bh6 Kh8 22.Bxf8 Rxf8 23.Rxd6 Rc8 24.Kb1 Qe5 25.Rd2 Bxe4 26.Ka2 Kg7 27.Qf2 Qc7 28.c3 bxc3 29.bxc3 Bc6 30.Rd4 Bxa4 31.Rg4+ Kf8 32.Rxa4 Qxc3 33.Qxa7 Qc1 34.Rc4 Rxc4 35.bxc4 Qxc4+ 36.Kb2 Qe2+ 37.Ka1 Qf1+ 38.Kb2 Qxg2+ 39.Ka1 Qf1+ 40.Kb2 Qxh3 41.Qb8+ Kg7 42.Qc7 Qg2+ 43.Ka1 Qg1+ 44.Kb2 h5 45.Qf4 Qg4 46.Qf2 h4 0-1
+Reference
+View
+Velimirovic, Dragoljub vs. Georgiev, Krum, Greece TCh 2001
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Bd7 6.Bc4 e6 7.Bb3 Nc6 8.Ndb5 Qb8 9.Bf4 Ne5 10.Bg5 Nxe4 11.Nxe4 Bxb5 12.f4 Ng6 13.f5 d5 14.fxg6 hxg6 15.c4 dxe4 16.cxb5 Rxh2 17.Rxh2 Qxh2 18.Be3 Qxg2 19.Rc1 Bb4+ 0-1
+Reference
+View
+Khamidov, Komil vs. Stremavicius, Titas, Wroclaw op 2012
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.f3 e5 7.Nb3 Be7 8.Be3 O-O 9.Qd2 Be6 10.Nd5 a5 11.Bb6 Qb8 12.Nc7 a4 13.Nxa8 Qxa8 14.Na5 d5 15.Nxc6 bxc6 16.Bd3 dxe4 17.fxe4 c5 18.O-O Qb7 19.Ba5 c4 20.Be2 Nxe4 21.Qe1 Qxb2 22.h3 Bc5+ 23.Kh2 Bd4 24.Qh4 Qxc2 25.Rae1 Nf6 26.Bd1 Qg6 27.Bb4 Bd5 28.Bf3 e4 29.Bd1 Be5+ 30.Kh1 Bg3 31.Rxf6 gxf6 0-1
+Reference
+View
+Nandhidhaa, PV. vs. Divya, Deshmukh, India Women Ch 2019
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.f3 e5 7.Nb3 Be7 8.Be3 Be6 9.Nd5 O-O 10.Qd2 a5 11.Bb6 Qb8 12.Nc7 a4 13.Nxa8 Qxa8 14.Nc1 d5 15.Bb5 a3 16.bxa3 Qxa3 17.Nb3 d4 18.O-O Nd7 19.Ba5 Ra8 20.Bxc6 bxc6 21.f4 c5 22.f5 Bc4 23.Rfc1 Bb5 24.c4 Bc6 25.Qe1 Bd6 26.Rc2 Ba4 27.Qc1 Qxc1+ 28.Rcxc1 Bc6 29.Re1 h6 30.Kf2 h5 31.Kf3 g6 32.g4 hxg4+ 33.Kxg4 Nf6+ 34.Kh3 Nxe4 35.fxg6 f5 36.Bb6 Kg7 37.Rxe4 Bxe4 38.Nxc5 Bc6 39.Nd3 Ra3 40.Rd1 Be4 41.c5 Bb8 42.c6 Bxd3 43.Kh4 Be2 44.Rg1 Rc3 45.Bd8 Rxc6 46.Rb1 d3 47.Rxb8 d2 48.Kg5 Rxg6+ 49.Kxf5 d1=Q 50.Rb7+ Kh6 0-1
+Reference
+View
+Gombar, Peter vs. Vermirovsky, Vlastimil, Tatry op 2012
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Be2 e5 7.Nb3 Be7 8.Be3 O-O 9.f3 a5 10.a4 Be6 11.Nd5 Bxd5 12.exd5 Nb4 13.c4 Nd7 14.O-O Bg5 15.f4 Bxf4 16.Bxf4 exf4 17.Rxf4 Qb6+ 18.Nd4 Rae8 19.Kh1 Ne5 20.Nf5 Ng6 21.Rg4 Re5 22.Ng3 Rfe8 23.Bf1 h5 24.Rd4 Re1 0-1
+Reference
+View
+Pruijssers, Roeland vs. Warmerdam, Max, Netherlands Ch 2021
+1.e4 c5 2.Nc3 Nc6 3.Nge2 d6 4.d4 cxd4 5.Nxd4 Nf6 6.f3 e5 7.Nb3 Be7 8.Be3 Be6 9.Nd5 O-O 10.c3 Nb8 11.Nxf6+ Bxf6 12.Be2 Bg5 13.Qd2 Bxe3 14.Qxe3 a5 15.O-O Qc7 16.Nd2 Rc8 17.Rfc1 Nd7 18.Bb5 a4 19.b4 axb3 20.axb3 Rxa1 21.Rxa1 Qxc3 22.Qxc3 Rxc3 23.Bxd7 Bxd7 24.Ra8+ Rc8 25.Rxc8+ Bxc8 26.Nc4 Be6 27.Nxd6 Bxb3 28.Nxb7 h5 29.h4 f6 30.Kf2 Kf7 31.Ke3 Ke7 32.Kd3 Bf7 33.Kc3 Kd7 34.Kb4 Kc7 35.Na5 Kb6 36.Nc4+ Bxc4 37.Kxc4 Kc6 38.Kb4 Kb6 39.Kc4 Kc6 40.Kb4 Kb6 41.Kc4 1/2-1/2
+Reference
+View
+Kacharava, Nikoloz vs. Lagarde, Maxime, El Llobregat op 2019
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.f3 e5 7.Nb3 Be7 8.Be3 Be6 9.Qe2 O-O 10.O-O-O Qc8 11.g4 a5 12.g5 Ne8 13.Na4 Bd8 14.Kb1 b5 15.Nc3 a4 16.Nc1 Na5 17.Nd5 Nc4 18.Qf2 f5 19.gxf6 Nxf6 20.Nxf6+ Bxf6 21.Bxc4 bxc4 22.Rxd6 Be7 23.Rb6 c3 24.b3 axb3 25.Nxb3 Bxb3 26.axb3 Ba3 27.Rg1 Bb2 28.Rxg7+ Kxg7 29.Qg3+ Kf7 30.Rf6+ Kxf6 31.Qh4+ Ke6 32.Qh3+ Kd6 33.Qh6+ Qe6 34.Bc5+ Kxc5 0-1
+Reference
+View
+Cassi, Elisa vs. Gaal, Zsoka, Chennai ol (women) 2022
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.f3 e5 7.Nb3 Be7 8.Be3 Be6 9.Qe2 O-O 10.O-O-O Qc8 11.Kb1 Rd8 12.Nd5 Bxd5 13.exd5 Nb4 14.g4 Nfxd5 15.Bc1 Nb6 16.f4 a5 17.a3 a4 18.Nd4 exd4 19.axb4 Re8 20.Rxd4 Bf6 21.Re4 Rxe4 22.Qxe4 a3 23.Bb5 g6 24.g5 d5 25.Qd3 Bxb2 26.Bxb2 axb2 27.Kxb2 Qb8 28.Qd4 Qa7 29.Kc3 Qa3+ 30.Kd2 Nc4+ 31.Bxc4 dxc4 32.Rb1 Re8 33.h4 Qf3 34.Rg1 Ra8 35.c3 Qh3 36.Kc1 Qh2 37.Kb1 Qa2+ 38.Kc1 Qa1+ 39.Kd2 Ra2+ 0-1
+Reference
+View
+Csonka, Balazs vs. So, Wesley, Titled Tuesday 2022
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.f3 e5 7.Nb3 Be7 8.Be3 Be6 9.Qd2 d5 10.exd5 Nxd5 11.Nxd5 Qxd5 12.Qxd5 Bxd5 13.O-O-O O-O-O 14.Bb5 Kc7 15.Rd2 Be6 16.Rxd8 Rxd8 17.Rd1 Rxd1+ 18.Kxd1 b6 19.a4 f5 20.Nd2 Bf6 21.c3 Ne7 22.a5 Nd5 23.axb6+ axb6 24.Bf2 h5 25.h4 g6 26.Nc4 Nf4 27.Ne3 Be7 28.Bf1 Kc6 29.Kd2 Bc5 30.Ke1 b5 31.g3 Nd5 32.Nxd5 Bxd5 33.Bxc5 Kxc5 34.f4 e4 35.Kf2 Bc4 36.Bg2 Bd3 37.Ke3 Kc4 38.Kd2 Kb3 39.Kc1 Bc4 40.Bh3 Be2 41.Kd2 Bf3 42.Kc1 e3 0-1
+Reference
+View
+Favarel, Julien vs. Lagarde, Maxime, France Ch 2019
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.f3 e5 7.Nb3 Be7 8.Be3 Be6 9.Qd2 d5 10.exd5 Nxd5 11.Nxd5 Qxd5 12.Qxd5 Bxd5 13.O-O-O O-O-O 14.Bb5 Kc7 15.Rd2 a6 16.Be2 Nb4 17.Kb1 Be6 18.Rxd8 Rxd8 19.Rd1 Bf5 20.Na1 Nd5 21.Bf2 a5 22.a3 Bxa3 23.Bg3 f6 24.Nb3 Bxc2+ 25.Kxc2 Ne3+ 26.Kc1 Bxb2+ 27.Kxb2 Nxd1+ 28.Bxd1 Rxd1 29.Nxa5 Rg1 30.f4 Rxg2+ 31.Kc3 b6 32.Nc4 exf4 33.Bxf4+ Kc6 34.Ne3 Ra2 35.Nf5 g5 36.Bd2 Ra3+ 37.Kd4 Rh3 38.Ne7+ Kd6 39.Nc8+ Ke6 40.Nxb6 Rxh2 41.Ke3 h5 42.Be1 h4 43.Nc4 h3 0-1
+Reference
+View
+Siva, Mahadevan vs. Dubov, Daniil, Titled Tuesday 2020
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Be2 e5 7.Nf3 Be7 8.Bg5 O-O 9.O-O Be6 10.Bxf6 Bxf6 11.Nd5 Rc8 12.c3 Ne7 13.Nxf6+ gxf6 14.Qd2 d5 15.exd5 Qxd5 16.Rad1 Qxd2 17.Rxd2 Rfd8 18.Rfd1 Rxd2 19.Rxd2 Kf8 20.a3 Nf5 21.Bd1 Ke7 22.Bc2 h6 23.Kf1 Nd6 24.Bb1 Rc6 25.Ke1 Nc4 26.Re2 Rb6 27.b4 Nxa3 28.Bd3 Rc6 29.Kd2 Rd6 30.Nh4 f5 31.f3 Kf6 32.Ke3 f4+ 33.Kd2 Bc4 0-1
+Reference
+View
+Caruso, Tomas vs. Hernandez Guerrero, Gilberto Eduardo, Mendoza Bermejo Memorial 2023
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.Be2 e5 7.Nb3 Be7 8.O-O O-O 9.Kh1 a5 10.a4 Nb4 11.f4 Be6 12.f5 Bd7 13.Bg5 Bc6 14.Bxf6 Bxf6 15.Bc4 Rc8 16.Bd5 h6 17.Rf2 Qb6 18.Re2 Rfd8 19.Nd2 Nxd5 20.exd5 Bd7 21.Nde4 Bxf5 22.Nxf6+ gxf6 23.Qc1 Kg7 24.Ra3 Rc4 25.Nd1 Bg6 26.Rh3 h5 27.b3 Rf4 28.Ne3 Qc5 29.c4 Rh8 30.Re1 h4 31.Rf1 Rxf1+ 32.Qxf1 Qd4 33.Rf3 Rh5 34.h3 e4 35.Nf5+ Bxf5 36.Rxf5 Rxf5 37.Qxf5 e3 38.Qf3 Qa1+ 39.Kh2 Qe5+ 40.Kg1 f5 41.Qh5 Qf4 42.Qe2 Qd4 0-1
+Reference
+View
+Djokic, Vladan vs. Bogosavljevic, Boban, Serbia U20 Ch 2007
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Be2 e5 7.Nb3 Be7 8.O-O O-O 9.f4 a5 10.Be3 a4 11.Nd2 exf4 12.Rxf4 a3 13.b3 d5 14.exd5 Nb4 15.Bf3 Nbxd5 16.Nxd5 Nxd5 17.Bxd5 Qxd5 18.Nc4 Qe6 19.Qf3 Bd7 20.Bd4 f6 21.Re4 Qf7 22.Qe2 Rae8 23.Re1 Bb4 24.c3 Rxe4 25.Qxe4 Re8 26.Qh4 Bf8 27.Ne3 Bc6 28.Qg3 Qe6 29.Nc2 Qf5 30.Ne3 Qe6 31.Nc2 Qf7 32.Ne3 Re6 33.Rf1 Bd6 34.Qh3 Re8 35.Nf5 Bf8 36.Qg3 Kh8 37.Ne3 Re4 38.Qb8 h5 39.Rf5 Kh7 40.Qg3 h4 41.Qf2 Qg6 42.Ra5 Bd6 43.Qf5 Bf4 44.Qxg6+ Kxg6 45.Nf1 Re2 46.Bf2 Rxa2 47.b4 Bc7 48.Ra7 0-1
+Reference
+View
+Dzierzak, Radoslaw vs. Hnydiuk, Aleksander, Krakow op 2019
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.Be2 e5 7.Nb3 Be7 8.Bg5 O-O 9.Bxf6 Bxf6 10.Nd5 Bg5 11.Bg4 Be6 12.O-O Qd7 13.h3 g6 14.Bxe6 fxe6 15.Qg4 Bh6 16.Rad1 Qf7 17.Nc3 Rad8 18.Nb5 Qe7 19.c4 Bg7 20.Rd2 Bh6 21.Rdd1 Bg7 22.a3 a6 23.Nc3 Nd4 24.Nxd4 exd4 25.Ne2 e5 26.f4 Rc8 27.b3 b5 28.cxb5 axb5 29.Rc1 Rxc1 30.Nxc1 exf4 31.Rxf4 d5 32.Rxf8+ Bxf8 33.e5 Qxe5 34.Nd3 Qe3+ 35.Kh1 Qxd3 36.Qe6+ Kg7 37.Qe5+ Kf7 38.Qxd5+ Kf6 39.Qc6+ Kg5 40.Qd5+ Kh6 41.Qd8 Qf1+ 42.Kh2 Qf4+ 43.g3 Qd6 0-1
+Reference
+View
+Rodriguez Vila, Andres vs. Vasquez Schroder, Rodrigo Rafael, Santiago Entel Cup 2005
+1.e4 c5 2.Nc3 Nc6 3.Nge2 d6 4.d4 cxd4 5.Nxd4 Nf6 6.Be3 Ng4 7.Bb5 Nxe3 8.fxe3 Bd7 9.O-O e6 10.Bxc6 bxc6 11.e5 Be7 12.exd6 Bxd6 13.Ne4 Bxh2+ 14.Kxh2 Qh4+ 15.Kg1 Qxe4 16.Qd2 O-O 17.Nb3 Bc8 18.Qc3 e5 19.Nc5 Qg6 20.Nd3 f6 21.Qxc6 Bf5 22.Rf2 Kh8 23.Qa6 Rfd8 24.Ne1 Be4 25.c4 Qg5 26.Qa3 Rd7 27.b4 Rad8 28.b5 h5 29.Qc3 Rd1 30.Rxd1 Rxd1 31.c5 Qg3 32.Kf1 Bd3+ 33.Qxd3 Rxd3 34.Nxd3 Qxe3 35.Rf3 Qd4 36.Rh3 Qc4 37.b6 axb6 38.cxb6 Qxa2 39.g4 Qb1+ 40.Ke2 Qxb6 41.Rxh5+ Kg8 42.Nf2 Qd4 43.Rh3 Qc4+ 44.Kd2 g6 45.Re3 Kf7 46.Nd3 e4 47.Nf2 Qd4+ 48.Ke2 f5 49.gxf5 gxf5 50.Nh3 Kf6 51.Nf2 Qc4+ 52.Kd2 Ke5 53.Re2 Kd4 54.Ke1 e3 55.Nd1 f4 56.Rh2 Ke4 57.Re2 Kf3 58.Rh2 Qb4+ 59.Kf1 e2+ 60.Rxe2 Qc4 0-1
+Reference
+View
+Flores, Jaime vs. Yermolinsky, Alex, Stillwater Winter op 2009
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Be3 Ng4 7.Bc1 Qb6 8.Bb5 e5 9.Nd5 Qxd4 10.Qxd4 exd4 11.Nc7+ Kd8 12.Nxa8 Be6 13.Bxc6 bxc6 14.Bd2 Be7 15.Ba5+ Kd7 16.Nb6+ axb6 17.Bxb6 c5 18.b3 f5 19.h3 Nf6 20.exf5 Bxf5 21.c4 dxc3 22.g4 Be6 23.Ba5 Nd5 24.a3 Bg5 0-1
+Reference
+View
+Chukavin, Kirill vs. Praggnanandhaa, Rameshbabu, Riga op 2021
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.Be2 g6 7.Be3 Bg7 8.O-O O-O 9.Nxc6 bxc6 10.Qd2 Qc7 11.Rad1 Bb7 12.Bh6 Bxh6 13.Qxh6 d5 14.Bf3 e6 15.Rfe1 Rad8 16.h4 Rfe8 17.h5 e5 18.g4 d4 19.Ne2 Bc8 20.g5 Ng4 21.Bxg4 Bxg4 22.Kg2 gxh5 23.f3 Rd6 24.fxg4 Rxh6 25.gxh6 h4 26.Rf1 Qd6 27.g5 Qg6 28.Rf5 Qh5 0-1
+Reference
+View
+Nakamura, Hikaru vs. Dubov, Daniil, Carlsen Tour Final rapid 2020
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.g3 g6 7.Bg2 Nxd4 8.Qxd4 Bg7 9.O-O O-O 10.Qd1 Bg4 11.Qd2 Rc8 12.h3 Be6 13.Nd5 Qd7 14.Kh2 Rc4 15.Qe2 Rfc8 16.c3 b5 17.a3 h5 18.Bg5 Bxd5 19.exd5 Qf5 20.h4 Ng4+ 21.Kg1 Bf6 22.Rae1 Bxg5 23.hxg5 Qxg5 24.Qxe7 Qxe7 25.Rxe7 R4c7 26.Re4 Ne5 27.f4 Ng4 28.Rfe1 Nf6 29.Rd4 Rb8 30.Bf1 Kf8 31.Red1 Re7 32.Rb4 Re3 33.Kg2 a6 34.a4 Ne4 35.axb5 axb5 36.Bd3 Nxg3 37.c4 h4 38.cxb5 Nh5 39.Kf2 Rh3 40.b6 Nf6 41.Be2 Rh2+ 42.Kf3 Nd7 43.b7 Nc5 44.Ra1 Rxb7 45.Ra8+ Kg7 46.Rxb7 Nxb7 47.b4 Rh3+ 48.Kg2 Rg3+ 49.Kh2 Rb3 50.Ba6 Rxb4 51.Rb8 Rb6 52.Bxb7 Rb3 53.Kg2 Kf6 54.Kh2 h3 55.Rd8 Rxb7 56.Kxh3 Kf5 57.Rxd6 Kxf4 58.Rd8 Rb3+ 59.Kg2 Ke5 60.Rd7 f5 61.Rd8 Rb6 62.Kg3 Rd6 63.Rg8 Kf6 0-1
+Reference
+View
+Adams, Michael vs. Kramnik, Vladimir, Wijk aa Zee 1998
+1.e4 c5 2.Nf3 Nc6 3.Nc3 d6 4.d4 cxd4 5.Nxd4 Nf6 6.g3 g6 7.Bg2 Nxd4 8.Qxd4 Bg7 9.O-O O-O 10.Qb4 a5 11.Qb3 Be6 12.Nd5 a4 13.Qxb7 Nxd5 14.exd5 Bf5 15.Bg5 Qb8 16.Qxb8 Rfxb8 17.Bxe7 Rxb2 18.a3 Rxc2 19.Rae1 Ra6 20.Be4 Bxe4 21.Rxe4 Bb2 22.Rfe1 Rc1 23.Rxc1 Bxc1 24.Bf6 Ra8 25.Rc4 Bxa3 26.Bd4 Bc5 27.Bxc5 dxc5 28.Rxc5 a3 29.Rc1 a2 0-1
+Reference
+View
+Rolletschek, Heinrich vs. Venkatesh, Marani Rajendran, Schwarzacher op 2022
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.g3 g6 7.Bg2 Nxd4 8.Qxd4 Bg7 9.O-O O-O 10.Qd3 Nd7 11.Nd5 e6 12.Ne3 Nc5 13.Qe2 b6 14.c4 Bb7 15.f3 a6 16.Rb1 b5 17.Rd1 Qb6 18.Bd2 b4 19.Be1 a5 20.Bf2 Rfd8 21.Nc2 Rac8 22.Nd4 Ba6 23.Nb3 a4 24.Nxc5 dxc5 25.e5 b3 26.a3 Bf8 27.f4 Qc7 28.Kf1 Be7 29.Ke1 Kg7 30.Rxd8 Rxd8 31.Rd1 Qa5+ 32.Rd2 Bxc4 33.Qe3 Rd3 34.Qe2 Rc3 35.Qd1 Rc2 36.Be3 Rxb2 37.Kf2 Qc3 0-1
+Reference
+View
+Pucher, Sebastien vs. Svane, Rasmus, Metz op 2014
+1.Nf3 c5 2.e4 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 g6 6.g3 Bg7 7.Bg2 O-O 8.O-O Nc6 9.Nde2 Rb8 10.a4 a6 11.Nd5 b5 12.axb5 axb5 13.Bg5 Ng4 14.h3 h6 15.Bd2 Nge5 16.b3 e6 17.Ne3 Qb6 18.Kh2 Bb7 19.Rc1 Rbc8 20.f4 Nd7 21.Ng4 h5 22.Be3 Qc7 23.Nf2 Rfd8 24.c3 Nc5 25.Nd4 Qb8 26.b4 Na4 27.Qb3 Nxd4 28.cxd4 Rxc1 29.Rxc1 Rc8 30.Rxc8+ Qxc8 31.Bf1 Nc3 32.Bg2 Qc4 33.Qxc4 bxc4 34.g4 hxg4 35.hxg4 d5 36.exd5 exd5 37.g5 Ne2 38.Ng4 c3 39.Bf1 Nxd4 40.Bxd4 Bxd4 41.Bd3 Bc8 42.Kg3 Kg7 43.Nh2 Bf5 44.Nf3 Bxd3 45.Nxd4 c2 46.Nb3 Bc4 47.Nc1 d4 48.Kf3 Kf8 0-1
+Reference
+View
+Narayanan, Srinath vs. Stopa, Jacek, Kolkata op 2013
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.h3 e5 7.Nb3 Be6 8.Be3 d5 9.exd5 Nxd5 10.Nxd5 Qxd5 11.Qxd5 Bxd5 12.O-O-O O-O-O 13.c4 Be4 14.Rxd8+ Kxd8 15.Nd2 Bg6 16.Nb1 f5 17.f3 f4 18.Bf2 Nd4 19.Bxd4 exd4 20.Nd2 Kc7 21.Ne4 Bxe4 22.fxe4 Kd6 23.Kc2 Ke5 24.Be2 Be7 25.Kd3 Rf8 26.h4 Rf6 27.h5 Rb6 28.Rb1 a5 29.Bf3 Ba3 30.Kc2 Bf8 31.Kd3 Rh6 32.Rc1 Bc5 33.Rh1 Be7 34.Rc1 Rb6 35.Rb1 g5 36.Bg4 h6 37.Bf3 Rb4 38.b3 Rb6 39.Bg4 Ba3 40.Bc8 Rc6 41.Bg4 Rc7 42.Bf3 b5 43.Bg4 Rb7 44.cxb5 Rxb5 45.Rd1 Rc5 46.Ke2 Bb4 47.Bf5 Rc2+ 48.Kf3 Rxa2 49.g3 fxg3 50.Kxg3 Ra3 0-1
+Reference
+View
+Suliborski, Jakub vs. Grela, Kacper, Polish 2nd League 2019
+1.e4 c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 d6 6.h3 e5 7.Nde2 Be6 8.Bg5 Be7 9.Bxf6 Bxf6 10.Nd5 O-O 11.Nec3 Bg5 12.Bd3 Rc8 13.O-O Ne7 14.Qf3 Nxd5 15.Nxd5 Bxd5 16.exd5 g6 17.c3 f5 18.Qd1 e4 19.Be2 Bf4 20.Qd4 Qg5 21.Bb5 Rc7 22.Rae1 Re7 23.Kh1 a6 24.Ba4 e3 25.Bd1 Re4 26.Qb6 Rfe8 27.Re2 Qh4 28.Bc2 R4e7 29.Qd4 Qg5 30.Bd3 exf2 31.Rxe7 Rxe7 32.Qxf2 Bg3 33.Qf3 Re3 34.Qd1 Be5 35.Rf3 Rxf3 36.gxf3 Qg3 37.Qe2 Qxh3+ 38.Kg1 Qh6 39.a4 Qc1+ 40.Kg2 h5 41.Qf2 Qf4 42.a5 h4 43.b4 Bxc3 44.b5 axb5 45.Bxb5 Bxa5 46.Qe2 Bc3 47.Be8 Kh7 48.Qe7+ Bg7 0-1
+Reference
+View
+Nakamura, Hikaru vs. Firouzja, Alireza, WCh Blitz 2019
+1.e4 c5 2.Nf3 d6 3.Nc3 Nf6 4.h3 Nc6 5.d4 cxd4 6.Nxd4 e5 7.Nf3 Be7 8.Bc4 O-O 9.O-O Be6 10.Bb3 h6 11.Re1 Na5 12.Be3 a6 13.Qe2 Qc7 14.Rad1 Nxb3 15.cxb3 b5 16.b4 Qb7 17.Nd2 Rac8 18.a3 d5 19.exd5 Nxd5 20.Qf3 Qc6 21.Nxd5 Bxd5 22.Qg3 f5 23.Qxe5 Bd6 24.Qc3 Bxg2 25.Qxc6 Bxc6 26.Bc5 Rf6 27.Kf1 Bf4 28.Be3 Bh2 29.Rc1 Rg6 30.Ke2 Rd8 31.Nf3 Bb8 32.Rg1 Rxg1 33.Rxg1 Kf7 34.Nd4 Bd7 35.f4 Re8 36.Kf2 Re4 37.Ne2 Be6 38.Rd1 g5 39.Kf3 gxf4 40.Nxf4 Bxf4 41.Bxf4 h5 42.Rd6 Rc4 43.h4 Rc2 44.Be5 Rc4 45.Rxa6 Rxh4 46.Ra7+ Ke8 47.Bf6 Bd5+ 48.Ke2 Re4+ 49.Kd3 Bc4+ 50.Kc3 f4 51.b3 f3 52.Bg7 f2 53.Ra8+ Kd7 0-1
+Reference
+View
+Sethuraman, SP. vs. Gelfand, Boris, FIDE Grand Swiss 2021
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 Nc6 6.Bb5 Bd7 7.Be3 Ng4 8.Nxc6 Nxe3 9.Nxd8 Nxd1 10.Nxf7 Nxc3 11.Bxd7+ Kxf7 12.bxc3 e6 13.f4 Ke7 14.Ba4 g6 15.Rd1 Rc8 16.O-O Bg7 17.f5 Rhf8 18.fxe6 Kxe6 19.Bb3+ Ke7 20.Rxf8 Rxf8 21.Rf1 Rxf1+ 22.Kxf1 Bxc3 23.Ke2 Be5 24.g3 g5 25.Kf3 h5 26.h3 Kf6 27.Bd5 b6 28.Bc6 h4 29.gxh4 gxh4 30.Ke2 Kg5 31.Kf3 1/2-1/2
+Reference
+View
+Begmuratov, Khumoyun vs. Samadov, Read, Baku op 2023
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.f3 e5 6.Nb3 d5 7.Bg5 d4 8.c3 Nc6 9.cxd4 Bb4+ 10.Bd2 Nxe4 11.Bxb4 Qh4+ 12.g3 Nxg3 13.hxg3 Qxh1 14.Bc5 Bh3 15.N1d2 O-O-O 16.Qc2 Bxf1 17.O-O-O Qh6 18.Rxf1 b6 19.Qf5+ Kb8 20.Ba3 exd4 21.Kd1 Qg6 22.Qf4+ Ka8 23.Re1 Rd7 24.Ne4 Rhd8 25.g4 f6 26.Rh1 Ne5 27.Nbd2 Rc8 28.Rh5 Rc1+ 29.Ke2 Re1+ 30.Kxe1 Nd3+ 31.Kd1 Nxf4 32.Rh2 f5 33.Nf2 Qe6 0-1
+Reference
+View
+Danin, Alexandre vs. Volokitin, Andrei, Austria TCh 2017
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.f3 e5 6.Nb3 d5 7.Bg5 d4 8.c3 Nc6 9.cxd4 Bb4+ 10.Bd2 Nxe4 11.Bxb4 Qh4+ 12.g3 Nxg3 13.hxg3 Qxh1 14.Ba3 Bh3 15.Qe2 O-O-O 16.N1d2 Bxf1 17.Nxf1 exd4 18.O-O-O Rhe8 19.Qd3 Kb8 20.Qf5 Ne5 21.Nfd2 Qg2 22.f4 Rc8+ 23.Kb1 Nf3 24.Qd3 Re3 25.Qf5 Nxd2+ 26.Nxd2 Qc6 27.Qxh7 d3 28.Qh1 Rxg3 29.Qf1 Qc2+ 30.Ka1 Rg2 31.Nb1 Qe2 32.Bd6+ Ka8 33.Be5 a6 34.Re1 Qxf1 35.Rxf1 Rcc2 36.Rd1 f6 37.Bc3 b5 38.a3 a5 39.Rxd3 Rg1 40.Bd2 g5 41.fxg5 fxg5 42.Ka2 Kb7 43.Bxa5 g4 44.Rd7+ Kc8 45.Rd8+ Kb7 46.Rd7+ Kc8 47.Rg7 g3 48.Kb3 Rgg2 49.Bc3 Rcf2 50.Be5 Re2 51.Rxg3 Rxg3+ 52.Bxg3 Re3+ 53.Nc3 Rxg3 54.Kb4 Rg2 55.b3 Kb7 56.Kxb5 Rg3 57.Kc4 Rg4+ 58.Kc5 Rg5+ 59.Kd4 Rg4+ 60.Kc5 Rg3 1/2-1/2
+Reference
+View
+Davidson, Jamie P vs. Champion, Chris, ICCF email 2018
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Qxd4 Nc6 5.Bb5 a6 6.Bxc6+ bxc6 7.O-O e5 8.Qa4 Qc7 9.c4 Bd7 10.Nc3 Nf6 11.Bg5 Be7 12.Rad1 O-O 13.Rd3 h6 14.Bxf6 Bxf6 15.Rfd1 d5 16.Qa3 d4 17.Na4 Be6 18.c5 Be7 19.Nb6 Rab8 20.b4 f5 21.exf5 Bxf5 22.R3d2 d3 23.Qxa6 e4 24.Nd4 Bg4 25.Qc4+ Kh8 26.Ne6 Bxe6 27.Qxe6 Bg5 28.Rb2 Rbe8 29.Qb3 e3 0-1
+Reference
+View
+Beradze, Irakli vs. Shevchenko, Kirill, World Uni rapid 2021
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Qxd4 Nc6 5.Bb5 a6 6.Bxc6+ bxc6 7.c4 e5 8.Qd3 Qc7 9.Nc3 Be7 10.O-O Nf6 11.Bg5 O-O 12.Rfd1 Rd8 13.Rac1 h6 14.Bh4 g5 15.Bg3 Nh5 16.Nd2 Nf4 17.Qf3 g4 18.Qe3 Bg5 19.Bxf4 exf4 20.Qd3 Qe7 21.Re1 Bf6 22.Nb3 Be5 23.Nd4 Bd7 24.f3 Qf6 25.Rcd1 g3 26.h3 Rab8 27.Rd2 Rxb2 28.Nce2 Rdb8 29.Nb3 Rxd2 30.Qxd2 Be6 31.Rc1 c5 32.Qd3 Qh4 33.Nc3 a5 34.Qe2 Qf6 35.Nb5 a4 36.Na5 Bd4+ 37.Kf1 Be3 38.Rd1 Rb6 39.Qc2 Qh4 40.e5 dxe5 41.Nc7 Bxh3 42.gxh3 Qxh3+ 43.Qg2 Qxg2+ 44.Kxg2 Rb2+ 45.Kh3 f5 46.Rh1 g2 47.Rd1 g1=N+ 48.Rxg1+ Bxg1 0-1
+Reference
+View
+Vorontsov, Pavlo vs. Korobov, Anton, Moscow op 2016
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Qxd4 Nc6 5.Bb5 a6 6.Bxc6+ bxc6 7.O-O e5 8.Qd3 Nf6 9.Rd1 Qc7 10.c4 Be7 11.Nc3 O-O 12.Bg5 Rd8 13.Nd2 Bg4 14.f3 Be6 15.Bxf6 Qb6+ 16.Kh1 Bxf6 17.b3 h5 18.Nf1 Bg5 19.Qe2 a5 20.Na4 Qa7 21.Rd3 Rd7 22.Rad1 Rad8 23.Ne3 g6 24.Nd5 cxd5 25.cxd5 Bh3 26.gxh3 Rc7 27.Rc3 Rxc3 28.Nxc3 Rc8 29.Nb5 Qc5 30.Qc4 Qf2 31.Rf1 Rxc4 32.Rxf2 Rc1+ 33.Kg2 Be3 34.Rf1 Rc2+ 35.Kh1 Bc5 36.f4 exf4 37.Rxf4 Rxa2 38.e5 dxe5 39.Rc4 Bb4 0-1
+Reference
+View
+Sankalp, Gupta vs. Mendonca, Leon Luke, Sukoon Resort Indian rapid 2020
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Qxd4 Nc6 5.Qe3 g6 6.Be2 Bg7 7.O-O Bg4 8.Rd1 Bxf3 9.Bxf3 Nf6 10.c4 Qb6 11.Nc3 O-O 12.Qxb6 axb6 13.Be3 Nd7 14.Rdc1 Nc5 15.Bd2 Nb4 16.Rab1 Nxa2 17.Nxa2 Rxa2 18.Bc3 Bxc3 19.Rxc3 Rfa8 20.Kf1 Ra1 21.Rcc1 Rxb1 22.Rxb1 Ra4 23.b4 Nd3 24.Be2 Ne5 25.f4 Nc6 26.c5 bxc5 27.bxc5 dxc5 28.Rxb7 Nd4 29.Rb2 c4 30.Kf2 c3 31.Rb8+ Kg7 32.Bd3 c2 33.Rc8 Ra1 34.Bxc2 Ra2 35.Rd8 Rxc2+ 36.Kg3 Ne6 37.Rd3 Nc5 38.Re3 Rd2 39.Re1 h5 40.e5 e6 41.Rc1 Rd3+ 42.Kf2 Ne4+ 43.Ke2 Ra3 44.Rc4 Nc3+ 45.Kf2 Nd5 46.Rd4 Ra2+ 47.Kg3 Ne7 48.Rd7 Nf5+ 49.Kh3 Ra3+ 50.g3 Ra2 51.Rd1 Ne3 52.Rh1 Ng4 53.Kh4 Rxh2+ 54.Rxh2 Nxh2 55.Kg5 Nf3 0-1
+Reference
+View
+Brkic, Ante vs. Bjerre, Jonas Buhl, Aimchess Play In rapid 2023
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.Bxd7+ Nxd7 5.O-O Ngf6 6.Qe2 e6 7.b3 g6 8.Bb2 Bg7 9.d4 cxd4 10.Bxd4 O-O 11.c4 Qa5 12.Rd1 a6 13.Bc3 Qc7 14.Nbd2 e5 15.Rac1 Nc5 16.b4 Ne6 17.g3 Rac8 18.Bb2 Qb6 19.a3 a5 20.Bc3 axb4 21.axb4 Bh6 22.Rb1 Rfe8 23.Kf1 Qc6 24.Bb2 Ng5 25.Nxg5 Bxg5 26.b5 Qc5 27.f3 Ra8 28.Bc3 Ra4 29.Nb3 Qxc4 30.Qxc4 Rxc4 31.Be1 Rc2 32.h4 Be3 33.Rxd6 Nh5 34.Rd3 Bb6 35.Rd2 Rec8 36.Rb2 R2c4 37.Kg2 f5 38.exf5 gxf5 39.Re2 Re8 40.Na5 Rc7 41.Rbc2 Bxa5 42.Bxa5 Rg7 43.Kh2 Nxg3 44.Rg2 f4 45.Be1 Nf5 46.Rxg7+ Kxg7 47.Bb4 b6 48.Rc6 Rb8 49.Rc7+ Kg6 50.Kh3 Nd4 51.Bd6 Nxb5 0-1
+Reference
+View
+Deuer, Marius vs. Yaniv, Yuval, EU TCh U18 2022
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.Bxd7+ Nxd7 5.O-O Ngf6 6.Qe2 e6 7.b3 g6 8.Bb2 Bg7 9.c4 O-O 10.d4 cxd4 11.Nxd4 d5 12.e5 Ne4 13.cxd5 exd5 14.f3 Nxe5 15.fxe4 dxe4 16.Qxe4 Re8 17.Nd2 Nc4 18.Qxe8+ Qxe8 19.Nxc4 b5 20.Rfe1 Bxd4+ 21.Bxd4 Qd7 22.Bf2 bxc4 23.bxc4 Rd8 24.c5 g5 25.Rac1 Qc6 26.Rcd1 Rxd1 27.Rxd1 f5 28.h3 f4 29.Rd6 Qc7 30.Bd4 Qe7 31.Kf2 h5 32.Kf3 Kh7 33.h4 gxh4 34.Kxf4 Qe2 35.c6 Qg4+ 36.Ke5 Qxg2 37.c7 Qc2 38.Rd7+ Kg6 39.Kd6 h3 40.Bc5 Qd2+ 41.Kc6 Qg2+ 42.Rd5 h2 43.c8=Q Qxd5+ 44.Kxd5 h1=Q+ 45.Kd6 Qh2+ 46.Ke7 Qh4+ 47.Kd7 Qg4+ 48.Kd8 Qg5+ 49.Ke8 Qe5+ 50.Be7 Qh8+ 51.Kd7 Qd4+ 52.Bd6 Qg7+ 53.Kc6 Qc3+ 54.Bc5 Qf3+ 55.Kc7 Qf7+ 56.Qd7 Qxa2 57.Qd3+ Kg5 58.Be7+ Kg4 59.Qe4+ Kh3 60.Qf3+ Kh2 61.Bd6+ Kg1 62.Bc5+ Kh2 63.Qxh5+ Kg2 64.Qg4+ Kh2 65.Bd6+ Kh1 66.Qh3+ 1-0
+Reference
+View
+Mastrovasilis, Dimitrios vs. Adhiban, Baskaran, Sharjah Masters 2021
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.Bxd7+ Nxd7 5.O-O Ngf6 6.Qe2 e6 7.c3 Be7 8.d4 O-O 9.e5 Ne8 10.Rd1 cxd4 11.cxd4 Nc7 12.Nc3 Nb6 13.Ne4 Ncd5 14.Bg5 Bxg5 15.Nfxg5 h6 16.Nf3 dxe5 17.dxe5 Qe7 18.Rd4 Rfd8 19.Qd2 Nd7 20.Rd1 Kh8 21.g3 Nb8 22.Nc3 Nc6 23.Rd3 Nxc3 24.Qxc3 Rxd3 25.Rxd3 Rd8 26.Kg2 Rd5 27.Rxd5 exd5 28.Qe3 Kg8 29.a3 a5 30.h4 Kh8 31.Kg1 Qe6 32.Qf4 Kg8 33.Kg2 Qe7 34.Qe3 Qe6 35.Qb6 Qd7 36.b4 axb4 37.axb4 Nd8 38.Nd4 Nc6 39.Nf3 Nd8 40.Nd4 Nc6 1/2-1/2
+Reference
+View
+Goryachkina, Aleksandra vs. Matlakov, Maxim, Titled Tuesday 2022
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.Bxd7+ Nxd7 5.O-O Ngf6 6.Qe2 e6 7.c3 Be7 8.d4 O-O 9.e5 Ne8 10.Bf4 cxd4 11.cxd4 Nb6 12.Nc3 Nc7 13.Ne4 Ncd5 14.Bg3 dxe5 15.dxe5 Rc8 16.Rfd1 h6 17.Nd4 a6 18.Nb3 Qd7 19.Rac1 Rxc1 20.Rxc1 Rc8 21.Rxc8+ Qxc8 22.h3 Na4 23.Nd6 Qd7 24.Na5 b6 25.Nac4 b5 26.Na5 Qc7 27.Nb3 Nab6 28.Kh2 Nc4 29.Nxc4 bxc4 30.Nd4 Bg5 31.Qf3 Bc1 32.Qe2 Bf4 33.Qf3 Bxe5 0-1
+Reference
+View
+Artemiev, Vladislav vs. Gledura, Benjamin, FIDE Grand Swiss 2023
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.Bxd7+ Nxd7 5.O-O e6 6.c3 Ngf6 7.Qe2 Be7 8.Rd1 O-O 9.d4 cxd4 10.cxd4 b5 11.Bg5 a6 12.a4 h6 13.Bh4 bxa4 14.Rxa4 a5 15.Nc3 Nb6 16.Raa1 a4 17.Qb5 Rb8 18.Bxf6 Bxf6 19.e5 Be7 20.Nxa4 Nxa4 21.Qxa4 Rxb2 22.Qa7 dxe5 23.dxe5 Qb6 24.Qxb6 Rxb6 25.Rab1 Rxb1 26.Rxb1 g5 27.h3 Rc8 28.g4 Rc2 29.Rd1 Bc5 30.Rd2 Rxd2 31.Nxd2 Kf8 32.Kg2 Ke7 33.Kg3 Kd7 34.Ne4 Be7 35.f4 Kc6 36.Kf3 Kd5 37.Nc3+ Kc4 38.Ne4 Kd5 39.Nc3+ Kd4 40.Nb5+ Kc5 41.Nc3 Kd4 42.Nb5+ Kc5 1/2-1/2
+Reference
+View
+Sandalakis, Angelos vs. Aravindh, Chithambaram VR, La Roda op 2023
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.Bxd7+ Nxd7 5.O-O Ngf6 6.Qe2 e6 7.c3 Be7 8.d4 O-O 9.Nbd2 cxd4 10.cxd4 Rc8 11.Rd1 Qc7 12.Nf1 Qc2 13.Qxc2 Rxc2 14.Ne1 Rc6 15.f3 Rfc8 16.Be3 Nb6 17.b3 d5 18.e5 Ne8 19.a4 Rc3 20.Rab1 g5 21.Bd2 R3c6 22.g3 f6 23.f4 gxf4 24.gxf4 Ng7 25.Ne3 Nd7 26.Nd3 fxe5 27.fxe5 Bg5 28.Nf1 Bxd2 29.Rxd2 Nf5 30.Nf4 Nf8 31.Ng3 Nh4 32.Rd3 Nfg6 33.Nfh5 Kf7 34.Ne2 Rc2 35.Nhg3 Ke7 36.Kf1 Rf8+ 37.Ke1 Nf4 38.Nxf4 Rxf4 39.Nf1 Rff2 40.b4 Rce2+ 41.Kd1 Ng2 0-1
+Reference
+View
+Loftgaard, Mikkel Vinh vs. Ramsdal, Jens Albert, Fredericia 2023
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.Bxd7+ Nxd7 5.O-O Ngf6 6.Re1 e6 7.c3 Be7 8.d4 O-O 9.Bg5 h6 10.Bh4 cxd4 11.cxd4 b5 12.Nbd2 Nb6 13.Qe2 a6 14.Rac1 Rc8 15.h3 Qd7 16.b3 Rxc1 17.Rxc1 Rc8 18.Qd1 Rc7 19.Rc2 Qc8 20.Ne1 e5 21.Bxf6 Bxf6 22.d5 Bg5 23.Ndf3 Bd8 24.Rxc7 Qxc7 25.Qc2 f5 26.exf5 Qxc2 27.Nxc2 Nxd5 28.Nd2 Nc3 29.Nb4 Ba5 30.Nxa6 Nxa2 31.Nb1 Kf7 32.g4 Nb4 33.Nxb4 Bxb4 34.Kf1 Kf6 35.h4 e4 36.Kg2 d5 37.f4 h5 38.Kg3 d4 0-1
+Reference
+View
+Smith, Allyne vs. Cleto Jr, Dirceu, ICCF email 2022
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.c4 Nc6 5.Nc3 e5 6.d3 Nge7 7.a3 Ng6 8.h4 h5 9.b4 Be7 10.Nd5 a6 11.Ba4 Bg4 12.Kf1 Rb8 13.Ne3 b5 14.Bb3 Nd4 15.Nxg4 Nxb3 16.Qxb3 hxg4 17.Nh2 Rxh4 18.g3 Rh8 19.Kg2 Qd7 20.Bd2 f5 21.cxb5 axb5 22.exf5 Qxf5 23.Qd5 Nf8 24.a4 bxa4 25.bxc5 dxc5 26.Be3 Rd8 27.Qe4 Qxe4+ 28.dxe4 Ra8 29.Rhc1 Nd7 30.Nxg4 Kf7 31.Rc4 Nb6 32.Rcc1 Nd7 33.Rc4 Nb6 34.Rc3 Bf6 35.Nxf6 gxf6 36.Bxc5 Rhc8 37.Rac1 Rc6 38.Bxb6 Rxb6 39.Rc7+ Ke6 40.Rh7 a3 41.Rcc7 Rba6 1/2-1/2
+Reference
+View
+Wong, Victor vs. Whelan, Hugh, ICCF email 2021
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.c4 Nc6 5.Nc3 e5 6.d3 Nge7 7.h4 Ng8 8.h5 h6 9.Nh4 Nf6 10.Nf5 Bxf5 11.exf5 Be7 12.g4 Nh7 13.Qf3 Rc8 14.Be3 O-O 15.O-O-O Bg5 16.Kb1 a6 17.Bxc6 bxc6 18.Qg3 Bxe3 19.fxe3 Qe7 20.d4 cxd4 21.exd4 Ng5 22.Rhe1 Rb8 23.dxe5 1/2-1/2
+Reference
+View
+Martinez Reyes, Pedro Ramon vs. Sarana, Alexey, Titled Tuesday 2022
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.c4 Nc6 5.Nc3 e5 6.O-O Nge7 7.d3 Ng6 8.Nd5 Be7 9.a3 O-O 10.b4 f5 11.bxc5 dxc5 12.Bxc6 Bxc6 13.exf5 Rxf5 14.Qb3 Bd6 15.Nd2 Nf4 16.Ne4 Ne2+ 17.Kh1 Qh4 18.h3 Rf3 19.Kh2 Qxe4 20.Qxb7 Bxb7 21.dxe4 Rd3 22.Be3 Ba6 23.Rfe1 Nd4 24.Bxd4 cxd4 25.c5 Bxc5 26.Rac1 Bb6 27.Rc6 Bb7 0-1
+Reference
+View
+Fressinet, Laurent vs. Gelfand, Boris, Paris FIDE GP 2013
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.c4 Nf6 5.Nc3 Nc6 6.d4 cxd4 7.Nxd4 g6 8.h3 Nxd4 9.Bxd7+ Qxd7 10.Qxd4 Bg7 11.O-O O-O 12.Qd3 Qc6 13.Re1 Rac8 14.b3 Nxe4 15.Nd5 Rfe8 16.Rxe4 e6 17.Rb1 exd5 18.cxd5 Qd7 19.Be3 Rxe4 20.Qxe4 a6 21.Rc1 Rxc1+ 22.Bxc1 Be5 23.Be3 h5 24.a4 Qc8 25.Qc4 Qf5 26.Kf1 b5 27.axb5 axb5 28.Qxb5 Qb1+ 29.Ke2 Qc2+ 30.Bd2 Qe4+ 31.Kf1 Qb1+ 32.Ke2 Qe4+ 33.Kf1 Qb1+ 34.Ke2 1/2-1/2
+Reference
+View
+Nepomniachtchi, Ian vs. Vachier Lagrave, Maxime, Bucharest Superbet Classic 2022
+1.e4 c5 2.Nf3 d6 3.d4 cxd4 4.Nxd4 Nf6 5.Bb5+ Bd7 6.c4 Nc6 7.Nc3 g6 8.h3 Nxd4 9.Bxd7+ Qxd7 10.Qxd4 Bg7 11.Be3 O-O 12.Qd3 Qc6 13.Bd4 a6 14.Nd5 Nxd5 15.exd5 Qd7 16.Bxg7 Kxg7 17.O-O b5 18.b4 Qf5 19.Qe2 bxc4 20.Qxc4 Rfc8 21.Qd4+ Qf6 22.Qe4 Rc3 23.Rac1 Rac8 24.Rxc3 Qxc3 25.Qxe7 Qxb4 26.Qe2 a5 27.Rd1 a4 28.g3 a3 29.Kg2 Rc3 30.h4 h5 31.Rd2 Rc1 32.Qd3 Rc3 33.Qe2 Qb1 34.Rd1 Qf5 35.Rd2 Rc1 36.Qe3 Qb1 37.Qd4+ Kg8 38.Re2 Rg1+ 39.Kh2 Rh1+ 40.Kg2 Rg1+ 41.Kh2 Rh1+ 42.Kg2 Rg1+ 1/2-1/2
+Reference
+View
+Sjugirov, Sanan vs. Brkic, Ante, Hungary Ch rapid 2023
+1.e4 c5 2.Nf3 d6 3.Bb5+ Bd7 4.c4 Nf6 5.Nc3 Nc6 6.d4 cxd4 7.Nxd4 g6 8.h3 Nxd4 9.Bxd7+ Qxd7 10.Qxd4 Bg7 11.Be3 O-O 12.Qd3 Qc6 13.Rc1 Nd7 14.Nd5 Rfe8 15.Qc2 e6 16.Nb4 Qc7 17.O-O Nc5 18.a3 a5 19.Na2 a4 20.Nc3 Bxc3 21.Qxc3 Nxe4 22.Qd4 Qc6 23.Rfd1 Rad8 24.Bh6 e5 25.Qe3 f6 26.Qf3 Kf7 27.Rd5 Nc5 28.Bg5 Re6 29.Be3 Nd3 30.Rc3 e4 31.Qe2 Rde8 32.Qd2 Re5 33.Rd4 R8e6 34.b4 axb3 35.Rxb3 Rc5 36.Rdxd3 exd3 37.Bxc5 dxc5 38.Rxd3 Qe4 39.Kh2 Re7 40.Rd8 Qe5+ 41.g3 Qf5 42.Rd5 Qf3 43.Rxc5 Qxa3 44.Qd5+ Kg7 45.Rc8 Rf7 46.Kg2 Qe7 47.Rd8 Qe5 48.Qxe5 fxe5 49.Rd5 Rc7 50.c5 Kf6 51.Kf3 Rc6 52.Rd7 h5 53.Rxb7 1/2-1/2
+Reference
+View
+Fedoseev, Vladimir vs. Sarana, Alexey, ChessCom rapid 2022
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.Bd3 g6 5.Bc2 Bg7 6.d4 cxd4 7.cxd4 Nc6 8.h3 O-O 9.O-O e5 10.d5 Nb4 11.Bb3 Nxe4 12.Qe1 Nxf2 13.Qxf2 Nd3 14.Qe3 e4 15.Qxe4 Nxc1 16.Rxc1 Bxb2 17.Nbd2 Qf6 18.Rab1 Bf5 19.Qb4 Bxb1 20.Rxb1 Bc3 21.Ne4 Qxf3 22.Nxc3 Qe3+ 23.Kh1 a5 24.Nd1 Qd3 25.Bc4 Qxd1+ 0-1
+Reference
+View
+Ibarra Jerez, Jose Carlos vs. Sarana, Alexey, Titled Tuesday 2023
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.h3 g6 5.Bd3 Bg7 6.Bc2 O-O 7.d4 cxd4 8.cxd4 Nc6 9.O-O e5 10.d5 Nb4 11.Bb3 Nxe4 12.Qe1 Nxf2 13.Qxf2 Nd3 14.Qe2 Nxc1 15.Rxc1 e4 16.Qxe4 Bxb2 17.Nbd2 Qf6 18.Rab1 Bf5 19.Qb4 Bxb1 20.Rxb1 Bc3 21.Qe4 Rac8 22.Nc4 b5 23.Ne3 Rfe8 24.Qd3 Qf4 25.Nf1 a6 26.Rd1 Ba5 27.Kh1 Bb6 28.g3 Qf6 29.N3d2 Qf2 30.Nh2 Re2 0-1
+Reference
+View
+Kosic, Dragan vs. Kovacevic, Aleksandar, Novi Sad 2009
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.Bd3 Nc6 5.Bc2 g6 6.h3 Bg7 7.O-O O-O 8.Re1 e5 9.d3 h6 10.Nbd2 Be6 11.Bb3 Bxb3 12.Qxb3 Qd7 13.Nc4 Kh7 14.d4 cxd4 15.cxd4 Nxd4 16.Nxd4 exd4 17.Bf4 d5 18.exd5 Qxd5 19.Re5 Qd7 20.Rb5 b6 21.Rd1 Ne4 22.a4 Nc5 23.Qb4 Qf5 24.Qd2 Qe6 25.Qc2 d3 26.Qc1 Nxa4 27.Be5 Rfc8 28.Bxg7 Kxg7 29.b3 Nc5 30.Qb2+ Qf6 31.Ne5 Re8 32.f4 Rad8 33.b4 Ne6 34.Kh1 Nc7 0-1
+Reference
+View
+Panopio, Rodolfo Jr vs. Wang, Hao, Puregold op 2016
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.h3 Nc6 5.Bd3 g6 6.O-O Bg7 7.Bc2 O-O 8.Re1 e5 9.d4 exd4 10.cxd4 cxd4 11.Nxd4 Nxd4 12.Qxd4 Be6 13.Nc3 Nd5 14.Qd3 Nxc3 15.bxc3 Rc8 16.Bd2 d5 17.Rab1 dxe4 18.Qxd8 Rfxd8 19.Bg5 Bxc3 20.Rxe4 Rd7 21.Ba4 Rdc7 22.Rxe6 fxe6 23.Bb3 Kf7 24.Rd1 Bf6 25.Bf4 Re7 26.g4 b5 27.g5 Bg7 28.Rd6 a5 29.Kg2 a4 30.Bd1 Rc5 31.Be2 Be5 0-1
+Reference
+View
+Darmanin, Jake vs. Ziska, Helgi Dam, Chennai ol 2022
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.h3 g6 5.Bd3 Bg7 6.O-O O-O 7.Bc2 e5 8.d4 exd4 9.cxd4 Nc6 10.Nc3 cxd4 11.Nxd4 d5 12.Nxc6 bxc6 13.exd5 Nxd5 14.Nxd5 cxd5 15.Rb1 Rb8 16.b4 Ba6 17.Bd3 Bc4 18.Bxc4 dxc4 19.Qc2 c3 20.Be3 Qh4 21.b5 Qc4 22.a4 Rb7 23.Rfd1 Re8 24.Rd3 h5 25.Rbd1 Re4 26.Ra1 Kh7 27.Rd6 Rbe7 28.Rc6 Qb4 29.Ra6 Bd4 30.Rb1 Qc5 31.Rc6 Qf5 32.Rf1 Bg7 33.Bc5 Rd7 34.f3 Rc4 35.Qxf5 gxf5 36.Be3 Rxa4 37.Rc1 Rd5 38.b6 axb6 39.Rxb6 Rd3 40.Bf2 Ra2 41.Rc6 Rdd2 42.Be3 Rxg2+ 0-1
+Reference
+View
+Druchenko, Mikhail vs. Sarana, Alexey, Anapa Sea Harbor Cup Rapid 2021
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.h3 g6 5.Bd3 Bg7 6.O-O O-O 7.Bc2 Nc6 8.d4 cxd4 9.cxd4 e5 10.dxe5 dxe5 11.Nc3 Be6 12.Be3 Qa5 13.Qe2 Rfd8 14.a3 Nd4 15.Bxd4 exd4 16.Nb5 Nh5 17.Rfd1 Nf4 18.Qf1 Rac8 19.Nbxd4 Bxd4 20.Nxd4 Bc4 21.Qe1 Qxe1+ 0-1
+Reference
+View
+Theodorou, Nikolas vs. Kobalia, Mihail, EU-ch Minsk 2017
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.Qc2 Qc7 5.Be2 g6 6.O-O Bg7 7.d3 O-O 8.h3 b6 9.Bf4 Bb7 10.Nbd2 Nbd7 11.Bh2 e5 12.Rac1 d5 13.Rfe1 Rad8 14.Bf1 Rfe8 15.Rcd1 Qc6 16.Qb3 Qc8 17.exd5 Bxd5 18.Qa4 Nh5 19.Qxa7 Qc6 20.Nxe5 Bxe5 21.Bxe5 Nxe5 22.c4 Qb7 23.Qa3 Bc6 24.Qc3 f6 25.g3 Qd7 26.Re3 Ng7 0-1
+Reference
+View
+Novikov, Stanislav vs. Shomoev, Anton, Russian Higher League 2010
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.Be2 g6 5.O-O Bg7 6.d3 O-O 7.a3 e5 8.b4 b6 9.Nbd2 Nc6 10.Bb2 Re8 11.Re1 Rb8 12.Qc2 b5 13.bxc5 dxc5 14.a4 b4 15.cxb4 Nxb4 16.Qc1 Nh5 17.Nc4 f6 18.g3 Bf8 19.Qc3 Ng7 20.Nfd2 Ne6 21.Nb3 Ba6 22.Red1 Re7 23.Kg2 Reb7 24.Nca5 Rc7 25.Ba3 Kh8 26.Rd2 Nd4 27.Bf1 Bc8 28.Rb2 Be6 29.Nd2 Qd7 30.Kg1 Qxa4 31.Nac4 Qd7 32.Qc1 Rd8 33.Ne3 Ndc6 34.Ndc4 Qg7 35.Qc3 Rcd7 36.Rd1 Nd4 37.Qc1 f5 38.exf5 gxf5 39.Bxb4 cxb4 40.Nd2 a5 41.Nc2 a4 42.Nxd4 Rxd4 43.Nf3 R4d5 44.Rc2 e4 45.Ng5 Bg8 46.Rc7 R5d7 47.Rxd7 Rxd7 48.Qf4 a3 49.h4 Rd5 50.Qb8 a2 51.Rc1 Rc5 52.Rd1 b3 0-1
+Reference
+View
+Rathnakaran, Kantholi vs. Visakh, Narayanan Rajeswari, New Delhi op 2022
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.Be2 g6 5.O-O Bg7 6.Re1 O-O 7.Bf1 Nc6 8.h3 e5 9.d4 cxd4 10.cxd4 exd4 11.Nxd4 Nxd4 12.Qxd4 Re8 13.Qa4 Bd7 14.Qb4 Bc6 15.f3 a5 16.Qd2 d5 17.e5 Nd7 18.f4 f6 19.Nc3 Qb6+ 20.Kh1 d4 21.Ne4 Bxe4 22.Rxe4 fxe5 23.fxe5 Nxe5 24.Qxd4 Qxd4 25.Rxd4 Nd3 26.Rxd3 Re1 27.Rf3 Rf8 28.Rxf8+ Bxf8 29.Be3 Rxa1 30.Kg1 b5 31.a3 Bg7 32.Kf2 Bxb2 33.Bxb5 Rxa3 34.Ke2 a4 35.Bc5 Ra1 36.Kd3 a3 37.Be3 a2 38.Bc4+ Kg7 39.Kc2 Bf6 0-1
+Reference
+View
+Mendonca, Leon Luke vs. Narayanan, Srinath, TItled Tuesday 2023
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.Be2 g6 5.O-O Bg7 6.Re1 O-O 7.Bf1 Nc6 8.h3 e5 9.d3 h6 10.a4 Re8 11.Na3 d5 12.exd5 Nxd5 13.Nc4 Qc7 14.a5 Bf5 15.Qb3 Rad8 16.Qb5 b6 17.Be3 Rb8 18.axb6 axb6 19.Bd2 Bd7 20.Qb3 Be6 21.Qc2 b5 22.Ne3 Nf4 23.h4 Qd7 24.g3 Nh3+ 25.Kg2 Rbd8 26.Bc1 Nf4+ 27.gxf4 exf4 28.Nd1 Bd5 29.Rxe8+ Rxe8 30.Bxf4 Qg4+ 31.Bg3 Qxf3+ 32.Kh3 Qh1+ 33.Bh2 Qxf1+ 0-1
+Reference
+View
+Zambor, Norbert vs. Kostromin, Mikhail Mukachevo Spring 2009
+1.e4 c5 2.Nf3 d6 3.Bc4 Nf6 4.Qe2 Nc6 5.h3 e6 6.Bb3 d5 7.d3 Be7 8.O-O O-O 9.e5 Nd7 10.c3 b5 11.d4 b4 12.Rd1 a5 13.Bf4 Qb6 14.Qe3 bxc3 15.Nxc3 cxd4 16.Nxd4 Bc5 17.Na4 Bxd4 18.Nxb6 Bxe3 19.Bxe3 Nxb6 20.Bxb6 a4 21.Bc2 Nxe5 22.Bc7 Nc6 23.Rac1 Bd7 24.Bd3 Rfc8 25.Bd6 Na7 26.Ba6 Rxc1 27.Rxc1 Nb5 28.Bxb5 Bxb5 29.f4 Bc4 30.a3 f6 31.Kf2 Re8 32.Re1 h5 33.g4 Kf7 34.Kg3 Rh8 35.Bb4 h4+ 36.Kf3 Rc8 37.Bc3 Bd3 38.Ke3 Be4 39.Re2 Re8 40.Rf2 Kg6 41.Bb4 e5 42.fxe5 fxe5 43.Rf1 Bg2 44.Rf5 Bxh3 45.Bd6 Re6 46.Bc7 Bxg4 47.Rxe5 Rxe5+ 48.Bxe5 Kh6 49.Kd4 Bf3 50.Ke3 Be4 51.Bd6 g5 0-1
+Reference
+View
+Rapport, Richard vs. Dominguez Perez, Leinier, Saint Louis Blitz 2021
+1.Nf3 Nf6 2.g3 c5 3.Bg2 Nc6 4.O-O e5 5.e4 d6 6.d3 g6 7.a3 Bg7 8.c3 O-O 9.b4 c4 10.Bg5 cxd3 11.Qxd3 Be6 12.Rd1 h6 13.Bxf6 Qxf6 14.Nfd2 Rac8 15.Nf1 h5 16.Nbd2 Bh6 17.Ne3 Ne7 18.Ndf1 h4 19.Rac1 h3 20.Bh1 Rfd8 21.Qe2 Kg7 22.Rd2 a6 23.a4 Rd7 24.Rd3 Rdd8 25.Rcd1 Bb3 26.Ra1 Bxe3 27.Nxe3 b5 28.axb5 axb5 29.Qg4 Be6 30.Qd1 Qg5 31.Ra6 Ng8 32.Qd2 Kh7 33.Bf3 Nf6 34.Raxd6 Rxd6 35.Rxd6 Ra8 36.Qd1 Ra3 37.Rc6 Ra2 38.Qf1 Kg7 39.Rc5 Bc4 40.Qc1 Nh7 41.Rc6 Qd8 42.Nxc4 bxc4 43.Rxc4 Qd3 44.Qf1 Qxf3 45.Rc5 Ra1 0-1
+Reference
+View
+Lueders, Gerhard vs. Alekseev, Evgeny V, Germany TCh 2006
+1.Nf3 c5 2.c4 Nc6 3.Nc3 e5 4.e4 d6 5.d3 g6 6.Nd5 Bg7 7.h3 h6 8.Bd2 Nge7 9.a3 f5 10.b4 O-O 11.b5 Nxd5 12.cxd5 Nd4 13.Nxd4 exd4 14.Rb1 fxe4 15.dxe4 Qh4 16.Qe2 Rxf2 17.Qxf2 Qxe4+ 18.Be2 Qxb1+ 19.Bd1 Qe4+ 20.Kf1 c4 21.Bf3 Qb1+ 22.Be1 c3 23.g4 c2 24.Qe2 c1=Q 25.Qe8+ Kh7 26.Kg2 Bxg4 0-1
+Reference
+View
+Dobre, Claudiu Cristian vs. Erdos, Viktor, Romania TCh 2021
+1.e4 c5 2.Nf3 Nc6 3.c4 e5 4.Nc3 d6 5.d3 g6 6.g3 Bg7 7.Bg2 Nge7 8.O-O O-O 9.Ne1 a6 10.Nc2 Rb8 11.Ne3 b5 12.Kh1 Nd4 13.Ned5 bxc4 14.Nxe7+ Qxe7 15.dxc4 f5 16.Nd5 Qf7 17.f4 Bb7 18.fxe5 Bxd5 19.cxd5 Bxe5 20.Bh6 Bg7 21.Bf4 Qe7 22.Qd2 Be5 23.Bg5 Qd7 24.Bh6 Rf7 25.Bh3 Qb7 26.Qd3 Re8 27.b3 Bg7 28.Bxg7 fxe4 29.Rxf7 Kxf7 30.Qc4 Kxg7 31.Re1 e3 32.Bg2 e2 33.Kg1 a5 34.Qc3 Qb4 35.Qxb4 axb4 36.Kf2 Rf8+ 37.Kg1 Ra8 38.Kf2 Rxa2 39.Be4 Rb2 40.Rb1 e1=Q+ 0-1
+Reference
+View
+Amin, Bassem vs. Niemann, Hans Moke, WCh Rapid 2021
+1.Nf3 c5 2.e4 d6 3.g3 Nf6 4.d3 Nc6 5.Bg2 g6 6.O-O Bg7 7.Re1 O-O 8.c3 e5 9.a4 h6 10.Na3 Re8 11.Bd2 d5 12.b4 dxe4 13.dxe4 Be6 14.Qb1 Rc8 15.Be3 cxb4 16.cxb4 Ng4 17.Rd1 Qf6 18.Bc5 b6 19.b5 Na5 20.Bb4 Nb3 21.h3 Nxa1 22.Qxa1 Nxf2 23.Kxf2 Red8 24.Bf1 Bb3 25.Rxd8+ Qxd8 26.Qb2 Be6 27.Nd2 h5 28.Nac4 h4 29.g4 Qf6+ 30.Kg2 Qf4 31.Qb3 f5 32.gxf5 gxf5 33.Qe3 fxe4 34.Bd6 Bd5 35.Be2 Bh6 36.Bg4 Rxc4 37.Nxc4 Bxc4 38.Qf2 Bd5 39.Qxh4 e3+ 40.Kg1 Bg5 41.Qe1 e2 42.Bxe2 Bh4 0-1
+Reference
+View
+Bergenwall, Henric vs. Astrom, Robert, Rilton Cup 1994
+1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.d3 g6 5.g3 Bg7 6.Bg2 O-O 7.O-O Nc6 8.Re1 e5 9.d4 exd4 10.cxd4 Bg4 11.dxc5 dxc5 12.Qxd8 Raxd8 13.h3 Be6 14.Nc3 Nb4 15.Bg5 h6 16.Bxf6 Bxf6 17.Re2 Bg7 18.Kh2 b6 19.a3 Nd3 20.Nd1 Bb3 21.Rd2 Ne5 22.Rxd8 Rxd8 23.Nc3 Nxf3+ 24.Bxf3 Rd2 25.Nd1 Bd4 0-1
+Reference
+View
+Amin, Bassem vs. Navara, David, Biel Blitz 2023
+1.e4 c5 2.Nf3 d6 3.g3 Nf6 4.d3 g6 5.Bg2 Bg7 6.O-O O-O 7.Re1 Nc6 8.c3 e5 9.a3 b5 10.h3 a5 11.a4 b4 12.Bg5 Be6 13.Nbd2 h6 14.Bxf6 Bxf6 15.Nc4 Rb8 16.Nfd2 Qd7 17.h4 Bg7 18.h5 f5 19.exf5 gxf5 20.f4 bxc3 21.bxc3 d5 22.Nxe5 Nxe5 23.fxe5 f4 24.Qf3 Rb2 25.Nf1 fxg3 26.Qxg3 Rf5 27.Rab1 Rxb1 28.Rxb1 Rg5 29.Qf3 Bh3 30.Rb2 Bxe5 31.Rf2 Be6 32.Qf8+ Kh7 33.Qxc5 d4 34.Qb6 dxc3 35.Kh1 Rxh5+ 36.Kg1 Bd4 0-1
+Reference
+View
+Ilamparthi, AR. vs. Hakobyan, Aram, Titled Tuesday 2023
+1.e4 c5 2.Nf3 d6 3.g3 Nf6 4.d3 g6 5.Bg2 Bg7 6.O-O O-O 7.Re1 e5 8.c3 Nc6 9.a3 b5 10.b4 a5 11.bxc5 dxc5 12.Bb2 Be6 13.a4 b4 14.cxb4 axb4 15.Nxe5 Na5 16.Nd2 Nd7 17.Ndf3 Nb6 18.h4 Nb3 19.Rb1 Nxa4 20.Nc6 Nxb2 21.Nxd8 Nxd1 22.Nxe6 fxe6 23.Rxb3 Nc3 24.d4 Rxf3 25.Bxf3 Bxd4 26.h5 Ra2 27.Rf1 Kf7 28.hxg6+ hxg6 29.Kg2 Be5 30.Bg4 Ke7 31.Kh3 Bd4 32.f3 Kd6 33.Re1 Ra3 34.Rb2 b3 35.f4 c4 36.Rd2 Nb5 37.Be2 Kc5 38.Rc1 Ra4 39.Bd1 Rb4 40.Bxb3 Rxb3 41.Rdd1 c3 42.f5 exf5 43.exf5 gxf5 44.Rf1 Nd6 45.Rf3 Kc4 46.Rf4 Ne4 47.Rxf5 Be3 48.Re1 c2 49.Re5 Kd4 50.Re8 c1=Q 51.Rxc1 Bxc1 52.Kh4 Bg5+ 53.Kh3 Rxg3+ 54.Kh2 Re3 55.Rf8 Ke5 56.Kg2 Rg3+ 57.Kf1 Ra3 58.Ke2 Ra2+ 59.Kd3 Rd2+ 60.Kc4 Rd4+ 61.Kb3 Nc5+ 62.Kc3 Bd2+ 63.Kc2 Ba5 64.Re8+ Kd5 65.Re2 Kc4 66.Rh2 Bc3 67.Rg2 Na6 68.Rh2 Nb4+ 69.Kc1 Kb3 70.Rh1 Rd2 71.Kb1 Rb2+ 72.Kc1 Nd3+ 73.Kd1 Rd2 0-1
+Reference
+View
+Caruana, Fabiano vs. Carlsen, Magnus, Tal Memorial Blitz 2012
+1.e4 c5 2.Nf3 Nc6 3.Bb5 Nf6 4.Nc3 e5 5.O-O d6 6.d3 Be7 7.Bg5 O-O 8.Bxf6 Bxf6 9.Nd5 Be6 10.Bc4 g6 11.c3 Bg7 12.a3 Kh8 13.b4 f5 14.Rb1 b6 15.Ne3 Bd7 16.Bd5 Rc8 17.Qb3 f4 18.Nc4 Qe7 19.Nfd2 g5 20.f3 g4 21.fxg4 Bxg4 22.Nf3 Bf6 23.Rb2 Nd8 24.a4 Ne6 25.a5 b5 26.Ncd2 a6 27.h3 Bxf3 28.Nxf3 Ng5 29.c4 Nxf3+ 30.Rxf3 cxb4 31.Qxb4 Rc5 32.Qa3 Bh4 33.Rb1 Qc7 34.cxb5 Rc2 35.bxa6 Rf6 36.Qb4 Qg7 37.Qb8+ Rf8 38.Qxf8+ Qxf8 39.a7 Rc8 40.d4 Qg7 41.Rb7 Rc1+ 42.Rf1 Bf2+ 43.Kxf2 Rc2+ 0-1
+Reference
+View
+Valner, Uku vs. Potapov, Pavel, EU-ch Blitz 2019
+1.e4 c5 2.Nc3 Nc6 3.g3 g6 4.Bg2 Bg7 5.d3 Rb8 6.Be3 d6 7.Qd2 b5 8.Nge2 Nd4 9.O-O b4 10.Nd1 h5 11.c3 bxc3 12.bxc3 Nxe2+ 13.Qxe2 h4 14.d4 Qa5 15.Qc2 Ba6 16.Re1 hxg3 17.hxg3 cxd4 18.Bxd4 Bxd4 19.cxd4 Qxe1+ 0-1
+Reference
+View
+Morin, Yves vs. Likavsky, Tomas, Quebec op 2007
+1.e4 c5 2.Nc3 Nc6 3.g3 g6 4.Bg2 Bg7 5.d3 Rb8 6.Nge2 b5 7.O-O b4 8.Nd5 e6 9.Ne3 Nge7 10.f4 d5 11.f5 exf5 12.exf5 Bxf5 13.Nxf5 Nxf5 14.Rxf5 gxf5 15.Nf4 Ne7 16.Qf3 O-O 17.Nxd5 Nxd5 18.Qxd5 Qxd5 19.Bxd5 Rbe8 20.Kf1 Re5 21.Bc6 Rc8 22.Bb5 Rb8 23.Bc6 Rb6 24.Bf3 Bh6 0-1
+Reference
+View
+Blalock, Rex E vs. Ubilava, Elizbar, Dos Hermanas op 1998
+1.e4 c5 2.Nc3 Nc6 3.g3 g6 4.Bg2 Bg7 5.d3 d6 6.f4 e6 7.Nf3 Nge7 8.O-O O-O 9.Be3 Rb8 10.Qd2 b5 11.a3 a5 12.e5 dxe5 13.Bxc5 b4 14.axb4 axb4 15.Nd1 Rb5 16.Be3 Nd5 17.fxe5 Nxe3 18.Qxe3 Nxe5 19.Nxe5 Rxe5 20.Qf3 Rc5 21.c3 bxc3 22.bxc3 Bxc3 23.Ra4 Bd7 24.Rh4 Bb5 25.Qe3 Qc7 26.d4 Rc4 27.Rf6 h5 28.Bf1 Ba1 29.Bxc4 Qxc4 30.Qe4 Rd8 31.Rxg6+ Kf8 32.Rf4 Bxd4+ 0-1
+Reference
+View
+Gesing, Oliver vs. Christiansen, Johan Sebastian, Menton op 2022
+1.e4 c5 2.Nc3 Nc6 3.g3 g6 4.Bg2 Bg7 5.d3 d6 6.f4 e6 7.Nf3 Nge7 8.O-O O-O 9.Be3 b6 10.d4 d5 11.exd5 exd5 12.Bf2 Rb8 13.h3 Nf5 14.Nxd5 Be6 15.c4 Nfxd4 16.Ng5 Bxd5 17.Bxd5 Nb4 18.Bg2 h6 19.Ne4 Ndc2 20.Rb1 Qxd1 21.Rfxd1 Nxa2 22.Rd7 a5 23.b3 Rbd8 24.Rbd1 Nd4 25.Rxd8 Rxd8 26.Rd2 Nc1 27.Kf1 Ncxb3 28.Ra2 Ne6 29.Be1 Rd1 30.Ke2 Rb1 31.Ra4 Nc1+ 32.Kd2 Nd4 33.Nc3 Ncb3+ 0-1
+Reference
+View
+Kadric, Denis vs. Gledura, Benjamin, Hollywood Masters op 2022
+1.e4 c5 2.Nc3 Nc6 3.Nge2 Nf6 4.g3 d5 5.exd5 Nxd5 6.Bg2 Nxc3 7.bxc3 g6 8.O-O Bg7 9.a4 O-O 10.Ba3 c4 11.Nf4 Bh6 12.Nd5 Be6 13.Ne3 Bxe3 14.dxe3 Qc7 15.f4 Rfd8 16.Qe2 Rd7 17.Rfd1 Rad8 18.Bxc6 Qxc6 19.Bxe7 Re8 20.Bb4 h5 21.Qg2 Bd5 22.Qf2 Qe6 23.Rd4 Bc6 24.e4 Rxd4 25.Qxd4 h4 26.f5 gxf5 27.e5 hxg3 28.hxg3 f6 29.Rd1 Qxe5 30.Qxe5 fxe5 31.a5 Kf7 32.Bc5 Rh8 33.Rd2 Rh1+ 34.Kf2 a6 35.Bd6 Ke6 36.Bc7 Bd5 37.Re2 Be4 38.Rd2 Rh2+ 39.Ke1 Rh3 40.Kf2 f4 41.gxf4 exf4 42.Rd4 Kf5 43.Rxc4 Rh2+ 44.Ke1 Rxc2 45.Bb6 f3 46.Rc7 Bc6 47.Bd4 Re2+ 48.Kf1 Ke6 49.Rg7 Ra2 50.Rg5 Bd5 51.Kg1 Ra1+ 52.Kf2 Rxa5 53.Ke3 Ra2 0-1
+Reference
+View
+Hari, Madhavan NB vs. Vakhidov, Jahongir, Abu Dhabi op 2023
+1.e4 c5 2.Nc3 Nc6 3.Bb5 Nd4 4.Nf3 a6 5.Bd3 g6 6.O-O Bg7 7.Nxd4 cxd4 8.Ne2 d5 9.exd5 Qxd5 10.c3 Bd7 11.Qb3 Qxb3 12.axb3 Bc6 13.b4 Rd8 14.Bc4 Nh6 15.d3 Nf5 16.Bf4 O-O 17.Bc7 Rd7 18.Bb6 Rc8 19.Rfc1 dxc3 20.bxc3 Nd6 21.f3 Bb5 22.Bxb5 Nxb5 23.d4 Nd6 24.Bc5 Nc4 25.b5 b6 26.Ba3 axb5 27.Rcb1 e5 28.dxe5 Bxe5 29.f4 Bg7 30.Bc1 Re8 31.Kf2 Nd2 32.Bxd2 Rxd2 0-1
+Reference
+View
+Dimitrov, Radoslav vs. Mamedov, Rauf, Turkey TCh 2019
+1.e4 c5 2.Nc3 Nc6 3.Bb5 Nd4 4.Bc4 a6 5.Nf3 b5 6.Bd5 Rb8 7.Nxd4 cxd4 8.Ne2 Nf6 9.Bb3 Nxe4 10.Nxd4 e6 11.c3 Bb7 12.O-O Bd6 13.d3 Nf6 14.Qe2 Qc7 15.h3 O-O 16.a4 bxa4 17.Bxa4 Nd5 18.Nf3 Bf4 19.Be3 Nxe3 20.fxe3 Bg3 21.e4 d5 22.e5 d4 23.cxd4 Bd5 24.Qe3 f5 25.b3 f4 26.Qc1 Qd8 27.Bc6 Bxf3 28.Bxf3 Qxd4+ 29.Kh1 Qxd3 30.Qc6 Rfe8 31.b4 Qb5 32.Rfb1 Qxc6 33.Bxc6 Red8 34.Kg1 Rb6 35.Bf3 Rd2 36.Ra5 Kf7 37.Kf1 Rf2+ 38.Kg1 Kg6 39.Rba1 Rb2 40.Kf1 R6xb4 41.Rxa6 Rb1+ 42.Ke2 Rxa1 43.Rxa1 Rb5 44.Ra4 Kf5 45.Bg4+ Kg5 46.Kd3 Rxe5 47.Re4 Rd5+ 48.Kc4 h5 49.Rxe6 hxg4 50.Kxd5 f3 51.gxf3 gxh3 52.Re7 h2 53.Rxg7+ Kh6 54.Rxg3 h1=Q 55.Ke4 Qb1+ 56.Ke3 Qe1+ 57.Kf4 Qc1+ 58.Ke4 Qe1+ 59.Kf4 Qd2+ 60.Ke4 Kh5 61.Rg4 Qc1 62.Kd4 Qe1 63.Kd3 Kh6 64.Rd4 Kg5 65.Rg4+ Kf5 66.Rd4 Qf2 67.f4 Qb2 68.Kc4 Qc2+ 69.Kd5 Qc7 70.Rc4 Qb7+ 71.Kd6 Qb6+ 72.Kd5 Qb5+ 73.Rc5 Qd7+ 74.Kc4+ Kxf4 75.Kb4 Qd6 76.Kb5 Ke4 77.Rc6 Qb8+ 78.Kc5 Ke5 79.Kc4 Qg8+ 80.Kc5 Qb3 81.Rc7 Qc3+ 82.Kb6 Qb4+ 83.Ka6 Kd6 84.Rb7 Qa4+ 85.Kb6 Qa8 86.Rh7 Qc6+ 87.Ka7 Qa4+ 88.Kb8 Qb5+ 89.Rb7 Qe8+ 90.Ka7 Qe4 91.Ka6 Kc6 92.Rb6+ Kc7 93.Ka5 Qe1+ 94.Rb4 Kc6 95.Ka4 Kc5 96.Rb2 Qd1+ 97.Ka3 Qd3+ 98.Rb3 Qd2 99.Rb2 Qc3+ 100.Ka2 Kc4 101.Kb1 Qd4 102.Kc2 Qf6 103.Kc1 Kc3 104.Rc2+ Kb3 105.Re2 Qd4 106.Re8 Kc3 107.Rc8+ Kd3 108.Kb1 Qb6+ 109.Kc1 Qa6 110.Rd8+ Kc3 111.Rd3+ Kxd3 0-1
+Reference
+View
+Ajak, Mach Duany vs. Gupta, Abhijeet, Chennai ol 2022
+1.e4 c5 2.Nc3 Nc6 3.Bb5 Nd4 4.Bc4 e6 5.Nge2 a6 6.a4 Ne7 7.O-O d5 8.exd5 exd5 9.Nxd5 Nxd5 10.Nxd4 cxd4 11.Qh5 Be6 12.Re1 Be7 13.Rxe6 Nf4 14.Rxe7+ Qxe7 15.Qf3 Ng6 16.Qa3 Qxa3 17.Rxa3 O-O 18.Ra1 b5 19.Bf1 Rac8 20.c3 Rfe8 21.f3 Nf4 22.axb5 axb5 23.Kf2 d3 24.b3 g5 25.Bb2 Re2+ 26.Bxe2 dxe2 27.g3 Nd3+ 28.Kxe2 Nxb2 29.Ra5 Re8+ 30.Kf1 Nd3 31.Rxb5 Re1+ 32.Kg2 Re2+ 33.Kg1 f6 34.c4 Rxd2 35.Rd5 Ne5 36.Rxd2 Nxf3+ 37.Kg2 Nxd2 38.c5 Kf7 39.b4 Ke6 40.Kf2 Kd5 41.Ke2 Nc4 42.h3 f5 43.Kd3 Ne5+ 44.Kc3 h5 45.Kd2 Kc4 46.Ke3 Kxb4 47.c6 Nxc6 48.h4 f4+ 49.gxf4 g4 50.f5 Ne7 0-1
+Reference
+View
+Boronyak, Arpad vs. Kantor, Gergely, Zalakaros Barczay Memorial 2021
+1.e4 c5 2.Nc3 Nc6 3.f4 g6 4.Nf3 Bg7 5.Bc4 e6 6.O-O Nge7 7.d3 O-O 8.Qe1 d5 9.Bb3 Nd4 10.Nxd4 cxd4 11.Ne2 dxe4 12.dxe4 b5 13.Ng3 a5 14.a3 Qc7 15.Qf2 Qc6 16.a4 b4 17.Rd1 Bb7 18.Rd3 Ba6 19.Rf3 f5 20.e5 Rfd8 21.Ne2 Qb6 22.Bd2 Kf7 23.Re1 Rac8 24.Nc1 Bc4 25.Bxc4 Rxc4 26.Rd3 Rxc2 27.Nb3 Rxb2 28.Rc1 Nd5 29.Qxd4 Qxd4+ 30.Nxd4 Bf8 31.Rc6 Re8 32.Nb3 Ra2 33.Nxa5 Rxa4 34.Nc4 Rb8 35.Rb3 Ke8 36.Ne3 Kd7 37.Rc4 Ra3 38.Rxa3 bxa3 39.Nxd5 exd5 40.Ra4 Bc5+ 41.Kf1 Rb2 42.Ke2 a2 43.Kd3 d4 44.Kc4 Kc6 45.Ra6+ Bb6 46.Bb4 d3 47.e6 d2 48.e7 Rxb4+ 49.Kxb4 Kd7 0-1
+Reference
+View
+Vijay, Shreeram P vs. Nitin, Senthilvel, Sivakasi Mahalingam Cup 2023
+1.e4 c5 2.Nc3 Nc6 3.f4 g6 4.Nf3 Bg7 5.Bc4 e6 6.f5 gxf5 7.d3 Nge7 8.O-O O-O 9.Bg5 h6 10.Bh4 Qc7 11.Qd2 a6 12.Bg3 d6 13.Nh4 Nd4 14.exf5 Nexf5 15.Nxf5 Nxf5 16.Rxf5 exf5 17.Nd5 Qd8 18.Qf4 Qg5 19.Nb6 Be6 20.Bxe6 fxe6 21.Nxa8 Qxf4 22.Bxf4 Rxa8 23.Bxd6 Bxb2 24.Rb1 Bd4+ 25.Kf1 b5 26.a3 Kf7 27.Ke2 e5 28.Kd2 Ke6 29.Bc7 Rc8 30.Bb6 Rc6 31.Ba7 Rc7 32.Bb6 Rb7 33.Ba5 Rg7 34.g3 f4 35.Rh1 c4 36.dxc4 bxc4 37.c3 Be3+ 38.Ke2 Kf5 39.gxf4 Bxf4 40.Kf2 Rd7 41.Rb1 Rd2+ 42.Kf1 Kg4 0-1
+Reference
+View
+Ahmadinia, Ebrahim vs. Kunte, Abhijit, Asia Ch 2011
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.d4 cxd4 5.Nf3 d6 6.cxd4 Nc6 7.Bc4 Nb6 8.Bb5 Bd7 9.Nc3 dxe5 10.dxe5 g6 11.O-O Bg7 12.Qe2 O-O 13.Rd1 Qc7 14.Bf4 Bg4 15.Rac1 Rad8 16.Bxc6 Qxc6 17.Rxd8 Rxd8 18.Ne4 Qd5 19.Nc5 Rc8 20.b4 Qc6 21.Nb3 Qd7 22.Rxc8+ Qxc8 23.h3 Be6 24.Nc5 Bd5 25.Qd3 Bxa2 26.Qa3 Bd5 27.Qxa7 Nc4 28.Nd3 h6 29.Qd4 Qc6 30.Nfe1 Nd6 31.Qe3 Nf5 32.Qc5 Qxc5 33.bxc5 g5 34.Bc1 Nd4 35.Bb2 Nc6 36.Nc2 Bc4 37.Ncb4 Nd8 38.f3 f5 39.Kf2 Kf7 40.Ke3 Bb5 41.g3 Ne6 42.f4 Kg6 43.Bc3 h5 44.h4 gxh4 45.gxh4 Kf7 46.Be1 Bh6 47.Bf2 Nf8 48.Ne1 Ng6 49.Ned3 e6 50.Kf3 Bf8 51.Ne1 Be7 52.Ng2 b6 53.Kg3 bxc5 54.Nc2 Bc6 0-1
+Reference
+View
+Vysochin, Spartak vs. Eljanov, Pavel, Ukraine Ch 2011
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.Nf3 Nc6 5.d4 cxd4 6.cxd4 d6 7.Bc4 Nb6 8.Bb5 Bd7 9.Nc3 dxe5 10.dxe5 g6 11.O-O Bg7 12.Qe2 O-O 13.Bf4 a6 14.Bxc6 Bxc6 15.Rfd1 Nd5 16.Nxd5 Bxd5 17.Qe3 e6 18.Bh6 Rc8 19.Rd4 Rc4 20.Rxc4 Bxc4 21.a3 Bd5 22.Bxg7 Kxg7 23.Rc1 Bxf3 24.gxf3 Qe7 25.Rc4 Rd8 26.Kg2 Rd5 27.Rd4 Qc5 28.Rxd5 Qxe3 29.fxe3 exd5 30.Kf2 g5 31.Ke2 Kg6 32.Kd3 Kf5 33.Kd4 Ke6 34.e4 dxe4 35.Kxe4 f5+ 36.exf6 Kxf6 37.Kd5 Kf5 38.Kc5 Kf4 39.Kb6 Kxf3 40.Kxb7 Kg2 41.Kxa6 Kxh2 42.b4 g4 1/2-1/2
+Reference
+View
+Rupprecht, Andreas vs. Baramidze, David, Bundesliga 2020
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.Nf3 Nc6 5.d4 cxd4 6.cxd4 d6 7.Bc4 Nb6 8.Bb5 Bd7 9.Nc3 dxe5 10.dxe5 g6 11.Qe2 Bg7 12.O-O O-O 13.h3 Qc7 14.Bf4 a6 15.Bd3 Be6 16.Rfd1 Rad8 17.Rac1 Nd5 18.Nxd5 Bxd5 19.b3 Bxf3 20.Qxf3 Qa5 21.Be4 Rxd1+ 22.Rxd1 Nxe5 23.Bxe5 Bxe5 24.Bxb7 Qxa2 25.Bd5 e6 26.Bc4 a5 27.Qe4 Qb2 28.g3 Rc8 29.Kg2 Bf6 30.Rd7 Qe5 31.Qxe5 Bxe5 32.Ra7 Bc3 33.Kf3 Rd8 34.Rb7 Rd2 35.Ke3 Rb2 36.f3 0-1
+Reference
+View
+Gaponenko, Inna vs. Vitiugov, Nikita, Tal Memorial rapid 2019
+1.e4 c5 2.Nf3 Nc6 3.c3 Nf6 4.e5 Nd5 5.d4 cxd4 6.cxd4 d6 7.Bc4 Nb6 8.Bb5 Bd7 9.Nc3 dxe5 10.dxe5 g6 11.h3 Bg7 12.Bf4 a6 13.Bd3 Be6 14.O-O O-O 15.Rc1 Nd5 16.Nxd5 Bxd5 17.Bc4 Bxc4 18.Rxc4 Qxd1 19.Rxd1 Rfd8 20.Rb1 Rd5 21.b4 Rad8 22.a4 Rd1+ 23.Rxd1 Rxd1+ 24.Kh2 Rb1 25.b5 axb5 26.axb5 Rxb5 27.Nd4 Rb4 28.Rxb4 Nxb4 29.Bg3 Nd3 30.f4 Bh6 31.Ne2 b5 32.Kg1 b4 33.Bh2 b3 34.g3 Nxe5 35.fxe5 Bd2 0-1
+Reference
+View
+Nielsen, Torkil vs. Apol, Luitjen Akselsson, Faroe Islands Ch 2022
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.d4 cxd4 5.cxd4 d6 6.Bc4 Nb6 7.Bb5+ Nc6 8.Nf3 Bd7 9.O-O Nxe5 10.Nxe5 dxe5 11.Bxd7+ Nxd7 12.dxe5 Nxe5 13.Qe2 Nc6 14.Rd1 Qc8 15.Nc3 e5 16.Bg5 Qe6 17.Nd5 Bd6 18.Nf4 exf4 19.Qxe6+ fxe6 20.Rxd6 e5 21.f3 O-O 22.Rad1 Rac8 23.Rd7 Rf7 24.Rxf7 Kxf7 25.Rd7+ Kg6 26.Bh4 Na5 27.g4 Rc1+ 28.Kg2 Nc4 29.Bd8 Ne3+ 30.Kf2 Rc2+ 31.Kg1 Rg2+ 32.Kh1 Rxb2 33.h4 e4 34.h5+ Kh6 35.g5+ Kxh5 36.Rxg7 exf3 37.Rxh7+ Kg4 38.Rh4+ Kxh4 0-1
+Reference
+View
+Sveshnikov, Evgeny vs. Shirov, Alexei, Vladimir Petrov Memorial rapid 2016
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.Nf3 Nc6 5.d4 cxd4 6.cxd4 d6 7.Nc3 dxe5 8.dxe5 Nxc3 9.Qxd8+ Nxd8 10.bxc3 Bd7 11.Be3 e6 12.Nd4 Rc8 13.Kd2 a6 14.Rb1 Bc5 15.Bd3 Ba4 16.f4 b5 17.f5 exf5 18.Nxf5 Ne6 19.Rhe1 O-O 20.Bxc5 Rxc5 21.Re3 Rd8 22.Rb4 Kf8 23.Rh4 h6 24.Nd4 Rcd5 25.Nc6 Rc8 26.Nb4 Rdc5 27.Nxa6 Rxc3 28.Nb4 Rc1 29.Bf5 Rd1+ 30.Ke2 Rcd8 31.Bxe6 R8d2+ 32.Kf3 fxe6 33.Rf4+ Ke7 34.Kg3 Rg1 35.Rf2 Rxf2 36.Kxf2 Rb1 37.Re4 Rb2+ 38.Kg3 Kd7 39.Rd4+ Kc7 40.a3 Rb3+ 41.Rd3 Kb6 42.Kf4 Rxd3 43.Nxd3 Bb3 44.h4 Bc4 45.Ke3 Bxd3 46.Kxd3 Ka5 47.Kd4 b4 48.axb4+ Kxb4 49.h5 Kb5 50.g4 Kb4 51.g5 Kb5 52.Ke4 Kc4 53.Kf4 Kd4 54.gxh6 gxh6 55.Kf3 Kxe5 56.Ke3 Kf5 57.Kf3 Kg5 58.Ke4 Kxh5 0-1
+Reference
+View
+Biro, Sandor vs. Motylev, Alexander, Romania TCh 2007
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.d4 cxd4 5.Nf3 Nc6 6.Bc4 Nb6 7.Bb3 d5 8.exd6 Qxd6 9.Na3 dxc3 10.Qxd6 exd6 11.Nb5 Rb8 12.bxc3 a6 13.Be3 axb5 14.Bxb6 Be6 15.O-O-O Be7 16.Rhe1 Kd7 17.Bd4 Rhg8 18.Kb2 Ra8 19.Rd2 Ra6 20.Rde2 Bc4 21.Rd2 Bxb3 22.axb3 b4 23.cxb4 Nxd4 24.Nxd4 Bf6 25.Red1 Rb6 26.Kb1 Rxb4 27.Nf5 Rxb3+ 28.Ka2 Rb6 29.Rxd6+ Rxd6 30.Rxd6+ Kc7 31.Rd3 Rd8 32.Rf3 Be5 33.h3 b5 34.Kb3 Rd2 35.Ne3 f6 36.Nc2 h5 37.g4 hxg4 38.hxg4 Kb6 39.Nb4 Rd4 40.Nd3 Rxg4 41.Re3 Bd6 0-1
+Reference
+View
+Chesebro, Brian vs. Meillon, Gustavo, e-mail 2010
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.d4 cxd4 5.Nf3 Nc6 6.Bc4 Nb6 7.Bb3 d5 8.exd6 Qxd6 9.Na3 dxc3 10.Qe2 cxb2 11.Bxb2 Qb4+ 12.Kf1 Bg4 13.Nb5 Rd8 14.Nc7+ Kd7 15.Nb5 e6 16.Rc1 a6 17.Nbd4 Nxd4 18.Bxd4 Ke8 19.Bxb6 Qxb6 20.Qe5 Bxf3 21.gxf3 Qb5+ 22.Qxb5+ axb5 23.Rc7 Rb8 24.a4 bxa4 25.Bxa4+ b5 0-1
+Reference
+View
+Martin Sanchez, Carlos vs. Schubert, Frank, Slovenia e-mail ch 2010
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.Nf3 d6 5.d4 cxd4 6.Qxd4 e6 7.exd6 Nc6 8.Bb5 Bd7 9.Bxc6 Bxc6 10.O-O Qxd6 11.Rd1 Qc7 12.c4 Rd8 13.Ne5 Ba4 14.b3 Bc5 15.Qb2 Bd6 16.Re1 Nb4 17.Bf4 f6 18.a3 fxe5 19.axb4 exf4 20.Rxa4 f3 21.g3 O-O 22.Nd2 Qf7 23.Qc2 Qh5 24.Qe4 Rf6 25.Rxa7 Bf8 26.Nf1 Qh3 27.Ne3 Rd4 28.Qxb7 Rd3 0-1
+Reference
+View
+Psyk, Radoslaw vs. Volokitin, Andrei, Polish Superleague rapid 2023
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.Nf3 d6 5.Bb5+ Bd7 6.Bc4 e6 7.d4 cxd4 8.Bxd5 exd5 9.O-O dxe5 10.Nxe5 Nc6 11.Nxc6 bxc6 12.Qxd4 Be6 13.Bf4 c5 14.Qe5 Qf6 15.Qxf6 gxf6 16.Nd2 Kd7 17.Rfd1 Be7 18.b3 a5 19.Rab1 Ra7 20.a3 Rb7 21.Rb2 Ra8 22.Kf1 Kc6 23.h3 a4 24.b4 d4 25.Rc1 Kd7 26.Ne4 f5 27.Nd2 dxc3 28.Rxc3 cxb4 29.axb4 Bf6 30.Rd3+ Ke8 31.Rb1 a3 0-1
+Reference
+View
+Basagic, Zlatko vs. Delchev, Aleksander, EU-ch Ohrid 2001
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.g3 d6 5.exd6 Qxd6 6.Bg2 Nc6 7.Ne2 Bg4 8.h3 Bh5 9.O-O e6 10.Na3 Qd7 11.Nc4 Rd8 12.g4 Bg6 13.d4 h5 14.g5 Be7 15.dxc5 Bxc5 16.b4 b5 17.Na3 Bb6 18.Nxb5 Ncxb4 19.cxb4 Qxb5 20.Nd4 Qd7 21.Nf3 O-O 22.Ne5 Qd6 23.Nxg6 fxg6 24.Kh1 Qe5 25.Qe1 Qxa1 26.Qxe6+ Kh7 27.Bxd5 Rxf2 28.Re1 Rxd5 0-1
+Reference
+View
+Kazoks, Aivars vs. Wadle, Michael Heinz, EU-ch e-mail 2023
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.Bc4 Nb6 5.Bb3 c4 6.Bc2 d6 7.exd6 Qxd6 8.Na3 g6 9.Qe2 Be6 10.b3 cxb3 11.axb3 Bg7 12.Nf3 O-O 13.O-O Nc6 14.d4 Bd5 15.Re1 Bxf3 16.Qxf3 e5 17.Nb5 Qd7 18.Ba3 Rfd8 19.Rad1 exd4 20.Nxd4 Nxd4 21.cxd4 Nd5 22.Be4 Bf8 23.Bxf8 Kxf8 24.h4 Rac8 25.h5 Kg7 26.Rd3 Qe7 27.Kf1 Re8 1/2-1/2
+Reference
+View
+Feuerstack, Aljoscha vs. Neiksans, Arturs, Najdorf Memorial 2016
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.Nf3 d6 5.Bc4 Nb6 6.Bb3 c4 7.Bc2 dxe5 8.Nxe5 Qd5 9.Qe2 f6 10.Nf3 Qe6 11.d4 cxd3 12.Bxd3 Qxe2+ 13.Bxe2 e5 14.O-O Nc6 15.Re1 Be7 16.Nbd2 Be6 17.Bb5 Kf7 18.Ne4 Rhd8 19.b3 Nd5 20.Bxc6 bxc6 21.Neg5+ fxg5 22.Nxe5+ Kf6 23.Nxc6 Rd6 24.Nd4 h6 25.Bb2 Nf4 26.Re3 Kf7 27.c4 Bf6 28.Nb5 Rd2 29.Bxf6 Kxf6 30.Rae1 Bd7 31.Nc3 Bc6 0-1
+Reference
+View
+Rakhmatullaev, Almas vs. Mohammad, Nubairshah Shaikh, Abu Dhabi Masters 2022
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.d4 cxd4 5.Qxd4 e6 6.Nf3 Nc6 7.Qe4 f5 8.Qe2 b5 9.g3 a5 10.Bg2 Be7 11.O-O Ba6 12.Rd1 O-O 13.Rxd5 exd5 14.Qd1 Kh8 15.Qxd5 b4 16.Be3 Rc8 17.Nbd2 d6 18.exd6 bxc3 19.bxc3 Qxd6 20.Qb3 Rb8 21.Qa4 Bb5 22.Qd1 Qa3 23.Ng5 Ba4 24.Qf1 Qxc3 25.Ne6 Rfc8 26.Nf4 Nb4 27.Bd5 Nxd5 28.Nxd5 Qe5 29.Nb6 Bb5 30.Nf3 Qf6 31.Qxb5 Qxa1+ 32.Kg2 Qf6 33.Ne5 Qe6 34.Ned7 Rb7 35.Qxa5 Rxd7 36.Nxc8 Qc6+ 0-1
+Reference
+View
+Deviatkin, Andrei vs. Najer, Evgeniy, Moscow op 2007
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.d4 cxd4 5.Qxd4 e6 6.Nf3 Nc6 7.Qe4 f5 8.Qe2 b5 9.Qxb5 Qc7 10.Qe2 a5 11.c4 Ba6 12.Qd1 Nb6 13.c5 Nc4 14.Nbd2 N4xe5 15.Bxa6 Rxa6 16.Qe2 Ra7 17.O-O Bxc5 18.b3 Ng4 19.Bb2 O-O 20.Rac1 Qb6 21.h3 Nf6 22.Rc4 Rc7 23.Rh4 Nb4 24.Nc4 Qa6 25.a3 Nbd5 26.Qe5 Rb7 27.Nfd2 Ba7 28.Qg3 Ne7 29.Rh6 Ng6 30.Rxg6 hxg6 31.Qxg6 d5 32.Ne5 Qb5 33.Ndf3 Qe8 34.Rc1 Rxb3 35.Bd4 Bxd4 36.Nxd4 Rxa3 37.Qg5 Qh5 38.h4 Qxg5 39.hxg5 Ng4 40.Nxg4 fxg4 41.Nxe6 Re8 42.g6 g3 43.f4 Rb3 44.Kf1 a4 45.f5 Rb7 46.Rc3 Ra8 47.Nc5 Rc7 48.Nxa4 Rxc3 49.Nxc3 Rf8 50.Ke1 Rxf5 51.Ne2 Rf2 52.Nxg3 Rxg2 53.Nf5 Rg5 0-1
+Reference
+View
+Finegold, Benjamin vs. Robson, Ray, Saint Louis match 2011
+1.e4 c5 2.c3 Nf6 3.e5 Nd5 4.d4 cxd4 5.Nf3 Nc6 6.Bc4 Nb6 7.Bb3 d5 8.exd6 Qxd6 9.O-O Be6 10.Bxe6 Qxe6 11.Nxd4 Nxd4 12.cxd4 Qd7 13.Bf4 e6 14.Be5 Qc6 15.Qg4 h5 16.Qe2 Nd5 17.Nc3 f6 18.Nxd5 Qxd5 19.Bf4 Be7 20.Rad1 Kf7 21.a3 Rac8 22.Rfe1 Rc4 23.Be3 Rhc8 24.h3 g6 25.Qd3 Rc2 26.Rd2 Rc1 27.Rxc1 Rxc1+ 28.Rd1 Rc4 29.Qb1 a6 30.Rc1 Qc6 31.Rxc4 Qxc4 32.Qd1 Qc6 33.Qd3 b5 34.Bd2 Qc4 35.Qe3 Qc2 36.Bc3 Qb1+ 37.Kh2 Bd6+ 38.g3 h4 39.Qf3 hxg3+ 40.fxg3 Qc2+ 41.Kh1 g5 42.d5 e5 43.Qg4 Bc5 44.Be1 Qd3 45.Kg2 Qxd5+ 46.Qf3 e4 47.Qe2 Qd4 48.h4 Qg1+ 49.Kh3 Qh1+ 50.Kg4 Kg6 51.h5+ Qxh5 0-1
+Reference
+View
+Reprintsev, Alexander vs. Nevednichy, Vladislav, Sunway Sitges 2022
+1.e4 c5 2.b3 g6 3.Bb2 Nf6 4.e5 Nd5 5.Nc3 Nxc3 6.dxc3 Nc6 7.Qd5 e6 8.Qe4 Qc7 9.f4 d6 10.exd6 Bxd6 11.g3 O-O 12.O-O-O e5 13.fxe5 Nxe5 14.Bg2 Rb8 15.c4 Bf5 16.Qd5 Rfd8 17.Ne2 Nc6 18.a3 Qe7 19.Qf3 Be5 20.Rd5 Rxd5 21.cxd5 Bxb2+ 22.Kxb2 Ne5 23.Qf2 Ng4 24.Qf3 Ne3 25.Nc3 b5 26.Qf4 Re8 27.d6 Nxg2 28.dxe7 Nxf4 29.gxf4 Rxe7 30.Nxb5 Re2 31.Rc1 Rxh2 32.Nxa7 h5 33.b4 cxb4 34.axb4 h4 35.b5 h3 36.b6 Be4 37.Kc3 Rg2 38.Kd4 Bb7 0-1
+Reference
+View
+Gelashvili, Tamaz vs. Yilmaz, Mustafa, EU-ch Minsk 2017
+1.e4 c5 2.b3 g6 3.Bb2 Nf6 4.e5 Nd5 5.Nc3 Nxc3 6.Bxc3 Bg7 7.h4 O-O 8.h5 d5 9.f4 Nc6 10.Nf3 Bg4 11.h6 Bh8 12.Rh4 Qd7 13.Bb5 Rac8 14.Qe2 a6 15.Bxc6 Rxc6 16.d3 Qf5 17.g3 d4 18.Bd2 Bxf3 19.Qxf3 Bxe5 20.g4 Qf6 21.Rh3 Bd6 22.O-O-O Rfc8 23.Kb1 b5 24.f5 c4 25.fxg6 hxg6 26.h7+ Kh8 27.Qd5 Rc5 28.Qh1 cxb3 29.cxb3 Rc2 30.Rc1 Rxc1+ 31.Bxc1 Qf2 32.Bb2 Qc2+ 33.Ka1 Be5 34.Qf3 f6 35.Rh1 Qc6 36.Qh3 Qd5 37.g5 Rc7 38.Re1 a5 39.Qh6 Qf7 40.Qh1 Qe8 41.Qd5 Kxh7 42.a3 Rc6 43.Rxe5 fxe5 44.Qxe5 Qf8 45.Qxd4 Rd6 46.Qe5 a4 47.b4 Kg8 48.Qxb5 Qa8 49.Qc4+ Qd5 50.b5 Qxc4 51.dxc4 Kf7 52.Bc3 Ke6 53.Kb2 Rd3 54.Kc2 Rf3 55.c5 Rf8 56.c6 Rb8 57.c7 Rf8 58.Bg7 Re8 59.Kc3 Kd6 60.b6 Kc6 61.Bd4 Kb7 62.Bc5 e5 63.Kb4 e4 64.Be3 Rf8 65.Kc4 Rf1 66.Bc5 Rd1 67.Kb5 Rd5 68.Kc4 Rxg5 69.Be3 Rg2 70.Kd5 Ra2 71.Bc5 e3 72.Bxe3 Rxa3 73.Bc5 Rb3 74.Ke6 Kc8 75.Kd6 a3 76.Kc6 a2 77.Bd4 g5 0-1
+Reference
+View
+Chigaev, Maksim vs. Vachier Lagrave, Maxime, Titled Tuesday 2015
+1.e4 c5 2.b3 g6 3.Bb2 Nf6 4.h4 Bg7 5.e5 Nd5 6.h5 Nc6 7.Nf3 d6 8.Bb5 Bg4 9.h6 Bxe5 10.Nxe5 Bxd1 11.Nxc6 Qb6 12.Nxa7+ Kd8 13.Bxh8 Bxc2 14.Bc4 Bxb1 15.Rxb1 Nf4 16.Nb5 d5 17.Bf1 Qe6+ 18.Kd1 f6 19.a4 Qf5 20.Rc1 Nd3 21.Bxd3 Qxd3 22.Rh3 Qf1+ 23.Kc2 Qxg2 24.Rc3 b6 25.d4 Qxf2+ 26.Kb1 c4 27.Bg7 cxb3 28.Rxb3 Rxa4 29.Nc3 Rc4 30.Rb5 Rxd4 31.Rxb6 Kd7 32.Rb7+ Ke6 33.Bf8 Kf5 34.Bxe7 Kg5 35.Rb6 Kg4 36.Bxf6 Rd3 37.Rb4+ d4 38.Nd5 Qf5 39.Rb5 Rb3+ 40.Ka1 Rxb5 41.Rg1+ Kh3 0-1
+Reference
+View
+Kumala, Aleksander vs. Bernadskiy, Vitaliy, Suwalki Warakomska Memorial 2018
+1.e4 c5 2.b3 g6 3.Bb2 Nf6 4.Qf3 d6 5.Bb5+ Nbd7 6.Bxf6 exf6 7.Qd3 a6 8.Bxd7+ Bxd7 9.Nc3 f5 10.O-O-O Qf6 11.exf5 O-O-O 12.fxg6 hxg6 13.Qf3 Qg7 14.Nge2 Bc6 15.Qg3 Be7 16.d4 Bh4 17.Qe3 Bxg2 18.Rhg1 Bc6 19.dxc5 Rde8 20.Qd4 Qxd4 21.Nxd4 Bxf2 22.Nxc6 Bxg1 23.cxd6 Be3+ 24.Kb2 Kd7 25.Na5 Bb6 26.Nc4 Bd8 27.Rd2 b5 28.Na3 b4 29.Nd5 bxa3+ 30.Kxa3 Re5 31.c4 Kxd6 32.Nb4+ Kc7 33.Nxa6+ Kb7 34.Nb4 Be7 35.Rd7+ Kc8 36.Ra7 Rxh2 37.Ka4 f5 38.a3 Bxb4 39.Kxb4 f4 0-1
+Reference
+View
+Winterholler, Christina vs. Kumic, Filip, Regionalliga SO 2017
+1.e4 c5 2.b3 g6 3.Bb2 Nf6 4.Qf3 d6 5.Bb5+ Nbd7 6.Bxf6 exf6 7.Nc3 Bg7 8.Qg3 O-O 9.Qxd6 f5 10.Nge2 fxe4 11.Bxd7 Qxd7 12.Qxc5 b6 13.Qe3 Bb7 14.O-O f5 15.g3 h6 16.h4 Qc6 17.Kh2 Kh7 18.Rg1 Rad8 19.Rad1 Bf6 20.a4 g5 21.hxg5 hxg5 22.Rh1 Kg6 23.Kg1 Rh8 24.Rxh8 Rxh8 25.Nb5 a6 26.Nbd4 Qd7 27.g4 f4 28.Qc3 Qxg4+ 0-1
+Reference
+View
+Vila Gazquez, Xavier vs. Ivanchuk, Vassily, Benidorm Stars rapid 2008
+1.e4 c5 2.b3 g6 3.Bb2 Nf6 4.Nc3 Bg7 5.e5 Nh5 6.Nf3 Nc6 7.Ne4 d6 8.Bb5 Bd7 9.Bxc6 Bxc6 10.d3 Qc7 11.exd6 Qa5+ 12.c3 Bxe4 13.d7+ Kf8 14.dxe4 Bxc3+ 15.Bxc3 Qxc3+ 16.Kf1 Rd8 17.g3 Nf6 18.Kg2 Rxd7 19.Qe2 Qd3 20.Qxd3 Rxd3 21.Rhd1 Rxd1 22.Rxd1 Ke8 23.e5 Nd7 24.e6 fxe6 25.Ng5 Nf8 26.Rc1 b6 27.b4 Nd7 28.Nxe6 Kf7 29.Ng5+ Kf6 30.f4 h6 31.Ne4+ Kf5 32.Kf3 Rc8 33.Rd1 Ke6 34.bxc5 Nxc5 35.Nc3 Nd7 0-1
+Reference
+View
+Hagesaether, Halvard vs. Tari, Aryan, Norway TCh 2022
+1.e4 c5 2.a3 g6 3.b4 Bg7 4.Nc3 d6 5.g3 Nf6 6.Bg2 Nc6 7.Rb1 Bg4 8.f3 Be6 9.Nge2 cxb4 10.axb4 a5 11.b5 Nb4 12.Ba3 O-O 13.Bxb4 axb4 14.Rxb4 Qb6 15.d4 Ra3 16.O-O Qa5 17.Qb1 Rc8 18.Qb2 Nd7 19.Rb1 Nb6 20.f4 Nc4 21.Qc1 Rxc3 0-1
+Reference
+View
+Korpas, Zoltan vs. Hajbok, Robert, Hungary TCh2 2014
+1.Nf3 c5 2.b4 cxb4 3.e4 d5 4.exd5 Qxd5 5.d4 e6 6.a3 Nf6 7.axb4 Bxb4+ 8.c3 Be7 9.Bd3 O-O 10.O-O b6 11.Bf4 Bb7 12.Qe2 Nc6 13.Nbd2 Rfe8 14.Ba6 Bxa6 15.Rxa6 Na5 16.c4 Qb7 17.c5 Nd5 18.Qb5 Nc6 19.Bg3 Nc3 20.Qd3 Nb4 21.Qxc3 Nxa6 22.c6 Qc8 23.Rc1 Nb4 24.h4 Na2 0-1
+Reference
+View
+Korchnoi, Viktor Lvovich vs. Huebner, Robert, World Cup Barcelona 1989
+1.e4 c5 2.Nc3 Nc6 3.Nge2 e5 4.g3 d6 5.Bg2 g6 6.d3 Bg7 7.O-O Nge7 8.f4 O-O 9.Be3 Nd4 10.Qd2 Be6 11.Rae1 Qd7 12.Nc1 Rae8 13.Nd1 b6 14.fxe5 dxe5 15.c3 Ndc6 16.Bh6 c4 17.dxc4 Qxd2 18.Bxd2 Bxc4 19.Rf2 Rd8 20.Bh3 f5 21.Ne3 Ba6 22.Bf1 Bxf1 23.Nxf1 Rd7 24.Nb3 Rfd8 25.Kg2 Rf8 26.Bc1 Nc8 27.a4 Rdf7 28.Rd1 f4 29.h4 h5 30.Nh2 Bf6 31.Nf3 fxg3 32.Rff1 Kg7 33.Be3 Nd8 34.Nbd2 Nd6 35.Kxg3 Ne6 36.Ng5 Bxg5 37.Rxf7+ Nxf7 38.hxg5 Nfxg5 39.a5 Rd8 40.axb6 axb6 41.Re1 b5 42.c4 bxc4 43.Nxc4 Nxe4+ 44.Kg2 Rc8 45.Nxe5 Rc2+ 46.Kf3 N4g5+ 47.Kg3 Rxb2 48.Ra1 Rb5 49.Ra7+ Kf6 50.Nd7+ Kf5 51.Ra1 Ne4+ 52.Kh4 Nd6 53.Rf1+ Ke4 54.Rf6 Nf5+ 55.Kh3 Kxe3 56.Rxe6+ Kf2 57.Ne5 Rb3+ 58.Kh2 Re3 59.Rxg6 Rxe5 60.Rg2+ Kf3 61.Rg5 h4 62.Kh3 Rd5 0-1
+Reference
+View
+Baboshin, Sergei vs. Zawadzka, Beata, Bayern ch 2009
+1.e4 c5 2.d3 Nc6 3.g3 g6 4.Bg2 Bg7 5.f4 Rb8 6.Nf3 b5 7.O-O d6 8.f5 Nf6 9.Nh4 Nd7 10.Nc3 O-O 11.Rb1 b4 12.Nd5 e6 13.Ne3 Nde5 14.Bd2 a5 15.h3 a4 16.Be1 b3 17.axb3 axb3 18.fxe6 fxe6 19.Rxf8+ Qxf8 20.c3 Ba6 21.c4 Nb4 22.Bxb4 Rxb4 23.Nf3 Nxf3+ 24.Qxf3 Bd4 25.Qxf8+ Kxf8 26.Kf2 Ra4 27.Ke2 Ra2 28.Nd1 Be5 29.g4 Ke7 30.Kd2 Kf6 31.Nc3 Ra5 32.Rf1+ Kg5 33.Rf7 Ra2 34.Nd1 Bxb2 35.Bf3 Bd4+ 36.Kc1 Ra1+ 37.Kd2 b2 38.Nxb2 Bxb2 39.Rxh7 Kf4 40.Bd1 Bc1+ 41.Kc2 Be3 42.Rf7+ Ke5 43.Rf1 Ra2+ 44.Kb3 Rh2 45.Rf3 Bf4 46.Bc2 Bc8 47.Bb1 Bd7 0-1
+Reference
+View
+Barle, Janez vs. Lenic, Luka, Slovenia ch 2008
+1.e4 c5 2.f4 d5 3.exd5 Nf6 4.Bb5+ Bd7 5.Bxd7+ Qxd7 6.c4 e6 7.Qc2 Bd6 8.dxe6 fxe6 9.d3 Nc6 10.Nf3 O-O 11.O-O Rae8 12.Nc3 e5 13.f5 Nd4 14.Qd1 h6 15.Ne4 Nxf5 16.Bd2 Nxe4 17.dxe4 Nd4 18.Be3 Qg4 19.Nd2 Rxf1+ 20.Kxf1 Rf8+ 21.Kg1 Qg6 22.Rc1 Be7 23.Kh1 Bh4 24.g3 Bxg3 25.hxg3 Qxg3 26.Qe1 Qh3+ 27.Kg1 Rf6 0-1
+Reference
+View
+Kazmin, Dmitrij vs. Neelotpal, Das, Titled Tuesday 2020
+1.e4 c5 2.f4 d5 3.exd5 Nf6 4.Bb5+ Bd7 5.Bxd7+ Qxd7 6.c4 e6 7.dxe6 Qxe6+ 8.Qe2 Qxe2+ 9.Nxe2 Nc6 10.Nbc3 O-O-O 11.O-O Nb4 12.d3 Rxd3 13.Rf3 Rxf3 14.gxf3 Be7 15.Bd2 Nd3 16.Rb1 Rd8 17.Be3 b6 18.b3 Nb4 19.Rb2 Rd3 20.Kf2 Rxc3 21.Nxc3 Nd3+ 0-1
+Reference
+View
+Previous chapter
+Course Options
+Course Info
+Course forum
+Browse Tree
+Pause all chapters
+Fast-forward time
+Chapter Options
+Resume all variations
+Delete my progress
+Course Settings
+Video:
+Learn:
+Priority Type:
+Quiz:
+Study:
+Review:
+Reps:
+Depth:
+Soft fail:
+Schedule:
+Quiz time limit:
+Unlimited
+sec
+Leaderboard
+Week
+Month
+All Time
+
+    1
+    yashart-2011
+    245,810
+    2
+    hyperion
+    231,670
+    3
+    will.power
+    121,155
+    4
+    dliren
+    105,850
+    5
+    spawnthefish
+    64,530
+    6
+    LandyPJY
+    59,415
+    7
+    Ancalagon
+    53,330
+    8
+    hopplaSchorsch
+    45,520
+    9
+    Chewbee
+    43,560
+    10
+    Ofen
+    41,600
+        26
+        AlekhineIsUnderrated
+        5,300
+
+Time Planner
+When?WorkMoves
+Now:None0
+In 1 hour:None0
+In 4 hrs:None0
+In 1 Day:None0
+In 3 Days:None0
+In 7 Days:None0
+Learning Status
+Status%Total
+Not learned:0%0
+Paused:0%0
+Learning:0%0
+Mature:0%0
+Difficult:0%0
+About Us
+Blog
+Careers
+Newsletter
+Leaderboards
+MoveTrainer®
+Science
+Suggestions
+How To
+Podcast
+Affiliate Program
+Cookie Preferences
+Privacy
+Terms
+Legal
+Need Help?

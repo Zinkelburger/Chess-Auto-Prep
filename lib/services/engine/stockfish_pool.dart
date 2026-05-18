@@ -182,7 +182,7 @@ class StockfishPool {
     _disposeAllWorkers();
   }
 
-  /// Dispose everything.  Called when leaving the repertoire screen.
+  /// Dispose everything.
   void dispose() {
     stopAll();
     _disposeAllWorkers();

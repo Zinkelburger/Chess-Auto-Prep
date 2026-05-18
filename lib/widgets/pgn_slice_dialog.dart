@@ -1,52 +1,402 @@
 /// Slice dialog — filter a PGN game collection by board position and headers.
+///
+/// Exports [SliceConfig] (serializable filter state) and [PgnSliceDialog].
 library;
+
+import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../utils/fen_utils.dart';
 
+// ---------------------------------------------------------------------------
+// Public data model — shared between dialog and screen
+// ---------------------------------------------------------------------------
+
 enum MatchMode { contains, exact, regex, after, before }
 
-String _matchModeLabel(MatchMode m) {
-  switch (m) {
-    case MatchMode.contains:
-      return 'contains';
-    case MatchMode.exact:
-      return 'exact';
-    case MatchMode.regex:
-      return 'regex';
-    case MatchMode.after:
-      return '≥ (after)';
-    case MatchMode.before:
-      return '≤ (before)';
+String _matchModeLabel(MatchMode m) => switch (m) {
+      MatchMode.contains => 'contains',
+      MatchMode.exact => 'exact',
+      MatchMode.regex => 'regex',
+      MatchMode.after => '≥ (after)',
+      MatchMode.before => '≤ (before)',
+    };
+
+MatchMode _matchModeFromName(String name) => MatchMode.values
+    .firstWhere((m) => m.name == name, orElse: () => MatchMode.contains);
+
+/// A single header‑based filter criterion.
+class HeaderFilterConfig {
+  final String field;
+  final MatchMode mode;
+  final String value;
+
+  const HeaderFilterConfig({
+    required this.field,
+    required this.mode,
+    required this.value,
+  });
+
+  Map<String, dynamic> toJson() =>
+      {'field': field, 'mode': mode.name, 'value': value};
+
+  factory HeaderFilterConfig.fromJson(Map<String, dynamic> j) =>
+      HeaderFilterConfig(
+        field: j['field'] as String? ?? 'Black',
+        mode: _matchModeFromName(j['mode'] as String? ?? 'contains'),
+        value: j['value'] as String? ?? '',
+      );
+
+  /// Human-readable summary for chip display.
+  String get chipLabel {
+    final modeStr =
+        mode == MatchMode.contains ? '' : ' (${_matchModeLabel(mode)})';
+    return '$field$modeStr: $value';
   }
 }
+
+/// Serializable snapshot of all slice filters.
+class SliceConfig {
+  final String? positionInput;
+  final List<HeaderFilterConfig> headerFilters;
+  final String? sequencePattern;
+  final int sequenceGap;
+
+  const SliceConfig({
+    this.positionInput,
+    this.headerFilters = const [],
+    this.sequencePattern,
+    this.sequenceGap = 4,
+  });
+  const SliceConfig.empty()
+      : positionInput = null,
+        headerFilters = const [],
+        sequencePattern = null,
+        sequenceGap = 4;
+
+  bool get isEmpty =>
+      (positionInput == null || positionInput!.trim().isEmpty) &&
+      headerFilters.every((f) => f.value.isEmpty) &&
+      (sequencePattern == null || sequencePattern!.trim().isEmpty);
+
+  String toJsonString() => jsonEncode({
+        if (positionInput != null && positionInput!.isNotEmpty)
+          'positionInput': positionInput,
+        'headerFilters': headerFilters.map((f) => f.toJson()).toList(),
+        if (sequencePattern != null && sequencePattern!.isNotEmpty)
+          'sequencePattern': sequencePattern,
+        if (sequenceGap != 4) 'sequenceGap': sequenceGap,
+      });
+
+  factory SliceConfig.fromJsonString(String s) {
+    try {
+      final j = jsonDecode(s) as Map<String, dynamic>;
+      return SliceConfig(
+        positionInput: j['positionInput'] as String?,
+        headerFilters: (j['headerFilters'] as List<dynamic>?)
+                ?.map((e) =>
+                    HeaderFilterConfig.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            const [],
+        sequencePattern: j['sequencePattern'] as String?,
+        sequenceGap: (j['sequenceGap'] as int?) ?? 4,
+      );
+    } catch (_) {
+      return const SliceConfig.empty();
+    }
+  }
+
+  /// Short summary for the top‑bar chip strip. Returns individual chip labels.
+  List<String> get chipLabels => [
+        if (positionInput != null && positionInput!.isNotEmpty)
+          'Pos: ${_truncate(positionInput!, 20)}',
+        if (sequencePattern != null && sequencePattern!.isNotEmpty)
+          'Seq: ${_truncate(sequencePattern!, 18)} (gap $sequenceGap)',
+        for (final f in headerFilters)
+          if (f.value.isNotEmpty) f.chipLabel,
+      ];
+
+  static String _truncate(String s, int max) =>
+      s.length <= max ? s : '${s.substring(0, max)}…';
+}
+
+/// Parse a sequence pattern string into groups of consecutive SAN moves.
+/// Groups are separated by `[gap]` tokens.
+/// Example: "d5 e5 [gap] f6" -> [["d5","e5"], ["f6"]]
+List<List<String>> parseSequenceGroups(String pattern) {
+  final trimmed = pattern.trim();
+  if (trimmed.isEmpty) return const [];
+  final parts = trimmed.split(RegExp(r'\[gap\]', caseSensitive: false));
+  final groups = <List<String>>[];
+  for (final part in parts) {
+    final tokens = part
+        .replaceAll(RegExp(r'\d+\.+'), '')
+        .replaceAll(RegExp(r'(1-0|0-1|1/2-1/2|\*)'), '')
+        .split(RegExp(r'\s+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (tokens.isNotEmpty) groups.add(tokens);
+  }
+  return groups;
+}
+
+/// Check whether a game's mainline matches the sequence groups with the
+/// given max gap (in ply) between groups.
+bool gameMatchesSequence(
+    String pgnText, List<List<String>> groups, int maxGap) {
+  if (groups.isEmpty) return true;
+  try {
+    final game = PgnGame.parsePgn(pgnText);
+    final moves = game.moves.mainline().map((n) => n.san).toList();
+    return _matchGroupsAt(moves, groups, 0, 0, maxGap);
+  } catch (_) {
+    return false;
+  }
+}
+
+bool _matchGroupsAt(
+    List<String> moves, List<List<String>> groups, int gi, int mi, int maxGap) {
+  if (gi >= groups.length) return true;
+  final group = groups[gi];
+  if (group.length > moves.length) return false;
+  final searchLimit = gi == 0 ? moves.length : mi + maxGap;
+  final end = searchLimit.clamp(0, moves.length - group.length);
+  for (int i = mi; i <= end; i++) {
+    bool ok = true;
+    for (int j = 0; j < group.length; j++) {
+      if (moves[i + j] != group[j]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok && _matchGroupsAt(moves, groups, gi + 1, i + group.length, maxGap)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Internal mutable filter row used inside the dialog
+// ---------------------------------------------------------------------------
 
 class _HeaderFilter {
   String field;
   MatchMode mode;
   String value;
   final TextEditingController controller;
-  _HeaderFilter()
-      : field = 'Black',
-        mode = MatchMode.contains,
-        value = '',
-        controller = TextEditingController();
+
+  _HeaderFilter({
+    this.field = 'Black',
+    this.mode = MatchMode.contains,
+    String initialValue = '',
+  })  : value = initialValue,
+        controller = TextEditingController(text: initialValue);
 }
 
+// ---------------------------------------------------------------------------
+// Position input parsing
+// ---------------------------------------------------------------------------
+
+/// Result of attempting to parse a position input string.
+class _PositionParseResult {
+  final String? fen;
+  final String? error;
+  const _PositionParseResult.ok(this.fen) : error = null;
+  const _PositionParseResult.err(this.error) : fen = null;
+  bool get isValid => fen != null;
+}
+
+/// Try to interpret [input] as either a FEN or a SAN move sequence.
+_PositionParseResult _parsePositionInput(String input) {
+  final trimmed = input.trim();
+  if (trimmed.isEmpty) return const _PositionParseResult.ok(null);
+
+  // Heuristic: FEN strings contain '/' for rank separators.
+  if (trimmed.contains('/')) {
+    try {
+      final fullFen = expandFen(trimmed);
+      // Validate by actually creating a position from it.
+      Chess.fromSetup(Setup.parseFen(fullFen));
+      return _PositionParseResult.ok(normalizeFen(fullFen));
+    } catch (e) {
+      return _PositionParseResult.err('Invalid FEN: $e');
+    }
+  }
+
+  // Otherwise treat as SAN move sequence: "1. e4 c6 2. d4 d5" etc.
+  return _parseSanSequence(trimmed);
+}
+
+_PositionParseResult _parseSanSequence(String input) {
+  // Strip move numbers, dots, result tokens.
+  final tokens = input
+      .replaceAll(RegExp(r'\d+\.+'), '')
+      .replaceAll(RegExp(r'(1-0|0-1|1/2-1/2|\*)'), '')
+      .split(RegExp(r'\s+'))
+      .where((t) => t.isNotEmpty)
+      .toList();
+
+  if (tokens.isEmpty) {
+    return const _PositionParseResult.err('No moves found');
+  }
+
+  Position pos = Chess.initial;
+  for (int i = 0; i < tokens.length; i++) {
+    try {
+      final move = pos.parseSan(tokens[i]);
+      if (move == null) {
+        return _PositionParseResult.err(
+            "Could not parse move ${i + 1}: '${tokens[i]}'");
+      }
+      pos = pos.play(move);
+    } catch (e) {
+      return _PositionParseResult.err("Invalid move ${i + 1}: '${tokens[i]}'");
+    }
+  }
+  return _PositionParseResult.ok(normalizeFen(pos.fen));
+}
+
+// ---------------------------------------------------------------------------
+// ECO validation
+// ---------------------------------------------------------------------------
+
+final _ecoExact = RegExp(r'^[A-E]\d{2}$');
+bool _isValidEco(String value) => _ecoExact.hasMatch(value.trim());
+
+// ---------------------------------------------------------------------------
+// Dialog types
+// ---------------------------------------------------------------------------
+
 typedef GameRecord = ({Map<String, String> headers, String pgnText});
+
+/// Callback signature: passes matching indices + the config that produced them.
+typedef SliceApplyCallback = void Function(
+    List<int> matchingIndices, SliceConfig config);
+
+// ---------------------------------------------------------------------------
+// Top-level helpers used inside Isolate.run closures.
+// Must NOT be class statics — Dart captures the enclosing class context
+// when referencing static members from a closure, which pulls unsendable
+// State/Widget objects into the isolate message.
+// ---------------------------------------------------------------------------
+
+bool _sliceGamePassesThroughPosition(
+    Map<String, String> headers, String pgnText, String targetFen) {
+  try {
+    final game = PgnGame.parsePgn(pgnText);
+    final mainline = game.moves.mainline().toList();
+
+    Position pos;
+    final setupFlag = headers['SetUp'] ?? headers['Setup'] ?? '';
+    final fenHeader = headers['FEN'] ?? '';
+    if (setupFlag == '1' && fenHeader.isNotEmpty) {
+      pos = Chess.fromSetup(Setup.parseFen(expandFen(fenHeader)));
+    } else {
+      pos = Chess.initial;
+    }
+
+    if (normalizeFen(pos.fen) == targetFen) return true;
+    for (final moveData in mainline) {
+      final move = pos.parseSan(moveData.san);
+      if (move == null) break;
+      pos = pos.play(move);
+      if (normalizeFen(pos.fen) == targetFen) return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+bool _sliceMatchesField(String headerVal, String query, MatchMode mode) {
+  switch (mode) {
+    case MatchMode.contains:
+      return headerVal.toLowerCase().contains(query.toLowerCase());
+    case MatchMode.exact:
+      return headerVal.toLowerCase() == query.toLowerCase();
+    case MatchMode.regex:
+      try {
+        return RegExp(query, caseSensitive: false).hasMatch(headerVal);
+      } catch (_) {
+        return false;
+      }
+    case MatchMode.after:
+      return headerVal.compareTo(query) >= 0;
+    case MatchMode.before:
+      return headerVal.compareTo(query) <= 0;
+  }
+}
+
+Future<List<int>> _runSliceCompute(
+  List<GameRecord> games,
+  String? targetFen,
+  List<({String field, MatchMode mode, String value})> filters,
+  List<List<String>> seqGroups,
+  int seqGap,
+) {
+  final filterData = filters
+      .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
+      .toList();
+  final gameData = games
+      .map((g) =>
+          (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText))
+      .toList();
+  final seqGroupsCopy = seqGroups.map((g) => List<String>.from(g)).toList();
+
+  return Isolate.run(() {
+    final indices = <int>[];
+    for (int i = 0; i < gameData.length; i++) {
+      final game = gameData[i];
+      bool matches = true;
+
+      if (targetFen != null) {
+        matches = _sliceGamePassesThroughPosition(
+            game.headers, game.pgnText, targetFen);
+      }
+
+      if (matches && seqGroupsCopy.isNotEmpty) {
+        matches = gameMatchesSequence(game.pgnText, seqGroupsCopy, seqGap);
+      }
+
+      if (matches) {
+        for (final f in filterData) {
+          if (f.value.isEmpty) continue;
+          final headerVal = game.headers[f.field] ?? '';
+          final mode = MatchMode.values.firstWhere((m) => m.name == f.modeName,
+              orElse: () => MatchMode.contains);
+          if (!_sliceMatchesField(headerVal, f.value, mode)) {
+            matches = false;
+            break;
+          }
+        }
+      }
+
+      if (matches) indices.add(i);
+    }
+    return indices;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// PgnSliceDialog
+// ---------------------------------------------------------------------------
 
 class PgnSliceDialog extends StatefulWidget {
   final List<GameRecord> allGames;
   final String currentFen;
-  final void Function(List<int> matchingIndices) onApply;
+  final SliceApplyCallback onApply;
+
+  /// Pre‑populate the dialog from a previously saved config.
+  final SliceConfig? initialConfig;
 
   const PgnSliceDialog({
     super.key,
     required this.allGames,
     required this.currentFen,
     required this.onApply,
+    this.initialConfig,
   });
 
   @override
@@ -54,29 +404,42 @@ class PgnSliceDialog extends StatefulWidget {
 }
 
 class _PgnSliceDialogState extends State<PgnSliceDialog> {
-  bool _usePositionFilter = false;
   final List<_HeaderFilter> _headerFilters = [];
   List<int> _matchingIndices = [];
   bool _computing = false;
 
-  static const _startFen =
-      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+  // Position filter
+  final TextEditingController _positionController = TextEditingController();
+  _PositionParseResult _positionParse = const _PositionParseResult.ok(null);
+
+  // Sequence filter
+  final TextEditingController _sequenceController = TextEditingController();
+  final TextEditingController _gapController = TextEditingController(text: '4');
+  String? _sequenceError;
+
+  // Permanent Date filter row
+  final TextEditingController _dateController = TextEditingController();
+  MatchMode _dateMode = MatchMode.after;
 
   static const _fieldOptions = [
     'White',
     'Black',
     'Event',
-    'Date',
     'Result',
     'ECO',
+    'Opening',
+    'Site',
+    'WhiteElo',
+    'BlackElo',
     'StudyRating',
     'StudySummary',
   ];
 
-  /// Match modes available per field. Date and StudyRating get comparison
-  /// operators; other fields get text matching.
   static List<MatchMode> _modesForField(String field) {
-    if (field == 'Date' || field == 'StudyRating') {
+    if (field == 'Date' ||
+        field == 'StudyRating' ||
+        field == 'WhiteElo' ||
+        field == 'BlackElo') {
       return MatchMode.values;
     }
     return [MatchMode.contains, MatchMode.exact, MatchMode.regex];
@@ -85,10 +448,79 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   @override
   void initState() {
     super.initState();
+    _restoreFromConfig(widget.initialConfig);
     _recompute();
   }
 
-  bool get _isStartPosition => widget.currentFen == _startFen;
+  void _restoreFromConfig(SliceConfig? config) {
+    if (config == null || config.isEmpty) return;
+    if (config.positionInput != null && config.positionInput!.isNotEmpty) {
+      _positionController.text = config.positionInput!;
+      _positionParse = _parsePositionInput(config.positionInput!);
+    }
+    if (config.sequencePattern != null && config.sequencePattern!.isNotEmpty) {
+      _sequenceController.text = config.sequencePattern!;
+    }
+    if (config.sequenceGap != 4) {
+      _gapController.text = config.sequenceGap.toString();
+    }
+    for (final f in config.headerFilters) {
+      if (f.value.isEmpty) continue;
+      if (f.field == 'Date') {
+        _dateController.text = f.value;
+        _dateMode = f.mode;
+        continue;
+      }
+      _headerFilters.add(_HeaderFilter(
+        field: _fieldOptions.contains(f.field) ? f.field : 'Black',
+        mode: f.mode,
+        initialValue: f.value,
+      ));
+    }
+  }
+
+  /// Parse the position input and recompute matches. Called explicitly by the
+  /// user (button press or Enter key), not on every keystroke.
+  void _applyPositionInput() {
+    setState(() {
+      _positionParse = _parsePositionInput(_positionController.text);
+    });
+    _recompute();
+  }
+
+  void _clearPositionInput() {
+    _positionController.clear();
+    setState(() {
+      _positionParse = const _PositionParseResult.ok(null);
+    });
+    _recompute();
+  }
+
+  bool get _hasPositionFilter =>
+      _positionParse.isValid && _positionParse.fen != null;
+
+  SliceConfig _buildConfig() {
+    final filters = <HeaderFilterConfig>[];
+    if (_dateController.text.trim().isNotEmpty) {
+      filters.add(HeaderFilterConfig(
+        field: 'Date',
+        mode: _dateMode,
+        value: _dateController.text.trim(),
+      ));
+    }
+    filters.addAll(_headerFilters.where((f) => f.value.isNotEmpty).map((f) =>
+        HeaderFilterConfig(field: f.field, mode: f.mode, value: f.value)));
+    return SliceConfig(
+      positionInput: _positionController.text.trim().isEmpty
+          ? null
+          : _positionController.text.trim(),
+      headerFilters: filters,
+      sequencePattern: _sequenceController.text.trim().isEmpty
+          ? null
+          : _sequenceController.text.trim(),
+      sequenceGap: int.tryParse(_gapController.text) ?? 4,
+    );
+  }
 
   void _addFilter() {
     setState(() => _headerFilters.add(_HeaderFilter()));
@@ -103,77 +535,52 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     _recompute();
   }
 
+  int _computeGeneration = 0;
+
   void _recompute() {
+    final generation = ++_computeGeneration;
     setState(() => _computing = true);
-    final indices = <int>[];
-    for (int i = 0; i < widget.allGames.length; i++) {
-      if (_matchesGame(i)) indices.add(i);
+
+    final targetFen = _hasPositionFilter ? _positionParse.fen : null;
+    final filters = <({String field, MatchMode mode, String value})>[];
+    if (_dateController.text.trim().isNotEmpty) {
+      filters.add(
+          (field: 'Date', mode: _dateMode, value: _dateController.text.trim()));
     }
-    setState(() {
-      _matchingIndices = indices;
-      _computing = false;
+    filters.addAll(_headerFilters
+        .where((f) => f.value.isNotEmpty)
+        .map((f) => (field: f.field, mode: f.mode, value: f.value)));
+    final games = widget.allGames;
+
+    final seqText = _sequenceController.text.trim();
+    final seqGroups = seqText.isNotEmpty
+        ? parseSequenceGroups(seqText)
+        : const <List<String>>[];
+    final seqGap = int.tryParse(_gapController.text) ?? 4;
+
+    _runSliceCompute(games, targetFen, filters, seqGroups, seqGap)
+        .then((indices) {
+      if (!mounted || generation != _computeGeneration) return;
+      setState(() {
+        _matchingIndices = indices;
+        _computing = false;
+      });
     });
-  }
-
-  bool _matchesGame(int index) {
-    final game = widget.allGames[index];
-
-    if (_usePositionFilter && !_isStartPosition) {
-      if (!_gamePassesThroughPosition(game.pgnText, widget.currentFen)) {
-        return false;
-      }
-    }
-
-    for (final f in _headerFilters) {
-      if (f.value.isEmpty) continue;
-      final headerVal = game.headers[f.field] ?? '';
-      if (!_matchesField(headerVal, f.value, f.mode)) return false;
-    }
-    return true;
-  }
-
-  static bool _gamePassesThroughPosition(String pgnText, String targetFen) {
-    try {
-      final game = PgnGame.parsePgn(pgnText);
-      final mainline = game.moves.mainline().toList();
-      Position pos = Chess.initial;
-      if (normalizeFen(pos.fen) == targetFen) return true;
-      for (final moveData in mainline) {
-        final move = pos.parseSan(moveData.san);
-        if (move == null) break;
-        pos = pos.play(move);
-        if (normalizeFen(pos.fen) == targetFen) return true;
-      }
-    } catch (_) {}
-    return false;
-  }
-
-  static bool _matchesField(String headerVal, String query, MatchMode mode) {
-    switch (mode) {
-      case MatchMode.contains:
-        return headerVal.toLowerCase().contains(query.toLowerCase());
-      case MatchMode.exact:
-        return headerVal.toLowerCase() == query.toLowerCase();
-      case MatchMode.regex:
-        try {
-          return RegExp(query, caseSensitive: false).hasMatch(headerVal);
-        } catch (_) {
-          return false;
-        }
-      case MatchMode.after:
-        return headerVal.compareTo(query) >= 0;
-      case MatchMode.before:
-        return headerVal.compareTo(query) <= 0;
-    }
   }
 
   @override
   void dispose() {
+    _positionController.dispose();
+    _sequenceController.dispose();
+    _gapController.dispose();
+    _dateController.dispose();
     for (final f in _headerFilters) {
       f.controller.dispose();
     }
     super.dispose();
   }
+
+  // ── Build ──
 
   @override
   Widget build(BuildContext context) {
@@ -186,97 +593,13 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Position filter toggle
-              SwitchListTile(
-                title: const Text('Filter by board position'),
-                subtitle: (_usePositionFilter && _isStartPosition)
-                    ? const Text(
-                        'Set a position on the board first, then re-open Slice',
-                        style: TextStyle(fontSize: 12, color: Colors.orange),
-                      )
-                    : _usePositionFilter
-                        ? Text(
-                            'Only games passing through the current position',
-                            style:
-                                TextStyle(fontSize: 12, color: Colors.grey[400]),
-                          )
-                        : null,
-                value: _usePositionFilter,
-                onChanged: (v) {
-                  setState(() => _usePositionFilter = v);
-                  if (v && _isStartPosition) {
-                    // Immediately turn it back off — can't filter on start pos
-                    Future.microtask(() {
-                      if (!mounted) return;
-                      setState(() => _usePositionFilter = false);
-                    });
-                  } else {
-                    _recompute();
-                  }
-                },
-                dense: true,
-              ),
+              _buildPositionSection(),
               const Divider(),
-              // Header filters
-              Row(
-                children: [
-                  Text(
-                    'Header Filters',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      color: Colors.grey[300],
-                    ),
-                  ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: _addFilter,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add filter'),
-                  ),
-                ],
-              ),
-              if (_headerFilters.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'No header filters. Click "Add filter" to narrow results.',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                  ),
-                ),
-              for (int i = 0; i < _headerFilters.length; i++)
-                _buildFilterRow(i),
+              _buildSequenceSection(),
+              const Divider(),
+              _buildHeaderSection(),
               const SizedBox(height: 16),
-              // Results preview
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey[850],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[700]!),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _computing ? Icons.hourglass_top : Icons.filter_list,
-                      size: 18,
-                      color: Colors.grey[400],
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _computing
-                          ? 'Computing...'
-                          : '${_matchingIndices.length} / ${widget.allGames.length} games match',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: _matchingIndices.isEmpty
-                            ? Colors.red[300]
-                            : Colors.green[300],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildResultsPreview(),
             ],
           ),
         ),
@@ -285,8 +608,16 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
         TextButton(
           onPressed: () {
             setState(() {
+              _positionController.clear();
+              _sequenceController.clear();
+              _gapController.text = '4';
+              _sequenceError = null;
+              _dateController.clear();
+              _dateMode = MatchMode.after;
+              for (final f in _headerFilters) {
+                f.controller.dispose();
+              }
               _headerFilters.clear();
-              _usePositionFilter = false;
             });
             _recompute();
           },
@@ -297,13 +628,384 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _matchingIndices.isNotEmpty
+          onPressed: !_computing && _matchingIndices.isNotEmpty
               ? () {
-                  widget.onApply(_matchingIndices);
+                  widget.onApply(_matchingIndices, _buildConfig());
                   Navigator.pop(context);
                 }
               : null,
-          child: Text('Apply (${_matchingIndices.length})'),
+          child: Text(
+              _computing ? 'Apply (…)' : 'Apply (${_matchingIndices.length})'),
+        ),
+      ],
+    );
+  }
+
+  // ── Position section ──
+
+  Widget _buildPositionSection() {
+    final showError = _positionParse.error != null;
+    final showOk = _positionParse.isValid && _positionParse.fen != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Position Filter',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: Colors.grey[300],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _positionController,
+                decoration: InputDecoration(
+                  hintText: 'FEN or moves, e.g. 1. e4 c6',
+                  hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: showOk || showError
+                      ? Icon(
+                          showOk ? Icons.check_circle : Icons.error_outline,
+                          size: 18,
+                          color: showOk ? Colors.green : Colors.red,
+                        )
+                      : null,
+                  suffixIconConstraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 28),
+                ),
+                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                onSubmitted: (_) => _applyPositionInput(),
+              ),
+            ),
+            const SizedBox(width: 6),
+            SizedBox(
+              height: 36,
+              child: OutlinedButton(
+                onPressed: _applyPositionInput,
+                child: const Text('Apply', style: TextStyle(fontSize: 12)),
+              ),
+            ),
+            if (_hasPositionFilter || _positionController.text.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  onPressed: _clearPositionInput,
+                  tooltip: 'Clear position filter',
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            if (showError)
+              Expanded(
+                child: Text(
+                  _positionParse.error!,
+                  style: const TextStyle(fontSize: 11, color: Colors.red),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              )
+            else
+              const Spacer(),
+            _buildBoardPositionChip(),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBoardPositionChip() {
+    const startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -';
+    final normalizedCurrent = normalizeFen(widget.currentFen);
+    final isStart = normalizedCurrent == startFen;
+    final isActive = _hasPositionFilter &&
+        normalizeFen(_positionController.text.trim()) == normalizedCurrent;
+
+    return Tooltip(
+      message: isStart
+          ? 'Navigate to a position on the board first'
+          : isActive
+              ? 'Remove board position filter'
+              : 'Use the current board position',
+      child: GestureDetector(
+        onTap: isStart
+            ? null
+            : () {
+                if (isActive) {
+                  _clearPositionInput();
+                } else {
+                  _positionController.text = widget.currentFen;
+                  _applyPositionInput();
+                }
+              },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isStart
+                ? Colors.grey[800]
+                : isActive
+                    ? Colors.blue[700]
+                    : Colors.grey[800],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isActive ? Colors.blue[400]! : Colors.grey[700]!,
+              width: isActive ? 1.5 : 0.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isActive ? Icons.grid_on : Icons.grid_on,
+                size: 12,
+                color: isStart
+                    ? Colors.grey[600]
+                    : isActive
+                        ? Colors.blue[100]
+                        : Colors.grey[400],
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Board position',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                  color: isStart
+                      ? Colors.grey[600]
+                      : isActive
+                          ? Colors.blue[100]
+                          : Colors.grey[400],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Sequence filter section ──
+
+  void _validateSequence() {
+    final text = _sequenceController.text.trim();
+    if (text.isEmpty) {
+      setState(() => _sequenceError = null);
+      _recompute();
+      return;
+    }
+    final groups = parseSequenceGroups(text);
+    if (groups.isEmpty) {
+      setState(() => _sequenceError = 'No valid moves found');
+      return;
+    }
+    // Validate each SAN token is plausible (basic check — not full legality)
+    for (final group in groups) {
+      for (final san in group) {
+        if (!RegExp(r'^[a-hKQRBNO0-9x+#=]+$').hasMatch(san)) {
+          setState(() => _sequenceError = "Invalid move token: '$san'");
+          return;
+        }
+      }
+    }
+    setState(() => _sequenceError = null);
+    _recompute();
+  }
+
+  Widget _buildSequenceSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Move Sequence Filter',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: Colors.grey[300],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Find games containing specific moves in order. '
+          'Use [gap] between groups that need not be consecutive.',
+          style: TextStyle(color: Colors.grey[500], fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _sequenceController,
+          decoration: InputDecoration(
+            hintText: 'e.g.  d5 e5 [gap] f6',
+            hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+            isDense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            border: const OutlineInputBorder(),
+            suffixIcon: _sequenceController.text.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.close, size: 16),
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: () {
+                      _sequenceController.clear();
+                      _validateSequence();
+                    },
+                  )
+                : null,
+            suffixIconConstraints:
+                const BoxConstraints(minWidth: 32, minHeight: 28),
+          ),
+          style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+          onChanged: (_) => _validateSequence(),
+          onSubmitted: (_) => _validateSequence(),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            if (_sequenceError != null)
+              Expanded(
+                child: Text(
+                  _sequenceError!,
+                  style: const TextStyle(fontSize: 11, color: Colors.red),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              )
+            else
+              const Spacer(),
+            Text('Max gap: ',
+                style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+            SizedBox(
+              width: 40,
+              child: TextField(
+                controller: _gapController,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  border: OutlineInputBorder(),
+                ),
+                style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                keyboardType: TextInputType.number,
+                onChanged: (_) {
+                  if (_sequenceController.text.trim().isNotEmpty) {
+                    _recompute();
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text('ply',
+                style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Header filters section ──
+
+  Widget _buildHeaderSection() {
+    final dateModes = _modesForField('Date');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Header Filters',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: Colors.grey[300],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Permanent Date filter row
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 120,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.grey[700]!),
+                  ),
+                  child: Text('Date',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[300])),
+                ),
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 120,
+                child: DropdownButtonFormField<MatchMode>(
+                  value: _dateMode,
+                  isDense: true,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: dateModes
+                      .map((m) => DropdownMenuItem(
+                            value: m,
+                            child: Text(_matchModeLabel(m),
+                                style: const TextStyle(fontSize: 12)),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    setState(() => _dateMode = v!);
+                    _recompute();
+                  },
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: TextField(
+                  controller: _dateController,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. 2000',
+                    hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    border: const OutlineInputBorder(),
+                  ),
+                  style: const TextStyle(fontSize: 12),
+                  onChanged: (_) => _recompute(),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Spacer to align with removable rows (which have an X button)
+              const SizedBox(width: 28),
+            ],
+          ),
+        ),
+        for (int i = 0; i < _headerFilters.length; i++) _buildFilterRow(i),
+        TextButton.icon(
+          onPressed: _addFilter,
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Add filter'),
         ),
       ],
     );
@@ -312,105 +1014,177 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   Widget _buildFilterRow(int index) {
     final f = _headerFilters[index];
     final availableModes = _modesForField(f.field);
-    // If current mode isn't valid for this field, reset to first available
     if (!availableModes.contains(f.mode)) {
       f.mode = availableModes.first;
     }
 
-    final hintText = (f.field == 'Date')
-        ? 'e.g. 2000'
-        : (f.field == 'StudyRating')
-            ? 'e.g. 3'
-            : 'Value...';
+    String hintText;
+    if (f.field == 'ECO') {
+      hintText = 'e.g. B12 or B1';
+    } else if (f.field == 'Date') {
+      hintText = 'e.g. 2000';
+    } else if (f.field == 'StudyRating') {
+      hintText = 'e.g. 3';
+    } else if (f.field == 'WhiteElo' || f.field == 'BlackElo') {
+      hintText = 'e.g. 2400';
+    } else {
+      hintText = 'Value...';
+    }
+
+    // ECO validation warning
+    final showEcoWarn = f.field == 'ECO' &&
+        f.mode == MatchMode.exact &&
+        f.value.isNotEmpty &&
+        !_isValidEco(f.value);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              // Field dropdown
+              SizedBox(
+                width: 120,
+                child: DropdownButtonFormField<String>(
+                  initialValue: f.field,
+                  isDense: true,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _fieldOptions
+                      .map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(s, style: const TextStyle(fontSize: 12))))
+                      .toList(),
+                  onChanged: (v) {
+                    setState(() {
+                      f.field = v!;
+                      final modes = _modesForField(f.field);
+                      if (!modes.contains(f.mode)) f.mode = modes.first;
+                    });
+                    _recompute();
+                  },
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Match mode dropdown
+              SizedBox(
+                width: 120,
+                child: DropdownButtonFormField<MatchMode>(
+                  initialValue: f.mode,
+                  isDense: true,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: availableModes
+                      .map((m) => DropdownMenuItem(
+                            value: m,
+                            child: Text(_matchModeLabel(m),
+                                style: const TextStyle(fontSize: 12)),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    setState(() => f.mode = v!);
+                    _recompute();
+                  },
+                ),
+              ),
+              const SizedBox(width: 6),
+              // Value text field
+              Expanded(
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: hintText,
+                    hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: showEcoWarn
+                        ? Tooltip(
+                            message: 'Not a standard ECO code (A00–E99)',
+                            child: Icon(Icons.warning_amber,
+                                size: 16, color: Colors.orange[400]),
+                          )
+                        : null,
+                    suffixIconConstraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                  ),
+                  style: const TextStyle(fontSize: 12),
+                  onChanged: (v) {
+                    f.value = v;
+                    _recompute();
+                  },
+                  controller: f.controller,
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Remove button
+              IconButton(
+                onPressed: () => _removeFilter(index),
+                icon: const Icon(Icons.close, size: 18),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+            ],
+          ),
+          if (showEcoWarn)
+            Padding(
+              padding: const EdgeInsets.only(left: 248, top: 2),
+              child: Text(
+                'Expected A00–E99',
+                style: TextStyle(fontSize: 10, color: Colors.orange[400]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Results preview ──
+
+  Widget _buildResultsPreview() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[700]!),
+      ),
       child: Row(
         children: [
-          // Field dropdown
-          SizedBox(
-            width: 120,
-            child: DropdownButtonFormField<String>(
-              initialValue: f.field,
-              isDense: true,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                border: OutlineInputBorder(),
-              ),
-              items: _fieldOptions
-                  .map((s) => DropdownMenuItem(
-                      value: s,
-                      child:
-                          Text(s, style: const TextStyle(fontSize: 12))))
-                  .toList(),
-              onChanged: (v) {
-                setState(() {
-                  f.field = v!;
-                  // Reset mode if not valid for new field
-                  final modes = _modesForField(f.field);
-                  if (!modes.contains(f.mode)) f.mode = modes.first;
-                });
-                _recompute();
-              },
+          if (_computing)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            Icon(Icons.filter_list, size: 18, color: Colors.grey[400]),
+          const SizedBox(width: 8),
+          Text(
+            _computing
+                ? 'Computing…'
+                : '${_matchingIndices.length} / ${widget.allGames.length} games match',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: _computing
+                  ? Colors.grey[400]
+                  : _matchingIndices.isEmpty
+                      ? Colors.red[300]
+                      : Colors.green[300],
             ),
-          ),
-          const SizedBox(width: 6),
-          // Match mode dropdown
-          SizedBox(
-            width: 120,
-            child: DropdownButtonFormField<MatchMode>(
-              initialValue: f.mode,
-              isDense: true,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                border: OutlineInputBorder(),
-              ),
-              items: availableModes
-                  .map((m) => DropdownMenuItem(
-                        value: m,
-                        child: Text(_matchModeLabel(m),
-                            style: const TextStyle(fontSize: 12)),
-                      ))
-                  .toList(),
-              onChanged: (v) {
-                setState(() => f.mode = v!);
-                _recompute();
-              },
-            ),
-          ),
-          const SizedBox(width: 6),
-          // Value text field
-          Expanded(
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: hintText,
-                hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                border: const OutlineInputBorder(),
-              ),
-              style: const TextStyle(fontSize: 12),
-              onChanged: (v) {
-                f.value = v;
-                _recompute();
-              },
-              controller: f.controller,
-            ),
-          ),
-          const SizedBox(width: 4),
-          // Remove button
-          IconButton(
-            onPressed: () => _removeFilter(index),
-            icon: const Icon(Icons.close, size: 18),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
         ],
       ),

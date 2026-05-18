@@ -1,0 +1,39 @@
+[Event "Benoni Example 1"]
+[Site "PoopChess"]
+[Date "2025.12.01"]
+[Round "1"]
+[White "White"]
+[Black "Black"]
+[Result "0-1"]
+
+1. d4 Nf6 2. c4 c5 3. d5 e6 4. Nc3 exd5 5. cxd5 d6 6. e4 g6 7. Nf3 Bg7 8. Be2 O-O 9. O-O Re8 10. Nd2 Na6 0-1
+
+[Event "Benoni Example 2"]
+[Site "PoopChess"]
+[Date "2025.12.01"]
+[Round "2"]
+[White "White"]
+[Black "Black"]
+[Result "1/2-1/2"]
+
+1. d4 Nf6 2. c4 c5 3. d5 e6 4. Nc3 exd5 5. cxd5 d6 6. Nf3 g6 7. g3 Bg7 8. Bg2 O-O 9. O-O a6 10. a4 Nbd7 1/2-1/2
+
+[Event "Benoni Example 3"]
+[Site "PoopChess"]
+[Date "2025.12.01"]
+[Round "3"]
+[White "White"]
+[Black "Black"]
+[Result "0-1"]
+
+1. d4 Nf6 2. c4 c5 3. d5 e6 4. Nc3 exd5 5. cxd5 d6 6. e4 g6 7. f4 Bg7 8. Bb5+ Nfd7 9. a4 Qh4+ 10. g3 Qe7 0-1
+
+[Event "Benoni Example 4"]
+[Site "PoopChess"]
+[Date "2025.12.01"]
+[Round "4"]
+[White "White"]
+[Black "Black"]
+[Result "1-0"]
+
+1. d4 Nf6 2. c4 c5 3. d5 e6 4. Nc3 exd5 5. cxd5 d6 6. e4 g6 7. f4 Bg7 8. Bb5+ Nfd7 9. Bd3 O-O 10. Nf3 Na6 11. O-O Nb4 1-0

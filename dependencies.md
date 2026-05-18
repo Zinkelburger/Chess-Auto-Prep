@@ -34,7 +34,6 @@ xdg-user-dir DOCUMENTS
 
 ### Platform Support
 - **Desktop**: Linux, Windows, macOS
-- **Web**: localStorage fallback
 - **Mobile**: Android, iOS (future)
 
 ## Packaging Options
@@ -44,12 +43,6 @@ xdg-user-dir DOCUMENTS
 cd flatpak
 ./build.sh
 flatpak install build org.chessautoprep.app
-```
-
-### Web Deployment
-```bash
-flutter build web --release
-# Serve from build/web/
 ```
 
 ### Native Linux

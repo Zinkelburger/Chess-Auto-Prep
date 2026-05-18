@@ -2,6 +2,8 @@
 /// Similar to openingtree.com's move explorer functionality
 library;
 
+import 'dart:collection';
+
 import 'package:dartchess/dartchess.dart';
 import '../utils/fen_utils.dart';
 
@@ -47,15 +49,27 @@ class OpeningTreeNode {
   /// Win rate as percentage
   double get winRatePercent => winRate * 100;
 
-  /// Get sorted list of children by number of games played (descending)
+  List<OpeningTreeNode>? _sortedChildrenCache;
+
+  /// Get sorted list of children by number of games played (descending).
+  /// Cached and invalidated when children or stats change.
   List<OpeningTreeNode> get sortedChildren {
-    final childList = children.values.toList();
-    childList.sort((a, b) => b.gamesPlayed.compareTo(a.gamesPlayed));
-    return childList;
+    if (_sortedChildrenCache == null) {
+      final childList = children.values.toList();
+      childList.sort((a, b) => b.gamesPlayed.compareTo(a.gamesPlayed));
+      _sortedChildrenCache = childList;
+    }
+    return _sortedChildrenCache!;
   }
 
-  /// Update statistics with a game result
-  /// Result should be from the player's perspective (1.0 = win, 0.5 = draw, 0.0 = loss)
+  void _invalidateSortCache() => _sortedChildrenCache = null;
+
+  /// Update statistics with a game result.
+  /// Result should be from the player's perspective (1.0 = win, 0.5 = draw, 0.0 = loss).
+  ///
+  /// **Important:** Directly mutating [gamesPlayed], [wins], [losses], or
+  /// [draws] bypasses cache invalidation. Always use this method or call
+  /// [_invalidateSortCache] on the parent after manual mutation.
   void updateStats(double result) {
     gamesPlayed++;
     if (result >= 0.9) {
@@ -65,11 +79,13 @@ class OpeningTreeNode {
     } else {
       draws++;
     }
+    parent?._invalidateSortCache();
   }
 
   /// Add or get a child node for a move
   OpeningTreeNode getOrCreateChild(String movesan, String resultingFen) {
     if (!children.containsKey(movesan)) {
+      _sortedChildrenCache = null;
       children[movesan] = OpeningTreeNode(
         move: movesan,
         fen: resultingFen,
@@ -85,11 +101,11 @@ class OpeningTreeNode {
     OpeningTreeNode? current = this;
 
     while (current != null && current.move.isNotEmpty) {
-      path.insert(0, current.move);
+      path.add(current.move);
       current = current.parent;
     }
 
-    return path;
+    return path.reversed.toList();
   }
 
   /// Get the full move path as a string (e.g. "1.e4 e5 2.Nf3 Nc6")
@@ -236,19 +252,22 @@ class OpeningTree {
     final nodeToId = <OpeningTreeNode, int>{};
 
     // BFS to assign IDs and serialise each node.
-    final queue = <OpeningTreeNode>[root];
+    final queue = Queue<OpeningTreeNode>()..add(root);
     nodeToId[root] = 0;
 
     while (queue.isNotEmpty) {
-      final node = queue.removeAt(0);
+      final node = queue.removeFirst();
       final id = nodeToId[node]!;
 
       final childIds = <String, int>{};
       for (final entry in node.children.entries) {
-        final childId = nodeToId.length;
-        nodeToId[entry.value] = childId;
+        final childNode = entry.value;
+        final childId = nodeToId.putIfAbsent(childNode, () {
+          final nextId = nodeToId.length;
+          queue.add(childNode);
+          return nextId;
+        });
         childIds[entry.key] = childId;
-        queue.add(entry.value);
       }
 
       nodes.add({

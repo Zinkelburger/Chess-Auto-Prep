@@ -8,12 +8,12 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:dartchess/dartchess.dart' hide File;
 
 import 'browser_extension_server.dart';
+import '../storage/app_paths.dart';
 
-/// Factory function for conditional import
+/// Factory function for creating the browser extension server.
 BrowserExtensionServer createBrowserExtensionServer() =>
     BrowserExtensionServerIO();
 
@@ -21,6 +21,28 @@ BrowserExtensionServer createBrowserExtensionServer() =>
 class BrowserExtensionServerIO implements BrowserExtensionServer {
   HttpServer? _server;
   int? _port;
+
+  Future<void> _writeAtomically(File target, String content) async {
+    final parent = target.parent;
+    if (!await parent.exists()) {
+      await parent.create(recursive: true);
+    }
+    final tmp = File(
+      p.join(
+        parent.path,
+        '.${p.basename(target.path)}.${DateTime.now().microsecondsSinceEpoch}.tmp',
+      ),
+    );
+    await tmp.writeAsString(content, flush: true);
+    try {
+      await tmp.rename(target.path);
+    } on FileSystemException {
+      if (await target.exists()) {
+        await target.delete();
+      }
+      await tmp.rename(target.path);
+    }
+  }
 
   @override
   bool get isRunning => _server != null;
@@ -30,7 +52,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
 
   @override
   bool get isSupported =>
-      !kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows);
+      Platform.isLinux || Platform.isMacOS || Platform.isWindows;
 
   @override
   Future<bool> start({int port = 9812}) async {
@@ -123,8 +145,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
     }
 
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
+      final repertoireDir = await AppPaths.repertoiresDirectory(create: true);
 
       // Create directory if it doesn't exist
       if (!await repertoireDir.exists()) {
@@ -202,9 +223,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
         targetFilename = '$targetFilename.pgn';
       }
 
-      final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
-      await repertoireDir.create(recursive: true);
+      final repertoireDir = await AppPaths.repertoiresDirectory(create: true);
 
       final targetFile = File(p.join(repertoireDir.path, targetFilename));
 
@@ -251,8 +270,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
     }
 
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
+      final repertoireDir = await AppPaths.repertoiresDirectory();
 
       int repertoireCount = 0;
       if (await repertoireDir.exists()) {
@@ -535,10 +553,10 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
 
     if (existingContent.isEmpty) {
       // Write directly
-      await file.writeAsString(pgnGame);
+      await _writeAtomically(file, pgnGame);
     } else {
       // Append with separator
-      await file.writeAsString('$existingContent\n\n$pgnGame');
+      await _writeAtomically(file, '$existingContent\n\n$pgnGame');
     }
   }
 

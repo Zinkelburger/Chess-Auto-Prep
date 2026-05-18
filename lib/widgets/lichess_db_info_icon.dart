@@ -19,11 +19,14 @@ class LichessDbInfoIcon extends StatelessWidget {
         if (LichessAuthService().isLoggedIn) return const SizedBox.shrink();
         return IconButton(
           padding: EdgeInsets.zero,
-          constraints: BoxConstraints(maxWidth: size + 8, maxHeight: size + 8),
+          constraints: const BoxConstraints(
+            minWidth: 48,
+            minHeight: 48,
+          ),
           iconSize: size,
-          splashRadius: size,
+          splashRadius: 24,
           icon: Icon(Icons.info_outline, size: size, color: Colors.grey[500]),
-          tooltip: '',
+          tooltip: 'Lichess database info',
           onPressed: () => _showInfoPopup(context),
         );
       },

@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'app_paths.dart';
 import 'storage_service.dart';
 
 StorageService getStorageService() => IOStorageService();
@@ -16,8 +16,34 @@ class IOStorageService implements StorageService {
       'repertoire_move_progress.csv';
 
   Future<File> _getFile(String filename) async {
-    final directory = await getApplicationDocumentsDirectory();
-    return File(p.join(directory.path, filename));
+    return AppPaths.documentsFile(filename);
+  }
+
+  /// Best-effort atomic replace: write to a temp file, then rename.
+  Future<void> _writeAtomically(File target, String content) async {
+    final parent = target.parent;
+    if (!await parent.exists()) {
+      await parent.create(recursive: true);
+    }
+
+    final tmp = File(
+      p.join(
+        parent.path,
+        '.${p.basename(target.path)}.${DateTime.now().microsecondsSinceEpoch}.tmp',
+      ),
+    );
+
+    await tmp.writeAsString(content, flush: true);
+
+    try {
+      await tmp.rename(target.path);
+    } on FileSystemException {
+      // Some platforms may fail to rename over an existing file.
+      if (await target.exists()) {
+        await target.delete();
+      }
+      await tmp.rename(target.path);
+    }
   }
 
   @override
@@ -37,7 +63,7 @@ class IOStorageService implements StorageService {
   Future<void> saveTacticsCsv(String csvContent) async {
     try {
       final file = await _getFile(_tacticsCsvFileName);
-      await file.writeAsString(csvContent);
+      await _writeAtomically(file, csvContent);
     } catch (e) {
       print('Error saving tactics CSV: $e');
     }
@@ -61,7 +87,7 @@ class IOStorageService implements StorageService {
   Future<void> saveAnalyzedGameIds(List<String> ids) async {
     try {
       final file = await _getFile(_analyzedGamesFileName);
-      await file.writeAsString(ids.join('\n'));
+      await _writeAtomically(file, ids.join('\n'));
     } catch (e) {
       print('Error saving analyzed game IDs: $e');
     }
@@ -84,7 +110,7 @@ class IOStorageService implements StorageService {
   Future<void> saveImportedPgns(String pgnContent) async {
     try {
       final file = await _getFile(_importedGamesFileName);
-      await file.writeAsString(pgnContent);
+      await _writeAtomically(file, pgnContent);
     } catch (e) {
       print('Error saving imported PGNs: $e');
     }
@@ -113,7 +139,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoirePgn(String filename, String content) async {
     try {
       final file = await _getFile(filename);
-      await file.writeAsString(content);
+      await _writeAtomically(file, content);
     } catch (e) {
       print('Error saving repertoire PGN: $e');
     }
@@ -136,7 +162,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoireReviewsCsv(String csvContent) async {
     try {
       final file = await _getFile(_repertoireReviewsFileName);
-      await file.writeAsString(csvContent);
+      await _writeAtomically(file, csvContent);
     } catch (e) {
       print('Error saving repertoire reviews CSV: $e');
     }
@@ -159,7 +185,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoireReviewHistoryCsv(String csvContent) async {
     try {
       final file = await _getFile(_repertoireReviewHistoryFileName);
-      await file.writeAsString(csvContent);
+      await _writeAtomically(file, csvContent);
     } catch (e) {
       print('Error saving repertoire review history CSV: $e');
     }
@@ -182,7 +208,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoireMoveProgressCsv(String csvContent) async {
     try {
       final file = await _getFile(_repertoireMoveProgressFileName);
-      await file.writeAsString(csvContent);
+      await _writeAtomically(file, csvContent);
     } catch (e) {
       print('Error saving repertoire move progress CSV: $e');
     }

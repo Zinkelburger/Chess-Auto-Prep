@@ -1,4 +1,4 @@
-/// Stub for web / non-IO platforms where dart:io is unavailable.
+/// Stub for non-IO platforms where dart:io is unavailable.
 library;
 
 /// Whether parallel multi-core analysis is available on this platform.

@@ -8,24 +8,30 @@ library;
 
 import 'dart:async';
 import 'dart:io' as io;
+import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
+import '../models/opening_tree.dart';
 import '../services/game_analysis_controller.dart';
+import '../services/opening_tree_builder.dart';
 import '../utils/fen_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/game_analysis_chart.dart';
 import '../services/default_pgn_service.dart';
+import '../widgets/opening_tree_widget.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn_slice_dialog.dart';
 
@@ -50,8 +56,10 @@ class _PgnGameEntry {
     final b = headers['Black'] ?? '?';
     final wElo = headers['WhiteElo'];
     final bElo = headers['BlackElo'];
-    final wStr = wElo != null && wElo.isNotEmpty && wElo != '?' ? '$w ($wElo)' : w;
-    final bStr = bElo != null && bElo.isNotEmpty && bElo != '?' ? '$b ($bElo)' : b;
+    final wStr =
+        wElo != null && wElo.isNotEmpty && wElo != '?' ? '$w ($wElo)' : w;
+    final bStr =
+        bElo != null && bElo.isNotEmpty && bElo != '?' ? '$b ($bElo)' : b;
     final d = headers['Date'] ?? '';
     return '$wStr vs $bStr  $d';
   }
@@ -66,7 +74,8 @@ class _Perspective {
   final _PerspectiveMode mode;
   final String playerName; // only meaningful when mode == player
 
-  const _Perspective({this.mode = _PerspectiveMode.white, this.playerName = ''});
+  const _Perspective(
+      {this.mode = _PerspectiveMode.white, this.playerName = ''});
 
   String toHeaderValue() => switch (mode) {
         _PerspectiveMode.white => 'white',
@@ -91,6 +100,231 @@ class PgnViewerScreen extends StatefulWidget {
   State<PgnViewerScreen> createState() => _PgnViewerScreenState();
 }
 
+// ---------------------------------------------------------------------------
+// Top-level helpers used inside Isolate.run closures.
+// Must NOT be class statics — Dart captures the enclosing class context
+// when referencing static members from a closure, which pulls unsendable
+// State/Widget objects into the isolate message.
+// ---------------------------------------------------------------------------
+
+final _chunkSplitRe = RegExp(r'(?<=\n)\n*(?=\[Event )');
+final _headerRe = RegExp(r'\[(\w+)\s+"([^"]*)"\]');
+
+List<_PgnGameEntry> _parseMultiGamePgn(String content) {
+  final entries = <_PgnGameEntry>[];
+  final chunks = content.split(_chunkSplitRe);
+  for (final chunk in chunks) {
+    final trimmed = chunk.trim();
+    if (trimmed.isEmpty) continue;
+    final headers = <String, String>{};
+    for (final m in _headerRe.allMatches(trimmed)) {
+      headers[m.group(1)!] = m.group(2)!;
+    }
+    final rating = int.tryParse(headers['StudyRating'] ?? '') ?? 0;
+    entries.add(_PgnGameEntry(
+      headers: headers,
+      pgnText: trimmed,
+      studyRating: rating.clamp(0, 5),
+      studySummary: headers['StudySummary'] ?? '',
+    ));
+  }
+  return entries;
+}
+
+bool _gamePassesThroughPosition(
+    Map<String, String> headers, String pgnText, String targetFen) {
+  try {
+    final game = PgnGame.parsePgn(pgnText);
+    final mainline = game.moves.mainline().toList();
+
+    Position pos;
+    final setupFlag = headers['SetUp'] ?? headers['Setup'] ?? '';
+    final fenHeader = headers['FEN'] ?? '';
+    if (setupFlag == '1' && fenHeader.isNotEmpty) {
+      pos = Chess.fromSetup(Setup.parseFen(expandFen(fenHeader)));
+    } else {
+      pos = Chess.initial;
+    }
+
+    if (normalizeFen(pos.fen) == targetFen) return true;
+    for (final moveData in mainline) {
+      final move = pos.parseSan(moveData.san);
+      if (move == null) break;
+      pos = pos.play(move);
+      if (normalizeFen(pos.fen) == targetFen) return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+bool _matchesFieldStatic(String headerVal, String query, MatchMode mode) {
+  switch (mode) {
+    case MatchMode.contains:
+      return headerVal.toLowerCase().contains(query.toLowerCase());
+    case MatchMode.exact:
+      return headerVal.toLowerCase() == query.toLowerCase();
+    case MatchMode.regex:
+      try {
+        return RegExp(query, caseSensitive: false).hasMatch(headerVal);
+      } catch (_) {
+        return false;
+      }
+    case MatchMode.after:
+      return headerVal.compareTo(query) >= 0;
+    case MatchMode.before:
+      return headerVal.compareTo(query) <= 0;
+  }
+}
+
+Future<List<int>> _applySliceConfig(
+    SliceConfig config, List<GameRecord> games) {
+  final posInput = config.positionInput;
+  final filters = config.headerFilters
+      .map((f) => (field: f.field, value: f.value, mode: f.mode))
+      .toList();
+  final gameData = games
+      .map((g) =>
+          (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText))
+      .toList();
+
+  final seqPattern = config.sequencePattern;
+  final seqGroups = (seqPattern != null && seqPattern.isNotEmpty)
+      ? parseSequenceGroups(seqPattern)
+      : const <List<String>>[];
+  final seqGap = config.sequenceGap;
+  final seqGroupsCopy = seqGroups.map((g) => List<String>.from(g)).toList();
+
+  return Isolate.run(() {
+    String? targetFen;
+    if (posInput != null && posInput.isNotEmpty) {
+      final input = posInput.trim();
+      if (input.contains('/')) {
+        try {
+          final full = expandFen(input);
+          Chess.fromSetup(Setup.parseFen(full));
+          targetFen = normalizeFen(full);
+        } catch (_) {}
+      } else {
+        final tokens = input
+            .replaceAll(RegExp(r'\d+\.+'), '')
+            .replaceAll(RegExp(r'(1-0|0-1|1/2-1/2|\*)'), '')
+            .split(RegExp(r'\s+'))
+            .where((t) => t.isNotEmpty)
+            .toList();
+        if (tokens.isNotEmpty) {
+          Position pos = Chess.initial;
+          bool valid = true;
+          for (final t in tokens) {
+            final move = pos.parseSan(t);
+            if (move == null) {
+              valid = false;
+              break;
+            }
+            pos = pos.play(move);
+          }
+          if (valid) targetFen = normalizeFen(pos.fen);
+        }
+      }
+    }
+
+    final indices = <int>[];
+    for (int i = 0; i < gameData.length; i++) {
+      final game = gameData[i];
+      bool matches = true;
+
+      if (targetFen != null) {
+        matches =
+            _gamePassesThroughPosition(game.headers, game.pgnText, targetFen);
+      }
+
+      if (matches && seqGroupsCopy.isNotEmpty) {
+        matches = gameMatchesSequence(game.pgnText, seqGroupsCopy, seqGap);
+      }
+
+      if (matches) {
+        for (final f in filters) {
+          if (f.value.isEmpty) continue;
+          final headerVal = game.headers[f.field] ?? '';
+          if (!_matchesFieldStatic(headerVal, f.value, f.mode)) {
+            matches = false;
+            break;
+          }
+        }
+      }
+
+      if (matches) indices.add(i);
+    }
+    return indices;
+  });
+}
+
+final _studyRatingRe = RegExp(r'\[StudyRating\s+"[^"]*"\]');
+final _studyRatingLineRe = RegExp(r'\[StudyRating\s+"[^"]*"\]\n?');
+final _studySummaryRe = RegExp(r'\[StudySummary\s+"[^"]*"\]');
+final _studySummaryLineRe = RegExp(r'\[StudySummary\s+"[^"]*"\]\n?');
+
+List<String> _buildMetadataOutput(
+    List<({String pgn, int rating, String summary})> gameData) {
+  final results = <String>[];
+  for (final game in gameData) {
+    var pgn = game.pgn;
+
+    if (game.rating > 0) {
+      if (_studyRatingRe.hasMatch(pgn)) {
+        pgn =
+            pgn.replaceFirst(_studyRatingRe, '[StudyRating "${game.rating}"]');
+      } else {
+        final firstNewline = pgn.indexOf('\n');
+        if (firstNewline != -1) {
+          pgn =
+              '${pgn.substring(0, firstNewline)}\n[StudyRating "${game.rating}"]${pgn.substring(firstNewline)}';
+        }
+      }
+    } else {
+      pgn = pgn.replaceFirst(_studyRatingLineRe, '');
+    }
+
+    if (game.summary.isNotEmpty) {
+      final escaped = game.summary.replaceAll('"', "'");
+      if (_studySummaryRe.hasMatch(pgn)) {
+        pgn = pgn.replaceFirst(_studySummaryRe, '[StudySummary "$escaped"]');
+      } else {
+        final firstNewline = pgn.indexOf('\n');
+        if (firstNewline != -1) {
+          pgn =
+              '${pgn.substring(0, firstNewline)}\n[StudySummary "$escaped"]${pgn.substring(firstNewline)}';
+        }
+      }
+    } else {
+      pgn = pgn.replaceFirst(_studySummaryLineRe, '');
+    }
+
+    results.add(pgn);
+  }
+  return results;
+}
+
+String? _detectProtagonistFrom(List<_PgnGameEntry> games) {
+  if (games.length < 2) return null;
+  final sample = games.take(math.min(4, games.length));
+  final counts = <String, int>{};
+  for (final g in sample) {
+    final w = g.headers['White'];
+    final b = g.headers['Black'];
+    if (w != null && w.isNotEmpty && w != '?') {
+      counts[w] = (counts[w] ?? 0) + 1;
+    }
+    if (b != null && b.isNotEmpty && b != '?') {
+      counts[b] = (counts[b] ?? 0) + 1;
+    }
+  }
+  final sampleSize = sample.length;
+  for (final entry in counts.entries) {
+    if (entry.value >= sampleSize) return entry.key;
+  }
+  return null;
+}
+
 class _PgnViewerScreenState extends State<PgnViewerScreen>
     with TickerProviderStateMixin {
   // File state
@@ -98,6 +332,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   List<_PgnGameEntry> _allGames = [];
   List<_PgnGameEntry> _filteredGames = []; // after slicing
   bool _hasActiveFilters = false;
+
+  // Active slice (kept in sync with the dialog result)
+  SliceConfig _activeSliceConfig = const SliceConfig.empty();
+  static const _slicePrefsPrefix = 'pgn_slice:';
 
   // Current game
   int _currentGameIndex = 0;
@@ -111,11 +349,24 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   // Tabs
   late final TabController _tabController;
 
+  // Opening tree
+  bool _showOpeningTree = false;
+  OpeningTree? _openingTree;
+  bool _buildingTree = false;
+  int _treeBuildProcessed = 0;
+  int _treeBuildTotal = 0;
+  int _treeBuildGeneration = 0;
+  final Map<String, List<int>> _treePositionGameCache = {};
+  List<String> _treeCurrentMoveSequence = [];
+
   // Game analysis
   final GameAnalysisController _analysisController = GameAnalysisController();
 
   // Focus node for keyboard shortcuts
   final FocusNode _focusNode = FocusNode(debugLabel: 'PgnViewerScreen');
+
+  // Loading state for heavy async operations
+  bool _isLoading = false;
 
   // Auto-play
   Timer? _autoPlayTimer;
@@ -131,8 +382,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   static const _recentFilesKey = 'pgn_viewer_recent_files';
   static const _maxRecentFiles = 10;
 
-  // Bundled collections discovered on disk
-  List<io.File> _collectionFiles = [];
+  // Default directory for the file picker (bundled collections folder)
   String? _collectionsDir;
 
   @override
@@ -169,13 +419,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Future<void> _loadCollections() async {
     final dir = await DefaultPgnService.collectionsPath;
-    final files = await DefaultPgnService.listCollections();
-    if (mounted) {
-      setState(() {
-        _collectionsDir = dir;
-        _collectionFiles = files;
-      });
-    }
+    if (mounted) setState(() => _collectionsDir = dir);
   }
 
   Future<void> _addToRecentFiles(String path) async {
@@ -197,6 +441,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _analysisController.removeListener(_onAnalysisUpdate);
     _analysisController.dispose();
     _autoPlayTimer?.cancel();
+    _persistDebounce?.cancel();
     _tabController.dispose();
     _focusNode.dispose();
     // Remove listener safely — context may not be usable here, but
@@ -242,8 +487,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   Future<void> _loadFile(String path) async {
     final file = io.File(path);
     if (!await file.exists()) return;
+    setState(() => _isLoading = true);
     final content = await file.readAsString();
-    final entries = _parseMultiGamePgn(content);
+    final entries = await compute(_parseMultiGamePgn, content);
     if (!mounted) return;
     // Read file-level perspective from first game's headers
     final perspectiveRaw = entries.isNotEmpty
@@ -263,38 +509,64 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     }
 
     setState(() {
+      _isLoading = false;
       _filePath = path;
       _allGames = entries;
       _filteredGames = List.of(entries);
       _hasActiveFilters = false;
+      _activeSliceConfig = const SliceConfig.empty();
       _sortMode = _SortMode.fileOrder;
       _currentGameIndex = 0;
       _perspective = perspective;
+      _openingTree = null;
+      _showOpeningTree = false;
+      _treeCurrentMoveSequence = [];
     });
     _addToRecentFiles(path);
+
+    // Restore saved slice for this file, if any.
+    await _tryRestoreSavedSlice(path, entries);
+
     _loadCurrentGame(); // also reclaims focus
   }
 
-  List<_PgnGameEntry> _parseMultiGamePgn(String content) {
-    final entries = <_PgnGameEntry>[];
-    // Split on [Event which marks the start of each game
-    final chunks = content.split(RegExp(r'(?<=\n)\n*(?=\[Event )'));
-    for (final chunk in chunks) {
-      final trimmed = chunk.trim();
-      if (trimmed.isEmpty) continue;
-      final headers = <String, String>{};
-      for (final m in RegExp(r'\[(\w+)\s+"([^"]*)"\]').allMatches(trimmed)) {
-        headers[m.group(1)!] = m.group(2)!;
-      }
-      final rating = int.tryParse(headers['StudyRating'] ?? '') ?? 0;
-      entries.add(_PgnGameEntry(
-        headers: headers,
-        pgnText: trimmed,
-        studyRating: rating.clamp(0, 5),
-        studySummary: headers['StudySummary'] ?? '',
+  Future<void> _tryRestoreSavedSlice(
+      String path, List<_PgnGameEntry> entries) async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString('$_slicePrefsPrefix$path');
+    if (json == null) return;
+    final config = SliceConfig.fromJsonString(json);
+    if (config.isEmpty) return;
+
+    // Re-apply the saved slice.
+    final allRecords =
+        entries.map((g) => (headers: g.headers, pgnText: g.pgnText)).toList();
+    setState(() => _isLoading = true);
+    final indices = await _applySliceConfig(config, allRecords);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    if (indices.length == entries.length) return; // no actual filtering
+
+    if (!mounted) return;
+    setState(() {
+      _filteredGames = indices.map((i) => _allGames[i]).toList();
+      _hasActiveFilters = true;
+      _activeSliceConfig = config;
+      _currentGameIndex = 0;
+    });
+
+    // Brief notification
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            'Restored last slice (${_filteredGames.length}/${_allGames.length} games)'),
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: _resetFilters,
+        ),
       ));
     }
-    return entries;
   }
 
   // -----------------------------------------------------------------------
@@ -358,39 +630,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   /// If one player appears in all of them, they're probably the focus.
   String? _detectProtagonist() => _detectProtagonistFrom(_allGames);
 
-  static String? _detectProtagonistFrom(List<_PgnGameEntry> games) {
-    if (games.length < 2) return null;
-    final sample = games.take(math.min(4, games.length));
-    final counts = <String, int>{};
-    for (final g in sample) {
-      final w = g.headers['White'];
-      final b = g.headers['Black'];
-      if (w != null && w.isNotEmpty && w != '?') {
-        counts[w] = (counts[w] ?? 0) + 1;
-      }
-      if (b != null && b.isNotEmpty && b != '?') {
-        counts[b] = (counts[b] ?? 0) + 1;
-      }
-    }
-    final sampleSize = sample.length;
-    for (final entry in counts.entries) {
-      if (entry.value >= sampleSize) return entry.key;
-    }
-    return null;
-  }
-
   // -----------------------------------------------------------------------
   // Game navigation
   // -----------------------------------------------------------------------
 
-  void _loadCurrentGame() {
+  Future<void> _loadCurrentGame() async {
     if (_filteredGames.isEmpty) return;
     _stopAutoPlay();
     _analysisController.cancel();
     _orientBoardForCurrentGame();
-    // Try loading cached analysis from [%eval] comments in the PGN
     final game = _filteredGames[_currentGameIndex];
-    _analysisController.tryLoadFromPgn(game.pgnText);
+    await _analysisController.tryLoadFromPgn(game.pgnText);
+    if (!mounted) return;
     setState(() {});
     _reclaimFocus();
   }
@@ -466,8 +717,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         // If we're at end of game
         if (_pgnController.currentFen == _currentPosition.fen) {
           // Position didn't change — we're at the end
-          if (_autoNextGame &&
-              _currentGameIndex < _filteredGames.length - 1) {
+          if (_autoNextGame && _currentGameIndex < _filteredGames.length - 1) {
             _nextGame();
             _startAutoPlay();
           } else {
@@ -492,57 +742,30 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _reclaimFocus();
   }
 
+  Timer? _persistDebounce;
+
   Future<void> _persistMetadata() async {
+    _persistDebounce?.cancel();
+    _persistDebounce = Timer(const Duration(milliseconds: 300), () {
+      _doPersistMetadata();
+    });
+  }
+
+  Future<void> _doPersistMetadata() async {
     if (_filePath == null) return;
-    final buffer = StringBuffer();
-    for (int i = 0; i < _allGames.length; i++) {
-      if (i > 0) buffer.write('\n\n');
-      final game = _allGames[i];
-      var pgn = game.pgnText;
+    final gameData = _allGames
+        .map((g) =>
+            (pgn: g.pgnText, rating: g.studyRating, summary: g.studySummary))
+        .toList();
 
-      // --- StudyRating ---
-      if (game.studyRating > 0) {
-        if (pgn.contains(RegExp(r'\[StudyRating\s+"[^"]*"\]'))) {
-          pgn = pgn.replaceFirst(
-            RegExp(r'\[StudyRating\s+"[^"]*"\]'),
-            '[StudyRating "${game.studyRating}"]',
-          );
-        } else {
-          final firstNewline = pgn.indexOf('\n');
-          if (firstNewline != -1) {
-            pgn =
-                '${pgn.substring(0, firstNewline)}\n[StudyRating "${game.studyRating}"]${pgn.substring(firstNewline)}';
-          }
-        }
-      } else {
-        pgn = pgn.replaceFirst(RegExp(r'\[StudyRating\s+"[^"]*"\]\n?'), '');
-      }
+    final result = await compute(_buildMetadataOutput, gameData);
 
-      // --- StudySummary ---
-      if (game.studySummary.isNotEmpty) {
-        final escaped = game.studySummary.replaceAll('"', "'");
-        if (pgn.contains(RegExp(r'\[StudySummary\s+"[^"]*"\]'))) {
-          pgn = pgn.replaceFirst(
-            RegExp(r'\[StudySummary\s+"[^"]*"\]'),
-            '[StudySummary "$escaped"]',
-          );
-        } else {
-          final firstNewline = pgn.indexOf('\n');
-          if (firstNewline != -1) {
-            pgn =
-                '${pgn.substring(0, firstNewline)}\n[StudySummary "$escaped"]${pgn.substring(firstNewline)}';
-          }
-        }
-      } else {
-        pgn = pgn.replaceFirst(RegExp(r'\[StudySummary\s+"[^"]*"\]\n?'), '');
-      }
-
-      game.pgnText = pgn;
-      buffer.write(pgn);
+    if (!mounted) return;
+    for (int i = 0; i < result.length && i < _allGames.length; i++) {
+      _allGames[i].pgnText = result[i];
     }
-    buffer.write('\n');
     try {
-      await io.File(_filePath!).writeAsString(buffer.toString());
+      await io.File(_filePath!).writeAsString('${result.join('\n\n')}\n');
     } catch (e) {
       debugPrint('Failed to persist metadata: $e');
     }
@@ -573,13 +796,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             .map((g) => (headers: g.headers, pgnText: g.pgnText))
             .toList(),
         currentFen: normalizeFen(_currentPosition.fen),
-        onApply: (indices) {
+        initialConfig: _activeSliceConfig.isEmpty ? null : _activeSliceConfig,
+        onApply: (indices, config) {
           setState(() {
-            _filteredGames =
-                indices.map((i) => _allGames[i]).toList();
+            _filteredGames = indices.map((i) => _allGames[i]).toList();
             _hasActiveFilters = _filteredGames.length != _allGames.length;
+            _activeSliceConfig = config;
             _currentGameIndex = 0;
+            _openingTree = null;
           });
+          _persistSliceConfig(config);
+          if (_showOpeningTree) _rebuildOpeningTree();
           _loadCurrentGame(); // also reclaims focus
         },
       ),
@@ -590,10 +817,103 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     setState(() {
       _filteredGames = List.of(_allGames);
       _hasActiveFilters = false;
+      _activeSliceConfig = const SliceConfig.empty();
       _currentGameIndex = 0;
+      _openingTree = null;
     });
+    _clearSavedSlice();
     _applySortMode();
+    if (_showOpeningTree) _rebuildOpeningTree();
     _loadCurrentGame(); // also reclaims focus
+  }
+
+  /// Remove a single filter chip by its index in the active config's chip
+  /// labels and re-apply the remaining filters.
+  Future<void> _removeSliceChip(int chipIndex) async {
+    final labels = _activeSliceConfig.chipLabels;
+    if (chipIndex < 0 || chipIndex >= labels.length) return;
+
+    final hasPos = _activeSliceConfig.positionInput != null &&
+        _activeSliceConfig.positionInput!.isNotEmpty;
+    final hasSeq = _activeSliceConfig.sequencePattern != null &&
+        _activeSliceConfig.sequencePattern!.isNotEmpty;
+    String? newPositionInput = _activeSliceConfig.positionInput;
+    String? newSequencePattern = _activeSliceConfig.sequencePattern;
+    int newSequenceGap = _activeSliceConfig.sequenceGap;
+    final newHeaders =
+        List<HeaderFilterConfig>.from(_activeSliceConfig.headerFilters);
+
+    int idx = chipIndex;
+    if (hasPos && idx == 0) {
+      newPositionInput = null;
+      idx = -1;
+    } else if (hasPos) {
+      idx--;
+    }
+
+    if (idx >= 0 && hasSeq && idx == 0) {
+      newSequencePattern = null;
+      idx = -1;
+    } else if (hasSeq && idx >= 0) {
+      idx--;
+    }
+
+    if (idx >= 0) {
+      int count = -1;
+      for (int i = 0; i < newHeaders.length; i++) {
+        if (newHeaders[i].value.isNotEmpty) count++;
+        if (count == idx) {
+          newHeaders.removeAt(i);
+          break;
+        }
+      }
+    }
+
+    final newConfig = SliceConfig(
+        positionInput: newPositionInput,
+        headerFilters: newHeaders,
+        sequencePattern: newSequencePattern,
+        sequenceGap: newSequenceGap);
+
+    if (newConfig.isEmpty) {
+      _resetFilters();
+      return;
+    }
+
+    final allRecords =
+        _allGames.map((g) => (headers: g.headers, pgnText: g.pgnText)).toList();
+    setState(() => _isLoading = true);
+    final indices = await _applySliceConfig(newConfig, allRecords);
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+      _filteredGames = indices.map((i) => _allGames[i]).toList();
+      _hasActiveFilters = _filteredGames.length != _allGames.length;
+      _activeSliceConfig = newConfig;
+      _currentGameIndex = 0;
+      _openingTree = null;
+    });
+    _persistSliceConfig(newConfig);
+    if (_showOpeningTree) _rebuildOpeningTree();
+    _loadCurrentGame();
+  }
+
+  Future<void> _persistSliceConfig(SliceConfig config) async {
+    if (_filePath == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (config.isEmpty) {
+      await prefs.remove('$_slicePrefsPrefix$_filePath');
+    } else {
+      await prefs.setString(
+          '$_slicePrefsPrefix$_filePath', config.toJsonString());
+    }
+  }
+
+  Future<void> _clearSavedSlice() async {
+    if (_filePath == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_slicePrefsPrefix$_filePath');
   }
 
   void _setSortMode(_SortMode mode) {
@@ -604,6 +924,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   void _applySortMode() {
+    _treePositionGameCache.clear();
     switch (_sortMode) {
       case _SortMode.fileOrder:
         // Re-derive from _allGames in original order, preserving filters
@@ -631,6 +952,173 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   void _onPositionChanged(Position pos) {
     setState(() => _currentPosition = pos);
+  }
+
+  // -----------------------------------------------------------------------
+  // Opening tree
+  // -----------------------------------------------------------------------
+
+  void _toggleOpeningTree() {
+    setState(() => _showOpeningTree = !_showOpeningTree);
+    if (_showOpeningTree && _openingTree == null && _filteredGames.isNotEmpty) {
+      _rebuildOpeningTree();
+    }
+    _reclaimFocus();
+  }
+
+  Future<void> _rebuildOpeningTree() async {
+    final generation = ++_treeBuildGeneration;
+    if (_filteredGames.isEmpty) {
+      setState(() {
+        _openingTree = null;
+        _buildingTree = false;
+        _treeBuildProcessed = 0;
+        _treeBuildTotal = 0;
+        _treePositionGameCache.clear();
+      });
+      return;
+    }
+    setState(() {
+      _buildingTree = true;
+      _treeBuildProcessed = 0;
+      _treeBuildTotal = _filteredGames.length;
+      _treePositionGameCache.clear();
+    });
+    try {
+      final tree = await OpeningTreeBuilder.buildTree(
+        pgnList: _filteredGames.map((g) => g.pgnText).toList(),
+        username: '',
+        userIsWhite: null,
+        strictPlayerMatching: false,
+        maxDepth: 50,
+        onProgress: (processed, total) {
+          if (!mounted || generation != _treeBuildGeneration) return;
+          setState(() {
+            _treeBuildProcessed = processed;
+            _treeBuildTotal = total;
+          });
+        },
+      );
+      if (!mounted || generation != _treeBuildGeneration) return;
+      setState(() {
+        _openingTree = tree;
+        _buildingTree = false;
+        _treeBuildProcessed = _treeBuildTotal;
+        _treeCurrentMoveSequence = [];
+      });
+    } catch (e) {
+      if (!mounted || generation != _treeBuildGeneration) return;
+      setState(() {
+        _buildingTree = false;
+        _openingTree = null;
+        _treeBuildProcessed = 0;
+        _treeBuildTotal = 0;
+      });
+      debugPrint('Failed to build opening tree: $e');
+    }
+  }
+
+  void _onTreeMoveSelected(String move) {
+    if (_openingTree == null) return;
+    _openingTree!.makeMove(move);
+    setState(() {
+      _treeCurrentMoveSequence = _openingTree!.currentNode.getMovePath();
+    });
+  }
+
+  void _onTreeGoBack() {
+    if (_openingTree == null) return;
+    _openingTree!.goBack();
+    setState(() {
+      _treeCurrentMoveSequence = _openingTree!.currentNode.getMovePath();
+    });
+  }
+
+  void _onTreeGoForward() {
+    if (_openingTree == null) return;
+    final children = _openingTree!.currentNode.sortedChildren;
+    if (children.isNotEmpty) {
+      _onTreeMoveSelected(children.first.move);
+    }
+  }
+
+  static const _maxTreeCacheEntries = 500;
+
+  /// Find games from the filtered set that pass through the current tree position.
+  List<int> _gamesAtTreePosition() {
+    if (_openingTree == null) return [];
+    final fen = normalizeFen(_openingTree!.currentNode.fen);
+    return _treePositionGameCache.putIfAbsent(fen, () {
+      if (_treePositionGameCache.length >= _maxTreeCacheEntries) {
+        // Evict oldest entries to bound memory.
+        final keysToRemove = _treePositionGameCache.keys
+            .take(_maxTreeCacheEntries ~/ 4)
+            .toList();
+        for (final k in keysToRemove) {
+          _treePositionGameCache.remove(k);
+        }
+      }
+      final results = <int>[];
+      for (int i = 0; i < _filteredGames.length; i++) {
+        if (_gamePassesThroughPosition(
+            _filteredGames[i].headers, _filteredGames[i].pgnText, fen)) {
+          results.add(i);
+        }
+      }
+      return results;
+    });
+  }
+
+  void _loadGameFromTree(int filteredIndex) {
+    setState(() {
+      _showOpeningTree = false;
+      _currentGameIndex = filteredIndex;
+    });
+    _loadCurrentGame();
+  }
+
+  // -----------------------------------------------------------------------
+  // Export
+  // -----------------------------------------------------------------------
+
+  Future<void> _exportSlice() async {
+    if (_filteredGames.isEmpty || _filePath == null) return;
+
+    final defaultName = '${p.basenameWithoutExtension(_filePath!)}_slice.pgn';
+
+    final outPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export ${_filteredGames.length} filtered games',
+      fileName: defaultName,
+      type: FileType.custom,
+      allowedExtensions: ['pgn'],
+      initialDirectory: p.dirname(_filePath!),
+    );
+    if (outPath == null) {
+      _reclaimFocus();
+      return;
+    }
+
+    final savePath = outPath.endsWith('.pgn') ? outPath : '$outPath.pgn';
+    final content = _filteredGames.map((g) => g.pgnText).join('\n\n');
+    try {
+      await io.File(savePath).writeAsString('$content\n');
+      if (!mounted) return;
+      final fileName = p.basename(savePath);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Exported ${_filteredGames.length} games to $fileName'),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Open',
+          onPressed: () => _loadFile(savePath),
+        ),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+    _reclaimFocus();
   }
 
   // -----------------------------------------------------------------------
@@ -675,7 +1163,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       }
       return KeyEventResult.handled;
 
-    // Game navigation
+      // Game navigation
     } else if (key == LogicalKeyboardKey.keyN) {
       _nextGame();
       return KeyEventResult.handled;
@@ -683,7 +1171,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _prevGame();
       return KeyEventResult.handled;
 
-    // Board & engine
+      // Board & engine
     } else if (key == LogicalKeyboardKey.keyF) {
       setState(() => _boardFlipped = !_boardFlipped);
       return KeyEventResult.handled;
@@ -691,7 +1179,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       InlineEngineBar.toggleEngine();
       return KeyEventResult.handled;
 
-    // Playback
+      // Playback
     } else if (key == LogicalKeyboardKey.space) {
       _toggleAutoPlay();
       return KeyEventResult.handled;
@@ -699,34 +1187,61 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       setState(() => _autoNextGame = !_autoNextGame);
       return KeyEventResult.handled;
 
-    // Rating (1-5, 0 to clear)
+      // Rating (1-5, 0 to clear)
     } else if (key == LogicalKeyboardKey.digit1) {
-      _setRating(_filteredGames.isNotEmpty && _filteredGames[_currentGameIndex].studyRating == 1 ? 0 : 1);
+      _setRating(_filteredGames.isNotEmpty &&
+              _filteredGames[_currentGameIndex].studyRating == 1
+          ? 0
+          : 1);
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.digit2) {
-      _setRating(_filteredGames.isNotEmpty && _filteredGames[_currentGameIndex].studyRating == 2 ? 0 : 2);
+      _setRating(_filteredGames.isNotEmpty &&
+              _filteredGames[_currentGameIndex].studyRating == 2
+          ? 0
+          : 2);
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.digit3) {
-      _setRating(_filteredGames.isNotEmpty && _filteredGames[_currentGameIndex].studyRating == 3 ? 0 : 3);
+      _setRating(_filteredGames.isNotEmpty &&
+              _filteredGames[_currentGameIndex].studyRating == 3
+          ? 0
+          : 3);
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.digit4) {
-      _setRating(_filteredGames.isNotEmpty && _filteredGames[_currentGameIndex].studyRating == 4 ? 0 : 4);
+      _setRating(_filteredGames.isNotEmpty &&
+              _filteredGames[_currentGameIndex].studyRating == 4
+          ? 0
+          : 4);
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.digit5) {
-      _setRating(_filteredGames.isNotEmpty && _filteredGames[_currentGameIndex].studyRating == 5 ? 0 : 5);
+      _setRating(_filteredGames.isNotEmpty &&
+              _filteredGames[_currentGameIndex].studyRating == 5
+          ? 0
+          : 5);
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.digit0) {
       _setRating(0);
       return KeyEventResult.handled;
 
-    // Analysis
+      // Analysis
     } else if (key == LogicalKeyboardKey.escape) {
       _pgnController.clearEphemeralMoves();
       return KeyEventResult.handled;
 
-    // Tabs
+      // Tabs
     } else if (key == LogicalKeyboardKey.tab) {
-      _tabController.animateTo((_tabController.index + 1) % _tabController.length);
+      _tabController
+          .animateTo((_tabController.index + 1) % _tabController.length);
+      return KeyEventResult.handled;
+
+      // Opening tree toggle
+    } else if (key == LogicalKeyboardKey.keyT) {
+      _toggleOpeningTree();
+      return KeyEventResult.handled;
+
+      // Export
+    } else if (key == LogicalKeyboardKey.keyE &&
+        HardwareKeyboard.instance.isControlPressed) {
+      _exportSlice();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -737,8 +1252,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   // -----------------------------------------------------------------------
 
   void _showAnalysisNodeMenu(int nodeId, Offset globalPosition) {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final position = RelativeRect.fromRect(
       Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
       Offset.zero & overlay.size,
@@ -795,19 +1309,34 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         onTap: _reclaimFocus,
         child: SafeArea(
           bottom: false,
-          child: Column(
+          child: Stack(
             children: [
-              _buildTopBar(theme),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (constraints.maxWidth >= 960) {
-                      return _buildWideLayout();
-                    }
-                    return _buildNarrowLayout();
-                  },
-                ),
+              Column(
+                children: [
+                  _buildTopBar(theme),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth >= 960) {
+                          return _buildWideLayout();
+                        }
+                        return _buildNarrowLayout();
+                      },
+                    ),
+                  ),
+                ],
               ),
+              if (_isLoading)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Colors.black26,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -818,8 +1347,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   // ── Top bar ──
 
   Widget _buildTopBar(ThemeData theme) {
-    final fileName =
-        _filePath != null ? _filePath!.split(io.Platform.pathSeparator).last : '';
+    final fileName = _filePath != null
+        ? _filePath!.split(io.Platform.pathSeparator).last
+        : '';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -837,26 +1367,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           ),
           if (_allGames.isNotEmpty) ...[
             const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: _openSliceDialog,
-              icon: Icon(
-                Icons.filter_alt,
-                size: 18,
-                color: _hasActiveFilters ? Colors.amber : null,
-              ),
-              label: Text(_hasActiveFilters
-                  ? 'Slice (${_filteredGames.length}/${_allGames.length})'
-                  : 'Slice'),
-            ),
-            if (_hasActiveFilters)
-              IconButton(
-                onPressed: _resetFilters,
-                icon: const Icon(Icons.clear, size: 18),
-                tooltip: 'Reset filters',
-              ),
-          ],
-          const Spacer(),
+            Expanded(child: _buildSliceChips()),
+          ] else
+            const Spacer(),
           if (_filteredGames.isNotEmpty) ...[
+            IconButton(
+              onPressed: _exportSlice,
+              icon: const Icon(Icons.file_upload_outlined, size: 20),
+              tooltip: 'Export filtered games (Ctrl+E)',
+            ),
             IconButton(
               onPressed: () => setState(() => _boardFlipped = !_boardFlipped),
               icon: const Icon(Icons.swap_vert, size: 20),
@@ -866,6 +1385,126 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           ],
           const AppModeMenuButton(),
         ],
+      ),
+    );
+  }
+
+  /// Inline filter chips showing active slice criteria + an "add" chip.
+  Widget _buildSliceChips() {
+    final chipLabels = _activeSliceConfig.chipLabels;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          // Active filter chips
+          for (int i = 0; i < chipLabels.length; i++) ...[
+            _buildActiveChip(chipLabels[i], i),
+            const SizedBox(width: 4),
+          ],
+          // Add / Slice chip
+          _buildAddSliceChip(),
+          if (_hasActiveFilters) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.blue.withAlpha(20),
+                borderRadius: BorderRadius.circular(8),
+                border:
+                    Border.all(color: Colors.blue.withAlpha(60), width: 0.5),
+              ),
+              child: Text(
+                '${_filteredGames.length}/${_allGames.length}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue[300],
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveChip(String label, int index) {
+    return GestureDetector(
+      onTap: _openSliceDialog,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.blue[900],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.blue.withAlpha(60), width: 0.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 140),
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue[100],
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: () => _removeSliceChip(index),
+              child: Icon(Icons.close,
+                  size: 13, color: Colors.blue[300]!.withAlpha(180)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddSliceChip() {
+    return Tooltip(
+      message: _hasActiveFilters ? 'Edit filters' : 'Add filter',
+      child: GestureDetector(
+        onTap: _openSliceDialog,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey[800],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: _hasActiveFilters
+                  ? Colors.blue.withAlpha(40)
+                  : Colors.grey[700]!,
+              width: 0.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.add,
+                size: 13,
+                color: _hasActiveFilters ? Colors.blue[300] : Colors.grey[400],
+              ),
+              const SizedBox(width: 3),
+              Text(
+                _hasActiveFilters ? 'Edit' : 'Slice',
+                style: TextStyle(
+                  fontSize: 11,
+                  color:
+                      _hasActiveFilters ? Colors.blue[300] : Colors.grey[400],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -888,7 +1527,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       itemBuilder: (ctx) => [
         if (protagonist != null)
           PopupMenuItem(
-            value: _Perspective(mode: _PerspectiveMode.player, playerName: protagonist),
+            value: _Perspective(
+                mode: _PerspectiveMode.player, playerName: protagonist),
             child: Row(children: [
               if (isPlayerMode && _perspective.playerName == protagonist)
                 const Icon(Icons.check, size: 16)
@@ -993,29 +1633,46 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   // ── Side panel (tabs + game nav) ──
 
   Widget _buildSidePanel() {
+    if (_showOpeningTree) return _buildOpeningTreePanel();
     return Column(
       children: [
-        // Tabs
-        TabBar(
-          controller: _tabController,
-          tabs: [
-            const Tab(text: 'Game'),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Analysis'),
-                  if (_analysisController.isAnalyzing) ...[
-                    const SizedBox(width: 6),
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 1.5),
+        // Tabs header with tree toggle
+        Row(
+          children: [
+            Expanded(
+              child: TabBar(
+                controller: _tabController,
+                tabs: [
+                  const Tab(text: 'Game'),
+                  Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Analysis'),
+                        if (_analysisController.isAnalyzing) ...[
+                          const SizedBox(width: 6),
+                          const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 1.5),
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
+            if (_filteredGames.isNotEmpty)
+              Tooltip(
+                message: 'Opening tree (T)',
+                child: IconButton(
+                  icon: Icon(Icons.account_tree,
+                      size: 20, color: Colors.grey[400]),
+                  onPressed: _toggleOpeningTree,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
           ],
         ),
         Expanded(
@@ -1030,6 +1687,189 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         // Game navigation bar
         if (_filteredGames.isNotEmpty) _buildGameNavBar(),
       ],
+    );
+  }
+
+  // ── Opening tree panel ──
+
+  Widget _buildOpeningTreePanel() {
+    return Column(
+      children: [
+        // Header bar
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Colors.grey[700]!),
+            ),
+          ),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, size: 20),
+                onPressed: _toggleOpeningTree,
+                tooltip: 'Back to Game/Analysis (T)',
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Opening Tree',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: Colors.grey[200],
+                ),
+              ),
+              const Spacer(),
+              if (_buildingTree)
+                Flexible(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          _treeBuildTotal > 0
+                              ? 'Building $_treeBuildProcessed / $_treeBuildTotal'
+                              : 'Building tree...',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[400],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        // Tree content
+        if (_buildingTree)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _treeBuildTotal > 0
+                        ? 'Building tree... $_treeBuildProcessed / $_treeBuildTotal games'
+                        : 'Building tree...',
+                    style: TextStyle(color: Colors.grey[300], fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  if (_treeBuildTotal > 0)
+                    SizedBox(
+                      width: 220,
+                      child: LinearProgressIndicator(
+                        value: _treeBuildProcessed / _treeBuildTotal,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          )
+        else if (_openingTree == null)
+          Expanded(
+            child: Center(
+              child: Text(
+                'No tree available.\nLoad games to build.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey[500]),
+              ),
+            ),
+          )
+        else ...[
+          Expanded(
+            child: OpeningTreeWidget(
+              tree: _openingTree!,
+              onMoveSelected: _onTreeMoveSelected,
+              onGoBack: _onTreeGoBack,
+              onGoForward: _onTreeGoForward,
+              currentMoveSequence: _treeCurrentMoveSequence,
+            ),
+          ),
+          _buildTreeGamesList(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTreeGamesList() {
+    final matchingIndices = _gamesAtTreePosition();
+    if (matchingIndices.isEmpty) return const SizedBox.shrink();
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 180),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.grey[700]!)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: Text(
+              '${matchingIndices.length} game${matchingIndices.length == 1 ? '' : 's'} at this position',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[400],
+              ),
+            ),
+          ),
+          Flexible(
+            child: ListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.only(bottom: 4),
+              itemCount: matchingIndices.length,
+              itemBuilder: (context, idx) {
+                final gi = matchingIndices[idx];
+                final game = _filteredGames[gi];
+                return InkWell(
+                  onTap: () => _loadGameFromTree(gi),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    child: Row(
+                      children: [
+                        Icon(Icons.play_arrow,
+                            size: 14, color: Colors.blue[300]),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            game.label,
+                            style: const TextStyle(fontSize: 11),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (game.studyRating > 0) ...[
+                          const Icon(Icons.star, size: 12, color: Colors.amber),
+                          Text('${game.studyRating}',
+                              style: const TextStyle(fontSize: 10)),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1054,54 +1894,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 icon: const Icon(Icons.folder_open),
                 label: const Text('Open PGN File'),
               ),
-              if (_collectionFiles.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                Text(
-                  'Collections',
-                  style: TextStyle(
-                    color: Colors.grey[500],
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                for (final file in _collectionFiles)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: InkWell(
-                      onTap: () => _loadFile(file.path),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.grey[800]!),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('♔', style: TextStyle(fontSize: 14)),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                file.path
-                                    .split(io.Platform.pathSeparator)
-                                    .last
-                                    .replaceAll('.pgn', ''),
-                                style: TextStyle(
-                                  color: Colors.blue[300],
-                                  fontSize: 13,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
               if (_recentFiles.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 Text(
@@ -1412,7 +2204,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: classColor.withAlpha(30),
                         borderRadius: BorderRadius.circular(4),
@@ -1513,10 +2306,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               Tooltip(
                 message: 'Next game (N)',
                 child: TextButton.icon(
-                  onPressed:
-                      _currentGameIndex < _filteredGames.length - 1
-                          ? _nextGame
-                          : null,
+                  onPressed: _currentGameIndex < _filteredGames.length - 1
+                      ? _nextGame
+                      : null,
                   icon: const Icon(Icons.skip_next, size: 20),
                   label: const Text('Next'),
                 ),
@@ -1600,8 +2392,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       itemBuilder: (ctx) {
         // Show up to 50 items around current index
         final start = (_currentGameIndex - 25).clamp(0, _filteredGames.length);
-        final end =
-            (_currentGameIndex + 25).clamp(0, _filteredGames.length);
+        final end = (_currentGameIndex + 25).clamp(0, _filteredGames.length);
         return [
           for (int i = start; i < end; i++)
             PopupMenuItem(
@@ -1737,4 +2528,3 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
   }
 }
-

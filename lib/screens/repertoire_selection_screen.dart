@@ -5,8 +5,8 @@ library;
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
+import '../services/storage/app_paths.dart';
 import '../utils/app_messages.dart';
 import '../widgets/pgn_import_dialog.dart';
 
@@ -36,13 +36,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     });
 
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
-
-      // Create repertoires directory if it doesn't exist
-      if (!await repertoireDir.exists()) {
-        await repertoireDir.create(recursive: true);
-      }
+      final repertoireDir = await AppPaths.repertoiresDirectory(create: true);
 
       final files = await repertoireDir
           .list()
@@ -451,12 +445,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     PgnImportResult? pgnImport,
   }) async {
     try {
-      final directory = await getApplicationDocumentsDirectory();
-      final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
-
-      if (!await repertoireDir.exists()) {
-        await repertoireDir.create(recursive: true);
-      }
+      final repertoireDir = await AppPaths.repertoiresDirectory(create: true);
 
       final file = File(p.join(repertoireDir.path, '$name.pgn'));
 
@@ -581,8 +570,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
     if (result != null && result.isNotEmpty) {
       try {
-        final directory = await getApplicationDocumentsDirectory();
-        final repertoireDir = Directory(p.join(directory.path, 'repertoires'));
+        final repertoireDir = await AppPaths.repertoiresDirectory(create: true);
         final oldFile = File(filePath);
         final newFile = File(p.join(repertoireDir.path, '$result.pgn'));
 

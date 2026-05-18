@@ -1,4 +1,4 @@
-// Stub for Web/Non-IO environments
+// Stub for non-IO environments
 import 'dart:async';
 import 'engine_connection.dart';
 

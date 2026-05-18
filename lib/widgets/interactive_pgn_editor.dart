@@ -805,7 +805,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         splitPgn.headers.where((line) => !_isManagedHeader(line));
     final entryLines = <String>[
       '[Event "$title"]',
-      '[Date "${DateTime.now().toIso8601String()}"]',
+      '[Date "${DateTime.now().toIso8601String().split('T').first}"]',
       '[White "$whiteHeader"]',
       '[Black "$blackHeader"]',
       '[Result "*"]',
@@ -1055,12 +1055,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   static String _sanitizeComment(String comment) =>
       comment.replaceAll('{', '').replaceAll('}', '');
 
+  static final _maiaCommentRe = RegExp(r'\[%maia [^\]]+\]');
+  static final _evalCommentRe = RegExp(r'\[%eval [^\]]+\]');
+  static final _clkCommentRe = RegExp(r'\[%clk [^\]]+\]');
+  static final _whitespaceRe = RegExp(r'\s+');
+
   Widget _buildInlineComment(String comment) {
     final sanitized = _sanitizeComment(comment)
-        .replaceAll(RegExp(r'\[%maia [^\]]+\]'), '')
-        .replaceAll(RegExp(r'\[%eval [^\]]+\]'), '')
-        .replaceAll(RegExp(r'\[%clk [^\]]+\]'), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(_maiaCommentRe, '')
+        .replaceAll(_evalCommentRe, '')
+        .replaceAll(_clkCommentRe, '')
+        .replaceAll(_whitespaceRe, ' ')
         .trim();
     if (sanitized.isEmpty) return const SizedBox.shrink();
     return Padding(

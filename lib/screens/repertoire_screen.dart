@@ -12,8 +12,6 @@ import '../core/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/engine_settings.dart';
 import '../models/repertoire_line.dart';
-import '../services/analysis_service.dart';
-import '../services/engine/stockfish_pool.dart';
 import '../services/repertoire_service.dart';
 import '../utils/app_messages.dart';
 import '../utils/chess_utils.dart' show uciToSan;
@@ -119,19 +117,34 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       // Load the requested repertoire if different from current
       final currentPath = _controller.currentRepertoire?['filePath'] as String?;
       if (currentPath != path) {
-        _controller.setRepertoire({'filePath': path, 'name': path.split('/').last.replaceAll('.pgn', '')});
+        _controller.setRepertoire({
+          'filePath': path,
+          'name': path.split('/').last.replaceAll('.pgn', '')
+        });
       }
-      // If a specific line was requested, navigate to it once loaded
+      // If a specific line was requested, navigate to it once loaded.
+      // Use a listener instead of a single post-frame callback so we
+      // don't miss the load if parsing takes more than one frame.
       if (lineId != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
+        void waitForLine() {
+          if (!mounted) {
+            _controller.removeListener(waitForLine);
+            return;
+          }
           final line = _controller.repertoireLines
               .where((l) => l.id == lineId)
               .firstOrNull;
           if (line != null) {
+            _controller.removeListener(waitForLine);
             _controller.loadPgnLine(line);
             _tabController.animateTo(2); // PGN tab
           }
+        }
+
+        _controller.addListener(waitForLine);
+        // Also check immediately in case data is already loaded.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) waitForLine();
         });
       }
     }
@@ -196,11 +209,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _tabController.dispose();
     _controller.removeListener(_onRepertoireChanged);
     _controller.dispose();
-
-    // Tear down pool workers — they persist for the repertoire session
-    // and are only killed when leaving the repertoire builder.
-    AnalysisService().dispose();
-    StockfishPool().dispose();
 
     try {
       context.read<AppState>().removeListener(_onAppStateChanged);
@@ -532,6 +540,22 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       padding: const EdgeInsets.all(8.0),
       child: Column(
         children: [
+          if (_isGenerating && !_isGenerationPaused)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: Colors.orange.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(8),
+                child: const ListTile(
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  leading: Icon(Icons.lock_outline, size: 18),
+                  title: Text(
+                    'Generation is running. Pause or cancel to switch tabs.',
+                  ),
+                ),
+              ),
+            ),
           IgnorePointer(
             ignoring: _isGenerating && !_isGenerationPaused,
             child: Opacity(
@@ -605,6 +629,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       title: title,
       actions: [
         if (_isGenerating) _buildGenerationStatusChip(),
+        if (_controller.currentRepertoire != null)
+          _buildTrainRepertoireButton(),
         const AppModeMenuButton(),
         if (showSelectRepertoireAction) _buildSelectRepertoireButton(),
       ],
@@ -679,6 +705,26 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 onPressed: _isGenerating ? null : _showRepertoireSelection,
                 icon: const Icon(Icons.library_books),
                 label: const Text('Select Repertoire'),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildTrainRepertoireButton() {
+    final compact = MediaQuery.sizeOf(context).width < 900;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Center(
+        child: compact
+            ? IconButton(
+                tooltip: 'Train repertoire',
+                onPressed: _isGenerating ? null : _trainRepertoire,
+                icon: const Icon(Icons.school),
+              )
+            : TextButton.icon(
+                onPressed: _isGenerating ? null : _trainRepertoire,
+                icon: const Icon(Icons.school),
+                label: const Text('Train'),
               ),
       ),
     );

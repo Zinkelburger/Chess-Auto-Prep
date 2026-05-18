@@ -1,0 +1,12 @@
+{Build stats: 6 nodes in 0.0s (9155/min), depth 8, branching 6.00, 1 threads}
+
+[Event "Repertoire Line #1"]
+[Site "tree_builder"]
+[Date "2026.04.20"]
+[Round "-"]
+[White "Repertoire"]
+[Black "Opponent"]
+[Result "*"]
+
+{CumProb 100.000%, Eval 0 cp}
+1. e4 *
