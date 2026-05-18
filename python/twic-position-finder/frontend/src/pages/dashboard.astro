@@ -303,35 +303,39 @@ import Base from '../layouts/Base.astro';
     for (const sub of subs) {
       const card = document.createElement('div');
       card.className = 'card';
-      card.style.cssText = 'display:flex; justify-content:space-between; align-items:start;';
 
-      const info = document.createElement('div');
       const h3 = document.createElement('h3');
       h3.style.marginBottom = '8px';
       h3.textContent = sub.label || 'Untitled subscription';
-      info.appendChild(h3);
+      card.appendChild(h3);
 
       const tagsDiv = document.createElement('div');
-      tagsDiv.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px;';
+      tagsDiv.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;';
       const tagEntries: [string, string][] = [];
-      if (sub.fen) tagEntries.push(['FEN', sub.fen.length > 30 ? sub.fen.substring(0, 30) + '...' : sub.fen]);
+      if (sub.fen) tagEntries.push(['FEN', sub.fen]);
       if (sub.player) tagEntries.push(['Player', sub.player]);
       if (sub.white) tagEntries.push(['White', sub.white]);
       if (sub.black) tagEntries.push(['Black', sub.black]);
       if (sub.eco) tagEntries.push(['ECO', sub.eco]);
       if (sub.min_elo) tagEntries.push(['Min Elo', String(sub.min_elo)]);
-      if (sub.exclude_site) tagEntries.push(['Excl', sub.exclude_site]);
-      if (sub.site) tagEntries.push(['Site', sub.site]);
+      if (sub.max_elo) tagEntries.push(['Max Elo', String(sub.max_elo)]);
+      if (sub.event) tagEntries.push(['Event', sub.event]);
       for (const [label, val] of tagEntries) {
         const tag = document.createElement('span');
         tag.className = 'tag';
         tag.textContent = `${label}: ${val}`;
         tagsDiv.appendChild(tag);
       }
-      info.appendChild(tagsDiv);
+      card.appendChild(tagsDiv);
 
       const actions = document.createElement('div');
-      actions.style.cssText = 'display:flex; flex-direction:column; gap:6px; flex-shrink:0;';
+      actions.style.cssText = 'display:flex; gap:8px; align-items:center;';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'sub-action-btn';
+      editBtn.innerHTML = '&#9998;';
+      editBtn.title = 'Edit';
+      editBtn.addEventListener('click', () => editSub(sub));
 
       const dlBtn = document.createElement('button');
       dlBtn.className = 'btn btn-outline btn-sm';
@@ -339,18 +343,68 @@ import Base from '../layouts/Base.astro';
       dlBtn.addEventListener('click', () => downloadPgn(sub.id, sub.label));
 
       const delBtn = document.createElement('button');
-      delBtn.className = 'btn btn-danger btn-sm';
+      delBtn.className = 'sub-action-btn sub-action-delete';
       delBtn.textContent = 'Delete';
       delBtn.addEventListener('click', () => deleteSub(sub.id));
 
+      actions.appendChild(editBtn);
       actions.appendChild(dlBtn);
       actions.appendChild(delBtn);
 
-      card.appendChild(info);
       card.appendChild(actions);
       list.appendChild(card);
     }
   }
+
+  // ── Edit subscription ──────────────────────────────────────────────
+
+  let editingSubId: number | null = null;
+
+  function editSub(sub: any) {
+    editingSubId = sub.id;
+    const form = document.getElementById('add-form')!;
+    const heading = form.querySelector('h2')!;
+    const submitBtn = form.querySelector('button[type="submit"]')! as HTMLButtonElement;
+
+    heading.textContent = 'Edit Subscription';
+    submitBtn.textContent = 'Save Changes';
+    form.style.display = 'block';
+
+    // Pre-fill label
+    (document.getElementById('dash-sub-label') as HTMLInputElement).value = sub.label || '';
+
+    // Pre-fill exclude checkbox
+    (document.getElementById('dash-sub-exclude-chess-com') as HTMLInputElement).checked = !!sub.exclude_site;
+
+    // Reset filters and add the ones from the subscription
+    dashActiveFilters.clear();
+    dashContainer.innerHTML = '';
+
+    const filterKeys = ['fen', 'player', 'eco', 'min_elo', 'max_elo', 'event'];
+    for (const key of filterKeys) {
+      if (sub[key]) {
+        dashAddFilter(key);
+        const inputId = `dash-sub-${key.replace('_', '-')}`;
+        const input = document.getElementById(inputId) as HTMLInputElement | null;
+        if (input) input.value = String(sub[key]);
+      }
+    }
+  }
+
+  function resetFormToCreate() {
+    editingSubId = null;
+    const form = document.getElementById('add-form')!;
+    const heading = form.querySelector('h2')!;
+    const submitBtn = form.querySelector('button[type="submit"]')! as HTMLButtonElement;
+    heading.textContent = 'New Subscription';
+    submitBtn.textContent = 'Create Subscription';
+    (document.getElementById('sub-form') as HTMLFormElement).reset();
+    dashActiveFilters.clear();
+    dashContainer.innerHTML = '';
+    dashAddFilter('fen');
+  }
+
+  // ── Download PGN ──────────────────────────────────────────────────
 
   async function downloadPgn(id: number, label: string) {
     try {
@@ -374,6 +428,8 @@ import Base from '../layouts/Base.astro';
     }
   }
 
+  // ── Delete subscription ──────────────────────────────────────────
+
   async function deleteSub(id: number) {
     if (!confirm('Delete this subscription?')) return;
     try {
@@ -386,14 +442,16 @@ import Base from '../layouts/Base.astro';
     }
   }
 
-  // ── Add form ──────────────────────────────────────────────────────
+  // ── Add/Edit form ──────────────────────────────────────────────────
 
   document.getElementById('show-add-form')!.addEventListener('click', () => {
+    resetFormToCreate();
     document.getElementById('add-form')!.style.display = 'block';
   });
 
   document.getElementById('cancel-add')!.addEventListener('click', () => {
     document.getElementById('add-form')!.style.display = 'none';
+    resetFormToCreate();
   });
 
   document.getElementById('sub-form')!.addEventListener('submit', async (e) => {
@@ -425,6 +483,13 @@ import Base from '../layouts/Base.astro';
     };
 
     try {
+      // If editing, delete the old one first
+      if (editingSubId !== null) {
+        await fetch(`${API}/api/subscriptions/${editingSubId}`, {
+          method: 'DELETE', headers: authHeaders(),
+        });
+      }
+
       const res = await fetch(`${API}/api/subscriptions`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -434,19 +499,15 @@ import Base from '../layouts/Base.astro';
       alertEl.style.display = 'block';
       if (res.ok) {
         alertEl.className = 'alert alert-success';
-        alertEl.textContent = 'Subscription created!';
-        (document.getElementById('sub-form') as HTMLFormElement).reset();
-        // Reset filters to default
-        dashActiveFilters.clear();
-        dashContainer.innerHTML = '';
-        dashAddFilter('fen');
+        alertEl.textContent = editingSubId ? 'Subscription updated!' : 'Subscription created!';
+        resetFormToCreate();
         setTimeout(() => { document.getElementById('add-form')!.style.display = 'none'; alertEl.style.display = 'none'; }, 1200);
         const subsRes = await fetch(`${API}/api/subscriptions`, { headers: authHeaders() });
         const subsData = await subsRes.json();
         renderSubscriptions(subsData.subscriptions);
       } else {
         alertEl.className = 'alert alert-error';
-        alertEl.textContent = data.detail || 'Failed to create subscription.';
+        alertEl.textContent = data.detail || 'Failed to save subscription.';
       }
     } catch {
       alertEl.style.display = 'block';

@@ -258,6 +258,28 @@ const currentPath = Astro.url.pathname;
     cursor: not-allowed;
   }
 
+  /* ── Subscription action buttons ──────────────── */
+
+  .sub-action-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: var(--sans);
+    transition: color 0.15s, background 0.15s;
+  }
+  .sub-action-btn:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.05);
+  }
+  .sub-action-delete:hover {
+    color: var(--danger);
+    background: rgba(224, 82, 82, 0.08);
+  }
+
   /* ── Alerts ──────────────────────────────────── */
 
   .alert {
