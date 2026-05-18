@@ -94,13 +94,14 @@ import Base from '../layouts/Base.astro';
     mono?: boolean;
     hasAutocomplete?: { jsonUrl: string; statusId: string; matchesId: string; acLabel: string };
     hasBoardPreview?: boolean;
+    hasEcoPicker?: boolean;
     tooltip?: string;
   }
 
   const FILTER_DEFS: FilterDef[] = [
     { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true },
     { key: 'player', label: 'Player name', inputType: 'text', hasAutocomplete: { jsonUrl: '/players.json', statusId: 'player-status', matchesId: 'player-matches', acLabel: 'player' } },
-    { key: 'eco', label: 'ECO Code', inputType: 'text' },
+    { key: 'eco', label: 'ECO Code', inputType: 'text', hasEcoPicker: true },
     { key: 'min_elo', label: 'Minimum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*', tooltip: 'At least one player must be at or above this rating' },
     { key: 'max_elo', label: 'Maximum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*', tooltip: 'Both players must be at or below this rating' },
     { key: 'event', label: 'Event name', inputType: 'text', hasAutocomplete: { jsonUrl: '/events.json', statusId: 'event-status', matchesId: 'event-matches', acLabel: 'event' } },
@@ -165,6 +166,15 @@ import Base from '../layouts/Base.astro';
       err.id = 'fen-error';
       err.className = 'board-invalid';
       body.appendChild(err);
+    }
+
+    if (def.hasEcoPicker) {
+      const browseBtn = document.createElement('button');
+      browseBtn.type = 'button';
+      browseBtn.className = 'eco-trigger-btn';
+      browseBtn.textContent = 'Browse openings...';
+      browseBtn.addEventListener('click', () => openEcoModal(input));
+      body.appendChild(browseBtn);
     }
 
     row.appendChild(body);
@@ -451,4 +461,181 @@ import Base from '../layouts/Base.astro';
       alertEl.textContent = 'Could not reach the server.';
     }
   });
+
+  // ── ECO Picker Modal ──────────────────────────────────────────────
+
+  let ecoData: [string, string, string, string][] = [];
+  let ecoLoaded = false;
+
+  async function loadEcoData() {
+    if (ecoLoaded) return;
+    try {
+      const res = await fetch('/eco.json');
+      ecoData = await res.json();
+      ecoLoaded = true;
+    } catch { /* silently fail */ }
+  }
+
+  loadEcoData();
+
+  function fuzzyMatch(entry: [string, string, string, string], query: string): boolean {
+    const [code, name] = entry;
+    const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+    const haystack = `${code} ${name}`.toLowerCase();
+    return words.every(w => haystack.includes(w));
+  }
+
+  function lichessAnalysisUrl(pgn: string): string {
+    return `https://lichess.org/analysis/pgn/${encodeURIComponent(pgn)}`;
+  }
+
+  function openEcoModal(targetInput: HTMLInputElement) {
+    loadEcoData();
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'eco-modal-backdrop';
+
+    const modal = document.createElement('div');
+    modal.className = 'eco-modal';
+
+    modal.innerHTML = `
+      <div class="eco-modal-header">
+        <h3>Select ECO Opening</h3>
+        <button class="eco-modal-close" type="button">&times;</button>
+      </div>
+      <div class="eco-modal-search">
+        <input type="text" placeholder="Search by code or name... e.g. B90, Sicilian, Najdorf" autocomplete="off" />
+        <div class="eco-search-hint">Type to filter 3,300+ openings. Click to select, then confirm.</div>
+      </div>
+      <div class="eco-modal-list"></div>
+      <div class="eco-modal-footer">
+        <span class="eco-selected-count"></span>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-outline btn-sm eco-modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm eco-modal-confirm">Select</button>
+        </div>
+      </div>
+    `;
+
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    const searchInput = modal.querySelector('.eco-modal-search input') as HTMLInputElement;
+    const listEl = modal.querySelector('.eco-modal-list')!;
+    const countEl = modal.querySelector('.eco-selected-count')!;
+    const closeBtn = modal.querySelector('.eco-modal-close')!;
+    const cancelBtn = modal.querySelector('.eco-modal-cancel')!;
+    const confirmBtn = modal.querySelector('.eco-modal-confirm')!;
+
+    let selectedCode = targetInput.value.trim().toUpperCase();
+
+    function close() { backdrop.remove(); }
+
+    closeBtn.addEventListener('click', close);
+    cancelBtn.addEventListener('click', close);
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) close();
+    });
+    document.addEventListener('keydown', function escHandler(e) {
+      if (e.key === 'Escape') { close(); document.removeEventListener('keydown', escHandler); }
+    });
+
+    confirmBtn.addEventListener('click', () => {
+      if (selectedCode) {
+        targetInput.value = selectedCode;
+        targetInput.dispatchEvent(new Event('input'));
+      }
+      close();
+    });
+
+    function renderList(query: string) {
+      const filtered = query
+        ? ecoData.filter(e => fuzzyMatch(e, query)).slice(0, 100)
+        : ecoData.slice(0, 100);
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<div class="eco-no-results">No openings match your search</div>';
+        return;
+      }
+
+      listEl.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      for (const [code, name, pgn, fen] of filtered) {
+        const item = document.createElement('div');
+        item.className = 'eco-item' + (code === selectedCode ? ' selected' : '');
+
+        const mainRow = document.createElement('div');
+        mainRow.className = 'eco-item-main';
+        mainRow.innerHTML = `
+          <span class="eco-item-toggle">&#9654;</span>
+          <span class="eco-item-code">${code}</span>
+          <span class="eco-item-name">${name}</span>
+          <span class="eco-item-check">&#10003;</span>
+        `;
+
+        const details = document.createElement('div');
+        details.className = 'eco-item-details';
+        details.innerHTML = `
+          <div class="eco-item-moves">${pgn}</div>
+          <div class="eco-item-board"></div>
+          <a href="${lichessAnalysisUrl(pgn)}" target="_blank" rel="noopener" class="eco-lichess-btn">
+            Analyze on Lichess &#8599;
+          </a>
+        `;
+
+        item.appendChild(mainRow);
+        item.appendChild(details);
+
+        const toggle = mainRow.querySelector('.eco-item-toggle')!;
+
+        function expandCollapse() {
+          const expanded = item.classList.toggle('expanded');
+          if (expanded) {
+            toggle.innerHTML = '&#9660;';
+            const boardEl = details.querySelector('.eco-item-board') as HTMLElement;
+            if (!boardEl.hasChildNodes()) {
+              (window as any).renderBoardPreview(fen, boardEl, null);
+              boardEl.style.display = 'grid';
+            }
+          } else {
+            toggle.innerHTML = '&#9654;';
+          }
+        }
+
+        mainRow.addEventListener('click', () => {
+          selectedCode = code;
+          listEl.querySelectorAll('.eco-item.selected').forEach(el => el.classList.remove('selected'));
+          item.classList.add('selected');
+          updateCount();
+          expandCollapse();
+        });
+
+        frag.appendChild(item);
+      }
+      listEl.appendChild(frag);
+
+      const total = query ? ecoData.filter(e => fuzzyMatch(e, query)).length : ecoData.length;
+      if (total > 100) {
+        const more = document.createElement('div');
+        more.className = 'eco-no-results';
+        more.textContent = `Showing 100 of ${total} results — refine your search`;
+        listEl.appendChild(more);
+      }
+    }
+
+    function updateCount() {
+      countEl.textContent = selectedCode ? `Selected: ${selectedCode}` : '';
+    }
+
+    let searchTimer: ReturnType<typeof setTimeout>;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => renderList(searchInput.value.trim()), 150);
+    });
+
+    renderList('');
+    updateCount();
+    setTimeout(() => searchInput.focus(), 50);
+  }
+
 </script>
