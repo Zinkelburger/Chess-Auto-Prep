@@ -1,4 +1,4 @@
-"""FastAPI backend for TWIC Position Finder — user registration, subscriptions, queries."""
+"""FastAPI backend for TWIC Position Finder — email auth and subscription management."""
 
 import logging
 import os
@@ -8,14 +8,11 @@ from pathlib import Path
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-
-import chess
 
 from models import (
     get_db, create_user, verify_user, get_user_by_auth, get_user_by_email,
@@ -24,8 +21,7 @@ from models import (
     count_user_subscriptions, create_email_token, consume_email_token,
     cleanup_expired_email_tokens,
 )
-from query import find_games, move_tree
-from email_sender import send_verification_email, send_login_email, build_email_html
+from email_sender import send_verification_email, send_login_email
 
 log = logging.getLogger(__name__)
 
@@ -34,7 +30,6 @@ FRONTEND_ORIGIN = os.getenv("TWIC_FRONTEND_ORIGIN", "https://chessautoprep.com")
 TURNSTILE_SECRET = os.getenv("TURNSTILE_SECRET_KEY", "")
 DEBUG = os.getenv("TWIC_DEBUG", "").lower() in ("1", "true", "yes")
 MAX_SUBSCRIPTIONS = 20
-MAX_QUERY_LIMIT = 200
 
 if not TURNSTILE_SECRET:
     log.warning("TURNSTILE_SECRET_KEY is not set — CAPTCHA verification is disabled")
@@ -59,7 +54,7 @@ app.add_middleware(
 bearer_scheme = HTTPBearer()
 
 _last_token_cleanup = 0.0
-_TOKEN_CLEANUP_INTERVAL = 6 * 3600  # every 6 hours
+_TOKEN_CLEANUP_INTERVAL = 6 * 3600
 
 
 def db():
@@ -88,7 +83,6 @@ def auth_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)
 
 
 def _client_ip(request: Request) -> str | None:
-    """Extract the real client IP, preferring proxy headers."""
     return (
         request.headers.get("CF-Connecting-IP")
         or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
@@ -97,7 +91,6 @@ def _client_ip(request: Request) -> str | None:
 
 
 def verify_turnstile(token: str, ip: str | None = None) -> bool:
-    """Verify a Cloudflare Turnstile response token. Skips if no secret configured."""
     if not TURNSTILE_SECRET:
         return True
     if not token:
@@ -121,16 +114,7 @@ def verify_turnstile(token: str, ip: str | None = None) -> bool:
         return False
 
 
-# ── Auth ──────────────────────────────────────────────────────────────
-
-
-class RegisterRequest(BaseModel):
-    email: EmailStr
-    cf_turnstile_token: str = ""
-
-
-class LoginRequest(BaseModel):
-    email: EmailStr
+# ── Subscribe (landing page form) ────────────────────────────────────
 
 
 class SubscribeRequest(BaseModel):
@@ -163,7 +147,7 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
     if req.fen:
         try:
             validate_fen(req.fen)
-        except (ValueError, chess.InvalidFenError):
+        except ValueError:
             raise HTTPException(400, "Invalid FEN position. Please check the format.")
 
     existing = get_user_by_email(conn, req.email)
@@ -189,20 +173,7 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
             "message": "Check your email for a verification link to activate your subscription."}
 
 
-@app.post("/api/register")
-@limiter.limit("5/minute")
-def register(req: RegisterRequest, request: Request, conn=Depends(db)):
-    if TURNSTILE_SECRET and not verify_turnstile(
-        req.cf_turnstile_token, _client_ip(request)
-    ):
-        raise HTTPException(400, "CAPTCHA verification failed. Please try again.")
-    user = create_user(conn, req.email)
-    if user.get("verified"):
-        return {"status": "already_verified",
-                "message": "This email is already verified. Check your inbox for a login link."}
-    send_verification_email(req.email, user["verify_token"])
-    return {"status": "verification_sent",
-            "message": "Check your email for a verification link."}
+# ── Email verification & login ────────────────────────────────────────
 
 
 class VerifyRequest(BaseModel):
@@ -215,10 +186,14 @@ def verify(req: VerifyRequest, request: Request, conn=Depends(db)):
     user = verify_user(conn, req.token)
     if not user:
         raise HTTPException(400, "Invalid or expired verification token")
-    login_token = create_email_token(conn, user["id"], "login")
-    send_login_email(user["email"], login_token)
+    auth_token = rotate_auth_token(conn, user["id"])
     return {"status": "verified", "email": user["email"],
-            "message": "Email verified! Check your inbox for your dashboard login link."}
+            "auth_token": auth_token,
+            "message": "Email verified! Redirecting to your dashboard..."}
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
 
 
 @app.post("/api/login")
@@ -240,7 +215,6 @@ class ExchangeTokenRequest(BaseModel):
 @app.post("/api/exchange-token")
 @limiter.limit("10/minute")
 def exchange_token(req: ExchangeTokenRequest, request: Request, conn=Depends(db)):
-    """Exchange a one-time email token for a fresh, time-limited auth token."""
     result = consume_email_token(conn, req.token, "login")
     if not result:
         raise HTTPException(401, "Invalid, expired, or already-used token")
@@ -252,7 +226,20 @@ def exchange_token(req: ExchangeTokenRequest, request: Request, conn=Depends(db)
     return {"auth_token": new_token}
 
 
-# ── Subscriptions ────────────────────────────────────────────────────
+# ── Dashboard (authenticated) ────────────────────────────────────────
+
+
+@app.get("/api/me")
+def get_me(user=Depends(auth_user), conn=Depends(db)):
+    sub_count = conn.execute(
+        "SELECT COUNT(*) FROM subscriptions WHERE user_id = ? AND active = 1",
+        (user["id"],),
+    ).fetchone()[0]
+    return {
+        "email": user["email"],
+        "verified": bool(user["verified"]),
+        "subscription_count": sub_count,
+    }
 
 
 class SubscriptionCreate(BaseModel):
@@ -264,7 +251,11 @@ class SubscriptionCreate(BaseModel):
     exclude_site: str | None = None
     site: str | None = None
     min_elo: int | None = None
+    max_elo: int | None = None
     eco: str | None = None
+    time_control: str | None = None
+    result: str | None = None
+    event: str | None = None
 
 
 @app.get("/api/subscriptions")
@@ -284,7 +275,7 @@ def create_subscription(req: SubscriptionCreate, user=Depends(auth_user),
     if req.fen:
         try:
             validate_fen(req.fen)
-        except (ValueError, chess.InvalidFenError):
+        except ValueError:
             raise HTTPException(400, "Invalid FEN position. Please check the format.")
 
     sub = add_subscription(
@@ -292,7 +283,9 @@ def create_subscription(req: SubscriptionCreate, user=Depends(auth_user),
         label=req.label, fen=req.fen, player=req.player,
         white=req.white, black=req.black,
         exclude_site=req.exclude_site, site=req.site,
-        min_elo=req.min_elo, eco=req.eco,
+        min_elo=req.min_elo, max_elo=req.max_elo, eco=req.eco,
+        time_control=req.time_control, result=req.result,
+        event=req.event,
     )
     return {"subscription": sub}
 
@@ -313,7 +306,6 @@ class UnsubscribeRequest(BaseModel):
 @app.post("/api/unsubscribe")
 @limiter.limit("10/minute")
 def unsubscribe(req: UnsubscribeRequest, request: Request, conn=Depends(db)):
-    """One-click unsubscribe via single-use email token."""
     result = consume_email_token(conn, req.token, "unsubscribe")
     if not result:
         raise HTTPException(401, "Invalid, expired, or already-used unsubscribe link")
@@ -327,15 +319,15 @@ def unsubscribe(req: UnsubscribeRequest, request: Request, conn=Depends(db)):
 
 @app.post("/api/logout")
 def logout(user=Depends(auth_user), conn=Depends(db)):
-    """Invalidate the current auth token."""
     revoke_auth_token(conn, user["id"])
     return {"status": "logged_out"}
 
 
+# ── Dev-only ──────────────────────────────────────────────────────────
+
 if DEBUG:
     @app.post("/api/dev-login")
     def dev_login(req: LoginRequest, conn=Depends(db)):
-        """DEV ONLY: Skip email and return a login URL directly."""
         user = get_user_by_email(conn, req.email)
         if not user:
             raise HTTPException(404, "User not found")
@@ -351,171 +343,6 @@ if DEBUG:
         login_token = create_email_token(conn, user["id"], "login")
         return {"login_url": f"{FRONTEND_ORIGIN}/dashboard?token={login_token}",
                 "token": login_token}
-
-
-@app.get("/api/me")
-def get_me(user=Depends(auth_user), conn=Depends(db)):
-    """Return basic user info for the dashboard header."""
-    sub_count = conn.execute(
-        "SELECT COUNT(*) FROM subscriptions WHERE user_id = ? AND active = 1",
-        (user["id"],),
-    ).fetchone()[0]
-    return {
-        "email": user["email"],
-        "verified": bool(user["verified"]),
-        "subscription_count": sub_count,
-    }
-
-
-# ── Query ────────────────────────────────────────────────────────────
-
-
-@app.get("/api/query")
-@limiter.limit("30/minute")
-def query_position(
-    request: Request,
-    fen: str,
-    white: str | None = None,
-    black: str | None = None,
-    player: str | None = None,
-    exclude_site: str | None = None,
-    site: str | None = None,
-    min_elo: int | None = None,
-    max_elo: int | None = None,
-    eco: str | None = None,
-    time_control: str | None = None,
-    result: str | None = None,
-    event: str | None = None,
-    limit: int = 50,
-    conn=Depends(db),
-):
-    limit = min(limit, MAX_QUERY_LIMIT)
-
-    try:
-        validate_fen(fen)
-    except (ValueError, chess.InvalidFenError):
-        raise HTTPException(400, "Invalid FEN position")
-
-    games = find_games(
-        conn, fen, white=white, black=black, player=player,
-        exclude_site=exclude_site, site=site, min_elo=min_elo,
-        max_elo=max_elo, eco=eco, time_control=time_control,
-        result=result,
-        limit=limit,
-    )
-    safe = [{k: v for k, v in g.items() if k != "pgn_text"} for g in games]
-    return {"count": len(safe), "games": safe}
-
-
-@app.get("/api/tree")
-@limiter.limit("30/minute")
-def query_tree(
-    request: Request,
-    fen: str,
-    player: str | None = None,
-    exclude_site: str | None = None,
-    conn=Depends(db),
-):
-    try:
-        validate_fen(fen)
-    except (ValueError, chess.InvalidFenError):
-        raise HTTPException(400, "Invalid FEN position")
-
-    filters = {}
-    if player:
-        filters["player"] = player
-    if exclude_site:
-        filters["exclude_site"] = exclude_site
-    tree = move_tree(conn, fen, **filters)
-    return {"fen": fen, "moves": tree}
-
-
-@app.get("/api/events")
-@limiter.limit("10/minute")
-def list_events(request: Request, q: str | None = None, conn=Depends(db)):
-    """Return distinct event names from TWIC data for autocomplete/validation."""
-    if q:
-        rows = conn.execute(
-            "SELECT DISTINCT event FROM games WHERE event LIKE ? ORDER BY event LIMIT 200",
-            (f"%{q}%",),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT DISTINCT event FROM games ORDER BY event LIMIT 500"
-        ).fetchall()
-    return {"events": [r["event"] for r in rows if r["event"]]}
-
-
-@app.get("/api/stats")
-@limiter.limit("60/minute")
-def db_stats(request: Request, conn=Depends(db)):
-    games = conn.execute("SELECT COUNT(*) FROM games").fetchone()[0]
-    positions = conn.execute("SELECT COUNT(*) FROM positions").fetchone()[0]
-    users = conn.execute("SELECT COUNT(*) FROM users WHERE verified=1").fetchone()[0]
-    subs = conn.execute("SELECT COUNT(*) FROM subscriptions WHERE active=1").fetchone()[0]
-    latest = conn.execute("SELECT MAX(twic_number) FROM games").fetchone()[0]
-    return {
-        "games": games, "positions": positions,
-        "users": users, "subscriptions": subs,
-        "latest_twic": latest,
-    }
-
-
-@app.get("/api/email-preview", response_class=HTMLResponse)
-def email_preview(
-    fen: str | None = None,
-    player: str | None = None,
-    eco: str | None = None,
-    conn=Depends(db),
-):
-    """Render a live email preview using real matched games from the database."""
-    sub = {
-        "id": 0,
-        "label": player or eco or "Position Alert",
-        "fen": fen,
-        "player": player,
-        "eco": eco,
-    }
-
-    filters: dict = {}
-    if player:
-        filters["player"] = player
-    if eco:
-        filters["eco"] = eco
-
-    if fen:
-        games = find_games(conn, fen, limit=5, **filters)
-    elif filters:
-        clauses, params = [], []
-        if player:
-            clauses.append("(g.white LIKE ? OR g.black LIKE ?)")
-            params += [f"%{player}%", f"%{player}%"]
-        if eco:
-            clauses.append("g.eco LIKE ?")
-            params.append(f"{eco}%")
-        sql = "SELECT g.* FROM games g"
-        if clauses:
-            sql += " WHERE " + " AND ".join(clauses)
-        sql += " ORDER BY g.id DESC LIMIT 5"
-        rows = conn.execute(sql, params).fetchall()
-        games = [dict(r) for r in rows]
-    else:
-        rows = conn.execute(
-            "SELECT * FROM games ORDER BY id DESC LIMIT 5"
-        ).fetchall()
-        games = [dict(r) for r in rows]
-
-    lichess_urls = {}
-    for g in games:
-        if g.get("lichess_url"):
-            lichess_urls[g["id"]] = g["lichess_url"]
-        else:
-            lichess_urls[g["id"]] = f"https://lichess.org/analysis"
-
-    html = build_email_html(sub, games, lichess_urls,
-                            manage_token="preview-token",
-                            unsub_token="preview-token")
-    return HTMLResponse(content=html)
 
 
 if __name__ == "__main__":

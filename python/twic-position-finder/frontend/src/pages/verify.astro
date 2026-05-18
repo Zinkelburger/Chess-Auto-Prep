@@ -41,13 +41,18 @@ import Base from '../layouts/Base.astro';
       window.history.replaceState({}, '', '/verify');
 
       if (res.ok) {
-        resultEl.innerHTML = `
-          <h1 style="color:var(--accent);">Email Verified!</h1>
-          <p class="subtitle">${escapeHtml(data.message)}</p>
-          <p style="color:var(--text-dim); margin-bottom:24px;">
-            Check your inbox for a login link to set up your position alerts.
-          </p>
-          <a href="/" class="btn btn-primary">Go Home</a>`;
+        if (data.auth_token) {
+          localStorage.setItem('twic_auth_token', data.auth_token);
+          resultEl.innerHTML = `
+            <h1 style="color:var(--accent);">Email Verified!</h1>
+            <p class="subtitle">Redirecting to your dashboard...</p>`;
+          setTimeout(() => { window.location.href = '/dashboard'; }, 1000);
+        } else {
+          resultEl.innerHTML = `
+            <h1 style="color:var(--accent);">Email Verified!</h1>
+            <p class="subtitle">${escapeHtml(data.message)}</p>
+            <a href="/dashboard" class="btn btn-primary">Go to Dashboard</a>`;
+        }
       } else {
         resultEl.innerHTML = `
           <div class="alert alert-error">${escapeHtml(data.detail || 'Verification failed.')}</div>
