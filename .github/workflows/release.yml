@@ -34,12 +34,12 @@ jobs:
       - name: Zip bundle
         run: |
           cd build/linux/x64/release/bundle
-          zip -r ../../../../../chess-auto-prep-linux.zip .
+          zip -r ../../../../../chess-auto-prep-${{ github.ref_name }}-linux.zip .
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: chess-auto-prep-linux.zip
+          path: chess-auto-prep-${{ github.ref_name }}-linux.zip
 
   build-windows:
     runs-on: windows-latest
@@ -62,12 +62,12 @@ jobs:
       - name: Zip bundle
         shell: pwsh
         run: |
-          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath chess-auto-prep-windows.zip
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath chess-auto-prep-${{ github.ref_name }}-windows.zip
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: chess-auto-prep-windows.zip
+          path: chess-auto-prep-${{ github.ref_name }}-windows.zip
 
   build-macos:
     runs-on: macos-latest
@@ -89,12 +89,12 @@ jobs:
       - name: Zip app bundle
         run: |
           cd build/macos/Build/Products/Release
-          zip -r ../../../../../chess-auto-prep-macos.zip *.app
+          zip -r ../../../../../chess-auto-prep-${{ github.ref_name }}-macos.zip *.app
 
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: chess-auto-prep-macos.zip
+          path: chess-auto-prep-${{ github.ref_name }}-macos.zip
 
   release:
     needs: [build-linux, build-windows, build-macos]
