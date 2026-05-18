@@ -20,7 +20,7 @@ from models import (
     add_subscription, get_subscriptions, delete_subscription,
     deactivate_subscription, validate_fen, rotate_auth_token, revoke_auth_token,
     count_user_subscriptions, create_email_token, consume_email_token,
-    cleanup_expired_email_tokens,
+    cleanup_expired_email_tokens, highest_twic_number, record_notification,
 )
 from email_sender import send_verification_email, send_login_email
 
@@ -262,6 +262,17 @@ class SubscriptionCreate(BaseModel):
 @app.get("/api/subscriptions")
 def list_subscriptions(user=Depends(auth_user), conn=Depends(db)):
     subs = get_subscriptions(conn, user["id"])
+    for sub in subs:
+        row = conn.execute(
+            """SELECT n.twic_number, COUNT(*) as game_count
+               FROM notifications_sent n
+               WHERE n.subscription_id = ?
+               GROUP BY n.twic_number
+               ORDER BY n.twic_number DESC LIMIT 1""",
+            (sub["id"],),
+        ).fetchone()
+        sub["latest_twic"] = row["twic_number"] if row else None
+        sub["latest_game_count"] = row["game_count"] if row else 0
     return {"subscriptions": subs}
 
 
@@ -288,6 +299,21 @@ def create_subscription(req: SubscriptionCreate, user=Depends(auth_user),
         time_control=req.time_control, result=req.result,
         event=req.event,
     )
+
+    # Immediately match against the latest TWIC issue (no email)
+    try:
+        from weekly import match_subscription
+        latest = highest_twic_number(conn)
+        if latest:
+            matches = match_subscription(conn, sub, latest)
+            for g in matches:
+                record_notification(conn, sub["id"], g["id"], latest)
+            conn.commit()
+            log.info("New sub #%d matched %d game(s) in TWIC #%d",
+                     sub["id"], len(matches), latest)
+    except Exception as e:
+        log.warning("Failed to run immediate match for new sub: %s", e)
+
     return {"subscription": sub}
 
 
@@ -308,12 +334,21 @@ def download_subscription_pgn(sub_id: int, user=Depends(auth_user), conn=Depends
     if not sub:
         raise HTTPException(404, "Subscription not found")
 
+    # Get the latest TWIC week for this subscription
+    latest_week = conn.execute(
+        "SELECT MAX(twic_number) as tw FROM notifications_sent WHERE subscription_id = ?",
+        (sub_id,),
+    ).fetchone()
+    if not latest_week or not latest_week["tw"]:
+        raise HTTPException(404, "No matched games found for this subscription")
+
+    twic_num = latest_week["tw"]
     rows = conn.execute(
         """SELECT g.pgn_text FROM games g
            JOIN notifications_sent n ON n.game_id = g.id
-           WHERE n.subscription_id = ?
+           WHERE n.subscription_id = ? AND n.twic_number = ?
            ORDER BY COALESCE(g.white_elo, 0) + COALESCE(g.black_elo, 0) DESC""",
-        (sub_id,),
+        (sub_id, twic_num),
     ).fetchall()
 
     if not rows:
@@ -321,7 +356,7 @@ def download_subscription_pgn(sub_id: int, user=Depends(auth_user), conn=Depends
 
     pgn_content = "\n\n".join(r["pgn_text"] for r in rows if r["pgn_text"])
     label = sub["label"] or f"subscription_{sub_id}"
-    filename = f"{label.replace(' ', '_')}.pgn"
+    filename = f"{label.replace(' ', '_')}_twic{twic_num}.pgn"
 
     return Response(
         content=pgn_content,

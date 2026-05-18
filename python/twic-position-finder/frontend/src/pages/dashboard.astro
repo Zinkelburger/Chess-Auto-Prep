@@ -344,12 +344,17 @@ import Base from '../layouts/Base.astro';
 
       const dlBtn = document.createElement('button');
       dlBtn.className = 'btn btn-outline btn-sm';
-      dlBtn.textContent = 'Download PGN';
+      if (sub.latest_twic && sub.latest_game_count > 0) {
+        dlBtn.textContent = `Download TWIC #${sub.latest_twic} PGN (${sub.latest_game_count} games)`;
+      } else {
+        dlBtn.textContent = 'No games yet';
+        dlBtn.disabled = true;
+      }
       dlBtn.addEventListener('click', () => downloadPgn(sub.id, sub.label));
 
       const delBtn = document.createElement('button');
       delBtn.className = 'sub-action-btn sub-action-delete';
-      delBtn.textContent = 'Delete';
+      delBtn.innerHTML = 'Delete &#128465;';
       delBtn.addEventListener('click', () => deleteSub(sub.id));
 
       actions.appendChild(editBtn);
