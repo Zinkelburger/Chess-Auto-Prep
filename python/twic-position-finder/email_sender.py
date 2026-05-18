@@ -6,10 +6,8 @@ import os
 import boto3
 from botocore.exceptions import ClientError
 
-from lichess import analysis_url_from_fen
-
 SES_REGION = os.getenv("AWS_SES_REGION", "us-east-1")
-FROM_EMAIL = os.getenv("TWIC_FROM_EMAIL", "alerts@chessautoprep.com")
+FROM_EMAIL = os.getenv("TWIC_FROM_EMAIL", "subscriptions@chessautoprep.com")
 SITE_URL = os.getenv("TWIC_SITE_URL", "https://chessautoprep.com")
 
 _ses_client = None
@@ -47,19 +45,7 @@ def _game_card_html(game: dict, lichess_url: str | None = None) -> str:
     result_color = result_colors.get(result, "#555")
     result_safe = _esc(result)
 
-    lichess_btn = ""
-    if lichess_url:
-        lichess_btn = f'''
-        <a href="{html.escape(lichess_url)}" target="_blank"
-           style="display:inline-block;background:#629924;color:#fff;
-                  padding:8px 18px;border-radius:4px;text-decoration:none;
-                  font-weight:bold;font-size:14px;margin-top:8px;">
-          Analyze on Lichess
-        </a>'''
-
-    return f'''
-    <div style="background:#1e1e1e;border:1px solid #333;border-radius:8px;
-                padding:16px;margin-bottom:12px;font-family:monospace;">
+    inner = f'''
       <div style="font-size:16px;margin-bottom:6px;">
         <span style="color:#e8e8e8;">{white}{elo_w}</span>
         <span style="color:#888;"> vs </span>
@@ -74,8 +60,22 @@ def _game_card_html(game: dict, lichess_url: str | None = None) -> str:
       <div style="color:#aaa;font-size:13px;">
         ECO: {eco} &middot; {opening}
         {f' &middot; Reached at ply {game["match_ply"]}' if game.get("match_ply") is not None else ""}
-      </div>
-      {lichess_btn}
+      </div>'''
+
+    if lichess_url:
+        return f'''
+    <a href="{html.escape(lichess_url)}" target="_blank"
+       style="display:block;background:#1e1e1e;border:1px solid #333;border-radius:8px;
+              padding:16px;margin-bottom:12px;font-family:monospace;text-decoration:none;
+              transition:border-color 0.2s;">
+      {inner}
+      <div style="color:#629924;font-size:12px;margin-top:8px;">View on Lichess &rarr;</div>
+    </a>'''
+    else:
+        return f'''
+    <div style="background:#1e1e1e;border:1px solid #333;border-radius:8px;
+                padding:16px;margin-bottom:12px;font-family:monospace;">
+      {inner}
     </div>'''
 
 
@@ -97,25 +97,23 @@ def build_email_html(subscription: dict, games: list[dict],
         sub_desc_parts.append(f"ECO: {_esc(subscription['eco'])}")
     if subscription.get("min_elo"):
         sub_desc_parts.append(f"Min Elo: {subscription['min_elo']}")
-    if subscription.get("exclude_site"):
-        sub_desc_parts.append(f"Excluding: {_esc(subscription['exclude_site'])}")
+    if subscription.get("max_elo"):
+        sub_desc_parts.append(f"Max Elo: {subscription['max_elo']}")
+    # Only show time_control/result if non-default (i.e. user narrowed them)
+    tc = subscription.get("time_control")
+    if tc and tc != "classical,rapid,blitz":
+        sub_desc_parts.append(f"Time control: {_esc(tc)}")
+    res = subscription.get("result")
+    if res and res != "1-0,0-1,1/2-1/2":
+        sub_desc_parts.append(f"Result: {_esc(res)}")
+    if subscription.get("event"):
+        sub_desc_parts.append(f"Event: {_esc(subscription['event'])}")
     sub_desc = " &middot; ".join(sub_desc_parts)
 
     game_cards = ""
     for g in games:
         url = lichess_urls.get(g.get("id"))
         game_cards += _game_card_html(g, url)
-
-    analysis_link = ""
-    if subscription.get("fen"):
-        aurl = analysis_url_from_fen(subscription["fen"])
-        analysis_link = f'''
-        <p style="margin-top:16px;">
-          <a href="{aurl}" target="_blank"
-             style="color:#629924;text-decoration:underline;">
-            Open this position on Lichess Analysis Board
-          </a>
-        </p>'''
 
     manage_qs = f"?token={manage_token}" if manage_token else ""
     manage_link = f'{SITE_URL}/dashboard{manage_qs}'
@@ -152,7 +150,12 @@ def build_email_html(subscription: dict, games: list[dict],
         {_esc(subscription.get("label"), "Untitled")}
       </div>
       <div style="color:#aaa;font-size:13px;margin-top:4px;">{sub_desc}</div>
-      {analysis_link}
+      <p style="margin-top:12px;">
+        <a href="{manage_link}" target="_blank"
+           style="color:#629924;text-decoration:underline;font-size:13px;">
+          Edit this filter in the dashboard
+        </a>
+      </p>
     </div>
 
     <h2 style="color:#fff;font-size:18px;margin-bottom:12px;">
@@ -200,7 +203,7 @@ def build_email_text(subscription: dict, games: list[dict],
         lines.append(f"  {g.get('event','')} | {g.get('site','')} | {g.get('date','')}")
         url = lichess_urls.get(g.get("id"))
         if url:
-            lines.append(f"  Analyze: {url}")
+            lines.append(f"  View on Lichess: {url}")
         lines.append("")
 
     manage_qs = f"?token={manage_token}" if manage_token else ""
