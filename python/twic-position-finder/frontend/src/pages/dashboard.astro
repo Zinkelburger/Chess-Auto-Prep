@@ -19,44 +19,33 @@ import Base from '../layouts/Base.astro';
     <!-- Add subscription form (hidden by default) -->
     <div id="add-form" class="card" style="display:none; margin-bottom:24px;">
       <h2>New Subscription</h2>
-      <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:16px;">
-        Add at least one filter: a FEN position, player name, or ECO code.
-      </p>
       <div id="add-alert" style="display:none;"></div>
       <form id="sub-form">
         <div class="form-row">
-          <label for="sub-label">Label (optional)</label>
-          <input type="text" id="sub-label" placeholder='e.g. "Najdorf games above 2600"' />
+          <label for="dash-sub-label">Label</label>
+          <input type="text" id="dash-sub-label" />
         </div>
-        <div class="form-row">
-          <label for="sub-fen">FEN</label>
-          <input type="text" id="sub-fen" class="mono"
-            placeholder="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" />
-          <div id="dash-fen-board" class="board-preview"></div>
-          <div id="dash-fen-error" class="board-invalid"></div>
-        </div>
-        <div class="form-grid">
-          <div class="form-row">
-            <label for="sub-player">Player name</label>
-            <input type="text" id="sub-player" placeholder="Magnus Carlsen" />
+
+        <!-- Dynamic filters section -->
+        <div class="filters-section">
+          <div class="filters-header">
+            <span class="filters-title">Filters</span>
+            <span class="filters-hint">At least one required</span>
           </div>
-          <div class="form-row">
-            <label for="sub-eco">ECO Code</label>
-            <input type="text" id="sub-eco" placeholder="B90" />
+          <div id="dash-filters-container"></div>
+          <div class="dash-add-filter-wrap">
+            <button type="button" class="btn btn-outline btn-sm" id="dash-add-filter-btn">+ Add filter</button>
+            <div id="dash-filter-menu" class="filter-menu" style="display:none;"></div>
           </div>
         </div>
-        <div class="form-grid">
-          <div class="form-row">
-            <label for="sub-min-elo">Minimum Elo</label>
-            <input type="text" id="sub-min-elo" inputmode="numeric" pattern="[0-9]*" placeholder="2400" />
-          </div>
-          <div class="form-row" style="display:flex; align-items:end; padding-bottom:2px;">
-            <label class="checkbox-label">
-              <input type="checkbox" id="sub-exclude-chess-com" />
-              <span>Exclude online games (i.e. chess.com)</span>
-            </label>
-          </div>
+
+        <div class="form-row" style="display:flex; align-items:end; padding-bottom:2px;">
+          <label class="checkbox-label">
+            <input type="checkbox" id="dash-sub-exclude-chess-com" checked />
+            <span>Exclude online games (i.e. chess.com)</span>
+          </label>
         </div>
+
         <div style="display:flex; gap:10px; margin-top:8px;">
           <button type="submit" class="btn btn-primary">Create Subscription</button>
           <button type="button" class="btn btn-outline" id="cancel-add">Cancel</button>
@@ -83,6 +72,145 @@ import Base from '../layouts/Base.astro';
   function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
     return { 'Authorization': `Bearer ${authToken}`, ...extra };
   }
+
+  // ── Dynamic filter system ──────────────────────────────────────────────
+
+  interface FilterDef {
+    key: string;
+    label: string;
+    inputType: string;
+    inputMode?: string;
+    pattern?: string;
+    mono?: boolean;
+    hasBoardPreview?: boolean;
+  }
+
+  const FILTER_DEFS: FilterDef[] = [
+    { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true },
+    { key: 'player', label: 'Player name', inputType: 'text' },
+    { key: 'eco', label: 'ECO Code', inputType: 'text' },
+    { key: 'min_elo', label: 'Minimum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*' },
+    { key: 'max_elo', label: 'Maximum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*' },
+    { key: 'event', label: 'Event name', inputType: 'text' },
+  ];
+
+  const dashActiveFilters: Set<string> = new Set();
+  const dashContainer = document.getElementById('dash-filters-container')!;
+  const dashAddBtn = document.getElementById('dash-add-filter-btn')!;
+  const dashFilterMenu = document.getElementById('dash-filter-menu')!;
+
+  function dashBuildFilterRow(def: FilterDef): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'filter-row';
+    row.dataset.filterKey = def.key;
+
+    const body = document.createElement('div');
+    body.className = 'filter-body';
+
+    const lbl = document.createElement('label');
+    lbl.textContent = def.label;
+    lbl.setAttribute('for', `dash-sub-${def.key.replace('_', '-')}`);
+    body.appendChild(lbl);
+
+    const input = document.createElement('input');
+    input.type = def.inputType;
+    input.id = `dash-sub-${def.key.replace('_', '-')}`;
+    if (def.mono) input.className = 'mono';
+    if (def.inputMode) input.inputMode = def.inputMode;
+    if (def.pattern) input.pattern = def.pattern;
+    input.autocomplete = 'off';
+    body.appendChild(input);
+
+    if (def.hasBoardPreview) {
+      const board = document.createElement('div');
+      board.id = 'dash-fen-board';
+      board.className = 'board-preview';
+      body.appendChild(board);
+      const err = document.createElement('div');
+      err.id = 'dash-fen-error';
+      err.className = 'board-invalid';
+      body.appendChild(err);
+    }
+
+    row.appendChild(body);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'filter-remove';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.title = 'Remove filter';
+    removeBtn.addEventListener('click', () => dashRemoveFilter(def.key));
+    row.appendChild(removeBtn);
+
+    return row;
+  }
+
+  function dashAddFilter(key: string) {
+    if (dashActiveFilters.has(key)) return;
+    const def = FILTER_DEFS.find(d => d.key === key);
+    if (!def) return;
+
+    dashActiveFilters.add(key);
+    const row = dashBuildFilterRow(def);
+    dashContainer.appendChild(row);
+
+    if (def.hasBoardPreview) {
+      const fenInput = document.getElementById('dash-sub-fen') as HTMLInputElement;
+      const fenBoard = document.getElementById('dash-fen-board')!;
+      const fenError = document.getElementById('dash-fen-error')!;
+      fenInput.addEventListener('input', () => (window as any).renderBoardPreview(fenInput.value, fenBoard, fenError));
+    }
+
+    dashUpdateMenuState();
+    dashHideMenu();
+  }
+
+  function dashRemoveFilter(key: string) {
+    dashActiveFilters.delete(key);
+    const row = dashContainer.querySelector(`[data-filter-key="${key}"]`);
+    if (row) row.remove();
+    dashUpdateMenuState();
+  }
+
+  function dashUpdateMenuState() {
+    dashFilterMenu.innerHTML = '';
+    let anyAvailable = false;
+    for (const def of FILTER_DEFS) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'filter-menu-item';
+      btn.textContent = def.label;
+      if (dashActiveFilters.has(def.key)) {
+        btn.disabled = true;
+      } else {
+        anyAvailable = true;
+        btn.addEventListener('click', () => dashAddFilter(def.key));
+      }
+      dashFilterMenu.appendChild(btn);
+    }
+    dashAddBtn.style.display = anyAvailable ? '' : 'none';
+  }
+
+  function dashShowMenu() { dashFilterMenu.style.display = 'block'; }
+  function dashHideMenu() { dashFilterMenu.style.display = 'none'; }
+
+  dashAddBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (dashFilterMenu.style.display === 'none') {
+      dashUpdateMenuState();
+      dashShowMenu();
+    } else {
+      dashHideMenu();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!(e.target as Element).closest('.dash-add-filter-wrap')) dashHideMenu();
+  });
+
+  dashAddFilter('fen');
+
+  // ── Auth & init ──────────────────────────────────────────────────────
 
   async function init() {
     const gate = document.getElementById('auth-gate')!;
@@ -225,10 +353,7 @@ import Base from '../layouts/Base.astro';
     }
   }
 
-  const dashFenInput = document.getElementById('sub-fen') as HTMLInputElement;
-  const dashFenBoard = document.getElementById('dash-fen-board')!;
-  const dashFenError = document.getElementById('dash-fen-error')!;
-  dashFenInput.addEventListener('input', () => renderBoardPreview(dashFenInput.value, dashFenBoard, dashFenError));
+  // ── Add form ──────────────────────────────────────────────────────
 
   document.getElementById('show-add-form')!.addEventListener('click', () => {
     document.getElementById('add-form')!.style.display = 'block';
@@ -241,20 +366,28 @@ import Base from '../layouts/Base.astro';
   document.getElementById('sub-form')!.addEventListener('submit', async (e) => {
     e.preventDefault();
     const alertEl = document.getElementById('add-alert')!;
-    const val = (id: string) => (document.getElementById(id) as HTMLInputElement).value.trim() || undefined;
-    const numVal = (id: string) => {
-      const v = (document.getElementById(id) as HTMLInputElement).value.trim();
+
+    const safeVal = (id: string) => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      return el ? el.value.trim() || undefined : undefined;
+    };
+    const safeNumVal = (id: string) => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (!el) return undefined;
+      const v = el.value.trim();
       return v ? parseInt(v) : undefined;
     };
 
-    const excludeChessCom = (document.getElementById('sub-exclude-chess-com') as HTMLInputElement).checked;
+    const excludeChessCom = (document.getElementById('dash-sub-exclude-chess-com') as HTMLInputElement).checked;
 
     const body: any = {
-      label: val('sub-label') || '',
-      fen: val('sub-fen'),
-      player: val('sub-player'),
-      eco: val('sub-eco'),
-      min_elo: numVal('sub-min-elo'),
+      label: safeVal('dash-sub-label') || '',
+      fen: safeVal('dash-sub-fen'),
+      player: safeVal('dash-sub-player'),
+      eco: safeVal('dash-sub-eco'),
+      min_elo: safeNumVal('dash-sub-min-elo'),
+      max_elo: safeNumVal('dash-sub-max-elo'),
+      event: safeVal('dash-sub-event'),
       exclude_site: excludeChessCom ? 'chess.com' : undefined,
     };
 
@@ -270,6 +403,10 @@ import Base from '../layouts/Base.astro';
         alertEl.className = 'alert alert-success';
         alertEl.textContent = 'Subscription created!';
         (document.getElementById('sub-form') as HTMLFormElement).reset();
+        // Reset filters to default
+        dashActiveFilters.clear();
+        dashContainer.innerHTML = '';
+        dashAddFilter('fen');
         setTimeout(() => { document.getElementById('add-form')!.style.display = 'none'; alertEl.style.display = 'none'; }, 1200);
         const subsRes = await fetch(`${API}/api/subscriptions`, { headers: authHeaders() });
         const subsData = await subsRes.json();

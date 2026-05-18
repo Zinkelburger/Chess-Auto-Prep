@@ -5,7 +5,7 @@ import Base from '../layouts/Base.astro';
   <h1>TWIC Notifications</h1>
   <p class="subtitle">Get notified when games from
     <a href="https://theweekinchess.com/" target="_blank" style="color:var(--accent); text-decoration:none;">The Week in Chess</a>
-    reach certain positions. Filter by player, Elo, or ECO code.
+    match your filters.
   </p>
 
   <section class="card">
@@ -13,41 +13,23 @@ import Base from '../layouts/Base.astro';
     <form id="subscribe-form">
       <div class="form-row">
         <label for="sub-email">Email address</label>
-        <input type="email" id="sub-email" name="email" placeholder="you@example.com" required />
+        <input type="email" id="sub-email" name="email" required />
       </div>
       <div class="form-row">
-        <label for="sub-label">Label (optional)</label>
-        <input type="text" id="sub-label" placeholder='e.g. "Najdorf games above 2600"' />
+        <label for="sub-label">Label</label>
+        <input type="text" id="sub-label" />
       </div>
-      <div class="form-row">
-        <label for="sub-fen">FEN</label>
-        <input type="text" id="sub-fen" class="mono"
-          placeholder="rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1" />
-        <div id="fen-board" class="board-preview"></div>
-        <div id="fen-error" class="board-invalid"></div>
-      </div>
-      <div class="form-grid">
-        <div class="form-row">
-          <label for="sub-player">Player name <span style="color:var(--text-dim); font-weight:normal;">(search by last name)</span></label>
-          <div style="position:relative;">
-            <input type="text" id="sub-player" placeholder="Carlsen" autocomplete="off" />
-            <span id="player-status" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:1.1rem; display:none;"></span>
-          </div>
-          <div id="player-matches" style="display:none; margin-top:6px; font-size:0.85rem; color:var(--text-dim); max-height:120px; overflow-y:auto;"></div>
+
+      <!-- Dynamic filters section -->
+      <div class="filters-section">
+        <div class="filters-header">
+          <span class="filters-title">Filters</span>
+          <span class="filters-hint">At least one required</span>
         </div>
-        <div class="form-row">
-          <label for="sub-eco">ECO Code</label>
-          <input type="text" id="sub-eco" placeholder="B90" />
-        </div>
-      </div>
-      <div class="form-grid">
-        <div class="form-row">
-          <label for="sub-min-elo">Minimum Elo</label>
-          <input type="text" id="sub-min-elo" inputmode="numeric" pattern="[0-9]*" placeholder="2400" />
-        </div>
-        <div class="form-row">
-          <label for="sub-max-elo">Maximum Elo</label>
-          <input type="text" id="sub-max-elo" inputmode="numeric" pattern="[0-9]*" placeholder="2800" />
+        <div id="filters-container"></div>
+        <div class="add-filter-wrap">
+          <button type="button" class="btn btn-outline btn-sm" id="add-filter-btn">+ Add filter</button>
+          <div id="filter-menu" class="filter-menu" style="display:none;"></div>
         </div>
       </div>
 
@@ -69,18 +51,9 @@ import Base from '../layouts/Base.astro';
         </div>
       </div>
 
-      <div class="form-row">
-        <label for="sub-event">Event name <span style="color:var(--text-dim); font-weight:normal;">(optional, e.g. "Grand Chess Tour")</span></label>
-        <div style="position:relative;">
-          <input type="text" id="sub-event" placeholder="Grand Chess Tour" autocomplete="off" />
-          <span id="event-status" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:1.1rem; display:none;"></span>
-        </div>
-        <div id="event-matches" style="display:none; margin-top:6px; font-size:0.85rem; color:var(--text-dim); max-height:120px; overflow-y:auto;"></div>
-      </div>
-
       <div class="form-row" style="display:flex; align-items:end; padding-bottom:2px;">
         <label class="checkbox-label">
-          <input type="checkbox" id="sub-exclude-chess-com" />
+          <input type="checkbox" id="sub-exclude-chess-com" checked />
           <span>Exclude online games (i.e. chess.com)</span>
         </label>
       </div>
@@ -98,7 +71,7 @@ import Base from '../layouts/Base.astro';
       </p>
       <form id="login-form" style="display:flex; gap:10px; align-items:end;">
         <div style="flex:1;">
-          <input type="email" id="login-email" placeholder="you@example.com" required />
+          <input type="email" id="login-email" required />
         </div>
         <button type="submit" class="btn btn-outline btn-sm">Send Login Link</button>
       </form>
@@ -112,23 +85,191 @@ import Base from '../layouts/Base.astro';
 <script>
   const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
 
-  const fenInput = document.getElementById('sub-fen') as HTMLInputElement;
-  const fenBoard = document.getElementById('fen-board')!;
-  const fenError = document.getElementById('fen-error')!;
-  fenInput.addEventListener('input', () => renderBoardPreview(fenInput.value, fenBoard, fenError));
+  interface FilterDef {
+    key: string;
+    label: string;
+    inputType: string;
+    inputMode?: string;
+    pattern?: string;
+    mono?: boolean;
+    hasAutocomplete?: { jsonUrl: string; statusId: string; matchesId: string; acLabel: string };
+    hasBoardPreview?: boolean;
+  }
+
+  const FILTER_DEFS: FilterDef[] = [
+    { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true },
+    { key: 'player', label: 'Player name', inputType: 'text', hasAutocomplete: { jsonUrl: '/players.json', statusId: 'player-status', matchesId: 'player-matches', acLabel: 'player' } },
+    { key: 'eco', label: 'ECO Code', inputType: 'text' },
+    { key: 'min_elo', label: 'Minimum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*' },
+    { key: 'max_elo', label: 'Maximum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*' },
+    { key: 'event', label: 'Event name', inputType: 'text', hasAutocomplete: { jsonUrl: '/events.json', statusId: 'event-status', matchesId: 'event-matches', acLabel: 'event' } },
+  ];
+
+  const activeFilters: Set<string> = new Set();
+  const container = document.getElementById('filters-container')!;
+  const addBtn = document.getElementById('add-filter-btn')!;
+  const filterMenu = document.getElementById('filter-menu')!;
+
+  function buildFilterRow(def: FilterDef): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'filter-row';
+    row.dataset.filterKey = def.key;
+
+    const body = document.createElement('div');
+    body.className = 'filter-body';
+
+    const lbl = document.createElement('label');
+    lbl.textContent = def.label;
+    lbl.setAttribute('for', `sub-${def.key.replace('_', '-')}`);
+    body.appendChild(lbl);
+
+    const inputWrap = document.createElement('div');
+    inputWrap.style.position = 'relative';
+
+    const input = document.createElement('input');
+    input.type = def.inputType;
+    input.id = `sub-${def.key.replace('_', '-')}`;
+    if (def.mono) input.className = 'mono';
+    if (def.inputMode) input.inputMode = def.inputMode;
+    if (def.pattern) input.pattern = def.pattern;
+    input.autocomplete = 'off';
+    inputWrap.appendChild(input);
+
+    if (def.hasAutocomplete) {
+      const status = document.createElement('span');
+      status.id = def.hasAutocomplete.statusId;
+      status.style.cssText = 'position:absolute; right:10px; top:50%; transform:translateY(-50%); font-size:1.1rem; display:none;';
+      inputWrap.appendChild(status);
+    }
+
+    body.appendChild(inputWrap);
+
+    if (def.hasAutocomplete) {
+      const matches = document.createElement('div');
+      matches.id = def.hasAutocomplete.matchesId;
+      matches.style.cssText = 'display:none; margin-top:6px; font-size:0.85rem; color:var(--text-dim); max-height:120px; overflow-y:auto;';
+      body.appendChild(matches);
+    }
+
+    if (def.hasBoardPreview) {
+      const board = document.createElement('div');
+      board.id = 'fen-board';
+      board.className = 'board-preview';
+      body.appendChild(board);
+      const err = document.createElement('div');
+      err.id = 'fen-error';
+      err.className = 'board-invalid';
+      body.appendChild(err);
+    }
+
+    row.appendChild(body);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'filter-remove';
+    removeBtn.innerHTML = '&times;';
+    removeBtn.title = 'Remove filter';
+    removeBtn.addEventListener('click', () => removeFilter(def.key));
+    row.appendChild(removeBtn);
+
+    return row;
+  }
+
+  function addFilter(key: string) {
+    if (activeFilters.has(key)) return;
+    const def = FILTER_DEFS.find(d => d.key === key);
+    if (!def) return;
+
+    activeFilters.add(key);
+    const row = buildFilterRow(def);
+    container.appendChild(row);
+
+    if (def.hasBoardPreview) {
+      const fenInput = document.getElementById('sub-fen') as HTMLInputElement;
+      const fenBoard = document.getElementById('fen-board')!;
+      const fenError = document.getElementById('fen-error')!;
+      fenInput.addEventListener('input', () => (window as any).renderBoardPreview(fenInput.value, fenBoard, fenError));
+    }
+
+    if (def.hasAutocomplete) {
+      setupAutocomplete(
+        def.hasAutocomplete.jsonUrl,
+        `sub-${def.key.replace('_', '-')}`,
+        def.hasAutocomplete.statusId,
+        def.hasAutocomplete.matchesId,
+        def.hasAutocomplete.acLabel,
+      );
+    }
+
+    updateMenuState();
+    hideMenu();
+  }
+
+  function removeFilter(key: string) {
+    activeFilters.delete(key);
+    const row = container.querySelector(`[data-filter-key="${key}"]`);
+    if (row) row.remove();
+    updateMenuState();
+  }
+
+  function updateMenuState() {
+    filterMenu.innerHTML = '';
+    let anyAvailable = false;
+    for (const def of FILTER_DEFS) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'filter-menu-item';
+      btn.textContent = def.label;
+      if (activeFilters.has(def.key)) {
+        btn.disabled = true;
+      } else {
+        anyAvailable = true;
+        btn.addEventListener('click', () => addFilter(def.key));
+      }
+      filterMenu.appendChild(btn);
+    }
+    addBtn.style.display = anyAvailable ? '' : 'none';
+  }
+
+  function showMenu() { filterMenu.style.display = 'block'; }
+  function hideMenu() { filterMenu.style.display = 'none'; }
+
+  addBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (filterMenu.style.display === 'none') {
+      updateMenuState();
+      showMenu();
+    } else {
+      hideMenu();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!(e.target as Element).closest('.add-filter-wrap')) hideMenu();
+  });
+
+  // Add FEN by default
+  addFilter('fen');
+
+  // ── Form submission ──────────────────────────────────────────────────
 
   document.getElementById('subscribe-form')!.addEventListener('submit', async (e) => {
     e.preventDefault();
     const alertEl = document.getElementById('subscribe-alert')!;
     const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
-    const val = (id: string) => (document.getElementById(id) as HTMLInputElement).value.trim() || undefined;
-    const numVal = (id: string) => {
-      const v = (document.getElementById(id) as HTMLInputElement).value.trim();
+
+    const safeVal = (id: string) => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      return el ? el.value.trim() || undefined : undefined;
+    };
+    const safeNumVal = (id: string) => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (!el) return undefined;
+      const v = el.value.trim();
       return v ? parseInt(v) : undefined;
     };
 
     const turnstileResponse = (window as any).turnstile?.getResponse() || '';
-
     const excludeChessCom = (document.getElementById('sub-exclude-chess-com') as HTMLInputElement).checked;
 
     const tcParts: string[] = [];
@@ -146,17 +287,20 @@ import Base from '../layouts/Base.astro';
     const body: Record<string, unknown> = {
       email: (document.getElementById('sub-email') as HTMLInputElement).value.trim(),
       cf_turnstile_token: turnstileResponse,
-      label: val('sub-label') || '',
-      fen: val('sub-fen'),
-      player: val('sub-player'),
-      eco: val('sub-eco'),
-      min_elo: numVal('sub-min-elo'),
-      max_elo: numVal('sub-max-elo'),
+      label: safeVal('sub-label') || '',
+      fen: safeVal('sub-fen'),
+      player: safeVal('sub-player'),
+      eco: safeVal('sub-eco'),
+      min_elo: safeNumVal('sub-min-elo'),
+      max_elo: safeNumVal('sub-max-elo'),
       time_control: timeControl,
       result: result,
-      event: val('sub-event'),
+      event: safeVal('sub-event'),
       exclude_site: excludeChessCom ? 'chess.com' : undefined,
     };
+
+    console.log('[TWIC Subscribe] Submitting to', `${API}/api/subscribe`);
+    console.log('[TWIC Subscribe] Payload:', JSON.stringify(body, null, 2));
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'Submitting...';
@@ -168,18 +312,23 @@ import Base from '../layouts/Base.astro';
         body: JSON.stringify(body),
       });
       const data = await res.json();
+      console.log('[TWIC Subscribe] Response:', res.status, data);
       alertEl.style.display = 'block';
       if (res.ok) {
         alertEl.className = 'alert alert-success';
         alertEl.textContent = data.message;
         (document.getElementById('subscribe-form') as HTMLFormElement).reset();
+        activeFilters.clear();
+        container.innerHTML = '';
+        addFilter('fen');
         if ((window as any).turnstile) (window as any).turnstile.reset();
       } else {
         alertEl.className = 'alert alert-error';
         alertEl.textContent = data.detail || 'Something went wrong';
         if ((window as any).turnstile) (window as any).turnstile.reset();
       }
-    } catch {
+    } catch (err) {
+      console.error('[TWIC Subscribe] Network error:', err);
       alertEl.style.display = 'block';
       alertEl.className = 'alert alert-error';
       alertEl.textContent = 'Could not reach the server.';
@@ -189,9 +338,8 @@ import Base from '../layouts/Base.astro';
     }
   });
 
-  // Static autocomplete (shipped with the site, no API calls).
-  // Splits the query into words so "Magnus Carlsen" matches "Carlsen,Magnus"
-  // and "Carlsen" alone matches "Carlsen,M".
+  // ── Autocomplete ──────────────────────────────────────────────────────
+
   function setupAutocomplete(
     jsonUrl: string,
     inputId: string,
@@ -246,7 +394,6 @@ import Base from '../layouts/Base.astro';
           status.title = `No matching ${label}s in TWIC data`;
           matchBox.style.display = 'block';
           if (label === 'player' && words.length > 1) {
-            // Try just the longest word (likely the last name) as a fallback hint
             const longest = words.reduce((a, b) => a.length >= b.length ? a : b);
             const fallback = dataset.filter(e => e.toLowerCase().includes(longest));
             if (fallback.length > 0) {
@@ -271,8 +418,7 @@ import Base from '../layouts/Base.astro';
     });
   }
 
-  setupAutocomplete('/events.json', 'sub-event', 'event-status', 'event-matches', 'event');
-  setupAutocomplete('/players.json', 'sub-player', 'player-status', 'player-matches', 'player');
+  // ── Login form ──────────────────────────────────────────────────────
 
   document.getElementById('login-form')!.addEventListener('submit', async (e) => {
     e.preventDefault();
