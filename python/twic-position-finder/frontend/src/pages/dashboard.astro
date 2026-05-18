@@ -330,14 +330,47 @@ import Base from '../layouts/Base.astro';
       }
       info.appendChild(tagsDiv);
 
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-danger btn-sm';
-      btn.textContent = 'Delete';
-      btn.addEventListener('click', () => deleteSub(sub.id));
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display:flex; flex-direction:column; gap:6px; flex-shrink:0;';
+
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'btn btn-outline btn-sm';
+      dlBtn.textContent = 'Download PGN';
+      dlBtn.addEventListener('click', () => downloadPgn(sub.id, sub.label));
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-danger btn-sm';
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', () => deleteSub(sub.id));
+
+      actions.appendChild(dlBtn);
+      actions.appendChild(delBtn);
 
       card.appendChild(info);
-      card.appendChild(btn);
+      card.appendChild(actions);
       list.appendChild(card);
+    }
+  }
+
+  async function downloadPgn(id: number, label: string) {
+    try {
+      const res = await fetch(`${API}/api/subscriptions/${id}/pgn`, { headers: authHeaders() });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.detail || 'No games available for download yet.');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(label || 'subscription').replace(/\s+/g, '_')}.pgn`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Could not download PGN. Try again later.');
     }
   }
 

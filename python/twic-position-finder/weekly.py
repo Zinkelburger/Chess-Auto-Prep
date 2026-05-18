@@ -138,14 +138,27 @@ def _run_match_and_notify(db, new_issues: list[int], dry_run: bool):
                 db, sub["user_id"], "unsubscribe",
                 subscription_id=sub["id"],
             )
-            subject = (f"TWIC #{twic_label}: {len(games)} game(s) matched"
+
+            # Sort by highest Elo (max of white/black), descending
+            def _max_elo(g):
+                w = g.get("white_elo") or 0
+                b = g.get("black_elo") or 0
+                return max(int(w) if w else 0, int(b) if b else 0)
+
+            sorted_games = sorted(games, key=_max_elo, reverse=True)
+            email_games = sorted_games[:10]
+            total_count = len(games)
+
+            subject = (f"TWIC #{twic_label}: {total_count} game(s) matched"
                        f" — {sub.get('label') or 'Position Alert'}")
-            html = build_email_html(sub, games, lichess_urls,
+            html = build_email_html(sub, email_games, lichess_urls,
                                     manage_token=manage_token,
-                                    unsub_token=unsub_token)
-            text = build_email_text(sub, games, lichess_urls,
+                                    unsub_token=unsub_token,
+                                    total_matches=total_count)
+            text = build_email_text(sub, email_games, lichess_urls,
                                     manage_token=manage_token,
-                                    unsub_token=unsub_token)
+                                    unsub_token=unsub_token,
+                                    total_matches=total_count)
 
             if dry_run:
                 log.info("  [DRY RUN] Would email %s: %s", email, subject)
@@ -156,6 +169,7 @@ def _run_match_and_notify(db, new_issues: list[int], dry_run: bool):
                 ok = send_ses_email(email, subject, html, text)
                 if ok:
                     log.info("  Emailed %s: %s", email, subject)
+                    # Record notifications for ALL matches, not just emailed ones
                     for g in games:
                         record_notification(
                             db, sub["id"], g["id"],
