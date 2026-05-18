@@ -120,15 +120,21 @@ def validate_fen(fen: str) -> None:
     chess.Board(fen)
 
 
+_initialized_dbs: set[str] = set()
+
+
 def get_db(path: Path = DEFAULT_DB) -> sqlite3.Connection:
-    db = sqlite3.connect(str(path), timeout=30)
+    db = sqlite3.connect(str(path), timeout=30, check_same_thread=False)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA synchronous=NORMAL")
     db.execute("PRAGMA busy_timeout=30000")
     db.execute("PRAGMA foreign_keys=ON")
-    db.executescript(SCHEMA)
-    _run_migrations(db)
+    key = str(path)
+    if key not in _initialized_dbs:
+        db.executescript(SCHEMA)
+        _run_migrations(db)
+        _initialized_dbs.add(key)
     return db
 
 
