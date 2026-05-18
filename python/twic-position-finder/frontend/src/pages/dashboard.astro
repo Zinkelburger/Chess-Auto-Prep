@@ -83,14 +83,15 @@ import Base from '../layouts/Base.astro';
     pattern?: string;
     mono?: boolean;
     hasBoardPreview?: boolean;
+    tooltip?: string;
   }
 
   const FILTER_DEFS: FilterDef[] = [
     { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true },
     { key: 'player', label: 'Player name', inputType: 'text' },
     { key: 'eco', label: 'ECO Code', inputType: 'text' },
-    { key: 'min_elo', label: 'Minimum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*' },
-    { key: 'max_elo', label: 'Maximum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*' },
+    { key: 'min_elo', label: 'Minimum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*', tooltip: 'At least one player must be at or above this rating' },
+    { key: 'max_elo', label: 'Maximum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*', tooltip: 'Both players must be at or below this rating' },
     { key: 'event', label: 'Event name', inputType: 'text' },
   ];
 
@@ -108,8 +109,12 @@ import Base from '../layouts/Base.astro';
     body.className = 'filter-body';
 
     const lbl = document.createElement('label');
-    lbl.textContent = def.label;
     lbl.setAttribute('for', `dash-sub-${def.key.replace('_', '-')}`);
+    if (def.tooltip) {
+      lbl.innerHTML = `${def.label} <span class="tooltip-trigger" title="${def.tooltip}">?</span>`;
+    } else {
+      lbl.textContent = def.label;
+    }
     body.appendChild(lbl);
 
     const input = document.createElement('input');
@@ -310,7 +315,7 @@ import Base from '../layouts/Base.astro';
       card.appendChild(h3);
 
       const tagsDiv = document.createElement('div');
-      tagsDiv.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;';
+      tagsDiv.style.cssText = 'display:flex; flex-direction:column; gap:4px; margin-bottom:12px;';
       const tagEntries: [string, string][] = [];
       if (sub.fen) tagEntries.push(['FEN', sub.fen]);
       if (sub.player) tagEntries.push(['Player', sub.player]);
@@ -321,10 +326,10 @@ import Base from '../layouts/Base.astro';
       if (sub.max_elo) tagEntries.push(['Max Elo', String(sub.max_elo)]);
       if (sub.event) tagEntries.push(['Event', sub.event]);
       for (const [label, val] of tagEntries) {
-        const tag = document.createElement('span');
-        tag.className = 'tag';
-        tag.textContent = `${label}: ${val}`;
-        tagsDiv.appendChild(tag);
+        const row = document.createElement('div');
+        row.style.cssText = 'font-size:0.82rem; color:var(--text-dim); font-family:var(--mono);';
+        row.innerHTML = `<span style="color:var(--text);font-weight:500;">${label}:</span> ${val}`;
+        tagsDiv.appendChild(row);
       }
       card.appendChild(tagsDiv);
 
