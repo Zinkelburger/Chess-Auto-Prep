@@ -7,6 +7,7 @@ from pathlib import Path
 
 import requests as http_requests
 from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
@@ -296,6 +297,37 @@ def remove_subscription(sub_id: int, user=Depends(auth_user), conn=Depends(db)):
     if not ok:
         raise HTTPException(404, "Subscription not found")
     return {"status": "deleted"}
+
+
+@app.get("/api/subscriptions/{sub_id}/pgn")
+def download_subscription_pgn(sub_id: int, user=Depends(auth_user), conn=Depends(db)):
+    sub = conn.execute(
+        "SELECT * FROM subscriptions WHERE id = ? AND user_id = ?",
+        (sub_id, user["id"]),
+    ).fetchone()
+    if not sub:
+        raise HTTPException(404, "Subscription not found")
+
+    rows = conn.execute(
+        """SELECT g.pgn_text FROM games g
+           JOIN notifications_sent n ON n.game_id = g.id
+           WHERE n.subscription_id = ?
+           ORDER BY COALESCE(g.white_elo, 0) + COALESCE(g.black_elo, 0) DESC""",
+        (sub_id,),
+    ).fetchall()
+
+    if not rows:
+        raise HTTPException(404, "No matched games found for this subscription")
+
+    pgn_content = "\n\n".join(r["pgn_text"] for r in rows if r["pgn_text"])
+    label = sub["label"] or f"subscription_{sub_id}"
+    filename = f"{label.replace(' ', '_')}.pgn"
+
+    return Response(
+        content=pgn_content,
+        media_type="application/x-chess-pgn",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 class UnsubscribeRequest(BaseModel):

@@ -82,8 +82,10 @@ def _game_card_html(game: dict, lichess_url: str | None = None) -> str:
 def build_email_html(subscription: dict, games: list[dict],
                      lichess_urls: dict[int, str],
                      manage_token: str | None = None,
-                     unsub_token: str | None = None) -> str:
+                     unsub_token: str | None = None,
+                     total_matches: int | None = None) -> str:
     """Build a full HTML email body for a subscription match."""
+    total_matches = total_matches or len(games)
     sub_desc_parts = []
     if subscription.get("fen"):
         sub_desc_parts.append(f"Position: <code>{_esc(subscription['fen'])}</code>")
@@ -129,6 +131,16 @@ def build_email_html(subscription: dict, games: list[dict],
         Unsubscribe from this alert
       </a>'''
 
+    showing_note = ""
+    if total_matches > len(games):
+        showing_note = f'''
+    <p style="color:#aaa;font-size:13px;margin-bottom:16px;text-align:center;">
+      Showing top {len(games)} by rating.
+      <a href="{manage_link}" style="color:#629924;text-decoration:underline;">
+        Download all {total_matches} games from your dashboard
+      </a>
+    </p>'''
+
     return f'''<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
@@ -140,7 +152,7 @@ def build_email_html(subscription: dict, games: list[dict],
         TWIC Position Alert
       </h1>
       <p style="color:#888;font-size:14px;margin:4px 0 0;">
-        {len(games)} new game{"s" if len(games) != 1 else ""} matched your subscription
+        {total_matches} new game{"s" if total_matches != 1 else ""} matched your subscription
       </p>
     </div>
 
@@ -162,6 +174,7 @@ def build_email_html(subscription: dict, games: list[dict],
       Matched Games
     </h2>
 
+    {showing_note}
     {game_cards}
 
     <div style="text-align:center;margin-top:32px;padding-top:16px;
@@ -183,9 +196,11 @@ def build_email_html(subscription: dict, games: list[dict],
 def build_email_text(subscription: dict, games: list[dict],
                      lichess_urls: dict[int, str],
                      manage_token: str | None = None,
-                     unsub_token: str | None = None) -> str:
+                     unsub_token: str | None = None,
+                     total_matches: int | None = None) -> str:
     """Build a plain-text fallback for the email."""
-    lines = [f"TWIC Position Alert — {len(games)} game(s) matched\n"]
+    total_matches = total_matches or len(games)
+    lines = [f"TWIC Position Alert — {total_matches} game(s) matched\n"]
 
     if subscription.get("label"):
         lines.append(f"Subscription: {subscription['label']}")
@@ -194,6 +209,10 @@ def build_email_text(subscription: dict, games: list[dict],
     if subscription.get("player"):
         lines.append(f"Player: {subscription['player']}")
     lines.append("")
+
+    if total_matches > len(games):
+        lines.append(f"Showing top {len(games)} by rating. "
+                     f"Download all {total_matches} from your dashboard.\n")
 
     for g in games:
         elo_w = f" ({g['white_elo']})" if g.get('white_elo') else ""
