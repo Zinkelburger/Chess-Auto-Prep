@@ -285,6 +285,105 @@ const currentPath = Astro.url.pathname;
     font-family: var(--mono);
   }
 
+  /* ── Filter rows (dynamic add/remove) ──────────────────────────── */
+
+  .filters-section {
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    background: rgba(0,0,0,0.15);
+  }
+  .filters-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .filters-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .filters-hint {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+  }
+  .filter-row {
+    display: flex;
+    align-items: start;
+    gap: 8px;
+    margin-bottom: 12px;
+    animation: filterIn 0.15s ease-out;
+  }
+  @keyframes filterIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .filter-row .filter-body {
+    flex: 1;
+  }
+  .filter-row .filter-body label {
+    margin-bottom: 4px;
+  }
+  .filter-remove {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 6px;
+    margin-top: 22px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .filter-remove:hover {
+    color: var(--danger);
+    background: rgba(224, 82, 82, 0.1);
+  }
+  .add-filter-wrap,
+  .dash-add-filter-wrap {
+    position: relative;
+  }
+  .filter-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 0;
+    min-width: 180px;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .filter-menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 0.85rem;
+    padding: 8px 14px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: background 0.1s;
+  }
+  .filter-menu-item:hover {
+    background: rgba(255,255,255,0.05);
+  }
+  .filter-menu-item:disabled {
+    color: var(--text-dim);
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .filter-menu-item:disabled:hover {
+    background: none;
+  }
+
   /* ── Board preview (FEN input) ──────────────────────────────────── */
 
   .board-preview {
