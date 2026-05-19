@@ -154,10 +154,22 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
     existing = get_user_by_email(conn, req.email)
 
     if existing and existing.get("verified"):
+        if count_user_subscriptions(conn, existing["id"]) >= MAX_SUBSCRIPTIONS:
+            raise HTTPException(400, f"Maximum of {MAX_SUBSCRIPTIONS} subscriptions reached. "
+                                     "Use your dashboard to manage existing ones.")
+        add_subscription(
+            conn, existing["id"],
+            label=req.label, fen=req.fen, player=req.player,
+            white=req.white, black=req.black,
+            exclude_site=req.exclude_site, site=req.site,
+            min_elo=req.min_elo, max_elo=req.max_elo, eco=req.eco,
+            time_control=req.time_control, result=req.result,
+            event=req.event, active=True,
+        )
         login_token = create_email_token(conn, existing["id"], "login")
         send_login_email(existing["email"], login_token)
-        return {"status": "already_verified",
-                "message": "You're already subscribed. Check your email for a link to manage your subscriptions."}
+        return {"status": "subscription_added",
+                "message": "Subscription added! Check your email for a link to manage all your subscriptions."}
 
     user = create_user(conn, req.email)
     add_subscription(
@@ -262,17 +274,19 @@ class SubscriptionCreate(BaseModel):
 @app.get("/api/subscriptions")
 def list_subscriptions(user=Depends(auth_user), conn=Depends(db)):
     subs = get_subscriptions(conn, user["id"])
+    latest_twic = highest_twic_number(conn)
     for sub in subs:
-        row = conn.execute(
+        rows = conn.execute(
             """SELECT n.twic_number, COUNT(*) as game_count
                FROM notifications_sent n
                WHERE n.subscription_id = ?
                GROUP BY n.twic_number
-               ORDER BY n.twic_number DESC LIMIT 1""",
+               ORDER BY n.twic_number DESC LIMIT 2""",
             (sub["id"],),
-        ).fetchone()
-        sub["latest_twic"] = row["twic_number"] if row else None
-        sub["latest_game_count"] = row["game_count"] if row else 0
+        ).fetchall()
+        sub["recent_issues"] = [{"twic": r["twic_number"], "games": r["game_count"]}
+                                for r in rows]
+        sub["latest_twic_scanned"] = latest_twic
     return {"subscriptions": subs}
 
 

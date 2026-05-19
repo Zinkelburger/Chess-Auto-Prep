@@ -352,15 +352,37 @@ import Base from '../layouts/Base.astro';
       editBtn.title = 'Edit subscription';
       editBtn.addEventListener('click', () => editSub(sub));
 
-      const dlBtn = document.createElement('button');
-      dlBtn.className = 'btn btn-outline btn-sm';
-      if (sub.latest_twic && sub.latest_game_count > 0) {
-        dlBtn.textContent = `Download TWIC #${sub.latest_twic} PGN (${sub.latest_game_count} games)`;
+      const issuesDiv = document.createElement('div');
+      issuesDiv.className = 'sub-issues';
+
+      const recentIssues = sub.recent_issues || [];
+      const latestScanned = sub.latest_twic_scanned;
+
+      if (recentIssues.length > 0) {
+        for (const issue of recentIssues) {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-outline btn-sm';
+          btn.textContent = `TWIC #${issue.twic}: ${issue.games} game${issue.games !== 1 ? 's' : ''}`;
+          btn.addEventListener('click', () => downloadPgn(sub.id, sub.label));
+          issuesDiv.appendChild(btn);
+        }
+        if (latestScanned && (!recentIssues.length || recentIssues[0].twic < latestScanned)) {
+          const noMatch = document.createElement('span');
+          noMatch.className = 'sub-no-match';
+          noMatch.textContent = `0 matched in TWIC #${latestScanned}`;
+          issuesDiv.appendChild(noMatch);
+        }
+      } else if (latestScanned) {
+        const noMatch = document.createElement('span');
+        noMatch.className = 'sub-no-match';
+        noMatch.textContent = `0 matched in TWIC #${latestScanned}`;
+        issuesDiv.appendChild(noMatch);
       } else {
-        dlBtn.textContent = 'PGN: 0 games';
-        dlBtn.disabled = true;
+        const pending = document.createElement('span');
+        pending.className = 'sub-no-match';
+        pending.textContent = 'Waiting for first scan...';
+        issuesDiv.appendChild(pending);
       }
-      dlBtn.addEventListener('click', () => downloadPgn(sub.id, sub.label));
 
       const delBtn = document.createElement('button');
       delBtn.className = 'sub-action-btn sub-action-delete';
@@ -368,7 +390,7 @@ import Base from '../layouts/Base.astro';
       delBtn.addEventListener('click', () => deleteSub(sub.id));
 
       actions.appendChild(editBtn);
-      actions.appendChild(dlBtn);
+      actions.appendChild(issuesDiv);
       actions.appendChild(delBtn);
 
       card.appendChild(actions);
