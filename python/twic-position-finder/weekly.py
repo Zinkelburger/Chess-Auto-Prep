@@ -13,7 +13,10 @@ from models import (
 from query import find_games
 from ingest import ingest_latest
 from lichess import import_games_batch
-from email_sender import build_email_html, build_email_text, send_ses_email
+from email_sender import (
+    build_email_html, build_email_text, send_ses_email,
+    build_no_matches_html, build_no_matches_text,
+)
 from export_events import export_all as export_static_data
 
 log = logging.getLogger("twic.weekly")
@@ -90,6 +93,7 @@ def _run_match_and_notify(db, new_issues: list[int], dry_run: bool):
     log.info("  %d active subscription(s) from verified users", len(subs))
 
     user_matches: dict[str, list[tuple[dict, list[dict]]]] = defaultdict(list)
+    user_no_matches: dict[str, list[dict]] = defaultdict(list)
 
     for sub in subs:
         all_matches = []
@@ -102,10 +106,7 @@ def _run_match_and_notify(db, new_issues: list[int], dry_run: bool):
         else:
             log.info("  Sub #%d (%s) -> no matches",
                      sub["id"], sub.get("label", ""))
-
-    if not user_matches:
-        log.info("No matches found for any subscription. Done.")
-        return
+            user_no_matches[sub["email"]].append(sub)
 
     # Step 3: Import to Lichess (skip in dry-run)
     log.info("STEP 3: Importing matched games to Lichess")
@@ -178,6 +179,42 @@ def _run_match_and_notify(db, new_issues: list[int], dry_run: bool):
                 else:
                     log.error("  FAILED to email %s: %s (will retry next run)",
                               email, subject)
+
+    # Step 5: Send "no matches" digests for subscriptions that had zero results
+    for email, subs_without_matches in user_no_matches.items():
+        # Skip if this user already got a matches email for a different sub
+        # (they know we're alive)
+        if email in user_matches:
+            log.info("  Skipping no-match email for %s (already got a match email)",
+                     email)
+            continue
+
+        for sub in subs_without_matches:
+            manage_token = create_email_token(db, sub["user_id"], "login")
+            unsub_token = create_email_token(
+                db, sub["user_id"], "unsubscribe",
+                subscription_id=sub["id"],
+            )
+
+            subject = (f"TWIC #{twic_label}: No matches this week"
+                       f" — {sub.get('label') or 'Position Alert'}")
+            html = build_no_matches_html(sub, twic_label,
+                                         manage_token=manage_token,
+                                         unsub_token=unsub_token)
+            text = build_no_matches_text(sub, twic_label,
+                                         manage_token=manage_token,
+                                         unsub_token=unsub_token)
+
+            if dry_run:
+                log.info("  [DRY RUN] Would send no-match email %s: %s",
+                         email, subject)
+            else:
+                ok = send_ses_email(email, subject, html, text)
+                if ok:
+                    log.info("  Sent no-match digest to %s: %s", email, subject)
+                else:
+                    log.error("  FAILED no-match email to %s (non-critical)",
+                              email)
 
 
 if __name__ == "__main__":
