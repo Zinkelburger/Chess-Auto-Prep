@@ -59,7 +59,7 @@ import Base from '../layouts/Base.astro';
       </div>
 
       {import.meta.env.PUBLIC_TURNSTILE_SITE_KEY && (
-        <div class="cf-turnstile" data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY} style="margin-bottom:16px;"></div>
+        <div class="cf-turnstile" data-sitekey={import.meta.env.PUBLIC_TURNSTILE_SITE_KEY} data-appearance="interaction-only" style="margin-bottom:16px;"></div>
       )}
 
       <button type="submit" class="btn btn-primary" id="submit-btn">Subscribe</button>
