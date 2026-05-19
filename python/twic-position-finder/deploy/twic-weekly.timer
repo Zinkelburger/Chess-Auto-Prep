@@ -1,8 +1,8 @@
 [Unit]
-Description=Run TWIC weekly job every Monday at noon UTC
+Description=Run TWIC weekly pipeline
 
 [Timer]
-OnCalendar=Mon *-*-* 12:00:00
+OnCalendar=Tue *-*-* 06:00:00
 Persistent=true
 
 [Install]

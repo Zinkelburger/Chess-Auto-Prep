@@ -257,6 +257,124 @@ def send_ses_email(to: str, subject: str, html_body: str, text_body: str) -> boo
         return False
 
 
+def build_no_matches_html(subscription: dict, twic_label: str,
+                          manage_token: str | None = None,
+                          unsub_token: str | None = None) -> str:
+    """Build an HTML email for when a subscription had no matches this week."""
+    sub_desc_parts = []
+    if subscription.get("fen"):
+        sub_desc_parts.append(f"Position: <code>{_esc(subscription['fen'])}</code>")
+    if subscription.get("player"):
+        sub_desc_parts.append(f"Player: {_esc(subscription['player'])}")
+    if subscription.get("white"):
+        sub_desc_parts.append(f"White: {_esc(subscription['white'])}")
+    if subscription.get("black"):
+        sub_desc_parts.append(f"Black: {_esc(subscription['black'])}")
+    if subscription.get("eco"):
+        sub_desc_parts.append(f"ECO: {_esc(subscription['eco'])}")
+    if subscription.get("min_elo"):
+        sub_desc_parts.append(f"Min Elo: {subscription['min_elo']}")
+    if subscription.get("max_elo"):
+        sub_desc_parts.append(f"Max Elo: {subscription['max_elo']}")
+    if subscription.get("exclude_site"):
+        sub_desc_parts.append(f"Excluding: {_esc(subscription['exclude_site'])}")
+    if subscription.get("event"):
+        sub_desc_parts.append(f"Event: {_esc(subscription['event'])}")
+    sub_desc = " &middot; ".join(sub_desc_parts)
+
+    manage_qs = f"?token={manage_token}" if manage_token else ""
+    manage_link = f'{SITE_URL}/dashboard{manage_qs}'
+
+    unsub_link = ""
+    if unsub_token:
+        unsub_url = (f'{SITE_URL}/unsubscribe?token={unsub_token}'
+                     f'&sub={subscription["id"]}')
+        unsub_link = f'''
+      <br/>
+      <a href="{unsub_url}" style="color:#888;font-size:12px;
+         text-decoration:underline;">
+        Unsubscribe from this alert
+      </a>'''
+
+    return f'''<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
+<body style="background:#121212;color:#e8e8e8;font-family:-apple-system,Segoe UI,
+             Roboto,Helvetica,Arial,sans-serif;padding:24px;margin:0;">
+  <div style="max-width:600px;margin:0 auto;">
+    <div style="text-align:center;margin-bottom:24px;">
+      <h1 style="color:#fff;font-size:22px;margin:0;">
+        TWIC #{_esc(twic_label)} — No Matches
+      </h1>
+      <p style="color:#888;font-size:14px;margin:4px 0 0;">
+        Your filter is active, but no games matched this week.
+      </p>
+    </div>
+
+    <div style="background:#262626;border-radius:8px;padding:16px;margin-bottom:20px;">
+      <div style="color:#aaa;font-size:13px;margin-bottom:4px;">Subscription:</div>
+      <div style="color:#e8e8e8;font-size:14px;">
+        {_esc(subscription.get("label"), "Untitled")}
+      </div>
+      <div style="color:#aaa;font-size:13px;margin-top:4px;">{sub_desc}</div>
+    </div>
+
+    <div style="background:#1e1e1e;border:1px solid #333;border-radius:8px;
+                padding:20px;text-align:center;margin-bottom:20px;">
+      <p style="color:#aaa;font-size:15px;margin:0 0 12px;">
+        We scanned TWIC #{_esc(twic_label)} and didn't find any games
+        matching your criteria. We'll check again next week.
+      </p>
+      <a href="{manage_link}" style="color:#629924;font-size:14px;
+         text-decoration:underline;">
+        Adjust your filters
+      </a>
+    </div>
+
+    <div style="text-align:center;margin-top:32px;padding-top:16px;
+                border-top:1px solid #333;">
+      <a href="{manage_link}" style="color:#629924;font-size:13px;
+         text-decoration:underline;">
+        Manage your subscriptions
+      </a>
+      {unsub_link}
+      <p style="color:#666;font-size:11px;margin-top:8px;">
+        TWIC Position Finder &middot; Chess Auto Prep
+      </p>
+    </div>
+  </div>
+</body>
+</html>'''
+
+
+def build_no_matches_text(subscription: dict, twic_label: str,
+                          manage_token: str | None = None,
+                          unsub_token: str | None = None) -> str:
+    """Build a plain-text email for when a subscription had no matches."""
+    lines = [f"TWIC #{twic_label} — No Matches\n"]
+
+    if subscription.get("label"):
+        lines.append(f"Subscription: {subscription['label']}")
+    if subscription.get("fen"):
+        lines.append(f"Position: {subscription['fen']}")
+    if subscription.get("player"):
+        lines.append(f"Player: {subscription['player']}")
+    lines.append("")
+    lines.append("We scanned this week's TWIC issue and didn't find any games "
+                 "matching your criteria. We'll check again next week.")
+    lines.append("")
+
+    manage_qs = f"?token={manage_token}" if manage_token else ""
+    lines.append(f"Adjust your filters: {SITE_URL}/dashboard{manage_qs}")
+
+    if unsub_token:
+        unsub_url = (f"{SITE_URL}/unsubscribe?token={unsub_token}"
+                     f"&sub={subscription['id']}")
+        lines.append(f"Unsubscribe from this alert: {unsub_url}")
+
+    return "\n".join(lines)
+
+
 def send_verification_email(to: str, verify_token: str) -> bool:
     """Send email verification link."""
     verify_url = f"{SITE_URL}/verify?token={verify_token}"
