@@ -13,9 +13,6 @@
 10.Bb2 O-O 11.Ne2 Re8 12.Nd2 Nxe4 13.Bxg7 Nxd2 14.Bh6 Bg4 15.Be3 Nf3+ 16.Bxf3 Bxf3
 17.Rg1 Nd7 18.Qd2 Nf6 19.Nf4 g5 20.Ne2 Re5 21.O-O-O Ne4 22.Qc2 Bxe2 23.Qxe2 Nc3  0-1
 
-
-
-
 [Event "Riga-ch"]
 [Site "Riga"]
 [Date "1954.??.??"]
@@ -33,9 +30,6 @@
 23.Nxd3 Bxe3 24.fxe3 cxd3 25.Qxd3 Qe7 26.Rf3 Qe4 27.Rg3+ Kh8 28.Qc3+ Qe5
 29.Rc1 Bf5 30.Qxe5+ Rxe5 31.Rc7 Rb8 32.Rgg7 b5 33.axb5 axb5 34.g4 Bg6 35.h4 Rxd5
 36.h5 Be4 37.g5 Rg8 38.Rxg8+ Kxg8 39.Rc8+ Kf7 40.Rc7+ Ke6 41.Rg7 h6  0-1
-
-
-
 
 [Event "Riga m"]
 [Site "Riga"]
@@ -56,9 +50,6 @@
 36.Nxc4 Nxc3 37.Ra1 N5a4 38.Bd4 Ne2+ 39.Kf1 Nxd4 40.Rxa4 Nxc6 41.Ra6 Rc7
 42.Nxd6 b2 43.Rb6 Nb4 44.Rxb4 Rc1+ 45.Ke2 b1=Q 46.Rxb1 Rxb1 47.Nc4  1/2-1/2
 
-
-
-
 [Event "Tallinn m"]
 [Site "Tallinn"]
 [Date "1954.??.??"]
@@ -77,9 +68,6 @@
 30.Qd3 Nf6 31.Qa6 Qc7 32.Nb6 Qe7 33.Qb7 Qxb7 34.Bxb7 Ne4 35.Bc6 Nd2 36.Ba4 g5
 37.f3 Bg3 38.Nc4  1/2-1/2
 
-
-
-
 [Event "URS-ch sf"]
 [Site "Riga"]
 [Date "1955.??.??"]
@@ -97,9 +85,6 @@
 23.Bh4 Qg7 24.h3 Nh6 25.Kh1 Nf7 26.Bf2 Rab8 27.a3 f5 28.axb4 axb4 29.cxb4 Rxb4
 30.e5 Rb7 31.e6 Nh6 32.Rab1 Reb8 33.Rxb7 Rxb7 34.Bc4 Rb2 35.Qe3 Rc2 36.Rc1 Qb2
 37.Rxc2 Qxc2 38.Bb3 Qb2 39.e7 Kf7 40.Bh4 Qd4 41.e8=Q+  1-0
-
-
-
 
 [Event "URS-ch sf"]
 [Site "Riga"]
@@ -120,9 +105,6 @@
 37.Qd4 Qh5 38.Qf2 Bb5 39.Bxb5 axb5 40.Bd4 Qh3 41.Rc1 R8g6 42.Rc7+ Kg8 43.Rc2 Rg3
 44.d6  0-1
 
-
-
-
 [Event "URS-ch23"]
 [Site "Leningrad"]
 [Date "1956.??.??"]
@@ -141,10 +123,8 @@
 30.Qxc5 Nxe4 31.Qxc7 Qxc7 32.Bxc7 Bb7 33.Bxe4 fxe4 34.d6 Ke6 35.Kf1 Bc6 36.Ke2 h5
 37.Ke3 Kf5 38.Kd4 g5 39.Kc5 Bd7 40.Bd8 g4 41.h4 Ba4 42.Kd5 Bd7  1/2-1/2
 
-
-
-
 [Event "URS-ch23"]
+[StudyRating "5"]
 [Site "Leningrad"]
 [Date "1956.??.??"]
 [Round "?"]
@@ -161,10 +141,8 @@
 23.Nb5 Ne4 24.Rbc1 Bh6 25.Rxc8 Rxc8 26.Qb3 f4 27.exf4 Qh4 28.Qe3 Nxd2 29.Qxd2 Bxf4
 30.Qb2 Rf8 31.Rf1  1/2-1/2
 
-
-
-
 [Event "URS-ch sf"]
+[StudyRating "5"]
 [Site "Tbilisi"]
 [Date "1956.??.??"]
 [Round "?"]
@@ -175,22 +153,12 @@
 [BlackElo ""]
 [ECO "A64"]
 
-1.c4 Nf6 2.d4 e6 3.Nc3 c5 4.d5 exd5 5.cxd5 d6 6.Nf3 g6 7.g3 Bg7 8.Bg2 O-O
-9.O-O Re8 10.Nd2 a6 11.a4 Nbd7 12.h3 Rb8 13.Nc4 Nb6 14.Na3 Bd7 15.Bf4 Nc8
-16.Nc4 Qc7 17.a5 Nh5 18.Bd2 Bb5 19.Ne3 Na7 20.Kh2 Qe7 21.Bf3 Nf6 22.Re1 h5
-23.Nxb5 Nxb5 24.Nc4 Ne4 25.Be3 h4 26.g4 Bd4 27.Kg2 Bxe3 28.fxe3 Nf6 29.Qc2 Nd7
-30.Ra4 Ne5 31.Qe4 Qg5 32.Qf4 Qxf4 33.exf4 Nd3 34.Rh1 Nxf4+ 35.Kf2 g5 36.e3 Nd3+
-37.Ke2 Ne5 38.Nd2 Kg7 39.Rc1 Re7 40.Be4 Rbe8 41.Bf5 Ng6 42.Ne4 Re5 43.Rd1 Ne7
-44.Nxg5 Nxf5 45.gxf5 Rxe3+ 46.Kf2 Re2+ 47.Kf3 Nd4+ 48.Raxd4 R2e3+ 49.Kg4 cxd4
-50.Rxd4 Re2 51.Rb4 Kf6 52.Nh7+ Ke5 53.Rxb7 Rg2+ 54.Kh5 Rg7 55.Kh6 Reg8 56.f6 Rg6+
-57.Kh5 Kf5 58.Rxf7 Rg2 59.Rb7 Rh8 60.Rf7 Rg3 61.Kxh4 Rg5 62.b4 Kf4 63.b5 axb5
-64.a6 b4 65.a7 Rgg8 66.Kh5 Kf5 67.Rb7 Rf8 68.Kh6 Rfg8 69.Rg7 Rxg7 70.fxg7 Ra8
-71.Nf8  1-0
 
-
+1. c4 {[%eval 0.08] [%maia 0.062]} Nf6 {[%eval 0.25] [%maia 0.345]} 2. d4 {[%eval 0.34] [%maia 0.223]} e6 {[%eval 0.34] [%maia 0.368]} 3. Nc3 {[%eval 0.24] [%maia 0.462]} c5 {[%eval 0.89] [%maia 0.100]} 4. d5 {[%eval 0.73] [%maia 0.501]} exd5 {[%eval 0.73] [%maia 0.868]} 5. cxd5 {[%eval 0.98] [%maia 0.958]} d6 {[%eval 0.70] [%maia 0.822]} 6. Nf3 {[%eval 0.75] [%maia 0.159]} g6 {[%eval 0.69] [%maia 0.748]} 7. g3 {[%eval 0.37] [%maia 0.117]} Bg7 {[%eval 0.38] [%maia 0.949]} 8. Bg2 {[%eval 0.50] [%maia 0.966]} O-O {[%eval 0.45] [%maia 0.003]} 9. O-O {[%eval 0.47] [%maia 0.002]} Re8 {[%eval 0.43] [%maia 0.412]} 10. Nd2 {[%eval 0.17] [%maia 0.397]} a6 {[%eval 0.36] [%maia 0.415]} 11. a4 {[%eval 0.31] [%maia 0.971]} Nbd7 {[%eval 0.50] [%maia 0.687]} 12. h3 {[%eval 0.41] [%maia 0.243]} Rb8 {[%eval 0.30] [%maia 0.548]} 13. Nc4 {[%eval 0.34] [%maia 0.707]} Nb6 {[%eval 0.38] [%maia 0.170]} 14. Na3 {[%eval 0.34] [%maia 0.515]} Bd7 {[%eval 0.33] [%maia 0.329]} 15. Bf4 {[%eval -0.67] [%maia 0.317]} Nc8 {[%eval 0.41] [%maia 0.154]} 16. Nc4 {[%eval -0.03] [%maia 0.686]} Qc7 {[%eval 0.46] [%maia 0.479]} 17. a5 {[%eval 0.52] [%maia 0.828]} Nh5 {[%eval 0.69] [%maia 0.391]} 18. Bd2 {[%eval 0.63] [%maia 0.413]} Bb5 {[%eval 0.62] [%maia 0.294]} 19. Ne3 {[%eval 0.54] [%maia 0.041]} Na7 {[%eval 0.82] [%maia 0.172]} 20. Kh2 {[%eval 0.50] [%maia 0.078]} Qe7 {[%eval 0.40] [%maia 0.025]} 21. Bf3 {[%eval 0.30] [%maia 0.068]} Nf6 {[%eval 0.31] [%maia 0.776]} 22. Re1 {[%eval 0.35] [%maia 0.324]} h5 {[%eval 0.17] [%maia 0.096]} 23. Nxb5 {[%eval -0.63] [%maia 0.134]} Nxb5 {[%eval -0.08] [%maia 0.907]} 24. Nc4 {[%eval -0.08] [%maia 0.434]} Ne4 {[%eval 0.34] [%maia 0.471]} 25. Be3 {[%eval -0.68] [%maia 0.407]} h4 {[%eval -0.30] [%maia 0.488]} 26. g4 {[%eval -0.75] [%maia 0.533]} Bd4 {[%eval -0.54] [%maia 0.110]} 27. Kg2 {[%eval -1.18] [%maia 0.166]} Bxe3 {[%eval -1.30] [%maia 0.511]} 28. fxe3 {[%eval -1.10] [%maia 0.136]} Nf6 {[%eval -1.17] [%maia 0.009]} 29. Qc2 {[%eval -1.37] [%maia 0.112]} Nd7 {[%eval -1.53] [%maia 0.391]} 30. Ra4 {[%eval -1.74] [%maia 0.023]} Ne5 {[%eval -1.29] [%maia 0.887]} 31. Qe4 {[%eval -2.00] [%maia 0.041]} Qg5 {[%eval -1.41] [%maia 0.131]} 32. Qf4 {[%eval -1.77] [%maia 0.662]} Qxf4 {[%eval -1.61] [%maia 0.141]} 33. exf4 {[%eval -1.56] [%maia 0.994]} Nd3 {[%eval -1.31] [%maia 0.416]} 34. Rh1 {[%eval -1.39] [%maia 0.001]} Nxf4+ {[%eval -1.28] [%maia 0.943]} 35. Kf2 {[%eval -1.21] [%maia 0.979]} g5 {[%eval -1.35] [%maia 0.682]} 36. e3 {[%eval -1.56] [%maia 0.307]} Nd3+ {[%eval -1.34] [%maia 0.849]} 37. Ke2 {[%eval -1.29] [%maia 0.634]} Ne5 {[%eval -1.18] [%maia 0.649]} 38. Nd2 {[%eval -1.66] [%maia 0.050]} Kg7 {[%eval -1.80] [%maia 0.218]} 39. Rc1 {[%eval -1.54] [%maia 0.055]} Re7 {[%eval -1.63] [%maia 0.526]} 40. Be4 {[%eval -1.60] [%maia 0.248]} Rbe8 {[%eval -1.31] [%maia 0.738]} 41. Bf5 {[%eval -1.74] [%maia 0.150]} Ng6 {[%eval -0.95] [%maia 0.417]} 42. Ne4 {[%eval -1.66] [%maia 0.057]} Re5 {[%eval -1.66] [%maia 0.411]} 43. Rd1 {[%eval -3.37] [%maia 0.196]} Ne7 {[%eval -3.16] [%maia 0.611]} 44. Nxg5 {[%eval -3.43] [%maia 0.414]} Nxf5 {[%eval -3.14] [%maia 0.735]} 45. gxf5 {[%eval -3.19] [%maia 0.978]} Rxe3+ {[%eval -3.23] [%maia 0.812]} 46. Kf2 {[%eval -3.15] [%maia 0.774]} Re2+ {[%eval -3.61] [%maia 0.497]} 47. Kf3 {[%eval -3.30] [%maia 0.581]} Nd4+ {[%eval -3.45] [%maia 0.421]} 48. Raxd4 {[%eval -3.39] [%maia 0.188]} R2e3+ {[%eval -2.30] [%maia 0.013]} 49. Kg4 {[%eval -3.99] [%maia 0.268]} cxd4 {[%eval -4.01] [%maia 0.980]} 50. Rxd4 {[%eval -5.02] [%maia 0.856]} Re2 {[%eval -3.78] [%maia 0.056]} 51. Rb4 {[%eval -4.05] [%maia 0.260]} Kf6 {[%eval -3.94] [%maia 0.163]} 52. Nh7+ {[%eval -3.67] [%maia 0.297]} Ke5 {[%eval -3.24] [%maia 0.169]} 53. Rxb7 {[%eval -3.54] [%maia 0.607]} Rg2+ {[%eval -3.42] [%maia 0.146]} 54. Kh5 {[%eval -3.21] [%maia 0.142]} Rg7 {[%eval -0.61] [%maia 0.034]} 55. Kh6 {[%eval -0.60] [%maia 0.704]} Reg8 {[%eval -1.19] [%maia 0.218]} 56. f6 {[%eval -1.15] [%maia 0.574]} Rg6+ {[%eval -0.77] [%maia 0.823]} 57. Kh5 {[%eval -0.98] [%maia 1.000]} Kf5 {[%eval -0.76] [%maia 0.079]} 58. Rxf7 {[%eval -1.13] [%maia 0.928]} Rg2 {[%eval -0.91] [%maia 0.076]} 59. Rb7 {[%eval -1.08] [%maia 0.026]} Rh8 {[%eval -0.91] [%maia 0.549]} 60. Rf7 {[%eval -1.15] [%maia 0.034]} Rg3 {[%eval -0.89] [%maia 0.093]} 61. Kxh4 {[%eval -0.69] [%maia 0.337]} Rg5 {[%eval -1.12] [%maia 0.004]} 62. b4 {[%eval -0.92] [%maia 0.232]} Kf4 {[%eval -0.64] [%maia 0.005]} 63. b5 {[%eval -0.16] [%maia 0.066]} axb5 {[%eval -0.39] [%maia 0.516]} 64. a6 {[%eval -0.26] [%maia 0.553]} b4 {[%eval -0.29] [%maia 0.071]} 65. a7 {[%eval -0.08] [%maia 0.686]} Rgg8 {[%eval 0.00] [%maia 0.044]} 66. Kh5 {[%eval 0.00] [%maia 0.369]} Kf5 {[%eval 0.00] [%maia 0.161]} 67. Rb7 {[%eval 0.00] [%maia 0.249]} Rf8 {[%eval 0.42] [%maia 0.009]} 68. Kh6 {[%eval 0.12] [%maia 0.817]} Rfg8 {[%eval 0.09] [%maia 0.034]} 69. Rg7 {[%eval 0.21] [%maia 0.162]} Rxg7 {[%eval 6.18] [%maia 0.029]} 70. fxg7 {[%eval 6.79] [%maia 0.733]} Ra8 {[%eval 6.14] [%maia 0.637]} 71. Nf8 {[%eval 6.62] [%maia 0.941]} 1-0
 
 
 [Event "URS-ch24"]
+[StudyRating "5"]
 [Site "Moscow"]
 [Date "1957.??.??"]
 [Round "1"]
@@ -205,9 +173,6 @@
 9.O-O Re8 10.Nd2 Na6 11.Re1 Nc7 12.a4 b6 13.Qc2 Ng4 14.h3 Nxf2 15.Kxf2 Qh4+
 16.Kf1 Bd4 17.Nd1 Qxh3 18.Bf3 Qh2 19.Ne3 f5 20.Ndc4 fxe4 21.Bxe4 Ba6 22.Bf3 Re5
 23.Ra3 Rae8 24.Bd2 Nxd5 25.Bxd5+ Rxd5 26.Ke2 Bxe3 27.Rxe3 Bxc4+  0-1
-
-
-
 
 [Event "WchT U26"]
 [Site "Reykjavik"]
@@ -228,9 +193,6 @@
 37.Bxc3 Nxg4 38.Rg1 Bxc3 39.bxc3 Nf2+ 40.Kh2 f6 41.Nxd6 Red8 42.e5 N2d3 43.Ne4 Nxe1
 44.Nxf6+ Kg7 45.Rxe1 Nd3 46.Nh5+ Kh6 47.Rh1 Nf2 48.Rf1 Rd1  0-1
 
-
-
-
 [Event "Portoroz Interzonal"]
 [Site "Portoroz"]
 [Date "1958.??.??"]
@@ -245,9 +207,6 @@
 1.d4 Nf6 2.c4 e6 3.Nc3 c5 4.d5 exd5 5.cxd5 d6 6.Nf3 g6 7.e4 Bg7 8.Bg5 O-O
 9.Nd2 h6 10.Bh4 a6 11.a4 Qe7 12.Be2 Nbd7 13.O-O g5 14.Bg3 Ne5 15.Re1 Nfd7
 16.Nf1 Ng6 17.Bg4 Nde5 18.Bxc8 Raxc8 19.Ne3 Qf6  1/2-1/2
-
-
-
 
 [Event "URS-ch25"]
 [Site "Riga"]
@@ -265,9 +224,6 @@
 16.Bf3 Nxe4 17.Nxe4 Bxe4 18.Bxe4 Qxd6 19.Qc2 Re7 20.Bf3 Rae8 21.Rad1 Bd4
 22.a4 b6 23.b3 Re5 24.Rd2 h5 25.Re2 Rxe2 26.Bxe2 h4 27.Kh1 Qf4 28.g3 Qf6
 29.Qd1 Rd8 30.Bg4 Bxf2 31.Qe2 Rd2 32.Qe8+ Kg7 33.gxh4 Qd4 34.Bh3 Qd3 35.Bg2 Rd1  0-1
-
-
-
 
 [Event "Candidats Tournament"]
 [Site "Bled/Zagreb/Belgrade"]
@@ -288,9 +244,6 @@
 36.Qe3 Kf8 37.Qe4 Rb8 38.Qxh7 Re8 39.Qh8+ Ke7 40.Qg7 Nh4+ 41.Kg1 Nf3+ 42.Kg2 Rg6
 43.Qc3 Nd4 44.b4 Kf8 45.Ne3 g3 46.h3 Rf6  0-1
 
-
-
-
 [Event "Riga"]
 [Site "Riga"]
 [Date "1959.??.??"]
@@ -306,9 +259,6 @@
 9.Be2 Re8 10.e5 dxe5 11.fxe5 Ng4 12.e6 fxe6 13.O-O exd5 14.Nxd5 Be6 15.Bc4 Ne5
 16.Bg5 Nxf3+ 17.Qxf3 Qxg5 18.Rae1 Rf8 19.Rxe6 Bd4+ 20.Kh1 Rxf3 21.Re8+ Kg7
 22.Rxf3 Qc1+ 23.Bf1 Nc6 24.Rxa8 Ne5 25.Rff8 Ng4 26.Rf3 Nf2+ 27.Kg1 Ne4+  0-1
-
-
-
 
 [Event "URS-ch26"]
 [Site "Tbilisi"]
@@ -329,9 +279,6 @@
 36.Rf3 Qg1+ 37.Kg3 Qe1+ 38.Kh2 Be5+ 39.Bxe5 Qxe5+ 40.Qg3 Qxd5 41.Rd3 Qc5
 42.Qg4 Qe5+  0-1
 
-
-
-
 [Event "URS-ch26"]
 [Site "Tbilisi"]
 [Date "1959.??.??"]
@@ -350,9 +297,6 @@
 30.Ra1 Qd4 31.Qxd4 Rxd4 32.Ra7 b5 33.h3 Rc8 34.Rd7 b4 35.Ra1 Rxf4 36.Raa7 Rh4
 37.Rab7 g5 38.Rg7+ Kh8 39.Rxg5 Rf8 40.Kg1 Rg8  1/2-1/2
 
-
-
-
 [Event "Zuerich"]
 [Site "Zuerich"]
 [Date "1959.??.??"]
@@ -368,9 +312,6 @@
 9.O-O a6 10.a4 Bg4 11.h3 Bxf3 12.Qxf3 Nbd7 13.Bf4 Qc7 14.Qe2 Rfe8 15.Bh2 Rac8
 16.Bc4 Ne5 17.f4 Nxc4 18.Qxc4 Nd7 19.Rfe1 Qb6 20.Rab1 Qb4 21.Qf1 c4 22.Re2 b5
 23.axb5 axb5 24.Kh1 Bxc3 25.bxc3 Qxc3 26.Rxb5 Qd3 27.Qe1 c3 28.Rb1 Nc5  0-1
-
-
-
 
 [Event "Leipzig olm fin-A"]
 [Site "Leipzig"]
@@ -389,9 +330,6 @@
 23.Bxa4 bxa4 24.fxg6 fxg6 25.Qf7+ Kh8 26.Nc5 Qa7 27.Qxd7 Qxd7 28.Nxd7 Rxb2
 29.Nb6 Rb3 30.Nxc4 Rd8 31.d6 Rc3 32.Rc1 Rxc1 33.Rxc1 Bd5 34.Nb6 Bb3 35.Ne4 h6
 36.d7 Bf8 37.Rc8 Be7 38.Bc5 Bh4 39.g3  1-0
-
-
-
 
 [Event "World Championship 23th"]
 [Site "Moscow"]
@@ -412,9 +350,6 @@
 37.Bd3+ Kf6 38.Kg3 Ree8 39.Bb5 Re4 40.Rc4 Rxc4 41.bxc4 Ke7 42.Ba4 Be5+ 43.Kf3 Rh4
 44.Rg1 f5  1/2-1/2
 
-
-
-
 [Event "World Championship 23th"]
 [Site "Moscow"]
 [Date "1960.??.??"]
@@ -433,9 +368,6 @@
 30.gxh4 Bd7 31.Qc3 Qxc3 32.bxc3 Bb5 33.Rfe1 Ne4 34.Rc1 Rbc8 35.Na5 Bxe2 36.Rxe2 Nxc3
 37.Rxc3 Rxc3 38.Nxb7 Rexe3 39.Rxe3 Rxe3 40.Nxd6 Rd3 41.Nf7+  1-0
 
-
-
-
 [Event "Bled"]
 [Site "Bled"]
 [Date "1961.??.??"]
@@ -450,9 +382,6 @@
 1.d4 Nf6 2.c4 e6 3.Nf3 c5 4.d5 exd5 5.cxd5 g6 6.Nc3 Bg7 7.e4 d6 8.Be2 O-O
 9.O-O Re8 10.Nd2 Na6 11.f3 Nd7 12.Nc4 Ne5 13.Bf4 Nxc4 14.Bxc4 Nc7 15.Qd2 a6
 16.a4 Rb8 17.a5 b5 18.axb6 Rxb6 19.Ra5 Rb4 20.Ra4 Bxc3  0-1
-
-
-
 
 [Event "Bled"]
 [Site "Bled"]
@@ -470,9 +399,6 @@
 16.Nxe5 Qxe5 17.Re1 Bd7 18.Rb1 g4 19.Ne2 b5 20.b3 Rfc8 21.Nf4 c4 22.bxc4 bxc4
 23.Bc2 Rab8 24.Qe2 Qc3 25.Rec1 Qa3 26.Kh2 a5 27.Re1 Rb4 28.Ne6 fxe6 29.Qxg4 Re8
 30.Bg6 Re7 31.Qh4 Bf8  0-1
-
-
-
 
 [Event "Varna olm"]
 [Site "Varna"]
@@ -495,9 +421,6 @@
 50.Kd2 Be4 51.Ke3 Bf5 52.Bf6 Kh3 53.Bg7 h5 54.b4 Kxh2 55.Kf2 h4 56.Bd4 Kh3
 57.Kf3 Bg4+ 58.Kf2 Bf5 59.Kf3 Bc2 60.Bb6 Bd1+ 61.Kf2 Kg4 62.Bc7 Bc2  0-1
 
-
-
-
 [Event "URS-ch30"]
 [Site "Yerevan"]
 [Date "1962.??.??"]
@@ -518,9 +441,6 @@
 45.Kh4 Qf7 46.Kg5 fxg4 47.hxg4 Bd7 48.Rc4 a4 49.Rc7 a3 50.Rxd7 Qxd7 51.e6 Qa7
 52.Qe5 axb2 53.e7 Kf7 54.d7  1-0
 
-
-
-
 [Event "URS-ch30"]
 [Site "Yerevan"]
 [Date "1962.??.??"]
@@ -540,9 +460,6 @@
 36.Ne4 g4 37.hxg4 hxg4 38.Nxd6 Qc1+ 39.Kh2 Qf4+ 40.Kh1 g3 41.Rd1 Qh6+ 42.Kg1 Qe3+
 43.Kh1 Qe2 44.Nf5+ Kf6 45.Rf1 Qh5+ 46.Nh4+ Ke7 47.Rf4 Qh8 48.Bf1 Qxb2 49.Nf5+ Ke6
 50.Nxg3  1/2-1/2
-
-
-
 
 [Event "Capablanca mem"]
 [Site "Havana"]
@@ -567,9 +484,6 @@
 64.Kd4 Na6 65.Be2 Nb4 66.Kc5 Nc2 67.Kd6 Nd4 68.e5+ Kg5 69.e6 Nf5+ 70.Ke5 Ne7
 71.g4 Ng8 72.Bf3  1-0
 
-
-
-
 [Event "Capablanca mem"]
 [Site "Havana"]
 [Date "1963.??.??"]
@@ -587,9 +501,6 @@
 23.Qxc4 Ra8 24.Nc3 Ra7 25.f3 Bd7 26.Qe4 b5 27.fxg4 b4 28.gxh5 bxc3 29.bxc3 Qe8
 30.Qf3 Bxa4 31.Ra3 Re7 32.Kf2 Bh6 33.c4 Bg5 34.h6 Bc2 35.Rh5 Be4 36.Qg4 Bxh6
 37.Qf4 Kg7 38.Qxd6 Bg6 39.Rh4 Rxe3 40.Ra2 Rc3 41.Kg1 Qe3+  0-1
-
-
-
 
 [Event "Asztalos mem"]
 [Site "Miskolc"]
@@ -609,9 +520,6 @@
 30.Qb3+ Kg7 31.Bxf4 Qxf4 32.Qe6 Rf7 33.Re2 h4 34.Qg4 Qc1+ 35.Kh2 Be5+ 36.g3 Qf1
 37.f4 Rxf4 38.Qd7+ Rf7 39.Qd2 hxg3+ 40.Nxg3 Bxg3+ 41.Kxg3 Rf3+  0-1
 
-
-
-
 [Event "Candidats sf1"]
 [Site "Bled"]
 [Date "1965.??.??"]
@@ -629,9 +537,6 @@
 24.Nd5 Re5 25.Nxf6+ Qxf6 26.Qxf6 gxf6 27.Bc6 Bc4 28.f4 Rc5 29.Ba4 Be6 30.Re1 Ba2
 31.Re3 Bb1 32.Kf2 Bf5 33.Kf3 Rc1 34.g4 Be6 35.f5 Bd5+ 36.Kf2 Rb1 37.b3 Rd1
 38.Re8+ Kg7 39.Rd8 Bf3 40.Rxd1 Bxd1 41.Kg3 Bc2  1/2-1/2
-
-
-
 
 [Event "Candidats sf1"]
 [Site "Bled"]
@@ -658,9 +563,6 @@
 79.Kf2 Rd2+ 80.Ke1 Rd6 81.g5 Kf3 82.Nh7 Ke3 83.Nf6 Kf3 84.Nh7 Rd5 85.g6 Rd7
 86.Ng5+ Ke3 87.Ne6 Rd2 88.Nf4 Rh2 89.Nd5+ Kf3 90.Kd1 Rg2 91.g7  1/2-1/2
 
-
-
-
 [Event "URS-chT"]
 [Site "URS"]
 [Date "1966.??.??"]
@@ -682,9 +584,6 @@
 51.Rf2 Kh5 52.Rb7 f5 53.Rh7+ Kg4 54.Rh6 Rg3+ 55.Kh1 Rh3+ 56.Rxh3 Rxh3+ 57.Kg2 Rg3+
 58.Kh2 Rf3 59.Rg2+ Kh5  0-1
 
-
-
-
 [Event "Budva"]
 [Site "Budva"]
 [Date "1967.??.??"]
@@ -703,9 +602,6 @@
 31.Qxc8 Bxc8 32.Bxc8 Re1+ 33.Kf2 Qe7 34.Be6 Rxe6 35.dxe6 Nf6 36.Rgf3 Ng8
 37.Rf7 Qh4+ 38.Rg3 d3 39.Rf8 Qd4+ 40.Kf1  1-0
 
-
-
-
 [Event "URS-chT"]
 [Site "URS"]
 [Date "1967.??.??"]
@@ -721,9 +617,6 @@
 9.O-O Re8 10.Nd2 Na6 11.Kh1 Nc7 12.a4 Rb8 13.f4 a6 14.a5 Bd7 15.Bf3 Nb5 16.e5 dxe5
 17.fxe5 Rxe5 18.Nc4 Rf5 19.Ne3 Rf4 20.Ne2 Rh4 21.g3 Re4 22.Bxe4 Nxe4 23.Nf4 Nd4
 24.Kg2 Qe7 25.Re1 h5 26.Ra3 Re8 27.Ne2 Bh3+ 28.Kxh3 Ng5+  0-1
-
-
-
 
 [Event "URS-ch36"]
 [Site "URS"]
@@ -743,9 +636,6 @@
 30.Kh2 Bd4 31.Ra2 a5 32.Bf1 Rb4 33.Bd3 h5 34.Kg2 a4 35.Rc2 Kg7 36.Nd1 Kh6
 37.h4 Rb3 38.Rd2 R3b4 39.Rc2 R8b6 40.Bc4 f5 41.Bd3  0-1
 
-
-
-
 [Event "URS-ch36"]
 [Site "URS"]
 [Date "1968.??.??"]
@@ -760,9 +650,6 @@
 1.d4 Nf6 2.c4 c5 3.d5 e6 4.Nc3 exd5 5.cxd5 d6 6.g3 g6 7.Bg2 Bg7 8.Nf3 O-O
 9.O-O a6 10.a4 Re8 11.Nd2 Nbd7 12.a5 b5 13.axb6 Nxb6 14.Nb3 Nc4 15.Ra4 Nb6
 16.Ra2 Nc4 17.Ra4 Nb6 18.Ra1 Nc4  1/2-1/2
-
-
-
 
 [Event "URS-ch37"]
 [Site "URS"]
@@ -779,11 +666,6 @@
 9.O-O Re8 10.Nd2 Nbd7 11.f3 a6 12.a4 Qc7 13.Qb3 Ne5 14.a5 Rb8 15.Nd1 Nh5
 16.Nc4 f5 17.exf5 Bxf5 18.g4 Nxc4 19.Bxc4 b5 20.axb6 Rxb6 21.Qa2 Bd4+ 22.Kg2 Qg7
 23.Nc3 Bd7 24.Bd2 Reb8 25.Rab1 Nf6 26.Rfc1 Qf7 27.b3 Nxg4 28.Ne4 Ne5  0-1
-
-
-
-
-
 
 [Event "URS-ch39"]
 [Site "Leningrad"]
@@ -803,9 +685,6 @@
 30.Rb1 Qe5 31.Qf2 Qf5 32.Nd2 Qc2 33.Re1 Rxe1+ 34.Qxe1 Ne5 35.Qe2 Kg7 36.Qe3 Nxc4
 37.Qd4+ Ne5 38.f4 Qd3 39.Qb2 Qe3+  0-1
 
-
-
-
 [Event "URS-ch39"]
 [Site "Leningrad"]
 [Date "1971.??.??"]
@@ -822,9 +701,6 @@
 16.g4 Re7 17.Rfe1 Ne8 18.Bg2 Rb8 19.Bg5 Bf6 20.Bxf6 Nexf6 21.f4 c4 22.Kh1 Ne8
 23.Ra4 b5 24.axb6 Rxb6 25.Rea1 Qb8 26.R1a2 Nc5 27.Rxc4 Reb7 28.e5 Rxb2 29.Rxb2 Rxb2
 30.Qd4 Rc2 31.exd6 Qb2 32.d7 Nxd7 33.Rc8 Rxg2  0-1
-
-
-
 
 [Event "Parnu"]
 [Site "Parnu"]
@@ -844,9 +720,6 @@
 30.Bc4 Rf2+ 31.Rxf2 Rxf2+ 32.Qxf2 Ndxf2 33.Bxf2 Qf4 34.Bg1 Qd2+ 35.Kh3 Ne5
 36.b3 Qc1 37.Be2 Kg7 38.Kg2 Qd2 39.Re3 b5 40.Kg3 c4 41.bxc4 bxc4 42.Rxe4 c3
 43.Be3 Qe1+ 44.Bf2 Qxf2+  0-1
-
-
-
 
 [Event "Tallinn"]
 [Site "Tallinn"]
@@ -870,9 +743,6 @@
 58.Ra6+ Ke7 59.Kc2 Bf6 60.Kd2 Be5 61.Kd3 Bf6 62.Ke2 Be5 63.Kf3 Bc3 64.Rc6 Bb4
 65.Kf4 Be1 66.f3 Kd7 67.Rc1 Bb4 68.Kf5  1-0
 
-
-
-
 [Event "Skopje ol (Men) prel"]
 [Site "Skopje"]
 [Date "1972.??.??"]
@@ -890,9 +760,6 @@
 24.Re1 h5 25.Nf1 b4 26.Nd1 Nf6 27.Nf2 Nxe4 28.Nxe4 Rexe4 29.Rxe4 Rxe4 30.Rxb3 Qe7
 31.Bf2 Re2 32.Qxb4 Rxf2 33.Kxf2 Qe2+ 34.Kg3 Qxf1 35.Qxd6 Bd4 36.f5 Qe1+  0-1
 
-
-
-
 [Event "Sukhumi"]
 [Site "Sukhumi"]
 [Date "1972.??.??"]
@@ -907,9 +774,6 @@
 1.d4 Nf6 2.c4 c5 3.d5 e6 4.Nc3 exd5 5.cxd5 d6 6.e4 g6 7.Nf3 Bg7 8.Nd2 O-O
 9.Be2 Re8 10.O-O a6 11.a4 Nbd7 12.f4 c4 13.e5 dxe5 14.Nxc4 Nb6 15.fxe5 Ng4
 16.Nd6 Bxe5 17.Nxe8 Qh4 18.h3 Qg3 19.Bxg4 Qh2+ 20.Kf2 Qg3+ 21.Kg1 Qh2+ 22.Kf2 Qg3+  1/2-1/2
-
-
-
 
 [Event "URS-ch43"]
 [Site "Yerevan"]
@@ -927,9 +791,6 @@
 17.exf6 Rxe3 18.fxg7 Ne5 19.Bg2 Qg5 20.Ne4 Qh4 21.Qd2 Kxg7 22.Qf2 Qxf2 23.Rxf2 f3
 24.Nxd6 Rd8 25.Nxb7 fxg2+ 26.Kxg2 Rxd5 27.b3 Nd3 28.Rc2 Re1  0-1
 
-
-
-
 [Event "Montreal"]
 [Site "Montreal"]
 [Date "1979.??.??"]
@@ -944,9 +805,6 @@
 1.d4 Nf6 2.c4 e6 3.g3 c5 4.d5 exd5 5.cxd5 d6 6.Nc3 g6 7.Nf3 Bg7 8.Bg2 O-O
 9.O-O Re8 10.h3 a6 11.a4 Ne4 12.Ra3 Nd7 13.Nxe4 Rxe4 14.Nd2 Re8 15.Nc4 Ne5
 16.Ne3 Nd7  1/2-1/2
-
-
-
 
 [Event "Riga Interzonal"]
 [Site "Riga"]
@@ -964,9 +822,6 @@
 16.Bg2 Bxg2 17.Kxg2 Bxb2 18.Rb1 Bg7 19.Qa4 Nd7 20.Rh1 a6 21.Rh4 b5 22.Rxb5 Nb6
 23.Rxb6 Qxb6 24.Qd7 Be5 25.Rxh7 Kxh7 26.Qxf7+ Bg7 27.Bf6 Qa7  0-1
 
-
-
-
 [Event "Tallinn"]
 [Site "Tallinn"]
 [Date "1979.??.??"]
@@ -983,9 +838,6 @@
 16.Bf3 Ng4 17.Ne3 Nxe3 18.Bxe3 b6 19.Qc2 Ba6 20.Rfd1 Be5 21.Bd4 Qh4 22.Bxe5 Rxe5
 23.g3 Qf6 24.Bg2 Rae8 25.Qd2 Rf5 26.Re1 Rxe1+ 27.Rxe1 Nd3 28.Re8+ Kg7 29.Kg1 Nxb2
 30.h3 Nc4 31.Qe1 Qd4+ 32.Kh2 Ne5 33.Ne2 Qb2 34.Ng1 Bf1  0-1
-
-
-
 
 [Event "Lvov"]
 [Site "Lvov"]
@@ -1006,9 +858,6 @@
 38.Qxa5 Qg5 39.Qa6 Nf3+ 40.Kf1 Ne1 41.Qxc8 Qc1 42.Qb7 Nf3+ 43.Ke2 Nd4+ 44.Kd3 Qc3+
 45.Ke4 Nf5  0-1
 
-
-
-
 [Event "Moscow Interzonal"]
 [Site "Moscow"]
 [Date "1982.??.??"]
@@ -1026,9 +875,6 @@
 23.Rxa6 g5 24.e5 Rxe5 25.Bg3 Rxe2 26.Nxe2 Nfxd5 27.Qd2 Nb4 28.Bxd6 Qc6 29.Rxb6 Qxb6
 30.Ng3 Rd8 31.Bxc5  1/2-1/2
 
-
-
-
 [Event "URS-ch50"]
 [Site "Moscow"]
 [Date "1983.??.??"]
@@ -1044,9 +890,6 @@
 9.O-O Re8 10.h3 a6 11.a4 Nbd7 12.Re1 Ne4 13.Nxe4 Rxe4 14.Qc2 Qe7 15.Bd2 Nf6
 16.Nh4 Bd7 17.Bc3 Re8 18.Bxe4 Nxe4 19.Bxg7 Kxg7 20.Ra3 Qg5 21.Rd1 Bxh3 22.Re3 Qg4
 23.Kh2 Re5 24.Rxe4 Qxe4 25.Qxe4 Rxe4 26.Kxh3 Rxe2 27.Nf3 Rxb2 28.a5 Kf6 29.Nd2  1/2-1/2
-
-
-
 
 [Event "Jurmala"]
 [Site "Jurmala"]
@@ -1066,9 +909,6 @@
 30.Nac3 Nh5 31.Rc2 Ng3 32.Ba7 Qb7 33.Bd4 Kh7 34.Rxb2 Qxb2 35.Qd1 Nxf3+ 36.gxf3 Bxd4+
 37.Nxd4 Qxc3 38.Kf2 Qb2+  0-1
 
-
-
-
 [Event "Taxco Interzonal"]
 [Site "Taxco"]
 [Date "1985.??.??"]
@@ -1085,9 +925,6 @@
 16.a4 fxe4 17.Nxe4 Bf5 18.Na2 Bxe4 19.fxe4 Nf6 20.Nc3 Neg4 21.Bxg4 Nxg4 22.Bd4 Qh4
 23.h3 Ne5 24.Qe3  1/2-1/2
 
-
-
-
 [Event "Sochi"]
 [Site "Sochi"]
 [Date "1986.??.??"]
@@ -1103,9 +940,6 @@
 9.O-O Re8 10.Nd2 a6 11.a4 Nbd7 12.a5 b5 13.axb6 Nxb6 14.Nb3 Nc4 15.Ra4 Nb6
 16.Ra2 Nc4 17.Ra4 Nb6 18.Ra2 Nc4 19.Ra4  1/2-1/2
 
-
-
-
 [Event "Reykjavik"]
 [Site "Reykjavik"]
 [Date "1987.??.??"]
@@ -1120,9 +954,6 @@
 1.d4 e6 2.c4 Nf6 3.Nf3 c5 4.d5 exd5 5.cxd5 d6 6.Nc3 g6 7.Bf4 a6 8.a4 Bg7
 9.e4 Bg4 10.Be2 Qe7 11.Nd2 Bxe2 12.Qxe2 Nh5 13.Be3 Nd7 14.O-O O-O 15.a5 Be5
 16.g3 Rae8 17.Bh6 Bg7 18.Bxg7 Nxg7 19.Rfe1 f5 20.exf5 Qd8 21.Qf1  1/2-1/2
-
-
-
 
 [Event "Subotica Interzonal"]
 [Site "Subotica"]
@@ -1145,9 +976,6 @@
 52.Rxc1 Rxc1 53.Ke2 Ra1 54.Kd2 Ra2+ 55.Nc2 e3+ 56.Kd1 Ne4 57.Nxe3 Kd6 58.Rd4 Kc5
 59.Nc2 Nc3+  0-1
 
-
-
-
 [Event "World Cup"]
 [Site "Reykjavik"]
 [Date "1988.??.??"]
@@ -1168,9 +996,6 @@
 44.Bd3 Bc5 45.Kg3 Bd4 46.f4 Be3 47.Bb5 Bd2 48.Kg4 Bc1 49.Be8 Ke7 50.Bc6 Kf6
 51.Bd7 Bd2 52.Bc8  1/2-1/2
 
-
-
-
 [Event "Saint John op-2"]
 [Site "Saint John"]
 [Date "1988.??.??"]
@@ -1185,9 +1010,6 @@
 1.d4 Nf6 2.c4 c5 3.d5 g6 4.Nc3 Bg7 5.g3 O-O 6.Bg2 d6 7.Nf3 e6 8.O-O exd5
 9.cxd5 Re8 10.Nd2 a6 11.a4 Nbd7 12.a5 b5 13.axb6 Nxb6 14.Nb3 Nc4 15.Ra4 Nb6
 16.Ra2 Nc4 17.Ra4 Nb6 18.Ra2  1/2-1/2
-
-
-
 
 [Event "Tbilisi"]
 [Site "Tbilisi"]
@@ -1204,9 +1026,6 @@
 10.cxd5 Qc7 11.O-O Nbd7 12.Bg5 Rb8 13.Re1 c4 14.Bf1 b5 15.axb5 axb5 16.b4 cxb3
 17.Nxb5 Qb6 18.Rb1 Nc5 19.Nd2 Ba6 20.Nxb3 Bxb5 21.Nxc5 Qxc5 22.Be3 Qa3 23.Rxb5 Rxb5
 24.Bxb5 Nxe4 25.Bd4 Nc3 26.Bxc3 Qxc3 27.Re8  1/2-1/2
-
-
-
 
 [Event "World Cup"]
 [Site "Skelleftea"]
@@ -1225,9 +1044,6 @@
 22.Qxd5 Rxd5 23.Rd2 Rd6 24.Kf1 Rb6 25.Bxd4 cxd4 26.b3 Ra6 27.Ke2 Rc3 28.Rxd4 Rxb3
 29.axb3 Rxa1 30.Ra4 Rb1 31.b4 Rb2+ 32.Ke3 Kg7 33.g4 g5 34.Kd4 Rxf2 35.Rxa7 Rf3
 36.b5 Rxh3 37.b6 Rb3 38.Kc5 h5 39.gxh5 g4 40.h6+ Kxh6 41.Rxf7  1/2-1/2
-
-
-
 
 [Event "Bundesliga 8990"]
 [Site "Germany"]

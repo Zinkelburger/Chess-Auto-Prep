@@ -38,10 +38,16 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
   ValueChanged<int>? get onPlySelected => widget.onPlySelected;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToPly());
+  }
+
+  @override
   void didUpdateWidget(GameAnalysisChart oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.currentPly != oldWidget.currentPly) {
-      _scrollToPly();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToPly());
     }
   }
 

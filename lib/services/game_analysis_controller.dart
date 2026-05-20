@@ -39,6 +39,7 @@ class MoveEval {
   final MoveClassification classification;
   final double? maiaProb; // MAIA's predicted probability of this move (0-1)
   final List<String> bestLine; // Engine's preferred continuation (SAN)
+  final int? depth; // Analysis depth
 
   const MoveEval({
     required this.ply,
@@ -51,6 +52,7 @@ class MoveEval {
     this.classification = MoveClassification.normal,
     this.maiaProb,
     this.bestLine = const [],
+    this.depth,
   });
 
   bool get isWhiteMove => ply % 2 == 1;
@@ -64,14 +66,20 @@ class MoveEval {
     return scoreCp ?? 0;
   }
 
-  /// Format as a Lichess-compatible `[%eval]` comment value.
+  /// Format as a Lichess-compatible `[%eval]` comment value, with optional
+  /// depth suffix (e.g. `1.23,18` or `#3,20`).
   String toEvalComment() {
-    if (scoreMate != null) return '#$scoreMate';
-    if (scoreCp != null) {
+    String base;
+    if (scoreMate != null) {
+      base = '#$scoreMate';
+    } else if (scoreCp != null) {
       final v = scoreCp! / 100.0;
-      return v.toStringAsFixed(2);
+      base = v.toStringAsFixed(2);
+    } else {
+      base = '0.00';
     }
-    return '0.00';
+    if (depth != null) return '$base,$depth';
+    return base;
   }
 }
 
@@ -113,19 +121,25 @@ MoveClassification classifyMove(double delta) {
 // PGN eval comment parsing
 // ---------------------------------------------------------------------------
 
-final _evalCommentRe = RegExp(r'\[%eval\s+(#?[+-]?\d+\.?\d*)\]');
+// Eval: [%eval 1.23] or [%eval 1.23,18] or [%eval #3] or [%eval #3,20]
+final _evalCommentRe =
+    RegExp(r'\[%eval\s+(#?[+-]?\d+\.?\d*)(?:,(\d+))?\]');
 
-({int? cp, int? mate})? _parseEvalComment(String comment) {
+({int? cp, int? mate, int? depth})? _parseEvalComment(String comment) {
   final match = _evalCommentRe.firstMatch(comment);
   if (match == null) return null;
   final raw = match.group(1)!;
+  final depthStr = match.group(2);
+  final depth = depthStr != null ? int.tryParse(depthStr) : null;
   if (raw.startsWith('#')) {
     final mate = int.tryParse(raw.substring(1));
-    if (mate != null) return (cp: null, mate: mate);
+    if (mate != null) return (cp: null, mate: mate, depth: depth);
     return null;
   }
   final cpFloat = double.tryParse(raw);
-  if (cpFloat != null) return (cp: (cpFloat * 100).round(), mate: null);
+  if (cpFloat != null) {
+    return (cp: (cpFloat * 100).round(), mate: null, depth: depth);
+  }
   return null;
 }
 
@@ -139,7 +153,7 @@ String _setEvalInComment(String comment, String evalValue) {
   return '$token $trimmed';
 }
 
-// MAIA probability persistence: [%maia 0.03]
+// MAIA probability: [%maia 0.03]
 final _maiaCommentRe = RegExp(r'\[%maia\s+(\d+\.?\d*)\]');
 
 double? _parseMaiaComment(String comment) {
@@ -152,6 +166,26 @@ String _setMaiaInComment(String comment, double prob) {
   final token = '[%maia ${prob.toStringAsFixed(3)}]';
   if (_maiaCommentRe.hasMatch(comment)) {
     return comment.replaceFirst(_maiaCommentRe, token);
+  }
+  final trimmed = comment.trim();
+  if (trimmed.isEmpty) return token;
+  return '$trimmed $token';
+}
+
+// Best line (PV): [%pv Nf3,Bb4,O-O,d5]
+final _pvCommentRe = RegExp(r'\[%pv\s+([^\]]+)\]');
+
+List<String> _parsePvComment(String comment) {
+  final match = _pvCommentRe.firstMatch(comment);
+  if (match == null) return const [];
+  return match.group(1)!.split(',').where((s) => s.isNotEmpty).toList();
+}
+
+String _setPvInComment(String comment, List<String> pv) {
+  if (pv.isEmpty) return comment;
+  final token = '[%pv ${pv.join(',')}]';
+  if (_pvCommentRe.hasMatch(comment)) {
+    return comment.replaceFirst(_pvCommentRe, token);
   }
   final trimmed = comment.trim();
   if (trimmed.isEmpty) return token;
@@ -188,12 +222,17 @@ String _setMaiaInComment(String comment, double prob) {
     pos = pos.play(move);
     final fenAfter = pos.fen;
 
-    ({int? cp, int? mate})? evalData;
+    ({int? cp, int? mate, int? depth})? evalData;
     double? maiaProb;
+    List<String> bestLine = const [];
     if (moveData.comments != null) {
       for (final c in moveData.comments!) {
         evalData ??= _parseEvalComment(c);
         maiaProb ??= _parseMaiaComment(c);
+        if (bestLine.isEmpty) {
+          final pv = _parsePvComment(c);
+          if (pv.isNotEmpty) bestLine = pv;
+        }
       }
     }
 
@@ -213,6 +252,8 @@ String _setMaiaInComment(String comment, double prob) {
       scoreMate: evalData.mate,
       winningChance: winChance,
       maiaProb: maiaProb,
+      bestLine: bestLine,
+      depth: evalData.depth,
     ));
   }
 
@@ -243,6 +284,8 @@ String _setMaiaInComment(String comment, double prob) {
       scoreMate: e.scoreMate,
       winningChance: e.winningChance,
       maiaProb: e.maiaProb,
+      bestLine: e.bestLine,
+      depth: e.depth,
       classification: classification,
     ));
     prevWinChance = e.winningChance;
@@ -408,6 +451,10 @@ class GameAnalysisController extends ChangeNotifier {
       final blackElo = int.tryParse(parsed.headers['BlackElo'] ?? '') ?? 2200;
 
       double prevWinChance = _startWinChance;
+      // Track the PV from the *before* position so we can show "what should
+      // have been played" rather than the continuation after a blunder.
+      List<String> prevBeforePv = startResult.pv;
+      String prevBeforeFen = startFen;
 
       // Process in parallel batches — classify incrementally
       final batchSize = workerCount;
@@ -442,14 +489,22 @@ class GameAnalysisController extends ChangeNotifier {
               : _negateMate(result.scoreMate);
           final winChance = cpToWinningChance(whiteNormCp, whiteNormMate);
 
-          final bestLine = _uciPvToSan(p.fenAfter, result.pv);
-
           // Classify immediately
           final isWhiteMove = ply % 2 == 1;
           final delta = isWhiteMove
               ? (prevWinChance - winChance)
               : (winChance - prevWinChance);
           var classification = classifyMove(delta.clamp(0.0, 1.0));
+
+          // For non-normal moves, show the engine's preferred line from the
+          // position *before* the move (i.e. what should have been played).
+          // For normal moves, show the continuation from after the move.
+          final List<String> bestLine;
+          if (classification != MoveClassification.normal) {
+            bestLine = _uciPvToSan(prevBeforeFen, prevBeforePv);
+          } else {
+            bestLine = _uciPvToSan(p.fenAfter, result.pv);
+          }
 
           // Run MAIA for this position
           double? maiaProb;
@@ -479,10 +534,13 @@ class GameAnalysisController extends ChangeNotifier {
             bestLine: bestLine,
             classification: classification,
             maiaProb: maiaProb,
+            depth: useDepth,
           );
           _evals.add(eval);
           _injectEvalComment(p.moveData, eval);
           prevWinChance = winChance;
+          prevBeforePv = result.pv;
+          prevBeforeFen = p.fenAfter;
         }
 
         _analyzedMoves = _evals.length;
@@ -504,10 +562,18 @@ class GameAnalysisController extends ChangeNotifier {
   void _injectEvalComment(PgnNodeData moveData, MoveEval eval) {
     final evalValue = eval.toEvalComment();
     if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-      moveData.comments![0] =
-          _setEvalInComment(moveData.comments!.first, evalValue);
+      var comment = moveData.comments!.first;
+      comment = _setEvalInComment(comment, evalValue);
+      if (eval.bestLine.isNotEmpty) {
+        comment = _setPvInComment(comment, eval.bestLine);
+      }
+      moveData.comments![0] = comment;
     } else {
-      moveData.comments = ['[%eval $evalValue]'];
+      var comment = '[%eval $evalValue]';
+      if (eval.bestLine.isNotEmpty) {
+        comment = '$comment [%pv ${eval.bestLine.join(',')}]';
+      }
+      moveData.comments = [comment];
     }
   }
 
