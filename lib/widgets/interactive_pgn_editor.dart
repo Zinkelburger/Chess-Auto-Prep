@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
+import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
+    show filterDisplayComment;
 
 // Simple counter for unique move IDs
 int _pgnMoveIdCounter = 0;
@@ -1055,18 +1057,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   static String _sanitizeComment(String comment) =>
       comment.replaceAll('{', '').replaceAll('}', '');
 
-  static final _maiaCommentRe = RegExp(r'\[%maia [^\]]+\]');
-  static final _evalCommentRe = RegExp(r'\[%eval [^\]]+\]');
-  static final _clkCommentRe = RegExp(r'\[%clk [^\]]+\]');
-  static final _whitespaceRe = RegExp(r'\s+');
-
   Widget _buildInlineComment(String comment) {
-    final sanitized = _sanitizeComment(comment)
-        .replaceAll(_maiaCommentRe, '')
-        .replaceAll(_evalCommentRe, '')
-        .replaceAll(_clkCommentRe, '')
-        .replaceAll(_whitespaceRe, ' ')
-        .trim();
+    final sanitized = filterDisplayComment(_sanitizeComment(comment));
     if (sanitized.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),

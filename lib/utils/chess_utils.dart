@@ -101,6 +101,46 @@ Role? parsePromotionRole(String char) => switch (char.toLowerCase()) {
       _ => null,
     };
 
+// ── Eval formatting ──────────────────────────────────────────────────────
+
+/// Format a centipawn / mate score for display (e.g. `+1.3`, `-0.5`, `#3`).
+///
+/// Uses one decimal place for centipawns and `#N` for mate scores.
+/// Returns `'--'` when both values are null.
+String formatEvalDisplay({int? scoreCp, int? scoreMate}) {
+  if (scoreMate != null) return '#$scoreMate';
+  if (scoreCp != null) {
+    final v = scoreCp / 100.0;
+    return v >= 0 ? '+${v.toStringAsFixed(1)}' : v.toStringAsFixed(1);
+  }
+  return '--';
+}
+
+// ── UCI PV conversion ────────────────────────────────────────────────────
+
+/// Convert a UCI principal-variation list to SAN move strings.
+///
+/// Walks the position forward from [fen], converting up to [maxMoves]
+/// UCI tokens to SAN. Returns an empty list on any parse error.
+List<String> uciPvToSan(String fen, List<String> uciMoves,
+    {int maxMoves = 8}) {
+  if (uciMoves.isEmpty) return const [];
+  try {
+    Position pos = Chess.fromSetup(Setup.parseFen(fen));
+    final san = <String>[];
+    for (final uci in uciMoves.take(maxMoves)) {
+      final move = Move.parse(uci);
+      if (move == null) break;
+      final (newPos, sanStr) = pos.makeSan(move);
+      san.add(sanStr);
+      pos = newPos;
+    }
+    return san;
+  } catch (_) {
+    return const [];
+  }
+}
+
 // ── Number formatting helpers ────────────────────────────────────────────
 
 /// Format a large integer with k/M suffixes.

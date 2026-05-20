@@ -41,6 +41,13 @@ class RepertoireLinesBrowser extends StatefulWidget {
   final bool isCoverageRunning;
   final bool isExpanded;
   final CoverageResult? coverageResult;
+  final Function(List<String> moveSequence)? onNavigateToPosition;
+
+  /// Optional coverage progress (0.0–1.0) shown during analysis.
+  final double? coverageProgress;
+
+  /// Optional coverage progress message shown during analysis.
+  final String? coverageProgressMessage;
 
   const RepertoireLinesBrowser({
     super.key,
@@ -52,6 +59,9 @@ class RepertoireLinesBrowser extends StatefulWidget {
     this.isCoverageRunning = false,
     this.isExpanded = false,
     this.coverageResult,
+    this.onNavigateToPosition,
+    this.coverageProgress,
+    this.coverageProgressMessage,
   });
 
   @override
@@ -326,6 +336,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     return Column(
       children: [
         _buildHeader(),
+        if (widget.isCoverageRunning) _buildCoverageProgressBar(),
         if (widget.coverageResult != null) _buildCoverageSummaryBar(),
         if (widget.coverageResult != null) _buildCoverageFilters(),
         _buildStatsBar(),
@@ -337,6 +348,36 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     );
   }
 
+  Widget _buildCoverageProgressBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.blue[900]?.withValues(alpha: 0.3),
+        border: Border(
+          bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.coverageProgressMessage != null)
+            Text(
+              widget.coverageProgressMessage!,
+              style: TextStyle(fontSize: 11, color: Colors.blue[200]),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          const SizedBox(height: 6),
+          LinearProgressIndicator(
+            value: widget.coverageProgress,
+            backgroundColor: Colors.grey[800],
+            minHeight: 4,
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Coverage summary bar ───────────────────────────────────────────────
 
   Widget _buildCoverageSummaryBar() {
@@ -344,6 +385,10 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     if (total == 0) return const SizedBox.shrink();
 
     double pct(int count) => (count / total) * 100;
+
+    final hasGaps = widget.coverageResult != null &&
+        (widget.coverageResult!.tooShallowLeaves.isNotEmpty ||
+            widget.coverageResult!.unaccountedMoves.isNotEmpty);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -353,41 +398,92 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
           bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
         ),
       ),
-      child: Row(
+      child: Column(
         children: [
-          _buildCoverageStat(
-              'Covered', pct(_coveredCount), const Color(0xFF4CAF50)),
-          const SizedBox(width: 4),
-          Text('|', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-          const SizedBox(width: 4),
-          _buildCoverageStat(
-              'Shallow', pct(_shallowCount), const Color(0xFFFFA726)),
-          const SizedBox(width: 4),
-          Text('|', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-          const SizedBox(width: 4),
-          _buildCoverageStat('Deep', pct(_deepCount), const Color(0xFF42A5F5)),
-          if (_totalUnaccountedMoves > 0) ...[
-            const Spacer(),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFEF5350),
-                    shape: BoxShape.circle,
-                  ),
+          Row(
+            children: [
+              _buildCoverageStat(
+                  'Covered', pct(_coveredCount), const Color(0xFF4CAF50)),
+              const SizedBox(width: 4),
+              Text('|',
+                  style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+              const SizedBox(width: 4),
+              _buildCoverageStat(
+                  'Shallow', pct(_shallowCount), const Color(0xFFFFA726)),
+              const SizedBox(width: 4),
+              Text('|',
+                  style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+              const SizedBox(width: 4),
+              _buildCoverageStat(
+                  'Deep', pct(_deepCount), const Color(0xFF42A5F5)),
+              if (_totalUnaccountedMoves > 0) ...[
+                const Spacer(),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF5350),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$_totalUnaccountedMoves unaccounted',
+                      style: TextStyle(fontSize: 10, color: Colors.grey[300]),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  '$_totalUnaccountedMoves unaccounted move${_totalUnaccountedMoves == 1 ? '' : 's'}',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[300]),
+              ],
+            ],
+          ),
+          if (hasGaps && widget.onNavigateToPosition != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                _buildGapButton(
+                  'Next Gap',
+                  Icons.skip_next,
+                  () {
+                    final moves = widget.coverageResult!.findNextGap();
+                    if (moves != null) {
+                      widget.onNavigateToPosition!(moves);
+                    }
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildGapButton(
+                  'Biggest Gap',
+                  Icons.priority_high,
+                  () {
+                    final moves = widget.coverageResult!.findBiggestGap();
+                    if (moves != null) {
+                      widget.onNavigateToPosition!(moves);
+                    }
+                  },
                 ),
               ],
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildGapButton(String label, IconData icon, VoidCallback onPressed) {
+    return SizedBox(
+      height: 26,
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 14),
+        label: Text(label, style: const TextStyle(fontSize: 11)),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          visualDensity: VisualDensity.compact,
+          side: BorderSide(color: Colors.grey[600]!),
+        ),
       ),
     );
   }
@@ -893,11 +989,9 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
   Widget? _buildUnaccountedAnnotation(_LineCoverageInfo? info) {
     if (info == null || info.unaccountedMoves.isEmpty) return null;
 
-    // Group by position, show top few
     final groups = info.groupedUnaccounted.entries.toList();
     if (groups.isEmpty) return null;
 
-    // Show unaccounted from at most 2 positions to avoid clutter
     final displayGroups = groups.take(2).toList();
 
     return Column(
@@ -905,17 +999,12 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
       children: displayGroups.map((group) {
         final moves = group.value
           ..sort((a, b) {
-            if (a.gameCount != b.gameCount)
+            if (a.gameCount != b.gameCount) {
               return b.gameCount.compareTo(a.gameCount);
+            }
             return b.probability.compareTo(a.probability);
           });
         final displayMoves = moves.take(4).toList();
-        final moveTexts = displayMoves.map((m) {
-          if (m.gameCount > 0) {
-            return '${m.move} (${_formatPercent(m.probability)})';
-          }
-          return '${m.move} (${_formatPercent(m.probability)}, ${m.source})';
-        }).join('  ');
 
         return Padding(
           padding: const EdgeInsets.only(top: 4),
@@ -931,14 +1020,56 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
                 ),
               ),
               Expanded(
-                child: Text(
-                  moveTexts +
-                      (moves.length > 4 ? '  +${moves.length - 4} more' : ''),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontFamily: 'monospace',
-                    color: const Color(0xFFEF5350).withValues(alpha: 0.7),
-                  ),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 2,
+                  children: [
+                    ...displayMoves.map((m) {
+                      final label = m.gameCount > 0
+                          ? '${m.move} (${_formatPercent(m.probability)})'
+                          : '${m.move} (${_formatPercent(m.probability)}, ${m.source})';
+
+                      if (widget.onNavigateToPosition != null) {
+                        return GestureDetector(
+                          onTap: () {
+                            widget.onNavigateToPosition!(
+                                [...m.parentMoves, m.move]);
+                          },
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                              color: const Color(0xFFEF5350)
+                                  .withValues(alpha: 0.9),
+                              decoration: TextDecoration.underline,
+                              decorationColor: const Color(0xFFEF5350)
+                                  .withValues(alpha: 0.5),
+                            ),
+                          ),
+                        );
+                      }
+                      return Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontFamily: 'monospace',
+                          color:
+                              const Color(0xFFEF5350).withValues(alpha: 0.7),
+                        ),
+                      );
+                    }),
+                    if (moves.length > 4)
+                      Text(
+                        '+${moves.length - 4} more',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color:
+                              const Color(0xFFEF5350).withValues(alpha: 0.5),
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],

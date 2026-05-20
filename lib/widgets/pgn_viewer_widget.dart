@@ -1,46 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:flutter/gestures.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
+import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
+    show filterDisplayComment, buildMovetext;
+import 'package:chess_auto_prep/models/analysis_node.dart';
 
-/// A node in the analysis tree. Each node represents a move.
-/// Children[0] is the main continuation, children[1+] are variations.
-class AnalysisNode {
-  final String san;
-  final String fenAfter;
-  final List<AnalysisNode> children;
-  final int id;
-  final bool isEphemeral; // true = user-added, false = from PGN
-
-  static int _nextId = 0;
-
-  AnalysisNode({
-    required this.san,
-    required this.fenAfter,
-    this.isEphemeral = true,
-  })  : children = [],
-        id = _nextId++;
-
-  AnalysisNode? findChild(String san) {
-    for (final child in children) {
-      if (child.san == san) return child;
-    }
-    return null;
-  }
-
-  (AnalysisNode node, bool isMainLine) addChild(String san, String fenAfter,
-      {bool isEphemeral = true}) {
-    final existing = findChild(san);
-    if (existing != null) {
-      return (existing, children.indexOf(existing) == 0);
-    }
-    final newNode =
-        AnalysisNode(san: san, fenAfter: fenAfter, isEphemeral: isEphemeral);
-    children.add(newNode);
-    return (newNode, children.length == 1);
-  }
-}
+export 'package:chess_auto_prep/models/analysis_node.dart';
 
 class PgnViewerController {
   _PgnViewerWidgetState? _state;
@@ -80,6 +46,12 @@ class PgnViewerController {
     state._jumpToMove(moveNumber, isWhiteToPlay);
   }
 
+  /// Navigate directly to a mainline position by half-move index (0-based
+  /// number of moves played from the start).
+  void goToMainLineIndex(int moveIndex) {
+    _state?._goToMainLineMove(moveIndex);
+  }
+
   void deleteAnalysisNode(int nodeId) {
     _state?._deleteAnalysisNode(nodeId);
   }
@@ -93,6 +65,9 @@ class PgnViewerController {
   int get mainLineIndex => _state?._mainLineIndex ?? 0;
 
   int get mainLineLength => _state?._moveHistory.length ?? 0;
+
+  /// Number of moves deep into the current variation (0 if on mainline).
+  int get variationDepth => _state?._analysisPath.length ?? 0;
 }
 
 class PgnViewerWidget extends StatefulWidget {
@@ -141,8 +116,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   int _activeBranchPly = -1; // which ply we're currently navigating in
   List<AnalysisNode> _analysisPath = [];
 
-  final List<TapGestureRecognizer> _gestureRecognizers = [];
-
   @override
   bool get wantKeepAlive => true;
 
@@ -155,10 +128,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   @override
   void dispose() {
-    for (final r in _gestureRecognizers) {
-      r.dispose();
-    }
-    _gestureRecognizers.clear();
     widget.controller?._detach(this);
     super.dispose();
   }
@@ -680,50 +649,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   void _notifyCommentsChanged() {
     if (widget.onCommentsChanged == null || _moveHistory.isEmpty) return;
-    final buf = StringBuffer();
-    var moveNum = 1;
-    var isWhite = true;
-    for (final move in _moveHistory) {
-      if (isWhite) buf.write('$moveNum. ');
-      buf.write('${move.san} ');
-      if (move.comments != null && move.comments!.isNotEmpty) {
-        for (final c in move.comments!) {
-          if (c.isNotEmpty) buf.write('{$c} ');
-        }
-      }
-      if (!isWhite) moveNum++;
-      isWhite = !isWhite;
-    }
     final result = _game?.headers['Result'];
-    if (result != null && result != '*') buf.write(result);
-    widget.onCommentsChanged!(buf.toString().trim());
+    widget.onCommentsChanged!(buildMovetext(_moveHistory, result: result));
   }
 
-  // ── Comment filtering ──
-
-  static final _evalRe = RegExp(r'\[%eval [^\]]+\]');
-  static final _clkRe = RegExp(r'\[%clk [^\]]+\]');
-  static final _maiaRe = RegExp(r'\[%maia [^\]]+\]');
-  static final _pvRe = RegExp(r'\[%pv [^\]]+\]');
-  static final _scoreArrowRe =
-      RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)');
-  static final _classificationRe = RegExp(
-      r'(Inaccuracy|Mistake|Blunder|Good move|Excellent move|Best move)\.[^.]*\.');
-  static final _wasBestRe = RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?');
-  static final _whitespaceRe = RegExp(r'\s+');
-
-  String _filterComment(String comment) {
-    comment = comment.replaceAll(_evalRe, '');
-    comment = comment.replaceAll(_clkRe, '');
-    comment = comment.replaceAll(_maiaRe, '');
-    comment = comment.replaceAll(_pvRe, '');
-    comment = comment.replaceAll(_scoreArrowRe, '');
-    comment = comment.replaceAll(_classificationRe, '');
-    comment = comment.replaceAll(_wasBestRe, '');
-    comment = comment.replaceAll(_whitespaceRe, ' ').trim();
-    if (comment.isEmpty || comment == '.,;!?') return '';
-    return comment;
-  }
+  String _filterComment(String comment) => filterDisplayComment(comment);
 
   // ── Build ──
 
@@ -807,12 +737,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     );
   }
 
-  TapGestureRecognizer _createTapRecognizer(VoidCallback onTap) {
-    final r = TapGestureRecognizer()..onTap = onTap;
-    _gestureRecognizers.add(r);
-    return r;
-  }
-
   String _rawComment(PgnNodeData moveData) {
     if (moveData.comments == null || moveData.comments!.isEmpty) return '';
     return moveData.comments!.first;
@@ -822,11 +746,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     if (_moveHistory.isEmpty && _variationsByPly.isEmpty) {
       return const SizedBox();
     }
-
-    for (final r in _gestureRecognizers) {
-      r.dispose();
-    }
-    _gestureRecognizers.clear();
 
     final children = <Widget>[];
     final spans = <InlineSpan>[];
@@ -871,49 +790,32 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
       final canEditComments = widget.onCommentsChanged != null;
 
-      if (canEditComments) {
-        spans.add(
-          WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: GestureDetector(
-              onTap: () => _onMainLineMoveClicked(i),
-              onLongPressStart: (_) => _startEditingComment(i),
-              onSecondaryTapDown: (_) => _startEditingComment(i),
-              child: Text(
-                san,
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 14,
-                  color: isCurrentMove
-                      ? Colors.white
-                      : (hasBranch ? Colors.blue[200] : Colors.blue[300]),
-                  fontWeight: (isCurrentMove || hasBranch)
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                  backgroundColor: isCurrentMove ? Colors.blue[700] : null,
-                ),
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _onMainLineMoveClicked(i),
+            onSecondaryTapDown:
+                canEditComments ? (_) => _startEditingComment(i) : null,
+            child: Text(
+              san,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 14,
+                color: isCurrentMove
+                    ? Colors.white
+                    : (hasBranch ? Colors.blue[200] : Colors.blue[300]),
+                fontWeight: (isCurrentMove || hasBranch)
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                backgroundColor: isCurrentMove ? Colors.blue[700] : null,
               ),
             ),
           ),
-        );
-      } else {
-        spans.add(
-          TextSpan(
-            text: san,
-            style: TextStyle(
-              color: isCurrentMove
-                  ? Colors.white
-                  : (hasBranch ? Colors.blue[200] : Colors.blue[300]),
-              fontWeight: (isCurrentMove || hasBranch)
-                  ? FontWeight.bold
-                  : FontWeight.normal,
-              backgroundColor: isCurrentMove ? Colors.blue[700] : null,
-            ),
-            recognizer: _createTapRecognizer(() => _onMainLineMoveClicked(i)),
-          ),
-        );
-      }
+        ),
+      );
 
       spans.add(const TextSpan(text: ' '));
 
@@ -928,32 +830,24 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       } else if (moveData.comments != null && moveData.comments!.isNotEmpty) {
         final comment = _filterComment(moveData.comments!.first);
         if (comment.isNotEmpty) {
-          if (canEditComments) {
-            spans.add(
-              WidgetSpan(
-                alignment: PlaceholderAlignment.baseline,
-                baseline: TextBaseline.alphabetic,
-                child: GestureDetector(
-                  onTap: () => _startEditingComment(i),
-                  child: Text(
-                    '{$comment} ',
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 14,
-                      color: Colors.green,
-                      fontStyle: FontStyle.italic,
-                    ),
+          spans.add(
+            WidgetSpan(
+              alignment: PlaceholderAlignment.baseline,
+              baseline: TextBaseline.alphabetic,
+              child: GestureDetector(
+                onTap: canEditComments ? () => _startEditingComment(i) : null,
+                child: Text(
+                  '{$comment} ',
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 14,
+                    color: Colors.green,
+                    fontStyle: FontStyle.italic,
                   ),
                 ),
               ),
-            );
-          } else {
-            spans.add(TextSpan(
-              text: '{$comment} ',
-              style: const TextStyle(
-                  color: Colors.green, fontStyle: FontStyle.italic),
-            ));
-          }
+            ),
+          );
         }
       }
 
@@ -1037,51 +931,36 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final isCurrentNode =
         _analysisPath.isNotEmpty && _analysisPath.last.id == node.id;
 
-    if (widget.onAnalysisNodeAction != null && node.isEphemeral) {
-      spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: GestureDetector(
-            onTap: () => _goToAnalysisNode(node, branchPly),
-            onSecondaryTapDown: (details) =>
-                widget.onAnalysisNodeAction!(node.id, details.globalPosition),
-            onLongPressStart: (details) =>
-                widget.onAnalysisNodeAction!(node.id, details.globalPosition),
-            child: Text(
-              node.san,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                color: isCurrentNode ? Colors.white : moveColor,
-                fontWeight:
-                    isCurrentNode ? FontWeight.bold : FontWeight.normal,
-                backgroundColor: isCurrentNode
-                    ? (node.isEphemeral
-                        ? Colors.orange[700]
-                        : Colors.teal[700])
-                    : null,
-              ),
+    spans.add(
+      WidgetSpan(
+        alignment: PlaceholderAlignment.baseline,
+        baseline: TextBaseline.alphabetic,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _goToAnalysisNode(node, branchPly),
+          onSecondaryTapDown: widget.onAnalysisNodeAction != null &&
+                  node.isEphemeral
+              ? (details) => widget.onAnalysisNodeAction!(
+                  node.id, details.globalPosition)
+              : null,
+          child: Text(
+            node.san,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 14,
+              color: isCurrentNode ? Colors.white : moveColor,
+              fontWeight:
+                  isCurrentNode ? FontWeight.bold : FontWeight.normal,
+              backgroundColor: isCurrentNode
+                  ? (node.isEphemeral
+                      ? Colors.orange[700]
+                      : Colors.teal[700])
+                  : null,
             ),
           ),
         ),
-      );
-    } else {
-      spans.add(
-        TextSpan(
-          text: node.san,
-          style: TextStyle(
-            color: isCurrentNode ? Colors.white : moveColor,
-            fontWeight: isCurrentNode ? FontWeight.bold : FontWeight.normal,
-            backgroundColor: isCurrentNode
-                ? (node.isEphemeral ? Colors.orange[700] : Colors.teal[700])
-                : null,
-          ),
-          recognizer: _createTapRecognizer(
-              () => _goToAnalysisNode(node, branchPly)),
-        ),
-      );
-    }
+      ),
+    );
 
     spans.add(const TextSpan(text: ' '));
 

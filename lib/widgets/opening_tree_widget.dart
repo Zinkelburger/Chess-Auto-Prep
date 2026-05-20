@@ -5,8 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
+import '../services/coverage_service.dart';
 import '../utils/app_messages.dart';
+import '../utils/fen_utils.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
+
+enum _CoverageStatus { covered, tooShallow, tooDeep, unaccounted }
 
 class OpeningTreeWidget extends StatefulWidget {
   final OpeningTree tree;
@@ -19,6 +23,7 @@ class OpeningTreeWidget extends StatefulWidget {
   final List<RepertoireLine> repertoireLines;
   final List<String> currentMoveSequence;
   final bool showPgnSearch;
+  final CoverageResult? coverageResult;
 
   const OpeningTreeWidget({
     super.key,
@@ -32,6 +37,7 @@ class OpeningTreeWidget extends StatefulWidget {
     this.repertoireLines = const [],
     this.currentMoveSequence = const [],
     this.showPgnSearch = false,
+    this.coverageResult,
   });
 
   @override
@@ -409,6 +415,111 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
     );
   }
 
+  /// Determine coverage status for a child node based on its FEN.
+  _CoverageStatus? _coverageStatusForNode(OpeningTreeNode node) {
+    final result = widget.coverageResult;
+    if (result == null) return null;
+
+    final normalized = normalizeFen(node.fen);
+
+    // Check if any leaf matches this node's FEN
+    for (final leaf in result.tooShallowLeaves) {
+      if (_leafMatchesFen(leaf, normalized)) {
+        return _CoverageStatus.tooShallow;
+      }
+    }
+    for (final leaf in result.tooDeepLeaves) {
+      if (_leafMatchesFen(leaf, normalized)) {
+        return _CoverageStatus.tooDeep;
+      }
+    }
+
+    // Check for unaccounted moves at this position
+    for (final um in result.unaccountedMoves) {
+      // The parent of the unaccounted move leads to this node
+      if (_unaccountedAtFen(um, normalized)) {
+        return _CoverageStatus.unaccounted;
+      }
+    }
+
+    for (final leaf in result.coveredLeaves) {
+      if (_leafMatchesFen(leaf, normalized)) {
+        return _CoverageStatus.covered;
+      }
+    }
+
+    return null;
+  }
+
+  bool _leafMatchesFen(LeafNode leaf, String normalizedFen) {
+    return normalizeFen(leaf.fen) == normalizedFen;
+  }
+
+  bool _unaccountedAtFen(UnaccountedMove um, String normalizedFen) {
+    // Rebuild the FEN for parentMoves + move (the destination position)
+    // But that's expensive. Instead check if the node's FEN is the parent position.
+    // We can't easily rebuild here, so we use a simpler heuristic:
+    // match via the tree's fen-to-node index.
+    return false; // Handled at the parent level below.
+  }
+
+  /// Check if there are unaccounted moves FROM this position (opponent responses
+  /// that our repertoire doesn't cover).
+  bool _hasUnaccountedFrom(OpeningTreeNode node) {
+    final result = widget.coverageResult;
+    if (result == null) return false;
+    final normalized = normalizeFen(node.fen);
+
+    // Check all positions in the tree that match this FEN
+    for (final um in result.unaccountedMoves) {
+      // Rebuild parent fen would be expensive; instead use allLeaves + tree
+      // The unaccounted parent position can be found via the tree's fenToNodes
+      final parentNodes = widget.tree.fenToNodes[normalized];
+      if (parentNodes != null && parentNodes.isNotEmpty) {
+        // Check if this node has child moves that don't include the unaccounted move
+        final repertoireMoves = node.children.keys.toSet();
+        if (!repertoireMoves.contains(um.move)) {
+          // Verify the unaccounted move's parent path matches
+          final nodePath = node.getMovePath();
+          if (_pathMatchesUnaccounted(nodePath, um.parentMoves)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  bool _pathMatchesUnaccounted(
+      List<String> nodePath, List<String> parentMoves) {
+    if (nodePath.length != parentMoves.length) return false;
+    for (int i = 0; i < nodePath.length; i++) {
+      if (nodePath[i] != parentMoves[i]) return false;
+    }
+    return true;
+  }
+
+  Widget _buildCoverageIndicator(_CoverageStatus status) {
+    Color color;
+    switch (status) {
+      case _CoverageStatus.covered:
+        color = const Color(0xFF4CAF50);
+      case _CoverageStatus.tooShallow:
+        color = const Color(0xFFFFA726);
+      case _CoverageStatus.tooDeep:
+        color = const Color(0xFF42A5F5);
+      case _CoverageStatus.unaccounted:
+        color = const Color(0xFFEF5350);
+    }
+
+    return Container(
+      width: 8,
+      height: 8,
+      margin: const EdgeInsets.only(right: 6),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    );
+  }
+
   Widget _buildMoveItem(OpeningTreeNode node) {
     final totalGames = widget.tree.currentNode.gamesPlayed;
     final playedPercent =
@@ -424,11 +535,15 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
       winRateColor = Colors.red;
     }
 
+    // Coverage indicator
+    _CoverageStatus? covStatus = _coverageStatusForNode(node);
+    if (covStatus == null && _hasUnaccountedFrom(node)) {
+      covStatus = _CoverageStatus.unaccounted;
+    }
+
     return InkWell(
       onTap: () {
-        // Delegate move handling to parent controller
         widget.onMoveSelected?.call(node.move);
-        // Also support legacy callback if needed (though we should prefer onMoveSelected)
         widget.onPositionSelected?.call(node.fen);
       },
       child: Container(
@@ -447,6 +562,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
             // Move and stats row
             Row(
               children: [
+                if (covStatus != null) _buildCoverageIndicator(covStatus),
                 // Move notation
                 SizedBox(
                   width: 60,

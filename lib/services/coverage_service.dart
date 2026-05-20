@@ -127,6 +127,46 @@ class CoverageResult {
   /// All leaves regardless of category
   List<LeafNode> get allLeaves =>
       [...coveredLeaves, ...tooShallowLeaves, ...tooDeepLeaves];
+
+  /// All "gap" items: too-shallow leaves and unaccounted moves, sorted by
+  /// move-path length (tree order). Returns move sequences.
+  List<List<String>> get _allGaps {
+    final gaps = <List<String>>[];
+    for (final leaf in tooShallowLeaves) {
+      gaps.add(leaf.moves);
+    }
+    for (final um in unaccountedMoves) {
+      gaps.add([...um.parentMoves, um.move]);
+    }
+    gaps.sort((a, b) => a.length.compareTo(b.length));
+    return gaps;
+  }
+
+  /// First gap in tree order (shortest move path).
+  List<String>? findNextGap() {
+    final gaps = _allGaps;
+    return gaps.isNotEmpty ? gaps.first : null;
+  }
+
+  /// Gap with the highest game count (most impactful to address).
+  List<String>? findBiggestGap() {
+    List<String>? best;
+    int bestCount = -1;
+
+    for (final leaf in tooShallowLeaves) {
+      if (leaf.gameCount > bestCount) {
+        bestCount = leaf.gameCount;
+        best = leaf.moves;
+      }
+    }
+    for (final um in unaccountedMoves) {
+      if (um.gameCount > bestCount) {
+        bestCount = um.gameCount;
+        best = [...um.parentMoves, um.move];
+      }
+    }
+    return best;
+  }
 }
 
 /// Progress callback for coverage analysis

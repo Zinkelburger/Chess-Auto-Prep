@@ -77,6 +77,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   List<int> _wrongMoveIndices = [];
   int _replayIndex = 0;
 
+  // -- Session statistics --
+  int _sessionCorrect = 0;
+  int _sessionIncorrect = 0;
+  int _sessionStreak = 0;
+  int _sessionBestStreak = 0;
+
   // Learn phase state
   bool _learnWaitingForAck = false;
   bool _learnQuizzing = false; // user must play back the move they just saw
@@ -670,6 +676,20 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       failCount: updated.failCount,
     );
 
+    // Update session statistics
+    setState(() {
+      if (hadMistake) {
+        _sessionIncorrect++;
+        _sessionStreak = 0;
+      } else {
+        _sessionCorrect++;
+        _sessionStreak++;
+        if (_sessionStreak > _sessionBestStreak) {
+          _sessionBestStreak = _sessionStreak;
+        }
+      }
+    });
+
     if (_settings.autoNext) {
       _rebuildQueueAndAdvance();
     } else {
@@ -687,7 +707,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     if (_dueQueue.isEmpty) {
       setState(() {
         _phase = _TrainingPhase.finished;
-        _feedback = 'All lines reviewed!';
+        _feedback = 'All caught up!';
       });
       return;
     }
@@ -905,15 +925,15 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             children: [
               Expanded(flex: 4, child: _buildBoardPane()),
               const Divider(height: 1, thickness: 1),
-              Expanded(flex: 5, child: _buildSidePane()),
+              Expanded(flex: 6, child: _buildSidePane()),
             ],
           );
         }
         return Row(
           children: [
-            Expanded(flex: 6, child: _buildBoardPane()),
+            Expanded(flex: 5, child: _buildBoardPane()),
             const VerticalDivider(width: 1, thickness: 1),
-            Expanded(flex: 4, child: _buildSidePane()),
+            Expanded(flex: 5, child: _buildSidePane()),
           ],
         );
       },
@@ -926,24 +946,18 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
   Widget _buildBoardPane() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Expanded(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: 1,
-                child: ChessBoardWidget(
-                  key: ValueKey(_session.fen),
-                  position: _session.position,
-                  flipped: _boardFlipped,
-                  enableUserMoves: _waitingForUser,
-                  onMove: _handleUserMove,
-                ),
-              ),
-            ),
+      padding: const EdgeInsets.all(12),
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: ChessBoardWidget(
+            key: ValueKey(_session.fen),
+            position: _session.position,
+            flipped: _boardFlipped,
+            enableUserMoves: _waitingForUser,
+            onMove: _handleUserMove,
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1009,6 +1023,15 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Repertoire-wide progress bar
+          _buildRepertoireProgressBar(theme),
+
+          // Session stats bar
+          if (_sessionCorrect + _sessionIncorrect > 0) ...[
+            _buildSessionStatsBar(theme),
+            const SizedBox(height: 8),
+          ],
+
           // Line name + progress
           if (_currentLine != null) ...[
             Text(
@@ -1030,6 +1053,117 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           _buildBottomControls(),
         ],
       ),
+    );
+  }
+
+  Widget _buildRepertoireProgressBar(ThemeData theme) {
+    if (_reviewMap.isEmpty) return const SizedBox.shrink();
+
+    int unseen = 0;
+    int due = 0;
+    int practiced = 0;
+    for (final entry in _reviewMap.values) {
+      if (entry.isNew) {
+        unseen++;
+      } else if (entry.isDue) {
+        due++;
+      } else {
+        practiced++;
+      }
+    }
+
+    final total = unseen + due + practiced;
+    if (total == 0) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              height: 6,
+              child: Row(
+                children: [
+                  if (practiced > 0)
+                    Expanded(
+                      flex: practiced,
+                      child: Container(color: Colors.green),
+                    ),
+                  if (due > 0)
+                    Expanded(
+                      flex: due,
+                      child: Container(color: Colors.orange),
+                    ),
+                  if (unseen > 0)
+                    Expanded(
+                      flex: unseen,
+                      child: Container(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          DefaultTextStyle(
+            style: theme.textTheme.bodySmall!,
+            child: Row(
+              children: [
+                Text('$practiced practiced',
+                    style: const TextStyle(color: Colors.green, fontSize: 11)),
+                const SizedBox(width: 8),
+                Text('$due due',
+                    style: const TextStyle(color: Colors.orange, fontSize: 11)),
+                const SizedBox(width: 8),
+                Text('$unseen unseen',
+                    style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 11)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSessionStatsBar(ThemeData theme) {
+    final total = _sessionCorrect + _sessionIncorrect;
+    final accuracy = total > 0 ? (_sessionCorrect * 100 ~/ total) : 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _statItem(Icons.check_circle_outline, '$_sessionCorrect',
+              Colors.green, theme),
+          _statItem(Icons.cancel_outlined, '$_sessionIncorrect',
+              Colors.red, theme),
+          _statItem(Icons.percent, '$accuracy%',
+              theme.colorScheme.onSurface, theme),
+          _statItem(Icons.local_fire_department, '$_sessionStreak',
+              Colors.orange, theme),
+        ],
+      ),
+    );
+  }
+
+  Widget _statItem(IconData icon, String value, Color color, ThemeData theme) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 3),
+        Text(value, style: TextStyle(fontSize: 12, color: color)),
+      ],
     );
   }
 
@@ -1204,6 +1338,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   }
 
   Widget _buildFinishedContent(ThemeData theme) {
+    // "All caught up" state -- no more due lines
+    if (_currentLine == null || _dueQueue.isEmpty) {
+      return _buildAllCaughtUp(theme);
+    }
+
     final entry = _reviewMap[_currentLine?.id];
 
     // Auto-rate if rating buttons are disabled
@@ -1260,6 +1399,38 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     );
   }
 
+  Widget _buildAllCaughtUp(ThemeData theme) {
+    DateTime? nextDue;
+    for (final entry in _reviewMap.values) {
+      if (entry.dueDateUtc != null) {
+        if (nextDue == null || entry.dueDateUtc!.isBefore(nextDue)) {
+          nextDue = entry.dueDateUtc;
+        }
+      }
+    }
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.check_circle_outline,
+              size: 56, color: Colors.green[400]),
+          const SizedBox(height: 16),
+          Text('All caught up!',
+              style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          if (nextDue != null)
+            Text('Next review: ${_formatRelativeDate(nextDue)}',
+                style: theme.textTheme.bodySmall),
+          if (_sessionCorrect + _sessionIncorrect > 0) ...[
+            const SizedBox(height: 16),
+            _buildSessionStatsBar(theme),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildMoveDifficultyChip(int moveIndex) {
     final difficulty = _moveDifficulty(_currentLine!, moveIndex);
     final theme = Theme.of(context);
@@ -1307,20 +1478,35 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   }
 
   Widget _buildRatingButtons() {
+    final entry = _currentLine != null ? _reviewMap[_currentLine!.id] : null;
+    final previewEntry = entry ??
+        RepertoireReviewEntry(
+          repertoireId: _repertoireId,
+          lineId: _currentLine?.id ?? '',
+          lineName: _currentLine?.name ?? '',
+        );
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
-        _ratingButton(ReviewRating.again, 'Again', Colors.red, '1'),
-        _ratingButton(ReviewRating.hard, 'Hard', Colors.orange, '2'),
-        _ratingButton(ReviewRating.good, 'Good', Colors.blue, '3'),
-        _ratingButton(ReviewRating.easy, 'Easy', Colors.green, '4'),
+        _ratingButton(ReviewRating.again, 'Again', Colors.red, '1',
+            previewEntry),
+        _ratingButton(ReviewRating.hard, 'Hard', Colors.orange, '2',
+            previewEntry),
+        _ratingButton(ReviewRating.good, 'Good', Colors.blue, '3',
+            previewEntry),
+        _ratingButton(ReviewRating.easy, 'Easy', Colors.green, '4',
+            previewEntry),
       ],
     );
   }
 
-  Widget _ratingButton(
-      ReviewRating rating, String label, Color color, String shortcut) {
+  Widget _ratingButton(ReviewRating rating, String label, Color color,
+      String shortcut, RepertoireReviewEntry previewEntry) {
+    final interval = _reviewService.previewInterval(previewEntry, rating);
+    final intervalLabel = RepertoireReviewService.formatInterval(interval);
+
     return Tooltip(
       message: 'Keyboard: $shortcut',
       child: OutlinedButton(
@@ -1329,7 +1515,14 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           foregroundColor: color,
           side: BorderSide(color: color.withValues(alpha: 0.5)),
         ),
-        child: Text('$label ($shortcut)'),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$label ($shortcut)'),
+            Text(intervalLabel,
+                style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.7))),
+          ],
+        ),
       ),
     );
   }
