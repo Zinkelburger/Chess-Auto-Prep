@@ -193,6 +193,46 @@ class RepertoireReviewService {
     );
   }
 
+  /// Dry-run of [applyRating] that returns the predicted interval without
+  /// persisting anything.  Used to show "Again (1h)" / "Good (4d)" previews.
+  double previewInterval(RepertoireReviewEntry entry, ReviewRating rating) {
+    double interval = entry.intervalDays;
+    switch (rating) {
+      case ReviewRating.again:
+        interval = 0.05;
+        break;
+      case ReviewRating.hard:
+        interval = interval <= 0 ? 1.0 : max(1.0, interval * 0.8 + 0.2);
+        break;
+      case ReviewRating.good:
+        interval = interval <= 0 ? 1.5 : interval * 1.6;
+        break;
+      case ReviewRating.easy:
+        interval = interval <= 0 ? 2.5 : interval * 2.3;
+        break;
+    }
+    return interval;
+  }
+
+  /// Human-readable label for a review interval in days.
+  static String formatInterval(double intervalDays) {
+    if (intervalDays < 1 / 24) return '<1m';
+    if (intervalDays < 1) {
+      final hours = (intervalDays * 24).round();
+      return '${hours}h';
+    }
+    if (intervalDays < 30) {
+      final days = intervalDays.round();
+      return '${days}d';
+    }
+    if (intervalDays < 365) {
+      final months = (intervalDays / 30).round();
+      return '${months}mo';
+    }
+    final years = (intervalDays / 365).round();
+    return '${years}y';
+  }
+
   Map<String, RepertoireMoveProgress> indexMoveProgress(
       List<RepertoireMoveProgress> items) {
     return {for (final i in items) '${i.lineId}:${i.moveIndex}': i};

@@ -30,8 +30,10 @@ import '../utils/fen_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/engine/inline_engine_bar.dart';
-import '../widgets/game_analysis_chart.dart';
 import '../services/default_pgn_service.dart';
+import '../widgets/fullscreen_game_view.dart';
+import '../widgets/game_analysis_tab.dart';
+import '../widgets/game_nav_bar.dart';
 import '../widgets/opening_tree_widget.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn_slice_dialog.dart';
@@ -66,7 +68,16 @@ class _PgnGameEntry {
   }
 }
 
-enum _SortMode { fileOrder, ratingDesc, ratingAsc }
+// Sort mode is now GameSortMode from game_nav_bar.dart
+
+final _digitKeys = {
+  LogicalKeyboardKey.digit0: 0,
+  LogicalKeyboardKey.digit1: 1,
+  LogicalKeyboardKey.digit2: 2,
+  LogicalKeyboardKey.digit3: 3,
+  LogicalKeyboardKey.digit4: 4,
+  LogicalKeyboardKey.digit5: 5,
+};
 
 /// Board perspective mode persisted as [StudyPerspective] header on first game.
 enum _PerspectiveMode { white, black, player }
@@ -377,6 +388,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   bool _isFirstAutoPlayStep = false;
   DateTime? _lastAutoPlayStepTime;
 
+  // Tracks which best-line / engine-line move is highlighted
+  int? _activeEngineLineMoveIdx; // 0-based index within engine PV
+
   void _setAutoPlaySpeed(double val) {
     setState(() => _autoPlayDelaySec = val);
     if (!_isAutoPlaying || _lastAutoPlayStepTime == null) return;
@@ -396,7 +410,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   // Sorting
-  _SortMode _sortMode = _SortMode.fileOrder;
+  GameSortMode _sortMode = GameSortMode.fileOrder;
 
   // Recent files
   List<String> _recentFiles = [];
@@ -553,7 +567,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _filteredGames = List.of(entries);
       _hasActiveFilters = false;
       _activeSliceConfig = const SliceConfig.empty();
-      _sortMode = _SortMode.fileOrder;
+      _sortMode = GameSortMode.fileOrder;
       _currentGameIndex = 0;
       _perspective = perspective;
       _openingTree = null;
@@ -978,7 +992,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     await prefs.remove('$_slicePrefsPrefix$_filePath');
   }
 
-  void _setSortMode(_SortMode mode) {
+  void _setSortMode(GameSortMode mode) {
     setState(() => _sortMode = mode);
     _applySortMode();
     setState(() => _currentGameIndex = 0);
@@ -988,7 +1002,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _applySortMode() {
     _treePositionGameCache.clear();
     switch (_sortMode) {
-      case _SortMode.fileOrder:
+      case GameSortMode.fileOrder:
         // Re-derive from _allGames in original order, preserving filters
         if (_hasActiveFilters) {
           final filteredSet = _filteredGames.toSet();
@@ -997,13 +1011,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         } else {
           _filteredGames = List.of(_allGames);
         }
-      case _SortMode.ratingDesc:
+      case GameSortMode.ratingDesc:
         _filteredGames.sort((a, b) {
           final aSort = a.studyRating == 0 ? 3 : a.studyRating;
           final bSort = b.studyRating == 0 ? 3 : b.studyRating;
           return bSort.compareTo(aSort);
         });
-      case _SortMode.ratingAsc:
+      case GameSortMode.ratingAsc:
         _filteredGames.sort((a, b) {
           final aSort = a.studyRating == 0 ? 3 : a.studyRating;
           final bSort = b.studyRating == 0 ? 3 : b.studyRating;
@@ -1013,7 +1027,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   void _onPositionChanged(Position pos) {
-    setState(() => _currentPosition = pos);
+    setState(() {
+      _currentPosition = pos;
+      // Clear engine line highlight only when leaving the variation entirely
+      if (_activeEngineLineMoveIdx != null &&
+          _pgnController.variationDepth == 0) {
+        _activeEngineLineMoveIdx = null;
+      }
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -1259,39 +1280,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       setState(() => _autoNextGame = !_autoNextGame);
       return KeyEventResult.handled;
 
-      // Rating (1-5, 0 to clear)
-    } else if (key == LogicalKeyboardKey.digit1) {
-      _setRating(_filteredGames.isNotEmpty &&
-              _filteredGames[_currentGameIndex].studyRating == 1
-          ? 0
-          : 1);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit2) {
-      _setRating(_filteredGames.isNotEmpty &&
-              _filteredGames[_currentGameIndex].studyRating == 2
-          ? 0
-          : 2);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit3) {
-      _setRating(_filteredGames.isNotEmpty &&
-              _filteredGames[_currentGameIndex].studyRating == 3
-          ? 0
-          : 3);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit4) {
-      _setRating(_filteredGames.isNotEmpty &&
-              _filteredGames[_currentGameIndex].studyRating == 4
-          ? 0
-          : 4);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit5) {
-      _setRating(_filteredGames.isNotEmpty &&
-              _filteredGames[_currentGameIndex].studyRating == 5
-          ? 0
-          : 5);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.digit0) {
-      _setRating(0);
+      // Rating (1-5 toggles, 0 clears)
+    } else if (_digitKeys.containsKey(key)) {
+      final star = _digitKeys[key]!;
+      final current = _filteredGames.isNotEmpty
+          ? _filteredGames[_currentGameIndex].studyRating
+          : 0;
+      _setRating(current == star ? 0 : star);
       return KeyEventResult.handled;
 
       // Escape: exit fullscreen first, then clear analysis
@@ -1425,229 +1420,35 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   // ── Fullscreen watch view ──
 
   Widget _buildFullScreenView(ThemeData theme) {
-    final gameLabel = _filteredGames.isNotEmpty
-        ? _filteredGames[_currentGameIndex].label
-        : '';
-
-    return ColoredBox(
-      color: Colors.black,
-      child: Stack(
-        children: [
-          // Board fills entire screen
-          Center(
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: ChessBoardWidget(
-                position: _currentPosition,
-                flipped: _boardFlipped,
-                onMove: (move) {
-                  _stopAutoPlay();
-                  _pgnController.addEphemeralMove(move.san);
-                },
-              ),
-            ),
-          ),
-          // Game info overlay at top (fades out after inactivity via mouse)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: _FullScreenOverlayBar(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withAlpha(180),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        gameLabel,
-                        style: TextStyle(
-                          color: Colors.white.withAlpha(200),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (_filteredGames.length > 1)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 12),
-                        child: Text(
-                          '${_currentGameIndex + 1} / ${_filteredGames.length}',
-                          style: TextStyle(
-                            color: Colors.white.withAlpha(140),
-                            fontSize: 12,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Controls overlay at bottom
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: _FullScreenOverlayBar(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withAlpha(180),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      onPressed:
-                          _currentGameIndex > 0 ? _prevGame : null,
-                      icon: Icon(Icons.skip_previous,
-                          color: Colors.white.withAlpha(180)),
-                      tooltip: 'Previous game (P)',
-                    ),
-                    IconButton(
-                      onPressed: () {
-                        _stopAutoPlay();
-                        _pgnController.goBack();
-                      },
-                      icon: Icon(Icons.chevron_left,
-                          color: Colors.white.withAlpha(180)),
-                      tooltip: 'Back (←)',
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: _toggleAutoPlay,
-                      icon: Icon(
-                        _isAutoPlaying
-                            ? Icons.pause_circle_filled
-                            : Icons.play_circle_filled,
-                        size: 40,
-                        color: _isAutoPlaying
-                            ? Colors.amber
-                            : Colors.white.withAlpha(220),
-                      ),
-                      tooltip: _isAutoPlaying ? 'Pause (Space)' : 'Watch game (Space)',
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      onPressed: () {
-                        _stopAutoPlay();
-                        _pgnController.goForward();
-                      },
-                      icon: Icon(Icons.chevron_right,
-                          color: Colors.white.withAlpha(180)),
-                      tooltip: 'Forward (→)',
-                    ),
-                    IconButton(
-                      onPressed:
-                          _currentGameIndex < _filteredGames.length - 1
-                              ? _nextGame
-                              : null,
-                      icon: Icon(Icons.skip_next,
-                          color: Colors.white.withAlpha(180)),
-                      tooltip: 'Next game (N)',
-                    ),
-                    const SizedBox(width: 12),
-                    // Speed control
-                    PopupMenuButton<double>(
-                      tooltip: 'Auto-play speed',
-                      icon: Icon(Icons.speed,
-                          size: 20, color: Colors.white.withAlpha(160)),
-                      color: Colors.grey[900],
-                      onSelected: _setAutoPlaySpeed,
-                      itemBuilder: (ctx) => [
-                        for (final s in [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 10.0])
-                          PopupMenuItem(
-                            value: s,
-                            child: Row(
-                              children: [
-                                if (s == _autoPlayDelaySec)
-                                  const Icon(Icons.check,
-                                      size: 16, color: Colors.amber)
-                                else
-                                  const SizedBox(width: 16),
-                                const SizedBox(width: 8),
-                                Text('${s}s / move',
-                                    style: const TextStyle(
-                                        color: Colors.white, fontSize: 13)),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                    // Auto next game toggle
-                    Tooltip(
-                      message: 'Auto next game (A)',
-                      child: GestureDetector(
-                        onTap: () =>
-                            setState(() => _autoNextGame = !_autoNextGame),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            color: _autoNextGame
-                                ? Colors.amber.withAlpha(40)
-                                : Colors.white.withAlpha(15),
-                            border: Border.all(
-                              color: _autoNextGame
-                                  ? Colors.amber.withAlpha(120)
-                                  : Colors.white.withAlpha(40),
-                            ),
-                          ),
-                          child: Text(
-                            'Auto',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: _autoNextGame
-                                  ? Colors.amber
-                                  : Colors.white.withAlpha(160),
-                              fontWeight: _autoNextGame
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // Exit fullscreen button (always visible, top-right corner)
-          Positioned(
-            top: 8,
-            right: 8,
-            child: IconButton(
-              onPressed: _exitFullScreen,
-              icon: Icon(Icons.fullscreen_exit,
-                  color: Colors.white.withAlpha(120), size: 28),
-              tooltip: 'Exit fullscreen (Esc)',
-            ),
-          ),
-        ],
-      ),
+    return FullscreenGameView(
+      position: _currentPosition,
+      boardFlipped: _boardFlipped,
+      gameLabel: _filteredGames.isNotEmpty
+          ? _filteredGames[_currentGameIndex].label
+          : '',
+      currentIndex: _currentGameIndex,
+      totalGames: _filteredGames.length,
+      isAutoPlaying: _isAutoPlaying,
+      autoPlayDelaySec: _autoPlayDelaySec,
+      autoNextGame: _autoNextGame,
+      onBoardMove: (san) {
+        _stopAutoPlay();
+        _pgnController.addEphemeralMove(san);
+      },
+      onPrev: _prevGame,
+      onNext: _nextGame,
+      onGoBack: () {
+        _stopAutoPlay();
+        _pgnController.goBack();
+      },
+      onGoForward: () {
+        _stopAutoPlay();
+        _pgnController.goForward();
+      },
+      onToggleAutoPlay: _toggleAutoPlay,
+      onExit: _exitFullScreen,
+      onSetSpeed: _setAutoPlaySpeed,
+      onSetAutoNext: (v) => setState(() => _autoNextGame = v),
     );
   }
 
@@ -1987,12 +1788,49 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             controller: _tabController,
             children: [
               _buildGameTab(),
-              _buildAnalysisTab(),
+              GameAnalysisTab(
+                analysisController: _analysisController,
+                pgnController: _pgnController,
+                currentPly: _currentPly,
+                variationDepth: _pgnController.variationDepth,
+                gamePgnText: _filteredGames.isNotEmpty
+                    ? _filteredGames[_currentGameIndex].pgnText
+                    : null,
+                onAnnotatedMovetext: _persistMoveComments,
+                onUserNavigation: () {
+                  _stopAutoPlay();
+                  _reclaimFocus();
+                },
+              ),
             ],
           ),
         ),
         // Game navigation bar
-        if (_filteredGames.isNotEmpty) _buildGameNavBar(),
+        if (_filteredGames.isNotEmpty)
+          GameNavBar(
+            games: _filteredGames
+                .map((g) => GameNavItem(
+                      label: g.label,
+                      studyRating: g.studyRating,
+                      studySummary: g.studySummary,
+                    ))
+                .toList(),
+            currentIndex: _currentGameIndex,
+            currentRating: _filteredGames[_currentGameIndex].studyRating,
+            sortMode: _sortMode,
+            isAutoPlaying: _isAutoPlaying,
+            autoPlayDelaySec: _autoPlayDelaySec,
+            autoNextGame: _autoNextGame,
+            onPrev: _prevGame,
+            onNext: _nextGame,
+            onGoToGame: _goToGame,
+            onSetRating: _setRating,
+            onSetSortMode: _setSortMode,
+            onToggleAutoPlay: _toggleAutoPlay,
+            onToggleFullScreen: _toggleFullScreen,
+            onSetSpeed: _setAutoPlaySpeed,
+            onSetAutoNext: (v) => setState(() => _autoNextGame = v),
+          ),
       ],
     );
   }
@@ -2258,6 +2096,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         InlineEngineBar(
           fen: _currentPosition.fen,
           onLineMoveTapped: _onEngineLineMoveTapped,
+          activeLineMoveIndex: _activeEngineLineMoveIdx != null
+              ? (_pgnController.variationDepth > 0
+                  ? _pgnController.variationDepth - 1
+                  : _activeEngineLineMoveIdx)
+              : null,
         ),
         const Divider(height: 1),
         Expanded(
@@ -2274,737 +2117,37 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
   }
 
-  // ── Analysis tab ──
-
-  void _startAnalysis() {
-    if (_filteredGames.isEmpty) return;
-    final game = _filteredGames[_currentGameIndex];
-    _analysisController.analyzeGame(
-      game.pgnText,
-      onAnnotatedMovetext: (annotated) {
-        _persistMoveComments(annotated);
-      },
-    );
-  }
-
-  void _onAnalysisPlySelected(int ply) {
-    if (ply <= 0) return;
-    _stopAutoPlay();
-    final moveNum = (ply + 1) ~/ 2;
-    final isWhite = ply % 2 == 1;
-    _pgnController.clearEphemeralMoves();
-    _pgnController.jumpToMove(moveNum, isWhite);
-    _reclaimFocus();
-  }
+  // ── Analysis tab (delegated to GameAnalysisTab widget) ──
 
   /// Handle a click on a move in an engine line (inline engine bar).
   /// Adds moves 0..clickedIndex as ephemeral variations from the current position.
   void _onEngineLineMoveTapped(List<String> sanMoves, int clickedIndex) {
     if (sanMoves.isEmpty || clickedIndex < 0) return;
     _stopAutoPlay();
-    final end = (clickedIndex + 1).clamp(0, sanMoves.length);
-    for (int i = 0; i < end; i++) {
-      _pgnController.addEphemeralMove(sanMoves[i]);
+
+    // Add entire line so arrow keys can continue past the clicked move
+    for (final san in sanMoves) {
+      _pgnController.addEphemeralMove(san);
     }
+
+    // Navigate back to the clicked position
+    final stepsBack = sanMoves.length - 1 - clickedIndex;
+    for (int i = 0; i < stepsBack; i++) {
+      _pgnController.goBack();
+    }
+
+    setState(() {
+      _activeEngineLineMoveIdx = clickedIndex;
+    });
     _reclaimFocus();
-  }
-
-  /// Navigate into the best line for a classified move, adding moves 1..N
-  /// as ephemeral variations and landing on the Nth move.
-  void _onBestLineMoveClicked(MoveEval eval, int moveIndex) {
-    if (eval.bestLine.isEmpty || moveIndex < 0) return;
-    _stopAutoPlay();
-
-    // The best line starts from the position *before* the blunder, so jump
-    // to ply-1 (the parent position).
-    final branchPly = eval.ply - 1;
-    if (branchPly < 0) return;
-    final moveNum = (branchPly + 1 + 1) ~/ 2; // 1-based move number
-    final isWhite = (branchPly + 1) % 2 == 1;
-    _pgnController.clearEphemeralMoves();
-    _pgnController.jumpToMove(moveNum, isWhite);
-
-    // Feed moves 0..moveIndex into the PGN viewer as ephemeral analysis
-    final end = (moveIndex + 1).clamp(0, eval.bestLine.length);
-    for (int i = 0; i < end; i++) {
-      _pgnController.addEphemeralMove(eval.bestLine[i]);
-    }
-    _reclaimFocus();
-  }
-
-  Widget _buildClickableBestLine(MoveEval eval) {
-    final line = eval.bestLine;
-    // Starting context: best line branches from position before the move,
-    // so the first move in the best line is played by the same side.
-    final startPly = eval.ply - 1;
-    var moveNum = (startPly ~/ 2) + 1;
-    var isWhite = startPly % 2 == 0;
-
-    final children = <InlineSpan>[];
-    children.add(TextSpan(
-      text: 'Best: ',
-      style: TextStyle(
-        fontSize: 11,
-        color: Colors.grey[600],
-        fontFamily: 'monospace',
-        fontWeight: FontWeight.bold,
-      ),
-    ));
-
-    for (int i = 0; i < line.length; i++) {
-      if (isWhite) {
-        children.add(TextSpan(
-          text: '$moveNum.',
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-            fontFamily: 'monospace',
-          ),
-        ));
-      } else if (i == 0) {
-        children.add(TextSpan(
-          text: '$moveNum...',
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-            fontFamily: 'monospace',
-          ),
-        ));
-      }
-
-      final idx = i;
-      children.add(WidgetSpan(
-        alignment: PlaceholderAlignment.baseline,
-        baseline: TextBaseline.alphabetic,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            onTap: () => _onBestLineMoveClicked(eval, idx),
-            child: Text(
-              '${line[i]} ',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.teal[300],
-                fontFamily: 'monospace',
-                decoration: TextDecoration.underline,
-                decorationColor: Colors.teal[300]!.withAlpha(80),
-                decorationStyle: TextDecorationStyle.dotted,
-              ),
-            ),
-          ),
-        ),
-      ));
-
-      if (!isWhite) moveNum++;
-      isWhite = !isWhite;
-    }
-
-    return RichText(
-      text: TextSpan(children: children),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
   }
 
   int get _currentPly {
     return _pgnController.mainLineIndex;
   }
 
-  Widget _buildAnalysisTab() {
-    if (_filteredGames.isEmpty) {
-      return Center(
-        child: Text(
-          'Load a PGN to analyze',
-          style: TextStyle(color: Colors.grey[500]),
-        ),
-      );
-    }
-
-    final evals = _analysisController.evals;
-    final isAnalyzing = _analysisController.isAnalyzing;
-    final total = _analysisController.totalMoves;
-    final done = _analysisController.analyzedMoves;
-
-    return Column(
-      children: [
-        // Analyze button / progress
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              if (!isAnalyzing)
-                FilledButton.icon(
-                  onPressed: _startAnalysis,
-                  icon: const Icon(Icons.analytics, size: 18),
-                  label: Text(evals.isEmpty ? 'Analyze Game' : 'Re-analyze'),
-                )
-              else ...[
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Analyzing move $done / $total  (depth ${_analysisController.depth})',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      const SizedBox(height: 4),
-                      LinearProgressIndicator(
-                        value: total > 0 ? done / total : 0,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _analysisController.cancel,
-                  icon: const Icon(Icons.stop, size: 20),
-                  tooltip: 'Stop analysis',
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-              if (!isAnalyzing && evals.isNotEmpty) ...[
-                const Spacer(),
-                _buildDepthSelector(),
-              ],
-            ],
-          ),
-        ),
-        // Chart
-        if (evals.isNotEmpty) ...[
-          GameAnalysisChart(
-            evals: evals,
-            startWinChance: _analysisController.startWinChance,
-            currentPly: _currentPly,
-            onPlySelected: _onAnalysisPlySelected,
-          ),
-          const Divider(height: 1),
-          // Summary stats
-          GameAnalysisSummary(evals: evals),
-          const Divider(height: 1),
-          // Move list with classifications
-          Expanded(child: _buildAnalysisMoveList(evals)),
-        ] else if (!isAnalyzing) ...[
-          const Spacer(),
-          Icon(Icons.show_chart, size: 48, color: Colors.grey[700]),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: _startAnalysis,
-            icon: const Icon(Icons.analytics, size: 20),
-            label: const Text('Analyze Game'),
-          ),
-          const Spacer(),
-        ] else
-          const Spacer(),
-      ],
-    );
-  }
-
-  Widget _buildDepthSelector() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('Depth:', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-        const SizedBox(width: 4),
-        PopupMenuButton<int>(
-          tooltip: 'Analysis depth',
-          onSelected: (d) => setState(() => _analysisController.depth = d),
-          itemBuilder: (ctx) => [
-            for (final d in [10, 12, 14, 16, 18, 20, 22, 24])
-              PopupMenuItem(
-                value: d,
-                child: Row(
-                  children: [
-                    if (d == _analysisController.depth)
-                      const Icon(Icons.check, size: 16)
-                    else
-                      const SizedBox(width: 16),
-                    const SizedBox(width: 8),
-                    Text('$d'),
-                  ],
-                ),
-              ),
-          ],
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.grey[700]!),
-            ),
-            child: Text(
-              '${_analysisController.depth}',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAnalysisMoveList(List<MoveEval> evals) {
-    // Only show moves with classifications (and some context)
-    final interesting = <MoveEval>[];
-    for (final e in evals) {
-      if (e.classification != MoveClassification.normal) {
-        interesting.add(e);
-      }
-    }
-
-    if (interesting.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            'No inaccuracies, mistakes, blunders, or interesting moves found.',
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
-          ),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      itemCount: interesting.length,
-      itemBuilder: (context, index) {
-        final e = interesting[index];
-        final moveNum = (e.ply + 1) ~/ 2;
-        final dots = e.isWhiteMove ? '.' : '...';
-
-        final Color classColor;
-        final String classLabel;
-        switch (e.classification) {
-          case MoveClassification.blunder:
-            classColor = const Color(0xFFDB3B21);
-            classLabel = 'Blunder';
-          case MoveClassification.mistake:
-            classColor = const Color(0xFFE69F00);
-            classLabel = 'Mistake';
-          case MoveClassification.inaccuracy:
-            classColor = const Color(0xFF56B4E9);
-            classLabel = 'Inaccuracy';
-          case MoveClassification.interesting:
-            classColor = const Color(0xFF9C27B0);
-            classLabel = 'Interesting';
-          case MoveClassification.normal:
-            classColor = Colors.grey;
-            classLabel = '';
-        }
-
-        final evalStr = _formatEvalCp(e);
-
-        return InkWell(
-          onTap: () => _onAnalysisPlySelected(e.ply),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 48,
-                      child: Text(
-                        '$moveNum$dots',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                      ),
-                    ),
-                    Text(
-                      e.san,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: classColor.withAlpha(30),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: classColor.withAlpha(80)),
-                      ),
-                      child: Text(
-                        classLabel,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: classColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      evalStr,
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: Colors.grey[400],
-                      ),
-                    ),
-                  ],
-                ),
-                if (e.bestLine.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 48, top: 3),
-                    child: _buildClickableBestLine(e),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  String _formatEvalCp(MoveEval e) {
-    if (e.scoreMate != null) return '#${e.scoreMate}';
-    if (e.scoreCp != null) {
-      final v = e.scoreCp! / 100.0;
-      return v >= 0 ? '+${v.toStringAsFixed(1)}' : v.toStringAsFixed(1);
-    }
-    return '--';
-  }
 
   // ── Game navigation bar ──
 
-  Widget _buildGameNavBar() {
-    final game = _filteredGames[_currentGameIndex];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: Border(
-          top: BorderSide(color: Colors.grey[700]!),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Rating + sort + counter row
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ..._buildStarRating(game.studyRating),
-                  const SizedBox(width: 8),
-                  _buildSortDropdown(),
-                ],
-              ),
-              _buildGameCounterDropdown(),
-              _buildAutoPlayControls(),
-            ],
-          ),
-          const SizedBox(height: 4),
-          // Prev / Next row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Tooltip(
-                message: 'Previous game (P)',
-                child: TextButton.icon(
-                  onPressed: _currentGameIndex > 0 ? _prevGame : null,
-                  icon: const Icon(Icons.skip_previous, size: 20),
-                  label: const Text('Prev'),
-                ),
-              ),
-              const SizedBox(width: 24),
-              Tooltip(
-                message: 'Next game (N)',
-                child: TextButton.icon(
-                  onPressed: _currentGameIndex < _filteredGames.length - 1
-                      ? _nextGame
-                      : null,
-                  icon: const Icon(Icons.skip_next, size: 20),
-                  label: const Text('Next'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSortDropdown() {
-    return PopupMenuButton<_SortMode>(
-      tooltip: 'Sort games',
-      onSelected: _setSortMode,
-      itemBuilder: (ctx) => [
-        for (final mode in _SortMode.values)
-          PopupMenuItem(
-            value: mode,
-            child: Row(
-              children: [
-                if (mode == _sortMode)
-                  const Icon(Icons.check, size: 16)
-                else
-                  const SizedBox(width: 16),
-                const SizedBox(width: 8),
-                Text(switch (mode) {
-                  _SortMode.fileOrder => 'File order',
-                  _SortMode.ratingDesc => 'Stars (high first)',
-                  _SortMode.ratingAsc => 'Stars (low first)',
-                }),
-              ],
-            ),
-          ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.grey[700]!),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.sort, size: 16, color: Colors.grey[400]),
-            const SizedBox(width: 4),
-            Text(
-              switch (_sortMode) {
-                _SortMode.fileOrder => 'File order',
-                _SortMode.ratingDesc => 'Stars ↓',
-                _SortMode.ratingAsc => 'Stars ↑',
-              },
-              style: const TextStyle(fontSize: 11),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildStarRating(int current) {
-    return List.generate(5, (i) {
-      final star = i + 1;
-      return Tooltip(
-        message: 'Rate $star star${star > 1 ? 's' : ''} ($star)',
-        child: GestureDetector(
-          onTap: () => _setRating(current == star ? 0 : star),
-          child: Icon(
-            star <= current ? Icons.star : Icons.star_border,
-            size: 22,
-            color: star <= current ? Colors.amber : Colors.grey[600],
-          ),
-        ),
-      );
-    });
-  }
-
-  Widget _buildGameCounterDropdown() {
-    return PopupMenuButton<int>(
-      tooltip: 'Jump to game',
-      itemBuilder: (ctx) {
-        // Show up to 50 items around current index
-        final start = (_currentGameIndex - 25).clamp(0, _filteredGames.length);
-        final end = (_currentGameIndex + 25).clamp(0, _filteredGames.length);
-        return [
-          for (int i = start; i < end; i++)
-            PopupMenuItem(
-              value: i,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 36,
-                        child: Text(
-                          '${i + 1}.',
-                          style: TextStyle(
-                            fontWeight: i == _currentGameIndex
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          _filteredGames[i].label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: i == _currentGameIndex
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                        ),
-                      ),
-                      if (_filteredGames[i].studyRating > 0)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(width: 4),
-                            const Icon(Icons.star,
-                                size: 14, color: Colors.amber),
-                            Text(
-                              '${_filteredGames[i].studyRating}',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                  if (_filteredGames[i].studySummary.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 36, top: 2),
-                      child: Text(
-                        _filteredGames[i].studySummary,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[500],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ];
-      },
-      onSelected: _goToGame,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.grey[700]!),
-        ),
-        child: Text(
-          'Game ${_currentGameIndex + 1} / ${_filteredGames.length}',
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAutoPlayControls() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Auto-play toggle
-        IconButton(
-          onPressed: _filteredGames.isNotEmpty ? _toggleAutoPlay : null,
-          icon: Icon(
-            _isAutoPlaying ? Icons.pause_circle : Icons.play_circle,
-            size: 28,
-            color: _isAutoPlaying ? Colors.amber : null,
-          ),
-          tooltip: _isAutoPlaying ? 'Pause (Space)' : 'Watch game (Space)',
-        ),
-        // Fullscreen watch mode
-        IconButton(
-          onPressed: _filteredGames.isNotEmpty ? _toggleFullScreen : null,
-          icon: Icon(Icons.fullscreen, size: 24, color: Colors.grey[400]),
-          tooltip: 'Fullscreen (Ctrl+F)',
-          visualDensity: VisualDensity.compact,
-        ),
-        // Speed control
-        PopupMenuButton<double>(
-          tooltip: 'Auto-play speed',
-          icon: Icon(Icons.speed, size: 20, color: Colors.grey[400]),
-          onSelected: _setAutoPlaySpeed,
-          itemBuilder: (ctx) => [
-            for (final s in [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 10.0])
-              PopupMenuItem(
-                value: s,
-                child: Row(
-                  children: [
-                    if (s == _autoPlayDelaySec)
-                      const Icon(Icons.check, size: 16)
-                    else
-                      const SizedBox(width: 16),
-                    const SizedBox(width: 8),
-                    Text('${s}s / move'),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        // Auto next game toggle
-        Tooltip(
-          message: 'Auto next game (A)',
-          child: FilterChip(
-            label: const Text('Auto', style: TextStyle(fontSize: 11)),
-            selected: _autoNextGame,
-            onSelected: (v) => setState(() => _autoNextGame = v),
-            visualDensity: VisualDensity.compact,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
-/// Overlay bar for fullscreen mode that fades in on mouse movement
-/// and fades out after a period of inactivity.
-class _FullScreenOverlayBar extends StatefulWidget {
-  final Widget child;
-
-  const _FullScreenOverlayBar({required this.child});
-
-  @override
-  State<_FullScreenOverlayBar> createState() => _FullScreenOverlayBarState();
-}
-
-class _FullScreenOverlayBarState extends State<_FullScreenOverlayBar> {
-  bool _visible = true;
-  Timer? _hideTimer;
-
-  @override
-  void initState() {
-    super.initState();
-    _scheduleHide();
-  }
-
-  @override
-  void dispose() {
-    _hideTimer?.cancel();
-    super.dispose();
-  }
-
-  void _scheduleHide() {
-    _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) setState(() => _visible = false);
-    });
-  }
-
-  void _onHover() {
-    if (!_visible) {
-      setState(() => _visible = true);
-    }
-    _scheduleHide();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onHover: (_) => _onHover(),
-      onEnter: (_) => _onHover(),
-      child: AnimatedOpacity(
-        opacity: _visible ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 400),
-        child: IgnorePointer(
-          ignoring: !_visible,
-          child: widget.child,
-        ),
-      ),
-    );
-  }
-}

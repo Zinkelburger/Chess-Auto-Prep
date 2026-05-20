@@ -157,7 +157,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   Widget _buildBoardPane() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: AspectRatio(
           aspectRatio: 1.0,
           child: ChessBoardWidget(

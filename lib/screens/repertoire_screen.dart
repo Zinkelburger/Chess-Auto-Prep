@@ -64,6 +64,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   CoverageResult? _coverageResult;
   bool _isCoverageRunning = false;
+  double? _coverageProgress;
+  String? _coverageProgressMessage;
 
   String? _lastRepertoireId;
 
@@ -360,7 +362,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 children: [
                   Expanded(flex: 4, child: _buildBoardPane()),
                   const Divider(height: 1, thickness: 1),
-                  Expanded(flex: 5, child: _buildTabbedPane()),
+                  Expanded(flex: 6, child: _buildTabbedPane()),
                 ],
               );
             }
@@ -368,12 +370,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             return Row(
               children: [
                 Expanded(
-                  flex: 6,
+                  flex: 5,
                   child: _buildBoardPane(),
                 ),
                 const VerticalDivider(width: 1, thickness: 1),
                 Expanded(
-                  flex: 4,
+                  flex: 5,
                   child: _buildTabbedPane(),
                 ),
               ],
@@ -388,7 +390,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return Stack(
       children: [
         Container(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(12),
           child: Center(
             child: AspectRatio(
               aspectRatio: 1,
@@ -777,11 +779,17 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       coverageResult: _coverageResult,
       onCoveragePressed: _showCoverageCalculator,
       isCoverageRunning: _isCoverageRunning,
+      coverageProgress: _coverageProgress,
+      coverageProgressMessage: _coverageProgressMessage,
       onLineSelected: (line) {
         _controller.loadPgnLine(line);
         _tabController.animateTo(2);
       },
       onLineRenamed: _renameLine,
+      onNavigateToPosition: (moveSequence) {
+        _controller.loadMoveSequence(moveSequence);
+        _tabController.animateTo(0); // Switch to Tree tab
+      },
     );
   }
 
@@ -1026,18 +1034,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             flex: 3,
             child: OpeningTreeWidget(
               tree: _controller.openingTree!,
-              showPgnSearch: false, // Disabled - using new browser below
+              showPgnSearch: false,
               repertoireLines: _controller.repertoireLines,
               currentMoveSequence: _controller.currentMoveSequence,
+              coverageResult: _coverageResult,
               onMoveSelected: (move) {
-                // Handle tree move selection
                 _controller.userSelectedTreeMove(move);
               },
               onGoBack: () => _controller.goBack(),
               onGoForward: () => _controller.goForward(),
-              onPositionSelected: (fen) {
-                // Deprecated: Use onMoveSelected instead
-              },
+              onPositionSelected: (fen) {},
               onLineSelected: (line) {
                 _selectLine(line);
               },
@@ -1307,9 +1313,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     setState(() {
       _isCoverageRunning = true;
       _coverageResult = null;
+      _coverageProgress = 0.0;
+      _coverageProgressMessage = 'Starting analysis...';
     });
 
-    // Switch to Lines tab so user sees progress
     _tabController.animateTo(3);
 
     final service = CoverageService(
@@ -1326,7 +1333,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         targetPercent: config.targetPercent,
         isWhiteRepertoire: _controller.isRepertoireWhite,
         onProgress: (message, progress) {
-          // Could show a snackbar or overlay, but Lines tab will update once done
+          if (mounted) {
+            setState(() {
+              _coverageProgressMessage = message;
+              _coverageProgress = progress;
+            });
+          }
         },
       );
 
@@ -1334,6 +1346,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         setState(() {
           _coverageResult = result;
           _isCoverageRunning = false;
+          _coverageProgress = null;
+          _coverageProgressMessage = null;
         });
         showAppSnackBar(
           context,
@@ -1345,7 +1359,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isCoverageRunning = false);
+        setState(() {
+          _isCoverageRunning = false;
+          _coverageProgress = null;
+          _coverageProgressMessage = null;
+        });
         showAppSnackBar(context, 'Coverage analysis failed: $e');
       }
     }

@@ -20,6 +20,8 @@ import 'dart:math' as math;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../utils/chess_utils.dart' show uciPvToSan, uciToSan;
+import '../utils/pgn_comment_utils.dart';
 import 'engine/stockfish_pool.dart';
 import 'maia_factory.dart';
 
@@ -38,6 +40,8 @@ class MoveEval {
   final double winningChance; // White's winning chance in [-1, 1]
   final MoveClassification classification;
   final double? maiaProb; // MAIA's predicted probability of this move (0-1)
+  final String? maiaTopMove; // Most likely move according to MAIA (SAN)
+  final double? maiaTopProb; // Probability of the most likely MAIA move
   final List<String> bestLine; // Engine's preferred continuation (SAN)
   final int? depth; // Analysis depth
 
@@ -51,6 +55,8 @@ class MoveEval {
     required this.winningChance,
     this.classification = MoveClassification.normal,
     this.maiaProb,
+    this.maiaTopMove,
+    this.maiaTopProb,
     this.bestLine = const [],
     this.depth,
   });
@@ -117,80 +123,6 @@ MoveClassification classifyMove(double delta) {
   return MoveClassification.normal;
 }
 
-// ---------------------------------------------------------------------------
-// PGN eval comment parsing
-// ---------------------------------------------------------------------------
-
-// Eval: [%eval 1.23] or [%eval 1.23,18] or [%eval #3] or [%eval #3,20]
-final _evalCommentRe =
-    RegExp(r'\[%eval\s+(#?[+-]?\d+\.?\d*)(?:,(\d+))?\]');
-
-({int? cp, int? mate, int? depth})? _parseEvalComment(String comment) {
-  final match = _evalCommentRe.firstMatch(comment);
-  if (match == null) return null;
-  final raw = match.group(1)!;
-  final depthStr = match.group(2);
-  final depth = depthStr != null ? int.tryParse(depthStr) : null;
-  if (raw.startsWith('#')) {
-    final mate = int.tryParse(raw.substring(1));
-    if (mate != null) return (cp: null, mate: mate, depth: depth);
-    return null;
-  }
-  final cpFloat = double.tryParse(raw);
-  if (cpFloat != null) {
-    return (cp: (cpFloat * 100).round(), mate: null, depth: depth);
-  }
-  return null;
-}
-
-String _setEvalInComment(String comment, String evalValue) {
-  final token = '[%eval $evalValue]';
-  if (_evalCommentRe.hasMatch(comment)) {
-    return comment.replaceFirst(_evalCommentRe, token);
-  }
-  final trimmed = comment.trim();
-  if (trimmed.isEmpty) return token;
-  return '$token $trimmed';
-}
-
-// MAIA probability: [%maia 0.03]
-final _maiaCommentRe = RegExp(r'\[%maia\s+(\d+\.?\d*)\]');
-
-double? _parseMaiaComment(String comment) {
-  final match = _maiaCommentRe.firstMatch(comment);
-  if (match == null) return null;
-  return double.tryParse(match.group(1)!);
-}
-
-String _setMaiaInComment(String comment, double prob) {
-  final token = '[%maia ${prob.toStringAsFixed(3)}]';
-  if (_maiaCommentRe.hasMatch(comment)) {
-    return comment.replaceFirst(_maiaCommentRe, token);
-  }
-  final trimmed = comment.trim();
-  if (trimmed.isEmpty) return token;
-  return '$trimmed $token';
-}
-
-// Best line (PV): [%pv Nf3,Bb4,O-O,d5]
-final _pvCommentRe = RegExp(r'\[%pv\s+([^\]]+)\]');
-
-List<String> _parsePvComment(String comment) {
-  final match = _pvCommentRe.firstMatch(comment);
-  if (match == null) return const [];
-  return match.group(1)!.split(',').where((s) => s.isNotEmpty).toList();
-}
-
-String _setPvInComment(String comment, List<String> pv) {
-  if (pv.isEmpty) return comment;
-  final token = '[%pv ${pv.join(',')}]';
-  if (_pvCommentRe.hasMatch(comment)) {
-    return comment.replaceFirst(_pvCommentRe, token);
-  }
-  final trimmed = comment.trim();
-  if (trimmed.isEmpty) return token;
-  return '$trimmed $token';
-}
 
 // ---------------------------------------------------------------------------
 // Isolate-safe top-level parser for cached evals (used by compute())
@@ -225,12 +157,14 @@ String _setPvInComment(String comment, List<String> pv) {
     ({int? cp, int? mate, int? depth})? evalData;
     double? maiaProb;
     List<String> bestLine = const [];
+    ({String move, double prob})? maiaTop;
     if (moveData.comments != null) {
       for (final c in moveData.comments!) {
-        evalData ??= _parseEvalComment(c);
-        maiaProb ??= _parseMaiaComment(c);
+        evalData ??= parseEvalComment(c);
+        maiaProb ??= parseMaiaComment(c);
+        maiaTop ??= parseMaiaTopComment(c);
         if (bestLine.isEmpty) {
-          final pv = _parsePvComment(c);
+          final pv = parsePvComment(c);
           if (pv.isNotEmpty) bestLine = pv;
         }
       }
@@ -252,6 +186,8 @@ String _setPvInComment(String comment, List<String> pv) {
       scoreMate: evalData.mate,
       winningChance: winChance,
       maiaProb: maiaProb,
+      maiaTopMove: maiaTop?.move,
+      maiaTopProb: maiaTop?.prob,
       bestLine: bestLine,
       depth: evalData.depth,
     ));
@@ -284,6 +220,8 @@ String _setPvInComment(String comment, List<String> pv) {
       scoreMate: e.scoreMate,
       winningChance: e.winningChance,
       maiaProb: e.maiaProb,
+      maiaTopMove: e.maiaTopMove,
+      maiaTopProb: e.maiaTopProb,
       bestLine: e.bestLine,
       depth: e.depth,
       classification: classification,
@@ -496,24 +434,31 @@ class GameAnalysisController extends ChangeNotifier {
               : (winChance - prevWinChance);
           var classification = classifyMove(delta.clamp(0.0, 1.0));
 
-          // For non-normal moves, show the engine's preferred line from the
-          // position *before* the move (i.e. what should have been played).
-          // For normal moves, show the continuation from after the move.
-          final List<String> bestLine;
-          if (classification != MoveClassification.normal) {
-            bestLine = _uciPvToSan(prevBeforeFen, prevBeforePv);
-          } else {
-            bestLine = _uciPvToSan(p.fenAfter, result.pv);
-          }
-
-          // Run MAIA for this position
+          // Run MAIA before choosing the best line, so "interesting" moves
+          // (reclassified from normal) also get the pre-move engine line.
           double? maiaProb;
+          String? maiaTopMove;
+          double? maiaTopProb;
           if (maiaReady) {
             try {
               final elo = isWhiteMove ? whiteElo : blackElo;
               final maiaResult = await maia!.evaluate(p.fenBefore, elo);
               maiaProb = maiaResult.policy[p.moveUci] ?? 0.0;
               _injectMaiaComment(p.moveData, maiaProb);
+
+              // Find the most likely MAIA move
+              if (maiaResult.policy.isNotEmpty) {
+                String topUci = maiaResult.policy.keys.first;
+                double topP = maiaResult.policy.values.first;
+                for (final entry in maiaResult.policy.entries) {
+                  if (entry.value > topP) {
+                    topUci = entry.key;
+                    topP = entry.value;
+                  }
+                }
+                maiaTopProb = topP;
+                maiaTopMove = _uciMoveToSan(p.fenBefore, topUci);
+              }
             } catch (_) {}
           }
 
@@ -521,6 +466,16 @@ class GameAnalysisController extends ChangeNotifier {
               maiaProb != null &&
               maiaProb < 0.05) {
             classification = MoveClassification.interesting;
+          }
+
+          // For non-normal moves (including interesting), show the engine's
+          // preferred line from the position *before* the move. For normal
+          // moves, show the continuation from after the move.
+          final List<String> bestLine;
+          if (classification != MoveClassification.normal) {
+            bestLine = _uciPvToSan(prevBeforeFen, prevBeforePv);
+          } else {
+            bestLine = _uciPvToSan(p.fenAfter, result.pv);
           }
 
           final eval = MoveEval(
@@ -534,6 +489,8 @@ class GameAnalysisController extends ChangeNotifier {
             bestLine: bestLine,
             classification: classification,
             maiaProb: maiaProb,
+            maiaTopMove: maiaTopMove,
+            maiaTopProb: maiaTopProb,
             depth: useDepth,
           );
           _evals.add(eval);
@@ -563,9 +520,12 @@ class GameAnalysisController extends ChangeNotifier {
     final evalValue = eval.toEvalComment();
     if (moveData.comments != null && moveData.comments!.isNotEmpty) {
       var comment = moveData.comments!.first;
-      comment = _setEvalInComment(comment, evalValue);
+      comment = setEvalInComment(comment, evalValue);
       if (eval.bestLine.isNotEmpty) {
-        comment = _setPvInComment(comment, eval.bestLine);
+        comment = setPvInComment(comment, eval.bestLine);
+      }
+      if (eval.maiaTopMove != null && eval.maiaTopProb != null) {
+        comment = setMaiaTopInComment(comment, eval.maiaTopMove!, eval.maiaTopProb!);
       }
       moveData.comments![0] = comment;
     } else {
@@ -573,60 +533,33 @@ class GameAnalysisController extends ChangeNotifier {
       if (eval.bestLine.isNotEmpty) {
         comment = '$comment [%pv ${eval.bestLine.join(',')}]';
       }
+      if (eval.maiaTopMove != null && eval.maiaTopProb != null) {
+        comment = setMaiaTopInComment(comment, eval.maiaTopMove!, eval.maiaTopProb!);
+      }
       moveData.comments = [comment];
     }
   }
 
   void _injectMaiaComment(PgnNodeData moveData, double prob) {
     if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-      moveData.comments![0] = _setMaiaInComment(moveData.comments!.first, prob);
+      moveData.comments![0] = setMaiaInComment(moveData.comments!.first, prob);
     } else {
       moveData.comments = ['[%maia ${prob.toStringAsFixed(3)}]'];
     }
   }
 
-  String _rebuildMovetext(List<PgnNodeData> mainline, String? result) {
-    final buf = StringBuffer();
-    var moveNum = 1;
-    var isWhite = true;
-    for (final move in mainline) {
-      if (isWhite) buf.write('$moveNum. ');
-      buf.write('${move.san} ');
-      if (move.comments != null && move.comments!.isNotEmpty) {
-        for (final c in move.comments!) {
-          if (c.isNotEmpty) buf.write('{$c} ');
-        }
-      }
-      if (!isWhite) moveNum++;
-      isWhite = !isWhite;
-    }
-    if (result != null && result != '*') buf.write(result);
-    return buf.toString().trim();
-  }
+  String _rebuildMovetext(List<PgnNodeData> mainline, String? result) =>
+      buildMovetext(mainline, result: result);
 
   void cancel() {
     _isCancelled = true;
     StockfishPool().stopAll();
   }
 
-  /// Convert a UCI PV to a list of SAN strings by walking the position forward.
-  List<String> _uciPvToSan(String fen, List<String> uciMoves) {
-    if (uciMoves.isEmpty) return const [];
-    try {
-      Position pos = Chess.fromSetup(Setup.parseFen(fen));
-      final san = <String>[];
-      for (final uci in uciMoves.take(8)) {
-        final move = Move.parse(uci);
-        if (move == null) break;
-        final (newPos, sanStr) = pos.makeSan(move);
-        san.add(sanStr);
-        pos = newPos;
-      }
-      return san;
-    } catch (_) {
-      return const [];
-    }
-  }
+  List<String> _uciPvToSan(String fen, List<String> uciMoves) =>
+      uciPvToSan(fen, uciMoves);
+
+  String? _uciMoveToSan(String fen, String uci) => uciToSan(fen, uci);
 
   int? _negateCp(int? cp) => cp != null ? -cp : null;
   int? _negateMate(int? mate) => mate != null ? -mate : null;

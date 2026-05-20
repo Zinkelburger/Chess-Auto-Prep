@@ -161,7 +161,7 @@ class _TacticsModeView extends StatelessWidget {
                   ? Column(
                       children: [
                         Expanded(
-                          flex: 5,
+                          flex: 4,
                           child: _TacticsBoardPane(appState: appState),
                         ),
                         const Divider(height: 1, thickness: 1),
@@ -177,15 +177,15 @@ class _TacticsModeView extends StatelessWidget {
                   : Row(
                       children: [
                         Expanded(
-                          flex: 6,
+                          flex: 5,
                           child: _TacticsBoardPane(appState: appState),
                         ),
                         Container(
                           width: 1,
-                          color: Colors.grey[300],
+                          color: Colors.grey[700],
                         ),
                         const Expanded(
-                          flex: 4,
+                          flex: 5,
                           child: Padding(
                             padding: EdgeInsets.all(8.0),
                             child: TacticsControlPanel(),
@@ -209,7 +209,7 @@ class _TacticsBoardPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(12),
       child: Center(
         child: AspectRatio(
           aspectRatio: 1,

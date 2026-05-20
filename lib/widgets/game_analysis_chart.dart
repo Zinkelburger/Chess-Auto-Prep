@@ -9,6 +9,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../services/game_analysis_controller.dart';
+import '../utils/chess_utils.dart' show formatEvalDisplay;
 
 class GameAnalysisChart extends StatefulWidget {
   final List<MoveEval> evals;
@@ -301,16 +302,8 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
     return (e.scoreCp ?? 0).toDouble().clamp(-800, 800);
   }
 
-  static String _formatEval(MoveEval e) {
-    if (e.scoreMate != null) {
-      return '#${e.scoreMate}';
-    }
-    if (e.scoreCp != null) {
-      final v = e.scoreCp! / 100.0;
-      return v >= 0 ? '+${v.toStringAsFixed(1)}' : v.toStringAsFixed(1);
-    }
-    return '--';
-  }
+  static String _formatEval(MoveEval e) =>
+      formatEvalDisplay(scoreCp: e.scoreCp, scoreMate: e.scoreMate);
 
   static String _classSymbol(MoveClassification cls) => switch (cls) {
         MoveClassification.blunder => '??',

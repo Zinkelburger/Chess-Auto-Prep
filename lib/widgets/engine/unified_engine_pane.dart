@@ -43,16 +43,8 @@ class _MergedMove {
 
   _MergedMove({required this.uci});
 
-  String get evalString {
-    if (stockfishMate != null) {
-      return 'M$stockfishMate';
-    }
-    if (stockfishCp != null) {
-      final e = stockfishCp! / 100.0;
-      return e >= 0 ? '+${e.toStringAsFixed(1)}' : e.toStringAsFixed(1);
-    }
-    return '--';
-  }
+  String get evalString =>
+      formatEvalDisplay(scoreCp: stockfishCp, scoreMate: stockfishMate);
 
   int get effectiveCp {
     if (stockfishMate != null) {
