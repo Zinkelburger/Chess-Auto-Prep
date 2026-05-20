@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'core/app_state.dart';
 import 'screens/main_screen.dart';
@@ -7,8 +8,9 @@ import 'screens/main_screen.dart';
 import 'services/browser_extension_server/browser_extension_server_factory.dart';
 import 'services/default_pgn_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await windowManager.ensureInitialized();
 
   _startBrowserExtensionServer();
   DefaultPgnService.ensureExtracted();

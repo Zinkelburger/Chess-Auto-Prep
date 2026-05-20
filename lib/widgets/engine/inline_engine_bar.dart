@@ -9,6 +9,7 @@
 /// workers used by the repertoire pane.
 library;
 
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -24,10 +25,15 @@ class InlineEngineBar extends StatefulWidget {
   final String fen;
   final bool isActive;
 
+  /// Called when the user clicks a move in an engine line.
+  /// Provides the full PV as SAN moves and the 0-based index of the clicked move.
+  final void Function(List<String> sanMoves, int clickedIndex)? onLineMoveTapped;
+
   const InlineEngineBar({
     super.key,
     required this.fen,
     this.isActive = true,
+    this.onLineMoveTapped,
   });
 
   /// Whether the engine is currently enabled (static, shared across instances).
@@ -293,9 +299,29 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     );
   }
 
+  /// Convert full UCI PV to SAN moves list (all moves, including the first).
+  List<String> _pvToSanList(String fen, List<String> pv) {
+    final result = <String>[];
+    try {
+      Position pos = Chess.fromSetup(Setup.parseFen(fen));
+      for (final uci in pv) {
+        final move = Move.parse(uci);
+        if (move == null) break;
+        try {
+          final (_, san) = pos.makeSan(move);
+          result.add(san);
+          pos = pos.play(move);
+        } catch (_) {
+          break;
+        }
+      }
+    } catch (_) {}
+    return result;
+  }
+
   Widget _buildLineRow(BuildContext context, DiscoveryLine line) {
-    final san = line.pv.isNotEmpty ? uciToSan(widget.fen, line.pv.first) : '?';
-    final continuation = formatContinuation(widget.fen, line.pv);
+    final sanMoves = _pvToSanList(widget.fen, line.pv);
+    final san = sanMoves.isNotEmpty ? sanMoves.first : '?';
 
     final String evalStr;
     if (line.scoreMate != null) {
@@ -319,14 +345,30 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         children: [
           SizedBox(
             width: 48,
-            child: Text(
-              san,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace',
-                fontSize: 14,
-              ),
-            ),
+            child: widget.onLineMoveTapped != null
+                ? MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () =>
+                          widget.onLineMoveTapped!(sanMoves, 0),
+                      child: Text(
+                        san,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  )
+                : Text(
+                    san,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                    ),
+                  ),
           ),
           Container(
             width: 52,
@@ -348,19 +390,83 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
           ),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(
-              continuation,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[500],
-                fontFamily: 'monospace',
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: _buildClickableContinuation(sanMoves),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildClickableContinuation(List<String> sanMoves) {
+    if (sanMoves.length <= 1) return const SizedBox.shrink();
+
+    final fenParts = widget.fen.split(' ');
+    final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
+    final fullMoveNum = fenParts.length >= 6
+        ? (int.tryParse(fenParts[5]) ?? 1)
+        : 1;
+
+    var moveNum = fullMoveNum;
+    var isWhite = isWhiteToMove;
+
+    // Skip the first move (shown separately in the bold column)
+    if (!isWhite) moveNum++;
+    isWhite = !isWhite;
+
+    final spans = <InlineSpan>[];
+    final hasCallback = widget.onLineMoveTapped != null;
+
+    for (int i = 1; i < sanMoves.length && i < 8; i++) {
+      if (isWhite) {
+        spans.add(TextSpan(
+          text: '$moveNum.',
+          style: TextStyle(fontSize: 12, color: Colors.grey[600], fontFamily: 'monospace'),
+        ));
+      } else if (i == 1) {
+        spans.add(TextSpan(
+          text: '$moveNum...',
+          style: TextStyle(fontSize: 12, color: Colors.grey[600], fontFamily: 'monospace'),
+        ));
+      }
+
+      if (hasCallback) {
+        final idx = i;
+        spans.add(WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () => widget.onLineMoveTapped!(sanMoves, idx),
+              child: Text(
+                '${sanMoves[i]} ',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.teal[300],
+                  fontFamily: 'monospace',
+                  decoration: TextDecoration.underline,
+                  decorationColor: Colors.teal[300]!.withAlpha(80),
+                  decorationStyle: TextDecorationStyle.dotted,
+                ),
+              ),
+            ),
+          ),
+        ));
+      } else {
+        spans.add(TextSpan(
+          text: '${sanMoves[i]} ',
+          style: TextStyle(fontSize: 12, color: Colors.grey[500], fontFamily: 'monospace'),
+        ));
+      }
+
+      if (!isWhite) moveNum++;
+      isWhite = !isWhite;
+    }
+
+    return RichText(
+      text: TextSpan(children: spans),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }

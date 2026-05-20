@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'package:provider/provider.dart';
 
@@ -326,7 +327,7 @@ String? _detectProtagonistFrom(List<_PgnGameEntry> games) {
 }
 
 class _PgnViewerScreenState extends State<PgnViewerScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WindowListener {
   // File state
   String? _filePath;
   List<_PgnGameEntry> _allGames = [];
@@ -372,7 +373,27 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   Timer? _autoPlayTimer;
   bool _isAutoPlaying = false;
   bool _autoNextGame = false;
-  double _autoPlayDelaySec = 2.0;
+  double _autoPlayDelaySec = 1.0;
+  bool _isFirstAutoPlayStep = false;
+  DateTime? _lastAutoPlayStepTime;
+
+  void _setAutoPlaySpeed(double val) {
+    setState(() => _autoPlayDelaySec = val);
+    if (!_isAutoPlaying || _lastAutoPlayStepTime == null) return;
+
+    _autoPlayTimer?.cancel();
+    final elapsedMs =
+        DateTime.now().difference(_lastAutoPlayStepTime!).inMilliseconds;
+    final newDelayMs = (val * 1000).round();
+    final remainingMs = newDelayMs - elapsedMs;
+
+    if (remainingMs <= 0) {
+      _autoPlayStep();
+    } else {
+      _autoPlayTimer =
+          Timer(Duration(milliseconds: remainingMs), _autoPlayStep);
+    }
+  }
 
   // Sorting
   _SortMode _sortMode = _SortMode.fileOrder;
@@ -385,11 +406,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   // Default directory for the file picker (bundled collections folder)
   String? _collectionsDir;
 
+  // Fullscreen watch mode
+  bool _isFullScreen = false;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _analysisController.addListener(_onAnalysisUpdate);
+    windowManager.addListener(this);
     _loadRecentFiles();
     _loadCollections();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -438,18 +463,31 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   @override
   void dispose() {
+    windowManager.removeListener(this);
     _analysisController.removeListener(_onAnalysisUpdate);
     _analysisController.dispose();
     _autoPlayTimer?.cancel();
     _persistDebounce?.cancel();
     _tabController.dispose();
     _focusNode.dispose();
-    // Remove listener safely — context may not be usable here, but
-    // Provider keeps the reference alive within the widget tree's scope.
     try {
       context.read<AppState>().removeListener(_onAppStateChanged);
     } catch (_) {}
     super.dispose();
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    if (mounted && _isFullScreen) {
+      setState(() => _isFullScreen = false);
+    }
+  }
+
+  @override
+  void onWindowEnterFullScreen() {
+    if (mounted && !_isFullScreen) {
+      setState(() => _isFullScreen = true);
+    }
   }
 
   /// Re-claim keyboard focus after any interaction (button click, popup, etc.)
@@ -684,6 +722,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   void _startAutoPlay() {
+    _isFirstAutoPlayStep = true;
     setState(() => _isAutoPlaying = true);
     _scheduleNextAutoPlayStep();
   }
@@ -699,34 +738,57 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _scheduleNextAutoPlayStep() {
     _autoPlayTimer?.cancel();
     if (!_isAutoPlaying) return;
-    _autoPlayTimer = Timer(
-      Duration(milliseconds: (_autoPlayDelaySec * 1000).round()),
-      _autoPlayStep,
-    );
+    final delayMs = _isFirstAutoPlayStep
+        ? 300
+        : (_autoPlayDelaySec * 1000).round();
+    _isFirstAutoPlayStep = false;
+    _autoPlayTimer = Timer(Duration(milliseconds: delayMs), _autoPlayStep);
   }
 
   void _autoPlayStep() {
     if (!mounted || !_isAutoPlaying) return;
-    // Try to advance one move
-    if (_pgnController.currentFen != null) {
-      _pgnController.goForward();
-      // Check if position actually changed (i.e. there was a move to make)
-      // We do this by scheduling a post-frame check
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_isAutoPlaying) return;
-        // If we're at end of game
-        if (_pgnController.currentFen == _currentPosition.fen) {
-          // Position didn't change — we're at the end
-          if (_autoNextGame && _currentGameIndex < _filteredGames.length - 1) {
-            _nextGame();
-            _startAutoPlay();
-          } else {
-            _stopAutoPlay();
-          }
+    if (_pgnController.currentFen == null) return;
+    _lastAutoPlayStepTime = DateTime.now();
+
+    final fenBefore = _pgnController.currentFen;
+    _pgnController.goForward();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isAutoPlaying) return;
+      final fenAfter = _pgnController.currentFen;
+      if (fenAfter == fenBefore) {
+        // Position didn't change — we're at the end
+        if (_autoNextGame && _currentGameIndex < _filteredGames.length - 1) {
+          _nextGame();
+          _startAutoPlay();
         } else {
-          _scheduleNextAutoPlayStep();
+          _stopAutoPlay();
         }
-      });
+      } else {
+        _scheduleNextAutoPlayStep();
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // Fullscreen watch mode
+  // -----------------------------------------------------------------------
+
+  Future<void> _toggleFullScreen() async {
+    final entering = !_isFullScreen;
+    await windowManager.setFullScreen(entering);
+    if (mounted) {
+      setState(() => _isFullScreen = entering);
+      _reclaimFocus();
+    }
+  }
+
+  Future<void> _exitFullScreen() async {
+    if (!_isFullScreen) return;
+    await windowManager.setFullScreen(false);
+    if (mounted) {
+      setState(() => _isFullScreen = false);
+      _reclaimFocus();
     }
   }
 
@@ -1171,6 +1233,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _prevGame();
       return KeyEventResult.handled;
 
+      // Fullscreen (Ctrl+F, Shift+F, or F11)
+    } else if (key == LogicalKeyboardKey.f11) {
+      _toggleFullScreen();
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyF &&
+        (HardwareKeyboard.instance.isShiftPressed ||
+         HardwareKeyboard.instance.isControlPressed)) {
+      _toggleFullScreen();
+      return KeyEventResult.handled;
+
       // Board & engine
     } else if (key == LogicalKeyboardKey.keyF) {
       setState(() => _boardFlipped = !_boardFlipped);
@@ -1222,9 +1294,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _setRating(0);
       return KeyEventResult.handled;
 
-      // Analysis
+      // Escape: exit fullscreen first, then clear analysis
     } else if (key == LogicalKeyboardKey.escape) {
-      _pgnController.clearEphemeralMoves();
+      if (_isFullScreen) {
+        _exitFullScreen();
+      } else {
+        _pgnController.clearEphemeralMoves();
+      }
       return KeyEventResult.handled;
 
       // Tabs
@@ -1307,39 +1383,270 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: _reclaimFocus,
-        child: SafeArea(
-          bottom: false,
-          child: Stack(
-            children: [
-              Column(
-                children: [
-                  _buildTopBar(theme),
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        if (constraints.maxWidth >= 960) {
-                          return _buildWideLayout();
-                        }
-                        return _buildNarrowLayout();
-                      },
+        child: _isFullScreen
+            ? _buildFullScreenView(theme)
+            : SafeArea(
+                bottom: false,
+                child: Stack(
+                  children: [
+                    Column(
+                      children: [
+                        _buildTopBar(theme),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              if (constraints.maxWidth >= 960) {
+                                return _buildWideLayout();
+                              }
+                              return _buildNarrowLayout();
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-              if (_isLoading)
-                Positioned.fill(
-                  child: ColoredBox(
-                    color: Colors.black26,
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: theme.colorScheme.primary,
+                    if (_isLoading)
+                      Positioned.fill(
+                        child: ColoredBox(
+                          color: Colors.black26,
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
+  // ── Fullscreen watch view ──
+
+  Widget _buildFullScreenView(ThemeData theme) {
+    final gameLabel = _filteredGames.isNotEmpty
+        ? _filteredGames[_currentGameIndex].label
+        : '';
+
+    return ColoredBox(
+      color: Colors.black,
+      child: Stack(
+        children: [
+          // Board fills entire screen
+          Center(
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: ChessBoardWidget(
+                position: _currentPosition,
+                flipped: _boardFlipped,
+                onMove: (move) {
+                  _stopAutoPlay();
+                  _pgnController.addEphemeralMove(move.san);
+                },
+              ),
+            ),
+          ),
+          // Game info overlay at top (fades out after inactivity via mouse)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _FullScreenOverlayBar(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withAlpha(180),
+                      Colors.transparent,
+                    ],
                   ),
                 ),
-            ],
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        gameLabel,
+                        style: TextStyle(
+                          color: Colors.white.withAlpha(200),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (_filteredGames.length > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 12),
+                        child: Text(
+                          '${_currentGameIndex + 1} / ${_filteredGames.length}',
+                          style: TextStyle(
+                            color: Colors.white.withAlpha(140),
+                            fontSize: 12,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
+          // Controls overlay at bottom
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _FullScreenOverlayBar(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withAlpha(180),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      onPressed:
+                          _currentGameIndex > 0 ? _prevGame : null,
+                      icon: Icon(Icons.skip_previous,
+                          color: Colors.white.withAlpha(180)),
+                      tooltip: 'Previous game (P)',
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        _stopAutoPlay();
+                        _pgnController.goBack();
+                      },
+                      icon: Icon(Icons.chevron_left,
+                          color: Colors.white.withAlpha(180)),
+                      tooltip: 'Back (←)',
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _toggleAutoPlay,
+                      icon: Icon(
+                        _isAutoPlaying
+                            ? Icons.pause_circle_filled
+                            : Icons.play_circle_filled,
+                        size: 40,
+                        color: _isAutoPlaying
+                            ? Colors.amber
+                            : Colors.white.withAlpha(220),
+                      ),
+                      tooltip: _isAutoPlaying ? 'Pause (Space)' : 'Watch game (Space)',
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () {
+                        _stopAutoPlay();
+                        _pgnController.goForward();
+                      },
+                      icon: Icon(Icons.chevron_right,
+                          color: Colors.white.withAlpha(180)),
+                      tooltip: 'Forward (→)',
+                    ),
+                    IconButton(
+                      onPressed:
+                          _currentGameIndex < _filteredGames.length - 1
+                              ? _nextGame
+                              : null,
+                      icon: Icon(Icons.skip_next,
+                          color: Colors.white.withAlpha(180)),
+                      tooltip: 'Next game (N)',
+                    ),
+                    const SizedBox(width: 12),
+                    // Speed control
+                    PopupMenuButton<double>(
+                      tooltip: 'Auto-play speed',
+                      icon: Icon(Icons.speed,
+                          size: 20, color: Colors.white.withAlpha(160)),
+                      color: Colors.grey[900],
+                      onSelected: _setAutoPlaySpeed,
+                      itemBuilder: (ctx) => [
+                        for (final s in [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 10.0])
+                          PopupMenuItem(
+                            value: s,
+                            child: Row(
+                              children: [
+                                if (s == _autoPlayDelaySec)
+                                  const Icon(Icons.check,
+                                      size: 16, color: Colors.amber)
+                                else
+                                  const SizedBox(width: 16),
+                                const SizedBox(width: 8),
+                                Text('${s}s / move',
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                    // Auto next game toggle
+                    Tooltip(
+                      message: 'Auto next game (A)',
+                      child: GestureDetector(
+                        onTap: () =>
+                            setState(() => _autoNextGame = !_autoNextGame),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: _autoNextGame
+                                ? Colors.amber.withAlpha(40)
+                                : Colors.white.withAlpha(15),
+                            border: Border.all(
+                              color: _autoNextGame
+                                  ? Colors.amber.withAlpha(120)
+                                  : Colors.white.withAlpha(40),
+                            ),
+                          ),
+                          child: Text(
+                            'Auto',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _autoNextGame
+                                  ? Colors.amber
+                                  : Colors.white.withAlpha(160),
+                              fontWeight: _autoNextGame
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Exit fullscreen button (always visible, top-right corner)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: IconButton(
+              onPressed: _exitFullScreen,
+              icon: Icon(Icons.fullscreen_exit,
+                  color: Colors.white.withAlpha(120), size: 28),
+              tooltip: 'Exit fullscreen (Esc)',
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1948,7 +2255,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final game = _filteredGames[_currentGameIndex];
     return Column(
       children: [
-        InlineEngineBar(fen: _currentPosition.fen),
+        InlineEngineBar(
+          fen: _currentPosition.fen,
+          onLineMoveTapped: _onEngineLineMoveTapped,
+        ),
         const Divider(height: 1),
         Expanded(
           child: PgnViewerWidget(
@@ -1985,6 +2295,115 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _pgnController.clearEphemeralMoves();
     _pgnController.jumpToMove(moveNum, isWhite);
     _reclaimFocus();
+  }
+
+  /// Handle a click on a move in an engine line (inline engine bar).
+  /// Adds moves 0..clickedIndex as ephemeral variations from the current position.
+  void _onEngineLineMoveTapped(List<String> sanMoves, int clickedIndex) {
+    if (sanMoves.isEmpty || clickedIndex < 0) return;
+    _stopAutoPlay();
+    final end = (clickedIndex + 1).clamp(0, sanMoves.length);
+    for (int i = 0; i < end; i++) {
+      _pgnController.addEphemeralMove(sanMoves[i]);
+    }
+    _reclaimFocus();
+  }
+
+  /// Navigate into the best line for a classified move, adding moves 1..N
+  /// as ephemeral variations and landing on the Nth move.
+  void _onBestLineMoveClicked(MoveEval eval, int moveIndex) {
+    if (eval.bestLine.isEmpty || moveIndex < 0) return;
+    _stopAutoPlay();
+
+    // The best line starts from the position *before* the blunder, so jump
+    // to ply-1 (the parent position).
+    final branchPly = eval.ply - 1;
+    if (branchPly < 0) return;
+    final moveNum = (branchPly + 1 + 1) ~/ 2; // 1-based move number
+    final isWhite = (branchPly + 1) % 2 == 1;
+    _pgnController.clearEphemeralMoves();
+    _pgnController.jumpToMove(moveNum, isWhite);
+
+    // Feed moves 0..moveIndex into the PGN viewer as ephemeral analysis
+    final end = (moveIndex + 1).clamp(0, eval.bestLine.length);
+    for (int i = 0; i < end; i++) {
+      _pgnController.addEphemeralMove(eval.bestLine[i]);
+    }
+    _reclaimFocus();
+  }
+
+  Widget _buildClickableBestLine(MoveEval eval) {
+    final line = eval.bestLine;
+    // Starting context: best line branches from position before the move,
+    // so the first move in the best line is played by the same side.
+    final startPly = eval.ply - 1;
+    var moveNum = (startPly ~/ 2) + 1;
+    var isWhite = startPly % 2 == 0;
+
+    final children = <InlineSpan>[];
+    children.add(TextSpan(
+      text: 'Best: ',
+      style: TextStyle(
+        fontSize: 11,
+        color: Colors.grey[600],
+        fontFamily: 'monospace',
+        fontWeight: FontWeight.bold,
+      ),
+    ));
+
+    for (int i = 0; i < line.length; i++) {
+      if (isWhite) {
+        children.add(TextSpan(
+          text: '$moveNum.',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey[600],
+            fontFamily: 'monospace',
+          ),
+        ));
+      } else if (i == 0) {
+        children.add(TextSpan(
+          text: '$moveNum...',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey[600],
+            fontFamily: 'monospace',
+          ),
+        ));
+      }
+
+      final idx = i;
+      children.add(WidgetSpan(
+        alignment: PlaceholderAlignment.baseline,
+        baseline: TextBaseline.alphabetic,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () => _onBestLineMoveClicked(eval, idx),
+            child: Text(
+              '${line[i]} ',
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.teal[300],
+                fontFamily: 'monospace',
+                decoration: TextDecoration.underline,
+                decorationColor: Colors.teal[300]!.withAlpha(80),
+                decorationStyle: TextDecorationStyle.dotted,
+              ),
+            ),
+          ),
+        ),
+      ));
+
+      if (!isWhite) moveNum++;
+      isWhite = !isWhite;
+    }
+
+    return RichText(
+      text: TextSpan(children: children),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 
   int get _currentPly {
@@ -2234,16 +2653,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 if (e.bestLine.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(left: 48, top: 3),
-                    child: Text(
-                      'Line: ${e.bestLine.join(' ')}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[500],
-                        fontFamily: 'monospace',
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: _buildClickableBestLine(e),
                   ),
               ],
             ),
@@ -2278,14 +2688,21 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           // Rating + sort + counter row
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 4,
+            runSpacing: 4,
             children: [
-              ..._buildStarRating(game.studyRating),
-              const SizedBox(width: 8),
-              _buildSortDropdown(),
-              const Spacer(),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ..._buildStarRating(game.studyRating),
+                  const SizedBox(width: 8),
+                  _buildSortDropdown(),
+                ],
+              ),
               _buildGameCounterDropdown(),
-              const Spacer(),
               _buildAutoPlayControls(),
             ],
           ),
@@ -2490,13 +2907,18 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           ),
           tooltip: _isAutoPlaying ? 'Pause (Space)' : 'Watch game (Space)',
         ),
+        // Fullscreen watch mode
+        IconButton(
+          onPressed: _filteredGames.isNotEmpty ? _toggleFullScreen : null,
+          icon: Icon(Icons.fullscreen, size: 24, color: Colors.grey[400]),
+          tooltip: 'Fullscreen (Ctrl+F)',
+          visualDensity: VisualDensity.compact,
+        ),
         // Speed control
         PopupMenuButton<double>(
           tooltip: 'Auto-play speed',
           icon: Icon(Icons.speed, size: 20, color: Colors.grey[400]),
-          onSelected: (val) {
-            setState(() => _autoPlayDelaySec = val);
-          },
+          onSelected: _setAutoPlaySpeed,
           itemBuilder: (ctx) => [
             for (final s in [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 10.0])
               PopupMenuItem(
@@ -2525,6 +2947,64 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Overlay bar for fullscreen mode that fades in on mouse movement
+/// and fades out after a period of inactivity.
+class _FullScreenOverlayBar extends StatefulWidget {
+  final Widget child;
+
+  const _FullScreenOverlayBar({required this.child});
+
+  @override
+  State<_FullScreenOverlayBar> createState() => _FullScreenOverlayBarState();
+}
+
+class _FullScreenOverlayBarState extends State<_FullScreenOverlayBar> {
+  bool _visible = true;
+  Timer? _hideTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleHide();
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _visible = false);
+    });
+  }
+
+  void _onHover() {
+    if (!_visible) {
+      setState(() => _visible = true);
+    }
+    _scheduleHide();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onHover: (_) => _onHover(),
+      onEnter: (_) => _onHover(),
+      child: AnimatedOpacity(
+        opacity: _visible ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 400),
+        child: IgnorePointer(
+          ignoring: !_visible,
+          child: widget.child,
+        ),
+      ),
     );
   }
 }
