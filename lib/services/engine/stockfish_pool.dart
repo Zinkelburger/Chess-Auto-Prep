@@ -37,11 +37,26 @@ class StockfishPool {
 
   int get workerCount => _workers.length;
 
+  /// UCI Threads applied when spawning or reconfiguring workers.
+  int _threadsPerWorker = 1;
+  int get threadsPerWorker => _threadsPerWorker;
+
   // ── Worker lifecycle ────────────────────────────────────────────────────
 
   /// Spawn workers up to [count].  Idempotent — only adds if fewer exist.
-  Future<void> ensureWorkers([int? count]) async {
+  ///
+  /// [threadsPerWorker] sets Stockfish UCI Threads on each worker (MultiPV
+  /// searches benefit strongly from >1 thread).  Existing workers are
+  /// reconfigured when [threadsPerWorker] differs from the current value.
+  Future<void> ensureWorkers([
+    int? count,
+    int? threadsPerWorker,
+  ]) async {
     if (!StockfishConnectionFactory.isAvailable) return;
+
+    if (threadsPerWorker != null && threadsPerWorker > 0) {
+      _threadsPerWorker = threadsPerWorker;
+    }
 
     final target = count ?? EngineSettings().workers;
     while (_workers.length < target) {
@@ -51,10 +66,33 @@ class StockfishPool {
       _free.add(w);
     }
 
+    if (_workers.isNotEmpty &&
+        _threadsPerWorker > 1 &&
+        threadsPerWorker != null) {
+      await reconfigureAllWorkers(_threadsPerWorker);
+    }
+
     if (kDebugMode && _workers.isNotEmpty) {
       print('[Pool] ${_workers.length} workers ready '
-          '(${kPoolHashPerWorkerMb} MB hash each)');
+          '(${kPoolHashPerWorkerMb} MB hash, '
+          '$_threadsPerWorker thread(s) each)');
     }
+  }
+
+  /// Set UCI Threads on every live worker (e.g. before a tree build).
+  Future<void> reconfigureAllWorkers(int threads) async {
+    if (threads < 1) threads = 1;
+    _threadsPerWorker = threads;
+    await Future.wait([
+      for (final w in _workers) w.setThreads(threads),
+    ]);
+  }
+
+  /// Prepare the pool for tree building: ensure at least one worker and
+  /// apply [threads] UCI Threads for faster MultiPV.
+  Future<void> prepareForTreeBuild(int threads) async {
+    await ensureWorkers(1, threads);
+    await reconfigureAllWorkers(threads);
   }
 
   Future<EvalWorker?> _spawnOne(int index) async {
@@ -62,7 +100,10 @@ class StockfishPool {
       final engine = await StockfishConnectionFactory.create();
       if (engine == null) return null;
       final worker = EvalWorker(engine);
-      await worker.init(hashMb: kPoolHashPerWorkerMb);
+      await worker.init(
+        hashMb: kPoolHashPerWorkerMb,
+        threads: _threadsPerWorker,
+      );
       return worker;
     } catch (e) {
       if (kDebugMode) print('[Pool] Worker #$index spawn failed: $e');

@@ -22,6 +22,7 @@ import '../services/generation/tree_ease.dart';
 import '../services/generation/tree_serialization.dart';
 import '../services/coverage_service.dart';
 import '../services/tree_build_service.dart';
+import '../utils/system_info.dart';
 import 'lichess_db_info_icon.dart';
 import 'lichess_db_selector.dart';
 
@@ -65,6 +66,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final TextEditingController _maxPlyCtrl = TextEditingController(text: '10');
   final TextEditingController _engineDepthCtrl =
       TextEditingController(text: '20');
+  late final TextEditingController _engineThreadsCtrl;
   final TextEditingController _evalGuardCtrl =
       TextEditingController(text: '30');
   late final TextEditingController _minEvalCtrl;
@@ -110,6 +112,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final Set<String> _lichessRatings = {'2000', '2200', '2500'};
 
   SelectionMode _selectionMode = SelectionMode.expectimax;
+  BuildMode _buildMode = BuildMode.stockfishExpectimax;
   bool _showAdvanced = false;
   bool _isGenerating = false;
   bool _cancelRequested = false;
@@ -134,6 +137,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   @override
   void initState() {
     super.initState();
+    _engineThreadsCtrl = TextEditingController(
+      text: defaultEngineThreads().toString(),
+    );
     _minEvalCtrl = TextEditingController(
       text: widget.isWhiteRepertoire ? '0' : '-100',
     );
@@ -165,6 +171,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _cutoffCtrl.dispose();
     _maxPlyCtrl.dispose();
     _engineDepthCtrl.dispose();
+    _engineThreadsCtrl.dispose();
     _evalGuardCtrl.dispose();
     _minEvalCtrl.dispose();
     _maxEvalCtrl.dispose();
@@ -324,6 +331,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   /// for [maxPly] when resuming a partial tree).
   TreeBuildConfig _treeBuildConfigFromControls() {
     final evalDepth = int.tryParse(_engineDepthCtrl.text.trim()) ?? 20;
+    final rawThreads = int.tryParse(_engineThreadsCtrl.text.trim());
+    final engineThreads = rawThreads != null
+        ? clampEngineThreads(rawThreads)
+        : defaultEngineThreads();
     final minAcceptableRaw = _minAcceptableEvalDepthCtrl.text.trim();
     final minAcceptableDepth = minAcceptableRaw.isEmpty
         ? 0
@@ -339,7 +350,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         fallbackPercent: 0.01,
       ),
       maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 10,
+      buildMode: _buildMode,
       evalDepth: evalDepth,
+      engineThreads: engineThreads,
       maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
       minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
           (widget.isWhiteRepertoire ? 0 : -100),
@@ -380,6 +393,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   Future<void> _startTreeBuild({BuildTree? existingTree}) async {
     if (_isGenerating) return;
+    if (_buildMode == BuildMode.dbExplorer ||
+        _buildMode == BuildMode.trapFinder) {
+      setState(() => _status =
+          '${_buildModeLabel(_buildMode)} is not yet available in the app.');
+      return;
+    }
+    if (_buildMode == BuildMode.maiaDbExplore &&
+        !_enableLocalChessDb &&
+        !_enableChessDbApi &&
+        !EvalDatabaseSettings.instance.enableCdbDirect) {
+      setState(() => _status =
+          'Maia + DB mode needs at least one eval source enabled '
+          '(local ChessDB, cdbdirect, or ChessDB API).');
+      return;
+    }
     final gen = ++_buildGeneration;
     final filePath = widget.currentRepertoire?['filePath'] as String?;
     if (filePath == null || filePath.isEmpty) {
@@ -789,6 +817,45 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           ),
           const SizedBox(height: 8),
 
+          // Build algorithm mode
+          DropdownButtonFormField<BuildMode>(
+            value: _buildMode,
+            decoration: const InputDecoration(
+              labelText: 'Build Algorithm',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: BuildMode.stockfishExpectimax,
+                child: Text('Stockfish + Expectimax (default)'),
+              ),
+              DropdownMenuItem(
+                value: BuildMode.maiaDbExplore,
+                child: Text('Maia + DB (fast, no engine)'),
+              ),
+              DropdownMenuItem(
+                value: BuildMode.dbExplorer,
+                child: Text('DB Explorer (coming soon)'),
+              ),
+              DropdownMenuItem(
+                value: BuildMode.trapFinder,
+                child: Text('Trap / Interest Finder (coming soon)'),
+              ),
+            ],
+            onChanged: _isGenerating
+                ? null
+                : (v) {
+                    if (v != null) setState(() => _buildMode = v);
+                  },
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _buildModeDescription(),
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
+
           // Main config fields
           Wrap(
             spacing: 8,
@@ -796,7 +863,17 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             children: [
               _numField(_cutoffCtrl, 'Cum Prob Cutoff (%)'),
               _numField(_maxPlyCtrl, 'Max Ply'),
-              _numField(_engineDepthCtrl, 'Engine Depth'),
+              if (_buildMode == BuildMode.stockfishExpectimax) ...[
+                _numField(_engineDepthCtrl, 'Engine Depth'),
+                _numField(
+                  _engineThreadsCtrl,
+                  'Engine Threads',
+                  tooltip:
+                      'Stockfish UCI threads per worker during tree build '
+                      '(1–${getLogicalCores()}). MultiPV is much faster '
+                      'with multiple threads.',
+                ),
+              ],
               _numField(_evalGuardCtrl, 'Max Eval Loss (cp)'),
               _numField(_minEvalCtrl, 'Min Eval For Us (cp)'),
               _numField(_maxEvalCtrl, 'Max Eval For Us (cp)'),
@@ -1411,6 +1488,39 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         ),
       ],
     );
+  }
+
+  String _buildModeLabel(BuildMode mode) {
+    switch (mode) {
+      case BuildMode.stockfishExpectimax:
+        return 'Stockfish + Expectimax';
+      case BuildMode.maiaDbExplore:
+        return 'Maia + DB';
+      case BuildMode.dbExplorer:
+        return 'DB Explorer';
+      case BuildMode.trapFinder:
+        return 'Trap / Interest Finder';
+    }
+  }
+
+  String _buildModeDescription() {
+    switch (_buildMode) {
+      case BuildMode.stockfishExpectimax:
+        return 'Full repertoire build: Stockfish MultiPV for our moves, '
+            'Maia/Lichess for opponent replies, expectimax selection. '
+            'Most thorough; needs a capable CPU.';
+      case BuildMode.maiaDbExplore:
+        return 'Fast exploration without Stockfish: top Maia moves for our '
+            'side, database evals only. Branches stop when a position is '
+            'missing from the database — natural pruning by DB coverage.';
+      case BuildMode.dbExplorer:
+        return 'Walk the tree using only ChessDB move rankings and scores '
+            '(queryall). No engine, no Maia — pure database-guided exploration.';
+      case BuildMode.trapFinder:
+        return 'Surface positions where human-likely moves (Maia) lead to '
+            'bad database evals — a highlights reel of tactical moments, '
+            'not a full repertoire.';
+    }
   }
 
   String _selectionModeDescription() {

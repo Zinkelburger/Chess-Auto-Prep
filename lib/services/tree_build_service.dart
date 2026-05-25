@@ -103,11 +103,14 @@ class TreeBuildService {
     _pauseCompleter = null;
 
     await Future.wait([
-      _pool.ensureWorkers(),
+      if (cfg.usesStockfish)
+        _pool.prepareForTreeBuild(cfg.resolvedEngineThreads)
+      else
+        Future.value(),
       _evalCache.init(),
     ]);
     await _initExternalEvalProviders(cfg);
-    if (_pool.workerCount == 0) {
+    if (cfg.usesStockfish && _pool.workerCount == 0) {
       throw StateError('No engine workers available');
     }
 
@@ -142,7 +145,19 @@ class TreeBuildService {
     _isBuilding = true;
 
     if (cfg.relativeEval) {
-      await _ensureEval(tree.root, cfg, fenMap: FenMap());
+      final rootFenMap = FenMap();
+      final gotEval = await _ensureEval(
+        tree.root,
+        cfg,
+        fenMap: rootFenMap,
+        dbOnly: !cfg.usesStockfish,
+      );
+      if (!gotEval && !cfg.usesStockfish) {
+        throw StateError(
+          'Root position has no database eval — enable an eval source '
+          '(local ChessDB, cdbdirect, or ChessDB API)',
+        );
+      }
       if (tree.root.hasEngineEval) {
         final rootEvalUs = tree.root.evalForUs(cfg.playAsWhite);
         cfg = cfg.copyWith(
@@ -258,12 +273,19 @@ class TreeBuildService {
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
 
     // Opponent-move nodes: ensure eval + window prune BEFORE expansion.
-    // Our-move nodes skip this — their eval comes from MultiPV line 0
-    // inside _buildOurMove, which also does its own window check.
-    // This matches C's build_process_node where ensure_eval + window is
-    // gated on `!is_our_move`.
-    if (!isOurMove) {
-      await _ensureEval(node, config, fenMap: fenMap);
+    // Our-move nodes skip this in stockfish mode — eval comes from MultiPV.
+    // In maiaDbExplore mode, both sides need a DB eval before expanding.
+    if (!isOurMove || !config.usesStockfish) {
+      final gotEval = await _ensureEval(
+        node,
+        config,
+        fenMap: fenMap,
+        dbOnly: !config.usesStockfish,
+      );
+      if (!gotEval && !config.usesStockfish) {
+        node.explored = true;
+        return;
+      }
       if (node.hasEngineEval) {
         final evalUs = node.evalForUs(config.playAsWhite);
         if (evalUs > config.maxEvalCp) {
@@ -293,15 +315,26 @@ class TreeBuildService {
     node.explored = true;
 
     if (isOurMove) {
-      await _buildOurMove(
-        tree: tree,
-        node: node,
-        config: config,
-        fenMap: fenMap,
-        isCancelled: isCancelled,
-        onProgress: onProgress,
-        queue: queue,
-      );
+      if (config.buildMode == BuildMode.maiaDbExplore) {
+        await _buildOurMoveMaiaDb(
+          tree: tree,
+          node: node,
+          config: config,
+          isCancelled: isCancelled,
+          onProgress: onProgress,
+          queue: queue,
+        );
+      } else {
+        await _buildOurMove(
+          tree: tree,
+          node: node,
+          config: config,
+          fenMap: fenMap,
+          isCancelled: isCancelled,
+          onProgress: onProgress,
+          queue: queue,
+        );
+      }
     } else {
       await _buildOpponentMove(
         tree: tree,
@@ -313,6 +346,162 @@ class TreeBuildService {
         queue: queue,
       );
     }
+  }
+
+  // ── Our move (Maia + DB): top-N Maia candidates, DB evals only ───────
+
+  Future<void> _buildOurMoveMaiaDb({
+    required BuildTree tree,
+    required BuildTreeNode node,
+    required TreeBuildConfig config,
+    required bool Function() isCancelled,
+    required void Function(BuildProgress) onProgress,
+    required Queue<BuildTreeNode> queue,
+  }) async {
+    if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
+      _log('Maia unavailable — cannot run maiaDbExplore mode');
+      return;
+    }
+
+    // Window prune using DB eval set in _processBuildNode.
+    if (node.hasEngineEval) {
+      final evalUs = node.evalForUs(config.playAsWhite);
+      if (evalUs > config.maxEvalCp) {
+        node.pruneReason = PruneReason.evalTooHigh;
+        node.pruneEvalCp = evalUs;
+        return;
+      }
+      if (evalUs < config.minEvalCp) {
+        node.pruneReason = PruneReason.evalTooLow;
+        node.pruneEvalCp = evalUs;
+        return;
+      }
+    }
+
+    final sw = Stopwatch()..start();
+    final MaiaResult maiaResult;
+    try {
+      maiaResult = await MaiaFactory.instance!.evaluate(
+        node.fen,
+        config.maiaElo,
+      );
+    } catch (e) {
+      _log('Maia eval failed: $e');
+      return;
+    }
+    _stats.maiaEvals++;
+    _stats.maiaTotalMs += sw.elapsedMilliseconds;
+    if (maiaResult.policy.isEmpty) return;
+
+    final sortedMoves = maiaResult.policy.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final maxCandidates = config.ourMultipv.clamp(1, 16);
+    final bestCpWhite = node.hasEngineEval
+        ? (node.isWhiteToMove
+            ? node.engineEvalCp!
+            : -node.engineEvalCp!)
+        : null;
+
+    int added = 0;
+    for (final entry in sortedMoves) {
+      if (added >= maxCandidates) break;
+      final uci = entry.key;
+      final prob = entry.value;
+      if (prob < config.maiaMinProb) continue;
+
+      final childFen = playUciMove(node.fen, uci);
+      if (childFen == null) continue;
+
+      // Child eval from DB only — skip candidates with no database coverage.
+      final childEval = await _lookupDbEvalWhite(childFen, config);
+      if (childEval == null) continue;
+
+      final childIsWhite = childFen.split(' ')[1] == 'w';
+      final childCpWhite = childEval.$1;
+
+      if (bestCpWhite != null) {
+        final evalLoss = bestCpWhite - childCpWhite;
+        if (evalLoss > config.maxEvalLossCp) continue;
+      }
+
+      final san = uciToSan(node.fen, uci);
+      final child = _makeChild(
+        parent: node,
+        fen: childFen,
+        san: san,
+        uci: uci,
+        tree: tree,
+      );
+      if (child == null) continue;
+
+      child.moveProbability = 1.0;
+      child.cumulativeProbability = node.cumulativeProbability;
+      child.maiaFrequency = prob;
+      child.engineEvalCp =
+          childIsWhite ? childCpWhite : -childCpWhite;
+      _cacheEvalWhite(childFen, childCpWhite, childEval.$2);
+
+      added++;
+      _emitProgress(tree, child.ply, child.fen, onProgress, config.maxPly);
+    }
+
+    for (final child in List.of(node.children)) {
+      if (!_isBuilding || isCancelled()) break;
+      queue.add(child);
+    }
+  }
+
+  /// DB-chain lookup returning white-normalized cp, or null on miss.
+  Future<(int cp, int depth)?> _lookupDbEvalWhite(
+    String fen,
+    TreeBuildConfig config,
+  ) async {
+    final minDepth = config.effectiveMinEvalDepth;
+
+    final cached = await _evalCache.getEvalCpWhite(fen, minDepth: minDepth);
+    if (cached != null) {
+      _stats.dbEvalHits++;
+      return (cached, minDepth);
+    }
+    _stats.dbEvalMisses++;
+
+    if (config.enableCdbDirect && _cdbDirect != null) {
+      final cdb = await _cdbDirect!.lookup(fen, minDepth: minDepth);
+      if (cdb.isHit) {
+        _stats.cdbDirectHits++;
+        final hit = cdb.hit!;
+        final depth = hit.depth > 0 ? hit.depth : config.evalDepth;
+        _cacheEvalWhite(fen, hit.cp, depth);
+        return (hit.cp, depth);
+      }
+    }
+
+    if (config.enableLocalChessDb && _localChessDb != null) {
+      final local = await _localChessDb!.lookup(fen, minDepth: minDepth);
+      if (local.isHit) {
+        _stats.localChessDbHits++;
+        final hit = local.hit!;
+        final depth = hit.depth > 0 ? hit.depth : config.evalDepth;
+        _cacheEvalWhite(fen, hit.cp, depth);
+        return (hit.cp, depth);
+      }
+    }
+
+    if (config.enableChessDbApi &&
+        _chessDbApi != null &&
+        _chessDbApi!.quotaRemaining) {
+      final api = await _chessDbApi!.lookup(fen, minDepth: minDepth);
+      if (api.isHit) {
+        _stats.chessDbApiHits++;
+        final hit = api.hit!;
+        final depth = hit.depth > 0 ? hit.depth : config.evalDepth;
+        _cacheEvalWhite(fen, hit.cp, depth);
+        return (hit.cp, depth);
+      }
+    }
+
+    return null;
   }
 
   // ── Our move: Stockfish MultiPV → eval filter → enqueue children ───────
@@ -636,12 +825,14 @@ class TreeBuildService {
 
   // ── Ensure eval (returns full result for bestmove reuse) ───────────────
 
-  Future<void> _ensureEval(
+  /// Ensure eval on [node]. Returns true when an eval was resolved.
+  Future<bool> _ensureEval(
     BuildTreeNode node,
     TreeBuildConfig config, {
     required FenMap fenMap,
+    bool dbOnly = false,
   }) async {
-    if (node.hasEngineEval) return;
+    if (node.hasEngineEval) return true;
 
     final outcome = await resolveEvalChain(
       fen: node.fen,
@@ -653,6 +844,7 @@ class TreeBuildService {
       chessDbApi: _chessDbApi,
       extEvalMode: node.extEvalMode,
       canonicalNode: fenMap.getCanonical(node.fen),
+      allowStockfishFallback: !dbOnly,
       stockfishEval: (f, depth) async {
         final sw = Stopwatch()..start();
         final result = await _pool.evaluateFen(f, depth);
@@ -672,7 +864,9 @@ class TreeBuildService {
       final isWhiteStm = node.fen.split(' ')[1] == 'w';
       node.engineEvalCp =
           isWhiteStm ? outcome.whiteCp! : -outcome.whiteCp!;
+      return true;
     }
+    return false;
   }
 
   Future<void> _initExternalEvalProviders(TreeBuildConfig config) async {

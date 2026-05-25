@@ -1,12 +1,43 @@
 /// Configuration and output types for repertoire generation.
 library;
 
+import '../../utils/system_info.dart';
+
 // ── Selection mode ──────────────────────────────────────────────────────
 
 enum SelectionMode {
   expectimax,
   engineOnly,
   dbWinRateOnly,
+}
+
+// ── Tree build algorithm mode ───────────────────────────────────────────
+
+/// Fundamentally different tree-building algorithms (not parameter presets).
+enum BuildMode {
+  /// Stockfish MultiPV + Maia/Lichess opponent moves + expectimax (default).
+  stockfishExpectimax,
+
+  /// Top-N Maia moves for our side, DB evals only, stop on DB miss.
+  maiaDbExplore,
+
+  /// Pure ChessDB queryall walk — not yet implemented in Flutter.
+  dbExplorer,
+
+  /// Maia × eval surprise highlights — not yet implemented in Flutter.
+  trapFinder,
+}
+
+/// Default engine thread count: half of logical cores, minimum 1.
+int defaultEngineThreads() {
+  final cores = getLogicalCores();
+  return (cores ~/ 2).clamp(1, cores);
+}
+
+/// Clamp [threads] to [1, logical core count].
+int clampEngineThreads(int threads) {
+  final cores = getLogicalCores();
+  return threads.clamp(1, cores);
 }
 
 // ── Two-phase tree build config (matches C tree_builder) ────────────────
@@ -24,8 +55,15 @@ class TreeBuildConfig {
   final int maxPly;
   final int maxNodes;
 
+  // ── Build algorithm ──
+  final BuildMode buildMode;
+
   // ── Engine ──
   final int evalDepth;
+
+  /// UCI Threads per Stockfish worker during tree build (1 = single-threaded).
+  /// Use [resolvedEngineThreads] for the clamped value.
+  final int engineThreads;
 
   // ── Our-move MultiPV (constant at every depth, matches C invariant) ──
   final int ourMultipv;
@@ -76,7 +114,9 @@ class TreeBuildConfig {
     this.minProbability = 0.0001,
     this.maxPly = 10,
     this.maxNodes = 0,
+    this.buildMode = BuildMode.stockfishExpectimax,
     this.evalDepth = 20,
+    this.engineThreads = 0,
     this.ourMultipv = 5,
     this.maxEvalLossCp = 50,
     this.oppMaxChildren = 6,
@@ -118,7 +158,9 @@ class TreeBuildConfig {
       minProbability: (json['min_probability'] as num?)?.toDouble() ?? 0.0001,
       maxPly: (json['max_depth'] as num?)?.toInt() ?? 10,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
+      buildMode: _parseBuildMode(json['build_mode'] as String?),
       evalDepth: (json['eval_depth'] as num?)?.toInt() ?? 20,
+      engineThreads: (json['engine_threads'] as num?)?.toInt() ?? 0,
       ourMultipv: (json['our_multipv'] as num?)?.toInt() ?? 5,
       maxEvalLossCp: (json['max_eval_loss_cp'] as num?)?.toInt() ?? 50,
       oppMaxChildren: (json['opp_max_children'] as num?)?.toInt() ?? 6,
@@ -155,6 +197,15 @@ class TreeBuildConfig {
     );
   }
 
+  /// Whether this build uses Stockfish at all during Phase 1.
+  bool get usesStockfish =>
+      buildMode == BuildMode.stockfishExpectimax;
+
+  /// Clamped engine thread count (defaults to half of logical cores).
+  int get resolvedEngineThreads => engineThreads > 0
+      ? clampEngineThreads(engineThreads)
+      : defaultEngineThreads();
+
   /// Minimum depth required from external eval sources.
   int get effectiveMinEvalDepth =>
       minAcceptableEvalDepth > 0 ? minAcceptableEvalDepth : evalDepth;
@@ -171,7 +222,9 @@ class TreeBuildConfig {
         'min_probability': minProbability,
         'max_depth': maxPly,
         'max_nodes': maxNodes,
+        'build_mode': buildMode.name,
         'eval_depth': evalDepth,
+        'engine_threads': resolvedEngineThreads,
         'our_multipv': ourMultipv,
         'max_eval_loss_cp': maxEvalLossCp,
         'opp_max_children': oppMaxChildren,
@@ -209,7 +262,9 @@ class TreeBuildConfig {
     double? minProbability,
     int? maxPly,
     int? maxNodes,
+    BuildMode? buildMode,
     int? evalDepth,
+    int? engineThreads,
     int? ourMultipv,
     int? maxEvalLossCp,
     int? oppMaxChildren,
@@ -246,7 +301,9 @@ class TreeBuildConfig {
       minProbability: minProbability ?? this.minProbability,
       maxPly: maxPly ?? this.maxPly,
       maxNodes: maxNodes ?? this.maxNodes,
+      buildMode: buildMode ?? this.buildMode,
       evalDepth: evalDepth ?? this.evalDepth,
+      engineThreads: engineThreads ?? this.engineThreads,
       ourMultipv: ourMultipv ?? this.ourMultipv,
       maxEvalLossCp: maxEvalLossCp ?? this.maxEvalLossCp,
       oppMaxChildren: oppMaxChildren ?? this.oppMaxChildren,
@@ -292,5 +349,18 @@ SelectionMode _parseSelectionMode(String? value) {
       return SelectionMode.dbWinRateOnly;
     default:
       return SelectionMode.expectimax;
+  }
+}
+
+BuildMode _parseBuildMode(String? value) {
+  switch (value) {
+    case 'maiaDbExplore':
+      return BuildMode.maiaDbExplore;
+    case 'dbExplorer':
+      return BuildMode.dbExplorer;
+    case 'trapFinder':
+      return BuildMode.trapFinder;
+    default:
+      return BuildMode.stockfishExpectimax;
   }
 }

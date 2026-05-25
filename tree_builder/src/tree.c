@@ -231,6 +231,7 @@ static void fen_map_put(FenMap *map, const char *fen, TreeNode *node) {
 TreeConfig tree_config_default(void) {
     TreeConfig config = {
         .play_as_white = true,
+        .build_mode = BUILD_MODE_STOCKFISH_EXPECTIMAX,
         .min_probability = 0.0001,
         .max_depth = 20,
         .max_nodes = 0,
@@ -386,6 +387,26 @@ static void maybe_batch_prefetch_cdbdirect(const TreeConfig *config,
         cdbdirect_eval_prefetch(config->cdbdirect, fens, n);
 }
 
+static bool lookup_db_eval_white(const TreeConfig *config, const char *fen,
+                                 int *out_cp, int *out_depth) {
+    if (config->db) {
+        int cp, depth;
+        if (rdb_get_eval(config->db, fen, &cp, &depth)) {
+            *out_cp = cp;
+            *out_depth = depth;
+            return true;
+        }
+    }
+
+    TreeNode stub;
+    memset(&stub, 0, sizeof(stub));
+    strncpy(stub.fen, fen, MAX_FEN_LENGTH - 1);
+
+    EvalChainContext chain = eval_chain_from_config(config);
+    const char *src = NULL;
+    return eval_chain_try_external(&stub, &chain, out_cp, out_depth, &src);
+}
+
 static void ensure_eval(TreeNode *node, const TreeConfig *config) {
     if (node->has_engine_eval) return;
 
@@ -413,6 +434,9 @@ static void ensure_eval(TreeNode *node, const TreeConfig *config) {
             rdb_put_eval(config->db, node->fen, cp, depth);
         return;
     }
+
+    if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE)
+        return;
 
     /* Run engine */
     if (config->engine_pool) {
@@ -729,6 +753,97 @@ static void build_our_move(Tree *tree, TreeNode *node,
 static void build_opponent_move(Tree *tree, TreeNode *node,
                                  const TreeConfig *config,
                                  LichessExplorer *explorer, BuildQueue *q);
+
+/**
+ * OUR MOVE (Maia + DB): top-N Maia candidates, DB evals only, stop on miss.
+ */
+static void build_our_move_maia_db(Tree *tree, TreeNode *node,
+                                    const TreeConfig *config,
+                                    LichessExplorer *explorer, BuildQueue *q) {
+    (void)explorer;
+
+    if (!config->maia) return;
+
+    if (node->has_engine_eval) {
+        int eval_us = node_eval_for_us(node, config->play_as_white);
+        if (eval_us > config->max_eval_cp) {
+            node->prune_reason = PRUNE_EVAL_TOO_HIGH;
+            node->prune_eval_cp = eval_us;
+            return;
+        }
+        if (eval_us < config->min_eval_cp) {
+            node->prune_reason = PRUNE_EVAL_TOO_LOW;
+            node->prune_eval_cp = eval_us;
+            return;
+        }
+    }
+
+    MaiaResponse maia_resp;
+    double maia_t = 0;
+    if (!query_maia_cached(config, node->fen, &maia_resp, &maia_t))
+        return;
+    node->maia_ms += maia_t;
+    if (!maia_resp.success || maia_resp.move_count == 0)
+        return;
+
+    int max_candidates = config->our_multipv;
+    if (max_candidates < 1) max_candidates = 1;
+    if (max_candidates > MAX_MULTIPV) max_candidates = MAX_MULTIPV;
+
+    int best_cp_white = 0;
+    bool have_best = false;
+    if (node->has_engine_eval) {
+        best_cp_white = node->is_white_to_move ? node->engine_eval_cp
+                                               : -node->engine_eval_cp;
+        have_best = true;
+    }
+
+    char san_buf[MAX_MOVE_LENGTH];
+    int added = 0;
+
+    for (int i = 0; i < maia_resp.move_count && added < max_candidates; i++) {
+        const char *uci = maia_resp.moves[i].uci;
+        double prob = maia_resp.moves[i].probability;
+        if (prob < config->maia_min_prob) continue;
+
+        char child_fen[MAX_FEN_LENGTH];
+        if (!apply_uci(node->fen, uci, child_fen, MAX_FEN_LENGTH))
+            continue;
+
+        int child_cp = 0, child_depth = 0;
+        if (!lookup_db_eval_white(config, child_fen, &child_cp, &child_depth))
+            continue;
+
+        if (have_best) {
+            ChessPosition child_pos;
+            bool child_white = position_from_fen(&child_pos, child_fen)
+                               && child_pos.white_to_move;
+            int child_cp_white = child_white ? child_cp : -child_cp;
+            if (best_cp_white - child_cp_white > config->max_eval_loss_cp)
+                continue;
+        }
+
+        const char *san = uci;
+        if (uci_to_san(node->fen, uci, san_buf, sizeof(san_buf)))
+            san = san_buf;
+
+        TreeNode *child = make_child(node, child_fen, san, uci, tree);
+        if (!child) continue;
+
+        child->move_probability = 1.0;
+        child->cumulative_probability = node->cumulative_probability;
+        child->maia_frequency = prob;
+        node_set_eval(child, child_cp);
+        if (config->db)
+            rdb_put_eval(config->db, child_fen, child_cp,
+                         child_depth > 0 ? child_depth : config->eval_depth);
+
+        added++;
+        emit_build_progress(tree, config);
+    }
+
+    build_queue_push_children(q, tree, node);
+}
 
 /**
  * OUR MOVE: Stockfish MultiPV → window prune → eval filter → enqueue children.
@@ -1167,8 +1282,13 @@ static void build_process_node(Tree *tree, TreeNode *node,
                "total=%zu cum_prob=%.6f fen=%s",
                tree->total_nodes, node->cumulative_probability, node->fen);
 
-    if (!is_our_move) {
+    if (!is_our_move || config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE) {
         ensure_eval(node, config);
+        if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE &&
+            !node->has_engine_eval) {
+            node->explored = true;
+            return;
+        }
         if (node->has_engine_eval) {
             int eval_us = node_eval_for_us(node, config->play_as_white);
             if (eval_us > config->max_eval_cp) {
@@ -1207,9 +1327,12 @@ static void build_process_node(Tree *tree, TreeNode *node,
 
     node->explored = true;
 
-    if (is_our_move)
-        build_our_move(tree, node, config, explorer, q);
-    else
+    if (is_our_move) {
+        if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE)
+            build_our_move_maia_db(tree, node, config, explorer, q);
+        else
+            build_our_move(tree, node, config, explorer, q);
+    } else
         build_opponent_move(tree, node, config, explorer, q);
 
     emit_event(config, "expanded", node->depth, nt,
@@ -1221,7 +1344,12 @@ bool tree_build(Tree *tree, const char *start_fen,
                 const TreeConfig *config, LichessExplorer *explorer) {
     if (!tree || !start_fen) return false;
     if (!explorer && !config->maia_only) return false;
-    if (!config->engine_pool) {
+    if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE) {
+        if (!config->maia) {
+            fprintf(stderr, "Error: Maia is required for maia-db-explore mode\n");
+            return false;
+        }
+    } else if (!config->engine_pool) {
         fprintf(stderr, "Error: engine_pool is required for tree_build\n");
         return false;
     }
