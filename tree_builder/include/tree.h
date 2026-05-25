@@ -30,6 +30,16 @@ struct ChessDBAPI;
 struct CdbDirectEval;
 
 /**
+ * Tree build algorithm mode (fundamentally different algorithms, not presets).
+ */
+typedef enum {
+    BUILD_MODE_STOCKFISH_EXPECTIMAX = 0,
+    BUILD_MODE_MAIA_DB_EXPLORE,
+    BUILD_MODE_DB_EXPLORER,   /* reserved — not yet implemented */
+    BUILD_MODE_TRAP_FINDER,   /* reserved — not yet implemented */
+} BuildMode;
+
+/**
  * BuildStats - Accumulated timing and counters from a tree build.
  * Populated by tree_build(); caller owns the struct.
  */
@@ -106,6 +116,9 @@ typedef struct BuildProgressInfo {
 typedef struct TreeConfig {
     /* Side to play */
     bool play_as_white;
+
+    /* Build algorithm */
+    BuildMode build_mode;
 
     /* Traversal limits */
     double min_probability;         /* Stop exploring below this cumul. probability */

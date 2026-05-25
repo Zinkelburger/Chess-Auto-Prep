@@ -84,11 +84,28 @@ class EvalWorker {
 
   Future<void> init({int hashMb = 128, int threads = 1}) async {
     await engine.waitForReady();
-    engine.sendCommand('setoption name Threads value $threads');
+    await _applyThreads(threads);
     engine.sendCommand('setoption name Hash value $hashMb');
     _readyCompleter = Completer<void>();
     engine.sendCommand('isready');
     await _readyCompleter!.future;
+  }
+
+  int _currentThreads = 1;
+
+  /// Dynamically set Stockfish UCI Threads (skips if already at desired count).
+  Future<void> setThreads(int threads) async {
+    if (threads < 1) threads = 1;
+    if (_currentThreads == threads) return;
+    await _applyThreads(threads);
+    _readyCompleter = Completer<void>();
+    engine.sendCommand('isready');
+    await _readyCompleter!.future;
+  }
+
+  Future<void> _applyThreads(int threads) async {
+    engine.sendCommand('setoption name Threads value $threads');
+    _currentThreads = threads;
   }
 
   /// Run MultiPV analysis on a position. Returns when bestmove arrives.

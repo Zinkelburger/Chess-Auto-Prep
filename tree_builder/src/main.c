@@ -93,6 +93,8 @@ static void print_usage(const char *prog_name) {
     printf("  -d, --ply <N>          Max tree depth in ply (half-moves) [default: 20]\n");
     printf("  -e, --eval-depth <N>   Stockfish search depth [default: 20]\n");
     printf("  -t, --threads <N>      Total CPU cores to use [default: 4]\n");
+    printf("  --build-mode <mode>    Build algorithm: stockfish-expectimax [default],\n");
+    printf("                         maia-db-explore, db-explorer, trap-finder\n");
     printf("  -S, --stockfish <path> Stockfish binary path\n");
     printf("  -D, --database <path>  SQLite database path [default: <name>.db]\n");
     printf("  -L, --load <file>      Load tree from a different JSON file\n");
@@ -348,6 +350,8 @@ int main(int argc, char *argv[]) {
     double maia_min_prob = 0.05;
     bool maia_only = true;
     bool relative_eval = false;
+    BuildMode build_mode = BUILD_MODE_STOCKFISH_EXPECTIMAX;
+    const char *build_mode_str = NULL;
     const char *event_log_path = NULL;
     const char *lichess_eval_db_path = NULL;
     const char *chessdb_eval_db_path = NULL;
@@ -427,6 +431,7 @@ int main(int argc, char *argv[]) {
         {"maia-min-prob",    required_argument, 0, 3004},
         {"maia-only",        no_argument,       0, 3005},
         {"lichess",          no_argument,       0, 3006},
+        {"build-mode",       required_argument, 0, 3007},
         /* General */
         {"event-log",        required_argument, 0, 4001},
         {"lichess-eval-db",  required_argument, 0, 4002},
@@ -527,6 +532,7 @@ int main(int argc, char *argv[]) {
             case 3004: if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1; break;
             case 3005: maia_only = true; break;
             case 3006: maia_only = false; break;
+            case 3007: build_mode_str = optarg; break;
             case 4001: event_log_path = optarg; break;
             case 4002: lichess_eval_db_path = optarg; break;
             case 4010: chessdb_eval_db_path = optarg; break;
@@ -546,6 +552,34 @@ int main(int argc, char *argv[]) {
 #endif
             default: print_usage(argv[0]); return 1;
         }
+    }
+
+    if (build_mode_str) {
+        if (strcmp(build_mode_str, "stockfish-expectimax") == 0 ||
+            strcmp(build_mode_str, "stockfishExpectimax") == 0)
+            build_mode = BUILD_MODE_STOCKFISH_EXPECTIMAX;
+        else if (strcmp(build_mode_str, "maia-db-explore") == 0 ||
+                 strcmp(build_mode_str, "maiaDbExplore") == 0)
+            build_mode = BUILD_MODE_MAIA_DB_EXPLORE;
+        else if (strcmp(build_mode_str, "db-explorer") == 0 ||
+                 strcmp(build_mode_str, "dbExplorer") == 0)
+            build_mode = BUILD_MODE_DB_EXPLORER;
+        else if (strcmp(build_mode_str, "trap-finder") == 0 ||
+                 strcmp(build_mode_str, "trapFinder") == 0)
+            build_mode = BUILD_MODE_TRAP_FINDER;
+        else {
+            fprintf(stderr, "Error: unknown build mode '%s'\n", build_mode_str);
+            fprintf(stderr, "  Valid: stockfish-expectimax, maia-db-explore, "
+                            "db-explorer, trap-finder\n");
+            return 1;
+        }
+    }
+
+    if (build_mode == BUILD_MODE_DB_EXPLORER ||
+        build_mode == BUILD_MODE_TRAP_FINDER) {
+        fprintf(stderr, "Error: build mode '%s' is not yet implemented\n",
+                build_mode_str ? build_mode_str : "?");
+        return 1;
     }
 
     /* Preset modes: fill defaults only for options the user did not set */
@@ -878,27 +912,36 @@ int main(int argc, char *argv[]) {
     }
 
     if (!skip_build) {
-        const char *sf_path = find_stockfish(stockfish_path);
-        if (!sf_path) {
-            fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
-            fprintf(stderr, "  Searched: ");
-            for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
-                fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
-            fprintf(stderr, "\n");
-            if (maia) maia_destroy(maia);
-            rdb_close(db);
-            return 1;
-        }
+        if (build_mode != BUILD_MODE_MAIA_DB_EXPLORE) {
+            const char *sf_path = find_stockfish(stockfish_path);
+            if (!sf_path) {
+                fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
+                fprintf(stderr, "  Searched: ");
+                for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
+                    fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
+                fprintf(stderr, "\n");
+                if (maia) maia_destroy(maia);
+                rdb_close(db);
+                return 1;
+            }
 
-        printf("  Stockfish: %s\n", sf_path);
-        printf("  Engines: %d | Depth: %d\n", num_threads, eval_depth);
+            printf("  Stockfish: %s\n", sf_path);
+            printf("  Engines: %d | Depth: %d\n", num_threads, eval_depth);
 
-        engine_pool = engine_pool_create(sf_path, num_threads, eval_depth, num_threads);
-        if (!engine_pool) {
-            fprintf(stderr, "Error: Failed to create engine pool\n");
-            if (maia) maia_destroy(maia);
-            rdb_close(db);
-            return 1;
+            engine_pool = engine_pool_create(sf_path, num_threads, eval_depth, num_threads);
+            if (!engine_pool) {
+                fprintf(stderr, "Error: Failed to create engine pool\n");
+                if (maia) maia_destroy(maia);
+                rdb_close(db);
+                return 1;
+            }
+        } else {
+            printf("  Build mode: maia-db-explore (no Stockfish)\n");
+            if (!maia) {
+                fprintf(stderr, "Error: Maia model required for maia-db-explore mode\n");
+                rdb_close(db);
+                return 1;
+            }
         }
     }
     printf("\n");
@@ -1016,6 +1059,7 @@ int main(int argc, char *argv[]) {
         /* Configure tree build */
         TreeConfig config = tree_config_default();
         config.play_as_white = play_as_white;
+        config.build_mode = build_mode;
         tree_config_set_color_defaults(&config);
         config.min_probability = min_probability;
         config.max_depth = max_depth;

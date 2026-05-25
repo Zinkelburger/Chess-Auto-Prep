@@ -55,6 +55,7 @@ Future<EvalChainOutcome> resolveEvalChain({
   BuildTreeNode? canonicalNode,
   required StockfishEvalFn stockfishEval,
   Future<void> Function(String fen, int whiteCp, int depth)? cacheWrite,
+  bool allowStockfishFallback = true,
 }) async {
   var mode = extEvalMode;
 
@@ -170,6 +171,10 @@ Future<EvalChainOutcome> resolveEvalChain({
         stats.chessDbApiMisses++;
       }
     }
+  }
+
+  if (!allowStockfishFallback) {
+    return EvalChainOutcome(extEvalMode: mode);
   }
 
   final sf = await stockfishEval(fen, config.evalDepth);
