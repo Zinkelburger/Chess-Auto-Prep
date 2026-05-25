@@ -143,6 +143,11 @@ typedef struct TreeNode {
      * -1.0 means not set. */
     double maia_frequency;
 
+    /* When true, skip ChessDB/Lichess local DB and ChessDB API for this
+     * node and descendants (project cache still consulted).  Set when a
+     * local DB returns a hard miss and ext_eval_subtree_skip is enabled. */
+    bool skip_ext_eval;
+
     /* Per-node build timing (ms since build start).
      * build_t_ms:   wall-clock moment this node was expanded (0 = not set)
      * sf_ms:        Stockfish time (single-PV or MultiPV) on this node

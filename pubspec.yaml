@@ -34,10 +34,13 @@ dependencies:
   shared_preferences: ^2.5.3
   stockfish: ^1.7.1
   onnxruntime: ^1.4.1
+  ffi: ^2.1.0
 
   # Persistent eval cache (desktop: Linux / macOS / Windows).
   sqflite_common_ffi: ^2.3.3
   sqlite3_flutter_libs: ^0.5.24
+  cdbdirect_flutter_libs:
+    path: packages/cdbdirect_flutter_libs
   path: ^1.9.0
   url_launcher: ^6.3.2
   fl_chart: ^1.2.0

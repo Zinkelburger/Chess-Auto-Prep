@@ -1,0 +1,234 @@
+/// FFI-backed cdbdirect eval provider (libcdbdirect).
+///
+/// Loads the bundled reader from [cdbdirect_flutter_libs] first, then falls
+/// back to system paths for development.
+library;
+
+import 'dart:ffi';
+import 'dart:io';
+
+import 'package:cdbdirect_flutter_libs/cdbdirect_flutter_libs.dart'
+    as cdb_libs;
+import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
+
+import 'cdbdirect_parse.dart';
+import 'eval_canonicalize.dart';
+import 'external_eval_provider.dart';
+
+typedef _InitializeNative = Pointer<Void> Function(Pointer<Utf8> path);
+typedef _InitializeDart = Pointer<Void> Function(Pointer<Utf8> path);
+
+typedef _GetNative = Pointer<Utf8> Function(Pointer<Void> handle, Pointer<Utf8> fen);
+typedef _GetDart = Pointer<Utf8> Function(Pointer<Void> handle, Pointer<Utf8> fen);
+
+typedef _SizeNative = IntPtr Function(Pointer<Void> handle);
+typedef _SizeDart = int Function(Pointer<Void> handle);
+
+typedef _FinalizeNative = Void Function(Pointer<Void> handle);
+typedef _FinalizeDart = void Function(Pointer<Void> handle);
+
+/// Injectable lookup for tests (bypasses FFI).
+typedef CdbDirectLookupFn = String? Function(String fen);
+
+/// Availability of the native cdbdirect reader on this machine.
+class CdbDirectLibraryStatus {
+  const CdbDirectLibraryStatus({
+    required this.isAvailable,
+    required this.platformName,
+    required this.usedBundledLibrary,
+  });
+
+  final bool isAvailable;
+  final String platformName;
+  final bool usedBundledLibrary;
+}
+
+class CdbDirectEvalProvider implements ExternalEvalProvider {
+  static bool? _libraryLoadable;
+
+  DynamicLibrary? _lib;
+  Pointer<Void>? _handle;
+
+  _InitializeDart? _initialize;
+  _GetDart? _get;
+  _SizeDart? _size;
+  _FinalizeDart? _finalize;
+
+  final String path;
+  final CdbDirectLookupFn? lookupOverride;
+
+  CdbDirectEvalProvider({
+    required this.path,
+    this.lookupOverride,
+  });
+
+  /// Whether the native reader can be loaded on this machine (cached after [probeAvailability]).
+  static bool get isAvailable => _libraryLoadable ?? false;
+
+  /// Whether this provider instance is ready to serve lookups.
+  bool get isReady => _handle != null || lookupOverride != null;
+
+  /// Probe and cache whether libcdbdirect is loadable. Safe to call multiple times.
+  static Future<bool> probeAvailability() async {
+    if (_libraryLoadable != null) return _libraryLoadable!;
+    final status = await libraryStatus();
+    _libraryLoadable = status.isAvailable;
+    return _libraryLoadable!;
+  }
+
+  int? get positionCount {
+    if (_handle == null || _size == null) return null;
+    return _size!(_handle!);
+  }
+
+  /// Probe whether a cdbdirect library can be loaded on this platform.
+  static Future<CdbDirectLibraryStatus> libraryStatus() async {
+    final platformName = cdb_libs.platformDisplayName;
+    if (!Platform.isLinux) {
+      return CdbDirectLibraryStatus(
+        isAvailable: false,
+        platformName: platformName,
+        usedBundledLibrary: false,
+      );
+    }
+
+    final bundled = cdb_libs.openLibrary();
+    if (bundled != null) {
+      return CdbDirectLibraryStatus(
+        isAvailable: true,
+        platformName: platformName,
+        usedBundledLibrary: true,
+      );
+    }
+
+    final dev = await _tryLoadDevLibrary();
+    return CdbDirectLibraryStatus(
+      isAvailable: dev != null,
+      platformName: platformName,
+      usedBundledLibrary: false,
+    );
+  }
+
+  /// Load bundled library first, then dev/system fallbacks.
+  static Future<DynamicLibrary?> tryLoadLibrary() async {
+    final bundled = cdb_libs.openLibrary();
+    if (bundled != null) return bundled;
+    return _tryLoadDevLibrary();
+  }
+
+  static Future<DynamicLibrary?> _tryLoadDevLibrary() async {
+    if (!Platform.isLinux) return null;
+
+    const names = [
+      'libcdbdirect.so',
+      'libcdbdirect.dylib',
+      'cdbdirect.dll',
+    ];
+    for (final name in names) {
+      try {
+        return DynamicLibrary.open(name);
+      } catch (_) {}
+    }
+
+    final envRoot = Platform.environment['TERARKDBROOT'];
+    if (envRoot != null && envRoot.isNotEmpty) {
+      final candidates = [
+        '$envRoot/lib/libcdbdirect.so',
+        '$envRoot/lib/libcdbdirect.dylib',
+        '$envRoot/lib/cdbdirect.dll',
+      ];
+      for (final libPath in candidates) {
+        try {
+          return DynamicLibrary.open(libPath);
+        } catch (_) {}
+      }
+    }
+    return null;
+  }
+
+  Future<bool> init({DynamicLibrary? library}) async {
+    if (lookupOverride != null) return path.isNotEmpty;
+    if (_handle != null) return true;
+    if (path.isEmpty) return false;
+    if (!await validateCdbDirectDataDir(path)) return false;
+
+    _lib = library ?? await tryLoadLibrary();
+    if (_lib == null) return false;
+
+    try {
+      _initialize = _lib!
+          .lookupFunction<_InitializeNative, _InitializeDart>('cdbdirect_initialize');
+      _get = _lib!.lookupFunction<_GetNative, _GetDart>('cdbdirect_get');
+      _size = _lib!.lookupFunction<_SizeNative, _SizeDart>('cdbdirect_size');
+      _finalize =
+          _lib!.lookupFunction<_FinalizeNative, _FinalizeDart>('cdbdirect_finalize');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[CdbDirectEvalProvider] symbol load failed: $e');
+      _lib = null;
+      return false;
+    }
+
+    final resolved = await resolveCdbDirectDataDir(path);
+    final openPath = resolved?.path ?? path;
+    final pathPtr = openPath.toNativeUtf8();
+    try {
+      _handle = _initialize!(pathPtr);
+    } finally {
+      malloc.free(pathPtr);
+    }
+
+    if (_handle == null || _handle!.address == 0) {
+      _handle = null;
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> close() async {
+    if (_handle != null && _finalize != null) {
+      _finalize!(_handle!);
+      _handle = null;
+    }
+  }
+
+  String? _nativeLookup(String fenKey) {
+    if (lookupOverride != null) return lookupOverride!(fenKey);
+    if (_handle == null || _get == null) return null;
+
+    final fenPtr = fenKey.toNativeUtf8();
+    try {
+      final respPtr = _get!(_handle!, fenPtr);
+      if (respPtr.address == 0) return null;
+      return respPtr.toDartString();
+    } finally {
+      malloc.free(fenPtr);
+    }
+  }
+
+  @override
+  Future<EvalLookupResult> lookup(String fen, {required int minDepth}) async {
+    if (!isReady) return const EvalLookupResult.miss();
+
+    final key = canonicalizeFen4(fen);
+    final isWhiteStm = key.split(' ').length >= 2 && key.split(' ')[1] == 'w';
+
+    try {
+      final response = _nativeLookup(key);
+      final parsed = parseCdbDirectResponse(response);
+      if (parsed == null) return const EvalLookupResult.hardMiss();
+
+      final whiteCp = isWhiteStm ? parsed.cp : -parsed.cp;
+      if (parsed.depth < minDepth) return const EvalLookupResult.shallow();
+
+      return EvalLookupResult.found(EvalHit(
+        cp: whiteCp,
+        depth: parsed.depth,
+        bestMove: parsed.bestMove,
+      ));
+    } catch (e) {
+      if (kDebugMode) debugPrint('[CdbDirectEvalProvider] lookup failed: $e');
+      return const EvalLookupResult.miss();
+    }
+  }
+}

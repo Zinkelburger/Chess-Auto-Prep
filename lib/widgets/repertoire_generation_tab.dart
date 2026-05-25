@@ -3,10 +3,15 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/build_tree_node.dart';
+import '../models/eval_database_settings.dart';
+import '../services/eval/cdbdirect_eval_provider.dart';
+import '../services/eval/chessdb_api_provider.dart';
+import '../services/eval/sqlite_eval_provider.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
@@ -76,6 +81,23 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final TextEditingController _leafConfidenceCtrl =
       TextEditingController(text: '1.0');
 
+  // Eval sources (Advanced)
+  bool _batchEvalLookups = false;
+  bool _cdbDirectAvailable = false;
+  bool _enableLocalChessDb = false;
+  final TextEditingController _localChessDbPathCtrl = TextEditingController();
+  bool? _localChessDbValid;
+  bool _enableChessDbApi = false;
+  final TextEditingController _chessDbQuotaCtrl =
+      TextEditingController(text: '5000');
+  final TextEditingController _chessDbConcurrencyCtrl =
+      TextEditingController(text: '2');
+  bool _enableExtEvalSubtreeSkip = true;
+  final TextEditingController _minAcceptableEvalDepthCtrl =
+      TextEditingController(text: '');
+  int _chessDbApiUsedToday = 0;
+  int _chessDbApiQuotaLimit = 5000;
+
   // null = Maia only; non-null = override with that Lichess DB
   LichessDatabase? _lichessDbOverride;
   bool _relativeEval = false;
@@ -119,6 +141,23 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       text: widget.isWhiteRepertoire ? '200' : '100',
     );
     _checkForPartialTree();
+    _refreshChessDbQuotaDisplay();
+    EvalDatabaseSettings.instance.load();
+    CdbDirectEvalProvider.probeAvailability().then((available) {
+      if (!mounted) return;
+      setState(() => _cdbDirectAvailable = available);
+    });
+  }
+
+  Future<void> _refreshChessDbQuotaDisplay() async {
+    final quota = int.tryParse(_chessDbQuotaCtrl.text.trim()) ?? 5000;
+    final api = ChessDbApiProvider(dailyQuota: quota);
+    await api.init();
+    if (!mounted) return;
+    setState(() {
+      _chessDbApiUsedToday = api.usedToday;
+      _chessDbApiQuotaLimit = api.quotaLimit;
+    });
   }
 
   @override
@@ -135,6 +174,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _oppMaxChildrenCtrl.dispose();
     _oppMassTargetCtrl.dispose();
     _leafConfidenceCtrl.dispose();
+    _chessDbQuotaCtrl.dispose();
+    _chessDbConcurrencyCtrl.dispose();
+    _minAcceptableEvalDepthCtrl.dispose();
+    _localChessDbPathCtrl.dispose();
     _stopUiPulse();
     super.dispose();
   }
@@ -165,6 +208,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     setState(() {
       if (_buildService.isBuilding) {
         _elapsedMs = _buildService.buildElapsedMs;
+        final api = _buildService.chessDbApiProvider;
+        if (api != null) {
+          _chessDbApiUsedToday = api.usedToday;
+          _chessDbApiQuotaLimit = api.quotaLimit;
+        }
       }
     });
   }
@@ -275,6 +323,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   /// Current form values as a [TreeBuildConfig] (used for new builds and
   /// for [maxPly] when resuming a partial tree).
   TreeBuildConfig _treeBuildConfigFromControls() {
+    final evalDepth = int.tryParse(_engineDepthCtrl.text.trim()) ?? 20;
+    final minAcceptableRaw = _minAcceptableEvalDepthCtrl.text.trim();
+    final minAcceptableDepth = minAcceptableRaw.isEmpty
+        ? 0
+        : (int.tryParse(minAcceptableRaw) ?? evalDepth);
+
+    final dbSettings = EvalDatabaseSettings.instance;
+
     return TreeBuildConfig(
       startFen: widget.fen,
       playAsWhite: widget.isWhiteRepertoire,
@@ -283,7 +339,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         fallbackPercent: 0.01,
       ),
       maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 10,
-      evalDepth: int.tryParse(_engineDepthCtrl.text.trim()) ?? 20,
+      evalDepth: evalDepth,
       maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
       minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
           (widget.isWhiteRepertoire ? 0 : -100),
@@ -303,6 +359,22 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       selectionMode: _selectionMode,
       noveltyWeight: _preferNovelties ? 60 : 0,
       leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
+      enableCdbDirect:
+          _cdbDirectAvailable && dbSettings.enableCdbDirect,
+      cdbDirectPath:
+          _cdbDirectAvailable ? dbSettings.cdbDirectPath : '',
+      cdbDirectReadAhead:
+          _cdbDirectAvailable && dbSettings.cdbDirectReadAhead,
+      batchEvalLookups: _cdbDirectAvailable && _batchEvalLookups,
+      enableLocalChessDb: _enableLocalChessDb,
+      localChessDbPath: _localChessDbPathCtrl.text.trim(),
+      enableChessDbApi: _enableChessDbApi,
+      chessDbApiDailyQuota:
+          (int.tryParse(_chessDbQuotaCtrl.text.trim()) ?? 5000).clamp(1, 50000),
+      chessDbApiConcurrency:
+          (int.tryParse(_chessDbConcurrencyCtrl.text.trim()) ?? 2).clamp(1, 16),
+      enableExtEvalSubtreeSkip: _enableExtEvalSubtreeSkip,
+      minAcceptableEvalDepth: minAcceptableDepth,
     );
   }
 
@@ -348,6 +420,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       _unexploredAtDepth = 0;
       _totalAtDepth = 0;
       _etaDepthSec = null;
+      _chessDbApiQuotaLimit = config.chessDbApiDailyQuota;
+      _chessDbApiUsedToday = 0;
     });
     _pendingPgnBuffer.clear();
     _pendingPgnLines = 0;
@@ -939,6 +1013,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 ),
               ),
             ],
+            const SizedBox(height: 16),
+            _buildEvalSourcesSection(),
           ],
           const SizedBox(height: 8),
 
@@ -1085,13 +1161,17 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     );
   }
 
-  Widget _numField(TextEditingController controller, String label,
-      {String? tooltip}) {
+  Widget _numField(
+    TextEditingController controller,
+    String label, {
+    String? tooltip,
+    bool enabled = true,
+  }) {
     final field = SizedBox(
       width: 170,
       child: TextField(
         controller: controller,
-        enabled: !_isGenerating,
+        enabled: enabled && !_isGenerating,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: InputDecoration(
           labelText: label,
@@ -1119,6 +1199,218 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     );
     if (tooltip == null) return row;
     return Tooltip(message: tooltip, child: row);
+  }
+
+  Future<void> _pickLocalChessDbFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Select ChessDB SQLite file',
+      type: FileType.custom,
+      allowedExtensions: ['db'],
+      lockParentWindow: true,
+    );
+    if (result == null || result.files.single.path == null) return;
+    final path = result.files.single.path!;
+    final valid = await validateChessDbEvalFile(path);
+    if (!mounted) return;
+    setState(() {
+      _localChessDbPathCtrl.text = path;
+      _localChessDbValid = valid;
+      if (valid) _enableLocalChessDb = true;
+    });
+  }
+
+  Widget _buildEvalSourcesSection() {
+    final localFieldsEnabled = _enableLocalChessDb && !_isGenerating;
+    final apiFieldsEnabled = _enableChessDbApi && !_isGenerating;
+    final path = _localChessDbPathCtrl.text;
+
+    Widget? pathStatusIcon;
+    if (path.isNotEmpty && _localChessDbValid != null) {
+      pathStatusIcon = Tooltip(
+        message: _localChessDbValid!
+            ? 'Valid ChessDB database'
+            : 'Not a valid ChessDB eval database (missing chessdb_evals table)',
+        child: Icon(
+          _localChessDbValid! ? Icons.check_circle : Icons.warning_amber,
+          size: 18,
+          color: _localChessDbValid! ? Colors.green[400] : Colors.red[400],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Eval Sources',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(width: 4),
+            Tooltip(
+              message: _cdbDirectAvailable
+                  ? 'Optional eval lookup chain before Stockfish:\n'
+                      'project cache → cdbdirect full dump → local SQLite → API → engine.\n'
+                      'On HDD, enable read-ahead and batch lookups for cdbdirect.'
+                  : 'Optional eval lookup chain before Stockfish:\n'
+                      'project cache → local SQLite → API → engine.',
+              child: Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        if (_cdbDirectAvailable)
+          ListenableBuilder(
+            listenable: EvalDatabaseSettings.instance,
+            builder: (context, _) {
+              final dbSettings = EvalDatabaseSettings.instance;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  dbSettings.enableCdbDirect
+                      ? Icons.storage
+                      : Icons.storage_outlined,
+                  color: dbSettings.enableCdbDirect
+                      ? Colors.green[400]
+                      : Colors.grey,
+                ),
+                title: const Text('Local ChessDB (full dump)',
+                    style: TextStyle(fontSize: 13)),
+                subtitle: Text(
+                  dbSettings.enableCdbDirect &&
+                          dbSettings.cdbDirectPath.isNotEmpty
+                      ? dbSettings.cdbDirectPath
+                      : 'Configure in Actions → Database Downloads',
+                  style: const TextStyle(fontSize: 11),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                dense: true,
+              );
+            },
+          ),
+        if (_cdbDirectAvailable)
+          Wrap(
+            spacing: 16,
+            children: [
+              FilterChip(
+                label: const Text('Batch eval lookups'),
+                selected: _batchEvalLookups,
+                onSelected: _isGenerating
+                    ? null
+                    : (v) => setState(() => _batchEvalLookups = v),
+              ),
+            ],
+          ),
+        if (_cdbDirectAvailable) const SizedBox(height: 12),
+
+        // Local ChessDB SQLite slice
+        _toggleSwitch(
+          'Local ChessDB file',
+          _enableLocalChessDb,
+          (v) => setState(() => _enableLocalChessDb = v),
+          tooltip:
+              'Use a local ChessDB SQLite slice for eval lookups.\n'
+              'Positions missing from the file can trigger subtree skip.',
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                readOnly: true,
+                enabled: !_isGenerating,
+                controller: _localChessDbPathCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Database path (.db)',
+                  hintText: 'No file selected',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: pathStatusIcon,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Tooltip(
+              message: 'Browse for a ChessDB .db file',
+              child: IconButton(
+                onPressed: localFieldsEnabled ? _pickLocalChessDbFile : null,
+                icon: const Icon(Icons.folder_open),
+              ),
+            ),
+            if (path.isNotEmpty)
+              Tooltip(
+                message: 'Clear path',
+                child: IconButton(
+                  onPressed: _isGenerating
+                      ? null
+                      : () => setState(() {
+                            _localChessDbPathCtrl.clear();
+                            _localChessDbValid = null;
+                          }),
+                  icon: const Icon(Icons.clear),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // ChessDB API
+        _toggleSwitch(
+          'ChessDB API',
+          _enableChessDbApi,
+          (v) => setState(() => _enableChessDbApi = v),
+          tooltip:
+              'Query chessdb.cn for positions not in local cache.\n'
+              'Subject to a configurable daily request quota.',
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            _numField(
+              _chessDbQuotaCtrl,
+              'Daily quota',
+              tooltip: 'Maximum ChessDB API requests per day (1–50000)',
+              enabled: apiFieldsEnabled,
+            ),
+            _numField(
+              _chessDbConcurrencyCtrl,
+              'Concurrency',
+              tooltip: 'Parallel ChessDB API requests during build (1–16)',
+              enabled: apiFieldsEnabled,
+            ),
+            Text(
+              '$_chessDbApiUsedToday / $_chessDbApiQuotaLimit requests used today',
+              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Behavior settings
+        _toggleSwitch(
+          'Skip external eval for off-book subtrees',
+          _enableExtEvalSubtreeSkip,
+          (v) => setState(() => _enableExtEvalSubtreeSkip = v),
+          tooltip:
+              'When a position is absent from the local ChessDB file,\n'
+              'skip further external lookups for that subtree and use Stockfish.',
+        ),
+        const SizedBox(height: 8),
+        _numField(
+          _minAcceptableEvalDepthCtrl,
+          'Min eval depth (0 = engine depth)',
+          tooltip:
+              'Minimum search depth required from external sources.\n'
+              'Shallower hits fall through to the next source.',
+          enabled: !_isGenerating,
+        ),
+      ],
+    );
   }
 
   String _selectionModeDescription() {

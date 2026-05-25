@@ -34,6 +34,11 @@
 #include "san_convert.h"
 #include "maia.h"
 #include "lichess_eval_db.h"
+#include "chessdb_eval_db.h"
+#include "chessdb_api.h"
+#ifdef HAS_CDBDIRECT
+#include "cdbdirect_eval.h"
+#endif
 
 
 #define DEFAULT_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -140,7 +145,19 @@ static void print_usage(const char *prog_name) {
     printf("  -h, --help             Show this help\n\n");
     printf("Lichess community eval DB (fast path for opponent-node evals):\n");
     printf("  --lichess-eval-db <path>  Slim SQLite built by build_lichess_eval_db\n");
-    printf("                            (opponent-node only; depth must meet -e)\n\n");
+    printf("                            (depth must meet -e)\n\n");
+    printf("ChessDB eval sources (3-phase chain: local DB → API → Stockfish):\n");
+    printf("  --chessdb-eval-db <path>  Local ChessDB SQLite slice (same schema)\n");
+#ifdef HAS_CDBDIRECT
+    printf("  --cdbdirect-path <dir>    TerarkDB ChessDB full dump data directory\n");
+    printf("                            (e.g. /mnt/hdd/chessdb/data — ~1TB on HDD)\n");
+    printf("  --cdbdirect-read-ahead    Hint sequential access (recommended on HDD)\n");
+    printf("  --batch-eval-lookups      Sort/prefetch cdbdirect lookups per BFS level\n");
+#endif
+    printf("  --chessdb-api             Enable ChessDB cloud API (queryscore)\n");
+    printf("  --chessdb-api-quota <N>   Daily API query limit [default: 5000]\n");
+    printf("  --chessdb-api-concurrency <N>  Parallel HTTP cap [default: 2]\n");
+    printf("  --no-ext-eval-subtree-skip  Disable off-book subtree skip heuristic\n\n");
     printf("Examples:\n");
     printf("  %s -c w -e 20 -t 4 -v repertoire\n", prog_name);
     printf("  %s -c b -f \"FEN\" -n \"Modern Benoni\" modern_benoni\n", prog_name);
@@ -333,6 +350,16 @@ int main(int argc, char *argv[]) {
     bool relative_eval = false;
     const char *event_log_path = NULL;
     const char *lichess_eval_db_path = NULL;
+    const char *chessdb_eval_db_path = NULL;
+    bool chessdb_api_enabled = false;
+    int chessdb_api_quota = 5000;
+    int chessdb_api_concurrency = 2;
+    bool ext_eval_subtree_skip = true;
+#ifdef HAS_CDBDIRECT
+    const char *cdbdirect_path = NULL;
+    bool cdbdirect_read_ahead = false;
+    bool batch_eval_lookups = false;
+#endif
 
     /* Our-move overrides (-1 = use default) */
     int our_multipv_arg = -1;
@@ -403,6 +430,16 @@ int main(int argc, char *argv[]) {
         /* General */
         {"event-log",        required_argument, 0, 4001},
         {"lichess-eval-db",  required_argument, 0, 4002},
+        {"chessdb-eval-db",  required_argument, 0, 4010},
+        {"chessdb-api",      no_argument,       0, 4011},
+        {"chessdb-api-quota", required_argument, 0, 4012},
+        {"chessdb-api-concurrency", required_argument, 0, 4013},
+        {"no-ext-eval-subtree-skip", no_argument, 0, 4014},
+#ifdef HAS_CDBDIRECT
+        {"cdbdirect-path",   required_argument, 0, 4020},
+        {"cdbdirect-read-ahead", no_argument,   0, 4021},
+        {"batch-eval-lookups", no_argument,     0, 4022},
+#endif
         {"verbose",          no_argument,       0, 'v'},
         {"help",             no_argument,       0, 'h'},
         {0, 0, 0, 0}
@@ -492,6 +529,21 @@ int main(int argc, char *argv[]) {
             case 3006: maia_only = false; break;
             case 4001: event_log_path = optarg; break;
             case 4002: lichess_eval_db_path = optarg; break;
+            case 4010: chessdb_eval_db_path = optarg; break;
+            case 4011: chessdb_api_enabled = true; break;
+            case 4012:
+                if (!parse_int(optarg, "chessdb-api-quota", &chessdb_api_quota)) return 1;
+                break;
+            case 4013:
+                if (!parse_int(optarg, "chessdb-api-concurrency",
+                               &chessdb_api_concurrency)) return 1;
+                break;
+            case 4014: ext_eval_subtree_skip = false; break;
+#ifdef HAS_CDBDIRECT
+            case 4020: cdbdirect_path = optarg; break;
+            case 4021: cdbdirect_read_ahead = true; break;
+            case 4022: batch_eval_lookups = true; break;
+#endif
             default: print_usage(argv[0]); return 1;
         }
     }
@@ -743,6 +795,11 @@ int main(int argc, char *argv[]) {
 
     /* Optional: open the read-only Lichess community eval DB. */
     LichessEvalDB *eval_db = NULL;
+    ChessDBEvalDB *chessdb_eval_db = NULL;
+    ChessDBAPI *chessdb_api = NULL;
+#ifdef HAS_CDBDIRECT
+    CdbDirectEval *cdbdirect = NULL;
+#endif
     if (lichess_eval_db_path) {
         eval_db = lichess_eval_db_open(lichess_eval_db_path);
         if (eval_db) {
@@ -756,6 +813,67 @@ int main(int argc, char *argv[]) {
             fprintf(stderr,
                 "  Warning: --lichess-eval-db %s could not be opened; continuing without it.\n",
                 lichess_eval_db_path);
+        }
+    }
+
+    if (chessdb_eval_db_path) {
+        chessdb_eval_db = chessdb_eval_db_open(chessdb_eval_db_path);
+        if (chessdb_eval_db) {
+            long n = chessdb_eval_db_count(chessdb_eval_db);
+            if (n >= 0)
+                printf("  ChessDB eval DB:  %s (%ld rows)\n",
+                       chessdb_eval_db_path, n);
+            else
+                printf("  ChessDB eval DB:  %s\n", chessdb_eval_db_path);
+        } else {
+            fprintf(stderr,
+                "  Warning: --chessdb-eval-db %s could not be opened; continuing without it.\n",
+                chessdb_eval_db_path);
+        }
+    }
+
+#ifdef HAS_CDBDIRECT
+    if (cdbdirect_path) {
+        const char *resolved = cdbdirect_path;
+        char env_path[PATH_MAX];
+        if (!resolved[0]) {
+            const char *chessdb_env = getenv("CHESSDB_PATH");
+            if (chessdb_env && chessdb_env[0]) {
+                snprintf(env_path, sizeof(env_path), "%s", chessdb_env);
+                resolved = env_path;
+            }
+        }
+        cdbdirect = cdbdirect_eval_open(resolved, cdbdirect_read_ahead);
+        if (cdbdirect) {
+            long n = cdbdirect_eval_count(cdbdirect);
+            if (n >= 0)
+                printf("  cdbdirect:        %s (%ld positions)\n", resolved, n);
+            else
+                printf("  cdbdirect:        %s\n", resolved);
+            if (batch_eval_lookups)
+                printf("  cdbdirect batch:  enabled (HDD-optimized prefetch)\n");
+        } else {
+            fprintf(stderr,
+                "  Warning: --cdbdirect-path %s could not be opened; continuing without it.\n",
+                resolved);
+        }
+    }
+#endif
+
+    if (chessdb_api_enabled) {
+        ChessDBAPIConfig api_cfg = chessdb_api_config_default();
+        api_cfg.enabled = true;
+        api_cfg.daily_quota = chessdb_api_quota;
+        api_cfg.max_concurrency = chessdb_api_concurrency;
+        char quota_path[PATH_MAX];
+        snprintf(quota_path, sizeof(quota_path), "%s.chessdb_quota", db_path);
+        api_cfg.quota_persist_path = quota_path;
+        chessdb_api = chessdb_api_create(&api_cfg);
+        if (chessdb_api) {
+            printf("  ChessDB API:      enabled (quota %d/day, concurrency %d)\n",
+                   chessdb_api_quota, chessdb_api_concurrency);
+        } else {
+            fprintf(stderr, "  Warning: ChessDB API init failed; continuing without it.\n");
         }
     }
 
@@ -904,6 +1022,14 @@ int main(int argc, char *argv[]) {
         config.engine_pool = engine_pool;
         config.db = db;
         config.lichess_eval_db = eval_db;
+        config.chessdb_eval_db = chessdb_eval_db;
+        config.chessdb_api = chessdb_api;
+#ifdef HAS_CDBDIRECT
+        config.cdbdirect = cdbdirect;
+        config.cdbdirect_read_ahead = cdbdirect_read_ahead;
+        config.batch_eval_lookups = batch_eval_lookups;
+#endif
+        config.ext_eval_subtree_skip = ext_eval_subtree_skip;
         config.eval_depth = eval_depth;
         config.rating_range = ratings;
         config.speeds = speeds;
@@ -1089,6 +1215,52 @@ int main(int argc, char *argv[]) {
                            build_stats.lichess_eval_db_shallow, eval_depth);
                 printf("\n");
             }
+            {
+                int cdb_total = build_stats.chessdb_local_hits
+                              + build_stats.chessdb_local_misses
+                              + build_stats.chessdb_local_shallow;
+                if (chessdb_eval_db || cdb_total > 0) {
+                    printf("    ChessDB local:  %d/%d hits",
+                           build_stats.chessdb_local_hits, cdb_total);
+                    if (cdb_total > 0)
+                        printf(" (%d%%)",
+                               build_stats.chessdb_local_hits * 100 / cdb_total);
+                    if (build_stats.chessdb_local_shallow > 0)
+                        printf(" | %d shallow", build_stats.chessdb_local_shallow);
+                    printf("\n");
+                }
+            }
+#ifdef HAS_CDBDIRECT
+            {
+                int cd_total = build_stats.cdbdirect_hits
+                             + build_stats.cdbdirect_misses
+                             + build_stats.cdbdirect_shallow;
+                if (cdbdirect || cd_total > 0) {
+                    printf("    cdbdirect:      %d/%d hits",
+                           build_stats.cdbdirect_hits, cd_total);
+                    if (cd_total > 0)
+                        printf(" (%d%%)",
+                               build_stats.cdbdirect_hits * 100 / cd_total);
+                    if (build_stats.cdbdirect_shallow > 0)
+                        printf(" | %d shallow", build_stats.cdbdirect_shallow);
+                    printf("\n");
+                }
+            }
+#endif
+            if (chessdb_api) {
+                int api_total = build_stats.chessdb_api_hits
+                              + build_stats.chessdb_api_misses;
+                printf("    ChessDB API:    %d hits", build_stats.chessdb_api_hits);
+                if (api_total > 0)
+                    printf(" / %d queries", api_total);
+                if (build_stats.chessdb_api_quota_exhausted > 0)
+                    printf(" | quota exhausted %d times",
+                           build_stats.chessdb_api_quota_exhausted);
+                printf(" (used %d today)\n", chessdb_api_quota_used(chessdb_api));
+            }
+            if (build_stats.ext_eval_skipped > 0)
+                printf("    Ext eval skip:  %d nodes (off-book subtree heuristic)\n",
+                       build_stats.ext_eval_skipped);
         }
         printf("\n");
 
@@ -1304,6 +1476,14 @@ cleanup:
     if (maia) maia_destroy(maia);
     if (tree) tree_destroy(tree);
     if (eval_db) lichess_eval_db_close(eval_db);
+    if (chessdb_eval_db) chessdb_eval_db_close(chessdb_eval_db);
+#ifdef HAS_CDBDIRECT
+    if (cdbdirect) cdbdirect_eval_close(cdbdirect);
+#endif
+    if (chessdb_api) {
+        chessdb_api_flush_quota(chessdb_api);
+        chessdb_api_destroy(chessdb_api);
+    }
     if (db) rdb_close(db);
     free(token_buf);
 

@@ -57,6 +57,19 @@ class TreeBuildConfig {
   final double leafConfidence;
   final int noveltyWeight;
 
+  // ── External eval sources (ChessDB local + API) ──
+  final bool enableCdbDirect;
+  final String cdbDirectPath;
+  final bool cdbDirectReadAhead;
+  final bool batchEvalLookups;
+  final bool enableLocalChessDb;
+  final String localChessDbPath;
+  final bool enableChessDbApi;
+  final int chessDbApiDailyQuota;
+  final int chessDbApiConcurrency;
+  final bool enableExtEvalSubtreeSkip;
+  final int minAcceptableEvalDepth;
+
   const TreeBuildConfig({
     required this.startFen,
     required this.playAsWhite,
@@ -82,6 +95,17 @@ class TreeBuildConfig {
     this.selectionMode = SelectionMode.expectimax,
     this.leafConfidence = 1.0,
     this.noveltyWeight = 0,
+    this.enableCdbDirect = false,
+    this.cdbDirectPath = '',
+    this.cdbDirectReadAhead = false,
+    this.batchEvalLookups = false,
+    this.enableLocalChessDb = false,
+    this.localChessDbPath = '',
+    this.enableChessDbApi = false,
+    this.chessDbApiDailyQuota = 5000,
+    this.chessDbApiConcurrency = 2,
+    this.enableExtEvalSubtreeSkip = true,
+    this.minAcceptableEvalDepth = 0,
   });
 
   factory TreeBuildConfig.fromJson(
@@ -113,8 +137,27 @@ class TreeBuildConfig {
       selectionMode: _parseSelectionMode(json['selection_mode'] as String?),
       leafConfidence: (json['leaf_confidence'] as num?)?.toDouble() ?? 1.0,
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
+      enableCdbDirect: json['enable_cdbdirect'] as bool? ?? false,
+      cdbDirectPath: json['cdbdirect_path'] as String? ?? '',
+      cdbDirectReadAhead: json['cdbdirect_read_ahead'] as bool? ?? false,
+      batchEvalLookups: json['batch_eval_lookups'] as bool? ?? false,
+      enableLocalChessDb: json['enable_local_chessdb'] as bool? ?? false,
+      localChessDbPath: json['local_chessdb_path'] as String? ?? '',
+      enableChessDbApi: json['enable_chessdb_api'] as bool? ?? false,
+      chessDbApiDailyQuota:
+          (json['chessdb_api_daily_quota'] as num?)?.toInt() ?? 5000,
+      chessDbApiConcurrency:
+          (json['chessdb_api_concurrency'] as num?)?.toInt() ?? 2,
+      enableExtEvalSubtreeSkip:
+          json['enable_ext_eval_subtree_skip'] as bool? ?? true,
+      minAcceptableEvalDepth:
+          (json['min_acceptable_eval_depth'] as num?)?.toInt() ?? 0,
     );
   }
+
+  /// Minimum depth required from external eval sources.
+  int get effectiveMinEvalDepth =>
+      minAcceptableEvalDepth > 0 ? minAcceptableEvalDepth : evalDepth;
 
   /// Quick eval depth for the repertoire selection phase.
   int get quickEvalDepth => evalDepth > 15 ? 15 : evalDepth;
@@ -147,6 +190,17 @@ class TreeBuildConfig {
         'selection_mode': selectionMode.name,
         'leaf_confidence': leafConfidence,
         'novelty_weight': noveltyWeight,
+        'enable_cdbdirect': enableCdbDirect,
+        'cdbdirect_path': cdbDirectPath,
+        'cdbdirect_read_ahead': cdbDirectReadAhead,
+        'batch_eval_lookups': batchEvalLookups,
+        'enable_local_chessdb': enableLocalChessDb,
+        'local_chessdb_path': localChessDbPath,
+        'enable_chessdb_api': enableChessDbApi,
+        'chessdb_api_daily_quota': chessDbApiDailyQuota,
+        'chessdb_api_concurrency': chessDbApiConcurrency,
+        'enable_ext_eval_subtree_skip': enableExtEvalSubtreeSkip,
+        'min_acceptable_eval_depth': minAcceptableEvalDepth,
       };
 
   TreeBuildConfig copyWith({
@@ -174,6 +228,17 @@ class TreeBuildConfig {
     SelectionMode? selectionMode,
     double? leafConfidence,
     int? noveltyWeight,
+    bool? enableCdbDirect,
+    String? cdbDirectPath,
+    bool? cdbDirectReadAhead,
+    bool? batchEvalLookups,
+    bool? enableLocalChessDb,
+    String? localChessDbPath,
+    bool? enableChessDbApi,
+    int? chessDbApiDailyQuota,
+    int? chessDbApiConcurrency,
+    bool? enableExtEvalSubtreeSkip,
+    int? minAcceptableEvalDepth,
   }) {
     return TreeBuildConfig(
       startFen: startFen ?? this.startFen,
@@ -200,6 +265,21 @@ class TreeBuildConfig {
       selectionMode: selectionMode ?? this.selectionMode,
       leafConfidence: leafConfidence ?? this.leafConfidence,
       noveltyWeight: noveltyWeight ?? this.noveltyWeight,
+      enableCdbDirect: enableCdbDirect ?? this.enableCdbDirect,
+      cdbDirectPath: cdbDirectPath ?? this.cdbDirectPath,
+      cdbDirectReadAhead: cdbDirectReadAhead ?? this.cdbDirectReadAhead,
+      batchEvalLookups: batchEvalLookups ?? this.batchEvalLookups,
+      enableLocalChessDb: enableLocalChessDb ?? this.enableLocalChessDb,
+      localChessDbPath: localChessDbPath ?? this.localChessDbPath,
+      enableChessDbApi: enableChessDbApi ?? this.enableChessDbApi,
+      chessDbApiDailyQuota:
+          chessDbApiDailyQuota ?? this.chessDbApiDailyQuota,
+      chessDbApiConcurrency:
+          chessDbApiConcurrency ?? this.chessDbApiConcurrency,
+      enableExtEvalSubtreeSkip:
+          enableExtEvalSubtreeSkip ?? this.enableExtEvalSubtreeSkip,
+      minAcceptableEvalDepth:
+          minAcceptableEvalDepth ?? this.minAcceptableEvalDepth,
     );
   }
 }

@@ -41,6 +41,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
+  cdbdirect_flutter_libs:
+    dependency: "direct main"
+    description:
+      path: "packages/cdbdirect_flutter_libs"
+      relative: true
+    source: path
+    version: "0.1.0"
   characters:
     dependency: transitive
     description:
@@ -146,7 +153,7 @@ packages:
     source: hosted
     version: "11.1.0"
   ffi:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: ffi
       sha256: "289279317b4b16eb2bb7e271abccd4bf84ec9bdcbe999e278a94b804f5630418"
