@@ -34,6 +34,20 @@ flutter pub get
 flutter run
 ```
 
+### Local ChessDB (1 TB TerarkDB dump, Linux)
+
+After building the cdbdirect reader in `tree_builder/`:
+
+```bash
+cd tree_builder && make setup-cdbdirect
+cd ..
+./run_with_cdbdirect.sh
+```
+
+In the app: **Repertoire → Actions → Database Downloads → Local ChessDB (full dump)** — browse to your `data/` directory (the folder containing `CURRENT` and `.sst` files).
+
+See [tree_builder/CDBDIRECT_SETUP.md](tree_builder/CDBDIRECT_SETUP.md) for download and troubleshooting.
+
 ### Building for Different Platforms
 
 - **Android**: `flutter build apk`
