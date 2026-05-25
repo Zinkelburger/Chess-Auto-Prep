@@ -39,6 +39,9 @@ RepertoireConfig repertoire_config_default(void) {
         .verbose_search = false,
         .start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
         .name = "",
+        .rank_lines_by_importance = true,
+        .annotate_move_probabilities = true,
+        .annotate_maia_only = true,
     };
     return config;
 }
@@ -199,6 +202,9 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
         TreeNode *node;
         char moves_san[128][16];
         char moves_uci[128][16];
+        double move_annotation_prob[128];
+        double move_maia_prob[128];
+        bool move_annotation_lichess[128];
         int depth;
     } LineState;
 
@@ -209,6 +215,11 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
     int stack_top = 0;
     stack[0].node = tree->root;
     stack[0].depth = 0;
+    for (int i = 0; i < 128; i++) {
+        stack[0].move_annotation_prob[i] = -1.0;
+        stack[0].move_maia_prob[i] = -1.0;
+        stack[0].move_annotation_lichess[i] = false;
+    }
     stack_top = 1;
 
     while (stack_top > 0 && num_lines < max_lines) {
@@ -234,12 +245,21 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                 next->depth = current.depth + 1;
                 memcpy(next->moves_san, current.moves_san, sizeof(current.moves_san));
                 memcpy(next->moves_uci, current.moves_uci, sizeof(current.moves_uci));
+                memcpy(next->move_annotation_prob, current.move_annotation_prob,
+                       sizeof(current.move_annotation_prob));
+                memcpy(next->move_maia_prob, current.move_maia_prob,
+                       sizeof(current.move_maia_prob));
+                memcpy(next->move_annotation_lichess, current.move_annotation_lichess,
+                       sizeof(current.move_annotation_lichess));
                 snprintf(next->moves_san[current.depth],
                          sizeof(next->moves_san[current.depth]),
                          "%s", selected->move_san);
                 snprintf(next->moves_uci[current.depth],
                          sizeof(next->moves_uci[current.depth]),
                          "%s", selected->move_uci);
+                next->move_annotation_prob[current.depth] = -1.0;
+                next->move_maia_prob[current.depth] = -1.0;
+                next->move_annotation_lichess[current.depth] = false;
                 stack_top++;
                 pushed_any = true;
             }
@@ -254,12 +274,22 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                     next->depth = current.depth + 1;
                     memcpy(next->moves_san, current.moves_san, sizeof(current.moves_san));
                     memcpy(next->moves_uci, current.moves_uci, sizeof(current.moves_uci));
+                    memcpy(next->move_annotation_prob, current.move_annotation_prob,
+                           sizeof(current.move_annotation_prob));
+                    memcpy(next->move_maia_prob, current.move_maia_prob,
+                           sizeof(current.move_maia_prob));
+                    memcpy(next->move_annotation_lichess, current.move_annotation_lichess,
+                           sizeof(current.move_annotation_lichess));
                     snprintf(next->moves_san[current.depth],
                              sizeof(next->moves_san[current.depth]),
                              "%s", child->move_san);
                     snprintf(next->moves_uci[current.depth],
                              sizeof(next->moves_uci[current.depth]),
                              "%s", child->move_uci);
+                    next->move_annotation_prob[current.depth] = child->move_probability;
+                    next->move_maia_prob[current.depth] = child->maia_frequency;
+                    next->move_annotation_lichess[current.depth] =
+                        child->total_games > 0;
                     stack_top++;
                     pushed_any = true;
                 }
@@ -283,6 +313,12 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
             RepertoireLine *line = &out_lines[num_lines];
             memcpy(line->moves_san, current.moves_san, sizeof(current.moves_san));
             memcpy(line->moves_uci, current.moves_uci, sizeof(current.moves_uci));
+            memcpy(line->move_annotation_prob, current.move_annotation_prob,
+                   sizeof(current.move_annotation_prob));
+            memcpy(line->move_maia_prob, current.move_maia_prob,
+                   sizeof(current.move_maia_prob));
+            memcpy(line->move_annotation_lichess, current.move_annotation_lichess,
+                   sizeof(current.move_annotation_lichess));
             line->num_moves = depth;
             line->probability = current.node
                 ? current.node->cumulative_probability : 0;
@@ -763,6 +799,54 @@ static int emit_start_moves(FILE *f, const char *start_moves) {
 }
 
 
+static int line_importance_cmp_desc(const void *a, const void *b) {
+    const RepertoireLine *la = *(const RepertoireLine * const *)a;
+    const RepertoireLine *lb = *(const RepertoireLine * const *)b;
+    if (lb->probability > la->probability) return 1;
+    if (lb->probability < la->probability) return -1;
+    return 0;
+}
+
+
+static double export_prob_for_move(const RepertoireLine *line, int move_idx,
+                                   const RepertoireConfig *config,
+                                   bool *from_lichess_out) {
+    if (!line || move_idx < 0 || move_idx >= line->num_moves) return -1.0;
+    if (line->move_annotation_prob[move_idx] < 0.0 &&
+        line->move_maia_prob[move_idx] < 0.0)
+        return -1.0;
+
+    const bool has_lichess = line->move_annotation_lichess[move_idx];
+    const bool has_maia = line->move_maia_prob[move_idx] >= 0.0;
+    const double lichess_prob = line->move_annotation_prob[move_idx];
+    const double maia_prob = has_maia ? line->move_maia_prob[move_idx]
+                                      : lichess_prob;
+
+    if (config && config->annotate_maia_only) {
+        *from_lichess_out = false;
+        return maia_prob;
+    }
+
+    if (has_lichess) {
+        *from_lichess_out = true;
+        return lichess_prob;
+    }
+
+    *from_lichess_out = false;
+    return maia_prob;
+}
+
+
+static void emit_move_probability_comment(FILE *f, double prob, bool from_lichess,
+                                          const RepertoireConfig *config) {
+    if (prob < 0.0 || !config || !config->annotate_move_probabilities) return;
+    if (from_lichess && !config->annotate_maia_only)
+        fprintf(f, " {[%%humanFrequency %.3f]}", prob);
+    else
+        fprintf(f, " {[%%maiaProbability %.3f]}", prob);
+}
+
+
 bool repertoire_export_pgn(const RepertoireResult *result,
                             const char *filename,
                             const RepertoireConfig *config) {
@@ -770,6 +854,19 @@ bool repertoire_export_pgn(const RepertoireResult *result,
 
     FILE *f = fopen(filename, "w");
     if (!f) return false;
+
+    /* Optional sort by cumulative probability (most likely first). */
+    RepertoireLine **line_order = NULL;
+    if (config && config->rank_lines_by_importance && result->num_lines > 1) {
+        line_order = (RepertoireLine **)calloc(result->num_lines,
+                                               sizeof(RepertoireLine *));
+        if (line_order) {
+            for (int i = 0; i < result->num_lines; i++)
+                line_order[i] = &result->lines[i];
+            qsort(line_order, result->num_lines, sizeof(RepertoireLine *),
+                  line_importance_cmp_desc);
+        }
+    }
 
     /* Choose starting-position representation.
      *
@@ -812,7 +909,7 @@ bool repertoire_export_pgn(const RepertoireResult *result,
     }
 
     for (int i = 0; i < result->num_lines; i++) {
-        const RepertoireLine *line = &result->lines[i];
+        const RepertoireLine *line = line_order ? line_order[i] : &result->lines[i];
 
         if (has_name)
             fprintf(f, "[Event \"%s Line #%d\"]\n", config->name, i + 1);
@@ -834,7 +931,11 @@ bool repertoire_export_pgn(const RepertoireResult *result,
             fprintf(f, "[FEN \"%s\"]\n", config->start_fen);
             fprintf(f, "[SetUp \"1\"]\n");
         }
-        fprintf(f, "[Result \"*\"]\n\n");
+        fprintf(f, "[Result \"*\"]\n");
+        if (!config || config->rank_lines_by_importance) {
+            fprintf(f, "[Importance \"%.3f\"]\n", line->probability);
+        }
+        fprintf(f, "\n");
 
         fprintf(f, "{CumProb %.3f%%, Eval %d cp",
                 line->probability * 100.0,
@@ -844,6 +945,9 @@ bool repertoire_export_pgn(const RepertoireResult *result,
         if (line->leaf_prune_reason == PRUNE_EVAL_TOO_HIGH) {
             fprintf(f, ", Already winning (%+.1f)",
                     line->leaf_prune_eval_cp / 100.0);
+        }
+        if (!config || config->rank_lines_by_importance) {
+            fprintf(f, ", [%%importance %.3f]", line->probability);
         }
         fprintf(f, "}\n");
 
@@ -860,11 +964,18 @@ bool repertoire_export_pgn(const RepertoireResult *result,
                 fprintf(f, "%d. ", (ply / 2) + 1);
             else if (j == 0)
                 fprintf(f, "%d... ", (ply / 2) + 1);
-            fprintf(f, "%s ", line->moves_san[j]);
+            fprintf(f, "%s", line->moves_san[j]);
+            {
+                bool from_lichess = false;
+                double prob = export_prob_for_move(line, j, config, &from_lichess);
+                emit_move_probability_comment(f, prob, from_lichess, config);
+            }
+            fprintf(f, " ");
         }
         fprintf(f, "*\n");
     }
 
+    free(line_order);
     fclose(f);
     return true;
 }

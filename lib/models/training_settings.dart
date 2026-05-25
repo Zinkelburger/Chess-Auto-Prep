@@ -1,5 +1,42 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// How the repertoire trainer orders lines for review.
+enum ReviewOrder {
+  byImportance,
+  random,
+  weakestFirst,
+  sequential,
+}
+
+extension ReviewOrderLabel on ReviewOrder {
+  String get label => switch (this) {
+        ReviewOrder.byImportance => 'By importance (most likely first)',
+        ReviewOrder.random => 'Random',
+        ReviewOrder.weakestFirst => 'Weakest first',
+        ReviewOrder.sequential => 'Sequential',
+      };
+
+  static ReviewOrder fromStorage(String? value) {
+    switch (value) {
+      case 'random':
+        return ReviewOrder.random;
+      case 'weakestFirst':
+        return ReviewOrder.weakestFirst;
+      case 'sequential':
+        return ReviewOrder.sequential;
+      default:
+        return ReviewOrder.byImportance;
+    }
+  }
+
+  String get storageValue => switch (this) {
+        ReviewOrder.byImportance => 'byImportance',
+        ReviewOrder.random => 'random',
+        ReviewOrder.weakestFirst => 'weakestFirst',
+        ReviewOrder.sequential => 'sequential',
+      };
+}
+
 class TrainingSettings {
   int correctStreakThreshold;
   int? trainingDepth; // null = full line
@@ -18,6 +55,9 @@ class TrainingSettings {
   /// If false, auto-rate based on whether user made mistakes.
   bool showRatingButtons;
 
+  /// Order in which due lines are presented for review.
+  ReviewOrder reviewOrder;
+
   TrainingSettings({
     this.correctStreakThreshold = 3,
     this.trainingDepth,
@@ -26,6 +66,7 @@ class TrainingSettings {
     this.learnRequiresClick = true,
     this.learnDelaySec = 3,
     this.showRatingButtons = true,
+    this.reviewOrder = ReviewOrder.byImportance,
   });
 
   static const _keyStreakThreshold = 'trainer_streak_threshold';
@@ -35,6 +76,7 @@ class TrainingSettings {
   static const _keyLearnRequiresClick = 'trainer_learn_requires_click';
   static const _keyLearnDelaySec = 'trainer_learn_delay_sec';
   static const _keyShowRatingButtons = 'trainer_show_rating_buttons';
+  static const _keyReviewOrder = 'trainer_review_order';
 
   static Future<TrainingSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -46,6 +88,8 @@ class TrainingSettings {
       learnRequiresClick: prefs.getBool(_keyLearnRequiresClick) ?? true,
       learnDelaySec: prefs.getInt(_keyLearnDelaySec) ?? 3,
       showRatingButtons: prefs.getBool(_keyShowRatingButtons) ?? true,
+      reviewOrder:
+          ReviewOrderLabel.fromStorage(prefs.getString(_keyReviewOrder)),
     );
   }
 
@@ -62,5 +106,6 @@ class TrainingSettings {
     await prefs.setBool(_keyLearnRequiresClick, learnRequiresClick);
     await prefs.setInt(_keyLearnDelaySec, learnDelaySec);
     await prefs.setBool(_keyShowRatingButtons, showRatingButtons);
+    await prefs.setString(_keyReviewOrder, reviewOrder.storageValue);
   }
 }

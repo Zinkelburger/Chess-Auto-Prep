@@ -217,7 +217,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
         _moveProgressMap = _reviewService.indexMoveProgress(
           moveProgress.where((mp) => mp.repertoireId == filePath).toList(),
         );
-        _dueQueue = _reviewService.dueLinesInOrder(lines, _reviewMap);
+        _dueQueue = _reviewService.orderLinesForReview(
+          lines,
+          _reviewMap,
+          _settings.reviewOrder,
+        );
       });
 
       _pickStartingLine(startLineId: startLineId);
@@ -694,14 +698,22 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       _rebuildQueueAndAdvance();
     } else {
       setState(() {
-        _dueQueue = _reviewService.dueLinesInOrder(_lines, _reviewMap);
+        _dueQueue = _reviewService.orderLinesForReview(
+          _lines,
+          _reviewMap,
+          _settings.reviewOrder,
+        );
       });
     }
   }
 
   void _rebuildQueueAndAdvance() {
     setState(() {
-      _dueQueue = _reviewService.dueLinesInOrder(_lines, _reviewMap);
+      _dueQueue = _reviewService.orderLinesForReview(
+        _lines,
+        _reviewMap,
+        _settings.reviewOrder,
+      );
     });
 
     if (_dueQueue.isEmpty) {
@@ -714,18 +726,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
     int nextIndex = 0;
     if (_currentLine != null) {
-      final currentOrderIndex =
-          _lines.indexWhere((l) => l.id == _currentLine!.id);
-      for (int i = 1; i <= _lines.length; i++) {
-        final candidateIndex = (currentOrderIndex + i) % _lines.length;
-        final candidate = _lines[candidateIndex];
-        if (_reviewMap[candidate.id]?.isDue ?? true) {
-          nextIndex = _dueQueue.indexWhere((l) => l.id == candidate.id);
-          if (nextIndex >= 0) break;
-        }
+      final currentQueueIndex =
+          _dueQueue.indexWhere((l) => l.id == _currentLine!.id);
+      if (currentQueueIndex >= 0) {
+        nextIndex = (currentQueueIndex + 1) % _dueQueue.length;
       }
     }
-    _startLine(_dueQueue[nextIndex.clamp(0, _dueQueue.length - 1)]);
+    _startLine(_dueQueue[nextIndex]);
   }
 
   void _updateMoveProgress(RepertoireLine line, int moveIndex,
@@ -1686,6 +1693,44 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                 }
               },
             ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // -- Review order --
+          Text('Review order', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'How due lines are ordered during training.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<ReviewOrder>(
+            value: _settings.reviewOrder,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: ReviewOrder.values
+                .map(
+                  (order) => DropdownMenuItem(
+                    value: order,
+                    child: Text(order.label),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _settings.reviewOrder = value;
+                _dueQueue = _reviewService.orderLinesForReview(
+                  _lines,
+                  _reviewMap,
+                  _settings.reviewOrder,
+                );
+              });
+              _settings.save();
+            },
           ),
 
           const SizedBox(height: 24),

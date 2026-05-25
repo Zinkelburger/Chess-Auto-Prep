@@ -90,6 +90,17 @@ class TreeBuildConfig {
   final double maiaMinProb;
   final bool maiaOnly;
 
+  // ── PGN export ──
+  /// Sort extracted lines by cumulative probability (most likely first).
+  final bool rankLinesByImportance;
+
+  /// Annotate opponent moves with move-likelihood comments in PGN.
+  final bool annotateMoveProbabilities;
+
+  /// When annotating: use Maia only. When false, prefer Lichess human
+  /// frequencies from the build and fall back to Maia.
+  final bool annotateMaiaOnly;
+
   // ── Expectimax / repertoire selection ──
   final SelectionMode selectionMode;
   final double leafConfidence;
@@ -132,6 +143,9 @@ class TreeBuildConfig {
     this.maiaElo = 2200,
     this.maiaMinProb = 0.05,
     this.maiaOnly = true,
+    this.rankLinesByImportance = true,
+    this.annotateMoveProbabilities = true,
+    this.annotateMaiaOnly = true,
     this.selectionMode = SelectionMode.expectimax,
     this.leafConfidence = 1.0,
     this.noveltyWeight = 0,
@@ -176,6 +190,11 @@ class TreeBuildConfig {
       maiaElo: (json['maia_elo'] as num?)?.toInt() ?? 2200,
       maiaMinProb: (json['maia_min_prob'] as num?)?.toDouble() ?? 0.05,
       maiaOnly: json['maia_only'] as bool? ?? true,
+      rankLinesByImportance:
+          json['rank_lines_by_importance'] as bool? ?? true,
+      annotateMoveProbabilities:
+          json['annotate_move_probabilities'] as bool? ?? true,
+      annotateMaiaOnly: json['annotate_maia_only'] as bool? ?? true,
       selectionMode: _parseSelectionMode(json['selection_mode'] as String?),
       leafConfidence: (json['leaf_confidence'] as num?)?.toDouble() ?? 1.0,
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
@@ -240,6 +259,9 @@ class TreeBuildConfig {
         'maia_elo': maiaElo,
         'maia_min_prob': maiaMinProb,
         'maia_only': maiaOnly,
+        'rank_lines_by_importance': rankLinesByImportance,
+        'annotate_move_probabilities': annotateMoveProbabilities,
+        'annotate_maia_only': annotateMaiaOnly,
         'selection_mode': selectionMode.name,
         'leaf_confidence': leafConfidence,
         'novelty_weight': noveltyWeight,
@@ -280,6 +302,9 @@ class TreeBuildConfig {
     int? maiaElo,
     double? maiaMinProb,
     bool? maiaOnly,
+    bool? rankLinesByImportance,
+    bool? annotateMoveProbabilities,
+    bool? annotateMaiaOnly,
     SelectionMode? selectionMode,
     double? leafConfidence,
     int? noveltyWeight,
@@ -319,6 +344,11 @@ class TreeBuildConfig {
       maiaElo: maiaElo ?? this.maiaElo,
       maiaMinProb: maiaMinProb ?? this.maiaMinProb,
       maiaOnly: maiaOnly ?? this.maiaOnly,
+      rankLinesByImportance:
+          rankLinesByImportance ?? this.rankLinesByImportance,
+      annotateMoveProbabilities:
+          annotateMoveProbabilities ?? this.annotateMoveProbabilities,
+      annotateMaiaOnly: annotateMaiaOnly ?? this.annotateMaiaOnly,
       selectionMode: selectionMode ?? this.selectionMode,
       leafConfidence: leafConfidence ?? this.leafConfidence,
       noveltyWeight: noveltyWeight ?? this.noveltyWeight,

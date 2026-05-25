@@ -8,6 +8,7 @@ import 'dart:io' as io;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/repertoire_line.dart';
+import '../utils/pgn_comment_utils.dart';
 import 'storage/storage_factory.dart';
 
 class RepertoireService {
@@ -100,6 +101,7 @@ class RepertoireService {
         final lineName = _generateLineName(game, gameIndex);
         final lineId = _extractLineId(game, mainlineMoves, gameIndex);
         final startPosition = extractStartPosition(game);
+        final importance = _extractImportance(game, gameText);
 
         lines.add(RepertoireLine(
           id: lineId,
@@ -111,6 +113,7 @@ class RepertoireService {
           comments: comments,
           variations: variations,
           headers: Map<String, String>.from(game.headers),
+          importance: importance,
         ));
       } catch (e) {
         if (kDebugMode) {
@@ -205,6 +208,24 @@ class RepertoireService {
     }
 
     return games;
+  }
+
+  /// Extract cumulative line importance from PGN headers or comments.
+  double? _extractImportance(PgnGame game, String gameText) {
+    final headerVal = game.headers['Importance'];
+    if (headerVal != null && headerVal.isNotEmpty) {
+      final parsed = double.tryParse(headerVal);
+      if (parsed != null) return parsed;
+    }
+
+    final cumProbMatch =
+        RegExp(r'CumProb\s+([\d.]+)%').firstMatch(gameText);
+    if (cumProbMatch != null) {
+      final pct = double.tryParse(cumProbMatch.group(1)!);
+      if (pct != null) return pct / 100.0;
+    }
+
+    return parseImportanceComment(gameText);
   }
 
   /// Generates a meaningful name for the repertoire line
