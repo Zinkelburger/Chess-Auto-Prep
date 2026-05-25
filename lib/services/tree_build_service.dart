@@ -17,6 +17,10 @@ import 'package:flutter/foundation.dart';
 import '../models/build_tree_node.dart';
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
 import 'engine/stockfish_pool.dart';
+import 'eval/cdbdirect_eval_provider.dart';
+import 'eval/chessdb_api_provider.dart';
+import 'eval/eval_chain.dart';
+import 'eval/sqlite_eval_provider.dart';
 import 'eval_cache.dart';
 import 'generation/fen_map.dart';
 import 'generation/generation_config.dart';
@@ -36,8 +40,15 @@ class TreeBuildService {
   final EvalCache _evalCache = EvalCache.instance;
   final Map<String, ExplorerResponse?> _dbCache = {};
 
+  SqliteEvalProvider? _localChessDb;
+  CdbDirectEvalProvider? _cdbDirect;
+  ChessDbApiProvider? _chessDbApi;
+
   late BuildStats _stats;
   Stopwatch _buildSw = Stopwatch();
+
+  BuildStats get buildStats => _stats;
+  ChessDbApiProvider? get chessDbApiProvider => _chessDbApi;
 
   int _lastProgressNodes = 0;
 
@@ -95,6 +106,7 @@ class TreeBuildService {
       _pool.ensureWorkers(),
       _evalCache.init(),
     ]);
+    await _initExternalEvalProviders(cfg);
     if (_pool.workerCount == 0) {
       throw StateError('No engine workers available');
     }
@@ -130,33 +142,12 @@ class TreeBuildService {
     _isBuilding = true;
 
     if (cfg.relativeEval) {
-      await _ensureEval(tree.root, cfg);
+      await _ensureEval(tree.root, cfg, fenMap: FenMap());
       if (tree.root.hasEngineEval) {
         final rootEvalUs = tree.root.evalForUs(cfg.playAsWhite);
-        cfg = TreeBuildConfig(
-          startFen: cfg.startFen,
-          playAsWhite: cfg.playAsWhite,
-          minProbability: cfg.minProbability,
-          maxPly: cfg.maxPly,
-          maxNodes: cfg.maxNodes,
-          evalDepth: cfg.evalDepth,
-          ourMultipv: cfg.ourMultipv,
-          maxEvalLossCp: cfg.maxEvalLossCp,
-          oppMaxChildren: cfg.oppMaxChildren,
-          oppMassTarget: cfg.oppMassTarget,
+        cfg = cfg.copyWith(
           minEvalCp: cfg.minEvalCp + rootEvalUs,
           maxEvalCp: cfg.maxEvalCp + rootEvalUs,
-          relativeEval: cfg.relativeEval,
-          useLichessDb: cfg.useLichessDb,
-          useMasters: cfg.useMasters,
-          ratingRange: cfg.ratingRange,
-          speeds: cfg.speeds,
-          minGames: cfg.minGames,
-          maiaElo: cfg.maiaElo,
-          maiaMinProb: cfg.maiaMinProb,
-          maiaOnly: cfg.maiaOnly,
-          leafConfidence: cfg.leafConfidence,
-          noveltyWeight: cfg.noveltyWeight,
         );
       }
     }
@@ -175,6 +166,7 @@ class TreeBuildService {
       );
     } finally {
       fenMap.clear();
+      await _teardownExternalEvalProviders();
     }
 
     final pruned = _pruneEvalTooLow(tree);
@@ -271,7 +263,7 @@ class TreeBuildService {
     // This matches C's build_process_node where ensure_eval + window is
     // gated on `!is_our_move`.
     if (!isOurMove) {
-      await _ensureEval(node, config);
+      await _ensureEval(node, config, fenMap: fenMap);
       if (node.hasEngineEval) {
         final evalUs = node.evalForUs(config.playAsWhite);
         if (evalUs > config.maxEvalCp) {
@@ -644,29 +636,83 @@ class TreeBuildService {
 
   // ── Ensure eval (returns full result for bestmove reuse) ───────────────
 
-  Future<void> _ensureEval(BuildTreeNode node, TreeBuildConfig config) async {
+  Future<void> _ensureEval(
+    BuildTreeNode node,
+    TreeBuildConfig config, {
+    required FenMap fenMap,
+  }) async {
     if (node.hasEngineEval) return;
 
-    final cached = await _getCachedEvalWhite(node.fen, config.evalDepth);
-    if (cached != null) {
-      final isWhiteStm = node.fen.split(' ')[1] == 'w';
-      node.engineEvalCp = isWhiteStm ? cached : -cached;
-      _stats.dbEvalHits++;
-      return;
+    final outcome = await resolveEvalChain(
+      fen: node.fen,
+      config: config,
+      cache: _evalCache,
+      stats: _stats,
+      localChessDb: _localChessDb,
+      cdbDirect: _cdbDirect,
+      chessDbApi: _chessDbApi,
+      extEvalMode: node.extEvalMode,
+      canonicalNode: fenMap.getCanonical(node.fen),
+      stockfishEval: (f, depth) async {
+        final sw = Stopwatch()..start();
+        final result = await _pool.evaluateFen(f, depth);
+        _stats.sfSingleMs += sw.elapsedMilliseconds;
+        return (stmCp: result.effectiveCp, depth: depth);
+      },
+      cacheWrite: (f, whiteCp, depth) async {
+        _cacheEvalWhite(f, whiteCp, depth);
+      },
+    );
+
+    if (outcome.extEvalMode != node.extEvalMode) {
+      node.extEvalMode = outcome.extEvalMode;
     }
-    _stats.dbEvalMisses++;
 
-    final sw = Stopwatch()..start();
-    final result = await _pool.evaluateFen(node.fen, config.evalDepth);
-    _stats.sfSingleCalls++;
-    _stats.sfSingleMs += sw.elapsedMilliseconds;
+    if (outcome.whiteCp != null) {
+      final isWhiteStm = node.fen.split(' ')[1] == 'w';
+      node.engineEvalCp =
+          isWhiteStm ? outcome.whiteCp! : -outcome.whiteCp!;
+    }
+  }
 
-    node.engineEvalCp = result.effectiveCp;
-    final isWhiteStm = node.fen.split(' ')[1] == 'w';
-    _cacheEvalWhite(
-        node.fen,
-        isWhiteStm ? result.effectiveCp : -result.effectiveCp,
-        config.evalDepth);
+  Future<void> _initExternalEvalProviders(TreeBuildConfig config) async {
+    await _teardownExternalEvalProviders();
+
+    await CdbDirectEvalProvider.probeAvailability();
+    if (config.enableCdbDirect &&
+        config.cdbDirectPath.isNotEmpty &&
+        CdbDirectEvalProvider.isAvailable) {
+      final provider = CdbDirectEvalProvider(path: config.cdbDirectPath);
+      if (await provider.init()) {
+        _cdbDirect = provider;
+      }
+    }
+
+    if (config.enableLocalChessDb && config.localChessDbPath.isNotEmpty) {
+      final provider = SqliteEvalProvider(path: config.localChessDbPath);
+      if (await provider.init()) {
+        _localChessDb = provider;
+      }
+    }
+
+    if (config.enableChessDbApi) {
+      _chessDbApi = ChessDbApiProvider(
+        dailyQuota: config.chessDbApiDailyQuota,
+        concurrency: config.chessDbApiConcurrency,
+      );
+      await _chessDbApi!.init();
+    }
+  }
+
+  Future<void> _teardownExternalEvalProviders() async {
+    await _localChessDb?.close();
+    _localChessDb = null;
+    await _cdbDirect?.close();
+    _cdbDirect = null;
+    if (_chessDbApi != null) {
+      await _chessDbApi!.flushQuota();
+      _chessDbApi = null;
+    }
   }
 
   // ── Prune eval-too-low (post-build cleanup) ────────────────────────────
@@ -727,6 +773,7 @@ class TreeBuildService {
     parent.children.add(child);
     tree.registerNode(child);
     tree.totalNodes++;
+    child.extEvalMode = parent.extEvalMode;
     if (child.ply > tree.maxPlyReached) {
       tree.maxPlyReached = child.ply;
     }
@@ -760,9 +807,6 @@ class TreeBuildService {
   void _cacheEvalWhite(String fen, int whiteCp, int depth) {
     unawaited(_evalCache.putEvalCpWhite(fen, whiteCp, depth));
   }
-
-  Future<int?> _getCachedEvalWhite(String fen, int minDepth) =>
-      _evalCache.getEvalCpWhite(fen, minDepth: minDepth);
 
   void _emitProgress(
     BuildTree tree,

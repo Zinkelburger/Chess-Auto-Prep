@@ -25,6 +25,9 @@ struct MaiaContext;
 struct RepertoireDB;
 struct RepertoireConfig;
 struct LichessEvalDB;
+struct ChessDBEvalDB;
+struct ChessDBAPI;
+struct CdbDirectEval;
 
 /**
  * BuildStats - Accumulated timing and counters from a tree build.
@@ -60,6 +63,24 @@ typedef struct BuildStats {
     int    lichess_eval_db_hits;
     int    lichess_eval_db_misses;
     int    lichess_eval_db_shallow;  /* row found but depth < eval_depth */
+
+    /* ChessDB cdbdirect (TerarkDB full dump) */
+    int    cdbdirect_hits;
+    int    cdbdirect_misses;
+    int    cdbdirect_shallow;
+
+    /* ChessDB local SQLite eval DB */
+    int    chessdb_local_hits;
+    int    chessdb_local_misses;
+    int    chessdb_local_shallow;
+
+    /* ChessDB cloud API */
+    int    chessdb_api_hits;
+    int    chessdb_api_misses;
+    int    chessdb_api_quota_exhausted;
+
+    /* External eval chain skipped (subtree off-book heuristic) */
+    int    ext_eval_skipped;
 } BuildStats;
 
 /**
@@ -101,6 +122,19 @@ typedef struct TreeConfig {
      * still need explicit MultiPV candidate generation, which the DB only
      * sparsely has. */
     struct LichessEvalDB *lichess_eval_db;
+
+    /* Optional ChessDB eval sources (3-phase chain phase 1 + 2). */
+    struct CdbDirectEval  *cdbdirect;       /* TerarkDB full dump (HAS_CDBDIRECT) */
+    struct ChessDBEvalDB *chessdb_eval_db;
+    struct ChessDBAPI    *chessdb_api;
+
+    /* HDD tuning: prefetch cdbdirect lookups sorted by FEN when creating children */
+    bool batch_eval_lookups;
+    bool cdbdirect_read_ahead;
+
+    /* When true (default), a local DB hard miss marks the subtree to skip
+     * external eval sources and use Stockfish only (project cache exempt). */
+    bool ext_eval_subtree_skip;
 
     /* Our-move candidate selection (engine-driven)
      *

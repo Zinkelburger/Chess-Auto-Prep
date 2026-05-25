@@ -75,7 +75,12 @@ lichess_output.txt
 *.tmp
 output.txt
 
+# tree_builder cdbdirect native build output (bundled via packages/cdbdirect_flutter_libs)
+packages/cdbdirect_flutter_libs/native/
+packages/cdbdirect_flutter_libs/.build/
+
 # tree_builder
+tree_builder/deps/
 tree_builder/bin/
 tree_builder/*.db
 tree_builder/*.db-shm

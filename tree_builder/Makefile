@@ -61,6 +61,23 @@ ifndef NO_MAIA
     endif
 endif
 
+# cdbdirect / TerarkDB full ChessDB dump (optional).
+# Requires vondele/cdbdirect built with TerarkDB:
+#   git clone https://github.com/vondele/cdbdirect && cd cdbdirect && make
+#   export TERARKDBROOT=/path/to/terarkdb
+#   export CHESSDB_PATH=/mnt/hdd/chessdb/data
+# Build with:  make HAS_CDBDIRECT=1
+# Mock tests:  make test-cdbdirect-mock
+ifdef HAS_CDBDIRECT
+    CFLAGS += -DHAS_CDBDIRECT
+    TERARKDBROOT ?= /usr/local
+    CFLAGS += -I$(TERARKDBROOT)/include
+    LDFLAGS += -L$(TERARKDBROOT)/lib
+    ifndef MOCK_CDBDIRECT
+        LDFLAGS += -lcdbdirect -lterarkdb -lstdc++ -lpthread -lz -lsnappy -llz4 -lbz2
+    endif
+endif
+
 # Directories
 SRC_DIR = src
 INC_DIR = include
@@ -72,6 +89,11 @@ SRCS = $(SRC_DIR)/node.c \
        $(SRC_DIR)/tree.c \
        $(SRC_DIR)/lichess_api.c \
        $(SRC_DIR)/lichess_eval_db.c \
+       $(SRC_DIR)/chessdb_eval_db.c \
+       $(SRC_DIR)/cdbdirect_eval.c \
+       $(SRC_DIR)/chessdb_api.c \
+       $(SRC_DIR)/eval_source.c \
+       $(SRC_DIR)/eval_chain.c \
        $(SRC_DIR)/serialization.c \
        $(SRC_DIR)/chess_logic.c \
        $(SRC_DIR)/san_convert.c \
@@ -107,10 +129,34 @@ ETL_OBJS = $(BUILD_DIR)/build_lichess_eval_db.o \
            $(BUILD_DIR)/sqlite3_amalg.o \
            $(BUILD_DIR)/cJSON.o
 
+# Unit tests for eval sources
+TEST_EVAL_SRC = test/test_eval_source.c
+TEST_EVAL_OBJS = $(BUILD_DIR)/test_eval_source.o \
+                 $(BUILD_DIR)/node.o \
+                 $(BUILD_DIR)/eval_source.o \
+                 $(BUILD_DIR)/eval_chain.o \
+                 $(BUILD_DIR)/lichess_eval_db.o \
+                 $(BUILD_DIR)/chessdb_eval_db.o \
+                 $(BUILD_DIR)/cdbdirect_eval.o \
+                 $(BUILD_DIR)/chessdb_api.o \
+                 $(BUILD_DIR)/sqlite3_amalg.o
+TEST_EVAL_TARGET = $(BIN_DIR)/test_eval_source
+TEST_CDB_MOCK_OBJS = $(BUILD_DIR)/test_eval_source_cdbmock.o \
+                     $(BUILD_DIR)/node.o \
+                     $(BUILD_DIR)/eval_source.o \
+                     $(BUILD_DIR)/eval_chain_cdbmock.o \
+                     $(BUILD_DIR)/lichess_eval_db.o \
+                     $(BUILD_DIR)/chessdb_eval_db.o \
+                     $(BUILD_DIR)/cdbdirect_eval_cdbmock.o \
+                     $(BUILD_DIR)/chessdb_api.o \
+                     $(BUILD_DIR)/sqlite3_amalg.o \
+                     $(BUILD_DIR)/mock_cdbdirect.o
+TEST_CDB_MOCK_TARGET = $(BIN_DIR)/test_eval_source_cdbdirect_mock
+
 # Include paths
 INCLUDES = -I$(INC_DIR) -I$(SRC_DIR) $(LOCAL_INC)
 
-.PHONY: all clean install test help check-deps dist etl
+.PHONY: all clean install test test-eval-source test-cdbdirect-mock setup-cdbdirect help check-deps dist etl
 
 all: check-deps directories $(TARGET)
 
@@ -149,9 +195,13 @@ $(BUILD_DIR)/sqlite3_amalg.o: $(SRC_DIR)/sqlite3_amalg.c
 
 # Header dependencies
 $(BUILD_DIR)/node.o: $(INC_DIR)/node.h
-$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/san_convert.h $(INC_DIR)/maia.h $(INC_DIR)/engine_pool.h $(INC_DIR)/database.h $(INC_DIR)/repertoire.h $(INC_DIR)/lichess_eval_db.h
+$(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/san_convert.h $(INC_DIR)/maia.h $(INC_DIR)/engine_pool.h $(INC_DIR)/database.h $(INC_DIR)/repertoire.h $(INC_DIR)/lichess_eval_db.h $(INC_DIR)/chessdb_eval_db.h $(INC_DIR)/cdbdirect_eval.h $(INC_DIR)/chessdb_api.h $(INC_DIR)/eval_chain.h
 $(BUILD_DIR)/lichess_api.o: $(INC_DIR)/lichess_api.h $(SRC_DIR)/cJSON.h
-$(BUILD_DIR)/lichess_eval_db.o: $(INC_DIR)/lichess_eval_db.h
+$(BUILD_DIR)/lichess_eval_db.o: $(INC_DIR)/lichess_eval_db.h $(INC_DIR)/eval_source.h
+$(BUILD_DIR)/chessdb_eval_db.o: $(INC_DIR)/chessdb_eval_db.h $(INC_DIR)/eval_source.h
+$(BUILD_DIR)/chessdb_api.o: $(INC_DIR)/chessdb_api.h $(INC_DIR)/eval_source.h
+$(BUILD_DIR)/eval_source.o: $(INC_DIR)/eval_source.h
+$(BUILD_DIR)/eval_chain.o: $(INC_DIR)/eval_chain.h $(INC_DIR)/cdbdirect_eval.h $(INC_DIR)/chessdb_eval_db.h $(INC_DIR)/lichess_eval_db.h $(INC_DIR)/chessdb_api.h
 $(BUILD_DIR)/serialization.o: $(INC_DIR)/serialization.h $(INC_DIR)/tree.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/chess_logic.o: $(INC_DIR)/chess_logic.h
 # san_convert uses chesslib types (separate TU to avoid ChessPosition name clash)
@@ -162,7 +212,14 @@ $(BUILD_DIR)/database.o: $(INC_DIR)/database.h
 $(BUILD_DIR)/engine_pool.o: $(INC_DIR)/engine_pool.h $(INC_DIR)/thread_pool.h
 $(BUILD_DIR)/repertoire.o: $(INC_DIR)/repertoire.h $(INC_DIR)/tree.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/chess_logic.h $(SRC_DIR)/cJSON.h
 $(BUILD_DIR)/maia.o: $(INC_DIR)/maia.h $(INC_DIR)/chess_logic.h $(SRC_DIR)/maia_vocab.inc
-$(BUILD_DIR)/main.o: $(INC_DIR)/tree.h $(INC_DIR)/lichess_api.h $(INC_DIR)/serialization.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/repertoire.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h $(INC_DIR)/lichess_eval_db.h
+$(BUILD_DIR)/main.o: $(INC_DIR)/tree.h $(INC_DIR)/lichess_api.h $(INC_DIR)/serialization.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/repertoire.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h $(INC_DIR)/lichess_eval_db.h $(INC_DIR)/chessdb_eval_db.h $(INC_DIR)/chessdb_api.h
+
+$(BUILD_DIR)/test_eval_source.o: $(TEST_EVAL_SRC)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(TEST_EVAL_TARGET): $(TEST_EVAL_OBJS)
+	$(CC) $(TEST_EVAL_OBJS) -o $@ $(LOCAL_LIB) $(LDFLAGS)
+	@echo "  Test binary: $(TEST_EVAL_TARGET)"
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
@@ -191,6 +248,36 @@ test: $(TARGET)
 	@echo "Test output saved to test_output.pgn"
 	@rm -f test_output.db test_output.db-shm test_output.db-wal \
 		test_output.pgn test_output.tree.json
+
+test-eval-source: $(TEST_EVAL_TARGET)
+	@echo ""
+	@echo "Running eval source unit tests..."
+	@cd $(CURDIR) && $(TEST_EVAL_TARGET)
+
+$(BUILD_DIR)/mock_cdbdirect.o: test/mock_cdbdirect.c
+	$(CC) $(CFLAGS) -DHAS_CDBDIRECT $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/cdbdirect_eval_cdbmock.o: $(SRC_DIR)/cdbdirect_eval.c $(INC_DIR)/cdbdirect_eval.h $(INC_DIR)/eval_source.h
+	$(CC) $(CFLAGS) -DHAS_CDBDIRECT $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/eval_chain_cdbmock.o: $(SRC_DIR)/eval_chain.c $(INC_DIR)/eval_chain.h $(INC_DIR)/cdbdirect_eval.h
+	$(CC) $(CFLAGS) -DHAS_CDBDIRECT $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/test_eval_source_cdbmock.o: $(TEST_EVAL_SRC)
+	$(CC) $(CFLAGS) -DHAS_CDBDIRECT $(INCLUDES) -c $< -o $@
+
+test-cdbdirect-mock: directories $(TEST_CDB_MOCK_TARGET)
+	@echo ""
+	@echo "Running cdbdirect mock tests..."
+	@cd $(CURDIR) && $(TEST_CDB_MOCK_TARGET)
+
+# Build TerarkDB + cdbdirect into deps/install (see CDBDIRECT_SETUP.md)
+setup-cdbdirect:
+	@./scripts/setup_cdbdirect.sh
+
+$(TEST_CDB_MOCK_TARGET): $(TEST_CDB_MOCK_OBJS)
+	$(CC) $(TEST_CDB_MOCK_OBJS) -o $@ $(LOCAL_LIB) $(LDFLAGS)
+	@echo "  Mock test binary: $(TEST_CDB_MOCK_TARGET)"
 
 # Full test with engine
 test-full: $(TARGET)
@@ -255,6 +342,9 @@ help:
 	@echo "  clean      - Remove build artifacts"
 	@echo "  install    - Install to /usr/local/bin"
 	@echo "  test       - Quick test (no engine)"
+	@echo "  test-eval-source - EvalSource / ChessDB unit tests"
+	@echo "  test-cdbdirect-mock - cdbdirect mock tests (no TerarkDB required)"
+	@echo "  setup-cdbdirect - Build TerarkDB + cdbdirect (see CDBDIRECT_SETUP.md)"
 	@echo "  test-full  - Full test with Stockfish"
 	@echo "  check-deps - Check for required libraries"
 	@echo "  help       - Show this help"
@@ -268,6 +358,13 @@ help:
 	@echo "    Fedora:  sudo dnf install onnxruntime-devel"
 	@echo "    pip:     pip install onnxruntime (set LD_LIBRARY_PATH)"
 	@echo "  To disable:  make NO_MAIA=1"
+	@echo ""
+	@echo "cdbdirect TerarkDB full dump (optional):"
+	@echo "  Run: make setup-cdbdirect  (see CDBDIRECT_SETUP.md)"
+	@echo "  Then: make HAS_CDBDIRECT=1 TERARKDBROOT=\$$PWD/deps/install"
+	@echo "  ./bin/tree_builder --cdbdirect-path /mnt/hdd/chessdb/data ..."
+	@echo "  HDD: use --cdbdirect-read-ahead and --batch-eval-lookups"
+	@echo "  Mock tests: make test-cdbdirect-mock"
 	@echo ""
 	@echo "After building:"
 	@echo "  ./bin/tree_builder -h      (show usage)"

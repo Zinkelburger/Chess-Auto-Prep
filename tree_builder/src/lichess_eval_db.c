@@ -3,6 +3,7 @@
  */
 
 #include "lichess_eval_db.h"
+#include "eval_source.h"
 #include "sqlite3.h"
 
 #include <stdio.h>
@@ -63,9 +64,11 @@ static void canonicalize_fen(char *fen) {
     }
 }
 
-bool lichess_eval_db_lookup(LichessEvalDB *h, const char *fen,
-                             int *out_eval_cp, int *out_depth) {
-    if (!h || !fen) return false;
+static void lichess_source_lookup(void *ctx, const char *fen, int min_depth,
+                                  EvalLookupResult *out) {
+    LichessEvalDB *h = (LichessEvalDB *)ctx;
+    eval_lookup_result_clear(out);
+    if (!h || !fen) return;
 
     char buf[128];
     snprintf(buf, sizeof(buf), "%s", fen);
@@ -76,7 +79,10 @@ bool lichess_eval_db_lookup(LichessEvalDB *h, const char *fen,
     sqlite3_bind_text(h->stmt_lookup, 1, buf, -1, SQLITE_TRANSIENT);
 
     int rc = sqlite3_step(h->stmt_lookup);
-    if (rc != SQLITE_ROW) return false;
+    if (rc != SQLITE_ROW) {
+        out->hard_miss = true;
+        return;
+    }
 
     int cp_val    = sqlite3_column_int(h->stmt_lookup, 0);
     int cp_null   = sqlite3_column_type(h->stmt_lookup, 0) == SQLITE_NULL;
@@ -84,19 +90,31 @@ bool lichess_eval_db_lookup(LichessEvalDB *h, const char *fen,
     int mate_null = sqlite3_column_type(h->stmt_lookup, 1) == SQLITE_NULL;
     int depth     = sqlite3_column_int(h->stmt_lookup, 2);
 
-    int eval_cp;
-    if (!mate_null) {
-        /* Match engine_pool's mate-to-cp mapping. */
-        eval_cp = mate_val > 0 ? (10000 - mate_val) : (-10000 - mate_val);
-    } else if (!cp_null) {
-        eval_cp = cp_val;
-    } else {
-        return false;  /* row present but no score — shouldn't happen */
+    out->depth = depth;
+    if (!eval_map_sqlite_score(cp_val, cp_null, mate_val, mate_null,
+                               &out->eval_cp, &out->mate)) {
+        out->hard_miss = true;
+        return;
     }
 
-    if (out_eval_cp) *out_eval_cp = eval_cp;
-    if (out_depth)   *out_depth   = depth;
+    out->found = true;
+    if (depth < min_depth)
+        out->shallow = true;
+}
+
+bool lichess_eval_db_lookup(LichessEvalDB *h, const char *fen,
+                             int *out_eval_cp, int *out_depth) {
+    EvalLookupResult r;
+    lichess_eval_db_lookup_result(h, fen, 0, &r);
+    if (!r.found) return false;
+    if (out_eval_cp) *out_eval_cp = r.eval_cp;
+    if (out_depth)   *out_depth   = r.depth;
     return true;
+}
+
+void lichess_eval_db_lookup_result(LichessEvalDB *db, const char *fen,
+                                   int min_depth, EvalLookupResult *out) {
+    lichess_source_lookup(db, fen, min_depth, out);
 }
 
 long lichess_eval_db_count(LichessEvalDB *h) {
@@ -110,4 +128,18 @@ long lichess_eval_db_count(LichessEvalDB *h) {
         n = (long)sqlite3_column_int64(s, 0);
     sqlite3_finalize(s);
     return n;
+}
+
+static void lichess_source_close(void *ctx) {
+    (void)ctx;
+}
+
+EvalSource *lichess_eval_db_as_source(LichessEvalDB *db) {
+    if (!db) return NULL;
+    EvalSource *src = calloc(1, sizeof(*src));
+    if (!src) return NULL;
+    src->ctx = db;
+    src->lookup = lichess_source_lookup;
+    src->close_fn = lichess_source_close;
+    return src;
 }

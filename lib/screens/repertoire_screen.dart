@@ -25,6 +25,7 @@ import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/opening_tree_widget.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../widgets/pgn_import_dialog.dart';
+import '../widgets/eval_database_settings_panel.dart';
 import '../widgets/repertoire_generation_tab.dart';
 import '../widgets/traps_browser.dart';
 import '../widgets/unified_engine_pane.dart';
@@ -1189,17 +1190,19 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return Container(
       padding: const EdgeInsets.all(8.0),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Actions',
+            'Actions & Settings',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const Divider(),
-
-          // Action buttons
           Expanded(
             child: ListView(
               children: [
+                const EvalDatabaseSettingsPanel(),
+                const SizedBox(height: 16),
+                const Divider(),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.quiz, color: Colors.green),

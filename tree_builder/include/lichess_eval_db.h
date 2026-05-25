@@ -22,6 +22,7 @@
 #ifndef LICHESS_EVAL_DB_H
 #define LICHESS_EVAL_DB_H
 
+#include "eval_source.h"
 #include <stdbool.h>
 
 typedef struct LichessEvalDB LichessEvalDB;
@@ -49,10 +50,17 @@ void lichess_eval_db_close(LichessEvalDB *db);
 bool lichess_eval_db_lookup(LichessEvalDB *db, const char *fen,
                              int *out_eval_cp, int *out_depth);
 
+/** Full lookup with shallow / hard_miss flags. */
+void lichess_eval_db_lookup_result(LichessEvalDB *db, const char *fen,
+                                   int min_depth, EvalLookupResult *out);
+
 /**
  * Reports the number of rows in the DB (for banner/diagnostics).
  * Returns -1 on NULL handle or query failure.
  */
 long lichess_eval_db_count(LichessEvalDB *db);
+
+/** Non-owning EvalSource wrapper for tests / uniform chain. */
+EvalSource *lichess_eval_db_as_source(LichessEvalDB *db);
 
 #endif /* LICHESS_EVAL_DB_H */

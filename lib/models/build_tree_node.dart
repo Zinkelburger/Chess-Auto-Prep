@@ -7,6 +7,17 @@
 /// trees and game analysis.
 library;
 
+// ── External eval skip mode ───────────────────────────────────────────────
+
+/// When external eval sources (local ChessDB / API) should be skipped.
+enum ExtEvalMode {
+  /// Try external sources after project cache.
+  none,
+
+  /// Skip local ChessDB and ChessDB API; use cache then Stockfish only.
+  skipExternal,
+}
+
 // ── Prune reasons ────────────────────────────────────────────────────────
 
 enum PruneReason {
@@ -90,6 +101,9 @@ class BuildTreeNode {
   /// Used as a novelty signal when novelty_weight > 0.
   /// -1.0 means not set.
   double maiaFrequency = -1.0;
+
+  /// External eval skip flag inherited from parent on local DB hard miss.
+  ExtEvalMode extEvalMode = ExtEvalMode.none;
 
   /// Selected as part of the repertoire during the selection phase.
   bool isRepertoireMove = false;
@@ -290,4 +304,22 @@ class BuildStats {
   int dbEvalMisses = 0;
   int dbExplorerHits = 0;
   int dbExplorerMisses = 0;
+
+  int localChessDbHits = 0;
+  int localChessDbMisses = 0;
+  int localChessDbShallow = 0;
+  int localChessDbHardMisses = 0;
+
+  int cdbDirectHits = 0;
+  int cdbDirectMisses = 0;
+  int cdbDirectShallow = 0;
+  int cdbDirectHardMisses = 0;
+
+  int chessDbApiHits = 0;
+  int chessDbApiMisses = 0;
+  int chessDbApiShallow = 0;
+  int chessDbApiQuotaBlocked = 0;
+
+  int transpositionEvalHits = 0;
+  int extEvalSubtreeSkips = 0;
 }
