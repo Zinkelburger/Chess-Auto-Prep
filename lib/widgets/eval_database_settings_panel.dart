@@ -150,7 +150,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                 Expanded(
                   child: Text(
                     'Native library not found. Run `make setup-cdbdirect` in '
-                    'tree_builder/ to enable.',
+                    'tree_builder/, then launch with `./run_with_cdbdirect.sh`.',
                     style: TextStyle(fontSize: 12, color: Colors.amber[100]),
                   ),
                 ),

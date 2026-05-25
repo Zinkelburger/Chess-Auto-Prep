@@ -114,12 +114,12 @@ make test-cdbdirect-mock
 ## Flutter app
 
 1. Complete setup so `deps/install/lib/libcdbdirect.so` exists.
-2. Export `TERARKDBROOT` (and `LD_LIBRARY_PATH` on Linux) in the environment where you launch Flutter.
-3. In the app: **Repertoire generation → External eval sources → Local ChessDB (full dump)**.
-4. Browse to your dump’s **data** directory (folder containing `CURRENT`, `LOCK`, or `.sst` files).
+2. From the repo root: `./run_with_cdbdirect.sh` (sets `LD_LIBRARY_PATH` and `TERARKDBROOT` for dev runs).
+3. In the app: **Repertoire → Actions → Database Downloads → Local ChessDB (full dump)**.
+4. Browse to your dump’s **data** directory (folder containing `CURRENT` and `.sst` files).
 5. On HDD: enable **HDD read-ahead hint** and **Batch eval lookups**.
 
-The Dart provider loads `libcdbdirect.so` from `TERARKDBROOT/lib` or `LD_LIBRARY_PATH`.
+The Dart provider loads `libcdbdirect.so` from the bundled app `lib/`, `LD_LIBRARY_PATH`, `TERARKDBROOT/lib`, or `tree_builder/deps/install/lib/` when run from the repo.
 
 ## CLI usage (HDD-optimized)
 

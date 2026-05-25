@@ -11,6 +11,7 @@ import 'package:cdbdirect_flutter_libs/cdbdirect_flutter_libs.dart'
     as cdb_libs;
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import 'cdbdirect_parse.dart';
 import 'eval_canonicalize.dart';
@@ -128,6 +129,44 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
     return _tryLoadDevLibrary();
   }
 
+  static DynamicLibrary? _openLibraryPath(String libPath) {
+    try {
+      return DynamicLibrary.open(libPath);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Dev / local install paths checked after bundled loader and soname lookup.
+  static Iterable<String> _devLibraryPathCandidates() sync* {
+    final env = Platform.environment;
+
+    final direct = env['CDBDIRECT_LIB'];
+    if (direct != null && direct.isNotEmpty) yield direct;
+
+    final envRoot = env['TERARKDBROOT'];
+    if (envRoot != null && envRoot.isNotEmpty) {
+      yield p.join(envRoot, 'lib', 'libcdbdirect.so');
+      yield p.join(envRoot, 'lib', 'libcdbdirect.dylib');
+      yield p.join(envRoot, 'lib', 'cdbdirect.dll');
+    }
+
+    final projectRoots = <String>{
+      if (env['CHESS_AUTO_PREP_ROOT']?.isNotEmpty == true)
+        env['CHESS_AUTO_PREP_ROOT']!,
+      Directory.current.path,
+    };
+    for (final root in projectRoots) {
+      yield p.join(root, 'tree_builder', 'deps', 'install', 'lib', 'libcdbdirect.so');
+    }
+
+    try {
+      final exeDir = p.dirname(Platform.resolvedExecutable);
+      yield p.join(exeDir, 'lib', 'libcdbdirect.so');
+      yield p.join(exeDir, '..', 'lib', 'libcdbdirect.so');
+    } catch (_) {}
+  }
+
   static Future<DynamicLibrary?> _tryLoadDevLibrary() async {
     if (!Platform.isLinux) return null;
 
@@ -137,23 +176,13 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
       'cdbdirect.dll',
     ];
     for (final name in names) {
-      try {
-        return DynamicLibrary.open(name);
-      } catch (_) {}
+      final lib = _openLibraryPath(name);
+      if (lib != null) return lib;
     }
 
-    final envRoot = Platform.environment['TERARKDBROOT'];
-    if (envRoot != null && envRoot.isNotEmpty) {
-      final candidates = [
-        '$envRoot/lib/libcdbdirect.so',
-        '$envRoot/lib/libcdbdirect.dylib',
-        '$envRoot/lib/cdbdirect.dll',
-      ];
-      for (final libPath in candidates) {
-        try {
-          return DynamicLibrary.open(libPath);
-        } catch (_) {}
-      }
+    for (final libPath in _devLibraryPathCandidates()) {
+      final lib = _openLibraryPath(libPath);
+      if (lib != null) return lib;
     }
     return null;
   }
