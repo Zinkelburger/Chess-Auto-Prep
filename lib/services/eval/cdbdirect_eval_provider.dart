@@ -35,11 +35,16 @@ typedef CdbDirectLookupFn = String? Function(String fen);
 class CdbDirectLibraryStatus {
   const CdbDirectLibraryStatus({
     required this.isAvailable,
+    required this.showFeatureUi,
     required this.platformName,
     required this.usedBundledLibrary,
   });
 
+  /// Native reader loaded (bundled .so or dev LD_LIBRARY_PATH / TERARKDBROOT).
   final bool isAvailable;
+
+  /// Whether the ChessDB dump UI should appear (Linux only).
+  final bool showFeatureUi;
   final String platformName;
   final bool usedBundledLibrary;
 }
@@ -66,6 +71,9 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
   /// Whether the native reader can be loaded on this machine (cached after [probeAvailability]).
   static bool get isAvailable => _libraryLoadable ?? false;
 
+  /// Linux shows the ChessDB dump UI even when the native library is not built yet.
+  static bool get showFeatureUi => Platform.isLinux;
+
   /// Whether this provider instance is ready to serve lookups.
   bool get isReady => _handle != null || lookupOverride != null;
 
@@ -88,6 +96,7 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
     if (!Platform.isLinux) {
       return CdbDirectLibraryStatus(
         isAvailable: false,
+        showFeatureUi: false,
         platformName: platformName,
         usedBundledLibrary: false,
       );
@@ -97,6 +106,7 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
     if (bundled != null) {
       return CdbDirectLibraryStatus(
         isAvailable: true,
+        showFeatureUi: true,
         platformName: platformName,
         usedBundledLibrary: true,
       );
@@ -105,6 +115,7 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
     final dev = await _tryLoadDevLibrary();
     return CdbDirectLibraryStatus(
       isAvailable: dev != null,
+      showFeatureUi: true,
       platformName: platformName,
       usedBundledLibrary: false,
     );

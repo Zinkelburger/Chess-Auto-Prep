@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -21,7 +21,24 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build clang libgtk-3-dev pkg-config
+          sudo apt-get install -y \
+            cmake ninja-build clang libgtk-3-dev pkg-config git g++ make \
+            libsnappy-dev liblz4-dev libzstd-dev libbz2-dev \
+            libboost-fiber-dev libboost-context-dev libtbb-dev libjemalloc-dev zlib1g-dev
+
+      - name: Cache TerarkDB + cdbdirect build
+        uses: actions/cache@v4
+        id: cdbdirect-cache
+        with:
+          path: packages/cdbdirect_flutter_libs/.build/deps
+          key: cdbdirect-terarkdb-v1-${{ hashFiles('packages/cdbdirect_flutter_libs/scripts/build_native.sh', 'packages/cdbdirect_flutter_libs/src/cdbdirect_capi.cpp') }}
+          restore-keys: |
+            cdbdirect-terarkdb-v1-
+
+      - name: Build bundled libcdbdirect.so
+        run: |
+          ./packages/cdbdirect_flutter_libs/scripts/build_native.sh --target linux-x64
+          test -f packages/cdbdirect_flutter_libs/native/linux-x64/libcdbdirect.so
 
       - name: Remove non-Linux Stockfish binaries
         run: |
