@@ -77,18 +77,22 @@ build_linux_x64() {
     git clone --depth 1 https://github.com/vondele/cdbdirect.git "$cdb_dir"
   fi
 
-  echo "Building TerarkDB (Release, -fPIC)..."
-  export CFLAGS="-fPIC ${CFLAGS:-}"
-  export CXXFLAGS="-fPIC ${CXXFLAGS:-}"
-  export EXTRA_CFLAGS="-fPIC"
-  export EXTRA_CXXFLAGS="-fPIC"
-  pushd "$terark_dir" >/dev/null
-  git submodule update --init --recursive
-  rm -rf output
-  WITH_TESTS=OFF WITH_TOOLS=OFF WITH_ZNS=OFF ./build.sh
-  popd >/dev/null
-
   local terark_lib="${terark_dir}/output/lib/libterarkdb.a"
+  if [[ ! -f "$terark_lib" || "$FORCE" -eq 1 ]]; then
+    echo "Building TerarkDB (Release, -fPIC, -march=x86-64)..."
+    export CFLAGS="-fPIC -march=x86-64 ${CFLAGS:-}"
+    export CXXFLAGS="-fPIC -march=x86-64 ${CXXFLAGS:-}"
+    export EXTRA_CFLAGS="-fPIC -march=x86-64"
+    export EXTRA_CXXFLAGS="-fPIC -march=x86-64"
+    pushd "$terark_dir" >/dev/null
+    git submodule update --init --recursive
+    rm -rf output
+    WITH_TESTS=OFF WITH_TOOLS=OFF WITH_ZNS=OFF ./build.sh
+    popd >/dev/null
+  else
+    echo "TerarkDB already built: $terark_lib"
+  fi
+
   [[ -f "$terark_lib" ]] || { echo "TerarkDB build failed" >&2; exit 1; }
 
   echo "Building libcdbdirect.a..."
@@ -101,7 +105,7 @@ build_linux_x64() {
   cp "${cdb_dir}/libcdbdirect.a" "$static_lib"
 
   echo "Adding C API wrapper..."
-  local cxxflags="-Wall -flto=auto -fPIC -O3 -g -DNDEBUG -fomit-frame-pointer"
+  local cxxflags="-Wall -flto=auto -fPIC -O3 -g -DNDEBUG -march=x86-64 -fomit-frame-pointer"
   local incflags="-I${cdb_dir} -I${terark_dir}/output/include \
     -I${terark_dir}/third-party/terark-zip/src -I${terark_dir}/include"
   g++ $cxxflags $incflags -c "${SRC_DIR}/cdbdirect_capi.cpp" -o "$capi_obj"

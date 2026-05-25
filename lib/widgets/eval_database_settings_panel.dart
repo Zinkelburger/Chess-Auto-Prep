@@ -1,7 +1,9 @@
 /// Database download / offline eval configuration (ChessDB full dump).
 ///
-/// Only shown on Linux when the bundled cdbdirect reader is available.
+/// Shown on Linux (always visible; native reader required to enable).
 library;
+
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -31,7 +33,8 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   final EvalDatabaseSettings _settings = EvalDatabaseSettings.instance;
   final TextEditingController _pathCtrl = TextEditingController();
 
-  bool? _featureAvailable;
+  bool? _featureVisible;
+  bool _libraryAvailable = false;
   CdbDirectDirValidation? _dirValidation;
   bool _setupExpanded = false;
 
@@ -43,18 +46,21 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   }
 
   Future<void> _bootstrap() async {
-    final available = await CdbDirectEvalProvider.probeAvailability();
-    if (!mounted) return;
-    if (!available) {
-      setState(() => _featureAvailable = false);
+    if (!Platform.isLinux) {
+      if (!mounted) return;
+      setState(() => _featureVisible = false);
       return;
     }
 
+    final status = await CdbDirectEvalProvider.libraryStatus();
     await _settings.load();
     if (!mounted) return;
     _pathCtrl.text = _settings.cdbDirectPath;
-    setState(() => _featureAvailable = true);
-    if (_settings.cdbDirectPath.isNotEmpty) {
+    setState(() {
+      _featureVisible = status.showFeatureUi;
+      _libraryAvailable = status.isAvailable;
+    });
+    if (_libraryAvailable && _settings.cdbDirectPath.isNotEmpty) {
       await _validatePath(_settings.cdbDirectPath);
     }
   }
@@ -80,6 +86,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
   }
 
   Future<void> _pickDirectory() async {
+    if (!_libraryAvailable) return;
     final result = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Select ChessDB data directory',
     );
@@ -101,7 +108,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (_featureAvailable != true) return const SizedBox.shrink();
+    if (_featureVisible != true) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -124,6 +131,33 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           'first — then API, then Stockfish.',
           style: TextStyle(fontSize: 12, color: Colors.grey[400]),
         ),
+        if (!_libraryAvailable) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_rounded,
+                    size: 18, color: Colors.amber[300]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Native library not found. Run `make setup-cdbdirect` in '
+                    'tree_builder/ to enable.',
+                    style: TextStyle(fontSize: 12, color: Colors.amber[100]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
 
         ExpansionTile(
@@ -185,7 +219,9 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           children: [
             Switch(
               value: _settings.enableCdbDirect,
-              onChanged: (v) => _settings.setEnableCdbDirect(v),
+              onChanged: _libraryAvailable
+                  ? (v) => _settings.setEnableCdbDirect(v)
+                  : null,
             ),
             const Expanded(
               child: Text(
@@ -231,7 +267,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             Tooltip(
               message: 'Browse for data/ folder',
               child: IconButton(
-                onPressed: _pickDirectory,
+                onPressed: _libraryAvailable ? _pickDirectory : null,
                 icon: const Icon(Icons.folder_open),
               ),
             ),
@@ -259,7 +295,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
         FilterChip(
           label: const Text('HDD read-ahead hint'),
           selected: _settings.cdbDirectReadAhead,
-          onSelected: _settings.enableCdbDirect
+          onSelected: _libraryAvailable && _settings.enableCdbDirect
               ? (v) => _settings.setCdbDirectReadAhead(v)
               : null,
         ),

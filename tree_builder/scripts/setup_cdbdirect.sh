@@ -3,7 +3,10 @@
 # setup_cdbdirect.sh — Build TerarkDB + cdbdirect for Chess-Auto-Prep.
 #
 # Usage:
-#   ./scripts/setup_cdbdirect.sh [--dump-path /mnt/hdd/chessdb/data] [--force] [--skip-smoke]
+#   ./scripts/setup_cdbdirect.sh [--dump-path PATH] [--force] [--skip-smoke]
+#
+# Builds TerarkDB + libcdbdirect.so only — no ChessDB dump required at build time.
+# Point the app at your data/ folder at runtime. Optional --dump-path runs a smoke test.
 #
 # Idempotent: safe to re-run; skips steps whose outputs already exist unless --force.
 #
@@ -56,15 +59,17 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Build TerarkDB and cdbdirect into tree_builder/deps/ for HAS_CDBDIRECT support.
+No ChessDB dump is needed — configure the data/ path in the app at runtime.
 
 Options:
-  --dump-path PATH   ChessDB TerarkDB data directory (enables smoke test)
+  --dump-path PATH   Optional: TerarkDB data dir for post-build smoke test only
   --force            Rebuild even if outputs already exist
   --skip-smoke       Skip smoke test even when --dump-path is set
   --jobs N           Parallel make jobs (default: ${JOBS})
   -h, --help         Show this help
 
-Example:
+Examples:
+  ./scripts/setup_cdbdirect.sh
   ./scripts/setup_cdbdirect.sh --dump-path /mnt/hdd/chess-20251115/data
 EOF
 }
@@ -252,11 +257,11 @@ build_terarkdb() {
         return 0
     fi
 
-    info "Building TerarkDB (Release, -fPIC, no tests/tools) — this takes several minutes..."
-    export CFLAGS="-fPIC ${CFLAGS:-}"
-    export CXXFLAGS="-fPIC ${CXXFLAGS:-}"
-    export EXTRA_CFLAGS="-fPIC"
-    export EXTRA_CXXFLAGS="-fPIC"
+    info "Building TerarkDB (Release, -fPIC, -march=x86-64, no tests/tools) — this takes several minutes..."
+    export CFLAGS="-fPIC -march=x86-64 ${CFLAGS:-}"
+    export CXXFLAGS="-fPIC -march=x86-64 ${CXXFLAGS:-}"
+    export EXTRA_CFLAGS="-fPIC -march=x86-64"
+    export EXTRA_CXXFLAGS="-fPIC -march=x86-64"
 
     pushd "$TERARKDB_DIR" >/dev/null
     git submodule update --init --recursive
@@ -309,7 +314,7 @@ build_cdbdirect() {
 
     info "Adding C API wrapper to static library..."
     local capi_obj="${DEPS_DIR}/cdbdirect_capi.o"
-    local cxxflags="-Wall -flto=auto -fPIC -O3 -g -DNDEBUG -march=native -fomit-frame-pointer"
+    local cxxflags="-Wall -flto=auto -fPIC -O3 -g -DNDEBUG -march=x86-64 -fomit-frame-pointer"
     local incflags="-I${CDBDIRECT_DIR} -I${TERARKDB_DIR}/output/include \
         -I${TERARKDB_DIR}/third-party/terark-zip/src -I${TERARKDB_DIR}/include"
 
