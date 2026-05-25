@@ -17,6 +17,17 @@ final evalCommentRe =
 /// Matches `[%maia 0.03]`.
 final maiaCommentRe = RegExp(r'\[%maia\s+(\d+\.?\d*)\]');
 
+/// Matches `[%maiaProbability 0.42]` — per-move Maia likelihood.
+final maiaProbabilityCommentRe =
+    RegExp(r'\[%maiaProbability\s+(\d+\.?\d*)\]');
+
+/// Matches `[%humanFrequency 0.42]` — per-move Lichess human frequency.
+final humanFrequencyCommentRe =
+    RegExp(r'\[%humanFrequency\s+(\d+\.?\d*)\]');
+
+/// Matches `[%importance 0.85]` — cumulative line likelihood.
+final importanceCommentRe = RegExp(r'\[%importance\s+(\d+\.?\d*)\]');
+
 /// Matches `[%pv Nf3,Bb4,O-O,d5]`.
 final pvCommentRe = RegExp(r'\[%pv\s+([^\]]+)\]');
 
@@ -49,6 +60,27 @@ final maiaTopCommentRe = RegExp(r'\[%maiatop\s+([^,\]]+),(\d+\.?\d*)\]');
 /// Parse a `[%maia ...]` token into a probability (0-1).
 double? parseMaiaComment(String comment) {
   final match = maiaCommentRe.firstMatch(comment);
+  if (match == null) return null;
+  return double.tryParse(match.group(1)!);
+}
+
+/// Parse a `[%maiaProbability ...]` token into a probability (0-1).
+double? parseMaiaProbabilityComment(String comment) {
+  final match = maiaProbabilityCommentRe.firstMatch(comment);
+  if (match == null) return null;
+  return double.tryParse(match.group(1)!);
+}
+
+/// Parse a `[%humanFrequency ...]` token into a probability (0-1).
+double? parseHumanFrequencyComment(String comment) {
+  final match = humanFrequencyCommentRe.firstMatch(comment);
+  if (match == null) return null;
+  return double.tryParse(match.group(1)!);
+}
+
+/// Parse a `[%importance ...]` token into a probability (0-1).
+double? parseImportanceComment(String comment) {
+  final match = importanceCommentRe.firstMatch(comment);
   if (match == null) return null;
   return double.tryParse(match.group(1)!);
 }
@@ -138,6 +170,9 @@ String filterDisplayComment(String comment) {
   comment = comment.replaceAll(evalCommentRe, '');
   comment = comment.replaceAll(_clkRe, '');
   comment = comment.replaceAll(maiaCommentRe, '');
+  comment = comment.replaceAll(maiaProbabilityCommentRe, '');
+  comment = comment.replaceAll(humanFrequencyCommentRe, '');
+  comment = comment.replaceAll(importanceCommentRe, '');
   comment = comment.replaceAll(pvCommentRe, '');
   comment = comment.replaceAll(maiaTopCommentRe, '');
   comment = comment.replaceAll(_scoreArrowRe, '');

@@ -4,6 +4,7 @@ import '../models/repertoire_line.dart';
 import '../models/repertoire_review_entry.dart';
 import '../models/repertoire_review_history_entry.dart';
 import '../models/repertoire_move_progress.dart';
+import '../models/training_settings.dart';
 import 'storage/storage_factory.dart';
 
 class RepertoireReviewService {
@@ -139,10 +140,23 @@ class RepertoireReviewService {
     );
   }
 
-  /// Return lines that are due (or new) in the original order.
+  /// Return lines that are due (or new) in the original file order.
   List<RepertoireLine> dueLinesInOrder(
     List<RepertoireLine> lines,
     Map<String, RepertoireReviewEntry> reviewMap,
+  ) {
+    return orderLinesForReview(
+      lines,
+      reviewMap,
+      ReviewOrder.sequential,
+    );
+  }
+
+  /// Filter due/new lines and sort according to [order].
+  List<RepertoireLine> orderLinesForReview(
+    List<RepertoireLine> lines,
+    Map<String, RepertoireReviewEntry> reviewMap,
+    ReviewOrder order,
   ) {
     final due = <RepertoireLine>[];
     for (final line in lines) {
@@ -151,7 +165,41 @@ class RepertoireReviewService {
         due.add(line);
       }
     }
+
+    switch (order) {
+      case ReviewOrder.byImportance:
+        due.sort((a, b) {
+          final ai = a.importance;
+          final bi = b.importance;
+          if (ai == null && bi == null) return 0;
+          if (ai == null) return 1;
+          if (bi == null) return -1;
+          return bi.compareTo(ai);
+        });
+      case ReviewOrder.random:
+        due.shuffle(Random());
+      case ReviewOrder.weakestFirst:
+        due.sort((a, b) {
+          final ea = reviewMap[a.id];
+          final eb = reviewMap[b.id];
+          final wa = _weaknessScore(ea);
+          final wb = _weaknessScore(eb);
+          final cmp = wb.compareTo(wa);
+          if (cmp != 0) return cmp;
+          return (eb?.failCount ?? 0).compareTo(ea?.failCount ?? 0);
+        });
+      case ReviewOrder.sequential:
+        break;
+    }
+
     return due;
+  }
+
+  double _weaknessScore(RepertoireReviewEntry? entry) {
+    if (entry == null) return 0;
+    final attempts = entry.passCount + entry.failCount;
+    if (attempts == 0) return 0;
+    return entry.failCount / attempts;
   }
 
   RepertoireReviewEntry applyRating(

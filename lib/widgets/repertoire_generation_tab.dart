@@ -105,6 +105,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   bool _relativeEval = false;
   bool _preferNovelties = false;
 
+  // PGN export options
+  bool _rankLinesByImportance = true;
+  bool _annotateMoveProbabilities = true;
+  bool _annotateMaiaOnly = true;
+
   // Lichess Players sub-options (shown when opponent source is lichessPlayers)
   final TextEditingController _lichessMinGamesCtrl =
       TextEditingController(text: '10');
@@ -360,6 +365,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           (widget.isWhiteRepertoire ? 200 : 100),
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
       maiaOnly: _lichessDbOverride == null,
+      rankLinesByImportance: _rankLinesByImportance,
+      annotateMoveProbabilities: _annotateMoveProbabilities,
+      annotateMaiaOnly: _annotateMaiaOnly,
       ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 5,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 6,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.95,
@@ -539,7 +547,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       // Phase 3: Extract lines
       if (mounted) setState(() => _status = 'Phase 3: Extracting lines...');
       final extractor = LineExtractor(config: config, fenMap: fenMap);
-      final extractedLines = extractor.extract(tree);
+      var extractedLines = extractor.extract(tree);
+      if (config.rankLinesByImportance) {
+        extractedLines.sort((a, b) => b.probability.compareTo(a.probability));
+      }
       _lines = extractedLines.length;
 
       // Pass completed tree to parent for the eval-tree viewer
@@ -558,6 +569,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           finalEvalCp: line.leafEvalCp ?? 0,
           pruneReason: line.leafPruneReason,
           pruneEvalCp: line.leafPruneEvalCp,
+          lineAnnotations: line.moveAnnotations,
+          prefixMoveCount: widget.currentMoveSequence.length,
+          rankByImportance: config.rankLinesByImportance,
+          annotateMoveProbabilities: config.annotateMoveProbabilities,
+          annotateMaiaOnly: config.annotateMaiaOnly,
         );
         _queuePgnEntry(pgn);
         if (_pendingPgnLines >= _pgnFlushEveryLines) {
@@ -645,6 +661,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     required int finalEvalCp,
     PruneReason? pruneReason,
     int? pruneEvalCp,
+    List<MoveProbabilityAnnotation> lineAnnotations = const [],
+    int prefixMoveCount = 0,
+    bool rankByImportance = true,
+    bool annotateMoveProbabilities = true,
+    bool annotateMaiaOnly = true,
   }) {
     final date = DateTime.now().toIso8601String().split('T').first;
     final whiteName = widget.isWhiteRepertoire ? 'Repertoire' : 'Opponent';
@@ -652,7 +673,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
     final rootFen = _rootFen();
     final rootWhiteToMove = _rootWhiteToMove(rootFen);
-    final line = _movesToPgnMoveText(moves, rootWhiteToMove: rootWhiteToMove);
+    final line = _movesToPgnMoveText(
+      moves,
+      rootWhiteToMove: rootWhiteToMove,
+      prefixMoveCount: prefixMoveCount,
+      lineAnnotations: lineAnnotations,
+      annotateMoveProbabilities: annotateMoveProbabilities,
+      annotateMaiaOnly: annotateMaiaOnly,
+    );
 
     final annotation = StringBuffer()
       ..write('{CumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%'
@@ -660,6 +688,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     if (pruneReason == PruneReason.evalTooHigh && pruneEvalCp != null) {
       annotation.write(
           ', Already winning (${pruneEvalCp >= 0 ? "+" : ""}${(pruneEvalCp / 100).toStringAsFixed(1)})');
+    }
+    if (rankByImportance) {
+      annotation.write(
+          ', [%importance ${cumulativeProb.toStringAsFixed(3)}]');
     }
     annotation.write('}');
 
@@ -674,6 +706,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       '[Black "$blackName"]',
       '[Result "*"]',
       '[Annotator "AutoGenerate"]',
+      if (rankByImportance)
+        '[Importance "${cumulativeProb.toStringAsFixed(3)}"]',
       if (needsFenHeader) '[FEN "$rootFen"]',
       if (needsFenHeader) '[SetUp "1"]',
     ];
@@ -699,8 +733,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     return parts.length < 2 || parts[1] == 'w';
   }
 
-  String _movesToPgnMoveText(List<String> moves,
-      {bool rootWhiteToMove = true}) {
+  String _movesToPgnMoveText(
+    List<String> moves, {
+    bool rootWhiteToMove = true,
+    int prefixMoveCount = 0,
+    List<MoveProbabilityAnnotation> lineAnnotations = const [],
+    bool annotateMoveProbabilities = true,
+    bool annotateMaiaOnly = true,
+  }) {
     if (moves.isEmpty) return '';
     final sb = StringBuffer();
     for (int i = 0; i < moves.length; i++) {
@@ -711,6 +751,19 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         sb.write('${(ply ~/ 2) + 1}... ');
       }
       sb.write(moves[i]);
+
+      if (annotateMoveProbabilities && i >= prefixMoveCount) {
+        final annIdx = i - prefixMoveCount;
+        if (annIdx < lineAnnotations.length &&
+            lineAnnotations[annIdx].probability != null) {
+          final ann = lineAnnotations[annIdx];
+          final prob = ann.probability!;
+          final tag = ann.fromLichess && !annotateMaiaOnly
+              ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
+              : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
+          sb.write(' {$tag}');
+        }
+      }
       sb.write(' ');
     }
     return sb.toString().trim();
@@ -881,6 +934,66 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             ],
           ),
           const SizedBox(height: 8),
+
+          // PGN export options
+          Text('PGN export',
+              style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: const Text('Rank lines by importance',
+                style: TextStyle(fontSize: 13)),
+            subtitle: const Text(
+              'Sort lines by cumulative probability (most likely first).',
+              style: TextStyle(fontSize: 12),
+            ),
+            value: _rankLinesByImportance,
+            onChanged: _isGenerating
+                ? null
+                : (v) => setState(() => _rankLinesByImportance = v),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            title: const Text('Annotate move probabilities',
+                style: TextStyle(fontSize: 13)),
+            subtitle: const Text(
+              'Add [%maiaProbability] / [%humanFrequency] on opponent moves.',
+              style: TextStyle(fontSize: 12),
+            ),
+            value: _annotateMoveProbabilities,
+            onChanged: _isGenerating
+                ? null
+                : (v) => setState(() => _annotateMoveProbabilities = v),
+          ),
+          if (_annotateMoveProbabilities)
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 8),
+              child: DropdownButtonFormField<bool>(
+                value: _annotateMaiaOnly,
+                decoration: const InputDecoration(
+                  labelText: 'Probability source',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: true,
+                    child: Text('Maia only'),
+                  ),
+                  DropdownMenuItem(
+                    value: false,
+                    child: Text('Lichess DB + Maia fallback'),
+                  ),
+                ],
+                onChanged: _isGenerating
+                    ? null
+                    : (v) {
+                        if (v != null) setState(() => _annotateMaiaOnly = v);
+                      },
+              ),
+            ),
 
           // Opponent move source
           Row(

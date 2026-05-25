@@ -72,6 +72,11 @@ typedef struct RepertoireConfig {
     int    build_threads;
     int    build_eval_depth;
 
+    /* PGN export options */
+    bool   rank_lines_by_importance;   /* Sort lines by cumP (default true) */
+    bool   annotate_move_probabilities; /* Add per-move likelihood comments */
+    bool   annotate_maia_only;         /* Maia only vs Lichess+Maia fallback */
+
 } RepertoireConfig;
 
 /**
@@ -121,7 +126,12 @@ typedef struct {
     /* Opening info */
     char opening_name[128];
     char opening_eco[8];
-    
+
+    /* Per-move opponent probability annotations (-1 = our move / N/A) */
+    double move_annotation_prob[128];
+    double move_maia_prob[128];
+    bool   move_annotation_lichess[128];
+
 } RepertoireLine;
 
 

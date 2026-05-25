@@ -9,6 +9,23 @@ import '../../models/build_tree_node.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 
+// ── Per-move annotation ──────────────────────────────────────────────────
+
+class MoveProbabilityAnnotation {
+  /// Local move probability (0–1). Null for our moves.
+  final double? probability;
+
+  /// True when probability came from Lichess explorer data.
+  final bool fromLichess;
+
+  const MoveProbabilityAnnotation({
+    this.probability,
+    this.fromLichess = false,
+  });
+
+  static const none = MoveProbabilityAnnotation();
+}
+
 // ── Extracted line ───────────────────────────────────────────────────────
 
 class ExtractedLine {
@@ -20,6 +37,7 @@ class ExtractedLine {
   final String? openingName;
   final String? openingEco;
   final int? leafEvalCp;
+  final List<MoveProbabilityAnnotation> moveAnnotations;
 
   const ExtractedLine({
     required this.movesSan,
@@ -30,14 +48,21 @@ class ExtractedLine {
     this.openingName,
     this.openingEco,
     this.leafEvalCp,
+    this.moveAnnotations = const [],
   });
 
   /// Format as PGN movetext with annotations.
   ///
   /// Pass [startFen] when the line starts from a non-standard position so
   /// the emitted PGN includes a correct `[FEN]` / `[SetUp]` header.
-  String toPgn(
-      {required bool rootWhiteToMove, String? event, String? startFen}) {
+  String toPgn({
+    required bool rootWhiteToMove,
+    String? event,
+    String? startFen,
+    bool rankByImportance = true,
+    bool annotateMoveProbabilities = true,
+    bool annotateMaiaOnly = true,
+  }) {
     final sb = StringBuffer();
 
     if (event != null) sb.writeln('[Event "$event"]');
@@ -45,6 +70,9 @@ class ExtractedLine {
     sb.writeln('[Date "????.??.??"]');
     sb.writeln('[Round "-"]');
     sb.writeln('[Result "*"]');
+    if (rankByImportance) {
+      sb.writeln('[Importance "${probability.toStringAsFixed(3)}"]');
+    }
     const standardStartpos =
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     if (startFen != null &&
@@ -55,6 +83,10 @@ class ExtractedLine {
     }
     sb.writeln();
 
+    if (rankByImportance) {
+      sb.write('{[%importance ${probability.toStringAsFixed(3)}]} ');
+    }
+
     for (int j = 0; j < movesSan.length; j++) {
       final ply = j + (rootWhiteToMove ? 0 : 1);
       if (ply % 2 == 0) {
@@ -62,7 +94,19 @@ class ExtractedLine {
       } else if (j == 0 && !rootWhiteToMove) {
         sb.write('${(ply ~/ 2) + 1}... ');
       }
-      sb.write('${movesSan[j]} ');
+      sb.write(movesSan[j]);
+
+      if (annotateMoveProbabilities &&
+          j < moveAnnotations.length &&
+          moveAnnotations[j].probability != null) {
+        final ann = moveAnnotations[j];
+        final prob = ann.probability!;
+        final tag = ann.fromLichess && !annotateMaiaOnly
+            ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
+            : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
+        sb.write(' {$tag}');
+      }
+      sb.write(' ');
     }
 
     if (leafPruneReason == PruneReason.evalTooHigh && leafPruneEvalCp != null) {
@@ -90,23 +134,48 @@ class LineExtractor {
       node: tree.root,
       movesSan: const [],
       movesUci: const [],
+      moveAnnotations: const [],
       lines: lines,
       maxLines: maxLines,
     );
     return lines;
   }
 
+  MoveProbabilityAnnotation _annotationForChild(BuildTreeNode child) {
+    if (config.annotateMaiaOnly) {
+      final prob = child.maiaFrequency >= 0
+          ? child.maiaFrequency
+          : child.moveProbability;
+      return MoveProbabilityAnnotation(probability: prob, fromLichess: false);
+    }
+    if (child.totalGames > 0) {
+      return MoveProbabilityAnnotation(
+        probability: child.moveProbability,
+        fromLichess: true,
+      );
+    }
+    if (child.maiaFrequency >= 0) {
+      return MoveProbabilityAnnotation(
+        probability: child.maiaFrequency,
+        fromLichess: false,
+      );
+    }
+    return MoveProbabilityAnnotation(
+      probability: child.moveProbability,
+      fromLichess: false,
+    );
+  }
+
   void _extractDfs({
     required BuildTreeNode node,
     required List<String> movesSan,
     required List<String> movesUci,
+    required List<MoveProbabilityAnnotation> moveAnnotations,
     required List<ExtractedLine> lines,
     required int maxLines,
   }) {
     if (lines.length >= maxLines) return;
 
-    // Resolve transpositions: childless leaves may redirect to a canonical
-    // node that has the real subtree (matches C `resolve_transposition`).
     final resolved = _resolveTransposition(node);
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
@@ -121,6 +190,7 @@ class LineExtractor {
           node: selected,
           movesSan: [...movesSan, selected.moveSan],
           movesUci: [...movesUci, selected.moveUci],
+          moveAnnotations: [...moveAnnotations, MoveProbabilityAnnotation.none],
           lines: lines,
           maxLines: maxLines,
         );
@@ -133,13 +203,16 @@ class LineExtractor {
           node: child,
           movesSan: [...movesSan, child.moveSan],
           movesUci: [...movesUci, child.moveUci],
+          moveAnnotations: [
+            ...moveAnnotations,
+            _annotationForChild(child),
+          ],
           lines: lines,
           maxLines: maxLines,
         );
       }
     }
 
-    // Leaf or no valid children → record line
     if (pushedAny || movesSan.isEmpty) return;
 
     String? openingName;
@@ -163,6 +236,7 @@ class LineExtractor {
       openingName: openingName,
       openingEco: openingEco,
       leafEvalCp: node.engineEvalCp,
+      moveAnnotations: moveAnnotations,
     ));
   }
 
@@ -179,8 +253,13 @@ class LineExtractor {
 
   /// Export all extracted lines as a single PGN string.
   String exportPgn(List<ExtractedLine> lines, {String? repertoireName}) {
+    final sorted = List<ExtractedLine>.from(lines);
+    if (config.rankLinesByImportance) {
+      sorted.sort((a, b) => b.probability.compareTo(a.probability));
+    }
+
     final rootWhiteToMove = config.startFen.split(' ')[1] == 'w';
-    return lines.asMap().entries.map((e) {
+    return sorted.asMap().entries.map((e) {
       final idx = e.key + 1;
       final eventName = repertoireName != null
           ? '$repertoireName Line #$idx'
@@ -189,6 +268,9 @@ class LineExtractor {
         rootWhiteToMove: rootWhiteToMove,
         event: eventName,
         startFen: config.startFen,
+        rankByImportance: config.rankLinesByImportance,
+        annotateMoveProbabilities: config.annotateMoveProbabilities,
+        annotateMaiaOnly: config.annotateMaiaOnly,
       );
     }).join('\n\n');
   }

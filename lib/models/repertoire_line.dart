@@ -16,6 +16,9 @@ class RepertoireLine {
   /// Raw PGN headers — includes review metadata like LastReview, Difficulty, etc.
   final Map<String, String> headers;
 
+  /// Cumulative path probability from PGN ([Importance] header or comment).
+  final double? importance;
+
   RepertoireLine({
     required this.id,
     required this.name,
@@ -26,6 +29,7 @@ class RepertoireLine {
     this.comments = const {},
     this.variations = const [],
     this.headers = const {},
+    this.importance,
   });
 
   /// Creates a training question at the specified move index
