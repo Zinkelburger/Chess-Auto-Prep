@@ -98,12 +98,15 @@ typedef struct BuildStats {
  */
 typedef struct BuildProgressInfo {
     int total_nodes;
-    int current_depth;
+    int current_depth;         /* deepest ply created in the tree so far */
     int max_depth_config;
-    int total_at_depth;
-    int unexplored_at_depth;
+    int total_at_depth;        /* nodes at [current_depth] */
+    int unexplored_at_depth;   /* same layer, not yet expanded (BFS backlog) */
+    int active_depth;          /* ply of the node being processed now */
+    int queue_pending;         /* BFS queue length */
     double nodes_per_minute;
     int eta_depth_seconds;
+    int session_nodes_added;   /* total_nodes - baseline at build start */
 } BuildProgressInfo;
 
 /**
@@ -196,6 +199,7 @@ typedef struct TreeConfig {
 
     /* Progress callback (see BuildProgressInfo below) */
     void (*progress_callback)(const struct BuildProgressInfo *info);
+    size_t progress_baseline_nodes; /* tree->total_nodes at build start (resume rate) */
 
     /* Build instrumentation (optional, caller-owned) */
     BuildStats *stats;
@@ -223,6 +227,10 @@ typedef struct Tree {
 
     bool is_building;
     bool build_complete;
+
+    /* Live build status (valid while is_building) */
+    int build_active_depth;
+    size_t build_queue_pending;
     uint64_t next_node_id;
 
     void *expanded_fens;    /* FenMap* — FEN → canonical TreeNode* for transposition detection */

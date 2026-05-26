@@ -264,6 +264,7 @@ TreeConfig tree_config_default(void) {
                                              main.c turns this off when
                                              novelty scoring isn't used */
         .progress_callback = NULL,
+        .progress_baseline_nodes = 0,
         .stats = NULL,
         .event_log = NULL,
         .event_log_epoch = {0, 0},
@@ -677,6 +678,25 @@ static TreeNode *build_queue_pop(BuildQueue *q) {
     }
 }
 
+/**
+ * On resume, register expanded FENs and enqueue only frontier leaves
+ * (no children, not explored) instead of re-walking the full tree via BFS.
+ */
+static void resume_prepare_frontier(TreeNode *node, FenMap *fmap,
+                                    BuildQueue *q, size_t *frontier_count) {
+    if (!node) return;
+    if (node->children_count > 0) {
+        fen_map_put(fmap, node->fen, node);
+        for (size_t i = 0; i < node->children_count; i++)
+            resume_prepare_frontier(node->children[i], fmap, q, frontier_count);
+        return;
+    }
+    if (!node->explored) {
+        if (build_queue_push(q, node))
+            (*frontier_count)++;
+    }
+}
+
 /** Append all children in sibling order (matches former DFS order). */
 static void build_queue_push_children(BuildQueue *q, Tree *tree, TreeNode *node) {
     if (!tree->is_building) return;
@@ -688,6 +708,15 @@ static void build_queue_push_children(BuildQueue *q, Tree *tree, TreeNode *node)
             break;
         }
     }
+}
+
+static void emit_build_progress_ex(Tree *tree, const TreeConfig *config,
+                                   bool force);
+
+static bool progress_display_reset;
+
+static void reset_build_progress_timer(void) {
+    progress_display_reset = true;
 }
 
 static void count_depth_layer(TreeNode *node, int target_depth,
@@ -703,29 +732,49 @@ static void count_depth_layer(TreeNode *node, int target_depth,
 }
 
 static void emit_build_progress(Tree *tree, const TreeConfig *config) {
+    emit_build_progress_ex(tree, config, false);
+}
+
+static void emit_build_progress_ex(Tree *tree, const TreeConfig *config,
+                                   bool force) {
     if (!config->progress_callback) return;
 
     static struct timespec start_time;
-    static int last_printed = -1;
+    static struct timespec last_emit_time;
+    static int last_printed_delta = -1;
     static bool started = false;
 
-    if (!started || tree->total_nodes <= 1) {
-        clock_gettime(CLOCK_MONOTONIC, &start_time);
+    size_t baseline = config->progress_baseline_nodes;
+    size_t session_added = tree->total_nodes > baseline
+                         ? tree->total_nodes - baseline : 0;
+
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+
+    if (progress_display_reset || !started) {
+        progress_display_reset = false;
+        start_time = now;
+        last_emit_time = now;
         started = true;
-        last_printed = -1;
+        last_printed_delta = -1;
     }
-    if ((int)tree->total_nodes - last_printed < 50) return;
-    last_printed = (int)tree->total_nodes;
+
+    double since_emit = (now.tv_sec - last_emit_time.tv_sec)
+                      + (now.tv_nsec - last_emit_time.tv_nsec) / 1e9;
+    if (!force && (int)session_added - last_printed_delta < 5 &&
+        since_emit < 15.0)
+        return;
+    last_printed_delta = (int)session_added;
+    last_emit_time = now;
 
     int d = tree->max_depth_reached;
     int total_at = 0, unexplored_at = 0;
     count_depth_layer(tree->root, d, &total_at, &unexplored_at);
 
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
     double elapsed_s = (now.tv_sec - start_time.tv_sec)
                      + (now.tv_nsec - start_time.tv_nsec) / 1e9;
-    double rate = (elapsed_s > 0.5) ? tree->total_nodes / (elapsed_s / 60.0) : 0;
+    double rate = (elapsed_s > 0.5 && session_added > 0)
+                ? session_added / (elapsed_s / 60.0) : 0;
     int eta = (rate > 0 && unexplored_at > 0)
             ? (int)(unexplored_at * 60.0 / rate + 0.5)
             : 0;
@@ -736,8 +785,11 @@ static void emit_build_progress(Tree *tree, const TreeConfig *config) {
         .max_depth_config  = config->max_depth,
         .total_at_depth    = total_at,
         .unexplored_at_depth = unexplored_at,
+        .active_depth      = tree->build_active_depth,
+        .queue_pending     = (int)tree->build_queue_pending,
         .nodes_per_minute  = rate,
         .eta_depth_seconds = eta,
+        .session_nodes_added = (int)session_added,
     };
     config->progress_callback(&info);
 }
@@ -908,6 +960,9 @@ static void build_our_move(Tree *tree, TreeNode *node,
                    "src=db lines=%d", mpv.num_lines);
     } else {
         STATS_INC(config, db_multipv_misses);
+        /* Stockfish MultiPV can take 10s+; refresh progress so the
+         * terminal does not look frozen while blocked inside the engine. */
+        emit_build_progress_ex(tree, config, true);
         struct timespec t0;
         clock_gettime(CLOCK_MONOTONIC, &t0);
         bool ok = engine_pool_evaluate_multipv(config->engine_pool, node->fen,
@@ -1247,6 +1302,10 @@ static void build_process_node(Tree *tree, TreeNode *node,
                                const TreeConfig *config,
                                LichessExplorer *explorer, BuildQueue *q) {
     if (!tree->is_building) return;
+
+    tree->build_active_depth = node->depth;
+    tree->build_queue_pending = q->tail - q->head;
+
     if (node->depth >= config->max_depth) {
         emit_event(config, "skip", node->depth, "-", "reason=max_depth");
         return;
@@ -1283,6 +1342,8 @@ static void build_process_node(Tree *tree, TreeNode *node,
                tree->total_nodes, node->cumulative_probability, node->fen);
 
     if (!is_our_move || config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE) {
+        if (!is_our_move && !node->has_engine_eval)
+            emit_build_progress_ex(tree, config, true);
         ensure_eval(node, config);
         if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE &&
             !node->has_engine_eval) {
@@ -1390,17 +1451,59 @@ bool tree_build(Tree *tree, const char *start_fen,
     }
 
     tree->expanded_fens = fen_map_create();
+    tree->config.progress_baseline_nodes = tree->total_nodes;
+    reset_build_progress_timer();
 
     BuildQueue bq;
     build_queue_init(&bq);
-    if (!build_queue_push(&bq, tree->root)) {
+
+    bool fast_resume = tree->root && tree->total_nodes > 1 &&
+                       tree->root->children_count > 0;
+    size_t frontier_count = 0;
+    bool queued = false;
+
+    if (fast_resume) {
+        resume_prepare_frontier(tree->root, (FenMap *)tree->expanded_fens,
+                                &bq, &frontier_count);
+        queued = frontier_count > 0;
+    } else {
+        queued = build_queue_push(&bq, tree->root);
+    }
+
+    if (fast_resume && frontier_count == 0) {
+        printf("  No frontier positions to expand.\n");
+        tree->is_building = false;
+        queued = true;
+    }
+
+    if (!queued) {
         fprintf(stderr, "Error: out of memory for build queue\n");
         tree->is_building = false;
-    } else {
+    } else if (tree->is_building) {
+        tree->build_active_depth = 0;
+        tree->build_queue_pending = 0;
+        size_t last_hb_nodes = tree->total_nodes;
+        struct timespec last_hb;
+        clock_gettime(CLOCK_MONOTONIC, &last_hb);
+
         while (tree->is_building) {
             TreeNode *n = build_queue_pop(&bq);
             if (!n) break;
             build_process_node(tree, n, &tree->config, explorer, &bq);
+
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            double hb_elapsed = (now.tv_sec - last_hb.tv_sec)
+                              + (now.tv_nsec - last_hb.tv_nsec) / 1e9;
+            if (hb_elapsed >= 15.0) {
+                tree->build_queue_pending = bq.tail - bq.head;
+                emit_build_progress_ex(tree, &tree->config, true);
+                last_hb = now;
+                last_hb_nodes = tree->total_nodes;
+            } else if (tree->total_nodes != last_hb_nodes) {
+                last_hb_nodes = tree->total_nodes;
+                last_hb = now;
+            }
         }
     }
     build_queue_free(&bq);
