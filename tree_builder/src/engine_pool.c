@@ -170,6 +170,9 @@ static char* engine_readline(StockfishEngine *eng, char *buf, size_t buf_size) {
     
     int ret = select(eng->stdout_fd + 1, &fds, NULL, NULL, &tv);
     if (ret <= 0) {
+        if (ret == 0)
+            fprintf(stderr, "Warning: engine %d timed out after %ds\n",
+                    eng->id, ENGINE_TIMEOUT_SEC);
         return NULL; /* Timeout or error */
     }
     
@@ -181,7 +184,10 @@ static char* engine_readline(StockfishEngine *eng, char *buf, size_t buf_size) {
         }
         return buf;
     }
-    
+
+    /* EOF — process exited or pipe broke */
+    eng->is_alive = false;
+    eng->is_ready = false;
     return NULL;
 }
 
@@ -386,12 +392,20 @@ static int acquire_engine(EnginePool *pool) {
     pthread_mutex_lock(&pool->alloc_lock);
     
     while (1) {
+        int alive = 0;
         for (int i = 0; i < pool->num_engines; i++) {
-            if (!pool->engine_in_use[i] && pool->engines[i].is_alive && pool->engines[i].is_ready) {
+            if (pool->engines[i].is_alive) alive++;
+            if (!pool->engine_in_use[i] && pool->engines[i].is_alive &&
+                pool->engines[i].is_ready) {
                 pool->engine_in_use[i] = true;
                 pthread_mutex_unlock(&pool->alloc_lock);
                 return i;
             }
+        }
+        if (alive == 0) {
+            fprintf(stderr, "Error: all Stockfish engines are dead\n");
+            pthread_mutex_unlock(&pool->alloc_lock);
+            return -1;
         }
         /* All engines busy, wait */
         pthread_cond_wait(&pool->engine_available, &pool->alloc_lock);
@@ -622,6 +636,7 @@ bool engine_pool_evaluate_full(EnginePool *pool, const char *fen, EvalJob *job) 
     
     /* Acquire an engine */
     int eng_idx = acquire_engine(pool);
+    if (eng_idx < 0) return false;
     
     /* Evaluate */
     bool success = evaluate_on_engine(&pool->engines[eng_idx], fen, 
@@ -654,6 +669,7 @@ bool engine_pool_evaluate_multipv(EnginePool *pool, const char *fen,
     strncpy(job->fen, fen, MAX_EVAL_FEN_LENGTH - 1);
 
     int eng_idx = acquire_engine(pool);
+    if (eng_idx < 0) return false;
     StockfishEngine *eng = &pool->engines[eng_idx];
     pthread_mutex_lock(&eng->lock);
     set_engine_threads(eng, pool->total_cores);
@@ -687,6 +703,11 @@ static void batch_eval_task(void *arg) {
     BatchTaskArg *bta = (BatchTaskArg *)arg;
     
     int eng_idx = acquire_engine(bta->pool);
+    if (eng_idx < 0) {
+        bta->job->success = false;
+        free(bta);
+        return;
+    }
     StockfishEngine *eng = &bta->pool->engines[eng_idx];
 
     pthread_mutex_lock(&eng->lock);

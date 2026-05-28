@@ -23,6 +23,7 @@ class EvalTreeNodeSnapshot {
   final double? expectimaxValue;
   final double? localCpl;
   final double? trapScore;
+  final double? myEase;
   final int subtreeSize;
   final int subtreePly;
   final EvalTreePruneKind pruneKind;
@@ -46,6 +47,7 @@ class EvalTreeNodeSnapshot {
     required this.expectimaxValue,
     required this.localCpl,
     required this.trapScore,
+    required this.myEase,
     required this.subtreeSize,
     required this.subtreePly,
     required this.pruneKind,

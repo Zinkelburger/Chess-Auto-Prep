@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../utils/eval_constants.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
 
@@ -492,7 +493,7 @@ class EvalTreeLayoutEngine {
 
     final evalForUsCp = node.evalForUsCp;
     if (evalForUsCp == null) return null;
-    if (evalForUsCp.abs() >= 10000) {
+    if (isMateEval(evalForUsCp)) {
       return evalForUsCp > 0 ? '+M' : '-M';
     }
     final pawns = evalForUsCp / 100.0;

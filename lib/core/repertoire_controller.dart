@@ -119,21 +119,42 @@ class RepertoireController with ChangeNotifier {
   }
 
   /// Called when user selects a move in the opening tree.
+  /// Uses the tree node's own path as the base so we branch from where the
+  /// tree visually IS, not from a potentially stale currentDepth comparison.
   void userSelectedTreeMove(String sanMove) {
     if (_openingTree == null) return;
 
-    final branchIndex = _openingTree!.currentDepth;
-
-    if (branchIndex < _moveHistory.length) {
-      _moveHistory = _moveHistory.sublist(0, branchIndex);
-    }
-
-    _moveHistory.add(sanMove);
+    final treePath = _openingTree!.currentNode.getMovePath();
+    _moveHistory = [...treePath, sanMove];
     _currentMoveIndex = _moveHistory.length - 1;
 
     _rebuildPosition();
     _syncOpeningTree();
     notifyListeners();
+  }
+
+  /// Atomically navigate to a specific position within a line.
+  /// Replaces the pattern of calling userPlayedMove in a loop, which caused
+  /// multiple intermediate rebuilds/syncs and left the tree cursor stale.
+  void navigateToLineMove(List<String> fullPath, {int? targetIndex}) {
+    _moveHistory = List.from(fullPath);
+    _currentMoveIndex =
+        targetIndex ?? (fullPath.isEmpty ? -1 : fullPath.length - 1);
+    _rebuildPosition();
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  /// Append [lineMoves] from the current position, keep the full line in
+  /// history/PGN, and jump the board to [lineMoveIndex] within that line.
+  void applyLineFromCurrent(List<String> lineMoves, int lineMoveIndex) {
+    if (lineMoves.isEmpty) return;
+    final base = currentMoveSequence;
+    final clamped = lineMoveIndex.clamp(0, lineMoves.length - 1);
+    navigateToLineMove(
+      [...base, ...lineMoves],
+      targetIndex: base.length + clamped,
+    );
   }
 
   /// Jump to a specific move index in the history (-1 = starting position).

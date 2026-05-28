@@ -12,6 +12,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../models/trap_line_info.dart';
+import '../theme/app_colors.dart';
 
 class TrapsBrowser extends StatefulWidget {
   final List<TrapLineInfo> traps;
@@ -73,7 +74,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
       child: Row(
         children: [
           Icon(Icons.warning_amber_rounded,
-              size: 16, color: Colors.orange[400]),
+              size: 16, color: AppColors.warning),
           const SizedBox(width: 8),
           Text(
             '$count trap${count == 1 ? '' : 's'}',
@@ -102,7 +103,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: selected ? Colors.orange[800] : Colors.grey[800],
+          color: selected ? AppColors.warningSurface : Colors.grey[800],
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
@@ -130,11 +131,11 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: isPositionMatch
-              ? Colors.orange[900]?.withValues(alpha: 0.25)
+              ? AppColors.warningSurface.withValues(alpha: 0.5)
               : (index % 2 == 0 ? Colors.grey[900] : Colors.grey[850]),
           border: Border(
             left: isPositionMatch
-                ? BorderSide(color: Colors.orange[400]!, width: 3)
+                ? const BorderSide(color: AppColors.warning, width: 3)
                 : BorderSide.none,
             bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
           ),
@@ -161,7 +162,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 // Trick surplus badge
                 _buildStatBadge(
                   '${trap.trickSurplus >= 0 ? "+" : ""}${(trap.trickSurplus * 100).toStringAsFixed(1)}%',
-                  Colors.orange[700]!,
+                  AppColors.warning,
                   tooltip: 'Trick surplus',
                 ),
                 const SizedBox(width: 6),
@@ -177,7 +178,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 // Eval diff
                 _buildStatBadge(
                   '+${trap.evalDiffCp}cp',
-                  Colors.green[700]!,
+                  AppColors.evalPositive,
                   tooltip: 'Centipawn gain',
                 ),
 
@@ -222,7 +223,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                   TextSpan(
                     text: trap.popularMove,
                     style: TextStyle(
-                      color: Colors.red[300],
+                      color: AppColors.danger,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'monospace',
                     ),
@@ -234,7 +235,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                   TextSpan(
                     text: trap.bestMove,
                     style: TextStyle(
-                      color: Colors.green[300],
+                      color: AppColors.evalPositive,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'monospace',
                     ),
@@ -270,7 +271,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
             trap.summary,
             style: TextStyle(
               fontSize: 11,
-              color: Colors.orange[300],
+              color: AppColors.warning,
               fontFamily: 'monospace',
             ),
           ),
@@ -283,19 +284,19 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
             'Expectimax (V)',
             '${(trap.expectimaxValue * 100).toStringAsFixed(1)}%',
             Icons.trending_up,
-            Colors.blue[300]!,
+            AppColors.info,
           ),
           _buildDetailRow(
             'Win prob from eval',
             '${(trap.wpEval * 100).toStringAsFixed(1)}%',
             Icons.analytics,
-            Colors.purple[300]!,
+            AppColors.maia,
           ),
           _buildDetailRow(
             'Trick surplus',
             '${trap.trickSurplus >= 0 ? "+" : ""}${(trap.trickSurplus * 100).toStringAsFixed(1)}%',
             Icons.auto_awesome,
-            Colors.orange[300]!,
+            AppColors.warning,
           ),
           const SizedBox(height: 6),
           const Divider(height: 1),
@@ -304,37 +305,37 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
             'Popular move',
             '${trap.popularMove} (${(trap.popularProb * 100).toStringAsFixed(0)}%)',
             Icons.people,
-            Colors.red[300]!,
+            AppColors.danger,
           ),
           _buildDetailRow(
             'Eval after popular',
             trap.formatEval(trap.popularEvalCp),
             Icons.arrow_downward,
-            Colors.red[300]!,
+            AppColors.danger,
           ),
           _buildDetailRow(
             'Best move',
             trap.bestMove,
             Icons.star,
-            Colors.green[300]!,
+            AppColors.evalPositive,
           ),
           _buildDetailRow(
             'Eval after best',
             trap.formatEval(trap.bestEvalCp),
             Icons.arrow_upward,
-            Colors.green[300]!,
+            AppColors.evalPositive,
           ),
           _buildDetailRow(
             'Centipawn gain',
             '+${trap.evalDiffCp}cp',
             Icons.add_circle_outline,
-            Colors.amber[300]!,
+            AppColors.difficulty,
           ),
           _buildDetailRow(
             'Reach probability',
             '${(trap.cumulativeProb * 100).toStringAsFixed(3)}%',
             Icons.route,
-            Colors.cyan[300]!,
+            AppColors.lichessDb,
           ),
         ],
       ),
@@ -411,7 +412,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
             padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
             decoration: BoxDecoration(
               color: i < matchDepth
-                  ? Colors.orange[800]?.withValues(alpha: 0.5)
+                  ? AppColors.warningSurface.withValues(alpha: 0.7)
                   : null,
               borderRadius: BorderRadius.circular(2),
             ),
@@ -420,7 +421,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               style: TextStyle(
                 fontSize: 11,
                 fontFamily: 'monospace',
-                color: i < matchDepth ? Colors.orange[200] : Colors.grey[300],
+                color: i < matchDepth ? AppColors.warning : Colors.grey[300],
                 fontWeight:
                     i < matchDepth ? FontWeight.bold : FontWeight.normal,
               ),
@@ -450,9 +451,5 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
     return depth;
   }
 
-  Color _trapScoreColor(double score) {
-    if (score >= 0.5) return Colors.red[600]!;
-    if (score >= 0.3) return Colors.orange[600]!;
-    return Colors.amber[700]!;
-  }
+  Color _trapScoreColor(double score) => AppColors.trapScore(score);
 }

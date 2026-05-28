@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../utils/eval_constants.dart';
 import 'eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
@@ -77,10 +78,10 @@ EvalHit? parseChessDbQueryScoreBody(String body, String fen) {
   int stmCp;
   int? mate;
 
-  if (raw.abs() > 10000) {
+  if (raw.abs() > kMateCpBase) {
     final ply = 30000 - raw.abs();
     mate = raw > 0 ? ply : -ply;
-    stmCp = raw > 0 ? (10000 - ply) : (-10000 - ply);
+    stmCp = raw > 0 ? (kMateCpBase - ply) : (-kMateCpBase - ply);
   } else {
     stmCp = raw;
   }

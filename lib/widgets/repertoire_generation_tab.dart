@@ -3,15 +3,12 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/build_tree_node.dart';
 import '../models/eval_database_settings.dart';
 import '../services/eval/cdbdirect_eval_provider.dart';
-import '../services/eval/chessdb_api_provider.dart';
-import '../services/eval/sqlite_eval_provider.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
@@ -19,12 +16,18 @@ import '../services/generation/line_extractor.dart';
 import '../services/generation/repertoire_selector.dart';
 import '../services/generation/trap_extractor.dart';
 import '../services/generation/tree_ease.dart';
+import '../services/generation/tree_my_ease.dart';
 import '../services/generation/tree_serialization.dart';
+import '../services/generation/tree_build_progress.dart';
+import '../services/generation/pgn_export.dart';
 import '../services/coverage_service.dart';
 import '../services/tree_build_service.dart';
 import '../utils/system_info.dart';
 import 'lichess_db_info_icon.dart';
+import '../theme/app_colors.dart';
+import 'generation/build_progress_display.dart';
 import 'lichess_db_selector.dart';
+import 'generation/eval_sources_section.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
@@ -57,13 +60,16 @@ class RepertoireGenerationTab extends StatefulWidget {
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final TreeBuildService _buildService = TreeBuildService();
+  final GlobalKey<EvalSourcesSectionState> _evalSourcesKey =
+      GlobalKey<EvalSourcesSectionState>();
+  bool _cdbDirectAvailable = false;
 
   static const int _pgnFlushEveryLines = 10;
 
   // ── Controllers ────────────────────────────────────────────────────────
 
   final TextEditingController _cutoffCtrl = TextEditingController(text: '0.01');
-  final TextEditingController _maxPlyCtrl = TextEditingController(text: '10');
+  final TextEditingController _maxPlyCtrl = TextEditingController(text: '20');
   final TextEditingController _engineDepthCtrl =
       TextEditingController(text: '20');
   late final TextEditingController _engineThreadsCtrl;
@@ -75,30 +81,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       TextEditingController(text: '2200');
 
   // Advanced
-  final TextEditingController _multipvCtrl = TextEditingController(text: '5');
+  final TextEditingController _multipvCtrl = TextEditingController(text: '4');
   final TextEditingController _oppMaxChildrenCtrl =
-      TextEditingController(text: '6');
+      TextEditingController(text: '4');
   final TextEditingController _oppMassTargetCtrl =
-      TextEditingController(text: '0.95');
+      TextEditingController(text: '0.80');
   final TextEditingController _leafConfidenceCtrl =
       TextEditingController(text: '1.0');
-
-  // Eval sources (Advanced)
-  bool _batchEvalLookups = false;
-  bool _cdbDirectAvailable = false;
-  bool _enableLocalChessDb = false;
-  final TextEditingController _localChessDbPathCtrl = TextEditingController();
-  bool? _localChessDbValid;
-  bool _enableChessDbApi = false;
-  final TextEditingController _chessDbQuotaCtrl =
-      TextEditingController(text: '5000');
-  final TextEditingController _chessDbConcurrencyCtrl =
-      TextEditingController(text: '2');
-  bool _enableExtEvalSubtreeSkip = true;
-  final TextEditingController _minAcceptableEvalDepthCtrl =
-      TextEditingController(text: '');
-  int _chessDbApiUsedToday = 0;
-  int _chessDbApiQuotaLimit = 5000;
 
   // null = Maia only; non-null = override with that Lichess DB
   LichessDatabase? _lichessDbOverride;
@@ -135,8 +124,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   int? _etaDepthSec;
   DateTime _lastProgressUpdate = DateTime(0);
   Timer? _uiPulseTimer;
-  final StringBuffer _pendingPgnBuffer = StringBuffer();
-  int _pendingPgnLines = 0;
+  final PgnBatchWriter _pgnWriter = PgnBatchWriter();
   BuildTree? _savedPartialTree;
 
   @override
@@ -152,22 +140,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       text: widget.isWhiteRepertoire ? '200' : '100',
     );
     _checkForPartialTree();
-    _refreshChessDbQuotaDisplay();
     EvalDatabaseSettings.instance.load();
     CdbDirectEvalProvider.probeAvailability().then((available) {
       if (!mounted) return;
       setState(() => _cdbDirectAvailable = available);
-    });
-  }
-
-  Future<void> _refreshChessDbQuotaDisplay() async {
-    final quota = int.tryParse(_chessDbQuotaCtrl.text.trim()) ?? 5000;
-    final api = ChessDbApiProvider(dailyQuota: quota);
-    await api.init();
-    if (!mounted) return;
-    setState(() {
-      _chessDbApiUsedToday = api.usedToday;
-      _chessDbApiQuotaLimit = api.quotaLimit;
     });
   }
 
@@ -186,10 +162,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _oppMaxChildrenCtrl.dispose();
     _oppMassTargetCtrl.dispose();
     _leafConfidenceCtrl.dispose();
-    _chessDbQuotaCtrl.dispose();
-    _chessDbConcurrencyCtrl.dispose();
-    _minAcceptableEvalDepthCtrl.dispose();
-    _localChessDbPathCtrl.dispose();
     _stopUiPulse();
     super.dispose();
   }
@@ -222,8 +194,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         _elapsedMs = _buildService.buildElapsedMs;
         final api = _buildService.chessDbApiProvider;
         if (api != null) {
-          _chessDbApiUsedToday = api.usedToday;
-          _chessDbApiQuotaLimit = api.quotaLimit;
+          _evalSourcesKey.currentState?.updateChessDbApiUsage(
+            api.usedToday,
+            api.quotaLimit,
+          );
         }
       }
     });
@@ -264,7 +238,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             _savedPartialTree = tree;
           });
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[RepertoireGenTab] Failed to load partial tree: $e');
+      }
     } else if (_savedPartialTree != null && mounted) {
       setState(() => _savedPartialTree = null);
     }
@@ -279,7 +255,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       _applyKnownRootMoves(tree);
       final treeJson = serializeTree(tree);
       await File(path).writeAsString(treeJson);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[RepertoireGenTab] Failed to save tree: $e');
+    }
   }
 
   Future<void> _deletePartialTree() async {
@@ -288,7 +266,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     try {
       final file = File(path);
       if (await file.exists()) await file.delete();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[RepertoireGenTab] Failed to delete tree file: $e');
+    }
   }
 
   void cancelGeneration({String? reason}) {
@@ -340,7 +320,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final engineThreads = rawThreads != null
         ? clampEngineThreads(rawThreads)
         : defaultEngineThreads();
-    final minAcceptableRaw = _minAcceptableEvalDepthCtrl.text.trim();
+    final eval = _evalSourcesKey.currentState;
+    final minAcceptableRaw = eval?.minAcceptableEvalDepthRaw ?? '';
     final minAcceptableDepth = minAcceptableRaw.isEmpty
         ? 0
         : (int.tryParse(minAcceptableRaw) ?? evalDepth);
@@ -354,7 +335,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         _cutoffCtrl.text,
         fallbackPercent: 0.01,
       ),
-      maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 10,
+      maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 20,
       buildMode: _buildMode,
       evalDepth: evalDepth,
       engineThreads: engineThreads,
@@ -368,9 +349,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       rankLinesByImportance: _rankLinesByImportance,
       annotateMoveProbabilities: _annotateMoveProbabilities,
       annotateMaiaOnly: _annotateMaiaOnly,
-      ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 5,
-      oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 6,
-      oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.95,
+      ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
+      oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
+      oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
       useLichessDb: _lichessDbOverride != null,
       useMasters: _lichessDbOverride == LichessDatabase.masters,
       speeds: _lichessSpeeds.join(','),
@@ -386,15 +367,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           _cdbDirectAvailable ? dbSettings.cdbDirectPath : '',
       cdbDirectReadAhead:
           _cdbDirectAvailable && dbSettings.cdbDirectReadAhead,
-      batchEvalLookups: _cdbDirectAvailable && _batchEvalLookups,
-      enableLocalChessDb: _enableLocalChessDb,
-      localChessDbPath: _localChessDbPathCtrl.text.trim(),
-      enableChessDbApi: _enableChessDbApi,
-      chessDbApiDailyQuota:
-          (int.tryParse(_chessDbQuotaCtrl.text.trim()) ?? 5000).clamp(1, 50000),
-      chessDbApiConcurrency:
-          (int.tryParse(_chessDbConcurrencyCtrl.text.trim()) ?? 2).clamp(1, 16),
-      enableExtEvalSubtreeSkip: _enableExtEvalSubtreeSkip,
+      batchEvalLookups:
+          _cdbDirectAvailable && (eval?.batchEvalLookups ?? false),
+      enableLocalChessDb: eval?.enableLocalChessDb ?? false,
+      localChessDbPath: eval?.localChessDbPath ?? '',
+      enableChessDbApi: eval?.enableChessDbApi ?? false,
+      chessDbApiDailyQuota: eval?.chessDbApiDailyQuota ?? 5000,
+      chessDbApiConcurrency: eval?.chessDbApiConcurrency ?? 2,
+      enableExtEvalSubtreeSkip: eval?.enableExtEvalSubtreeSkip ?? true,
       minAcceptableEvalDepth: minAcceptableDepth,
     );
   }
@@ -407,9 +387,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           '${_buildModeLabel(_buildMode)} is not yet available in the app.');
       return;
     }
+    final evalSources = _evalSourcesKey.currentState;
     if (_buildMode == BuildMode.maiaDbExplore &&
-        !_enableLocalChessDb &&
-        !_enableChessDbApi &&
+        !(evalSources?.enableLocalChessDb ?? false) &&
+        !(evalSources?.enableChessDbApi ?? false) &&
         !EvalDatabaseSettings.instance.enableCdbDirect) {
       setState(() => _status =
           'Maia + DB mode needs at least one eval source enabled '
@@ -456,11 +437,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       _unexploredAtDepth = 0;
       _totalAtDepth = 0;
       _etaDepthSec = null;
-      _chessDbApiQuotaLimit = config.chessDbApiDailyQuota;
-      _chessDbApiUsedToday = 0;
+      _evalSourcesKey.currentState
+          ?.resetChessDbApiUsageForBuild(config.chessDbApiDailyQuota);
+
+      // Seed depth-layer counters so resume doesn't show "0 / 0 explored"
+      // while BFS replays existing nodes toward the frontier.
+      if (existingTree != null && existingTree.maxPlyReached > 0) {
+        final layer = TreeBuildProgressTracker.depthLayerStats(
+          existingTree.root,
+          existingTree.maxPlyReached,
+        );
+        _totalAtDepth = layer.$1;
+        _unexploredAtDepth = layer.$2;
+      }
     });
-    _pendingPgnBuffer.clear();
-    _pendingPgnLines = 0;
+    _pgnWriter.clear();
     widget.onTreeReset?.call();
     widget.onGeneratingChanged(true);
     _startUiPulse();
@@ -528,6 +519,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       // Phase 2b.2: Trap scores
       ecaCalc.computeTrapScores(tree.root);
 
+      // Phase 2b.3: My Ease (how natural our moves are)
+      calculateMyEase(tree, playAsWhite: config.playAsWhite);
+
       // Phase 2c: Select repertoire moves
       if (mounted) {
         setState(() => _status = 'Phase 2: Selecting repertoire...');
@@ -557,16 +551,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       widget.onTreeBuilt?.call(tree);
 
       // Save lines to PGN file
+      final rootFen = _rootFen();
+      final rootWhiteToMove = _rootWhiteToMove(rootFen);
       for (int i = 0; i < extractedLines.length; i++) {
         final line = extractedLines[i];
         final idx = i + 1;
         final title = 'Generated Line $idx';
         final fullMoves = [...widget.currentMoveSequence, ...line.movesSan];
-        final pgn = _buildPgnEntry(
+        final pgn = buildRepertoirePgnEntry(
           moves: fullMoves,
           title: title,
           cumulativeProb: line.probability,
           finalEvalCp: line.leafEvalCp ?? 0,
+          isWhiteRepertoire: widget.isWhiteRepertoire,
+          rootFen: rootFen,
+          rootWhiteToMove: rootWhiteToMove,
           pruneReason: line.leafPruneReason,
           pruneEvalCp: line.leafPruneEvalCp,
           lineAnnotations: line.moveAnnotations,
@@ -575,13 +574,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           annotateMoveProbabilities: config.annotateMoveProbabilities,
           annotateMaiaOnly: config.annotateMaiaOnly,
         );
-        _queuePgnEntry(pgn);
-        if (_pendingPgnLines >= _pgnFlushEveryLines) {
-          await _flushPendingPgnWrites(filePath);
+        _pgnWriter.queue(pgn);
+        if (_pgnWriter.lineCount >= _pgnFlushEveryLines) {
+          await _pgnWriter.flush(filePath);
         }
         widget.onLineSaved(fullMoves, title, pgn);
       }
-      await _flushPendingPgnWrites(filePath);
+      await _pgnWriter.flush(filePath);
 
       // Save tree JSON alongside PGN
       try {
@@ -619,7 +618,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     } catch (e) {
       final fp = widget.currentRepertoire?['filePath'] as String?;
       if (fp != null && fp.isNotEmpty) {
-        await _flushPendingPgnWrites(fp);
+        await _pgnWriter.flush(fp);
       }
       if (mounted) {
         setState(() => _status = 'Generation failed: $e');
@@ -636,90 +635,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   // ── PGN helpers ───────────────────────────────────────────────────────
 
-  void _queuePgnEntry(String pgn) {
-    _pendingPgnBuffer.writeln();
-    _pendingPgnBuffer.writeln(pgn);
-    _pendingPgnLines++;
-  }
-
-  Future<void> _flushPendingPgnWrites(String filePath) async {
-    if (_pendingPgnLines == 0) return;
-    final payload = _pendingPgnBuffer.toString();
-    _pendingPgnBuffer.clear();
-    _pendingPgnLines = 0;
-    await File(filePath).writeAsString(
-      payload,
-      mode: FileMode.append,
-      flush: true,
-    );
-  }
-
-  String _buildPgnEntry({
-    required List<String> moves,
-    required String title,
-    required double cumulativeProb,
-    required int finalEvalCp,
-    PruneReason? pruneReason,
-    int? pruneEvalCp,
-    List<MoveProbabilityAnnotation> lineAnnotations = const [],
-    int prefixMoveCount = 0,
-    bool rankByImportance = true,
-    bool annotateMoveProbabilities = true,
-    bool annotateMaiaOnly = true,
-  }) {
-    final date = DateTime.now().toIso8601String().split('T').first;
-    final whiteName = widget.isWhiteRepertoire ? 'Repertoire' : 'Opponent';
-    final blackName = widget.isWhiteRepertoire ? 'Opponent' : 'Repertoire';
-
-    final rootFen = _rootFen();
-    final rootWhiteToMove = _rootWhiteToMove(rootFen);
-    final line = _movesToPgnMoveText(
-      moves,
-      rootWhiteToMove: rootWhiteToMove,
-      prefixMoveCount: prefixMoveCount,
-      lineAnnotations: lineAnnotations,
-      annotateMoveProbabilities: annotateMoveProbabilities,
-      annotateMaiaOnly: annotateMaiaOnly,
-    );
-
-    final annotation = StringBuffer()
-      ..write('{CumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%'
-          ', Eval $finalEvalCp cp');
-    if (pruneReason == PruneReason.evalTooHigh && pruneEvalCp != null) {
-      annotation.write(
-          ', Already winning (${pruneEvalCp >= 0 ? "+" : ""}${(pruneEvalCp / 100).toStringAsFixed(1)})');
-    }
-    if (rankByImportance) {
-      annotation.write(
-          ', [%importance ${cumulativeProb.toStringAsFixed(3)}]');
-    }
-    annotation.write('}');
-
-    const standardStartpos =
-        'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    final needsFenHeader = rootFen.isNotEmpty && rootFen != standardStartpos;
-
-    final tags = [
-      '[Event "$title"]',
-      '[Date "$date"]',
-      '[White "$whiteName"]',
-      '[Black "$blackName"]',
-      '[Result "*"]',
-      '[Annotator "AutoGenerate"]',
-      if (rankByImportance)
-        '[Importance "${cumulativeProb.toStringAsFixed(3)}"]',
-      if (needsFenHeader) '[FEN "$rootFen"]',
-      if (needsFenHeader) '[SetUp "1"]',
-    ];
-
-    return [
-      ...tags,
-      '',
-      '$annotation',
-      '$line *',
-    ].join('\n');
-  }
-
   String _rootFen() {
     // The `[...currentMoveSequence, ...line.movesSan]` path is relative to
     // the app's standard startpos when currentMoveSequence is non-empty,
@@ -733,126 +648,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     return parts.length < 2 || parts[1] == 'w';
   }
 
-  String _movesToPgnMoveText(
-    List<String> moves, {
-    bool rootWhiteToMove = true,
-    int prefixMoveCount = 0,
-    List<MoveProbabilityAnnotation> lineAnnotations = const [],
-    bool annotateMoveProbabilities = true,
-    bool annotateMaiaOnly = true,
-  }) {
-    if (moves.isEmpty) return '';
-    final sb = StringBuffer();
-    for (int i = 0; i < moves.length; i++) {
-      final ply = i + (rootWhiteToMove ? 0 : 1);
-      if (ply.isEven) {
-        sb.write('${(ply ~/ 2) + 1}. ');
-      } else if (i == 0 && !rootWhiteToMove) {
-        sb.write('${(ply ~/ 2) + 1}... ');
-      }
-      sb.write(moves[i]);
-
-      if (annotateMoveProbabilities && i >= prefixMoveCount) {
-        final annIdx = i - prefixMoveCount;
-        if (annIdx < lineAnnotations.length &&
-            lineAnnotations[annIdx].probability != null) {
-          final ann = lineAnnotations[annIdx];
-          final prob = ann.probability!;
-          final tag = ann.fromLichess && !annotateMaiaOnly
-              ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
-              : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
-          sb.write(' {$tag}');
-        }
-      }
-      sb.write(' ');
-    }
-    return sb.toString().trim();
-  }
-
   // ── UI ─────────────────────────────────────────────────────────────────
-
-  static String _formatEta(int sec) {
-    if (sec < 60) return '${sec}s';
-    if (sec < 3600) return '${(sec / 60).ceil()}m';
-    final h = sec ~/ 3600;
-    final m = ((sec % 3600) / 60).ceil();
-    return '${h}h ${m}m';
-  }
-
-  Widget _buildProgressDisplay() {
-    final secs = _elapsedMs / 1000.0;
-    final elapsed = secs >= 60
-        ? '${(secs / 60).floor()}m ${(secs % 60).toStringAsFixed(0)}s'
-        : '${secs.toStringAsFixed(1)}s';
-
-    final explored = _totalAtDepth - _unexploredAtDepth;
-    final rateStr = _nodesPerMinute != null
-        ? '${_nodesPerMinute!.toStringAsFixed(0)} nodes/min'
-        : null;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row 1: total nodes + elapsed
-          Row(
-            children: [
-              if (_isGenerating && !_isPaused)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              if (_isPaused)
-                Icon(Icons.pause_circle, size: 14, color: Colors.amber[400]),
-              const SizedBox(width: 6),
-              Text(
-                '$_nodes nodes',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              if (rateStr != null) ...[
-                const SizedBox(width: 10),
-                Text(
-                  rateStr,
-                  style: TextStyle(fontSize: 13, color: Colors.grey[400]),
-                ),
-              ],
-              const Spacer(),
-              Text(
-                elapsed,
-                style: TextStyle(fontSize: 13, color: Colors.grey[400]),
-              ),
-            ],
-          ),
-          // Row 2: depth progress + ETA
-          if (_isGenerating && _currentDepth > 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              () {
-                final parts = <String>[
-                  'Depth $_currentDepth/$_maxPlyConfig',
-                  '$explored / $_totalAtDepth explored',
-                  if (_unexploredAtDepth > 0) '$_unexploredAtDepth remaining',
-                  if (_etaDepthSec != null) '~${_formatEta(_etaDepthSec!)}',
-                ];
-                return parts.join(' · ');
-              }(),
-              style: TextStyle(fontSize: 13, color: Colors.grey[400]),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -865,7 +661,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            'Starting position: ${widget.currentMoveSequence.isEmpty ? 'Initial position' : _movesToPgnMoveText(widget.currentMoveSequence)}',
+            'Starting position: ${widget.currentMoveSequence.isEmpty ? 'Initial position' : movesToPgnMoveText(widget.currentMoveSequence)}',
             style: const TextStyle(color: Colors.grey, fontSize: 12),
           ),
           const SizedBox(height: 8),
@@ -1082,6 +878,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 value: SelectionMode.dbWinRateOnly,
                 child: Text('DB win rate only (no engine selection)'),
               ),
+              DropdownMenuItem(
+                value: SelectionMode.playable,
+                child: Text('Playable (expectimax + ease)'),
+              ),
             ],
             onChanged: _isGenerating
                 ? null
@@ -1105,7 +905,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               ],
             ),
           ),
-          if (_showAdvanced) ...[
+          Visibility(
+            visible: _showAdvanced,
+            maintainState: true,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -1204,8 +1009,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               ),
             ],
             const SizedBox(height: 16),
-            _buildEvalSourcesSection(),
-          ],
+            EvalSourcesSection(
+              key: _evalSourcesKey,
+              isGenerating: _isGenerating,
+              cdbDirectAvailable: _cdbDirectAvailable,
+            ),
+              ],
+            ),
+          ),
           const SizedBox(height: 8),
 
           // Saved partial tree banner
@@ -1213,9 +1024,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.1),
+                color: AppColors.warningSurface.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.amber[700]!, width: 1),
+                border: Border.all(color: AppColors.warning, width: 1),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1223,13 +1034,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   Row(
                     children: [
                       Icon(Icons.pause_circle,
-                          size: 18, color: Colors.amber[400]),
+                          size: 18, color: AppColors.warning),
                       const SizedBox(width: 8),
                       Text(
                         'Paused Build Available',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: Colors.amber[300],
+                          color: AppColors.warning,
                         ),
                       ),
                     ],
@@ -1289,7 +1100,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 FilledButton.icon(
                   onPressed: togglePause,
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.amber[800],
+                    backgroundColor: AppColors.warningSurface,
                   ),
                   icon: const Icon(Icons.pause, color: Colors.white),
                   label: const Text(
@@ -1306,7 +1117,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 FilledButton.icon(
                   onPressed: togglePause,
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.green[700],
+                    backgroundColor: AppColors.successSurface,
                   ),
                   icon: const Icon(Icons.play_arrow, color: Colors.white),
                   label: const Text(
@@ -1321,7 +1132,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 FilledButton.icon(
                   onPressed: () => cancelGeneration(),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.red[700],
+                    backgroundColor: AppColors.dangerSurface,
                   ),
                   icon: const Icon(Icons.stop, color: Colors.white),
                   label: const Text(
@@ -1337,7 +1148,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           ),
           if (_isGenerating || _nodes > 0) ...[
             const SizedBox(height: 8),
-            _buildProgressDisplay(),
+            BuildProgressDisplay(
+              nodes: _nodes,
+              isGenerating: _isGenerating,
+              isPaused: _isPaused,
+              elapsedMs: _elapsedMs,
+              nodesPerMinute: _nodesPerMinute,
+              currentDepth: _currentDepth,
+              maxPlyConfig: _maxPlyConfig,
+              unexploredAtDepth: _unexploredAtDepth,
+              totalAtDepth: _totalAtDepth,
+              etaDepthSec: _etaDepthSec,
+            ),
           ],
           const SizedBox(height: 8),
           Text(_status, style: const TextStyle(color: Colors.grey)),
@@ -1391,218 +1213,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     return Tooltip(message: tooltip, child: row);
   }
 
-  Future<void> _pickLocalChessDbFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Select ChessDB SQLite file',
-      type: FileType.custom,
-      allowedExtensions: ['db'],
-      lockParentWindow: true,
-    );
-    if (result == null || result.files.single.path == null) return;
-    final path = result.files.single.path!;
-    final valid = await validateChessDbEvalFile(path);
-    if (!mounted) return;
-    setState(() {
-      _localChessDbPathCtrl.text = path;
-      _localChessDbValid = valid;
-      if (valid) _enableLocalChessDb = true;
-    });
-  }
-
-  Widget _buildEvalSourcesSection() {
-    final localFieldsEnabled = _enableLocalChessDb && !_isGenerating;
-    final apiFieldsEnabled = _enableChessDbApi && !_isGenerating;
-    final path = _localChessDbPathCtrl.text;
-
-    Widget? pathStatusIcon;
-    if (path.isNotEmpty && _localChessDbValid != null) {
-      pathStatusIcon = Tooltip(
-        message: _localChessDbValid!
-            ? 'Valid ChessDB database'
-            : 'Not a valid ChessDB eval database (missing chessdb_evals table)',
-        child: Icon(
-          _localChessDbValid! ? Icons.check_circle : Icons.warning_amber,
-          size: 18,
-          color: _localChessDbValid! ? Colors.green[400] : Colors.red[400],
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('Eval Sources',
-                style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(width: 4),
-            Tooltip(
-              message: _cdbDirectAvailable
-                  ? 'Optional eval lookup chain before Stockfish:\n'
-                      'project cache → cdbdirect full dump → local SQLite → API → engine.\n'
-                      'On HDD, enable read-ahead and batch lookups for cdbdirect.'
-                  : 'Optional eval lookup chain before Stockfish:\n'
-                      'project cache → local SQLite → API → engine.',
-              child: Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-
-        if (_cdbDirectAvailable)
-          ListenableBuilder(
-            listenable: EvalDatabaseSettings.instance,
-            builder: (context, _) {
-              final dbSettings = EvalDatabaseSettings.instance;
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  dbSettings.enableCdbDirect
-                      ? Icons.storage
-                      : Icons.storage_outlined,
-                  color: dbSettings.enableCdbDirect
-                      ? Colors.green[400]
-                      : Colors.grey,
-                ),
-                title: const Text('Local ChessDB (full dump)',
-                    style: TextStyle(fontSize: 13)),
-                subtitle: Text(
-                  dbSettings.enableCdbDirect &&
-                          dbSettings.cdbDirectPath.isNotEmpty
-                      ? dbSettings.cdbDirectPath
-                      : 'Configure in Actions → Database Downloads',
-                  style: const TextStyle(fontSize: 11),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                dense: true,
-              );
-            },
-          ),
-        if (_cdbDirectAvailable)
-          Wrap(
-            spacing: 16,
-            children: [
-              FilterChip(
-                label: const Text('Batch eval lookups'),
-                selected: _batchEvalLookups,
-                onSelected: _isGenerating
-                    ? null
-                    : (v) => setState(() => _batchEvalLookups = v),
-              ),
-            ],
-          ),
-        if (_cdbDirectAvailable) const SizedBox(height: 12),
-
-        // Local ChessDB SQLite slice
-        _toggleSwitch(
-          'Local ChessDB file',
-          _enableLocalChessDb,
-          (v) => setState(() => _enableLocalChessDb = v),
-          tooltip:
-              'Use a local ChessDB SQLite slice for eval lookups.\n'
-              'Positions missing from the file can trigger subtree skip.',
-        ),
-        const SizedBox(height: 6),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: TextField(
-                readOnly: true,
-                enabled: !_isGenerating,
-                controller: _localChessDbPathCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Database path (.db)',
-                  hintText: 'No file selected',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: pathStatusIcon,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Tooltip(
-              message: 'Browse for a ChessDB .db file',
-              child: IconButton(
-                onPressed: localFieldsEnabled ? _pickLocalChessDbFile : null,
-                icon: const Icon(Icons.folder_open),
-              ),
-            ),
-            if (path.isNotEmpty)
-              Tooltip(
-                message: 'Clear path',
-                child: IconButton(
-                  onPressed: _isGenerating
-                      ? null
-                      : () => setState(() {
-                            _localChessDbPathCtrl.clear();
-                            _localChessDbValid = null;
-                          }),
-                  icon: const Icon(Icons.clear),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // ChessDB API
-        _toggleSwitch(
-          'ChessDB API',
-          _enableChessDbApi,
-          (v) => setState(() => _enableChessDbApi = v),
-          tooltip:
-              'Query chessdb.cn for positions not in local cache.\n'
-              'Subject to a configurable daily request quota.',
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _numField(
-              _chessDbQuotaCtrl,
-              'Daily quota',
-              tooltip: 'Maximum ChessDB API requests per day (1–50000)',
-              enabled: apiFieldsEnabled,
-            ),
-            _numField(
-              _chessDbConcurrencyCtrl,
-              'Concurrency',
-              tooltip: 'Parallel ChessDB API requests during build (1–16)',
-              enabled: apiFieldsEnabled,
-            ),
-            Text(
-              '$_chessDbApiUsedToday / $_chessDbApiQuotaLimit requests used today',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Behavior settings
-        _toggleSwitch(
-          'Skip external eval for off-book subtrees',
-          _enableExtEvalSubtreeSkip,
-          (v) => setState(() => _enableExtEvalSubtreeSkip = v),
-          tooltip:
-              'When a position is absent from the local ChessDB file,\n'
-              'skip further external lookups for that subtree and use Stockfish.',
-        ),
-        const SizedBox(height: 8),
-        _numField(
-          _minAcceptableEvalDepthCtrl,
-          'Min eval depth (0 = engine depth)',
-          tooltip:
-              'Minimum search depth required from external sources.\n'
-              'Shallower hits fall through to the next source.',
-          enabled: !_isGenerating,
-        ),
-      ],
-    );
-  }
-
   String _buildModeLabel(BuildMode mode) {
     switch (mode) {
       case BuildMode.stockfishExpectimax:
@@ -1648,6 +1258,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       case SelectionMode.dbWinRateOnly:
         return 'Builds the full tree, then selects moves by database win rate.'
             ' Falls back to engine eval when no DB data is available.';
+      case SelectionMode.playable:
+        return 'Blends expectimax value (60%) with my-ease (40%) to prefer'
+            ' moves that are both strong and natural for a human to find.';
     }
   }
 

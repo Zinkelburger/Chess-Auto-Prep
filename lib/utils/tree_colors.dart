@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../features/eval_tree/models/eval_tree_snapshot.dart';
+import '../theme/app_colors.dart';
 
 // ── CPL thresholds (move loss vs best sibling) ─────────────────────────────
 
@@ -17,15 +18,15 @@ const double kCplInaccuracyThreshold = 8;
 
 // ── Graph-node colors by move quality ─────────────────────────────────────
 
-const Color kNodeColorOurMoveRepertoire = Color(0xFF2E7D32); // green[800]
-const Color kNodeColorOurMove = Color(0xFF1B5E20); // green[900]
-const Color kNodeColorOpponentMove = Color(0xFF37474F); // blueGrey[800]
-const Color kNodeColorBlunder = Color(0xFFE53935); // red[600]
-const Color kNodeColorBigMistake = Color(0xFFF4511E); // deepOrange[600]
-const Color kNodeColorMistake = Color(0xFFFB8C00); // orange[600]
-const Color kNodeColorInaccuracy = Color(0xFFFDD835); // yellow[600]
-const Color kNodeColorNeutral = Color(0xFF424242); // grey[800]
-const Color kNodeAccentRepertoire = Color(0xFFB2DFDB); // teal[100]
+const Color kNodeColorOurMoveRepertoire = Color(0xFF3D5245);
+const Color kNodeColorOurMove = Color(0xFF354840);
+const Color kNodeColorOpponentMove = Color(0xFF3A4248);
+const Color kNodeColorBlunder = Color(0xFF6E4545);
+const Color kNodeColorBigMistake = Color(0xFF6E4F3D);
+const Color kNodeColorMistake = Color(0xFF6E5A3D);
+const Color kNodeColorInaccuracy = Color(0xFF6E6640);
+const Color kNodeColorNeutral = Color(0xFF424242);
+const Color kNodeAccentRepertoire = Color(0xFF8A9E9A);
 
 /// Returns true when the move represented by [node] was played by us.
 bool isOurMoveNode(EvalTreeSnapshot snapshot, EvalTreeNodeSnapshot node) {
@@ -158,52 +159,18 @@ Color roleBadgeColor(bool isOurTurn) {
 
 // ── Eval color (stats panel) ──────────────────────────────────────────────
 
-Color evalColor(int cpForUs) {
-  if (cpForUs > 100) return Colors.green;
-  if (cpForUs > 30) return Colors.green[300]!;
-  if (cpForUs > -30) return Colors.grey[400]!;
-  if (cpForUs > -100) return Colors.orange;
-  return Colors.red;
-}
+Color evalColor(int cpForUs) => AppColors.cpEval(cpForUs);
 
-Color evalBgColor(int cpForUs) {
-  if (cpForUs > 100) return Colors.green[900]!;
-  if (cpForUs > 30) return Colors.green[800]!.withValues(alpha: 0.7);
-  if (cpForUs > -30) return Colors.grey[800]!;
-  if (cpForUs > -100) return Colors.orange[900]!.withValues(alpha: 0.7);
-  return Colors.red[900]!;
-}
+Color evalBgColor(int cpForUs) => AppColors.cpEvalBg(cpForUs);
 
-Color evalTextColor(int cpForUs) {
-  if (cpForUs > 30) return Colors.green[200]!;
-  if (cpForUs > -30) return Colors.grey[300]!;
-  return Colors.red[200]!;
-}
+Color evalTextColor(int cpForUs) => AppColors.cpEval(cpForUs);
 
 // ── Other metric colors ───────────────────────────────────────────────────
 
-Color easeColor(double ease) {
-  if (ease > 0.8) return Colors.green[300]!;
-  if (ease > 0.6) return Colors.yellow[300]!;
-  return Colors.orange[300]!;
-}
+Color easeColor(double ease) => AppColors.ease(ease);
 
-Color cplColor(double cpl) {
-  if (cpl < 5) return Colors.green[300]!;
-  if (cpl < 15) return Colors.lightGreen[300]!;
-  if (cpl < 30) return Colors.yellow[300]!;
-  return Colors.orange[300]!;
-}
+Color cplColor(double cpl) => AppColors.cpl(cpl);
 
-Color trapColor(double trap) {
-  if (trap > 0.5) return Colors.red[300]!;
-  if (trap > 0.2) return Colors.orange[300]!;
-  return Colors.yellow[300]!;
-}
+Color trapColor(double trap) => AppColors.trapScore(trap);
 
-Color vColor(double v) {
-  if (v > 0.65) return Colors.green[300]!;
-  if (v > 0.55) return Colors.green[200]!;
-  if (v > 0.45) return Colors.grey[400]!;
-  return Colors.orange[300]!;
-}
+Color vColor(double v) => AppColors.winProbability(v);

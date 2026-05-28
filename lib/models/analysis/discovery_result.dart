@@ -1,6 +1,8 @@
 /// Data classes for the MultiPV discovery phase of the analysis pool.
 library;
 
+import '../../utils/eval_constants.dart';
+
 /// A single line from the MultiPV discovery search.
 class DiscoveryLine {
   final int pvNumber;
@@ -23,14 +25,8 @@ class DiscoveryLine {
 
   String get moveUci => pv.isNotEmpty ? pv.first : '';
 
-  int get effectiveCp {
-    if (scoreMate != null) {
-      return scoreMate! > 0
-          ? 10000 - scoreMate!.abs()
-          : -(10000 - scoreMate!.abs());
-    }
-    return scoreCp ?? 0;
-  }
+  int get effectiveCp =>
+      effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
 }
 
 /// Result of the MultiPV discovery phase.

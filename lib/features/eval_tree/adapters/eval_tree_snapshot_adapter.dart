@@ -58,6 +58,7 @@ class EvalTreeSnapshotAdapter {
       expectimaxValue: node.hasExpectimax ? node.expectimaxValue : null,
       localCpl: localCpl,
       trapScore: node.trapScore >= 0.0 ? node.trapScore : null,
+      myEase: node.myEase >= 0.0 ? node.myEase : null,
       subtreeSize: node.subtreeSize > 0 ? node.subtreeSize : derivedSubtreeSize,
       subtreePly: node.subtreePly > 0 || node.children.isEmpty
           ? node.subtreePly

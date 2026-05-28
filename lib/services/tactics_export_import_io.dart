@@ -27,7 +27,7 @@ Future<void> exportCsvContent(
     // Clean up temp file
     try {
       await tempFile.delete();
-    } catch (_) {}
+    } catch (_) { /* temp-file cleanup — ignore */ }
   } else {
     // On desktop, let user choose save location
     final savePath = await FilePicker.platform.saveFile(

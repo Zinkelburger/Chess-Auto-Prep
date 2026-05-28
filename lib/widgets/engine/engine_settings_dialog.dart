@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/engine_settings.dart';
+import '../../theme/app_colors.dart';
 import '../../services/lichess_auth_service.dart';
 import '../../utils/app_messages.dart';
 import '../../services/engine/stockfish_pool.dart';
@@ -98,11 +99,6 @@ Future<void> showEngineSettingsDialog({
                           setDialogState(() {});
                         }),
                         _buildCompactToggle(
-                            'Difficulty', settings.showDifficulty, (v) {
-                          settings.showDifficulty = v;
-                          setDialogState(() {});
-                        }),
-                        _buildCompactToggle(
                             'Probability', settings.showProbability, (v) {
                           settings.showProbability = v;
                           setDialogState(() {});
@@ -176,17 +172,6 @@ Future<void> showEngineSettingsDialog({
                       setDialogState(() {});
                     },
                   ),
-                  if (!compact)
-                    _buildNumberField(
-                      label: 'Difficulty Depth',
-                      value: settings.easeDepth,
-                      min: 1,
-                      max: 99,
-                      onChanged: (v) {
-                        settings.easeDepth = v;
-                        setDialogState(() {});
-                      },
-                    ),
                   _buildNumberField(
                     label: compact ? 'Lines' : 'Multiple lines',
                     value: settings.multiPv,
@@ -362,7 +347,7 @@ Widget _buildLichessSection({
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: oauthWaiting ? Colors.blue[300] : Colors.red[300],
+                    color: oauthWaiting ? AppColors.info : AppColors.danger,
                   ),
                 ),
               ),
@@ -382,9 +367,9 @@ Widget _buildLichessSection({
               authLink,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.blue[400],
+                color: AppColors.lichessDb,
                 decoration: TextDecoration.underline,
-                decorationColor: Colors.blue[400],
+                decorationColor: AppColors.lichessDb,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -487,11 +472,22 @@ Widget _buildNumberField({
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         ),
         SizedBox(
-          width: 50,
-          child: Text(
-            value.toString(),
+          width: 52,
+          child: TextField(
+            controller: TextEditingController(text: '$value'),
+            keyboardType: TextInputType.number,
             textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            decoration: const InputDecoration(
+              isDense: true,
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (t) {
+              final n = int.tryParse(t);
+              if (n != null) onChanged(n.clamp(min, max));
+            },
           ),
         ),
         IconButton(
@@ -502,6 +498,8 @@ Widget _buildNumberField({
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         ),
+        Text('($min–$max)',
+            style: TextStyle(fontSize: 10, color: Colors.grey[600])),
       ],
     ),
   );

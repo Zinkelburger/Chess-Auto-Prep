@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/app_state.dart';
+import 'models/engine_settings.dart';
 import 'screens/main_screen.dart';
+import 'theme/app_colors.dart';
 
 import 'services/browser_extension_server/browser_extension_server_factory.dart';
 import 'services/default_pgn_service.dart';
@@ -11,6 +13,8 @@ import 'services/default_pgn_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
+
+  await EngineSettings().loadFromPrefs();
 
   _startBrowserExtensionServer();
   DefaultPgnService.ensureExtracted();
@@ -52,18 +56,23 @@ class ChessAutoPrepApp extends StatelessWidget {
         title: 'Chess Auto Prep',
         theme: ThemeData(
           colorScheme: const ColorScheme.dark(
-            surface: Color(0xFF121212),
+            surface: AppColors.surface,
             onSurface: Colors.white,
             primary: Colors.white,
-            onPrimary: Color(0xFF121212),
-            primaryContainer: Color(0xFF2A2A2A),
+            onPrimary: AppColors.surface,
+            primaryContainer: AppColors.surfaceContainer,
             onPrimaryContainer: Colors.white,
             secondary: Color(0xFF606060),
             onSecondary: Colors.white,
+            tertiary: AppColors.expectimax,
+            onTertiary: AppColors.surface,
+            error: AppColors.danger,
+            onError: Colors.white,
           ),
-          scaffoldBackgroundColor: const Color(0xFF121212),
+          scaffoldBackgroundColor: AppColors.surface,
+          dividerColor: AppColors.divider,
           appBarTheme: const AppBarTheme(
-            backgroundColor: Color(0xFF1E1E1E),
+            backgroundColor: AppColors.surfaceElevated,
             foregroundColor: Colors.white,
           ),
           elevatedButtonTheme: ElevatedButtonThemeData(

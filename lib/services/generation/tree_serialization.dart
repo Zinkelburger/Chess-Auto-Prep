@@ -65,6 +65,10 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
     obj['maia_frequency'] = node.maiaFrequency;
   }
 
+  if (node.myEase >= 0.0) {
+    obj['my_ease'] = node.myEase;
+  }
+
   if (node.totalGames > 0) {
     obj['white_wins'] = node.whiteWins;
     obj['black_wins'] = node.blackWins;
@@ -202,6 +206,10 @@ BuildTreeNode _nodeFromJson(
 
   if (obj.containsKey('maia_frequency')) {
     node.maiaFrequency = (obj['maia_frequency'] as num).toDouble();
+  }
+
+  if (obj.containsKey('my_ease')) {
+    node.myEase = (obj['my_ease'] as num).toDouble();
   }
 
   if (obj.containsKey('white_wins') &&

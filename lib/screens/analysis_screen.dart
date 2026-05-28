@@ -534,7 +534,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         player.username,
         _engineEvals.map((e) => e.toJson()).toList(),
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AnalysisScreen] Failed to persist/load analysis: $e');
+    }
   }
 
   Future<void> _loadEngineEvals() async {
@@ -552,7 +554,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             .toList();
         _mergeEvalsIntoAnalysis();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AnalysisScreen] Failed to persist/load analysis: $e');
+    }
   }
 
   // ── Analysis ─────────────────────────────────────────────────────
@@ -728,7 +732,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         isWhite,
         analysis.toJson(),
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[AnalysisScreen] Failed to persist/load analysis: $e');
+    }
 
     return (analysis, tree);
   }

@@ -102,6 +102,10 @@ class BuildTreeNode {
   /// -1.0 means not set.
   double maiaFrequency = -1.0;
 
+  /// How natural our chosen move is at this position (Maia-derived).
+  /// Only meaningful at our-move children. -1.0 means not computed.
+  double myEase = -1.0;
+
   /// External eval skip flag inherited from parent on local DB hard miss.
   ExtEvalMode extEvalMode = ExtEvalMode.none;
 

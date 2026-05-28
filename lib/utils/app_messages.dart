@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
+
 /// All user-facing notification strings in one place for easy auditing.
 ///
 /// Messages are grouped by how they're displayed:
@@ -64,7 +66,7 @@ void showAppSnackBar(
       width: screenWidth < 500 ? screenWidth * 0.85 : 400,
       duration:
           isError ? const Duration(days: 365) : const Duration(seconds: 3),
-      backgroundColor: isError ? Colors.red[800] : null,
+      backgroundColor: isError ? AppColors.dangerSurface : null,
       showCloseIcon: isError,
       closeIconColor: Colors.white70,
     ),

@@ -165,7 +165,7 @@ bool _gamePassesThroughPosition(
       pos = pos.play(move);
       if (normalizeFen(pos.fen) == targetFen) return true;
     }
-  } catch (_) {}
+  } catch (_) { /* invalid position — will return false */ }
   return false;
 }
 
@@ -215,7 +215,7 @@ Future<List<int>> _applySliceConfig(
           final full = expandFen(input);
           Chess.fromSetup(Setup.parseFen(full));
           targetFen = normalizeFen(full);
-        } catch (_) {}
+        } catch (_) { /* invalid FEN input */ }
       } else {
         final tokens = input
             .replaceAll(RegExp(r'\d+\.+'), '')
@@ -486,7 +486,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     _focusNode.dispose();
     try {
       context.read<AppState>().removeListener(_onAppStateChanged);
-    } catch (_) {}
+    } catch (_) { /* provider may already be disposed */ }
     super.dispose();
   }
 

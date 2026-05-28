@@ -7,6 +7,27 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
+
+/// Per-move annotation rendered inline after or before the move SAN.
+class MoveAnnotation {
+  final String? suffix;
+  final Color? suffixColor;
+  final FontWeight? suffixFontWeight;
+  final IconData? prefixIcon;
+  final Color? prefixIconColor;
+  final double iconSize;
+
+  const MoveAnnotation({
+    this.suffix,
+    this.suffixColor,
+    this.suffixFontWeight,
+    this.prefixIcon,
+    this.prefixIconColor,
+    this.iconSize = 10,
+  });
+}
+
 class ClickableMoveLineWidget extends StatelessWidget {
   /// The SAN moves to render.
   final List<String> sanMoves;
@@ -21,6 +42,16 @@ class ClickableMoveLineWidget extends StatelessWidget {
   /// Called when the user clicks a move. Receives the 0-based index into
   /// [sanMoves].
   final ValueChanged<int>? onMoveTapped;
+
+  /// Called when the pointer enters a move. [anchorGlobal] is the bottom-center
+  /// of the move label (board is placed below it, not at the cursor).
+  final void Function(int index, Offset anchorGlobal)? onMoveHovered;
+
+  /// Called when the mouse leaves a move.
+  final VoidCallback? onHoverExit;
+
+  /// Per-move annotations indexed by position in [sanMoves].
+  final List<MoveAnnotation>? annotations;
 
   /// Optional prefix text (e.g. "Best: ") rendered before the moves.
   final String? label;
@@ -43,6 +74,9 @@ class ClickableMoveLineWidget extends StatelessWidget {
     required this.startPly,
     this.activeMoveIndex,
     this.onMoveTapped,
+    this.onMoveHovered,
+    this.onHoverExit,
+    this.annotations,
     this.label,
     this.startIndex = 0,
     this.maxMoves = 8,
@@ -106,39 +140,83 @@ class ClickableMoveLineWidget extends StatelessWidget {
 
       if (hasCallback) {
         final idx = i;
+        final annotation =
+            annotations != null && i < annotations!.length ? annotations![i] : null;
+
+        if (annotation?.prefixIcon != null) {
+          spans.add(WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: Icon(annotation!.prefixIcon,
+                size: annotation.iconSize,
+                color: annotation.prefixIconColor ?? Colors.grey),
+          ));
+        }
+
         spans.add(WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
-          child: MouseRegion(
-            cursor: SystemMouseCursors.click,
-            child: GestureDetector(
-              onTap: () => onMoveTapped!(idx),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                decoration: isActive
-                    ? BoxDecoration(
-                        color: Colors.teal[700],
-                        borderRadius: BorderRadius.circular(2),
-                      )
+          child: Builder(
+            builder: (anchorContext) {
+              return MouseRegion(
+                cursor: SystemMouseCursors.click,
+                onEnter: onMoveHovered != null
+                    ? (_) {
+                        final box =
+                            anchorContext.findRenderObject() as RenderBox?;
+                        if (box == null) return;
+                        final anchor = box.localToGlobal(
+                          Offset(box.size.width / 2, box.size.height),
+                        );
+                        onMoveHovered!(idx, anchor);
+                      }
                     : null,
-                child: Text(
-                  sanMoves[i],
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    color: isActive ? Colors.white : Colors.teal[300],
-                    fontFamily: 'monospace',
-                    fontWeight:
-                        isActive ? FontWeight.bold : FontWeight.normal,
-                    decoration:
-                        isActive ? null : TextDecoration.underline,
-                    decorationColor: Colors.teal[300]!.withAlpha(80),
-                    decorationStyle: TextDecorationStyle.dotted,
+                onExit: onHoverExit != null ? (_) => onHoverExit!() : null,
+                child: GestureDetector(
+                  onTap: () => onMoveTapped!(idx),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                    decoration: isActive
+                        ? BoxDecoration(
+                            color: AppColors.expectimax,
+                            borderRadius: BorderRadius.circular(2),
+                          )
+                        : null,
+                    child: Text(
+                      sanMoves[i],
+                      style: TextStyle(
+                        fontSize: fontSize,
+                        color: isActive ? Colors.white : AppColors.expectimax,
+                        fontFamily: 'monospace',
+                        fontWeight:
+                            isActive ? FontWeight.bold : FontWeight.normal,
+                        decoration:
+                            isActive ? null : TextDecoration.underline,
+                        decorationColor:
+                            AppColors.expectimax.withValues(alpha: 0.5),
+                        decorationStyle: TextDecorationStyle.dotted,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ));
+
+        if (annotation?.suffix != null) {
+          spans.add(TextSpan(
+            text: annotation!.suffix,
+            style: TextStyle(
+              fontSize: fontSize - 1,
+              color: annotation.suffixColor ?? Colors.grey[500],
+              fontWeight: annotation.suffixFontWeight,
+              fontFamily: 'monospace',
+            ),
+          ));
+        }
+
         spans.add(TextSpan(
           text: ' ',
           style: TextStyle(fontSize: fontSize, fontFamily: 'monospace'),

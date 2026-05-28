@@ -21,6 +21,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../utils/chess_utils.dart' show uciPvToSan, uciToSan;
+import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'engine/stockfish_pool.dart';
 import 'maia_factory.dart';
@@ -63,14 +64,8 @@ class MoveEval {
 
   bool get isWhiteMove => ply % 2 == 1;
 
-  int get effectiveCp {
-    if (scoreMate != null) {
-      return scoreMate! > 0
-          ? 10000 - scoreMate!.abs()
-          : -(10000 - scoreMate!.abs());
-    }
-    return scoreCp ?? 0;
-  }
+  int get effectiveCp =>
+      effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
 
   /// Format as a Lichess-compatible `[%eval]` comment value, with optional
   /// depth suffix (e.g. `1.23,18` or `#3,20`).
@@ -101,18 +96,9 @@ enum MoveClassification { normal, interesting, inaccuracy, mistake, blunder }
 /// `2 / (1 + exp(-0.00368208 * cp)) - 1`
 /// Clamps CP to [-1000, 1000], maps mate to pseudo-CP.
 double cpToWinningChance(int? cp, int? mate) {
-  double effectiveCp;
-  if (mate != null) {
-    if (mate > 0) {
-      effectiveCp = (10000 - mate.abs()).toDouble();
-    } else {
-      effectiveCp = -(10000 - mate.abs()).toDouble();
-    }
-  } else {
-    effectiveCp = (cp ?? 0).toDouble();
-  }
-  effectiveCp = effectiveCp.clamp(-1000, 1000);
-  return 2.0 / (1.0 + math.exp(-0.00368208 * effectiveCp)) - 1.0;
+  double eCp = effectiveCpFromScores(scoreCp: cp, scoreMate: mate).toDouble();
+  eCp = eCp.clamp(-1000, 1000);
+  return 2.0 / (1.0 + math.exp(-kWinProbK * eCp)) - 1.0;
 }
 
 /// Classify a move based on the change in winning chances.
@@ -382,7 +368,9 @@ class GameAnalysisController extends ChangeNotifier {
         try {
           await maia.initialize();
           maiaReady = true;
-        } catch (_) {}
+        } catch (e) {
+          if (kDebugMode) debugPrint('[GameAnalysis] MAIA init failed: $e');
+        }
       }
 
       final whiteElo = int.tryParse(parsed.headers['WhiteElo'] ?? '') ?? 2200;
@@ -459,7 +447,9 @@ class GameAnalysisController extends ChangeNotifier {
                 maiaTopProb = topP;
                 maiaTopMove = _uciMoveToSan(p.fenBefore, topUci);
               }
-            } catch (_) {}
+            } catch (e) {
+              if (kDebugMode) debugPrint('[GameAnalysis] MAIA eval failed: $e');
+            }
           }
 
           if (classification == MoveClassification.normal &&

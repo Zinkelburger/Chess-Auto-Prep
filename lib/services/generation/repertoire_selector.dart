@@ -5,6 +5,7 @@
 library;
 
 import '../../models/build_tree_node.dart';
+import '../../utils/eval_constants.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
@@ -71,6 +72,8 @@ class RepertoireSelector {
         return _pickByDbWinRate(node);
       case SelectionMode.expectimax:
         return ecaCalc.scoreOurMoveChildren(node);
+      case SelectionMode.playable:
+        return _pickByPlayability(node);
     }
   }
 
@@ -79,7 +82,7 @@ class RepertoireSelector {
   ScoredChild? _pickByEngineEval(BuildTreeNode node) {
     if (node.children.isEmpty) return null;
 
-    int bestCp = -100000;
+    int bestCp = kWorstEvalCp;
     BuildTreeNode? bestChild;
 
     for (final child in node.children) {
@@ -117,6 +120,31 @@ class RepertoireSelector {
     // Fallback: if no children have DB data, pick by engine eval
     if (bestChild == null) return _pickByEngineEval(node);
 
+    return ScoredChild(
+      child: bestChild,
+      expectimaxValue: bestChild.expectimaxValue,
+    );
+  }
+
+  /// Playable mode: blend expectimax value (60%) with myEase (40%)
+  /// to prefer moves that are both strong and natural.
+  ScoredChild? _pickByPlayability(BuildTreeNode node) {
+    if (node.children.isEmpty) return null;
+
+    double bestScore = -1.0;
+    BuildTreeNode? bestChild;
+
+    for (final child in node.children) {
+      if (!child.hasExpectimax) continue;
+      final myEase = child.myEase >= 0 ? child.myEase : 0.5;
+      final score = child.expectimaxValue * 0.6 + myEase * 0.4;
+      if (score > bestScore) {
+        bestScore = score;
+        bestChild = child;
+      }
+    }
+
+    if (bestChild == null) return _pickByEngineEval(node);
     return ScoredChild(
       child: bestChild,
       expectimaxValue: bestChild.expectimaxValue,

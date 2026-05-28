@@ -17,6 +17,7 @@ import '../../models/analysis/discovery_result.dart';
 import '../../services/engine/eval_worker.dart';
 import '../../services/engine/stockfish_connection_factory.dart';
 import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
+import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart' show formatEvalDisplay, formatNodes, uciPvToSan;
 import '../clickable_move_line.dart';
 import 'engine_settings_dialog.dart';
@@ -77,6 +78,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   @override
   void initState() {
     super.initState();
+    // Manual listener: thread-count changes dispose worker and re-run discovery.
     _settings.addListener(_onSettingsChanged);
     _externalToggleNotifier.add(_onExternalToggle);
     if (_engineEnabled && widget.isActive) {
@@ -314,11 +316,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     final evalStr =
         formatEvalDisplay(scoreCp: line.scoreCp, scoreMate: line.scoreMate);
 
-    final evalColor = line.scoreMate != null || (line.scoreCp ?? 0) > 50
-        ? Colors.green
-        : (line.scoreCp ?? 0) < -50
-            ? Colors.red
-            : Colors.grey;
+    final evalColor = AppColors.cpEval(line.effectiveCp);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
@@ -336,7 +334,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                         padding: const EdgeInsets.symmetric(horizontal: 2),
                         decoration: isFirstActive
                             ? BoxDecoration(
-                                color: Colors.teal[700],
+                                color: AppColors.pgnMainLine,
                                 borderRadius: BorderRadius.circular(3),
                               )
                             : null,

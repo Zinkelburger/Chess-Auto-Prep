@@ -6,8 +6,7 @@ import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/tactics_control_panel.dart';
 
-import '../services/analysis_service.dart';
-import '../services/engine/stockfish_pool.dart';
+import '../services/engine/engine_lifecycle.dart';
 import 'analysis_screen.dart';
 import 'pgn_viewer_screen.dart';
 import 'repertoire_screen.dart';
@@ -56,15 +55,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
     if (previousMode == AppMode.repertoire &&
         currentMode != AppMode.repertoire) {
-      _disposeEngineResources();
+      EngineLifecycle().toggleOff();
     }
 
     _lastMode = currentMode;
-  }
-
-  void _disposeEngineResources() {
-    AnalysisService().dispose();
-    StockfishPool().dispose();
   }
 
   @override
@@ -77,9 +71,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached) {
-      // App is shutting down — send 'quit' to every Stockfish process
-      // so we don't leave orphan OS processes behind.
-      _disposeEngineResources();
+      EngineLifecycle().toggleOff();
     }
   }
 

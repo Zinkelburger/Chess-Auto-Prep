@@ -21,6 +21,32 @@ String uciToSan(String fen, String uci) {
   }
 }
 
+/// Convert a UCI PV list to SAN moves, playing from [fen].
+///
+/// Returns at most [maxMoves] SAN strings. The first move in [fullPv] IS
+/// included (unlike [formatContinuation] which skips it).
+List<String> pvToSanList(String fen, List<String> fullPv, {int maxMoves = 10}) {
+  if (fullPv.isEmpty) return const [];
+  try {
+    Position pos = Chess.fromSetup(Setup.parseFen(fen));
+    final result = <String>[];
+    for (int i = 0; i < fullPv.length && result.length < maxMoves; i++) {
+      final move = Move.parse(fullPv[i]);
+      if (move == null) break;
+      try {
+        final (newPos, san) = pos.makeSan(move);
+        result.add(san);
+        pos = newPos;
+      } catch (_) {
+        break;
+      }
+    }
+    return result;
+  } catch (_) {
+    return const [];
+  }
+}
+
 /// Format a PV continuation (skip the first move) as SAN text.
 ///
 /// Returns at most [maxMoves] SAN tokens joined by spaces.
@@ -168,4 +194,27 @@ String formatNps(int nps) {
 String formatRam(int mb) {
   if (mb >= 1024) return '${(mb / 1024).toStringAsFixed(1)} GB';
   return '$mb MB';
+}
+
+/// Compute the FEN after playing [sanMoves] from [startFen] up to [upToIndex].
+///
+/// Returns [startFen] if no moves can be parsed.
+String fenAfterMoves(String startFen, List<String> sanMoves, int upToIndex) {
+  try {
+    Position pos = Chess.fromSetup(Setup.parseFen(startFen));
+    for (int i = 0; i <= upToIndex && i < sanMoves.length; i++) {
+      final move = pos.parseSan(sanMoves[i]);
+      if (move == null) break;
+      pos = pos.play(move);
+    }
+    return pos.fen;
+  } catch (_) {
+    return startFen;
+  }
+}
+
+/// From/to squares for highlighting the last move on a mini board.
+Set<String> uciHighlightSquares(String uci) {
+  if (uci.length < 4) return const {};
+  return {uci.substring(0, 2), uci.substring(2, 4)};
 }
