@@ -1,4 +1,4 @@
-/// Unified Engine Pane - Single table combining Stockfish, Maia, Difficulty, and Probability
+/// Unified Engine Pane - Single table combining Stockfish, Maia, and Probability
 library;
 
 import 'dart:math' as math;
@@ -9,9 +9,14 @@ import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/maia_factory.dart';
 import '../../services/probability_service.dart';
+import '../../services/board_preview_controller.dart';
+import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart';
+import '../../utils/eval_constants.dart';
 import 'engine_settings_dialog.dart';
 import 'engine_pane_footer.dart';
+import 'floating_board_preview.dart';
+import '../clickable_move_line.dart';
 import '../lichess_db_info_icon.dart';
 
 /// Lightweight stopwatch helper for timestamped performance logging.
@@ -36,9 +41,6 @@ class _MergedMove {
   List<String> fullPv = []; // Full PV from Stockfish (including this move)
   double? maiaProb; // 0.0 – 1.0
   double? dbProb; // 0 – 100 (percentage)
-  double? moveEase; // 0.0 – 1.0 (ease of resulting position)
-  String? topResponseUci; // Most likely opponent reply (UCI)
-  double? topResponseProb; // Probability of that reply (0–1)
   int? stockfishRank; // 1-based rank from Stockfish MultiPV
 
   _MergedMove({required this.uci});
@@ -46,14 +48,8 @@ class _MergedMove {
   String get evalString =>
       formatEvalDisplay(scoreCp: stockfishCp, scoreMate: stockfishMate);
 
-  int get effectiveCp {
-    if (stockfishMate != null) {
-      return stockfishMate! > 0
-          ? 10000 - stockfishMate!.abs()
-          : -(10000 - stockfishMate!.abs());
-    }
-    return stockfishCp ?? 0;
-  }
+  int get effectiveCp =>
+      effectiveCpFromScores(scoreCp: stockfishCp, scoreMate: stockfishMate);
 
   bool get hasStockfish => stockfishCp != null || stockfishMate != null;
 }
@@ -63,9 +59,16 @@ class UnifiedEnginePane extends StatefulWidget {
   final bool isActive;
   final bool? isUserTurn;
   final Function(String uciMove)? onMoveSelected;
+  final void Function(List<String> sanMoves, int clickedIndex)? onLineMoveTapped;
   final List<String> currentMoveSequence;
   final bool isWhiteRepertoire;
   final VoidCallback? onSetRoot;
+  final BoardPreviewController? boardPreview;
+
+  /// Hides the inline settings bar; use [onOpenSettings] from parent instead.
+  final bool compact;
+
+  final VoidCallback? onOpenSettings;
 
   const UnifiedEnginePane({
     super.key,
@@ -73,9 +76,13 @@ class UnifiedEnginePane extends StatefulWidget {
     this.isActive = true,
     this.isUserTurn,
     this.onMoveSelected,
+    this.onLineMoveTapped,
     this.currentMoveSequence = const [],
     this.isWhiteRepertoire = true,
     this.onSetRoot,
+    this.boardPreview,
+    this.compact = false,
+    this.onOpenSettings,
   });
 
   @override
@@ -106,6 +113,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   final EngineSettings _settings = EngineSettings();
   final AnalysisService _analysis = AnalysisService();
   final ProbabilityService _probabilityService = ProbabilityService();
+  final GlobalKey _previewStackKey = GlobalKey();
 
   // ── Per-FEN analysis cache (static — survives widget rebuilds) ──
   static final Map<String, _PositionSnapshot> _analysisCache = {};
@@ -126,16 +134,21 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   /// User-controlled on/off switch (persists across rebuilds via static).
   static bool _engineEnabled = true;
 
+  int _analysisConfigRevision = 0;
+
   /// Whether analysis should run right now.
   bool get _isActive => widget.isActive && _engineEnabled;
 
   @override
   void initState() {
     super.initState();
+    _analysisConfigRevision = _settings.analysisConfigRevision;
+    // Manual listener: analysisConfigRevision changes trigger re-analysis, not just rebuild.
     _settings.addListener(_onSettingsChanged);
     _analysis.poolStatus.addListener(_onPoolStatusChanged);
 
     if (_isActive) {
+      _analysis.beginEnginePaneAnalysis(widget.fen);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _startInitialAnalysis();
       });
@@ -176,11 +189,16 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   }
 
   void _onSettingsChanged() {
-    _analysisCache.remove(widget.fen);
-    setState(() {});
-    if (_isActive) {
-      _runAnalysis();
+    final revision = _settings.analysisConfigRevision;
+    final configChanged = revision != _analysisConfigRevision;
+    if (configChanged) {
+      _analysisConfigRevision = revision;
+      _analysisCache.remove(widget.fen);
+      if (_isActive) {
+        _runAnalysis();
+      }
     }
+    if (mounted) setState(() {});
   }
 
   void _runAnalysis() {
@@ -190,6 +208,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     }
 
     _trySaveCurrentToCache();
+    _analysis.beginEnginePaneAnalysis(widget.fen);
     _initialAnalysisStarted = false;
     _startInitialAnalysis();
   }
@@ -219,67 +238,77 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
     final useStockfish = _settings.showStockfish;
     final useMaia = _settings.showMaia &&
+        _settings.fetchMaiaForOpponent &&
         MaiaFactory.isAvailable &&
         MaiaFactory.instance != null;
-    final useDb = _settings.showProbability;
+    final useDb =
+        _settings.showProbability && _settings.fetchLichessForOpponent;
 
     _perfLog('Pipeline START — SF=${useStockfish ? "ON" : "OFF"}, '
         'Maia=${useMaia ? "ON" : "OFF"}, DB=${useDb ? "ON" : "OFF"}');
 
-    // ── Fire all sources in parallel ──
-    final discoveryFuture = useStockfish
-        ? _analysis.runDiscovery(
-            fen: widget.fen,
-            depth: _settings.depth,
-            multiPv: _settings.multiPv,
-          )
-        : Future.value(const DiscoveryResult());
+    try {
+      // ── Fire all sources in parallel ──
+      final discoveryFuture = useStockfish
+          ? _analysis.runDiscovery(
+              fen: widget.fen,
+              depth: _settings.depth,
+              multiPv: _settings.multiPv,
+            )
+          : Future.value(const DiscoveryResult());
 
-    final maiaFuture =
-        useMaia ? _runMaiaAnalysis() : Future.value(<String, double>{});
+      final maiaFuture =
+          useMaia ? _runMaiaAnalysis() : Future.value(<String, double>{});
 
-    final dbFuture = useDb ? _fetchDbData() : Future.value(null);
+      final dbFuture = useDb ? _fetchDbData() : Future.value(null);
 
-    // ── Await all ──
-    final results = await Future.wait<Object?>([
-      discoveryFuture,
-      maiaFuture,
-      dbFuture,
-    ]);
+      // ── Await all ──
+      final results = await Future.wait<Object?>([
+        discoveryFuture,
+        maiaFuture,
+        dbFuture,
+      ]);
 
-    if (!mounted || _analysisGeneration != myGen) return;
+      if (!mounted || _analysisGeneration != myGen) {
+        _analysis.endEnginePaneAnalysis(widget.fen);
+        return;
+      }
 
-    final discovery = results[0] as DiscoveryResult;
-    _maiaProbs = results[1] as Map<String, double>;
-    final dbData = _probabilityService.currentPosition.value;
+      final discovery = results[0] as DiscoveryResult;
+      _maiaProbs = results[1] as Map<String, double>;
+      final dbData = _probabilityService.currentPosition.value;
 
-    _perfLog('All sources complete');
+      _perfLog('All sources complete');
 
-    // ── Filter candidates ──
-    final sfUcis = discovery.lines
-        .map((l) => l.moveUci)
-        .where((u) => u.isNotEmpty)
-        .toList();
+      // ── Filter candidates ──
+      final sfUcis = discovery.lines
+          .map((l) => l.moveUci)
+          .where((u) => u.isNotEmpty)
+          .toList();
 
-    final candidates = _filterCandidates(sfUcis, _maiaProbs!, dbData);
-    _selectedMoveUcis = candidates;
+      final candidates = _filterCandidates(sfUcis, _maiaProbs!, dbData);
+      _selectedMoveUcis = candidates;
 
-    _perfLog('Filtered ${candidates.length} candidates '
-        '(${sfUcis.length} SF + '
-        '${candidates.length - sfUcis.length} Maia/DB)');
+      _perfLog('Filtered ${candidates.length} candidates '
+          '(${sfUcis.length} SF + '
+          '${candidates.length - sfUcis.length} Maia/DB)');
 
-    // ── Fire-and-forget: cumulative probability ──
-    if (useDb) _calculateCumulativeProbability();
+      // ── Fire-and-forget: cumulative probability ──
+      if (useDb) _calculateCumulativeProbability();
 
-    // ── Start evaluation phase ──
-    _analysis.startEvaluation(
-      baseFen: widget.fen,
-      moveUcis: candidates,
-      evalDepth: _settings.depth,
-      easeDepth: _settings.easeDepth,
-    );
+      // ── Start evaluation phase ──
+      _analysis.startEvaluation(
+        baseFen: widget.fen,
+        moveUcis: candidates,
+        evalDepth: _settings.depth,
+      );
 
-    if (mounted) setState(() {});
+      if (mounted) setState(() {});
+    } catch (e) {
+      _analysis.endEnginePaneAnalysis(widget.fen);
+      if (kDebugMode) print('[Engine] Pipeline FAILED — $e');
+      rethrow;
+    }
   }
 
   /// Filter candidates: SF moves always included.
@@ -356,7 +385,12 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   Future<void> _fetchDbData() async {
     _perfLog('DB fetch START');
     try {
-      await _probabilityService.fetchProbabilities(widget.fen);
+      await _probabilityService.fetchProbabilities(
+        widget.fen,
+        speeds: _settings.explorerSpeeds,
+        ratings: _settings.explorerRatings,
+        useMasters: _settings.explorerUseMasters,
+      );
       _perfLog('DB fetch DONE — '
           '${_probabilityService.currentPosition.value?.moves.length ?? 0} moves');
     } catch (e) {
@@ -426,21 +460,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   void _onPoolStatusChanged() {
     final ps = _analysis.poolStatus.value;
     if (ps.isComplete) {
-      final res = _analysis.results.value;
-      final withDiff = res.values.where((r) => r.moveEase != null).length;
-      _perfLog('Evaluation COMPLETE — ${res.length} evals, '
-          '$withDiff with difficulty — FULL PIPELINE DONE');
-      if (kDebugMode) {
-        for (final e in res.entries) {
-          final r = e.value;
-          final diffStr = r.moveEase != null
-              ? (1.0 - r.moveEase!).toStringAsFixed(3)
-              : 'null';
-          print('[Engine]   ${uciToSan(widget.fen, e.key)}: '
-              'cp=${r.scoreCp}, mate=${r.scoreMate}, '
-              'difficulty=$diffStr');
-        }
-      }
+      _analysis.endEnginePaneAnalysis(_currentAnalysisFen);
+      _perfLog('Evaluation COMPLETE — ${_analysis.results.value.length} evals');
       _trySaveCurrentToCache();
     }
   }
@@ -462,8 +483,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _buildSettingsBar(),
-        const Divider(height: 1),
+        if (!widget.compact) ...[
+          _buildSettingsBar(),
+          const Divider(height: 1),
+        ],
         if (_engineEnabled) ...[
           Expanded(child: _buildUnifiedMoveTable()),
           EnginePaneFooter(
@@ -561,15 +584,22 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           IconButton(
             icon: const Icon(Icons.settings, size: 18),
             tooltip: 'Engine Settings',
-            onPressed: () => showEngineSettingsDialog(
-              context: context,
-              settings: _settings,
-              currentProbabilityStartMoves: _settings.probabilityStartMoves,
-              onProbabilityStartMovesChanged: (newVal) {
-                _settings.probabilityStartMoves = newVal;
-                _calculateCumulativeProbability();
-              },
-            ),
+            onPressed: () {
+              if (widget.onOpenSettings != null) {
+                widget.onOpenSettings!();
+              } else {
+                showEngineSettingsDialog(
+                  context: context,
+                  settings: _settings,
+                  currentProbabilityStartMoves:
+                      _settings.probabilityStartMoves,
+                  onProbabilityStartMovesChanged: (newVal) {
+                    _settings.probabilityStartMoves = newVal;
+                    _calculateCumulativeProbability();
+                  },
+                );
+              }
+            },
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
@@ -583,6 +613,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   Widget _buildUnifiedMoveTable() {
     return ListenableBuilder(
       listenable: Listenable.merge([
+        _settings,
         _analysis.discoveryResult,
         _analysis.results,
         _analysis.poolStatus,
@@ -591,7 +622,11 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       builder: (context, _) {
         final moves = _mergeMoves();
 
-        return ListView(
+        return Stack(
+          key: _previewStackKey,
+          clipBehavior: Clip.none,
+          children: [
+            ListView(
           padding: const EdgeInsets.only(top: 4, bottom: 4),
           children: [
             _buildTableHeader(),
@@ -618,19 +653,89 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
             else
               ...moves.map(_buildMoveRow),
           ],
+        ),
+            if (widget.boardPreview != null)
+              FloatingBoardPreview(
+                stackKey: _previewStackKey,
+                controller: widget.boardPreview!,
+                flipped: !widget.isWhiteRepertoire,
+                ownerTag: _previewStackKey,
+              ),
+          ],
         );
       },
     );
   }
 
-  Widget _buildTableHeader() {
-    final headerStyle = TextStyle(
+  static const _colHeaderTip =
+      'Tap to dim this column; tap again to restore full color.';
+
+  Widget _buildColumnHeader({
+    required String columnId,
+    required String label,
+    required TextAlign textAlign,
+    double? width,
+    Widget? leading,
+    String? tooltipExtra,
+  }) {
+    final muted = _settings.isAnalysisColumnMuted(columnId);
+    final style = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: Colors.grey[500],
+      color: muted ? AppColors.onSurfaceDim : Colors.grey[400],
       letterSpacing: 0.5,
+      decoration: muted ? TextDecoration.lineThrough : null,
+      decorationColor: AppColors.onSurfaceDim,
     );
 
+    final child = Row(
+      mainAxisAlignment: textAlign == TextAlign.right
+          ? MainAxisAlignment.end
+          : MainAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (leading != null) ...[leading, const SizedBox(width: 2)],
+        Text(
+          label,
+          style: style,
+          textAlign: textAlign,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+
+    final header = Tooltip(
+      message: tooltipExtra != null
+          ? '$tooltipExtra\n$_colHeaderTip'
+          : _colHeaderTip,
+      child: Material(
+        color: muted
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(4),
+        child: InkWell(
+          onTap: () {
+            final id = columnId;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _settings.toggleAnalysisColumnMuted(id);
+            });
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+            child: child,
+          ),
+        ),
+      ),
+    );
+
+    if (width != null) {
+      return SizedBox(width: width, child: header);
+    }
+    return Expanded(child: header);
+  }
+
+  Widget _buildTableHeader() {
     final dbData = _probabilityService.currentPosition.value;
     final gameCountStr =
         dbData != null ? ' (${formatCount(dbData.totalGames)})' : '';
@@ -641,51 +746,46 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         children: [
           SizedBox(
             width: 52,
-            child: Text('MOVE', style: headerStyle),
+            child: Text(
+              'MOVE',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[500],
+                letterSpacing: 0.5,
+              ),
+            ),
           ),
-          SizedBox(
+          _buildColumnHeader(
+            columnId: EngineSettings.colEval,
+            label: 'EVAL',
+            textAlign: TextAlign.center,
             width: 58,
-            child:
-                Text('EVAL', style: headerStyle, textAlign: TextAlign.center),
+            tooltipExtra: 'Stockfish evaluation',
           ),
           const SizedBox(width: 8),
-          Expanded(
-            child: Text('LINE', style: headerStyle),
+          _buildColumnHeader(
+            columnId: EngineSettings.colLine,
+            label: 'LINE',
+            textAlign: TextAlign.left,
+            tooltipExtra: 'Principal variation continuation',
           ),
-          if (_settings.showProbability)
-            SizedBox(
+          if (_settings.showProbability && _settings.fetchLichessForOpponent)
+            _buildColumnHeader(
+              columnId: EngineSettings.colDb,
+              label: 'DB',
+              textAlign: TextAlign.right,
               width: 60,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const LichessDbInfoIcon(size: 12),
-                  Tooltip(
-                    message: 'Database probability$gameCountStr',
-                    child: Text('DB',
-                        style: headerStyle, textAlign: TextAlign.right),
-                  ),
-                ],
-              ),
+              leading: const LichessDbInfoIcon(size: 12),
+              tooltipExtra: 'Database probability$gameCountStr',
             ),
-          if (_settings.showMaia)
-            SizedBox(
+          if (_settings.showMaia && _settings.fetchMaiaForOpponent)
+            _buildColumnHeader(
+              columnId: EngineSettings.colMaia,
+              label: 'MAIA',
+              textAlign: TextAlign.right,
               width: 46,
-              child: Tooltip(
-                message: 'Maia ${_settings.maiaElo} prediction',
-                child: Text('MAIA',
-                    style: headerStyle, textAlign: TextAlign.right),
-              ),
-            ),
-          if (_settings.showDifficulty)
-            SizedBox(
-              width: 76,
-              child: Tooltip(
-                message: 'How hard the next move is after playing this (0–5)\n'
-                    'Higher = opponent struggles to find good replies',
-                child: Text('DIFFICULTY',
-                    style: headerStyle, textAlign: TextAlign.right),
-              ),
+              tooltipExtra: 'Maia ${_settings.maiaElo} prediction',
             ),
         ],
       ),
@@ -693,42 +793,16 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   }
 
   Widget _buildMoveRow(_MergedMove move) {
+    final evalMuted =
+        _settings.isAnalysisColumnMuted(EngineSettings.colEval);
+    final lineMuted =
+        _settings.isAnalysisColumnMuted(EngineSettings.colLine);
+    final dbMuted = _settings.isAnalysisColumnMuted(EngineSettings.colDb);
+    final maiaMuted = _settings.isAnalysisColumnMuted(EngineSettings.colMaia);
+
     final evalColor = move.hasStockfish
-        ? (move.effectiveCp > 50
-            ? Colors.green
-            : (move.effectiveCp < -50 ? Colors.red : Colors.grey))
-        : Colors.grey[700]!;
-
-    final continuation = formatContinuation(widget.fen, move.fullPv);
-
-    final displayDifficulty = move.moveEase != null
-        ? (1.0 - move.moveEase!) * kEaseDisplayScale
-        : null;
-
-    final fenParts = widget.fen.split(' ');
-    final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
-    final resultingSide = isWhiteToMove ? "Black's" : "White's";
-    final diffSingular = displayDifficulty != null && displayDifficulty < 0.01;
-    final diffDesc = displayDifficulty != null
-        ? diffSingular
-            ? 'move is not difficult'
-            : displayDifficulty < 1.5
-                ? 'moves are not very difficult'
-                : displayDifficulty < 3.0
-                    ? 'moves are moderately difficult'
-                    : 'moves are very difficult'
-        : null;
-    String diffExtra = '';
-    if (displayDifficulty != null && move.topResponseUci != null) {
-      final resultingFen = playUciMove(widget.fen, move.uci);
-      final topSan = resultingFen != null
-          ? uciToSan(resultingFen, move.topResponseUci!)
-          : move.topResponseUci!;
-      final pctStr = move.topResponseProb != null
-          ? ', ${(move.topResponseProb! * 100).toStringAsFixed(0)}% chance'
-          : '';
-      diffExtra = '\n$topSan$pctStr';
-    }
+        ? AppColors.cpEval(move.effectiveCp, muted: evalMuted)
+        : AppColors.onSurfaceDim;
 
     return InkWell(
       onTap: () => widget.onMoveSelected?.call(move.uci),
@@ -736,23 +810,44 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         child: Row(
           children: [
-            SizedBox(
-              width: 52,
-              child: Text(
-                move.san,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
-                  fontSize: 15,
-                ),
-              ),
+            Builder(
+              builder: (anchorContext) {
+                return MouseRegion(
+                  onEnter: widget.boardPreview != null
+                      ? (_) {
+                          final box =
+                              anchorContext.findRenderObject() as RenderBox?;
+                          if (box == null) return;
+                          final anchor = box.localToGlobal(
+                            Offset(box.size.width / 2, box.size.height),
+                          );
+                          _previewEngineMove(move, anchor);
+                        }
+                      : null,
+                  onExit: widget.boardPreview != null
+                      ? (_) => widget.boardPreview!.clearPreview()
+                      : null,
+                  child: SizedBox(
+                    width: 52,
+                    child: Text(
+                      move.san,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
             Container(
               width: 58,
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               decoration: BoxDecoration(
                 color: move.hasStockfish
-                    ? evalColor.withAlpha(25)
+                    ? AppColors.cpEvalBg(move.effectiveCp, muted: evalMuted)
+                        .withValues(alpha: evalMuted ? 0.5 : 0.85)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -769,19 +864,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                continuation,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey[500],
-                  fontFamily: 'monospace',
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: _buildContinuationWidget(move, muted: lineMuted),
             ),
             const SizedBox(width: 6),
-            if (_settings.showProbability)
+            if (_settings.showProbability && _settings.fetchLichessForOpponent)
               SizedBox(
                 width: 46,
                 child: Text(
@@ -792,13 +878,13 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                   style: TextStyle(
                     fontSize: 14,
                     color: move.dbProb != null
-                        ? Colors.cyan[300]
-                        : Colors.grey[700],
+                        ? AppColors.lichessDbColor(muted: dbMuted)
+                        : AppColors.onSurfaceDim,
                     fontFamily: 'monospace',
                   ),
                 ),
               ),
-            if (_settings.showMaia)
+            if (_settings.showMaia && _settings.fetchMaiaForOpponent)
               SizedBox(
                 width: 46,
                 child: Text(
@@ -809,34 +895,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                   style: TextStyle(
                     fontSize: 14,
                     color: move.maiaProb != null
-                        ? Colors.purple[300]
-                        : Colors.grey[700],
+                        ? AppColors.maiaColor(muted: maiaMuted)
+                        : AppColors.onSurfaceDim,
                     fontFamily: 'monospace',
-                  ),
-                ),
-              ),
-            if (_settings.showDifficulty)
-              SizedBox(
-                width: 76,
-                child: Tooltip(
-                  message: diffDesc != null
-                      ? "$resultingSide $diffDesc (${displayDifficulty!.toStringAsFixed(1)}/5)$diffExtra"
-                      : '',
-                  child: Text(
-                    displayDifficulty != null
-                        ? displayDifficulty.toStringAsFixed(1)
-                        : '--',
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: displayDifficulty != null
-                          ? FontWeight.w500
-                          : FontWeight.normal,
-                      color: displayDifficulty != null
-                          ? Colors.amber[300]
-                          : Colors.grey[700],
-                      fontFamily: 'monospace',
-                    ),
                   ),
                 ),
               ),
@@ -846,7 +907,80 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     );
   }
 
+  Widget _buildContinuationWidget(_MergedMove move, {bool muted = false}) {
+    final lineColor =
+        muted ? AppColors.onSurfaceDim : Colors.grey[500];
+    if (move.fullPv.length <= 1 || widget.boardPreview == null) {
+      final continuation = formatContinuation(widget.fen, move.fullPv);
+      return Text(
+        continuation,
+        style: TextStyle(
+          fontSize: 13,
+          color: lineColor,
+          fontFamily: 'monospace',
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+
+    final afterFirstMove = playUciMove(widget.fen, move.uci);
+    if (afterFirstMove == null) return const SizedBox.shrink();
+
+    final continuationUci = move.fullPv.sublist(1);
+    final sanMoves = pvToSanList(afterFirstMove, continuationUci);
+    if (sanMoves.isEmpty) return const SizedBox.shrink();
+
+    final fenParts = afterFirstMove.split(' ');
+    final fullMoveNumber = int.tryParse(fenParts.length >= 6 ? fenParts[5] : '1') ?? 1;
+    final isBlack = fenParts.length >= 2 && fenParts[1] == 'b';
+    final startPly = (fullMoveNumber - 1) * 2 + (isBlack ? 1 : 0);
+
+    return ClickableMoveLineWidget(
+      sanMoves: sanMoves,
+      startPly: startPly,
+      maxMoves: 8,
+      fontSize: 13,
+      onMoveTapped: (idx) {
+        if (widget.onLineMoveTapped != null) {
+          final fullLine = [move.san, ...sanMoves];
+          widget.onLineMoveTapped!(fullLine, idx + 1);
+          widget.boardPreview?.clearPreview();
+        } else if (idx < continuationUci.length) {
+          widget.onMoveSelected?.call(move.uci);
+        }
+      },
+      onMoveHovered: (idx, anchor) {
+        final fen = fenAfterMoves(afterFirstMove, sanMoves, idx);
+        final uci =
+            idx < continuationUci.length ? continuationUci[idx] : null;
+        widget.boardPreview!.setPreview(
+          fen,
+          moves: sanMoves.sublist(0, idx + 1),
+          target: BoardPreviewTarget.floating,
+          lastMoveUci: uci,
+          anchorGlobal: anchor,
+          ownerTag: _previewStackKey,
+        );
+      },
+      onHoverExit: () => widget.boardPreview!.clearPreview(),
+    );
+  }
+
   // ─── Merge Logic ────────────────────────────────────────────────────────
+
+  void _previewEngineMove(_MergedMove move, Offset anchorGlobal) {
+    final fen = playUciMove(widget.fen, move.uci);
+    if (fen == null) return;
+    widget.boardPreview!.setPreview(
+      fen,
+      moves: [move.san],
+      target: BoardPreviewTarget.floating,
+      lastMoveUci: move.uci,
+      anchorGlobal: anchorGlobal,
+      ownerTag: _previewStackKey,
+    );
+  }
 
   List<_MergedMove> _mergeMoves() {
     final byUci = <String, _MergedMove>{};
@@ -888,11 +1022,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           m.stockfishCp = poolResult.scoreCp;
           m.stockfishMate = poolResult.scoreMate;
           if (poolResult.pv.isNotEmpty) m.fullPv = poolResult.pv;
-        }
-        if (poolResult.moveEase != null) {
-          m.moveEase = poolResult.moveEase;
-          m.topResponseUci = poolResult.topResponseUci;
-          m.topResponseProb = poolResult.topResponseProb;
         }
       }
 

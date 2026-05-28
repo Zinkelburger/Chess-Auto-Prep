@@ -13,6 +13,7 @@ import 'dart:math' as math;
 import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show playUciMove;
 import '../utils/ease_utils.dart';
+import '../utils/eval_constants.dart';
 import 'engine/eval_worker.dart';
 import 'maia_factory.dart';
 
@@ -72,7 +73,7 @@ class EaseCalculator {
 
     final evalResults = await evaluateBatch(childFens, evalDepth);
 
-    int bestForMover = -100000;
+    int bestForMover = kWorstEvalCp;
     final scores = <int>[];
     for (final eval in evalResults) {
       final forMover = -eval.effectiveCp;

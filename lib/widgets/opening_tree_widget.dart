@@ -2,15 +2,16 @@
 /// Similar to openingtree.com's interface
 
 import 'package:flutter/material.dart';
+
+import '../theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
 import '../services/coverage_service.dart';
 import '../utils/app_messages.dart';
-import '../utils/fen_utils.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
-
-enum _CoverageStatus { covered, tooShallow, tooDeep, unaccounted }
+import 'opening_tree/coverage_annotation.dart';
+import 'opening_tree/opening_tree_move_row.dart';
 
 class OpeningTreeWidget extends StatefulWidget {
   final OpeningTree tree;
@@ -221,7 +222,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
-            color: Colors.orange[900],
+            color: AppColors.warningSurface,
             child: const Text(
               'Current position is out of book',
               style: TextStyle(fontSize: 11, color: Colors.white),
@@ -247,7 +248,19 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                   itemCount: sortedChildren.length,
                   itemBuilder: (context, index) {
                     final child = sortedChildren[index];
-                    return _buildMoveItem(child);
+                    return OpeningTreeMoveRow(
+                      node: child,
+                      parentGamesPlayed: currentNode.gamesPlayed,
+                      coverageStatus: resolveCoverageStatus(
+                        node: child,
+                        tree: widget.tree,
+                        coverageResult: widget.coverageResult,
+                      ),
+                      onTap: () {
+                        widget.onMoveSelected?.call(child.move);
+                        widget.onPositionSelected?.call(child.fen);
+                      },
+                    );
                   },
                 ),
         ),
@@ -409,270 +422,6 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Determine coverage status for a child node based on its FEN.
-  _CoverageStatus? _coverageStatusForNode(OpeningTreeNode node) {
-    final result = widget.coverageResult;
-    if (result == null) return null;
-
-    final normalized = normalizeFen(node.fen);
-
-    // Check if any leaf matches this node's FEN
-    for (final leaf in result.tooShallowLeaves) {
-      if (_leafMatchesFen(leaf, normalized)) {
-        return _CoverageStatus.tooShallow;
-      }
-    }
-    for (final leaf in result.tooDeepLeaves) {
-      if (_leafMatchesFen(leaf, normalized)) {
-        return _CoverageStatus.tooDeep;
-      }
-    }
-
-    // Check for unaccounted moves at this position
-    for (final um in result.unaccountedMoves) {
-      // The parent of the unaccounted move leads to this node
-      if (_unaccountedAtFen(um, normalized)) {
-        return _CoverageStatus.unaccounted;
-      }
-    }
-
-    for (final leaf in result.coveredLeaves) {
-      if (_leafMatchesFen(leaf, normalized)) {
-        return _CoverageStatus.covered;
-      }
-    }
-
-    return null;
-  }
-
-  bool _leafMatchesFen(LeafNode leaf, String normalizedFen) {
-    return normalizeFen(leaf.fen) == normalizedFen;
-  }
-
-  bool _unaccountedAtFen(UnaccountedMove um, String normalizedFen) {
-    // Rebuild the FEN for parentMoves + move (the destination position)
-    // But that's expensive. Instead check if the node's FEN is the parent position.
-    // We can't easily rebuild here, so we use a simpler heuristic:
-    // match via the tree's fen-to-node index.
-    return false; // Handled at the parent level below.
-  }
-
-  /// Check if there are unaccounted moves FROM this position (opponent responses
-  /// that our repertoire doesn't cover).
-  bool _hasUnaccountedFrom(OpeningTreeNode node) {
-    final result = widget.coverageResult;
-    if (result == null) return false;
-    final normalized = normalizeFen(node.fen);
-
-    // Check all positions in the tree that match this FEN
-    for (final um in result.unaccountedMoves) {
-      // Rebuild parent fen would be expensive; instead use allLeaves + tree
-      // The unaccounted parent position can be found via the tree's fenToNodes
-      final parentNodes = widget.tree.fenToNodes[normalized];
-      if (parentNodes != null && parentNodes.isNotEmpty) {
-        // Check if this node has child moves that don't include the unaccounted move
-        final repertoireMoves = node.children.keys.toSet();
-        if (!repertoireMoves.contains(um.move)) {
-          // Verify the unaccounted move's parent path matches
-          final nodePath = node.getMovePath();
-          if (_pathMatchesUnaccounted(nodePath, um.parentMoves)) {
-            return true;
-          }
-        }
-      }
-    }
-    return false;
-  }
-
-  bool _pathMatchesUnaccounted(
-      List<String> nodePath, List<String> parentMoves) {
-    if (nodePath.length != parentMoves.length) return false;
-    for (int i = 0; i < nodePath.length; i++) {
-      if (nodePath[i] != parentMoves[i]) return false;
-    }
-    return true;
-  }
-
-  Widget _buildCoverageIndicator(_CoverageStatus status) {
-    Color color;
-    switch (status) {
-      case _CoverageStatus.covered:
-        color = const Color(0xFF4CAF50);
-      case _CoverageStatus.tooShallow:
-        color = const Color(0xFFFFA726);
-      case _CoverageStatus.tooDeep:
-        color = const Color(0xFF42A5F5);
-      case _CoverageStatus.unaccounted:
-        color = const Color(0xFFEF5350);
-    }
-
-    return Container(
-      width: 8,
-      height: 8,
-      margin: const EdgeInsets.only(right: 6),
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-
-  Widget _buildMoveItem(OpeningTreeNode node) {
-    final totalGames = widget.tree.currentNode.gamesPlayed;
-    final playedPercent =
-        totalGames > 0 ? (node.gamesPlayed / totalGames * 100) : 0.0;
-
-    // Color based on win rate
-    Color winRateColor;
-    if (node.winRate >= 0.55) {
-      winRateColor = Colors.green;
-    } else if (node.winRate >= 0.45) {
-      winRateColor = Colors.orange;
-    } else {
-      winRateColor = Colors.red;
-    }
-
-    // Coverage indicator
-    _CoverageStatus? covStatus = _coverageStatusForNode(node);
-    if (covStatus == null && _hasUnaccountedFrom(node)) {
-      covStatus = _CoverageStatus.unaccounted;
-    }
-
-    return InkWell(
-      onTap: () {
-        widget.onMoveSelected?.call(node.move);
-        widget.onPositionSelected?.call(node.fen);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: Colors.grey[800]!,
-              width: 0.5,
-            ),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Move and stats row
-            Row(
-              children: [
-                if (covStatus != null) _buildCoverageIndicator(covStatus),
-                // Move notation
-                SizedBox(
-                  width: 60,
-                  child: Text(
-                    node.move,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-
-                // Games played
-                Expanded(
-                  child: Text(
-                    '${node.gamesPlayed} games (${playedPercent.toStringAsFixed(1)}%)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[400],
-                    ),
-                  ),
-                ),
-
-                // Win rate
-                Text(
-                  '${node.winRatePercent.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: winRateColor,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-
-            // Visual stats bar
-            Row(
-              children: [
-                // W-D-L text
-                SizedBox(
-                  width: 100,
-                  child: Text(
-                    '${node.wins}-${node.draws}-${node.losses}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[500],
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-
-                // Win rate bar
-                Expanded(
-                  child: _buildWinRateBar(node),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Build a visual win rate bar similar to openingtree.com
-  Widget _buildWinRateBar(OpeningTreeNode node) {
-    final winPercent =
-        node.gamesPlayed > 0 ? node.wins / node.gamesPlayed : 0.0;
-    final drawPercent =
-        node.gamesPlayed > 0 ? node.draws / node.gamesPlayed : 0.0;
-    final lossPercent =
-        node.gamesPlayed > 0 ? node.losses / node.gamesPlayed : 0.0;
-
-    return Container(
-      height: 16,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: Colors.grey[700]!, width: 1),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(1),
-        child: Row(
-          children: [
-            // Win section (green)
-            if (winPercent > 0)
-              Expanded(
-                flex: (winPercent * 100).round(),
-                child: Container(
-                  color: Colors.green[600],
-                ),
-              ),
-            // Draw section (grey)
-            if (drawPercent > 0)
-              Expanded(
-                flex: (drawPercent * 100).round(),
-                child: Container(
-                  color: Colors.grey[600],
-                ),
-              ),
-            // Loss section (red)
-            if (lossPercent > 0)
-              Expanded(
-                flex: (lossPercent * 100).round(),
-                child: Container(
-                  color: Colors.red[600],
-                ),
-              ),
           ],
         ),
       ),

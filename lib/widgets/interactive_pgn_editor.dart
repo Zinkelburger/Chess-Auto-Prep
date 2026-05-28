@@ -5,6 +5,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
@@ -883,9 +885,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.grey[900],
+                  color: AppColors.surfaceContainer,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey[700]!),
+                  border: Border.all(color: AppColors.divider),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -937,20 +939,34 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _roots.isNotEmpty ? _addToRepertoire : null,
-                    icon: const Icon(Icons.add_box),
-                    label: const Text('Add to Repertoire'),
+                    icon: const Icon(Icons.add_box, size: 18),
+                    label: const Text('Add to Repertoire',
+                        style: TextStyle(fontSize: 13)),
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green[700]),
+                      backgroundColor: AppColors.successSurface,
+                      foregroundColor: Colors.grey[300],
+                      disabledBackgroundColor: Colors.grey[850],
+                      disabledForegroundColor: Colors.grey[600],
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _roots.isNotEmpty ? _clearLine : null,
-                    icon: const Icon(Icons.clear),
-                    label: const Text('Clear Line'),
+                    icon: const Icon(Icons.clear, size: 18),
+                    label: const Text('Clear Line',
+                        style: TextStyle(fontSize: 13)),
                     style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red[700]),
+                      backgroundColor: AppColors.dangerSurface,
+                      foregroundColor: Colors.grey[300],
+                      disabledBackgroundColor: Colors.grey[850],
+                      disabledForegroundColor: Colors.grey[600],
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
                   ),
                 ),
               ],
@@ -1005,11 +1021,17 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (isWhite) {
       widgets.add(Text('$moveNumber. ',
           style: const TextStyle(
-              color: Colors.grey, fontWeight: FontWeight.bold)));
+            color: AppColors.pgnMoveNumber,
+            fontFamily: 'monospace',
+            fontSize: 13,
+          )));
     } else if (isFirstMove) {
       widgets.add(Text('$moveNumber... ',
           style: const TextStyle(
-              color: Colors.grey, fontWeight: FontWeight.bold)));
+            color: AppColors.pgnMoveNumber,
+            fontFamily: 'monospace',
+            fontSize: 13,
+          )));
     }
 
     widgets.add(_buildSingleMoveWidget(main));
@@ -1021,15 +1043,28 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     // Check for variations (siblings 1+)
     if (siblings.length > 1) {
       for (int i = 1; i < siblings.length; i++) {
-        widgets.add(const Text(' ( ', style: TextStyle(color: Colors.grey)));
+        widgets.add(const Text(' ( ',
+            style: TextStyle(
+              color: AppColors.pgnVariation,
+              fontFamily: 'monospace',
+              fontSize: 13,
+            )));
 
         final variant = siblings[i];
         if (isWhite) {
           widgets.add(Text('$moveNumber. ',
-              style: const TextStyle(color: Colors.grey)));
+              style: const TextStyle(
+                color: AppColors.pgnMoveNumber,
+                fontFamily: 'monospace',
+                fontSize: 13,
+              )));
         } else {
           widgets.add(Text('$moveNumber... ',
-              style: const TextStyle(color: Colors.grey)));
+              style: const TextStyle(
+                color: AppColors.pgnMoveNumber,
+                fontFamily: 'monospace',
+                fontSize: 13,
+              )));
         }
 
         widgets.add(_buildSingleMoveWidget(variant));
@@ -1042,7 +1077,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         widgets.addAll(_buildMoveWidgets(
             variant.children, isWhite ? moveNumber : moveNumber + 1, !isWhite));
 
-        widgets.add(const Text(' ) ', style: TextStyle(color: Colors.grey)));
+        widgets.add(const Text(' ) ',
+            style: TextStyle(
+              color: AppColors.pgnVariation,
+              fontFamily: 'monospace',
+              fontSize: 13,
+            )));
       }
     }
 
@@ -1061,13 +1101,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final sanitized = filterDisplayComment(_sanitizeComment(comment));
     if (sanitized.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.only(left: 4, right: 2),
       child: Text(
-        '{$sanitized}',
-        style: TextStyle(
-          fontSize: 11,
-          fontStyle: FontStyle.italic,
-          color: Colors.green[300]?.withValues(alpha: 0.85),
+        sanitized,
+        style: const TextStyle(
+          fontSize: 13,
+          height: 1.35,
+          color: AppColors.pgnComment,
         ),
       ),
     );
@@ -1076,16 +1116,23 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   Widget _buildSingleMoveWidget(PgnMove move) {
     final isSelected = move.id == _selectedMoveId;
     final isCurrent = _currentPath.any((m) => m.id == move.id);
-    final hasComment = move.comment != null && move.comment!.isNotEmpty;
 
-    Color textColor = Colors.blue[300]!;
+    late final Color textColor;
     Color? bgColor;
+    FontWeight fontWeight = FontWeight.normal;
+    TextDecoration decoration = TextDecoration.none;
+
     if (isSelected) {
       textColor = Colors.white;
-      bgColor = Colors.blue[700];
+      bgColor = AppColors.pgnMoveSelectedBg;
+      fontWeight = FontWeight.w500;
     } else if (isCurrent) {
-      textColor = Colors.orange;
-      bgColor = Colors.grey[800];
+      textColor = AppColors.pgnMoveCurrent;
+      bgColor = AppColors.pgnMoveCurrentBg;
+      fontWeight = FontWeight.w500;
+    } else {
+      textColor = AppColors.pgnMove;
+      decoration = TextDecoration.underline;
     }
 
     return GestureDetector(
@@ -1094,31 +1141,24 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       child: Container(
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: BorderRadius.circular(3),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               move.san,
               style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
                 color: textColor,
-                fontWeight: isSelected || isCurrent
-                    ? FontWeight.bold
-                    : FontWeight.normal,
-                decoration: TextDecoration.underline,
+                fontWeight: fontWeight,
+                decoration: decoration,
+                decorationColor: AppColors.onSurfaceDim.withValues(alpha: 0.45),
+                decorationStyle: TextDecorationStyle.dotted,
               ),
             ),
-            if (hasComment)
-              Padding(
-                padding: const EdgeInsets.only(left: 1),
-                child: Icon(
-                  Icons.chat_bubble,
-                  size: 8,
-                  color: Colors.green[400]?.withValues(alpha: 0.7),
-                ),
-              ),
           ],
         ),
       ),
@@ -1190,7 +1230,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                         icon: Icons.delete_outline,
                         text: 'Delete from Here',
                         onTap: _deleteFromHere,
-                        color: Colors.red[300],
+                        color: Colors.grey[400],
                       ),
                     ],
                   ),

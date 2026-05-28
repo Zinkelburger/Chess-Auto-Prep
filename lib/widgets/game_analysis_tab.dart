@@ -10,6 +10,7 @@ import '../services/game_analysis_controller.dart';
 import '../utils/chess_utils.dart' show formatEvalDisplay;
 import '../widgets/clickable_move_line.dart';
 import '../widgets/game_analysis_chart.dart';
+import '../theme/app_colors.dart';
 import '../widgets/pgn_viewer_widget.dart';
 
 class GameAnalysisTab extends StatefulWidget {
@@ -492,7 +493,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       TextSpan(
         text: '${e.san} ',
         style: monoStyle.copyWith(
-            color: Colors.purple[300], fontWeight: FontWeight.bold),
+            color: AppColors.maia, fontWeight: FontWeight.bold),
       ),
       TextSpan(
         text: '$playedEval ',
@@ -523,7 +524,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                 padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                 decoration: isExpectedActive
                     ? BoxDecoration(
-                        color: Colors.teal[700],
+                        color: AppColors.pgnMainLine,
                         borderRadius: BorderRadius.circular(2),
                       )
                     : null,
@@ -531,12 +532,12 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                   e.maiaTopMove!,
                   style: monoStyle.copyWith(
                     color:
-                        isExpectedActive ? Colors.white : Colors.teal[300],
+                        isExpectedActive ? Colors.white : AppColors.pgnMainLine,
                     fontWeight: FontWeight.bold,
                     decoration: isExpectedActive
                         ? null
                         : TextDecoration.underline,
-                    decorationColor: Colors.teal[300]!.withAlpha(80),
+                    decorationColor: AppColors.pgnMainLine.withValues(alpha: 0.31),
                     decorationStyle: TextDecorationStyle.dotted,
                   ),
                 ),

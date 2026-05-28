@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/eval_database_settings.dart';
+import '../theme/app_colors.dart';
 import '../services/eval/cdbdirect_eval_provider.dart';
 import '../services/eval/cdbdirect_parse.dart';
 
@@ -145,13 +146,13 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.warning_amber_rounded,
-                    size: 18, color: Colors.amber[300]),
+                    size: 18, color: AppColors.warning),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Native library not found. Run `make setup-cdbdirect` in '
                     'tree_builder/, then launch with `./run_with_cdbdirect.sh`.',
-                    style: TextStyle(fontSize: 12, color: Colors.amber[100]),
+                    style: TextStyle(fontSize: 12, color: AppColors.warning),
                   ),
                 ),
               ],
@@ -287,7 +288,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           const SizedBox(height: 4),
           Text(
             _dirValidation!.message,
-            style: TextStyle(fontSize: 11, color: Colors.red[300]),
+            style: TextStyle(fontSize: 11, color: AppColors.danger),
           ),
         ],
 
@@ -311,7 +312,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
       child: Icon(
         valid ? Icons.check_circle : Icons.cancel,
         size: 18,
-        color: valid ? Colors.green[400] : Colors.red[400],
+        color: valid ? AppColors.evalPositive : AppColors.danger,
       ),
     );
   }

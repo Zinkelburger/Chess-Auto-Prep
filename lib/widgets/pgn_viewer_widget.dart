@@ -5,6 +5,7 @@ import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show filterDisplayComment, buildMovetext;
 import 'package:chess_auto_prep/models/analysis_node.dart';
+import 'package:chess_auto_prep/theme/app_colors.dart';
 
 export 'package:chess_auto_prep/models/analysis_node.dart';
 
@@ -755,7 +756,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final baseStyle = TextStyle(
       fontFamily: 'monospace',
       fontSize: 14,
-      color: Colors.grey[300],
+      color: AppColors.pgnMove,
     );
 
     void flushSpans() {
@@ -780,8 +781,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       if (isWhiteTurn) {
         spans.add(TextSpan(
           text: '$moveNumber. ',
-          style:
-              TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600]),
+          style: const TextStyle(
+            color: AppColors.pgnMoveNumber,
+            fontFamily: 'monospace',
+          ),
         ));
       }
 
@@ -799,18 +802,28 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
             onTap: () => _onMainLineMoveClicked(i),
             onSecondaryTapDown:
                 canEditComments ? (_) => _startEditingComment(i) : null,
-            child: Text(
-              san,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                color: isCurrentMove
-                    ? Colors.white
-                    : (hasBranch ? Colors.blue[200] : Colors.blue[300]),
-                fontWeight: (isCurrentMove || hasBranch)
-                    ? FontWeight.bold
-                    : FontWeight.normal,
-                backgroundColor: isCurrentMove ? Colors.blue[700] : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+              decoration: isCurrentMove
+                  ? BoxDecoration(
+                      color: AppColors.pgnMoveCurrentBg,
+                      borderRadius: BorderRadius.circular(3),
+                    )
+                  : null,
+              child: Text(
+                san,
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: 14,
+                  color: isCurrentMove
+                      ? AppColors.pgnMoveCurrent
+                      : (hasBranch ? AppColors.lichessDb : AppColors.info),
+                  fontWeight: isCurrentMove ? FontWeight.w500 : FontWeight.normal,
+                  decoration: isCurrentMove ? null : TextDecoration.underline,
+                  decorationColor:
+                      AppColors.onSurfaceDim.withValues(alpha: 0.45),
+                  decorationStyle: TextDecorationStyle.dotted,
+                ),
               ),
             ),
           ),
@@ -837,12 +850,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
               child: GestureDetector(
                 onTap: canEditComments ? () => _startEditingComment(i) : null,
                 child: Text(
-                  '{$comment} ',
+                  '$comment ',
                   style: const TextStyle(
-                    fontFamily: 'monospace',
                     fontSize: 14,
-                    color: Colors.green,
-                    fontStyle: FontStyle.italic,
+                    height: 1.35,
+                    color: AppColors.pgnComment,
                   ),
                 ),
               ),
@@ -889,18 +901,24 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
     for (final root in roots) {
       final bracketColor =
-          root.isEphemeral ? Colors.orange[300]! : Colors.teal[200]!;
+          root.isEphemeral ? AppColors.pgnEphemeralMove : AppColors.pgnVariation;
 
       spans.add(TextSpan(
         text: '( ',
-        style: TextStyle(color: bracketColor, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: bracketColor,
+          fontFamily: 'monospace',
+        ),
       ));
 
       spans.addAll(_buildNodeSpans(root, moveNum, isWhiteTurn, true, ply));
 
       spans.add(TextSpan(
         text: ') ',
-        style: TextStyle(color: bracketColor, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: bracketColor,
+          fontFamily: 'monospace',
+        ),
       ));
     }
 
@@ -912,19 +930,24 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       bool isWhiteTurn, bool isFirst, int branchPly) {
     final spans = <InlineSpan>[];
     final moveColor =
-        node.isEphemeral ? Colors.orange[300]! : Colors.teal[300]!;
-    final numColor =
-        node.isEphemeral ? Colors.orange[200]! : Colors.teal[200]!;
+        node.isEphemeral ? AppColors.pgnEphemeralMove : AppColors.pgnVariation;
+    final numColor = AppColors.pgnMoveNumber;
 
     if (isWhiteTurn) {
       spans.add(TextSpan(
         text: '$moveNumber. ',
-        style: TextStyle(color: numColor, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: numColor,
+          fontFamily: 'monospace',
+        ),
       ));
     } else if (isFirst) {
       spans.add(TextSpan(
         text: '$moveNumber... ',
-        style: TextStyle(color: numColor, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: numColor,
+          fontFamily: 'monospace',
+        ),
       ));
     }
 
@@ -943,19 +966,33 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
               ? (details) => widget.onAnalysisNodeAction!(
                   node.id, details.globalPosition)
               : null,
-          child: Text(
-            node.san,
-            style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 14,
-              color: isCurrentNode ? Colors.white : moveColor,
-              fontWeight:
-                  isCurrentNode ? FontWeight.bold : FontWeight.normal,
-              backgroundColor: isCurrentNode
-                  ? (node.isEphemeral
-                      ? Colors.orange[700]
-                      : Colors.teal[700])
-                  : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+            decoration: isCurrentNode
+                ? BoxDecoration(
+                    color: node.isEphemeral
+                        ? AppColors.pgnEphemeralBg
+                        : AppColors.pgnMoveCurrentBg,
+                    borderRadius: BorderRadius.circular(3),
+                  )
+                : null,
+            child: Text(
+              node.san,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 14,
+                color: isCurrentNode
+                    ? (node.isEphemeral
+                        ? AppColors.pgnMoveCurrent
+                        : AppColors.pgnMainLine)
+                    : moveColor,
+                fontWeight: isCurrentNode ? FontWeight.w500 : FontWeight.normal,
+                decoration:
+                    isCurrentNode ? null : TextDecoration.underline,
+                decorationColor:
+                    AppColors.onSurfaceDim.withValues(alpha: 0.45),
+                decorationStyle: TextDecorationStyle.dotted,
+              ),
             ),
           ),
         ),
@@ -973,18 +1010,25 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
       for (int i = 1; i < node.children.length; i++) {
         final variation = node.children[i];
-        final subColor =
-            variation.isEphemeral ? Colors.amber[400]! : Colors.teal[200]!;
+        final subColor = variation.isEphemeral
+            ? AppColors.pgnEphemeralMove
+            : AppColors.pgnVariation;
 
         spans.add(TextSpan(
           text: '( ',
-          style: TextStyle(color: subColor, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: subColor,
+            fontFamily: 'monospace',
+          ),
         ));
         spans.addAll(_buildNodeSpans(
             variation, nextMoveNumber, nextIsWhite, true, branchPly));
         spans.add(TextSpan(
           text: ') ',
-          style: TextStyle(color: subColor, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: subColor,
+            fontFamily: 'monospace',
+          ),
         ));
       }
     }
@@ -1032,38 +1076,31 @@ class _CommentEditorState extends State<_CommentEditor> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: 0.08),
+        color: Colors.grey.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.comment, size: 16, color: Colors.green),
-          const SizedBox(width: 6),
           Expanded(
             child: TextField(
               controller: _controller,
               autofocus: true,
               maxLines: null,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Colors.green,
-                fontStyle: FontStyle.italic,
-              ),
-              decoration: const InputDecoration(
+              style: TextStyle(fontSize: 13, color: Colors.grey[200]),
+              decoration: InputDecoration(
                 isDense: true,
                 contentPadding:
-                    EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 border: InputBorder.none,
-                hintText: 'Add comment...',
-                hintStyle: TextStyle(color: Colors.green, fontSize: 13),
+                hintText: 'Comment',
+                hintStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
               ),
               onSubmitted: (v) => widget.onSave(v),
             ),
           ),
           IconButton(
             onPressed: () => widget.onSave(_controller.text),
-            icon: const Icon(Icons.check, size: 18, color: Colors.green),
+            icon: Icon(Icons.check, size: 18, color: Colors.grey[400]),
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
           ),

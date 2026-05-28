@@ -7,6 +7,7 @@ library;
 
 import '../../models/build_tree_node.dart';
 import '../../utils/ease_utils.dart' show winProbability;
+import '../../utils/eval_constants.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 
@@ -127,7 +128,7 @@ class ExpectimaxCalculator {
   void _computeLocalCpl(BuildTreeNode node) {
     if (node.children.isEmpty) return;
 
-    int bestOppCp = 100000;
+    int bestOppCp = kBestEvalCp;
     bool hasAny = false;
     for (final child in node.children) {
       if (!child.hasEngineEval) continue;
@@ -159,7 +160,7 @@ class ExpectimaxCalculator {
   ScoredChild? scoreOurMoveChildren(BuildTreeNode node) {
     if (node.children.isEmpty) return null;
 
-    int bestChildCp = -100000;
+    int bestChildCp = kWorstEvalCp;
     for (final child in node.children) {
       if (!child.hasEngineEval) continue;
       final cpUs = child.evalForUs(config.playAsWhite);
@@ -245,7 +246,7 @@ class ExpectimaxCalculator {
     BuildTreeNode? mostPopular;
     BuildTreeNode? bestMove;
     double highestProb = 0.0;
-    int bestEval = -100000;
+    int bestEval = kWorstEvalCp;
 
     for (final child in node.children) {
       if (child.moveProbability > highestProb) {

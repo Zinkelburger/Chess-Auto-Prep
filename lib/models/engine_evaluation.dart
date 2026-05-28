@@ -1,3 +1,5 @@
+import '../utils/eval_constants.dart';
+
 class EngineEvaluation {
   final int depth;
   final int? scoreCp; // Centipawns
@@ -22,14 +24,8 @@ class EngineEvaluation {
   String? get bestMove => pv.isNotEmpty ? pv.first : null;
 
   /// Collapse mate / cp into a single comparable centipawn value.
-  int get effectiveCp {
-    if (scoreMate != null) {
-      return scoreMate! > 0
-          ? 10000 - scoreMate!.abs()
-          : -(10000 - scoreMate!.abs());
-    }
-    return scoreCp ?? 0;
-  }
+  int get effectiveCp =>
+      effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
 
   String get scoreString {
     if (scoreMate != null) {

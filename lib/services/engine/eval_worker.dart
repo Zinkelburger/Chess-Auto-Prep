@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart';
 
 import 'engine_connection.dart';
 import '../../models/analysis/discovery_result.dart';
+import '../../utils/eval_constants.dart';
 
 // ── Eval result (side-to-move perspective) ────────────────────────────────
 
@@ -35,14 +36,8 @@ class EvalResult {
 
   /// Collapse mate / cp into a single comparable centipawn value.
   /// Positive = good for side-to-move, negative = bad.
-  int get effectiveCp {
-    if (scoreMate != null) {
-      return scoreMate! > 0
-          ? 10000 - scoreMate!.abs()
-          : -(10000 - scoreMate!.abs());
-    }
-    return scoreCp ?? 0;
-  }
+  int get effectiveCp =>
+      effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
 }
 
 // ── Single Stockfish worker ───────────────────────────────────────────────
@@ -311,7 +306,7 @@ class EvalWorker {
     _sub.cancel();
     try {
       engine.sendCommand('quit');
-    } catch (_) {}
+    } catch (_) { /* engine may already be closed */ }
     engine.dispose();
   }
 }

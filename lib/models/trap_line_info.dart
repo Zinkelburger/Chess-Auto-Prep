@@ -5,6 +5,8 @@
 /// likely to blunder into a worse position.
 library;
 
+import 'trap_reply.dart';
+
 class TrapLineInfo {
   /// SAN moves from root to the trap position.
   final List<String> movesSan;
@@ -43,6 +45,18 @@ class TrapLineInfo {
   /// wp(eval_for_us) at this node.
   final double wpEval;
 
+  /// FEN at the trap position (null for legacy files).
+  final String? fen;
+
+  /// Opening name at this position (null for legacy files).
+  final String? openingName;
+
+  /// Eval at the node before any reply (our perspective, centipawns).
+  final int? positionEvalCp;
+
+  /// All opponent responses at the trap position.
+  final List<TrapReply>? allReplies;
+
   const TrapLineInfo({
     required this.movesSan,
     required this.trapScore,
@@ -56,6 +70,10 @@ class TrapLineInfo {
     required this.trickSurplus,
     required this.expectimaxValue,
     required this.wpEval,
+    this.fen,
+    this.openingName,
+    this.positionEvalCp,
+    this.allReplies,
   });
 
   Map<String, dynamic> toJson() => {
@@ -71,6 +89,11 @@ class TrapLineInfo {
         'trick_surplus': trickSurplus,
         'expectimax_value': expectimaxValue,
         'wp_eval': wpEval,
+        if (fen != null) 'fen': fen,
+        if (openingName != null) 'opening_name': openingName,
+        if (positionEvalCp != null) 'position_eval_cp': positionEvalCp,
+        if (allReplies != null)
+          'all_replies': allReplies!.map((r) => r.toJson()).toList(),
       };
 
   factory TrapLineInfo.fromJson(Map<String, dynamic> json) => TrapLineInfo(
@@ -86,6 +109,15 @@ class TrapLineInfo {
         trickSurplus: (json['trick_surplus'] as num).toDouble(),
         expectimaxValue: (json['expectimax_value'] as num).toDouble(),
         wpEval: (json['wp_eval'] as num).toDouble(),
+        fen: json['fen'] as String?,
+        openingName: json['opening_name'] as String?,
+        positionEvalCp: json['position_eval_cp'] as int?,
+        allReplies: json['all_replies'] != null
+            ? (json['all_replies'] as List)
+                .map((r) =>
+                    TrapReply.fromJson(r as Map<String, dynamic>))
+                .toList()
+            : null,
       );
 
   /// Format eval in pawn units (e.g. +1.25, -0.50).

@@ -306,7 +306,7 @@ bool _sliceGamePassesThroughPosition(
       pos = pos.play(move);
       if (normalizeFen(pos.fen) == targetFen) return true;
     }
-  } catch (_) {}
+  } catch (_) { /* invalid position — will return false */ }
   return false;
 }
 

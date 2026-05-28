@@ -1,7 +1,7 @@
 /// Interactive analysis pipeline for the engine pane.
 ///
 /// Orchestrates: discovery (MultiPV) -> candidate filtering -> per-move
-/// eval + ease.  Uses [StockfishPool] for Stockfish workers and exposes
+/// eval.  Uses [StockfishPool] for Stockfish workers and exposes
 /// [ValueNotifier]s for the UI to subscribe to.
 ///
 /// Replaces the old [MoveAnalysisPool] for the interactive analysis use case.
@@ -10,12 +10,9 @@ library;
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 
-import 'ease_calculator.dart';
 import 'engine/stockfish_pool.dart';
 import 'engine/eval_worker.dart';
-import 'probability_service.dart';
 import '../models/analysis/move_analysis_result.dart';
-import '../models/engine_settings.dart';
 import '../utils/chess_utils.dart' show playUciMove;
 
 export '../models/analysis/discovery_result.dart';
@@ -37,10 +34,8 @@ class AnalysisService {
   List<String> _moveQueue = [];
   int _nextMoveIndex = 0;
   int _evalDepth = 20;
-  int _easeDepth = 12;
 
   final Map<int, String> _workerCurrentMoves = {};
-  final ProbabilityService _probabilityService = ProbabilityService();
 
   // ── Public notifiers ──────────────────────────────────────────────────
   final ValueNotifier<DiscoveryResult> discoveryResult =
@@ -51,6 +46,80 @@ class AnalysisService {
       ValueNotifier(const PoolStatus());
 
   int get workerCount => _pool.workerCount;
+
+  // ── Engine-pane priority gate ─────────────────────────────────────────
+  //
+  // On-the-fly expectimax shares [StockfishPool] with the interactive engine
+  // pane.  The pane calls [beginEnginePaneAnalysis] while its full pipeline
+  // (Maia + DB + discovery + per-move eval) runs; expectimax waits via
+  // [waitForEnginePaneAnalysis] so Stockfish serves the current position first.
+
+  String? _enginePaneFen;
+  Completer<void>? _enginePaneDone;
+
+  void beginEnginePaneAnalysis(String fen) {
+    if (_enginePaneFen == fen &&
+        _enginePaneDone != null &&
+        !_enginePaneDone!.isCompleted) {
+      return;
+    }
+    endEnginePaneAnalysis();
+    _enginePaneFen = fen;
+    _enginePaneDone = Completer<void>();
+    if (kDebugMode) {
+      debugPrint('[Analysis] Engine-pane pipeline BLOCKING expectimax for '
+          '${fen.split(' ').take(2).join(' ')}');
+    }
+  }
+
+  void endEnginePaneAnalysis([String? fen]) {
+    if (fen != null &&
+        _enginePaneFen != null &&
+        _enginePaneFen != fen) {
+      return;
+    }
+    final blockedFen = _enginePaneFen;
+    _enginePaneFen = null;
+    final done = _enginePaneDone;
+    _enginePaneDone = null;
+    if (done != null && !done.isCompleted) {
+      done.complete();
+    }
+    if (kDebugMode && blockedFen != null) {
+      debugPrint('[Analysis] Engine-pane pipeline DONE — expectimax may run');
+    }
+  }
+
+  Future<void> waitForEnginePaneAnalysis(String fen) async {
+    // The engine pane registers its gate from a post-frame callback; expectimax
+    // may start earlier on controller changes, so poll briefly for the gate.
+    const poll = Duration(milliseconds: 16);
+    const maxWait = Duration(seconds: 3);
+    final deadline = DateTime.now().add(maxWait);
+
+    while (DateTime.now().isBefore(deadline)) {
+      if (_enginePaneFen == fen) {
+        final done = _enginePaneDone;
+        if (done != null) {
+          if (kDebugMode) {
+            debugPrint('[Analysis] Expectimax waiting for engine-pane pipeline '
+                '(${fen.split(' ').take(2).join(' ')})');
+          }
+          await done.future;
+          if (kDebugMode) {
+            debugPrint('[Analysis] Expectimax may proceed — engine-pane done');
+          }
+          return;
+        }
+      }
+      await Future.delayed(poll);
+    }
+
+    if (kDebugMode && _enginePaneFen != fen) {
+      debugPrint('[Analysis] Expectimax proceeding without engine-pane gate '
+          '(timed out waiting for ${fen.split(' ').take(2).join(' ')})');
+    }
+  }
 
   // ── Warm-up ───────────────────────────────────────────────────────────
 
@@ -91,8 +160,11 @@ class AnalysisService {
 
     if (kDebugMode) {
       debugPrint('[Analysis] Discovery START — MultiPV=$multiPv, depth=$depth, '
-          'workers=${_pool.workerCount}');
+          'workers=${_pool.workerCount}, '
+          'fen=${fen.split(' ').take(2).join(' ')}');
     }
+
+    var lastLoggedDiscoveryDepth = 0;
 
     try {
       final result = await _pool.discoverMoves(
@@ -111,6 +183,14 @@ class AnalysisService {
             activeWorkers: _pool.workerCount,
             hashPerWorkerMb: kPoolHashPerWorkerMb,
           );
+          if (kDebugMode &&
+              intermediate.depth > lastLoggedDiscoveryDepth &&
+              intermediate.lines.isNotEmpty) {
+            lastLoggedDiscoveryDepth = intermediate.depth;
+            debugPrint('[Analysis] Discovery depth ${intermediate.depth}/$depth '
+                '— ${intermediate.lines.length} lines, '
+                '${intermediate.nodes} nodes');
+          }
         },
       );
 
@@ -129,13 +209,12 @@ class AnalysisService {
     }
   }
 
-  // ── Evaluation: per-move deep eval + ease ─────────────────────────────
+  // ── Evaluation: per-move deep eval ─────────────────────────────────────
 
   Future<void> startEvaluation({
     required String baseFen,
     required List<String> moveUcis,
     required int evalDepth,
-    required int easeDepth,
   }) async {
     _generation++;
     final myGen = _generation;
@@ -158,7 +237,6 @@ class AnalysisService {
     }
 
     _evalDepth = evalDepth;
-    _easeDepth = easeDepth;
 
     await _pool.ensureWorkers();
 
@@ -180,8 +258,7 @@ class AnalysisService {
 
     if (kDebugMode) {
       debugPrint('[Analysis] Evaluation START — ${moveUcis.length} moves, '
-          'depth=$evalDepth, ease=$easeDepth, '
-          'workers=${_pool.workerCount}');
+          'depth=$evalDepth, workers=${_pool.workerCount}');
     }
 
     _startWorkerLoops(myGen);
@@ -197,6 +274,7 @@ class AnalysisService {
     discoveryResult.value = const DiscoveryResult();
     results.value = {};
     poolStatus.value = const PoolStatus();
+    endEnginePaneAnalysis();
   }
 
   // ── Worker loop ───────────────────────────────────────────────────────
@@ -284,31 +362,6 @@ class AnalysisService {
           ),
         );
         _emitPoolStatus();
-
-        // ── Ease ──
-        EaseResult? easeResult;
-        try {
-          easeResult = await _computeMoveEase(
-              worker, resultingFen, eval, _easeDepth, generation);
-        } catch (e) {
-          if (kDebugMode) {
-            debugPrint('[Analysis] Ease FAILED for $uci: $e');
-          }
-        }
-        if (_generation != generation) return;
-
-        _emitResult(
-          uci,
-          MoveAnalysisResult(
-            scoreCp: whiteCp,
-            scoreMate: whiteMate,
-            pv: fullPv,
-            depth: eval.depth,
-            moveEase: easeResult?.ease,
-            topResponseUci: easeResult?.topCandidateUci,
-            topResponseProb: easeResult?.topCandidateProb,
-          ),
-        );
       } catch (e) {
         if (_generation != generation) return;
         if (kDebugMode) {
@@ -326,35 +379,6 @@ class AnalysisService {
     final updated = Map<String, MoveAnalysisResult>.from(results.value);
     updated[uci] = result;
     results.value = updated;
-  }
-
-  // ── Ease computation ──────────────────────────────────────────────────
-
-  Future<EaseResult?> _computeMoveEase(
-    EvalWorker worker,
-    String fen,
-    EvalResult rootEval,
-    int depth,
-    int generation,
-  ) async {
-    final dbData = await _probabilityService.getProbabilitiesForFen(fen);
-
-    return EaseCalculator.compute(
-      fen: fen,
-      evalDepth: depth,
-      maiaElo: EngineSettings().maiaElo,
-      dbData: dbData,
-      evaluateBatch: (fens, d) async {
-        final results = <EvalResult>[];
-        for (final f in fens) {
-          if (_generation != generation) {
-            throw StateError('Generation changed');
-          }
-          results.add(await worker.evaluateFen(f, d));
-        }
-        return results;
-      },
-    );
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/engine_weakness_result.dart';
 import '../models/opening_tree.dart';
+import '../utils/eval_constants.dart';
 import '../utils/fen_utils.dart';
 import 'engine/stockfish_pool.dart';
 
@@ -96,7 +97,7 @@ class EngineWeaknessService {
 
         if (eval.scoreMate != null) {
           evalWhiteMate = isWhiteToMove ? eval.scoreMate! : -eval.scoreMate!;
-          evalWhiteCp = evalWhiteMate > 0 ? 10000 : -10000;
+          evalWhiteCp = evalWhiteMate > 0 ? kMateCpBase : -kMateCpBase;
         } else {
           evalWhiteCp =
               isWhiteToMove ? (eval.scoreCp ?? 0) : -(eval.scoreCp ?? 0);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../utils/ease_utils.dart' show winProbability;
+import '../../../utils/eval_constants.dart';
 import '../../../utils/tree_colors.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
@@ -574,7 +575,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
   }
 
   String _formatEval(int cpForUs) {
-    if (cpForUs.abs() >= 10000) {
+    if (isMateEval(cpForUs)) {
       return cpForUs > 0 ? '+M' : '-M';
     }
     final pawns = cpForUs / 100.0;

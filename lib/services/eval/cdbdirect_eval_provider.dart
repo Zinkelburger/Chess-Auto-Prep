@@ -164,7 +164,7 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
       final exeDir = p.dirname(Platform.resolvedExecutable);
       yield p.join(exeDir, 'lib', 'libcdbdirect.so');
       yield p.join(exeDir, '..', 'lib', 'libcdbdirect.so');
-    } catch (_) {}
+    } catch (_) { /* resolvedExecutable may throw on some platforms */ }
   }
 
   static Future<DynamicLibrary?> _tryLoadDevLibrary() async {

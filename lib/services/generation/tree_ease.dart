@@ -11,6 +11,7 @@ import 'dart:math' as math;
 
 import '../../models/build_tree_node.dart';
 import '../../utils/ease_utils.dart';
+import '../../utils/eval_constants.dart';
 
 /// Compute ease scores on every applicable node in the tree.
 /// Returns the number of nodes that received an ease value.
@@ -38,7 +39,7 @@ double? _nodeEase(BuildTreeNode node) {
 
   // Find the best eval from the parent's perspective.
   // child.engineEvalCp is side-to-move; negating gives parent's perspective.
-  int bestEval = -100000;
+  int bestEval = kWorstEvalCp;
   bool hasEvals = false;
   for (final child in node.children) {
     if (child.hasEngineEval) {

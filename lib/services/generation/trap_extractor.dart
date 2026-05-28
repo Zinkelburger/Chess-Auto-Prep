@@ -12,6 +12,7 @@ import 'dart:io';
 import '../../models/build_tree_node.dart';
 import '../../models/trap_line_info.dart';
 import '../../utils/ease_utils.dart' show winProbability;
+import '../../utils/eval_constants.dart';
 
 class TrapExtractor {
   final bool playAsWhite;
@@ -77,7 +78,7 @@ class TrapExtractor {
     BuildTreeNode? mostPopular;
     BuildTreeNode? bestMoveNode;
     double highestProb = 0.0;
-    int bestEval = -100000;
+    int bestEval = kWorstEvalCp;
 
     for (final child in node.children) {
       if (child.moveProbability > highestProb) {

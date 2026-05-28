@@ -1,7 +1,7 @@
 /// Generic external evaluation lookup interface for the 3-phase eval chain.
 library;
 
-import 'eval_canonicalize.dart';
+import '../../utils/eval_constants.dart';
 
 /// A qualifying evaluation from an external source.
 ///
@@ -54,7 +54,7 @@ int? mapSqliteScoreToWhiteCp({
   required bool isWhiteToMove,
 }) {
   if (mate != null) {
-    final stmCp = mate > 0 ? (10000 - mate) : (-10000 - mate);
+    final stmCp = mate > 0 ? (kMateCpBase - mate) : (-kMateCpBase - mate);
     return isWhiteToMove ? stmCp : -stmCp;
   }
   if (cp != null) {

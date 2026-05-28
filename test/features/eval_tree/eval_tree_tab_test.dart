@@ -22,6 +22,33 @@ void main() {
     );
   }
 
+  testWidgets('tapping a candidate row navigates into that line', (
+    WidgetTester tester,
+  ) async {
+    final tree = makeEvalTreeTestTree();
+    EvalTreeController? controller;
+
+    await tester.pumpWidget(
+      buildHarness(
+        child: EvalTreeTab(
+          currentRepertoire: const {'filePath': '/tmp/test-repertoire.pgn'},
+          isWhiteRepertoire: true,
+          generatedTree: tree,
+          treeResetCounter: 0,
+          onControllerReady: (value) => controller = value,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('EXP EASE'), findsOneWidget);
+    await tester.tap(find.text('e4').first);
+    await tester.pumpAndSettle();
+
+    expect(controller!.selectedNode?.moveSan, 'e4');
+    expect(find.textContaining('1. e4'), findsWidgets);
+  });
+
   testWidgets('tapping a visible node chip updates selection and position', (
     WidgetTester tester,
   ) async {

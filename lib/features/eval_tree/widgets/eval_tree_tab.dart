@@ -9,9 +9,10 @@ import '../adapters/eval_tree_snapshot_adapter.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
 import '../services/eval_tree_layout_engine.dart';
-import 'eval_tree_details_pane.dart';
+import '../services/eval_tree_line_metrics.dart';
 import 'eval_tree_toolbar.dart';
 import 'eval_tree_viewport.dart';
+import 'repertoire_tree_explorer.dart';
 
 class EvalTreePositionSelection {
   static const String _standardFen =
@@ -68,6 +69,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
 
   BuildTree? _tree;
   EvalTreeSnapshot? _snapshot;
+  EvalTreeLineMetricsCache? _metricsCache;
   bool _isLoading = false;
   String? _error;
   bool _dismissed = false;
@@ -173,16 +175,18 @@ class _EvalTreeTabState extends State<EvalTreeTab>
               child: Column(
                 children: [
                   Expanded(
-                    flex: 2,
-                    child: EvalTreeDetailsPane(
+                    flex: 3,
+                    child: RepertoireTreeExplorer(
                       snapshot: snapshot,
                       controller: _controller,
+                      metricsCache: _metricsCache ??
+                          EvalTreeLineMetricsCache.fromSnapshot(snapshot),
                       currentNode: currentNode,
                     ),
                   ),
                   const Divider(height: 1),
                   Expanded(
-                    flex: 3,
+                    flex: 2,
                     child: EvalTreeViewport(
                       snapshot: snapshot,
                       controller: _controller,
@@ -381,9 +385,11 @@ class _EvalTreeTabState extends State<EvalTreeTab>
       tree,
       playAsWhite: widget.isWhiteRepertoire,
     );
+    final metricsCache = EvalTreeLineMetricsCache.fromSnapshot(snapshot);
     setState(() {
       _tree = tree;
       _snapshot = snapshot;
+      _metricsCache = metricsCache;
       _isLoading = false;
       _error = null;
     });
@@ -394,6 +400,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
     setState(() {
       _tree = null;
       _snapshot = null;
+      _metricsCache = null;
       _isLoading = false;
       _error = null;
     });

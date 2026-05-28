@@ -1,34 +1,24 @@
 /// Public result types emitted by [AnalysisService].
 library;
 
-/// Per-move analysis result combining eval and ease.
+import '../../utils/eval_constants.dart';
+
+/// Per-move analysis result combining eval data.
 class MoveAnalysisResult {
   final int? scoreCp; // White perspective
   final int? scoreMate; // White perspective
   final List<String> pv; // Full PV (move + continuation)
-  final double? moveEase; // Ease of resulting position
   final int depth;
-  final String? topResponseUci; // Most likely opponent reply (UCI)
-  final double? topResponseProb; // Probability of that reply (0–1)
 
   MoveAnalysisResult({
     this.scoreCp,
     this.scoreMate,
     this.pv = const [],
-    this.moveEase,
     this.depth = 0,
-    this.topResponseUci,
-    this.topResponseProb,
   });
 
-  int get effectiveCp {
-    if (scoreMate != null) {
-      return scoreMate! > 0
-          ? 10000 - scoreMate!.abs()
-          : -(10000 - scoreMate!.abs());
-    }
-    return scoreCp ?? 0;
-  }
+  int get effectiveCp =>
+      effectiveCpFromScores(scoreCp: scoreCp, scoreMate: scoreMate);
 
   bool get hasEval => scoreCp != null || scoreMate != null;
 }

@@ -97,7 +97,7 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
     try {
       final game = PgnGame.parsePgn(pgn);
       if (game.moves.mainline().isNotEmpty) return 1;
-    } catch (_) {}
+    } catch (_) { /* invalid PGN format */ }
     return 0;
   }
 

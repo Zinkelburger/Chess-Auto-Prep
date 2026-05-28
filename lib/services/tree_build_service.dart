@@ -15,51 +15,39 @@ import 'dart:collection' show Queue;
 import 'package:flutter/foundation.dart';
 
 import '../models/build_tree_node.dart';
+import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
 import 'engine/stockfish_pool.dart';
-import 'eval/cdbdirect_eval_provider.dart';
 import 'eval/chessdb_api_provider.dart';
-import 'eval/eval_chain.dart';
-import 'eval/sqlite_eval_provider.dart';
-import 'eval_cache.dart';
 import 'generation/fen_map.dart';
 import 'generation/generation_config.dart';
+import 'generation/tree_build_progress.dart';
+import 'generation/tree_eval_resolver.dart';
 import 'maia_factory.dart';
 import 'maia_service.dart';
-import 'probability_service.dart';
 
 class TreeBuildService {
   final StockfishPool _pool = StockfishPool();
-  final ProbabilityService _probabilityService = ProbabilityService();
+  final TreeEvalResolver _evalResolver = TreeEvalResolver();
 
   bool _isBuilding = false;
   bool _isPaused = false;
   Completer<void>? _pauseCompleter;
   int _nextNodeId = 1;
 
-  final EvalCache _evalCache = EvalCache.instance;
-  final Map<String, ExplorerResponse?> _dbCache = {};
-
-  SqliteEvalProvider? _localChessDb;
-  CdbDirectEvalProvider? _cdbDirect;
-  ChessDbApiProvider? _chessDbApi;
-
   late BuildStats _stats;
   Stopwatch _buildSw = Stopwatch();
 
-  BuildStats get buildStats => _stats;
-  ChessDbApiProvider? get chessDbApiProvider => _chessDbApi;
+  final TreeBuildProgressTracker _progress = TreeBuildProgressTracker();
 
-  int _lastProgressNodes = 0;
+  BuildStats get buildStats => _stats;
+  ChessDbApiProvider? get chessDbApiProvider => _evalResolver.chessDbApiProvider;
 
   /// True while Phase 1 BFS is running ([build] in progress).
   bool get isBuilding => _isBuilding;
 
   /// Phase 1 active-build elapsed time; stops advancing while [pauseBuild] holds.
   int get buildElapsedMs => _buildSw.elapsedMilliseconds;
-
-  /// [BuildTree.totalNodes] when Phase 1 starts (after optional root eval).
-  int _buildStartTotalNodes = 0;
 
   BuildTree? _currentTree;
   BuildTree? get currentTree => _currentTree;
@@ -94,9 +82,9 @@ class TreeBuildService {
     BuildTree? existingTree,
   }) async {
     _stats = BuildStats();
+    _evalResolver.stats = _stats;
     _buildSw = Stopwatch()..start();
-    _lastProgressNodes = 0;
-    _buildStartTotalNodes = 0;
+    _progress.reset(buildStartTotalNodes: 0);
 
     var cfg = config;
     _isPaused = false;
@@ -107,9 +95,9 @@ class TreeBuildService {
         _pool.prepareForTreeBuild(cfg.resolvedEngineThreads)
       else
         Future.value(),
-      _evalCache.init(),
+      _evalResolver.evalCache.init(),
     ]);
-    await _initExternalEvalProviders(cfg);
+    await _evalResolver.initProviders(cfg);
     if (cfg.usesStockfish && _pool.workerCount == 0) {
       throw StateError('No engine workers available');
     }
@@ -122,7 +110,7 @@ class TreeBuildService {
         tree.computeMetadata();
       }
     } else {
-      _dbCache.clear();
+      _evalResolver.reset();
       _nextNodeId = 1;
       final rootFen = cfg.startFen;
       final isWhiteToMove = rootFen.split(' ')[1] == 'w';
@@ -146,10 +134,11 @@ class TreeBuildService {
 
     if (cfg.relativeEval) {
       final rootFenMap = FenMap();
-      final gotEval = await _ensureEval(
+      final gotEval = await _evalResolver.ensureEval(
         tree.root,
         cfg,
         fenMap: rootFenMap,
+        pool: _pool,
         dbOnly: !cfg.usesStockfish,
       );
       if (!gotEval && !cfg.usesStockfish) {
@@ -167,7 +156,7 @@ class TreeBuildService {
       }
     }
 
-    _buildStartTotalNodes = tree.totalNodes;
+    _progress.reset(buildStartTotalNodes: tree.totalNodes);
 
     final fenMap = FenMap();
 
@@ -181,7 +170,7 @@ class TreeBuildService {
       );
     } finally {
       fenMap.clear();
-      await _teardownExternalEvalProviders();
+      await _evalResolver.teardownProviders();
     }
 
     final pruned = _pruneEvalTooLow(tree);
@@ -255,9 +244,30 @@ class TreeBuildService {
       if (!_isBuilding || isCancelled()) return;
     }
 
-    if (node.ply >= config.maxPly) return;
+    if (node.ply >= config.maxPly) {
+      if (!node.hasEngineEval && config.usesStockfish) {
+        await _evalResolver.ensureEval(
+          node,
+          config,
+          fenMap: fenMap,
+          pool: _pool,
+        );
+      }
+      node.explored = true;
+      return;
+    }
     if (node.cumulativeProbability < config.minProbability) return;
     if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) return;
+
+    _progress.emitProgress(
+      tree,
+      node.ply,
+      node.fen,
+      onProgress,
+      config.maxPly,
+      buildSw: _buildSw,
+      fromDequeue: true,
+    );
 
     // Resume: skip nodes that already have children — enqueue them only
     if (node.children.isNotEmpty) {
@@ -276,10 +286,11 @@ class TreeBuildService {
     // Our-move nodes skip this in stockfish mode — eval comes from MultiPV.
     // In maiaDbExplore mode, both sides need a DB eval before expanding.
     if (!isOurMove || !config.usesStockfish) {
-      final gotEval = await _ensureEval(
+      final gotEval = await _evalResolver.ensureEval(
         node,
         config,
         fenMap: fenMap,
+        pool: _pool,
         dbOnly: !config.usesStockfish,
       );
       if (!gotEval && !config.usesStockfish) {
@@ -414,7 +425,7 @@ class TreeBuildService {
       if (childFen == null) continue;
 
       // Child eval from DB only — skip candidates with no database coverage.
-      final childEval = await _lookupDbEvalWhite(childFen, config);
+      final childEval = await _evalResolver.lookupDbEvalWhite(childFen, config);
       if (childEval == null) continue;
 
       final childIsWhite = childFen.split(' ')[1] == 'w';
@@ -440,68 +451,23 @@ class TreeBuildService {
       child.maiaFrequency = prob;
       child.engineEvalCp =
           childIsWhite ? childCpWhite : -childCpWhite;
-      _cacheEvalWhite(childFen, childCpWhite, childEval.$2);
+      _evalResolver.cacheEvalWhite(childFen, childCpWhite, childEval.$2);
 
       added++;
-      _emitProgress(tree, child.ply, child.fen, onProgress, config.maxPly);
+      _progress.emitProgress(
+        tree,
+        child.ply,
+        child.fen,
+        onProgress,
+        config.maxPly,
+        buildSw: _buildSw,
+      );
     }
 
     for (final child in List.of(node.children)) {
       if (!_isBuilding || isCancelled()) break;
       queue.add(child);
     }
-  }
-
-  /// DB-chain lookup returning white-normalized cp, or null on miss.
-  Future<(int cp, int depth)?> _lookupDbEvalWhite(
-    String fen,
-    TreeBuildConfig config,
-  ) async {
-    final minDepth = config.effectiveMinEvalDepth;
-
-    final cached = await _evalCache.getEvalCpWhite(fen, minDepth: minDepth);
-    if (cached != null) {
-      _stats.dbEvalHits++;
-      return (cached, minDepth);
-    }
-    _stats.dbEvalMisses++;
-
-    if (config.enableCdbDirect && _cdbDirect != null) {
-      final cdb = await _cdbDirect!.lookup(fen, minDepth: minDepth);
-      if (cdb.isHit) {
-        _stats.cdbDirectHits++;
-        final hit = cdb.hit!;
-        final depth = hit.depth > 0 ? hit.depth : config.evalDepth;
-        _cacheEvalWhite(fen, hit.cp, depth);
-        return (hit.cp, depth);
-      }
-    }
-
-    if (config.enableLocalChessDb && _localChessDb != null) {
-      final local = await _localChessDb!.lookup(fen, minDepth: minDepth);
-      if (local.isHit) {
-        _stats.localChessDbHits++;
-        final hit = local.hit!;
-        final depth = hit.depth > 0 ? hit.depth : config.evalDepth;
-        _cacheEvalWhite(fen, hit.cp, depth);
-        return (hit.cp, depth);
-      }
-    }
-
-    if (config.enableChessDbApi &&
-        _chessDbApi != null &&
-        _chessDbApi!.quotaRemaining) {
-      final api = await _chessDbApi!.lookup(fen, minDepth: minDepth);
-      if (api.isHit) {
-        _stats.chessDbApiHits++;
-        final hit = api.hit!;
-        final depth = hit.depth > 0 ? hit.depth : config.evalDepth;
-        _cacheEvalWhite(fen, hit.cp, depth);
-        return (hit.cp, depth);
-      }
-    }
-
-    return null;
   }
 
   // ── Our move: Stockfish MultiPV → eval filter → enqueue children ───────
@@ -535,7 +501,7 @@ class TreeBuildService {
       final topCp = discovery.lines.first.effectiveCp;
       final stmCp = isWhiteToMove ? topCp : -topCp;
       node.engineEvalCp = stmCp;
-      _cacheEvalWhite(node.fen, topCp, config.evalDepth);
+      _evalResolver.cacheEvalWhite(node.fen, topCp, config.evalDepth);
     }
 
     // Eval-window pruning (deferred from _processBuildNode so the eval
@@ -559,7 +525,7 @@ class TreeBuildService {
     // source, so the explorer data is available anyway).
     ExplorerResponse? lichess;
     if (!config.maiaOnly) {
-      lichess = await _getDbData(node.fen, config);
+      lichess = await _evalResolver.getDbData(node.fen, config);
     }
 
     if (lichess != null) {
@@ -612,7 +578,7 @@ class TreeBuildService {
       child.moveProbability = 1.0;
       child.cumulativeProbability = node.cumulativeProbability;
       child.engineEvalCp = childEvalStm;
-      _cacheEvalWhite(childFen, childIsWhite ? childEvalStm : -childEvalStm,
+      _evalResolver.cacheEvalWhite(childFen, childIsWhite ? childEvalStm : -childEvalStm,
           config.evalDepth);
 
       // Enrich with Lichess stats
@@ -624,7 +590,14 @@ class TreeBuildService {
         }
       }
 
-      _emitProgress(tree, child.ply, child.fen, onProgress, config.maxPly);
+      _progress.emitProgress(
+        tree,
+        child.ply,
+        child.fen,
+        onProgress,
+        config.maxPly,
+        buildSw: _buildSw,
+      );
     }
 
     // Populate maia_frequency on our-move children.  C gates this on
@@ -714,7 +687,7 @@ class TreeBuildService {
     required TreeBuildConfig config,
     required void Function(BuildProgress) onProgress,
   }) async {
-    final response = await _getDbData(node.fen, config);
+    final response = await _evalResolver.getDbData(node.fen, config);
     if (response == null || response.totalGames == 0) return;
 
     final totalW = response.moves.fold(0, (s, m) => s + m.white);
@@ -755,7 +728,14 @@ class TreeBuildService {
       childrenAdded++;
       massCovered += prob;
 
-      _emitProgress(tree, child.ply, child.fen, onProgress, config.maxPly);
+      _progress.emitProgress(
+        tree,
+        child.ply,
+        child.fen,
+        onProgress,
+        config.maxPly,
+        buildSw: _buildSw,
+      );
     }
   }
 
@@ -819,93 +799,14 @@ class TreeBuildService {
       childrenAdded++;
       massCovered += prob;
 
-      _emitProgress(tree, child.ply, child.fen, onProgress, config.maxPly);
-    }
-  }
-
-  // ── Ensure eval (returns full result for bestmove reuse) ───────────────
-
-  /// Ensure eval on [node]. Returns true when an eval was resolved.
-  Future<bool> _ensureEval(
-    BuildTreeNode node,
-    TreeBuildConfig config, {
-    required FenMap fenMap,
-    bool dbOnly = false,
-  }) async {
-    if (node.hasEngineEval) return true;
-
-    final outcome = await resolveEvalChain(
-      fen: node.fen,
-      config: config,
-      cache: _evalCache,
-      stats: _stats,
-      localChessDb: _localChessDb,
-      cdbDirect: _cdbDirect,
-      chessDbApi: _chessDbApi,
-      extEvalMode: node.extEvalMode,
-      canonicalNode: fenMap.getCanonical(node.fen),
-      allowStockfishFallback: !dbOnly,
-      stockfishEval: (f, depth) async {
-        final sw = Stopwatch()..start();
-        final result = await _pool.evaluateFen(f, depth);
-        _stats.sfSingleMs += sw.elapsedMilliseconds;
-        return (stmCp: result.effectiveCp, depth: depth);
-      },
-      cacheWrite: (f, whiteCp, depth) async {
-        _cacheEvalWhite(f, whiteCp, depth);
-      },
-    );
-
-    if (outcome.extEvalMode != node.extEvalMode) {
-      node.extEvalMode = outcome.extEvalMode;
-    }
-
-    if (outcome.whiteCp != null) {
-      final isWhiteStm = node.fen.split(' ')[1] == 'w';
-      node.engineEvalCp =
-          isWhiteStm ? outcome.whiteCp! : -outcome.whiteCp!;
-      return true;
-    }
-    return false;
-  }
-
-  Future<void> _initExternalEvalProviders(TreeBuildConfig config) async {
-    await _teardownExternalEvalProviders();
-
-    await CdbDirectEvalProvider.probeAvailability();
-    if (config.enableCdbDirect &&
-        config.cdbDirectPath.isNotEmpty &&
-        CdbDirectEvalProvider.isAvailable) {
-      final provider = CdbDirectEvalProvider(path: config.cdbDirectPath);
-      if (await provider.init()) {
-        _cdbDirect = provider;
-      }
-    }
-
-    if (config.enableLocalChessDb && config.localChessDbPath.isNotEmpty) {
-      final provider = SqliteEvalProvider(path: config.localChessDbPath);
-      if (await provider.init()) {
-        _localChessDb = provider;
-      }
-    }
-
-    if (config.enableChessDbApi) {
-      _chessDbApi = ChessDbApiProvider(
-        dailyQuota: config.chessDbApiDailyQuota,
-        concurrency: config.chessDbApiConcurrency,
+      _progress.emitProgress(
+        tree,
+        child.ply,
+        child.fen,
+        onProgress,
+        config.maxPly,
+        buildSw: _buildSw,
       );
-      await _chessDbApi!.init();
-    }
-  }
-
-  Future<void> _teardownExternalEvalProviders() async {
-    await _localChessDb?.close();
-    _localChessDb = null;
-    await _cdbDirect?.close();
-    _cdbDirect = null;
-    if (_chessDbApi != null) {
-      await _chessDbApi!.flushQuota();
-      _chessDbApi = null;
     }
   }
 
@@ -972,111 +873,6 @@ class TreeBuildService {
       tree.maxPlyReached = child.ply;
     }
     return child;
-  }
-
-  Future<ExplorerResponse?> _getDbData(
-    String fen,
-    TreeBuildConfig config,
-  ) async {
-    final cacheKey = '${config.useMasters ? "m" : "l"}|$fen';
-    if (_dbCache.containsKey(cacheKey)) {
-      _stats.dbExplorerHits++;
-      return _dbCache[cacheKey];
-    }
-    _stats.dbExplorerMisses++;
-    _stats.lichessQueries++;
-    final data = await _probabilityService.getProbabilitiesForFen(
-      fen,
-      speeds: config.speeds,
-      ratings: config.ratingRange,
-      useMasters: config.useMasters,
-    );
-    _dbCache[cacheKey] = data;
-    return data;
-  }
-
-  /// Persist an eval (white-normalized cp).  Fire-and-forget — the L1
-  /// mirror inside [EvalCache] is updated synchronously, so subsequent
-  /// reads hit immediately without awaiting the DB write.
-  void _cacheEvalWhite(String fen, int whiteCp, int depth) {
-    unawaited(_evalCache.putEvalCpWhite(fen, whiteCp, depth));
-  }
-
-  void _emitProgress(
-    BuildTree tree,
-    int ply,
-    String? fen,
-    void Function(BuildProgress) onProgress,
-    int maxPlyConfig,
-  ) {
-    if (tree.totalNodes - _lastProgressNodes < 5 && tree.totalNodes > 2) {
-      return;
-    }
-    _lastProgressNodes = tree.totalNodes;
-
-    final elapsedMs = _buildSw.elapsedMilliseconds;
-    final d = tree.maxPlyReached;
-
-    int totalAtDepth = 0;
-    int unexploredAtDepth = 0;
-    _countDepthLayer(tree.root, d, (total, unexplored) {
-      totalAtDepth = total;
-      unexploredAtDepth = unexplored;
-    });
-
-    double? nodesPerMinute;
-    int? etaDepthSeconds;
-
-    final elapsedMin = elapsedMs / 60000.0;
-    final deltaNodes = tree.totalNodes - _buildStartTotalNodes;
-    if (elapsedMs >= 500 && elapsedMin > 0 && deltaNodes >= 1) {
-      nodesPerMinute = deltaNodes / elapsedMin;
-      if (nodesPerMinute > 0 && unexploredAtDepth > 0) {
-        etaDepthSeconds = (unexploredAtDepth * 60.0 / nodesPerMinute)
-            .round()
-            .clamp(1, 86400 * 7);
-      }
-    }
-
-    onProgress(BuildProgress(
-      totalNodes: tree.totalNodes,
-      maxPlyReached: d,
-      maxPlyConfig: maxPlyConfig,
-      elapsedMs: elapsedMs,
-      nodesPerMinute: nodesPerMinute,
-      currentDepth: d,
-      unexploredAtDepth: unexploredAtDepth,
-      totalAtDepth: totalAtDepth,
-      etaDepthSeconds: etaDepthSeconds,
-    ));
-  }
-
-  static void _countDepthLayer(
-    BuildTreeNode node,
-    int targetPly,
-    void Function(int total, int unexplored) callback,
-  ) {
-    int total = 0;
-    int unexplored = 0;
-    _walkDepthLayer(node, targetPly, (n) {
-      total++;
-      if (!n.explored) unexplored++;
-    });
-    callback(total, unexplored);
-  }
-
-  static void _walkDepthLayer(
-    BuildTreeNode node,
-    int targetPly,
-    void Function(BuildTreeNode) visitor,
-  ) {
-    if (node.ply == targetPly) {
-      visitor(node);
-      return;
-    }
-    for (final c in node.children) {
-      _walkDepthLayer(c, targetPly, visitor);
-    }
   }
 
   int _findMaxNodeId(BuildTreeNode node) {

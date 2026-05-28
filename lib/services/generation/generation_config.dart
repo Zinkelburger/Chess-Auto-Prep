@@ -9,6 +9,7 @@ enum SelectionMode {
   expectimax,
   engineOnly,
   dbWinRateOnly,
+  playable,
 }
 
 // ── Tree build algorithm mode ───────────────────────────────────────────
@@ -123,15 +124,15 @@ class TreeBuildConfig {
     required this.startFen,
     required this.playAsWhite,
     this.minProbability = 0.0001,
-    this.maxPly = 10,
+    this.maxPly = 20,
     this.maxNodes = 0,
     this.buildMode = BuildMode.stockfishExpectimax,
-    this.evalDepth = 20,
+    this.evalDepth = 15,
     this.engineThreads = 0,
-    this.ourMultipv = 5,
+    this.ourMultipv = 4,
     this.maxEvalLossCp = 50,
-    this.oppMaxChildren = 6,
-    this.oppMassTarget = 0.95,
+    this.oppMaxChildren = 4,
+    this.oppMassTarget = 0.80,
     this.minEvalCp = 0,
     this.maxEvalCp = 200,
     this.relativeEval = false,
@@ -170,15 +171,15 @@ class TreeBuildConfig {
       startFen: startFen,
       playAsWhite: json['play_as_white'] as bool? ?? true,
       minProbability: (json['min_probability'] as num?)?.toDouble() ?? 0.0001,
-      maxPly: (json['max_depth'] as num?)?.toInt() ?? 10,
+      maxPly: (json['max_depth'] as num?)?.toInt() ?? 20,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
       buildMode: _parseBuildMode(json['build_mode'] as String?),
-      evalDepth: (json['eval_depth'] as num?)?.toInt() ?? 20,
+      evalDepth: (json['eval_depth'] as num?)?.toInt() ?? 15,
       engineThreads: (json['engine_threads'] as num?)?.toInt() ?? 0,
-      ourMultipv: (json['our_multipv'] as num?)?.toInt() ?? 5,
+      ourMultipv: (json['our_multipv'] as num?)?.toInt() ?? 4,
       maxEvalLossCp: (json['max_eval_loss_cp'] as num?)?.toInt() ?? 50,
-      oppMaxChildren: (json['opp_max_children'] as num?)?.toInt() ?? 6,
-      oppMassTarget: (json['opp_mass_target'] as num?)?.toDouble() ?? 0.95,
+      oppMaxChildren: (json['opp_max_children'] as num?)?.toInt() ?? 4,
+      oppMassTarget: (json['opp_mass_target'] as num?)?.toDouble() ?? 0.80,
       minEvalCp: (json['min_eval_cp'] as num?)?.toInt() ?? 0,
       maxEvalCp: (json['max_eval_cp'] as num?)?.toInt() ?? 200,
       relativeEval: json['relative_eval'] as bool? ?? false,
@@ -377,6 +378,8 @@ SelectionMode _parseSelectionMode(String? value) {
       return SelectionMode.engineOnly;
     case 'dbWinRateOnly':
       return SelectionMode.dbWinRateOnly;
+    case 'playable':
+      return SelectionMode.playable;
     default:
       return SelectionMode.expectimax;
   }
