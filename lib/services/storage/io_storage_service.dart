@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import '../../models/repertoire_metadata.dart';
+import '../pgn_parsing_service.dart' as pgn;
 import 'app_paths.dart';
 import 'storage_service.dart';
 
@@ -18,6 +20,9 @@ class IOStorageService implements StorageService {
   Future<File> _getFile(String filename) async {
     return AppPaths.documentsFile(filename);
   }
+
+  File _resolve(String path) =>
+      p.isAbsolute(path) ? File(path) : File(path);
 
   /// Best-effort atomic replace: write to a temp file, then rename.
   Future<void> _writeAtomically(File target, String content) async {
@@ -38,12 +43,78 @@ class IOStorageService implements StorageService {
     try {
       await tmp.rename(target.path);
     } on FileSystemException {
-      // Some platforms may fail to rename over an existing file.
       if (await target.exists()) {
         await target.delete();
       }
       await tmp.rename(target.path);
     }
+  }
+
+  // ── Generic file I/O ─────────────────────────────────────────────────────
+
+  @override
+  Future<String?> readFile(String path) async {
+    try {
+      final file = _resolve(path);
+      if (await file.exists()) return await file.readAsString();
+    } catch (_) {}
+    return null;
+  }
+
+  @override
+  Future<void> writeFile(String path, String content) async {
+    await _writeAtomically(_resolve(path), content);
+  }
+
+  @override
+  Future<bool> fileExists(String path) async {
+    try {
+      return await _resolve(path).exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> deleteFile(String path) async {
+    try {
+      final file = _resolve(path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> renameFile(String oldPath, String newPath) async {
+    await _resolve(oldPath).rename(newPath);
+  }
+
+  @override
+  String parentPath(String filePath) => p.dirname(filePath);
+
+  // ── Repertoire file management ────────────────────────────────────────────
+
+  @override
+  Future<List<RepertoireMetadata>> listRepertoireFiles() async {
+    final dir = await AppPaths.repertoiresDirectory(create: true);
+    final entries = <RepertoireMetadata>[];
+    await for (final entity in dir.list()) {
+      if (!entity.path.toLowerCase().endsWith('.pgn')) continue;
+      final stat = await entity.stat();
+      final content = await File(entity.path).readAsString();
+      entries.add(RepertoireMetadata(
+        filePath: entity.path,
+        name: p.basenameWithoutExtension(entity.path),
+        gameCount: pgn.countPgnGames(content),
+        lastModified: stat.modified,
+      ));
+    }
+    return entries;
+  }
+
+  @override
+  Future<String> repertoireFilePath(String name) async {
+    final dir = await AppPaths.repertoiresDirectory(create: true);
+    return p.join(dir.path, '$name.pgn');
   }
 
   @override

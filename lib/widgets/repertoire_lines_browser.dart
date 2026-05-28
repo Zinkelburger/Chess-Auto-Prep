@@ -7,13 +7,13 @@ import 'package:flutter/material.dart';
 
 import '../models/build_tree_node.dart';
 import '../models/repertoire_line.dart';
-import '../models/trap_line_info.dart';
+import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import '../services/coherence_service.dart';
-import '../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/generation/fen_map.dart';
-import '../services/navigation_stack.dart';
+import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../utils/coverage_helpers.dart';
-import '../utils/line_metrics_helpers.dart';
+import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../utils/lines_filter_helpers.dart';
 import 'lines/line_filter_controls.dart';
 import 'lines/line_metrics_panel.dart';

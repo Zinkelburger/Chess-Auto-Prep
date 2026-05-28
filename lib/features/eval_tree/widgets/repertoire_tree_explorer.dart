@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../utils/ease_utils.dart' show winProbability;
 import '../../../utils/eval_constants.dart';
-import '../../../utils/tree_colors.dart';
+import '../tree_colors.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
 import '../services/eval_tree_line_metrics.dart';

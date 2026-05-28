@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/coverage_helpers.dart';
 import '../../utils/lines_filter_helpers.dart';
@@ -205,6 +205,12 @@ class _HeaderSection extends StatelessWidget {
               _SortChip(
                   label: 'Quality',
                   value: 'quality',
+                  sortBy: sortBy,
+                  onChanged: onSortByChanged),
+              const SizedBox(width: 4),
+              _SortChip(
+                  label: 'Playability',
+                  value: 'playability',
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
               const SizedBox(width: 4),

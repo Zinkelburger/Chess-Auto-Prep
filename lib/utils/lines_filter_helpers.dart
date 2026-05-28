@@ -1,7 +1,7 @@
 import '../models/repertoire_line.dart';
-import '../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../utils/coverage_helpers.dart';
-import '../utils/line_metrics_helpers.dart';
+import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
 
 /// Coverage category filter for the lines browser.
@@ -134,6 +134,13 @@ String getLineGroupName(RepertoireLine line) {
         final aq = lineMetrics[a.id]?.quality ?? 0.5;
         final bq = lineMetrics[b.id]?.quality ?? 0.5;
         return aq.compareTo(bq);
+      });
+      break;
+    case 'playability':
+      filtered.sort((a, b) {
+        final ap = lineMetrics[a.id]?.playability ?? 0.5;
+        final bp = lineMetrics[b.id]?.playability ?? 0.5;
+        return bp.compareTo(ap);
       });
       break;
     case 'traps':

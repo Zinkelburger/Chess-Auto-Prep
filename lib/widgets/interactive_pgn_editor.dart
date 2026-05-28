@@ -13,6 +13,10 @@ import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show filterDisplayComment;
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
+import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
+import 'package:chess_auto_prep/features/traps/widgets/trap_move_indicator.dart';
 
 // Simple counter for unique move IDs
 int _pgnMoveIdCounter = 0;
@@ -116,6 +120,12 @@ class InteractivePgnEditor extends StatefulWidget {
   /// Whether the editor is showing an existing line being edited in-place.
   final bool isEditingExistingLine;
 
+  /// Optional trap index for orange dot markers on trap positions in the PGN.
+  final TrapIndexService? trapIndex;
+
+  /// Optional board preview on trap dot hover.
+  final BoardPreviewController? boardPreview;
+
   const InteractivePgnEditor({
     super.key,
     this.onPositionChanged,
@@ -131,6 +141,8 @@ class InteractivePgnEditor extends StatefulWidget {
     this.onLineSaved,
     this.onLineEdited,
     this.isEditingExistingLine = false,
+    this.trapIndex,
+    this.boardPreview,
   });
 
   @override
@@ -1004,18 +1016,40 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     return Wrap(
       spacing: 2,
       runSpacing: 4,
-      children: _buildMoveWidgets(_roots, startMoveNumber, startIsWhite,
-          isFirstMove: true),
+      children: _buildMoveWidgets(
+        _roots,
+        startMoveNumber,
+        startIsWhite,
+        isFirstMove: true,
+        positionBefore: _startingPosition(),
+      ),
     );
+  }
+
+  Position _startingPosition() {
+    try {
+      return widget.startingFen != null
+          ? Chess.fromSetup(Setup.parseFen(widget.startingFen!))
+          : Chess.initial;
+    } catch (_) {
+      return Chess.initial;
+    }
   }
 
   List<Widget> _buildMoveWidgets(
       List<PgnMove> siblings, int moveNumber, bool isWhite,
-      {bool isFirstMove = false}) {
+      {bool isFirstMove = false, required Position positionBefore}) {
     final widgets = <Widget>[];
     if (siblings.isEmpty) return widgets;
 
     final main = siblings[0];
+    final mainMove = positionBefore.parseSan(main.san);
+    Position positionAfterMain = positionBefore;
+    TrapLineInfo? mainTrap;
+    if (mainMove != null) {
+      positionAfterMain = positionBefore.play(mainMove);
+      mainTrap = widget.trapIndex?.trapAtFen(positionAfterMain.fen);
+    }
 
     // Main move - show move number for White, or "X..." for Black on first move
     if (isWhite) {
@@ -1034,7 +1068,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           )));
     }
 
-    widgets.add(_buildSingleMoveWidget(main));
+    widgets.add(_buildSingleMoveWidget(
+      main,
+      trap: mainTrap,
+      fenAfterMove: mainMove != null ? positionAfterMain.fen : null,
+    ));
 
     if (main.comment != null && main.comment!.isNotEmpty) {
       widgets.add(_buildInlineComment(main.comment!));
@@ -1051,6 +1089,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             )));
 
         final variant = siblings[i];
+        final variantMove = positionBefore.parseSan(variant.san);
+        Position positionAfterVariant = positionBefore;
+        TrapLineInfo? variantTrap;
+        if (variantMove != null) {
+          positionAfterVariant = positionBefore.play(variantMove);
+          variantTrap =
+              widget.trapIndex?.trapAtFen(positionAfterVariant.fen);
+        }
+
         if (isWhite) {
           widgets.add(Text('$moveNumber. ',
               style: const TextStyle(
@@ -1067,7 +1114,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
               )));
         }
 
-        widgets.add(_buildSingleMoveWidget(variant));
+        widgets.add(_buildSingleMoveWidget(
+          variant,
+          trap: variantTrap,
+          fenAfterMove:
+              variantMove != null ? positionAfterVariant.fen : null,
+        ));
 
         if (variant.comment != null && variant.comment!.isNotEmpty) {
           widgets.add(_buildInlineComment(variant.comment!));
@@ -1075,7 +1127,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
         // Recursively build the rest of the variation
         widgets.addAll(_buildMoveWidgets(
-            variant.children, isWhite ? moveNumber : moveNumber + 1, !isWhite));
+          variant.children,
+          isWhite ? moveNumber : moveNumber + 1,
+          !isWhite,
+          positionBefore: positionAfterVariant,
+        ));
 
         widgets.add(const Text(' ) ',
             style: TextStyle(
@@ -1088,7 +1144,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     // Continue main line
     widgets.addAll(_buildMoveWidgets(
-        main.children, isWhite ? moveNumber : moveNumber + 1, !isWhite));
+      main.children,
+      isWhite ? moveNumber : moveNumber + 1,
+      !isWhite,
+      positionBefore: positionAfterMain,
+    ));
 
     return widgets;
   }
@@ -1113,7 +1173,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     );
   }
 
-  Widget _buildSingleMoveWidget(PgnMove move) {
+  Widget _buildSingleMoveWidget(
+    PgnMove move, {
+    TrapLineInfo? trap,
+    String? fenAfterMove,
+  }) {
     final isSelected = move.id == _selectedMoveId;
     final isCurrent = _currentPath.any((m) => m.id == move.id);
 
@@ -1159,6 +1223,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 decorationStyle: TextDecorationStyle.dotted,
               ),
             ),
+            if (trap != null)
+              TrapMoveIndicator(
+                trap: trap,
+                boardPreview: widget.boardPreview,
+                previewFen: fenAfterMove,
+                ownerTag: this,
+              ),
           ],
         ),
       ),

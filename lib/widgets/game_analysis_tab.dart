@@ -15,7 +15,7 @@ import '../widgets/pgn_viewer_widget.dart';
 
 class GameAnalysisTab extends StatefulWidget {
   final GameAnalysisController analysisController;
-  final PgnViewerController pgnController;
+  final PgnViewerWidgetController pgnController;
   final int currentPly;
 
   /// Current variation depth (0 = on mainline). Used to update best-line

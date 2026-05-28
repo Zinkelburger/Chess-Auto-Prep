@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../screens/settings_screen.dart';
 import '../../theme/app_colors.dart';
 import '../app_mode_menu_button.dart';
+import '../layout/board_zone.dart';
+import '../layout/repertoire_mode.dart';
+import '../layout/repertoire_mode_switcher.dart';
 
 /// App bar for the repertoire screen: title, generation status, and actions.
 class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
@@ -14,9 +17,13 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.showTrainButton = false,
     this.showSelectRepertoireAction = false,
     this.generationLocked = false,
+    this.trapNavigation,
+    this.mode,
+    this.onModeChanged,
     required this.onOpenSettings,
     this.onSelectRepertoire,
     this.onTrainRepertoire,
+    this.onOpenGeneration,
   });
 
   final Widget title;
@@ -25,9 +32,13 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final bool showTrainButton;
   final bool showSelectRepertoireAction;
   final bool generationLocked;
+  final Widget? trapNavigation;
+  final RepertoireMode? mode;
+  final ValueChanged<RepertoireMode>? onModeChanged;
   final VoidCallback onOpenSettings;
   final VoidCallback? onSelectRepertoire;
   final VoidCallback? onTrainRepertoire;
+  final VoidCallback? onOpenGeneration;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -38,9 +49,19 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
       titleSpacing: 16,
       title: title,
       actions: [
+        if (mode != null && onModeChanged != null)
+          RepertoireModeSwitcher(
+            mode: mode!,
+            onModeChanged: onModeChanged!,
+            enabled: !generationLocked,
+          ),
+        BoardZoneControls(trapNavigation: trapNavigation),
+        if (mode == RepertoireMode.edit && onOpenGeneration != null)
+          RepertoireGenerateButton(onPressed: onOpenGeneration),
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
+            onTap: onOpenGeneration,
           ),
         if (showTrainButton && onTrainRepertoire != null)
           RepertoireTrainButton(
@@ -101,45 +122,81 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
   const RepertoireGenerationStatusChip({
     super.key,
     required this.isPaused,
+    this.onTap,
   });
 
   final bool isPaused;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: isPaused
-                ? AppColors.warningSurface
-                : AppColors.warningSurface.withValues(alpha: 0.85),
+        child: Material(
+          color: isPaused
+              ? AppColors.warningSurface
+              : AppColors.warningSurface.withValues(alpha: 0.85),
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!isPaused)
-                const SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!isPaused)
+                    const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  else
+                    const Icon(Icons.pause, size: 12, color: Colors.white),
+                  const SizedBox(width: 6),
+                  Text(
+                    isPaused ? 'Paused' : 'Building...',
+                    style: const TextStyle(fontSize: 11, color: Colors.white),
                   ),
-                )
-              else
-                const Icon(Icons.pause, size: 12, color: Colors.white),
-              const SizedBox(width: 6),
-              Text(
-                isPaused ? 'Paused' : 'Building...',
-                style: const TextStyle(fontSize: 11, color: Colors.white),
+                ],
               ),
-            ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class RepertoireGenerateButton extends StatelessWidget {
+  const RepertoireGenerateButton({
+    super.key,
+    required this.onPressed,
+  });
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 900;
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Center(
+        child: compact
+            ? IconButton(
+                tooltip: 'Generate repertoire (G)',
+                onPressed: onPressed,
+                icon: const Icon(Icons.auto_awesome),
+              )
+            : TextButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('Generate'),
+              ),
       ),
     );
   }
@@ -207,8 +264,8 @@ class RepertoireTrainButton extends StatelessWidget {
 }
 
 /// Opens global settings from the repertoire toolbar.
-void openRepertoireSettings(BuildContext context) {
-  Navigator.push(
+Future<void> openRepertoireSettings(BuildContext context) {
+  return Navigator.push(
     context,
     MaterialPageRoute(builder: (_) => const SettingsScreen()),
   );

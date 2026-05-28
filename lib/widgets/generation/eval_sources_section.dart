@@ -54,7 +54,6 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
   @override
   void initState() {
     super.initState();
-    EvalDatabaseSettings.instance.load();
     _refreshChessDbQuotaDisplay();
   }
 
@@ -231,7 +230,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
                   dbSettings.enableCdbDirect &&
                           dbSettings.cdbDirectPath.isNotEmpty
                       ? dbSettings.cdbDirectPath
-                      : 'Configure in Actions → Database Downloads',
+                      : 'Configure in Settings → Database',
                   style: const TextStyle(fontSize: 11),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,

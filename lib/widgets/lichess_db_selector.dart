@@ -5,7 +5,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import 'lichess_db_info_icon.dart';
 
 const _speedOptions = <(String label, String value)>[

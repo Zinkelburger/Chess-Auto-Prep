@@ -12,6 +12,7 @@ import 'package:dartchess/dartchess.dart' hide File;
 
 import 'browser_extension_server.dart';
 import '../storage/app_paths.dart';
+import '../pgn_parsing_service.dart';
 
 /// Factory function for creating the browser extension server.
 BrowserExtensionServer createBrowserExtensionServer() =>
@@ -160,12 +161,11 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
         if (file is File && file.path.toLowerCase().endsWith('.pgn')) {
           final stat = await file.stat();
           final content = await file.readAsString();
-          final lineCount = _countGamesInPgn(content);
+          final lineCount = countPgnGames(content);
           final fileName = p.basename(file.path);
           final name = p.basenameWithoutExtension(file.path);
 
-          // Extract color metadata from PGN comments (e.g., "// Color: White")
-          final color = _extractRepertoireColor(content);
+          final color = extractRepertoireColor(content);
 
           repertoires.add({
             'name': name,
@@ -301,33 +301,10 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
     request.response.close();
   }
 
-  int _countGamesInPgn(String content) {
-    return '[Event '.allMatches(content).length;
-  }
-
-  /// Extract repertoire color from PGN content
-  /// Looks for "// Color: White" or "// Color: Black" comments at the start of the file
-  String? _extractRepertoireColor(String content) {
-    final lines = content.split('\n');
-
-    // Check the first 10 lines for the color comment
-    for (int i = 0; i < lines.length && i < 10; i++) {
-      final line = lines[i].trim();
-      if (line.startsWith('// Color:')) {
-        final colorValue = line.substring(9).trim().toLowerCase();
-        if (colorValue == 'white' || colorValue == 'black') {
-          return colorValue;
-        }
-      }
-    }
-
-    return null; // No color specified
-  }
-
   Future<int> _countGamesInFile(File file) async {
     if (!await file.exists()) return 0;
     final content = await file.readAsString();
-    return _countGamesInPgn(content);
+    return countPgnGames(content);
   }
 
   /// Generate a signature for a line based on moves (for duplicate detection)
@@ -355,7 +332,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
     final newSignature = _getLineSignature(data);
 
     // Parse existing games and compare signatures
-    final games = _splitPgnIntoGames(content);
+    final games = splitPgnIntoGames(content);
 
     for (final gameText in games) {
       try {
@@ -400,40 +377,6 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
       final moves = _extractMovesManually(gameText);
       return '$variant:$startFen:${moves.join(':')}';
     }
-  }
-
-  /// Split PGN content into individual games
-  List<String> _splitPgnIntoGames(String content) {
-    final games = <String>[];
-    final lines = content.split('\n');
-
-    String currentGame = '';
-    bool inGame = false;
-
-    for (final line in lines) {
-      final trimmedLine = line.trim();
-
-      // Skip comment-only lines at the top level
-      if (trimmedLine.startsWith('//') && !inGame) {
-        continue;
-      }
-
-      if (trimmedLine.startsWith('[Event')) {
-        if (inGame && currentGame.trim().isNotEmpty) {
-          games.add(currentGame);
-        }
-        currentGame = '$line\n';
-        inGame = true;
-      } else if (inGame) {
-        currentGame += '$line\n';
-      }
-    }
-
-    if (inGame && currentGame.trim().isNotEmpty) {
-      games.add(currentGame);
-    }
-
-    return games;
   }
 
   /// Fallback move extraction when parsing fails

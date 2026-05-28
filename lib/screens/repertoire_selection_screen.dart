@@ -3,11 +3,11 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'dart:io';
-import 'package:path/path.dart' as p;
 
-import '../services/storage/app_paths.dart';
+import '../models/repertoire_metadata.dart';
+import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
+import '../widgets/layout/empty_state_placeholder.dart';
 import '../widgets/pgn_import_dialog.dart';
 
 class RepertoireSelectionScreen extends StatefulWidget {
@@ -19,7 +19,7 @@ class RepertoireSelectionScreen extends StatefulWidget {
 }
 
 class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
-  List<Map<String, dynamic>> _repertoires = [];
+  List<RepertoireMetadata> _repertoires = [];
   bool _isLoading = true;
   String? _loadError;
 
@@ -36,31 +36,9 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     });
 
     try {
-      final repertoireDir = await AppPaths.repertoiresDirectory(create: true);
-
-      final files = await repertoireDir
-          .list()
-          .where((file) => file.path.toLowerCase().endsWith('.pgn'))
-          .toList();
-      final repertoires = <Map<String, dynamic>>[];
-
-      for (final file in files) {
-        final fileName = p.basenameWithoutExtension(file.path);
-        final stat = await file.stat();
-        final content = await File(file.path).readAsString();
-        final gameCount = _countGamesInPgn(content);
-
-        repertoires.add({
-          'name': fileName,
-          'fileName': fileName,
-          'gameCount': gameCount,
-          'lastModified': stat.modified,
-          'filePath': file.path,
-        });
-      }
-
-      repertoires.sort((a, b) => (b['lastModified'] as DateTime)
-          .compareTo(a['lastModified'] as DateTime));
+      final repertoires = await StorageFactory.instance.listRepertoireFiles();
+      repertoires.sort(
+          (a, b) => b.lastModified.compareTo(a.lastModified));
 
       if (!mounted) return;
       setState(() {
@@ -77,10 +55,6 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
         _loadError = 'Could not load repertoires.\n$e';
       });
     }
-  }
-
-  int _countGamesInPgn(String content) {
-    return '[Event '.allMatches(content).length;
   }
 
   @override
@@ -135,35 +109,13 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     }
 
     if (_repertoires.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.library_books,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No Repertoires Found',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Create a new repertoire to get started',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[600],
-                  ),
-            ),
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              onPressed: _showCreateDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('Create Repertoire'),
-            ),
-          ],
-        ),
+      return EmptyStatePlaceholder(
+        icon: Icons.library_books,
+        title: 'No Repertoires Found',
+        subtitle: 'Create a new repertoire to get started',
+        actionLabel: 'Create Repertoire',
+        actionIcon: Icons.add,
+        onAction: _showCreateDialog,
       );
     }
 
@@ -177,10 +129,10 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     );
   }
 
-  Widget _buildRepertoireCard(Map<String, dynamic> repertoire) {
-    final name = repertoire['name'] as String;
-    final gameCount = repertoire['gameCount'] as int;
-    final lastModified = repertoire['lastModified'] as DateTime;
+  Widget _buildRepertoireCard(RepertoireMetadata repertoire) {
+    final name = repertoire.name;
+    final gameCount = repertoire.gameCount;
+    final lastModified = repertoire.lastModified;
 
     String timeAgo = 'Unknown';
     final difference = DateTime.now().difference(lastModified);
@@ -289,8 +241,8 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     );
   }
 
-  void _selectRepertoire(Map<String, dynamic> repertoire) {
-    Navigator.of(context).pop(repertoire);
+  void _selectRepertoire(RepertoireMetadata repertoire) {
+    Navigator.of(context).pop(repertoire.toMap());
   }
 
   Future<void> _showCreateDialog() async {
@@ -445,11 +397,10 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     PgnImportResult? pgnImport,
   }) async {
     try {
-      final repertoireDir = await AppPaths.repertoiresDirectory(create: true);
+      final storage = StorageFactory.instance;
+      final filePath = await storage.repertoireFilePath(name);
 
-      final file = File(p.join(repertoireDir.path, '$name.pgn'));
-
-      if (await file.exists()) {
+      if (await storage.fileExists(filePath)) {
         if (mounted) {
           showAppSnackBar(context, AppMessages.repertoireExists(name));
         }
@@ -461,7 +412,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
           '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
 
       if (pgnImport != null) {
-        await file.writeAsString('$header${pgnImport.pgnContent}\n');
+        await storage.writeFile(filePath, '$header${pgnImport.pgnContent}\n');
         if (mounted) {
           showAppSnackBar(
             context,
@@ -470,7 +421,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
           );
         }
       } else {
-        await file.writeAsString(header);
+        await storage.writeFile(filePath, header);
       }
 
       await _loadRepertoires();
@@ -483,16 +434,13 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     }
   }
 
-  Future<void> _deleteRepertoire(Map<String, dynamic> repertoire) async {
-    final name = repertoire['name'] as String;
-    final filePath = repertoire['filePath'] as String;
-
+  Future<void> _deleteRepertoire(RepertoireMetadata repertoire) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Repertoire'),
-        content:
-            Text('Delete repertoire "$name"? This action cannot be undone.'),
+        content: Text(
+            'Delete repertoire "${repertoire.name}"? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -509,11 +457,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
     if (confirmed == true) {
       try {
-        final file = File(filePath);
-        if (await file.exists()) {
-          await file.delete();
-        }
-
+        await StorageFactory.instance.deleteFile(repertoire.filePath);
         await _loadRepertoires();
       } catch (e) {
         debugPrint('Delete repertoire failed: $e');
@@ -525,10 +469,8 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
     }
   }
 
-  Future<void> _renameRepertoire(Map<String, dynamic> repertoire) async {
-    final name = repertoire['name'] as String;
-    final filePath = repertoire['filePath'] as String;
-    final nameController = TextEditingController(text: name);
+  Future<void> _renameRepertoire(RepertoireMetadata repertoire) async {
+    final nameController = TextEditingController(text: repertoire.name);
 
     final result = await showDialog<String>(
       context: context,
@@ -556,7 +498,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
           TextButton(
             onPressed: () {
               final newName = nameController.text.trim();
-              if (newName.isNotEmpty && newName != name) {
+              if (newName.isNotEmpty && newName != repertoire.name) {
                 Navigator.of(context).pop(newName);
               }
             },
@@ -570,18 +512,17 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
     if (result != null && result.isNotEmpty) {
       try {
-        final repertoireDir = await AppPaths.repertoiresDirectory(create: true);
-        final oldFile = File(filePath);
-        final newFile = File(p.join(repertoireDir.path, '$result.pgn'));
+        final storage = StorageFactory.instance;
+        final newPath = await storage.repertoireFilePath(result);
 
-        if (await newFile.exists()) {
+        if (await storage.fileExists(newPath)) {
           if (mounted) {
             showAppSnackBar(context, AppMessages.repertoireExists(result));
           }
           return;
         }
 
-        await oldFile.rename(newFile.path);
+        await storage.renameFile(repertoire.filePath, newPath);
         await _loadRepertoires();
       } catch (e) {
         debugPrint('Rename repertoire failed: $e');

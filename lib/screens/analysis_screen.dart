@@ -17,6 +17,7 @@ import '../models/position_analysis.dart';
 import '../utils/fen_utils.dart';
 import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
+import '../services/pgn_parsing_service.dart';
 import '../services/engine_weakness_service.dart';
 import '../services/unified_analysis_builder.dart';
 import '../widgets/engine_weakness_dialog.dart';
@@ -690,7 +691,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       return null;
     }
 
-    final pgnList = AnalysisGamesService.splitPgnIntoGames(pgns);
+    final pgnList = splitPgnIntoGames(pgns);
     if (pgnList.isEmpty) {
       if (mounted) {
         _showError('No valid games found in downloaded data.');

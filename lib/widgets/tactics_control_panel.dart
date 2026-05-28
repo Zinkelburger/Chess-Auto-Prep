@@ -56,7 +56,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   Timer? _coresErrorTimer;
 
   // PGN Viewer controller for analysis tab
-  final PgnViewerController _pgnViewerController = PgnViewerController();
+  final PgnViewerWidgetController _pgnViewerController = PgnViewerWidgetController();
 
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();

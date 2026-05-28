@@ -1,183 +1,20 @@
 /// Slice dialog — filter a PGN game collection by board position and headers.
 ///
-/// Exports [SliceConfig] (serializable filter state) and [PgnSliceDialog].
+/// The data models ([SliceConfig], [MatchMode], [HeaderFilterConfig]) now live
+/// in `lib/models/pgn_filter_models.dart` and are re-exported here for
+/// backward compatibility.
 library;
 
-import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
+import '../models/pgn_filter_models.dart';
+import '../services/pgn_parsing_service.dart' as pgn;
 import '../utils/fen_utils.dart';
 
-// ---------------------------------------------------------------------------
-// Public data model — shared between dialog and screen
-// ---------------------------------------------------------------------------
-
-enum MatchMode { contains, exact, regex, after, before }
-
-String _matchModeLabel(MatchMode m) => switch (m) {
-      MatchMode.contains => 'contains',
-      MatchMode.exact => 'exact',
-      MatchMode.regex => 'regex',
-      MatchMode.after => '≥ (after)',
-      MatchMode.before => '≤ (before)',
-    };
-
-MatchMode _matchModeFromName(String name) => MatchMode.values
-    .firstWhere((m) => m.name == name, orElse: () => MatchMode.contains);
-
-/// A single header‑based filter criterion.
-class HeaderFilterConfig {
-  final String field;
-  final MatchMode mode;
-  final String value;
-
-  const HeaderFilterConfig({
-    required this.field,
-    required this.mode,
-    required this.value,
-  });
-
-  Map<String, dynamic> toJson() =>
-      {'field': field, 'mode': mode.name, 'value': value};
-
-  factory HeaderFilterConfig.fromJson(Map<String, dynamic> j) =>
-      HeaderFilterConfig(
-        field: j['field'] as String? ?? 'Black',
-        mode: _matchModeFromName(j['mode'] as String? ?? 'contains'),
-        value: j['value'] as String? ?? '',
-      );
-
-  /// Human-readable summary for chip display.
-  String get chipLabel {
-    final modeStr =
-        mode == MatchMode.contains ? '' : ' (${_matchModeLabel(mode)})';
-    return '$field$modeStr: $value';
-  }
-}
-
-/// Serializable snapshot of all slice filters.
-class SliceConfig {
-  final String? positionInput;
-  final List<HeaderFilterConfig> headerFilters;
-  final String? sequencePattern;
-  final int sequenceGap;
-
-  const SliceConfig({
-    this.positionInput,
-    this.headerFilters = const [],
-    this.sequencePattern,
-    this.sequenceGap = 4,
-  });
-  const SliceConfig.empty()
-      : positionInput = null,
-        headerFilters = const [],
-        sequencePattern = null,
-        sequenceGap = 4;
-
-  bool get isEmpty =>
-      (positionInput == null || positionInput!.trim().isEmpty) &&
-      headerFilters.every((f) => f.value.isEmpty) &&
-      (sequencePattern == null || sequencePattern!.trim().isEmpty);
-
-  String toJsonString() => jsonEncode({
-        if (positionInput != null && positionInput!.isNotEmpty)
-          'positionInput': positionInput,
-        'headerFilters': headerFilters.map((f) => f.toJson()).toList(),
-        if (sequencePattern != null && sequencePattern!.isNotEmpty)
-          'sequencePattern': sequencePattern,
-        if (sequenceGap != 4) 'sequenceGap': sequenceGap,
-      });
-
-  factory SliceConfig.fromJsonString(String s) {
-    try {
-      final j = jsonDecode(s) as Map<String, dynamic>;
-      return SliceConfig(
-        positionInput: j['positionInput'] as String?,
-        headerFilters: (j['headerFilters'] as List<dynamic>?)
-                ?.map((e) =>
-                    HeaderFilterConfig.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            const [],
-        sequencePattern: j['sequencePattern'] as String?,
-        sequenceGap: (j['sequenceGap'] as int?) ?? 4,
-      );
-    } catch (_) {
-      return const SliceConfig.empty();
-    }
-  }
-
-  /// Short summary for the top‑bar chip strip. Returns individual chip labels.
-  List<String> get chipLabels => [
-        if (positionInput != null && positionInput!.isNotEmpty)
-          'Pos: ${_truncate(positionInput!, 20)}',
-        if (sequencePattern != null && sequencePattern!.isNotEmpty)
-          'Seq: ${_truncate(sequencePattern!, 18)} (gap $sequenceGap)',
-        for (final f in headerFilters)
-          if (f.value.isNotEmpty) f.chipLabel,
-      ];
-
-  static String _truncate(String s, int max) =>
-      s.length <= max ? s : '${s.substring(0, max)}…';
-}
-
-/// Parse a sequence pattern string into groups of consecutive SAN moves.
-/// Groups are separated by `[gap]` tokens.
-/// Example: "d5 e5 [gap] f6" -> [["d5","e5"], ["f6"]]
-List<List<String>> parseSequenceGroups(String pattern) {
-  final trimmed = pattern.trim();
-  if (trimmed.isEmpty) return const [];
-  final parts = trimmed.split(RegExp(r'\[gap\]', caseSensitive: false));
-  final groups = <List<String>>[];
-  for (final part in parts) {
-    final tokens = part
-        .replaceAll(RegExp(r'\d+\.+'), '')
-        .replaceAll(RegExp(r'(1-0|0-1|1/2-1/2|\*)'), '')
-        .split(RegExp(r'\s+'))
-        .where((t) => t.isNotEmpty)
-        .toList();
-    if (tokens.isNotEmpty) groups.add(tokens);
-  }
-  return groups;
-}
-
-/// Check whether a game's mainline matches the sequence groups with the
-/// given max gap (in ply) between groups.
-bool gameMatchesSequence(
-    String pgnText, List<List<String>> groups, int maxGap) {
-  if (groups.isEmpty) return true;
-  try {
-    final game = PgnGame.parsePgn(pgnText);
-    final moves = game.moves.mainline().map((n) => n.san).toList();
-    return _matchGroupsAt(moves, groups, 0, 0, maxGap);
-  } catch (_) {
-    return false;
-  }
-}
-
-bool _matchGroupsAt(
-    List<String> moves, List<List<String>> groups, int gi, int mi, int maxGap) {
-  if (gi >= groups.length) return true;
-  final group = groups[gi];
-  if (group.length > moves.length) return false;
-  final searchLimit = gi == 0 ? moves.length : mi + maxGap;
-  final end = searchLimit.clamp(0, moves.length - group.length);
-  for (int i = mi; i <= end; i++) {
-    bool ok = true;
-    for (int j = 0; j < group.length; j++) {
-      if (moves[i + j] != group[j]) {
-        ok = false;
-        break;
-      }
-    }
-    if (ok && _matchGroupsAt(moves, groups, gi + 1, i + group.length, maxGap)) {
-      return true;
-    }
-  }
-  return false;
-}
+export '../models/pgn_filter_models.dart';
 
 // ---------------------------------------------------------------------------
 // Internal mutable filter row used inside the dialog
@@ -271,63 +108,13 @@ bool _isValidEco(String value) => _ecoExact.hasMatch(value.trim());
 // Dialog types
 // ---------------------------------------------------------------------------
 
-typedef GameRecord = ({Map<String, String> headers, String pgnText});
-
 /// Callback signature: passes matching indices + the config that produced them.
 typedef SliceApplyCallback = void Function(
     List<int> matchingIndices, SliceConfig config);
 
 // ---------------------------------------------------------------------------
-// Top-level helpers used inside Isolate.run closures.
-// Must NOT be class statics — Dart captures the enclosing class context
-// when referencing static members from a closure, which pulls unsendable
-// State/Widget objects into the isolate message.
+// Isolate-safe slice compute — delegates to centralized helpers.
 // ---------------------------------------------------------------------------
-
-bool _sliceGamePassesThroughPosition(
-    Map<String, String> headers, String pgnText, String targetFen) {
-  try {
-    final game = PgnGame.parsePgn(pgnText);
-    final mainline = game.moves.mainline().toList();
-
-    Position pos;
-    final setupFlag = headers['SetUp'] ?? headers['Setup'] ?? '';
-    final fenHeader = headers['FEN'] ?? '';
-    if (setupFlag == '1' && fenHeader.isNotEmpty) {
-      pos = Chess.fromSetup(Setup.parseFen(expandFen(fenHeader)));
-    } else {
-      pos = Chess.initial;
-    }
-
-    if (normalizeFen(pos.fen) == targetFen) return true;
-    for (final moveData in mainline) {
-      final move = pos.parseSan(moveData.san);
-      if (move == null) break;
-      pos = pos.play(move);
-      if (normalizeFen(pos.fen) == targetFen) return true;
-    }
-  } catch (_) { /* invalid position — will return false */ }
-  return false;
-}
-
-bool _sliceMatchesField(String headerVal, String query, MatchMode mode) {
-  switch (mode) {
-    case MatchMode.contains:
-      return headerVal.toLowerCase().contains(query.toLowerCase());
-    case MatchMode.exact:
-      return headerVal.toLowerCase() == query.toLowerCase();
-    case MatchMode.regex:
-      try {
-        return RegExp(query, caseSensitive: false).hasMatch(headerVal);
-      } catch (_) {
-        return false;
-      }
-    case MatchMode.after:
-      return headerVal.compareTo(query) >= 0;
-    case MatchMode.before:
-      return headerVal.compareTo(query) <= 0;
-  }
-}
 
 Future<List<int>> _runSliceCompute(
   List<GameRecord> games,
@@ -352,12 +139,12 @@ Future<List<int>> _runSliceCompute(
       bool matches = true;
 
       if (targetFen != null) {
-        matches = _sliceGamePassesThroughPosition(
+        matches = pgn.gamePassesThroughFen(
             game.headers, game.pgnText, targetFen);
       }
 
       if (matches && seqGroupsCopy.isNotEmpty) {
-        matches = gameMatchesSequence(game.pgnText, seqGroupsCopy, seqGap);
+        matches = pgn.gameMatchesSequence(game.pgnText, seqGroupsCopy, seqGap);
       }
 
       if (matches) {
@@ -366,7 +153,7 @@ Future<List<int>> _runSliceCompute(
           final headerVal = game.headers[f.field] ?? '';
           final mode = MatchMode.values.firstWhere((m) => m.name == f.modeName,
               orElse: () => MatchMode.contains);
-          if (!_sliceMatchesField(headerVal, f.value, mode)) {
+          if (!pgn.matchesField(headerVal, f.value, mode)) {
             matches = false;
             break;
           }
@@ -554,7 +341,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
 
     final seqText = _sequenceController.text.trim();
     final seqGroups = seqText.isNotEmpty
-        ? parseSequenceGroups(seqText)
+        ? pgn.parseSequenceGroups(seqText)
         : const <List<String>>[];
     final seqGap = int.tryParse(_gapController.text) ?? 4;
 
@@ -808,7 +595,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
       _recompute();
       return;
     }
-    final groups = parseSequenceGroups(text);
+    final groups = pgn.parseSequenceGroups(text);
     if (groups.isEmpty) {
       setState(() => _sequenceError = 'No valid moves found');
       return;
@@ -969,7 +756,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                   items: dateModes
                       .map((m) => DropdownMenuItem(
                             value: m,
-                            child: Text(_matchModeLabel(m),
+                            child: Text(matchModeLabel(m),
                                 style: const TextStyle(fontSize: 12)),
                           ))
                       .toList(),
@@ -1090,7 +877,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                   items: availableModes
                       .map((m) => DropdownMenuItem(
                             value: m,
-                            child: Text(_matchModeLabel(m),
+                            child: Text(matchModeLabel(m),
                                 style: const TextStyle(fontSize: 12)),
                           ))
                       .toList(),

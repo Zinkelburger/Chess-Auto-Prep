@@ -7,7 +7,7 @@ import '../theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import '../models/opening_tree.dart';
 import '../models/repertoire_line.dart';
-import '../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../utils/app_messages.dart';
 import '../utils/pgn_utils.dart' as pgn_utils;
 import 'opening_tree/coverage_annotation.dart';

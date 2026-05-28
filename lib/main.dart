@@ -2,19 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'constants/engine_defaults.dart';
 import 'core/app_state.dart';
 import 'models/engine_settings.dart';
+import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
 import 'theme/app_colors.dart';
 
 import 'services/browser_extension_server/browser_extension_server_factory.dart';
 import 'services/default_pgn_service.dart';
+import 'services/engine/engine_lifecycle.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
 
   await EngineSettings().loadFromPrefs();
+  await EvalDatabaseSettings.instance.load();
+  await EngineLifecycle().loadPersistedState();
 
   _startBrowserExtensionServer();
   DefaultPgnService.ensureExtracted();
@@ -22,11 +27,10 @@ void main() async {
   runApp(const ChessAutoPrepApp());
 }
 
-/// Start the browser extension HTTP server on supported platforms (desktop only)
-/// The server listens on localhost:9812 and handles requests from the Lichess extension
 void _startBrowserExtensionServer() async {
   if (BrowserExtensionServerFactory.isSupported) {
-    final started = await BrowserExtensionServerFactory.start(port: 9812);
+    final started = await BrowserExtensionServerFactory.start(
+        port: kBrowserExtensionPort);
     if (started) {
       debugPrint('Browser extension server started successfully');
     } else {

@@ -10,15 +10,29 @@ enum RepertoireMode {
 
 /// Context sub-views within Edit mode.
 enum EditContextView {
+  browse,
   engine,
   expectimax,
   tree,
 }
 
-/// Sub-tabs within Analyze mode.
+/// Sub-tabs within Analyze mode (legacy; prefer [AnalyzeMainView] + [AnalyzeContextView]).
 enum AnalyzeTab {
   lines,
   coverage,
   traps,
   evalTree,
+}
+
+/// Main analyze work area: lines list vs coverage-focused view.
+enum AnalyzeMainView {
+  lines,
+  coverage,
+}
+
+/// Analyze context detail pane beside the board / main zone.
+enum AnalyzeContextView {
+  traps,
+  evalTree,
+  metrics,
 }

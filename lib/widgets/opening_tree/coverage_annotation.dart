@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/opening_tree.dart';
-import '../../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../utils/fen_utils.dart';
 
 /// Coverage classification for an opening-tree move row.

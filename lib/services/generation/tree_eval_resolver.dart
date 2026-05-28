@@ -73,54 +73,31 @@ class TreeEvalResolver {
   }
 
   /// DB-chain lookup returning white-normalized cp, or null on miss.
+  ///
+  /// Delegates to [resolveEvalChain] with Stockfish fallback disabled so the
+  /// full chain (cache, transposition, cdbDirect, local, API) is traversed
+  /// consistently, including subtree-skip and stat tracking.
   Future<(int cp, int depth)?> lookupDbEvalWhite(
     String fen,
     TreeBuildConfig config,
   ) async {
-    final minDepth = config.effectiveMinEvalDepth;
-
-    final cached = await evalCache.getEvalCpWhite(fen, minDepth: minDepth);
-    if (cached != null) {
-      stats.dbEvalHits++;
-      return (cached, minDepth);
+    final outcome = await resolveEvalChain(
+      fen: fen,
+      config: config,
+      cache: evalCache,
+      stats: stats,
+      localChessDb: _localChessDb,
+      cdbDirect: _cdbDirect,
+      chessDbApi: _chessDbApi,
+      allowStockfishFallback: false,
+      stockfishEval: (_, __) async => (stmCp: 0, depth: 0),
+      cacheWrite: (f, whiteCp, depth) async {
+        cacheEvalWhite(f, whiteCp, depth);
+      },
+    );
+    if (outcome.whiteCp != null) {
+      return (outcome.whiteCp!, outcome.depth);
     }
-    stats.dbEvalMisses++;
-
-    if (config.enableCdbDirect && _cdbDirect != null) {
-      final cdb = await _cdbDirect!.lookup(fen, minDepth: minDepth);
-      if (cdb.isHit) {
-        stats.cdbDirectHits++;
-        final hit = cdb.hit!;
-        final depth = hit.depth > 0 ? hit.depth : config.evalDepth;
-        cacheEvalWhite(fen, hit.cp, depth);
-        return (hit.cp, depth);
-      }
-    }
-
-    if (config.enableLocalChessDb && _localChessDb != null) {
-      final local = await _localChessDb!.lookup(fen, minDepth: minDepth);
-      if (local.isHit) {
-        stats.localChessDbHits++;
-        final hit = local.hit!;
-        final depth = hit.depth > 0 ? hit.depth : config.evalDepth;
-        cacheEvalWhite(fen, hit.cp, depth);
-        return (hit.cp, depth);
-      }
-    }
-
-    if (config.enableChessDbApi &&
-        _chessDbApi != null &&
-        _chessDbApi!.quotaRemaining) {
-      final api = await _chessDbApi!.lookup(fen, minDepth: minDepth);
-      if (api.isHit) {
-        stats.chessDbApiHits++;
-        final hit = api.hit!;
-        final depth = hit.depth > 0 ? hit.depth : config.evalDepth;
-        cacheEvalWhite(fen, hit.cp, depth);
-        return (hit.cp, depth);
-      }
-    }
-
     return null;
   }
 

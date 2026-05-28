@@ -3,7 +3,9 @@ library;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../constants/engine_defaults.dart';
 import '../utils/system_info.dart';
+import 'settings_enums.dart';
 
 class EngineSettings with ChangeNotifier {
   static const _prefix = 'engine_settings.';
@@ -23,10 +25,10 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
-  int _depth = 15;
+  int _depth = kDefaultDepth;
   int get depth => _depth;
   set depth(int value) {
-    if (value != _depth && value >= 1 && value <= 99) {
+    if (value != _depth && value >= kMinDepth && value <= kMaxDepth) {
       _depth = value;
       _persist();
       notifyListeners();
@@ -34,10 +36,10 @@ class EngineSettings with ChangeNotifier {
   }
 
 
-  int _multiPv = 3;
+  int _multiPv = kDefaultMultiPv;
   int get multiPv => _multiPv;
   set multiPv(int value) {
-    if (value != _multiPv && value >= 1 && value <= 10) {
+    if (value != _multiPv && value >= kMinMultiPv && value <= kMaxMultiPv) {
       _multiPv = value;
       _persist();
       notifyListeners();
@@ -46,12 +48,13 @@ class EngineSettings with ChangeNotifier {
 
   /// Threads for the inline (PGN) engine worker.  Uses a single Stockfish
   /// process so more threads = faster search on one position.
-  int _inlineThreads = 1;
+  int _inlineThreads = kDefaultInlineThreads;
   int get inlineThreads => _inlineThreads;
   set inlineThreads(int value) {
     final clamped = value.clamp(1, systemCores);
     if (clamped != _inlineThreads) {
       _inlineThreads = clamped;
+      _persist();
       notifyListeners();
     }
   }
@@ -59,18 +62,21 @@ class EngineSettings with ChangeNotifier {
   /// Maximum total moves to display in the analysis table.
   /// Stockfish MultiPV lines fill guaranteed slots; remaining slots are
   /// filled by the highest-probability Maia + DB candidates.
-  int _maxAnalysisMoves = 8;
+  int _maxAnalysisMoves = kDefaultMaxAnalysisMoves;
   int get maxAnalysisMoves => _maxAnalysisMoves;
   set maxAnalysisMoves(int value) {
-    if (value != _maxAnalysisMoves && value >= 3 && value <= 20) {
+    if (value != _maxAnalysisMoves &&
+        value >= kMinMaxAnalysisMoves &&
+        value <= kMaxMaxAnalysisMoves) {
       _maxAnalysisMoves = value;
+      _persist();
       notifyListeners();
     }
   }
 
   // ── Panel visibility toggles ──────────────────────────────────────────
 
-  bool _showStockfish = true;
+  bool _showStockfish = kDefaultShowStockfish;
   bool get showStockfish => _showStockfish;
   set showStockfish(bool value) {
     if (value != _showStockfish) {
@@ -80,7 +86,7 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
-  bool _showMaia = true;
+  bool _showMaia = kDefaultShowMaia;
   bool get showMaia => _showMaia;
   set showMaia(bool value) {
     if (value != _showMaia) {
@@ -90,7 +96,7 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
-  bool _showProbability = true;
+  bool _showProbability = kDefaultShowProbability;
   bool get showProbability => _showProbability;
   set showProbability(bool value) {
     if (value != _showProbability) {
@@ -130,7 +136,7 @@ class EngineSettings with ChangeNotifier {
     notifyListeners();
   }
 
-  bool _showEngineDock = true;
+  bool _showEngineDock = kDefaultShowEngineDock;
   bool get showEngineDock => _showEngineDock;
   set showEngineDock(bool value) {
     if (value != _showEngineDock) {
@@ -140,7 +146,7 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
-  bool _showExpectimaxDock = true;
+  bool _showExpectimaxDock = kDefaultShowExpectimaxDock;
   bool get showExpectimaxDock => _showExpectimaxDock;
   set showExpectimaxDock(bool value) {
     if (value != _showExpectimaxDock) {
@@ -152,14 +158,12 @@ class EngineSettings with ChangeNotifier {
 
   // ── Opponent probability source (engine table + line odds) ─────────────
 
-  /// `maia` | `lichess` | `maia_lichess_fallback`
-  String _opponentProbabilityMode = 'maia_lichess_fallback';
-  String get opponentProbabilityMode => _opponentProbabilityMode;
-  set opponentProbabilityMode(String value) {
-    if (value != _opponentProbabilityMode &&
-        (value == 'maia' ||
-            value == 'lichess' ||
-            value == 'maia_lichess_fallback')) {
+  OpponentProbabilityMode _opponentProbabilityMode =
+      OpponentProbabilityMode.maiaLichessFallback;
+  OpponentProbabilityMode get opponentProbabilityMode =>
+      _opponentProbabilityMode;
+  set opponentProbabilityMode(OpponentProbabilityMode value) {
+    if (value != _opponentProbabilityMode) {
       _opponentProbabilityMode = value;
       _persist();
       notifyListeners();
@@ -167,15 +171,15 @@ class EngineSettings with ChangeNotifier {
   }
 
   bool get fetchMaiaForOpponent =>
-      opponentProbabilityMode == 'maia' ||
-      opponentProbabilityMode == 'maia_lichess_fallback';
+      _opponentProbabilityMode == OpponentProbabilityMode.maia ||
+      _opponentProbabilityMode == OpponentProbabilityMode.maiaLichessFallback;
 
   bool get fetchLichessForOpponent =>
-      opponentProbabilityMode == 'lichess' ||
-      opponentProbabilityMode == 'maia_lichess_fallback';
+      _opponentProbabilityMode == OpponentProbabilityMode.lichess ||
+      _opponentProbabilityMode == OpponentProbabilityMode.maiaLichessFallback;
 
   /// `lichess` or `masters` (Lichess Explorer API).
-  String _explorerDatabase = 'lichess';
+  String _explorerDatabase = kDefaultExplorerDatabase;
   String get explorerDatabase => _explorerDatabase;
   set explorerDatabase(String value) {
     if (value != _explorerDatabase &&
@@ -188,7 +192,7 @@ class EngineSettings with ChangeNotifier {
 
   bool get explorerUseMasters => _explorerDatabase == 'masters';
 
-  String _explorerSpeeds = 'blitz,rapid,classical';
+  String _explorerSpeeds = kDefaultExplorerSpeeds;
   String get explorerSpeeds => _explorerSpeeds;
   set explorerSpeeds(String value) {
     if (value != _explorerSpeeds && value.isNotEmpty) {
@@ -198,7 +202,7 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
-  String _explorerRatings = '1800,2000,2200,2500';
+  String _explorerRatings = kDefaultExplorerRatings;
   String get explorerRatings => _explorerRatings;
   set explorerRatings(String value) {
     if (value != _explorerRatings && value.isNotEmpty) {
@@ -237,16 +241,17 @@ class EngineSettings with ChangeNotifier {
   set probabilityStartMoves(String value) {
     if (value != _probabilityStartMoves) {
       _probabilityStartMoves = value;
+      _persist();
       notifyListeners();
     }
   }
 
   // ── Maia ELO setting ──────────────────────────────────────────────────
 
-  int _maiaElo = 2200;
+  int _maiaElo = kDefaultMaiaElo;
   int get maiaElo => _maiaElo;
   set maiaElo(int value) {
-    if (value != _maiaElo && value >= 600 && value <= 2400) {
+    if (value != _maiaElo && value >= kMinMaiaElo && value <= kMaxMaiaElo) {
       _maiaElo = value;
       _persist();
       notifyListeners();
@@ -255,24 +260,20 @@ class EngineSettings with ChangeNotifier {
 
   // ── Candidate source settings ──────────────────────────────────────────
 
-  /// Candidate source for our moves: 'maia' (default) or 'stockfish'.
-  String _candidateSourceOur = 'maia';
-  String get candidateSourceOur => _candidateSourceOur;
-  set candidateSourceOur(String value) {
-    if (value != _candidateSourceOur &&
-        (value == 'maia' || value == 'stockfish')) {
+  CandidateSource _candidateSourceOur = CandidateSource.maia;
+  CandidateSource get candidateSourceOur => _candidateSourceOur;
+  set candidateSourceOur(CandidateSource value) {
+    if (value != _candidateSourceOur) {
       _candidateSourceOur = value;
       _persist();
       notifyListeners();
     }
   }
 
-  /// Candidate source for opponent moves: 'maia' (default) or 'stockfish'.
-  String _candidateSourceOpp = 'maia';
-  String get candidateSourceOpp => _candidateSourceOpp;
-  set candidateSourceOpp(String value) {
-    if (value != _candidateSourceOpp &&
-        (value == 'maia' || value == 'stockfish')) {
+  CandidateSource _candidateSourceOpp = CandidateSource.maia;
+  CandidateSource get candidateSourceOpp => _candidateSourceOpp;
+  set candidateSourceOpp(CandidateSource value) {
+    if (value != _candidateSourceOpp) {
       _candidateSourceOpp = value;
       _persist();
       notifyListeners();
@@ -280,10 +281,12 @@ class EngineSettings with ChangeNotifier {
   }
 
   /// When using Stockfish for candidate generation, how many top moves.
-  int _stockfishTopN = 3;
+  int _stockfishTopN = kDefaultStockfishTopN;
   int get stockfishTopN => _stockfishTopN;
   set stockfishTopN(int value) {
-    if (value != _stockfishTopN && value >= 1 && value <= 10) {
+    if (value != _stockfishTopN &&
+        value >= kMinStockfishTopN &&
+        value <= kMaxStockfishTopN) {
       _stockfishTopN = value;
       _persist();
       notifyListeners();
@@ -291,10 +294,12 @@ class EngineSettings with ChangeNotifier {
   }
 
   /// Max BFS depth for on-the-fly expectimax (plies from current position).
-  int _onTheFlyMaxDepth = 5;
+  int _onTheFlyMaxDepth = kDefaultOnTheFlyMaxDepth;
   int get onTheFlyMaxDepth => _onTheFlyMaxDepth;
   set onTheFlyMaxDepth(int value) {
-    if (value != _onTheFlyMaxDepth && value >= 1 && value <= 12) {
+    if (value != _onTheFlyMaxDepth &&
+        value >= kMinOnTheFlyMaxDepth &&
+        value <= kMaxOnTheFlyMaxDepth) {
       _onTheFlyMaxDepth = value;
       _persist();
       notifyListeners();
@@ -303,50 +308,62 @@ class EngineSettings with ChangeNotifier {
 
   // ── Expectimax tree build settings ────────────────────────────────────
 
-  int _expectimaxOurMultipv = 4;
+  int _expectimaxOurMultipv = kDefaultExpOurMultipv;
   int get expectimaxOurMultipv => _expectimaxOurMultipv;
   set expectimaxOurMultipv(int v) {
-    if (v != _expectimaxOurMultipv && v >= 1 && v <= 8) {
+    if (v != _expectimaxOurMultipv &&
+        v >= kMinExpOurMultipv &&
+        v <= kMaxExpOurMultipv) {
       _expectimaxOurMultipv = v; _persist(); notifyListeners();
     }
   }
 
-  int _expectimaxOppMaxChildren = 4;
+  int _expectimaxOppMaxChildren = kDefaultExpOppMaxChildren;
   int get expectimaxOppMaxChildren => _expectimaxOppMaxChildren;
   set expectimaxOppMaxChildren(int v) {
-    if (v != _expectimaxOppMaxChildren && v >= 1 && v <= 12) {
+    if (v != _expectimaxOppMaxChildren &&
+        v >= kMinExpOppMaxChildren &&
+        v <= kMaxExpOppMaxChildren) {
       _expectimaxOppMaxChildren = v; _persist(); notifyListeners();
     }
   }
 
-  double _expectimaxOppMassTarget = 0.80;
+  double _expectimaxOppMassTarget = kDefaultExpOppMassTarget;
   double get expectimaxOppMassTarget => _expectimaxOppMassTarget;
   set expectimaxOppMassTarget(double v) {
-    if (v != _expectimaxOppMassTarget && v >= 0.5 && v <= 1.0) {
+    if (v != _expectimaxOppMassTarget &&
+        v >= kMinExpOppMassTarget &&
+        v <= kMaxExpOppMassTarget) {
       _expectimaxOppMassTarget = v; _persist(); notifyListeners();
     }
   }
 
-  double _expectimaxMinProb = 0.02;
+  double _expectimaxMinProb = kDefaultExpMinProb;
   double get expectimaxMinProb => _expectimaxMinProb;
   set expectimaxMinProb(double v) {
-    if (v != _expectimaxMinProb && v >= 0.005 && v <= 0.2) {
+    if (v != _expectimaxMinProb &&
+        v >= kMinExpMinProb &&
+        v <= kMaxExpMinProb) {
       _expectimaxMinProb = v; _persist(); notifyListeners();
     }
   }
 
-  int _expectimaxMaxEvalLoss = 80;
+  int _expectimaxMaxEvalLoss = kDefaultExpMaxEvalLoss;
   int get expectimaxMaxEvalLoss => _expectimaxMaxEvalLoss;
   set expectimaxMaxEvalLoss(int v) {
-    if (v != _expectimaxMaxEvalLoss && v >= 20 && v <= 300) {
+    if (v != _expectimaxMaxEvalLoss &&
+        v >= kMinExpMaxEvalLoss &&
+        v <= kMaxExpMaxEvalLoss) {
       _expectimaxMaxEvalLoss = v; _persist(); notifyListeners();
     }
   }
 
-  int _expectimaxEvalDepth = 12;
+  int _expectimaxEvalDepth = kDefaultExpEvalDepth;
   int get expectimaxEvalDepth => _expectimaxEvalDepth;
   set expectimaxEvalDepth(int v) {
-    if (v != _expectimaxEvalDepth && v >= 6 && v <= 20) {
+    if (v != _expectimaxEvalDepth &&
+        v >= kMinExpEvalDepth &&
+        v <= kMaxExpEvalDepth) {
       _expectimaxEvalDepth = v; _persist(); notifyListeners();
     }
   }
@@ -361,14 +378,14 @@ class EngineSettings with ChangeNotifier {
         showStockfish,
         showMaia,
         showProbability,
-        opponentProbabilityMode,
-        explorerDatabase,
-        explorerSpeeds,
-        explorerRatings,
-        maiaElo,
-        candidateSourceOur,
-        candidateSourceOpp,
-        stockfishTopN,
+        _opponentProbabilityMode,
+        _explorerDatabase,
+        _explorerSpeeds,
+        _explorerRatings,
+        _maiaElo,
+        _candidateSourceOur,
+        _candidateSourceOpp,
+        _stockfishTopN,
       );
 
   /// Detected logical CPU cores.
@@ -384,40 +401,55 @@ class EngineSettings with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _workers = prefs.getInt('${_prefix}workers') ??
           (systemCores ~/ 2).clamp(1, systemCores);
-      _depth = prefs.getInt('${_prefix}depth') ?? 15;
-      _multiPv = prefs.getInt('${_prefix}multi_pv') ?? 3;
-      _inlineThreads = prefs.getInt('${_prefix}inline_threads') ?? 1;
-      _maxAnalysisMoves = prefs.getInt('${_prefix}max_analysis_moves') ?? 8;
-      _showStockfish = prefs.getBool('${_prefix}show_stockfish') ?? true;
-      _showMaia = prefs.getBool('${_prefix}show_maia') ?? true;
-      _showProbability = prefs.getBool('${_prefix}show_probability') ?? true;
-      _showEngineDock = prefs.getBool('${_prefix}show_engine_dock') ?? true;
+      _depth = prefs.getInt('${_prefix}depth') ?? kDefaultDepth;
+      _multiPv = prefs.getInt('${_prefix}multi_pv') ?? kDefaultMultiPv;
+      _inlineThreads =
+          prefs.getInt('${_prefix}inline_threads') ?? kDefaultInlineThreads;
+      _maxAnalysisMoves = prefs.getInt('${_prefix}max_analysis_moves') ??
+          kDefaultMaxAnalysisMoves;
+      _showStockfish =
+          prefs.getBool('${_prefix}show_stockfish') ?? kDefaultShowStockfish;
+      _showMaia = prefs.getBool('${_prefix}show_maia') ?? kDefaultShowMaia;
+      _showProbability =
+          prefs.getBool('${_prefix}show_probability') ?? kDefaultShowProbability;
+      _showEngineDock =
+          prefs.getBool('${_prefix}show_engine_dock') ?? kDefaultShowEngineDock;
       _showExpectimaxDock =
-          prefs.getBool('${_prefix}show_expectimax_dock') ?? true;
-      _opponentProbabilityMode =
+          prefs.getBool('${_prefix}show_expectimax_dock') ??
+              kDefaultShowExpectimaxDock;
+      _opponentProbabilityMode = OpponentProbabilityMode.fromStorageKey(
           prefs.getString('${_prefix}opponent_prob_mode') ??
-              'maia_lichess_fallback';
-      _explorerDatabase =
-          prefs.getString('${_prefix}explorer_database') ?? 'lichess';
-      _explorerSpeeds =
-          prefs.getString('${_prefix}explorer_speeds') ?? 'blitz,rapid,classical';
+              'maia_lichess_fallback');
+      _explorerDatabase = prefs.getString('${_prefix}explorer_database') ??
+          kDefaultExplorerDatabase;
+      _explorerSpeeds = prefs.getString('${_prefix}explorer_speeds') ??
+          kDefaultExplorerSpeeds;
       _explorerRatings = prefs.getString('${_prefix}explorer_ratings') ??
-          '1800,2000,2200,2500';
-      _maiaElo = prefs.getInt('${_prefix}maia_elo') ?? 2200;
-      _candidateSourceOur =
-          prefs.getString('${_prefix}candidate_source_our') ?? 'maia';
-      _candidateSourceOpp =
-          prefs.getString('${_prefix}candidate_source_opp') ?? 'maia';
-      _stockfishTopN = prefs.getInt('${_prefix}stockfish_top_n') ?? 3;
-      _onTheFlyMaxDepth = prefs.getInt('${_prefix}on_the_fly_max_depth') ?? 5;
-      _expectimaxOurMultipv = prefs.getInt('${_prefix}exp_our_multipv') ?? 4;
+          kDefaultExplorerRatings;
+      _maiaElo = prefs.getInt('${_prefix}maia_elo') ?? kDefaultMaiaElo;
+      _candidateSourceOur = CandidateSource.fromStorageKey(
+          prefs.getString('${_prefix}candidate_source_our') ?? 'maia');
+      _candidateSourceOpp = CandidateSource.fromStorageKey(
+          prefs.getString('${_prefix}candidate_source_opp') ?? 'maia');
+      _stockfishTopN =
+          prefs.getInt('${_prefix}stockfish_top_n') ?? kDefaultStockfishTopN;
+      _onTheFlyMaxDepth = prefs.getInt('${_prefix}on_the_fly_max_depth') ??
+          kDefaultOnTheFlyMaxDepth;
+      _expectimaxOurMultipv =
+          prefs.getInt('${_prefix}exp_our_multipv') ?? kDefaultExpOurMultipv;
       _expectimaxOppMaxChildren =
-          prefs.getInt('${_prefix}exp_opp_max_children') ?? 4;
+          prefs.getInt('${_prefix}exp_opp_max_children') ??
+              kDefaultExpOppMaxChildren;
       _expectimaxOppMassTarget =
-          prefs.getDouble('${_prefix}exp_opp_mass') ?? 0.80;
-      _expectimaxMinProb = prefs.getDouble('${_prefix}exp_min_prob') ?? 0.02;
-      _expectimaxMaxEvalLoss = prefs.getInt('${_prefix}exp_max_eval_loss') ?? 80;
-      _expectimaxEvalDepth = prefs.getInt('${_prefix}exp_eval_depth') ?? 12;
+          prefs.getDouble('${_prefix}exp_opp_mass') ?? kDefaultExpOppMassTarget;
+      _expectimaxMinProb =
+          prefs.getDouble('${_prefix}exp_min_prob') ?? kDefaultExpMinProb;
+      _expectimaxMaxEvalLoss =
+          prefs.getInt('${_prefix}exp_max_eval_loss') ?? kDefaultExpMaxEvalLoss;
+      _expectimaxEvalDepth =
+          prefs.getInt('${_prefix}exp_eval_depth') ?? kDefaultExpEvalDepth;
+      _probabilityStartMoves =
+          prefs.getString('${_prefix}probability_start_moves') ?? '';
       _mutedAnalysisColumns
         ..clear()
         ..addAll(
@@ -446,15 +478,16 @@ class EngineSettings with ChangeNotifier {
       await prefs.setBool('${_prefix}show_engine_dock', _showEngineDock);
       await prefs.setBool('${_prefix}show_expectimax_dock', _showExpectimaxDock);
       await prefs.setString(
-          '${_prefix}opponent_prob_mode', _opponentProbabilityMode);
+          '${_prefix}opponent_prob_mode',
+          _opponentProbabilityMode.storageKey);
       await prefs.setString('${_prefix}explorer_database', _explorerDatabase);
       await prefs.setString('${_prefix}explorer_speeds', _explorerSpeeds);
       await prefs.setString('${_prefix}explorer_ratings', _explorerRatings);
       await prefs.setInt('${_prefix}maia_elo', _maiaElo);
       await prefs.setString(
-          '${_prefix}candidate_source_our', _candidateSourceOur);
+          '${_prefix}candidate_source_our', _candidateSourceOur.storageKey);
       await prefs.setString(
-          '${_prefix}candidate_source_opp', _candidateSourceOpp);
+          '${_prefix}candidate_source_opp', _candidateSourceOpp.storageKey);
       await prefs.setInt('${_prefix}stockfish_top_n', _stockfishTopN);
       await prefs.setInt('${_prefix}on_the_fly_max_depth', _onTheFlyMaxDepth);
       await prefs.setInt('${_prefix}exp_our_multipv', _expectimaxOurMultipv);
@@ -464,6 +497,8 @@ class EngineSettings with ChangeNotifier {
       await prefs.setDouble('${_prefix}exp_min_prob', _expectimaxMinProb);
       await prefs.setInt('${_prefix}exp_max_eval_loss', _expectimaxMaxEvalLoss);
       await prefs.setInt('${_prefix}exp_eval_depth', _expectimaxEvalDepth);
+      await prefs.setString(
+          '${_prefix}probability_start_moves', _probabilityStartMoves);
       await prefs.setString(
         '${_prefix}muted_columns',
         _mutedAnalysisColumns.join(','),
@@ -476,31 +511,31 @@ class EngineSettings with ChangeNotifier {
   /// Reset all settings to defaults
   void resetToDefaults() {
     _workers = (systemCores ~/ 2).clamp(1, systemCores);
-    _depth = 15;
-    _multiPv = 3;
-    _inlineThreads = 1;
-    _maxAnalysisMoves = 8;
-    _showStockfish = true;
-    _showMaia = true;
-    _showProbability = true;
-    _showEngineDock = true;
-    _showExpectimaxDock = true;
-    _opponentProbabilityMode = 'maia_lichess_fallback';
-    _explorerDatabase = 'lichess';
-    _explorerSpeeds = 'blitz,rapid,classical';
-    _explorerRatings = '1800,2000,2200,2500';
+    _depth = kDefaultDepth;
+    _multiPv = kDefaultMultiPv;
+    _inlineThreads = kDefaultInlineThreads;
+    _maxAnalysisMoves = kDefaultMaxAnalysisMoves;
+    _showStockfish = kDefaultShowStockfish;
+    _showMaia = kDefaultShowMaia;
+    _showProbability = kDefaultShowProbability;
+    _showEngineDock = kDefaultShowEngineDock;
+    _showExpectimaxDock = kDefaultShowExpectimaxDock;
+    _opponentProbabilityMode = OpponentProbabilityMode.maiaLichessFallback;
+    _explorerDatabase = kDefaultExplorerDatabase;
+    _explorerSpeeds = kDefaultExplorerSpeeds;
+    _explorerRatings = kDefaultExplorerRatings;
     _probabilityStartMoves = '';
-    _maiaElo = 2200;
-    _candidateSourceOur = 'maia';
-    _candidateSourceOpp = 'maia';
-    _stockfishTopN = 3;
-    _onTheFlyMaxDepth = 5;
-    _expectimaxOurMultipv = 4;
-    _expectimaxOppMaxChildren = 4;
-    _expectimaxOppMassTarget = 0.80;
-    _expectimaxMinProb = 0.02;
-    _expectimaxMaxEvalLoss = 80;
-    _expectimaxEvalDepth = 12;
+    _maiaElo = kDefaultMaiaElo;
+    _candidateSourceOur = CandidateSource.maia;
+    _candidateSourceOpp = CandidateSource.maia;
+    _stockfishTopN = kDefaultStockfishTopN;
+    _onTheFlyMaxDepth = kDefaultOnTheFlyMaxDepth;
+    _expectimaxOurMultipv = kDefaultExpOurMultipv;
+    _expectimaxOppMaxChildren = kDefaultExpOppMaxChildren;
+    _expectimaxOppMassTarget = kDefaultExpOppMassTarget;
+    _expectimaxMinProb = kDefaultExpMinProb;
+    _expectimaxMaxEvalLoss = kDefaultExpMaxEvalLoss;
+    _expectimaxEvalDepth = kDefaultExpEvalDepth;
     _mutedAnalysisColumns.clear();
     _persist();
     notifyListeners();

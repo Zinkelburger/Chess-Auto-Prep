@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../services/navigation_stack.dart';
+import 'package:chess_auto_prep/core/navigation_stack.dart';
+import '../layout/repertoire_mode.dart';
 import '../navigation_trail.dart';
 
 /// Tab bar, navigation trail, and tab views for the repertoire right pane.
@@ -9,23 +10,23 @@ class RepertoireTabBar extends StatelessWidget {
     super.key,
     required this.tabController,
     required this.navigationStack,
-    required this.isGenerating,
-    required this.isGenerationPaused,
     required this.onNavigationJump,
     required this.tabChildren,
+    this.mode = RepertoireMode.edit,
+    this.isCompactLayout = false,
   });
 
   final TabController tabController;
   final NavigationStack navigationStack;
-  final bool isGenerating;
-  final bool isGenerationPaused;
   final void Function(NavigationEntry entry) onNavigationJump;
   final List<Widget> tabChildren;
+  final RepertoireMode mode;
+
+  /// Below [kCompactBreakpoint]: Edit uses PGN + Context tabs; Analyze uses one tab.
+  final bool isCompactLayout;
 
   @override
   Widget build(BuildContext context) {
-    final tabsLocked = isGenerating && !isGenerationPaused;
-
     return Container(
       padding: const EdgeInsets.all(8.0),
       child: Column(
@@ -34,57 +35,15 @@ class RepertoireTabBar extends StatelessWidget {
             stack: navigationStack,
             onJumpTo: onNavigationJump,
           ),
-          if (tabsLocked)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Material(
-                color: Colors.orange.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(8),
-                child: const ListTile(
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  leading: Icon(Icons.lock_outline, size: 18),
-                  title: Text(
-                    'Generation is running. Pause or cancel to switch tabs.',
-                  ),
-                ),
-              ),
-            ),
-          IgnorePointer(
-            ignoring: tabsLocked,
-            child: Opacity(
-              opacity: tabsLocked ? 0.35 : 1.0,
-              child: TabBar(
-                controller: tabController,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                tabs: const [
-                  Tab(
-                    text: 'Browse',
-                    icon: Icon(Icons.explore, size: 16),
-                  ),
-                  Tab(
-                    text: 'PGN',
-                    icon: Icon(Icons.description, size: 16),
-                  ),
-                  Tab(
-                    text: 'Lines',
-                    icon: Icon(Icons.library_books, size: 16),
-                  ),
-                  Tab(
-                    text: 'Generate',
-                    icon: Icon(Icons.auto_awesome, size: 16),
-                  ),
-                ],
-              ),
-            ),
+          TabBar(
+            controller: tabController,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: _tabsForMode(mode, isCompactLayout),
           ),
           Expanded(
             child: TabBarView(
               controller: tabController,
-              physics: tabsLocked
-                  ? const NeverScrollableScrollPhysics()
-                  : null,
               children: [
                 for (final child in tabChildren)
                   _KeepAliveTab(child: child),
@@ -94,6 +53,44 @@ class RepertoireTabBar extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static List<Tab> _tabsForMode(RepertoireMode mode, bool isCompactLayout) {
+    if (mode == RepertoireMode.analyze) {
+      return [
+        Tab(
+          text: isCompactLayout ? 'Analysis' : 'Lines',
+          icon: Icon(
+            isCompactLayout ? Icons.analytics_outlined : Icons.library_books,
+            size: 16,
+          ),
+        ),
+      ];
+    }
+
+    if (isCompactLayout) {
+      return const [
+        Tab(
+          text: 'PGN',
+          icon: Icon(Icons.description, size: 16),
+        ),
+        Tab(
+          text: 'Context',
+          icon: Icon(Icons.dashboard_customize_outlined, size: 16),
+        ),
+      ];
+    }
+
+    return const [
+      Tab(
+        text: 'Browse',
+        icon: Icon(Icons.explore, size: 16),
+      ),
+      Tab(
+        text: 'PGN',
+        icon: Icon(Icons.description, size: 16),
+      ),
+    ];
   }
 }
 

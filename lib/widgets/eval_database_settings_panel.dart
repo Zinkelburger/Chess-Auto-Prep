@@ -1,6 +1,7 @@
 /// Database download / offline eval configuration (ChessDB full dump).
 ///
-/// Shown on Linux (always visible; native reader required to enable).
+/// Shown on Linux when the native reader is available; mounted from
+/// [SettingsScreen] under the Database section.
 library;
 
 import 'dart:io';
@@ -54,7 +55,6 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
     }
 
     final status = await CdbDirectEvalProvider.libraryStatus();
-    await _settings.load();
     if (!mounted) return;
     _pathCtrl.text = _settings.cdbDirectPath;
     setState(() {

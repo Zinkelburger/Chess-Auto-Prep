@@ -7,14 +7,15 @@ import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
+import '../../services/engine/engine_lifecycle.dart';
 import '../../services/maia_factory.dart';
 import '../../services/probability_service.dart';
-import '../../services/board_preview_controller.dart';
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart';
 import '../../utils/eval_constants.dart';
-import 'engine_settings_dialog.dart';
 import 'engine_pane_footer.dart';
+import '../analysis/analysis_settings_sheet.dart';
 import 'floating_board_preview.dart';
 import '../clickable_move_line.dart';
 import '../lichess_db_info_icon.dart';
@@ -131,13 +132,13 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   /// The curated set of move UCIs to display, built after all sources complete.
   List<String> _selectedMoveUcis = [];
 
-  /// User-controlled on/off switch (persists across rebuilds via static).
-  static bool _engineEnabled = true;
-
   int _analysisConfigRevision = 0;
 
   /// Whether analysis should run right now.
-  bool get _isActive => widget.isActive && _engineEnabled;
+  bool get _isActive =>
+      widget.isActive && EngineLifecycle().state != EngineState.off;
+
+  bool get _engineEnabled => EngineLifecycle().state != EngineState.off;
 
   @override
   void initState() {
@@ -146,6 +147,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     // Manual listener: analysisConfigRevision changes trigger re-analysis, not just rebuild.
     _settings.addListener(_onSettingsChanged);
     _analysis.poolStatus.addListener(_onPoolStatusChanged);
+    EngineLifecycle().addListener(_onLifecycleChanged);
 
     if (_isActive) {
       _analysis.beginEnginePaneAnalysis(widget.fen);
@@ -184,8 +186,19 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
     _analysis.poolStatus.removeListener(_onPoolStatusChanged);
+    EngineLifecycle().removeListener(_onLifecycleChanged);
     _analysis.cancel();
     super.dispose();
+  }
+
+  void _onLifecycleChanged() {
+    if (!mounted) return;
+    if (_isActive) {
+      _runAnalysis();
+    } else {
+      _analysis.cancel();
+    }
+    setState(() {});
   }
 
   void _onSettingsChanged() {
@@ -207,6 +220,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       print('[Engine] ── _runAnalysis() for $shortFen ──');
     }
 
+    EngineLifecycle().onPositionChanged(widget.fen);
     _trySaveCurrentToCache();
     _analysis.beginEnginePaneAnalysis(widget.fen);
     _initialAnalysisStarted = false;
@@ -460,6 +474,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   void _onPoolStatusChanged() {
     final ps = _analysis.poolStatus.value;
     if (ps.isComplete) {
+      EngineLifecycle().onAnalysisComplete();
       _analysis.endEnginePaneAnalysis(_currentAnalysisFen);
       _perfLog('Evaluation COMPLETE — ${_analysis.results.value.length} evals');
       _trySaveCurrentToCache();
@@ -467,17 +482,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   }
 
   // ─── Build ──────────────────────────────────────────────────────────────
-
-  void _toggleEngine(bool value) {
-    setState(() {
-      _engineEnabled = value;
-    });
-    if (_isActive) {
-      _runAnalysis();
-    } else {
-      _analysis.cancel();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -502,8 +506,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           const Expanded(
             child: Center(
               child: Text(
-                'Engine off',
+                'Engine off — use the toolbar toggle to enable analysis',
                 style: TextStyle(color: Colors.grey, fontSize: 14),
+                textAlign: TextAlign.center,
               ),
             ),
           ),
@@ -517,17 +522,14 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Row(
         children: [
-          // ── On/off toggle ──
-          SizedBox(
-            height: 24,
-            child: FittedBox(
-              child: Switch(
-                value: _engineEnabled,
-                onChanged: _toggleEngine,
-              ),
+          Text(
+            _engineEnabled ? 'Engine on' : 'Engine off',
+            style: TextStyle(
+              fontSize: 12,
+              color: _engineEnabled ? Colors.white70 : Colors.grey,
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           // ── Status text ──
           Expanded(
             child: _engineEnabled
@@ -588,16 +590,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
               if (widget.onOpenSettings != null) {
                 widget.onOpenSettings!();
               } else {
-                showEngineSettingsDialog(
-                  context: context,
-                  settings: _settings,
-                  currentProbabilityStartMoves:
-                      _settings.probabilityStartMoves,
-                  onProbabilityStartMovesChanged: (newVal) {
-                    _settings.probabilityStartMoves = newVal;
-                    _calculateCumulativeProbability();
-                  },
-                );
+                showAnalysisSettingsSheet(context);
               }
             },
             padding: EdgeInsets.zero,
