@@ -1,14 +1,20 @@
 /// Centralized settings screen accessible from the app bar.
 ///
-/// Groups all persistent configuration: Engine, Database, Generation,
-/// Training, and Display settings in a single scrollable view.
+/// Groups all persistent engine configuration in a single scrollable view.
+/// Uses [ListenableBuilder] so it always reflects the latest singleton state,
+/// even if another UI surface mutates [EngineSettings] concurrently.
 library;
 
 import 'package:flutter/material.dart';
 
 import '../models/engine_settings.dart';
-import '../theme/app_colors.dart';
+import '../models/eval_database_settings.dart';
+import '../models/settings_enums.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../utils/system_info.dart';
+import '../widgets/eval_database_settings_panel.dart';
+import '../widgets/lichess_db_selector.dart';
+import '../widgets/settings/settings_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -19,279 +25,319 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _engine = EngineSettings();
+  late final TextEditingController _probStartCtrl;
 
   @override
   void initState() {
     super.initState();
-    _engine.addListener(_onSettingsChanged);
+    _probStartCtrl = TextEditingController(text: _engine.probabilityStartMoves);
   }
 
   @override
   void dispose() {
-    _engine.removeListener(_onSettingsChanged);
+    _probStartCtrl.dispose();
     super.dispose();
   }
 
-  void _onSettingsChanged() {
-    if (mounted) setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
-    final cores = getLogicalCores();
+    return ListenableBuilder(
+      listenable: _engine,
+      builder: (context, _) {
+        final cores = getLogicalCores();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _SettingsGroup(
-            title: 'Engine',
-            icon: Icons.bolt,
-            children: [
-              _SliderTile(
-                label: 'Workers (interactive)',
-                value: _engine.workers,
-                min: 1,
-                max: cores,
-                suffix: '/ $cores cores',
-                onChanged: (v) => _engine.workers = v,
-              ),
-              _SliderTile(
-                label: 'Search depth',
-                value: _engine.depth,
-                min: 1,
-                max: 40,
-                onChanged: (v) => _engine.depth = v,
-              ),
-              _SliderTile(
-                label: 'MultiPV',
-                value: _engine.multiPv,
-                min: 1,
-                max: 10,
-                onChanged: (v) => _engine.multiPv = v,
-              ),
-              _SliderTile(
-                label: 'Max analysis moves',
-                value: _engine.maxAnalysisMoves,
-                min: 3,
-                max: 20,
-                onChanged: (v) => _engine.maxAnalysisMoves = v,
-              ),
-              _SliderTile(
-                label: 'Inline threads (PGN viewer)',
-                value: _engine.inlineThreads,
-                min: 1,
-                max: cores,
-                onChanged: (v) => _engine.inlineThreads = v,
-              ),
-              _SliderTile(
-                label: 'Maia ELO',
-                value: _engine.maiaElo,
-                min: 600,
-                max: 2400,
-                divisions: 18,
-                onChanged: (v) => _engine.maiaElo = v,
-              ),
-              _SliderTile(
-                label: 'On-the-fly expectimax depth',
-                value: _engine.onTheFlyMaxDepth,
-                min: 1,
-                max: 12,
-                onChanged: (v) => _engine.onTheFlyMaxDepth = v,
-              ),
-              _SwitchTile(
-                label: 'Show Stockfish analysis',
-                value: _engine.showStockfish,
-                onChanged: (v) => _engine.showStockfish = v,
-              ),
-              _SwitchTile(
-                label: 'Show Maia probabilities',
-                value: _engine.showMaia,
-                onChanged: (v) => _engine.showMaia = v,
-              ),
-              _SwitchTile(
-                label: 'Show probability',
-                value: _engine.showProbability,
-                onChanged: (v) => _engine.showProbability = v,
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: OutlinedButton.icon(
-              icon: const Icon(Icons.restore, size: 16),
-              label: const Text('Reset All to Defaults'),
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Reset Settings'),
-                    content: const Text(
-                        'Reset all settings to factory defaults?'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          _engine.resetToDefaults();
-                          Navigator.pop(ctx);
-                        },
-                        child: const Text('Reset'),
-                      ),
-                    ],
-                  ),
-                );
-              },
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Settings'),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.pop(context),
             ),
           ),
-          const SizedBox(height: 16),
-          Center(
-            child: Text(
-              'Chess Auto Prep',
-              style: TextStyle(
-                  color: Colors.grey[600], fontSize: 11),
-            ),
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsGroup extends StatelessWidget {
-  final String title;
-  final IconData icon;
-  final List<Widget> children;
-
-  const _SettingsGroup({
-    required this.title,
-    required this.icon,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8, top: 16),
-          child: Row(
+          body: ListView(
+            padding: const EdgeInsets.all(16),
             children: [
-              Icon(icon, size: 18, color: AppColors.pgnMainLine),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+              // ── Engine ───────────────────────────────────
+              _buildEngineSection(cores),
+              const SizedBox(height: 8),
+
+              // ── Opponent Model ───────────────────────────
+              _buildOpponentModelSection(),
+              const SizedBox(height: 8),
+
+              // ── Expectimax ───────────────────────────────
+              _buildExpectimaxSection(),
+              const SizedBox(height: 8),
+
+              // ── Cumulative Probability ───────────────────
+              _buildProbabilitySection(),
+              const SizedBox(height: 8),
+
+              // ── Database ─────────────────────────────────
+              ListenableBuilder(
+                listenable: EvalDatabaseSettings.instance,
+                builder: (context, _) => _buildDatabaseSection(),
+              ),
+              const SizedBox(height: 24),
+
+              // ── Reset ────────────────────────────────────
+              _buildResetButton(),
+              const SizedBox(height: 16),
+              Center(
+                child: Text(
+                  'Chess Auto Prep',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
                 ),
               ),
+              const SizedBox(height: 24),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  // ── Engine section ─────────────────────────────────────────────────────────
+
+  Widget _buildEngineSection(int cores) {
+    return SettingsGroup(
+      title: 'Stockfish Engine',
+      icon: Icons.bolt,
+      children: [
+        SettingsSliderTile(
+          label: 'Workers (interactive)',
+          tooltip: 'Parallel Stockfish processes for interactive analysis.',
+          value: _engine.workers,
+          min: 1,
+          max: cores,
+          suffix: '/ $cores cores',
+          onChanged: (v) => _engine.workers = v,
         ),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey[800]!, width: 0.5),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(children: children),
+        SettingsSliderTile(
+          label: 'Search depth',
+          tooltip: 'Search depth per position. Higher = more accurate.',
+          value: _engine.depth,
+          min: 1,
+          max: 40,
+          onChanged: (v) => _engine.depth = v,
+        ),
+        SettingsSliderTile(
+          label: 'MultiPV',
+          tooltip: 'How many top moves Stockfish evaluates in parallel.',
+          value: _engine.multiPv,
+          min: 1,
+          max: 10,
+          onChanged: (v) => _engine.multiPv = v,
+        ),
+        SettingsSliderTile(
+          label: 'Max analysis moves',
+          tooltip:
+              'Maximum total moves displayed in the analysis table.',
+          value: _engine.maxAnalysisMoves,
+          min: 3,
+          max: 20,
+          onChanged: (v) => _engine.maxAnalysisMoves = v,
+        ),
+        SettingsSliderTile(
+          label: 'Inline threads (PGN viewer)',
+          tooltip:
+              'Threads for the single-process inline engine bar.',
+          value: _engine.inlineThreads,
+          min: 1,
+          max: cores,
+          onChanged: (v) => _engine.inlineThreads = v,
+        ),
+        SettingsSliderTile(
+          label: 'Maia ELO',
+          tooltip:
+              'Skill level of the simulated opponent for Maia predictions.',
+          value: _engine.maiaElo,
+          min: 600,
+          max: 2400,
+          divisions: 18,
+          onChanged: (v) => _engine.maiaElo = v,
+        ),
+        SettingsSwitchTile(
+          label: 'Show Stockfish analysis',
+          tooltip: 'Run Stockfish in the background to evaluate moves.',
+          value: _engine.showStockfish,
+          onChanged: (v) => _engine.showStockfish = v,
+        ),
+        // Panel/column visibility toggles live on the PGN analysis settings
+        // sheet only — see analysis_settings_sheet.dart.
+      ],
+    );
+  }
+
+  // ── Opponent model section ─────────────────────────────────────────────────
+
+  Widget _buildOpponentModelSection() {
+    final database = _engine.explorerUseMasters
+        ? LichessDatabase.masters
+        : LichessDatabase.lichess;
+    final speeds = _engine.explorerSpeedSet;
+    final ratings = _engine.explorerRatingSet;
+
+    return SettingsGroup(
+      title: 'Opponent Model',
+      icon: Icons.people,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SettingsDropdown<OpponentProbabilityMode>(
+                label: 'Prediction source',
+                tooltip:
+                    'Maia: neural net trained on human games.\n'
+                    'Lichess DB: raw move frequencies.\n'
+                    'Maia + DB fallback: blends both.',
+                value: _engine.opponentProbabilityMode,
+                items: [
+                  for (final m in OpponentProbabilityMode.values)
+                    (m, m.label),
+                ],
+                onChanged: (v) {
+                  if (v != null) _engine.opponentProbabilityMode = v;
+                },
+              ),
+              if (_engine.fetchLichessForOpponent) ...[
+                const SizedBox(height: 12),
+                LichessDbSelector(
+                  database: database,
+                  onDatabaseChanged: (db) => _engine.explorerDatabase =
+                      db == LichessDatabase.masters ? 'masters' : 'lichess',
+                  selectedSpeeds: speeds,
+                  onSpeedsChanged: _engine.setExplorerSpeedSet,
+                  selectedRatings: ratings,
+                  onRatingsChanged: _engine.setExplorerRatingSet,
+                ),
+              ],
+            ],
           ),
         ),
       ],
     );
   }
-}
 
-class _SliderTile extends StatelessWidget {
-  final String label;
-  final int value;
-  final int min;
-  final int max;
-  final int? divisions;
-  final String? suffix;
-  final ValueChanged<int> onChanged;
+  // ── Expectimax section ─────────────────────────────────────────────────────
 
-  const _SliderTile({
-    required this.label,
-    required this.value,
-    required this.min,
-    required this.max,
-    this.divisions,
-    this.suffix,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 180,
-            child: Text(label,
-                style: const TextStyle(fontSize: 13)),
-          ),
-          Expanded(
-            child: Slider(
-              value: value.toDouble(),
-              min: min.toDouble(),
-              max: max.toDouble(),
-              divisions: divisions ?? (max - min),
-              label: '$value',
-              onChanged: (v) => onChanged(v.round()),
-            ),
-          ),
-          SizedBox(
-            width: 60,
-            child: Text(
-              suffix != null ? '$value $suffix' : '$value',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[400],
-                fontFamily: 'monospace',
-              ),
-            ),
-          ),
-        ],
-      ),
+  Widget _buildExpectimaxSection() {
+    return SettingsGroup(
+      title: 'Expectimax Search',
+      icon: Icons.analytics,
+      children: [
+        SettingsSliderTile(
+          label: 'On-the-fly depth',
+          tooltip:
+              'Search depth (plies) for positions not in the tree.',
+          value: _engine.onTheFlyMaxDepth,
+          min: 1,
+          max: 12,
+          onChanged: (v) => _engine.onTheFlyMaxDepth = v,
+        ),
+        SettingsSliderTile(
+          label: 'Eval depth',
+          tooltip: 'Stockfish depth for leaf evaluation.',
+          value: _engine.expectimaxEvalDepth,
+          min: 6,
+          max: 20,
+          onChanged: (v) => _engine.expectimaxEvalDepth = v,
+        ),
+        SettingsSliderTile(
+          label: 'Our MultiPV',
+          tooltip: 'Candidate moves for our side at each node.',
+          value: _engine.expectimaxOurMultipv,
+          min: 1,
+          max: 8,
+          onChanged: (v) => _engine.expectimaxOurMultipv = v,
+        ),
+        SettingsSliderTile(
+          label: 'Max eval loss (cp)',
+          tooltip: 'Prune opponent moves losing more than this.',
+          value: _engine.expectimaxMaxEvalLoss,
+          min: 20,
+          max: 300,
+          divisions: 28,
+          onChanged: (v) => _engine.expectimaxMaxEvalLoss = v,
+        ),
+      ],
     );
   }
-}
 
-class _SwitchTile extends StatelessWidget {
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
+  // ── Cumulative probability section ─────────────────────────────────────────
 
-  const _SwitchTile({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
+  Widget _buildProbabilitySection() {
+    return SettingsGroup(
+      title: 'Cumulative Line Probability',
+      icon: Icons.timeline,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: SettingsTextFieldRow(
+            label: 'Starting position (moves)',
+            tooltip:
+                'Enter opening moves (e.g. "1. e4 e5 2. Nf3") so the '
+                'cumulative % starts at 100% from that position.',
+            controller: _probStartCtrl,
+            onSubmitted: (v) => _engine.probabilityStartMoves = v.trim(),
+          ),
+        ),
+      ],
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return SwitchListTile(
-      title: Text(label, style: const TextStyle(fontSize: 13)),
-      value: value,
-      onChanged: onChanged,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      dense: true,
+  // ── Database section ───────────────────────────────────────────────────────
+
+  Widget _buildDatabaseSection() {
+    return const SettingsGroup(
+      title: 'Database',
+      icon: Icons.storage,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: EvalDatabaseSettingsPanel(),
+        ),
+      ],
+    );
+  }
+
+  // ── Reset button ───────────────────────────────────────────────────────────
+
+  Widget _buildResetButton() {
+    return Center(
+      child: OutlinedButton.icon(
+        icon: const Icon(Icons.restore, size: 16),
+        label: const Text('Reset All to Defaults'),
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Reset Settings'),
+              content: const Text(
+                'Reset all engine, opponent, expectimax, probability, and '
+                'database settings to factory defaults?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    _engine.resetToDefaults();
+                    await EvalDatabaseSettings.instance.resetToDefaults();
+                    _probStartCtrl.text = _engine.probabilityStartMoves;
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                  child: const Text('Reset'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

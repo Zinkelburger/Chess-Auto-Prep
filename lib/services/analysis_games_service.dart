@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import '../models/analysis_player_info.dart';
 import 'lichess_api_client.dart';
+import 'pgn_parsing_service.dart';
 import 'storage/app_paths.dart';
 
 /// Service for downloading and managing games for position analysis.
@@ -129,7 +130,7 @@ class AnalysisGamesService {
       try {
         final response = await http.get(Uri.parse('${archives[i]}/pgn'));
         if (response.statusCode == 200 && response.body.isNotEmpty) {
-          for (final game in splitPgnIntoGames(response.body)) {
+          for (final game in splitPgnIntoGames(stripBom(response.body))) {
             if (!isDateMode && allGames.length >= maxGames) break;
             if (!_isBulletGame(game)) allGames.add(game);
           }
@@ -198,7 +199,7 @@ class AnalysisGamesService {
       throw Exception('HTTP ${response.statusCode}: ${response.reasonPhrase}');
     }
 
-    final games = splitPgnIntoGames(response.body);
+    final games = splitPgnIntoGames(stripBom(response.body));
     onProgress?.call('Downloaded ${games.length} games');
     return response.body;
   }
@@ -219,7 +220,7 @@ class AnalysisGamesService {
       platform: platform,
       username: username,
     ).playerKey;
-    final gameCount = splitPgnIntoGames(pgns).length;
+    final gameCount = countPgnGames(pgns);
 
     // Write PGN.
     await _writeAtomically(File(p.join(directory.path, '$key.pgn')), pgns);
@@ -416,37 +417,6 @@ class AnalysisGamesService {
   }
 
   // ── Utilities ──────────────────────────────────────────────────────
-
-  /// Split a multi-game PGN string into individual game strings.
-  ///
-  /// This is a static utility so callers outside the service can reuse it
-  /// without duplicating the logic.
-  static List<String> splitPgnIntoGames(String pgn) {
-    if (pgn.startsWith('\uFEFF')) pgn = pgn.substring(1);
-    final games = <String>[];
-    final lines = pgn.split('\n');
-    final buffer = StringBuffer();
-    bool inGame = false;
-
-    for (final line in lines) {
-      if (line.startsWith('[Event')) {
-        if (inGame && buffer.isNotEmpty) {
-          games.add(buffer.toString().trim());
-          buffer.clear();
-        }
-        buffer.writeln(line);
-        inGame = true;
-      } else if (inGame) {
-        buffer.writeln(line);
-      }
-    }
-
-    if (inGame && buffer.isNotEmpty) {
-      games.add(buffer.toString().trim());
-    }
-
-    return games;
-  }
 
   /// Returns `true` if the PGN's TimeControl is under 3 minutes (bullet).
   bool _isBulletGame(String pgn) {

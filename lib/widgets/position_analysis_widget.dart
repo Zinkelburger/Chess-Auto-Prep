@@ -67,7 +67,7 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   GameInfo? _selectedGame;
 
   late TabController _tabController;
-  final PgnViewerController _pgnController = PgnViewerController();
+  final PgnViewerWidgetController _pgnController = PgnViewerWidgetController();
   int _lastNavigateGeneration = 0;
 
   /// Starting-position board, shown when no FEN has been selected yet.

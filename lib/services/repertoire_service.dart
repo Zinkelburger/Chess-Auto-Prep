@@ -9,6 +9,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/repertoire_line.dart';
 import '../utils/pgn_comment_utils.dart';
+import 'pgn_parsing_service.dart' as pgn;
 import 'storage/storage_factory.dart';
 
 class RepertoireService {
@@ -57,13 +58,12 @@ class RepertoireService {
     String pgnContent, {
     String? trainingColor,
   }) {
-    pgnContent = _stripBom(pgnContent);
+    pgnContent = pgn.stripBom(pgnContent);
     final lines = <RepertoireLine>[];
     final resolvedColor =
-        trainingColor ?? _extractRepertoireColor(pgnContent) ?? 'white';
+        trainingColor ?? pgn.extractRepertoireColor(pgnContent) ?? 'white';
 
-    // Split PGN into individual games/sections
-    final games = _splitPgnIntoGames(pgnContent);
+    final games = pgn.splitPgnIntoGames(pgnContent);
 
     for (int gameIndex = 0; gameIndex < games.length; gameIndex++) {
       final gameText = games[gameIndex];
@@ -148,68 +148,6 @@ class RepertoireService {
     }
   }
 
-  String? _extractRepertoireColor(String content) {
-    final lines = content.split('\n');
-
-    for (int i = 0; i < lines.length && i < 20; i++) {
-      final line = lines[i].trim();
-      if (line.startsWith('// Color:')) {
-        final color = line.substring(9).trim().toLowerCase();
-        if (color == 'white' || color == 'black') {
-          return color;
-        }
-      }
-
-      if (line.startsWith('[Event ')) {
-        break;
-      }
-    }
-
-    return null;
-  }
-
-  /// Splits PGN content into individual games
-  List<String> _splitPgnIntoGames(String content) {
-    final games = <String>[];
-    final lines = content.split('\n');
-
-    String currentGame = '';
-    bool inGame = false;
-
-    for (final line in lines) {
-      final trimmedLine = line.trim();
-
-      // Skip comment-only lines at the top level
-      if (trimmedLine.startsWith('//') && !inGame) {
-        continue;
-      }
-
-      if (trimmedLine.startsWith('[Event')) {
-        if (inGame && currentGame.trim().isNotEmpty) {
-          games.add(currentGame);
-        }
-        currentGame = '$line\n';
-        inGame = true;
-      } else if (inGame) {
-        currentGame += '$line\n';
-      } else if (trimmedLine.isNotEmpty) {
-        // Handle PGN without headers (just moves)
-        if (!inGame) {
-          currentGame =
-              '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n';
-          inGame = true;
-        }
-        currentGame += '$line\n';
-      }
-    }
-
-    if (inGame && currentGame.trim().isNotEmpty) {
-      games.add(currentGame);
-    }
-
-    return games;
-  }
-
   /// Extract cumulative line importance from PGN headers or comments.
   double? _extractImportance(PgnGame game, String gameText) {
     final headerVal = game.headers['Importance'];
@@ -281,7 +219,7 @@ class RepertoireService {
   ({String preamble, List<String> games}) _splitPgnDocumentPreservingPreamble(
     String content,
   ) {
-    content = _stripBom(content);
+    content = pgn.stripBom(content);
     final lines = content.split('\n');
     final preambleLines = <String>[];
     final games = <String>[];
@@ -352,9 +290,7 @@ class RepertoireService {
     return 'line_${trimmed.length > 22 ? trimmed.substring(0, 22) : trimmed}';
   }
 
-  /// Strip a leading UTF-8 BOM if present (common in Windows-exported files).
-  static String _stripBom(String s) =>
-      s.startsWith('\uFEFF') ? s.substring(1) : s;
+
 
   /// Creates training questions from repertoire lines for a specific color
   List<TrainingQuestion> createTrainingQuestions(List<RepertoireLine> lines,
@@ -628,5 +564,139 @@ class RepertoireService {
 
     await _writeAtomically(file, '${sections.join('\n\n').trimRight()}\n');
     return true;
+  }
+
+  /// Appends [san] after [pathFromRoot] in the best-matching game, or adds a
+  /// new game when no exact prefix match exists.
+  Future<({bool success, String updatedContent})> appendMoveAtPath(
+    String filePath,
+    List<String> pathFromRoot,
+    String san, {
+    String? startingFen,
+    bool isWhiteRepertoire = true,
+  }) async {
+    final file = io.File(filePath);
+    if (!await file.exists()) {
+      return (success: false, updatedContent: '');
+    }
+
+    final content = await file.readAsString();
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    final games = List<String>.from(document.games);
+
+    int? exactMatchIndex;
+    for (int i = 0; i < games.length; i++) {
+      try {
+        final game = PgnGame.parsePgn(games[i]);
+        final moves = game.moves.mainline().map((n) => n.san).toList();
+        if (_listEquals(moves, pathFromRoot)) {
+          exactMatchIndex = i;
+          break;
+        }
+      } catch (_) {
+        continue;
+      }
+    }
+
+    if (exactMatchIndex != null) {
+      games[exactMatchIndex] = appendSanToGamePgn(
+        games[exactMatchIndex],
+        pathFromRoot,
+        san,
+      );
+    } else {
+      final fullPath = [...pathFromRoot, san];
+      games.add(buildMinimalGamePgn(
+        fullPath,
+        startingFen: startingFen,
+        isWhiteRepertoire: isWhiteRepertoire,
+      ));
+    }
+
+    final sections = <String>[];
+    if (document.preamble.isNotEmpty) {
+      sections.add(document.preamble);
+    }
+    sections.addAll(games);
+    final updated = '${sections.join('\n\n').trimRight()}\n';
+    await _writeAtomically(file, updated);
+    return (success: true, updatedContent: updated);
+  }
+
+  static bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  static String _formatNextSan(List<String> existingMoves, String san) {
+    final nextIndex = existingMoves.length;
+    if (nextIndex.isEven) {
+      return '${(nextIndex ~/ 2) + 1}. $san';
+    }
+    return san;
+  }
+
+  String appendSanToGamePgn(
+    String gameText,
+    List<String> existingMoves,
+    String san,
+  ) {
+    final lines = gameText.split('\n');
+    final moveLines = <String>[];
+    final headerLines = <String>[];
+    final headerPattern = RegExp(r'^\[(\w+)\s+"([^"]*)"\]');
+
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      if (headerPattern.hasMatch(trimmed)) {
+        headerLines.add(line);
+      } else {
+        moveLines.add(trimmed);
+      }
+    }
+
+    final moveText = moveLines.join(' ').trim();
+    final suffix = _formatNextSan(existingMoves, san);
+    final updatedMoveText =
+        moveText.isEmpty ? suffix : '$moveText $suffix';
+
+    return [...headerLines, '', updatedMoveText].join('\n');
+  }
+
+  String buildMinimalGamePgn(
+    List<String> moves, {
+    String? startingFen,
+    required bool isWhiteRepertoire,
+  }) {
+    final headers = <String>[
+      '[Event "Repertoire Line"]',
+      '[Date "${DateTime.now().toIso8601String().split('T')[0]}"]',
+      '[White "${isWhiteRepertoire ? 'Me' : 'Opponent'}"]',
+      '[Black "${isWhiteRepertoire ? 'Opponent' : 'Me'}"]',
+      '[Result "1-0"]',
+    ];
+
+    if (startingFen != null && startingFen.trim().isNotEmpty) {
+      headers.add('[FEN "$startingFen"]');
+      headers.add('[SetUp "1"]');
+    }
+
+    final moveText = _movesToPgnMoveText(moves);
+    return [...headers, '', moveText].join('\n');
+  }
+
+  static String _movesToPgnMoveText(List<String> moves) {
+    if (moves.isEmpty) return '';
+    final sb = StringBuffer();
+    for (int i = 0; i < moves.length; i++) {
+      if (i.isEven) sb.write('${(i ~/ 2) + 1}. ');
+      sb.write(moves[i]);
+      if (i < moves.length - 1) sb.write(' ');
+    }
+    return sb.toString();
   }
 }

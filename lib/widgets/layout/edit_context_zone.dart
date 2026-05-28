@@ -1,39 +1,79 @@
 /// Context panel in Edit mode.
 ///
-/// Shows engine output, expectimax lines, or opening tree,
-/// switchable via chips. All sub-views support hover preview.
+/// Chip-switched sub-views: browse candidates, engine PV, expectimax lines,
+/// or opening / eval tree. Content can be injected for isolated testing or
+/// built from [RepertoireController] when wired into the repertoire screen.
 library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/repertoire_controller.dart';
-import '../../models/build_tree_node.dart';
-import '../../services/board_preview_controller.dart';
-import '../../services/generation/fen_map.dart';
-import '../../services/generation/generation_config.dart';
-import '../../utils/chess_utils.dart' show uciToSan;
-import '../engine/expectimax_lines_pane.dart';
-import '../opening_tree_widget.dart';
-import '../unified_engine_pane.dart';
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/services/generation/fen_map.dart';
+import 'package:chess_auto_prep/services/generation/generation_config.dart';
+import 'package:chess_auto_prep/theme/app_colors.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart' show uciToSan;
+import 'package:chess_auto_prep/widgets/engine/expectimax_lines_pane.dart';
+import 'package:chess_auto_prep/widgets/engine/unified_engine_pane.dart';
+import 'package:chess_auto_prep/widgets/layout/empty_state_placeholder.dart';
+import 'package:chess_auto_prep/widgets/opening_tree_widget.dart';
 import 'repertoire_mode.dart';
 
+/// Descriptor for one chip in [EditContextZone].
+typedef EditContextChipSpec = ({EditContextView view, String label, IconData icon});
+
+/// Default chip order for the Edit context panel.
+const kEditContextChips = <EditContextChipSpec>[
+  (view: EditContextView.browse, label: 'Browse', icon: Icons.travel_explore),
+  (view: EditContextView.engine, label: 'Engine', icon: Icons.bolt),
+  (view: EditContextView.expectimax, label: 'Expectimax', icon: Icons.analytics),
+  (view: EditContextView.tree, label: 'Tree', icon: Icons.account_tree),
+];
+
+/// Chip-switched context column for Edit mode (browse / engine / expectimax / tree).
 class EditContextZone extends StatefulWidget {
-  final RepertoireController controller;
+  final EditContextView initialView;
+
+  /// When set, chip selection is mirrored here (read on init, written on change).
+  final ValueNotifier<EditContextView>? selectedViewNotifier;
+
+  final ValueChanged<EditContextView>? onViewChanged;
+
+  /// Injected content — preferred for tests and custom wiring.
+  final Widget? browseContent;
+  final Widget? engineContent;
+  final Widget? expectimaxContent;
+  final Widget? treeContent;
+
+  /// Subset of chips to show; defaults to all four.
+  final List<EditContextChipSpec>? chips;
+
+  /// Delegate mode: build default panes when content slots are null.
+  final RepertoireController? controller;
   final BuildTree? tree;
   final TreeBuildConfig? treeConfig;
   final FenMap? fenMap;
-  final BoardPreviewController boardPreview;
+  final BoardPreviewController? boardPreview;
   final bool isGenerating;
   final bool isGenerationPaused;
 
   const EditContextZone({
     super.key,
-    required this.controller,
+    required this.initialView,
+    this.selectedViewNotifier,
+    this.onViewChanged,
+    this.browseContent,
+    this.engineContent,
+    this.expectimaxContent,
+    this.treeContent,
+    this.chips,
+    this.controller,
     this.tree,
     this.treeConfig,
     this.fenMap,
-    required this.boardPreview,
+    this.boardPreview,
     this.isGenerating = false,
     this.isGenerationPaused = false,
   });
@@ -43,140 +83,233 @@ class EditContextZone extends StatefulWidget {
 }
 
 class _EditContextZoneState extends State<EditContextZone> {
-  EditContextView _view = EditContextView.engine;
+  late EditContextView _view;
+
+  List<EditContextChipSpec> get _chips => widget.chips ?? kEditContextChips;
+
+  @override
+  void initState() {
+    super.initState();
+    _view = widget.selectedViewNotifier?.value ?? widget.initialView;
+    widget.selectedViewNotifier?.addListener(_onExternalViewChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant EditContextZone oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedViewNotifier != widget.selectedViewNotifier) {
+      oldWidget.selectedViewNotifier?.removeListener(_onExternalViewChanged);
+      widget.selectedViewNotifier?.addListener(_onExternalViewChanged);
+      if (widget.selectedViewNotifier != null) {
+        _view = widget.selectedViewNotifier!.value;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.selectedViewNotifier?.removeListener(_onExternalViewChanged);
+    super.dispose();
+  }
+
+  void _onExternalViewChanged() {
+    final external = widget.selectedViewNotifier!.value;
+    if (external != _view && mounted) {
+      setState(() => _view = external);
+    }
+  }
+
+  void _selectView(EditContextView view) {
+    if (_view == view) return;
+    setState(() => _view = view);
+    widget.selectedViewNotifier?.value = view;
+    widget.onViewChanged?.call(view);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildChipBar(),
-        const Divider(height: 1),
+        _buildChipBar(context),
+        const Divider(height: 1, color: AppColors.divider),
         Expanded(child: _buildContent()),
       ],
     );
   }
 
-  Widget _buildChipBar() {
+  Widget _buildChipBar(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Row(
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
         children: [
-          _chip('Engine', EditContextView.engine, Icons.bolt),
-          const SizedBox(width: 6),
-          _chip('Expectimax', EditContextView.expectimax, Icons.analytics),
-          const SizedBox(width: 6),
-          _chip('Tree', EditContextView.tree, Icons.account_tree),
+          for (final spec in _chips)
+            _ContextChoiceChip(
+              label: spec.label,
+              icon: spec.icon,
+              selected: _view == spec.view,
+              onSelected: () => _selectView(spec.view),
+              selectedColor: theme.colorScheme.primary,
+            ),
         ],
       ),
-    );
-  }
-
-  Widget _chip(String label, EditContextView view, IconData icon) {
-    final isSelected = _view == view;
-    return FilterChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon,
-              size: 14,
-              color: isSelected
-                  ? Colors.teal
-                  : Colors.grey[500]),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 11)),
-        ],
-      ),
-      selected: isSelected,
-      onSelected: (_) => setState(() => _view = view),
-      visualDensity: VisualDensity.compact,
-      showCheckmark: false,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
 
   Widget _buildContent() {
     return switch (_view) {
-      EditContextView.engine => _buildEngine(),
-      EditContextView.expectimax => _buildExpectimax(),
-      EditContextView.tree => _buildTree(),
+      EditContextView.browse => _resolveBrowse(),
+      EditContextView.engine => _resolveEngine(),
+      EditContextView.expectimax => _resolveExpectimax(),
+      EditContextView.tree => _resolveTree(),
     };
   }
 
-  Widget _buildEngine() {
+  Widget _resolveBrowse() {
+    if (widget.browseContent != null) return widget.browseContent!;
+    return const EmptyStatePlaceholder(
+      icon: Icons.travel_explore,
+      iconSize: 36,
+      title: 'Browse not configured',
+      subtitle: 'Pass browseContent or wire BrowsePanel from the parent',
+    );
+  }
+
+  Widget _resolveEngine() {
+    if (widget.engineContent != null) return widget.engineContent!;
+    final built = _buildDefaultEngine();
+    if (built != null) return built;
+    return _missingSlot('Engine', 'engineContent');
+  }
+
+  Widget _resolveExpectimax() {
+    if (widget.expectimaxContent != null) return widget.expectimaxContent!;
+    final built = _buildDefaultExpectimax();
+    if (built != null) return built;
+    return _missingSlot('Expectimax', 'expectimaxContent');
+  }
+
+  Widget _resolveTree() {
+    if (widget.treeContent != null) return widget.treeContent!;
+    final built = _buildDefaultTree();
+    if (built != null) return built;
+    return _missingSlot('Tree', 'treeContent or EvalTreeTab');
+  }
+
+  Widget _missingSlot(String label, String hint) {
+    return EmptyStatePlaceholder(
+      icon: Icons.widgets_outlined,
+      iconSize: 36,
+      title: '$label not configured',
+      subtitle: 'Pass $hint',
+    );
+  }
+
+  Widget? _buildDefaultEngine() {
+    final controller = widget.controller;
+    final preview = widget.boardPreview;
+    if (controller == null || preview == null) return null;
+
     return UnifiedEnginePane(
-      fen: widget.controller.fen,
+      fen: controller.fen,
       isActive: !widget.isGenerating || widget.isGenerationPaused,
-      isUserTurn: widget.controller.position.turn ==
-          (widget.controller.isRepertoireWhite ? Side.white : Side.black),
-      currentMoveSequence: widget.controller.currentMoveSequence,
-      isWhiteRepertoire: widget.controller.isRepertoireWhite,
-      boardPreview: widget.boardPreview,
+      isUserTurn: controller.position.turn ==
+          (controller.isRepertoireWhite ? Side.white : Side.black),
+      currentMoveSequence: controller.currentMoveSequence,
+      isWhiteRepertoire: controller.isRepertoireWhite,
+      boardPreview: preview,
       onMoveSelected: (uciMove) {
-        final san = uciToSan(widget.controller.fen, uciMove);
+        final san = uciToSan(controller.fen, uciMove);
         if (san != uciMove) {
-          widget.controller.userPlayedMove(san);
+          controller.userPlayedMove(san);
         }
       },
       onLineMoveTapped: (sanMoves, index) {
-        widget.controller.applyLineFromCurrent(sanMoves, index);
-        widget.boardPreview.clearPreview();
+        controller.applyLineFromCurrent(sanMoves, index);
+        preview.clearPreview();
       },
     );
   }
 
-  Widget _buildExpectimax() {
+  Widget? _buildDefaultExpectimax() {
+    final controller = widget.controller;
+    final preview = widget.boardPreview;
+    if (controller == null || preview == null) return null;
+
     if (widget.tree == null || widget.treeConfig == null) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.analytics_outlined, size: 36, color: Colors.grey),
-            SizedBox(height: 12),
-            Text(
-              'No tree loaded',
-              style: TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-            SizedBox(height: 4),
-            Text(
-              'Generate a tree to see expectimax lines',
-              style: TextStyle(color: Colors.grey, fontSize: 11),
-            ),
-          ],
-        ),
+      return const EmptyStatePlaceholder(
+        icon: Icons.analytics_outlined,
+        iconSize: 36,
+        title: 'No tree loaded',
+        subtitle: 'Generate a tree to see expectimax lines',
       );
     }
 
     return ExpectimaxLinesPane(
-      fen: widget.controller.fen,
+      fen: controller.fen,
       tree: widget.tree,
       config: widget.treeConfig,
       fenMap: widget.fenMap,
-      isWhiteRepertoire: widget.controller.isRepertoireWhite,
-      boardPreview: widget.boardPreview,
-      onMoveSelected: (san) {
-        widget.controller.userPlayedMove(san);
-      },
+      isWhiteRepertoire: controller.isRepertoireWhite,
+      boardPreview: preview,
+      onMoveSelected: controller.userPlayedMove,
       onLineMoveClicked: (sanMoves, index) {
-        widget.controller.applyLineFromCurrent(sanMoves, index);
-        widget.boardPreview.clearPreview();
+        controller.applyLineFromCurrent(sanMoves, index);
+        preview.clearPreview();
       },
     );
   }
 
-  Widget _buildTree() {
-    if (widget.controller.openingTree == null) {
-      return const Center(
-        child: Text('No opening tree available',
-            style: TextStyle(color: Colors.grey)),
-      );
-    }
+  Widget? _buildDefaultTree() {
+    final controller = widget.controller;
+    if (controller?.openingTree == null) return null;
+
     return OpeningTreeWidget(
-      tree: widget.controller.openingTree!,
-      repertoireLines: widget.controller.repertoireLines,
-      currentMoveSequence: widget.controller.currentMoveSequence,
-      onMoveSelected: (move) {
-        widget.controller.userPlayedMove(move);
-      },
+      tree: controller!.openingTree!,
+      repertoireLines: controller.repertoireLines,
+      currentMoveSequence: controller.currentMoveSequence,
+      onMoveSelected: controller.userPlayedMove,
+    );
+  }
+}
+
+class _ContextChoiceChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onSelected;
+  final Color selectedColor;
+
+  const _ContextChoiceChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onSelected,
+    required this.selectedColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: selected ? selectedColor : AppColors.onSurfaceDim,
+          ),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(fontSize: 11)),
+        ],
+      ),
+      selected: selected,
+      onSelected: (_) => onSelected(),
+      visualDensity: VisualDensity.compact,
+      showCheckmark: false,
     );
   }
 }

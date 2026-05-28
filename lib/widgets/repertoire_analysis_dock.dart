@@ -8,8 +8,9 @@ import '../core/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/engine_settings.dart';
 import '../services/analysis_service.dart';
-import '../services/board_preview_controller.dart';
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../services/coherence_service.dart';
+import '../services/engine/engine_lifecycle.dart';
 import '../services/expectimax_line_service.dart' show findNodeByFen;
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
@@ -99,6 +100,10 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   }
 
   void _maybeAutoCompute() {
+    if (EngineLifecycle().state == EngineState.off ||
+        EngineLifecycle().state == EngineState.generating) {
+      return;
+    }
     if (widget.isGenerating && !widget.isGenerationPaused) return;
     if (!_settings.showExpectimaxDock) return;
 
@@ -123,7 +128,10 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   }
 
   bool get _engineActive =>
-      widget.isActive && (!widget.isGenerating || widget.isGenerationPaused);
+      widget.isActive &&
+      EngineLifecycle().state != EngineState.off &&
+      EngineLifecycle().state != EngineState.generating &&
+      (!widget.isGenerating || widget.isGenerationPaused);
 
   @override
   Widget build(BuildContext context) {

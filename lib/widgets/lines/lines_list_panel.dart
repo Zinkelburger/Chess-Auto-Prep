@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../models/repertoire_line.dart';
-import '../../services/navigation_stack.dart';
+import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../../utils/coverage_helpers.dart';
-import '../../utils/line_metrics_helpers.dart';
+import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
+import '../layout/empty_state_placeholder.dart';
 import 'line_item_row.dart';
 
 /// Scrollable list of repertoire lines, optionally grouped.
@@ -48,9 +49,18 @@ class LinesListPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (filteredLines.isEmpty) {
-      return _LinesEmptyState(
-        hasActiveFilters: hasActiveFilters,
-        onResetFilters: onResetFilters,
+      return EmptyStatePlaceholder(
+        icon: Icons.search_off,
+        iconSize: 48,
+        title: hasActiveFilters
+            ? 'No lines match the current filters'
+            : 'No lines in repertoire',
+        trailing: hasActiveFilters
+            ? TextButton(
+                onPressed: onResetFilters,
+                child: const Text('Show all lines'),
+              )
+            : null,
       );
     }
 
@@ -103,46 +113,6 @@ class LinesListPanel extends StatelessWidget {
           navigationStack: navigationStack,
         );
       },
-    );
-  }
-}
-
-class _LinesEmptyState extends StatelessWidget {
-  final bool hasActiveFilters;
-  final VoidCallback onResetFilters;
-
-  const _LinesEmptyState({
-    required this.hasActiveFilters,
-    required this.onResetFilters,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_off, size: 48, color: Colors.grey[600]),
-            const SizedBox(height: 16),
-            Text(
-              hasActiveFilters
-                  ? 'No lines match the current filters'
-                  : 'No lines in repertoire',
-              style: TextStyle(color: Colors.grey[500]),
-              textAlign: TextAlign.center,
-            ),
-            if (hasActiveFilters) ...[
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: onResetFilters,
-                child: const Text('Show all lines'),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

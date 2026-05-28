@@ -1,63 +1,26 @@
 import 'package:flutter/material.dart';
 
-import '../../models/build_tree_node.dart';
-import '../../models/repertoire_line.dart';
-import '../../models/trap_line_info.dart';
-import '../../services/board_preview_controller.dart';
-import '../../services/coherence_service.dart';
-import '../../services/coverage_service.dart';
-import '../../services/coverage_suggestion_service.dart';
-import '../../services/generation/fen_map.dart';
-import '../../services/navigation_stack.dart';
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
+import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
+import '../../features/eval_tree/widgets/eval_tree_tab.dart';
 import '../../theme/app_colors.dart';
 import '../coherence_panel.dart';
-import '../coverage/suggestion_panel.dart';
+import 'package:chess_auto_prep/features/coverage/widgets/suggestion_panel.dart';
 import '../repertoire_lines_browser.dart';
-import '../traps_browser.dart';
+import 'package:chess_auto_prep/features/traps/widgets/traps_browser.dart';
+import 'repertoire_analyze_props.dart';
 
 /// Lines tab body with optional collapsible traps, coherence, and suggestions.
+///
+/// Used for compact analyze layout; wide layout uses [RepertoireAnalyzePane].
 class RepertoireLinesWithTraps extends StatefulWidget {
   const RepertoireLinesWithTraps({
     super.key,
-    required this.lines,
-    required this.currentMoveSequence,
-    this.coverageResult,
-    this.onCoveragePressed,
-    this.isCoverageRunning = false,
-    this.coverageProgress,
-    this.coverageProgressMessage,
-    required this.onLineSelected,
-    required this.onLineRenamed,
-    this.onNavigateToPosition,
-    required this.traps,
-    required this.onTrapSelected,
-    this.tree,
-    this.fenMap,
-    this.isWhiteRepertoire = true,
-    this.coherenceResult,
-    this.navigationStack,
-    this.boardPreview,
+    required this.props,
   });
 
-  final List<RepertoireLine> lines;
-  final List<String> currentMoveSequence;
-  final CoverageResult? coverageResult;
-  final VoidCallback? onCoveragePressed;
-  final bool isCoverageRunning;
-  final double? coverageProgress;
-  final String? coverageProgressMessage;
-  final void Function(RepertoireLine line) onLineSelected;
-  final Future<void> Function(RepertoireLine line, String newTitle)
-      onLineRenamed;
-  final void Function(List<String> moveSequence)? onNavigateToPosition;
-  final List<TrapLineInfo> traps;
-  final void Function(TrapLineInfo trap) onTrapSelected;
-  final BuildTree? tree;
-  final FenMap? fenMap;
-  final bool isWhiteRepertoire;
-  final CoherenceResult? coherenceResult;
-  final NavigationStack? navigationStack;
-  final BoardPreviewController? boardPreview;
+  final RepertoireAnalyzeProps props;
 
   @override
   State<RepertoireLinesWithTraps> createState() =>
@@ -68,12 +31,44 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
   bool _trapsExpanded = false;
   bool _coherenceExpanded = false;
   bool _suggestionsExpanded = false;
+  bool _evalTreeExpanded = false;
+
+  RepertoireAnalyzeProps get _props => widget.props;
+
+  Future<void> _acceptSuggestion(SuggestedLine suggestion) async {
+    try {
+      await _props.writer.acceptSuggestion(suggestion);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Added ${suggestion.newMoves.join(' ')} to repertoire',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint(
+          '[RepertoireLinesWithTraps] Failed to accept suggestion: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add suggestion: $e'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final hasAnyCollapsible = widget.traps.isNotEmpty ||
-        widget.coherenceResult != null ||
-        (widget.coverageResult != null && widget.tree != null);
+    final props = _props;
+    final hasAnyCollapsible = props.traps.isNotEmpty ||
+        props.coherenceResult != null ||
+        props.hasSuggestionMetrics ||
+        props.currentRepertoire != null;
 
     return Column(
       children: [
@@ -81,35 +76,36 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
           flex: hasAnyCollapsible &&
                   (_trapsExpanded ||
                       _coherenceExpanded ||
-                      _suggestionsExpanded)
+                      _suggestionsExpanded ||
+                      _evalTreeExpanded)
               ? 2
               : 1,
           child: RepertoireLinesBrowser(
-            lines: widget.lines,
-            currentMoveSequence: widget.currentMoveSequence,
+            lines: props.lines,
+            currentMoveSequence: props.currentMoveSequence,
             isExpanded: true,
-            coverageResult: widget.coverageResult,
-            onCoveragePressed: widget.onCoveragePressed,
-            isCoverageRunning: widget.isCoverageRunning,
-            coverageProgress: widget.coverageProgress,
-            coverageProgressMessage: widget.coverageProgressMessage,
-            onLineSelected: widget.onLineSelected,
-            onLineRenamed: widget.onLineRenamed,
-            onNavigateToPosition: widget.onNavigateToPosition,
-            tree: widget.tree,
-            fenMap: widget.fenMap,
-            isWhiteRepertoire: widget.isWhiteRepertoire,
-            traps: widget.traps,
-            coherenceResult: widget.coherenceResult,
-            navigationStack: widget.navigationStack,
+            coverageResult: props.coverageResult,
+            onCoveragePressed: props.onCoveragePressed,
+            isCoverageRunning: props.isCoverageRunning,
+            coverageProgress: props.coverageProgress,
+            coverageProgressMessage: props.coverageProgressMessage,
+            onLineSelected: props.onLineSelected,
+            onLineRenamed: props.onLineRenamed,
+            onNavigateToPosition: props.onNavigateToPosition,
+            tree: props.tree,
+            fenMap: props.fenMap,
+            isWhiteRepertoire: props.isWhiteRepertoire,
+            traps: props.traps,
+            coherenceResult: props.coherenceResult,
+            navigationStack: props.navigationStack,
           ),
         ),
-        if (widget.traps.isNotEmpty) ...[
+        if (props.traps.isNotEmpty) ...[
           const Divider(height: 1),
           _buildCollapsibleHeader(
             icon: Icons.warning_amber_rounded,
             iconColor: AppColors.warning,
-            label: 'Traps (${widget.traps.length})',
+            label: 'Traps (${props.traps.length})',
             isExpanded: _trapsExpanded,
             onTap: () => setState(() => _trapsExpanded = !_trapsExpanded),
           ),
@@ -117,19 +113,22 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
             Expanded(
               flex: 1,
               child: TrapsBrowser(
-                traps: widget.traps,
-                currentMoveSequence: widget.currentMoveSequence,
-                onTrapSelected: widget.onTrapSelected,
+                traps: props.traps,
+                currentMoveSequence: props.currentMoveSequence,
+                boardPreview: props.boardPreview,
+                onTrapSelected: props.onTrapSelected,
+                metrics: TrapIndexService(props.traps).metrics,
+                onStartTour: props.onStartTrapTour,
               ),
             ),
         ],
-        if (widget.coherenceResult != null) ...[
+        if (props.coherenceResult != null) ...[
           const Divider(height: 1),
           _buildCollapsibleHeader(
             icon: Icons.hub,
             iconColor: AppColors.maia,
             label:
-                'Coherence (${widget.coherenceResult!.globalCoherence.toStringAsFixed(2)})',
+                'Coherence (${props.coherenceResult!.globalCoherence.toStringAsFixed(2)})',
             isExpanded: _coherenceExpanded,
             onTap: () =>
                 setState(() => _coherenceExpanded = !_coherenceExpanded),
@@ -138,14 +137,12 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
             Expanded(
               flex: 1,
               child: CoherencePanel(
-                result: widget.coherenceResult!,
-                lineNames: {
-                  for (final l in widget.lines) l.id: l.name,
-                },
+                result: props.coherenceResult!,
+                lineNames: props.lineNames,
               ),
             ),
         ],
-        if (widget.coverageResult != null && widget.tree != null) ...[
+        if (props.hasSuggestionMetrics) ...[
           const Divider(height: 1),
           _buildCollapsibleHeader(
             icon: Icons.auto_fix_high,
@@ -160,18 +157,37 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
               flex: 1,
               child: SuggestionPanel(
                 service: CoverageSuggestionService(
-                  coverage: widget.coverageResult!,
-                  tree: widget.tree,
-                  fenMap: widget.fenMap,
+                  coverage: props.coverageResult!,
+                  tree: props.tree,
+                  fenMap: props.fenMap,
+                  coherence: props.coherenceResult,
                 ),
-                playAsWhite: widget.isWhiteRepertoire,
+                playAsWhite: props.isWhiteRepertoire,
                 boardPreview:
-                    widget.boardPreview ?? BoardPreviewController(),
-                currentCoverage: widget.coverageResult!.coveragePercent,
-                onAccept: (suggestion) {
-                  // Add the suggested line to the repertoire
-                  // This is handled by the parent
-                },
+                    props.boardPreview ?? BoardPreviewController(),
+                currentCoverage: props.coverageResult!.coveragePercent,
+                onAccept: _acceptSuggestion,
+              ),
+            ),
+        ],
+        if (props.currentRepertoire != null) ...[
+          const Divider(height: 1),
+          _buildCollapsibleHeader(
+            icon: Icons.insights,
+            iconColor: AppColors.evalPositive,
+            label: 'Eval Tree',
+            isExpanded: _evalTreeExpanded,
+            onTap: () => setState(() => _evalTreeExpanded = !_evalTreeExpanded),
+          ),
+          if (_evalTreeExpanded)
+            Expanded(
+              flex: 1,
+              child: EvalTreeTab(
+                currentRepertoire: props.currentRepertoire,
+                isWhiteRepertoire: props.isWhiteRepertoire,
+                generatedTree: props.tree,
+                treeResetCounter: props.treeResetCounter,
+                onPositionSelected: props.onEvalTreePositionSelected,
               ),
             ),
         ],

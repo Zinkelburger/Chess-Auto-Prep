@@ -1,13 +1,13 @@
 library;
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/build_tree_node.dart';
 import '../models/eval_database_settings.dart';
+import '../services/storage/storage_factory.dart';
 import '../services/eval/cdbdirect_eval_provider.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
@@ -20,7 +20,8 @@ import '../services/generation/tree_my_ease.dart';
 import '../services/generation/tree_serialization.dart';
 import '../services/generation/tree_build_progress.dart';
 import '../services/generation/pgn_export.dart';
-import '../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
+import '../services/engine/engine_lifecycle.dart';
 import '../services/tree_build_service.dart';
 import '../utils/system_info.dart';
 import 'lichess_db_info_icon.dart';
@@ -140,7 +141,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       text: widget.isWhiteRepertoire ? '200' : '100',
     );
     _checkForPartialTree();
-    EvalDatabaseSettings.instance.load();
     CdbDirectEvalProvider.probeAvailability().then((available) {
       if (!mounted) return;
       setState(() => _cdbDirectAvailable = available);
@@ -224,10 +224,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   Future<void> _checkForPartialTree() async {
     final path = _partialTreePath();
     if (path == null) return;
-    final file = File(path);
-    if (await file.exists()) {
+    final storage = StorageFactory.instance;
+    if (await storage.fileExists(path)) {
       try {
-        final json = await file.readAsString();
+        final json = await storage.readFile(path);
+        if (json == null) return;
         final tree = deserializeTree(json);
         if (!tree.buildComplete && mounted) {
           setState(() {
@@ -254,7 +255,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     try {
       _applyKnownRootMoves(tree);
       final treeJson = serializeTree(tree);
-      await File(path).writeAsString(treeJson);
+      await StorageFactory.instance.writeFile(path, treeJson);
     } catch (e) {
       debugPrint('[RepertoireGenTab] Failed to save tree: $e');
     }
@@ -264,8 +265,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final path = _partialTreePath();
     if (path == null) return;
     try {
-      final file = File(path);
-      if (await file.exists()) await file.delete();
+      await StorageFactory.instance.deleteFile(path);
     } catch (e) {
       debugPrint('[RepertoireGenTab] Failed to delete tree file: $e');
     }
@@ -456,7 +456,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     widget.onGeneratingChanged(true);
     _startUiPulse();
 
+    var engineGenerationEntered = false;
     try {
+      if (config.usesStockfish) {
+        await EngineLifecycle().enterGeneration(config.resolvedEngineThreads);
+        engineGenerationEntered = true;
+      }
+
       // If the tree already reaches the target depth, skip Phase 1
       // entirely and use what we have — BFS guarantees shallower plies
       // are complete, so the tree is usable as-is.
@@ -586,7 +592,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       try {
         final treeJson = serializeTree(tree);
         final base = p.withoutExtension(filePath);
-        await File('${base}_tree.json').writeAsString(treeJson);
+        await StorageFactory.instance
+            .writeFile('${base}_tree.json', treeJson);
       } catch (_) {
         // Tree JSON save is best-effort
       }
@@ -624,6 +631,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         setState(() => _status = 'Generation failed: $e');
       }
     } finally {
+      if (engineGenerationEntered) {
+        await EngineLifecycle().exitGeneration();
+      }
       if (mounted && gen == _buildGeneration) {
         setState(() => _isGenerating = false);
         widget.onGeneratingChanged(false);

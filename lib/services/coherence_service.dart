@@ -6,10 +6,66 @@ library;
 
 import 'dart:math' show pow;
 
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/repertoire_line.dart';
 import 'fp_growth.dart';
+
+/// Browse-mode coherence hint for a candidate move.
+class CoherenceCandidateHint {
+  final double score;
+  final String? clusterName;
+
+  const CoherenceCandidateHint({
+    required this.score,
+    this.clusterName,
+  });
+}
+
+/// Returns a hint when [candidateSan] extends a frequent itemset or cluster.
+CoherenceCandidateHint? coherenceHintForCandidateMove({
+  required List<String> currentMoves,
+  required String candidateSan,
+  required bool playAsWhite,
+  required CoherenceResult result,
+}) {
+  if (result.maximalItemsets.isEmpty) return null;
+
+  final moves = [...currentMoves, candidateSan];
+  final itemset = extractItemset(
+    RepertoireLine(
+      id: '_candidate',
+      name: '_candidate',
+      moves: moves,
+      color: playAsWhite ? 'white' : 'black',
+      startPosition: Chess.initial,
+      fullPgn: '',
+    ),
+    playAsWhite,
+  );
+
+  final score = lineCoherence(itemset, result.maximalItemsets);
+
+  String? clusterName;
+  for (final cluster in result.clusters) {
+    if (cluster.id == 'unclustered') continue;
+    final sig = cluster.signature.items;
+    if (sig.isNotEmpty && sig.every(itemset.contains)) {
+      clusterName = cluster.autoName;
+      break;
+    }
+  }
+
+  final extendsItemset = result.maximalItemsets.any(
+    (mfi) => mfi.items.every(itemset.contains),
+  );
+  if (!extendsItemset && clusterName == null && score < 0.35) {
+    return null;
+  }
+
+  return CoherenceCandidateHint(score: score, clusterName: clusterName);
+}
 
 /// Extract the set of our moves from a line.
 Set<String> extractItemset(RepertoireLine line, bool playAsWhite) {
@@ -81,6 +137,7 @@ class CoherenceResult {
   final double riskWeightedCoherence;
   final List<CoherenceCluster> clusters;
   final Map<String, double> lineCoherenceById;
+  final List<FrequentItemset> maximalItemsets;
   final double topNCoverage;
 
   const CoherenceResult({
@@ -88,6 +145,7 @@ class CoherenceResult {
     required this.riskWeightedCoherence,
     required this.clusters,
     required this.lineCoherenceById,
+    required this.maximalItemsets,
     required this.topNCoverage,
   });
 }
@@ -141,6 +199,7 @@ class CoherenceService extends ChangeNotifier {
       riskWeightedCoherence: riskWeighted,
       clusters: clusters,
       lineCoherenceById: lineScores,
+      maximalItemsets: maximal,
       topNCoverage: topN,
     );
 

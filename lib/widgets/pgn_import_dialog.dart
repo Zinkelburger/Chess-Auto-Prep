@@ -5,11 +5,10 @@
 /// from PGN" and "append lines to the current repertoire".
 library;
 
-import 'dart:io' as io;
-
-import 'package:dartchess/dartchess.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../services/pgn_parsing_service.dart' as pgn;
+import '../services/storage/storage_factory.dart';
 
 /// Result returned when the user confirms an import.
 class PgnImportResult {
@@ -76,7 +75,7 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
     }
 
     try {
-      final count = _countGames(text);
+      final count = pgn.countPgnGames(text);
       setState(() {
         _gameCount = count;
         _error = count == 0 ? 'No valid games found in PGN.' : null;
@@ -87,18 +86,6 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
         _error = 'Could not parse PGN: $e';
       });
     }
-  }
-
-  int _countGames(String pgn) {
-    final headerMatches = RegExp(r'\[Event\s').allMatches(pgn).length;
-    if (headerMatches > 0) return headerMatches;
-
-    // Bare movetext without headers — try parsing as a single game.
-    try {
-      final game = PgnGame.parsePgn(pgn);
-      if (game.moves.mainline().isNotEmpty) return 1;
-    } catch (_) { /* invalid PGN format */ }
-    return 0;
   }
 
   Future<void> _pickFile() async {
@@ -115,7 +102,8 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
       final path = result.files.single.path;
       if (path == null) return;
 
-      final content = await io.File(path).readAsString();
+      final content = await StorageFactory.instance.readFile(path);
+      if (content == null) return;
       _controller.text = content;
       setState(() => _fileName = result.files.single.name);
       _recount();

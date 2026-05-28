@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/build_tree_node.dart';
 import '../../models/engine_settings.dart';
-import '../../services/board_preview_controller.dart';
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../services/coherence_service.dart';
 import '../../services/expectimax_line_service.dart';
 import '../../services/on_the_fly_expectimax_service.dart';

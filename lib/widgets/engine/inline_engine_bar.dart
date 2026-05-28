@@ -20,7 +20,7 @@ import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart' show formatEvalDisplay, formatNodes, uciPvToSan;
 import '../clickable_move_line.dart';
-import 'engine_settings_dialog.dart';
+import '../analysis/analysis_settings_sheet.dart';
 
 class InlineEngineBar extends StatefulWidget {
   final String fen;
@@ -260,13 +260,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             IconButton(
               icon: const Icon(Icons.settings, size: 18),
               tooltip: 'Engine Settings',
-              onPressed: () => showEngineSettingsDialog(
-                context: context,
-                settings: _settings,
-                compact: true,
-                currentProbabilityStartMoves: _settings.probabilityStartMoves,
-                onProbabilityStartMovesChanged: (_) {},
-              ),
+              onPressed: () => showAnalysisSettingsSheet(context),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             ),

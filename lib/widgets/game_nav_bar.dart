@@ -6,12 +6,9 @@ library;
 
 import 'package:flutter/material.dart';
 
-/// Sort mode for games in the nav bar.
-enum GameSortMode {
-  fileOrder,
-  ratingDesc,
-  ratingAsc,
-}
+import '../models/pgn_filter_models.dart';
+
+export '../models/pgn_filter_models.dart' show GameSortMode;
 
 /// Lightweight data class so the nav bar doesn't need the full game model.
 class GameNavItem {

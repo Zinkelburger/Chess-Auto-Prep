@@ -55,4 +55,15 @@ class EvalDatabaseSettings extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyCdbDirectReadAhead, value);
   }
+
+  Future<void> resetToDefaults() async {
+    _enableCdbDirect = false;
+    _cdbDirectPath = '';
+    _cdbDirectReadAhead = false;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyEnableCdbDirect, false);
+    await prefs.setString(_keyCdbDirectPath, '');
+    await prefs.setBool(_keyCdbDirectReadAhead, false);
+  }
 }

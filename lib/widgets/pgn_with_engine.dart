@@ -18,7 +18,7 @@ class PgnWithEngine extends StatefulWidget {
   final int? moveNumber;
   final bool? isWhiteToPlay;
   final Function(Position)? onPositionChanged;
-  final PgnViewerController? controller;
+  final PgnViewerWidgetController? controller;
   final String? initialFen;
   final bool showStartEndButtons;
 

@@ -2,17 +2,18 @@
 // This was extracted from the repertoire screen so it can be reused (e.g., trainer).
 // It owns the canonical chess state: move history, current ply index, derived FEN,
 // and synchronizes the opening tree and parsed repertoire lines.
-import 'dart:io' as io;
-
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../constants/chess_constants.dart';
+import '../constants/engine_defaults.dart';
 import '../models/opening_tree.dart';
+import '../services/pgn_parsing_service.dart' as pgn;
 import '../models/repertoire_line.dart';
-import '../services/engine/stockfish_pool.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
-import '../utils/pgn_utils.dart' as pgn_utils;
+import '../services/storage/storage_factory.dart';
+import 'repertoire_writer.dart';
 
 // ---------------------------------------------------------------------------
 // Isolate-safe top-level helper for parsing repertoire lines (used by compute)
@@ -27,8 +28,7 @@ List<RepertoireLine> _parseRepertoireInIsolate(
 /// Manages repertoire state and acts as the single source of truth.
 /// All UI components should derive their chess position from this class.
 class RepertoireController with ChangeNotifier {
-  static const String _standardFen =
-      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  late final RepertoireWriter writer = RepertoireWriter(this);
 
   Map<String, dynamic>? _currentRepertoire;
   Map<String, dynamic>? get currentRepertoire => _currentRepertoire;
@@ -83,7 +83,7 @@ class RepertoireController with ChangeNotifier {
     final trimmedFen = fen?.trim();
     if (trimmedFen == null ||
         trimmedFen.isEmpty ||
-        trimmedFen == _standardFen) {
+        trimmedFen == kStandardStartFen) {
       return null;
     }
     return trimmedFen;
@@ -301,13 +301,14 @@ class RepertoireController with ChangeNotifier {
   Future<void> setRepertoireColor(bool isWhite) async {
     if (_currentRepertoire == null) return;
     final filePath = _currentRepertoire!['filePath'] as String;
-    final file = io.File(filePath);
-    if (!await file.exists()) return;
+    final storage = StorageFactory.instance;
+    if (!await storage.fileExists(filePath)) return;
 
     final colorLabel = isWhite ? 'White' : 'Black';
-    final existing = await file.readAsString();
+    final existing = await storage.readFile(filePath);
+    if (existing == null) return;
     final updated = _upsertMetadataComment(existing, '// Color:', colorLabel);
-    await file.writeAsString(updated);
+    await storage.writeFile(filePath, updated);
     _needsColorSelection = false;
     await loadRepertoire();
   }
@@ -362,29 +363,47 @@ class RepertoireController with ChangeNotifier {
   Future<void> setRootPosition() async {
     if (_currentRepertoire == null) return;
     final filePath = _currentRepertoire!['filePath'] as String;
-    final file = io.File(filePath);
-    if (!await file.exists()) return;
+    final storage = StorageFactory.instance;
+    if (!await storage.fileExists(filePath)) return;
 
     final moveText = _movesToPgnMoveText(currentMoveSequence);
     _rootMoves = moveText;
 
-    final existing = await file.readAsString();
+    final existing = await storage.readFile(filePath);
+    if (existing == null) return;
     final updated = _upsertMetadataComment(existing, '// Root:', moveText);
-    await file.writeAsString(updated);
+    await storage.writeFile(filePath, updated);
+    notifyListeners();
+  }
+
+  /// Restores repertoire state from a PGN snapshot (used by undo).
+  Future<void> restoreRepertoireFromPgn(
+    String pgn, {
+    List<String>? syncPath,
+  }) async {
+    _repertoirePgn = pgn.isEmpty ? null : pgn;
+    await _buildOpeningTree();
+    await _parseRepertoireLines();
+    if (syncPath != null) {
+      navigateToLineMove(syncPath);
+    } else {
+      _navigateToRootPosition();
+    }
     notifyListeners();
   }
 
   /// (Re)loads the PGN content for the current repertoire.
   Future<void> loadRepertoire() async {
     if (_currentRepertoire == null) return;
+    writer.clearUndoStack();
     _setLoading(true);
 
     try {
       final filePath = _currentRepertoire!['filePath'] as String;
-      final file = io.File(filePath);
+      final storage = StorageFactory.instance;
 
-      if (await file.exists()) {
-        _repertoirePgn = await file.readAsString();
+      if (await storage.fileExists(filePath)) {
+        _repertoirePgn = await storage.readFile(filePath);
 
         _position = Chess.initial;
         _moveHistory.clear();
@@ -414,8 +433,6 @@ class RepertoireController with ChangeNotifier {
       _startingFen = null;
     } finally {
       _setLoading(false);
-
-      StockfishPool().warmUp();
     }
   }
 
@@ -470,51 +487,24 @@ class RepertoireController with ChangeNotifier {
 
       final processedGames = <String>[];
 
-      String? currentEvent;
-      String? currentDate;
-      String? currentWhite;
-      String? currentBlack;
-      String? currentResult;
-      final moveLines = <String>[];
-
-      for (final line in lines) {
-        final trimmedLine = line.trim();
-
-        if (trimmedLine.startsWith('//')) {
-          continue;
+      for (final chunk in pgn.splitPgnIntoGames(_repertoirePgn!)) {
+        final headers = pgn.extractHeaders(chunk);
+        final moveLines = <String>[];
+        for (final line in chunk.split('\n')) {
+          final trimmed = line.trim();
+          if (trimmed.isEmpty || trimmed.startsWith('[')) continue;
+          moveLines.add(trimmed);
         }
+        if (moveLines.isEmpty) continue;
 
-        if (trimmedLine.startsWith('[Event ')) {
-          if (currentEvent != null && moveLines.isNotEmpty) {
-            final game = _buildGame(currentEvent, currentDate, currentWhite,
-                currentBlack, currentResult, moveLines);
-            if (game != null) {
-              processedGames.add(game);
-            }
-          }
-
-          currentEvent = _extractHeaderValue(trimmedLine);
-          currentDate = null;
-          currentWhite = null;
-          currentBlack = null;
-          currentResult = null;
-          moveLines.clear();
-        } else if (trimmedLine.startsWith('[Date ')) {
-          currentDate = _extractHeaderValue(trimmedLine);
-        } else if (trimmedLine.startsWith('[White ')) {
-          currentWhite = _extractHeaderValue(trimmedLine);
-        } else if (trimmedLine.startsWith('[Black ')) {
-          currentBlack = _extractHeaderValue(trimmedLine);
-        } else if (trimmedLine.startsWith('[Result ')) {
-          currentResult = _extractHeaderValue(trimmedLine);
-        } else if (trimmedLine.isNotEmpty) {
-          moveLines.add(trimmedLine);
-        }
-      }
-
-      if (currentEvent != null && moveLines.isNotEmpty) {
-        final game = _buildGame(currentEvent, currentDate, currentWhite,
-            currentBlack, currentResult, moveLines);
+        final game = _buildGame(
+          headers['Event'],
+          headers['Date'],
+          headers['White'],
+          headers['Black'],
+          headers['Result'],
+          moveLines,
+        );
         if (game != null) {
           processedGames.add(game);
         }
@@ -530,7 +520,7 @@ class RepertoireController with ChangeNotifier {
         pgnList: processedGames,
         username: '',
         userIsWhite: isWhiteRepertoire,
-        maxDepth: 50,
+        maxDepth: kOpeningTreeMaxDepth,
         strictPlayerMatching: false,
       );
 
@@ -651,9 +641,6 @@ class RepertoireController with ChangeNotifier {
     return true;
   }
 
-  String? _extractHeaderValue(String line) =>
-      pgn_utils.extractHeaderValue(line);
-
   String? _buildGame(
     String? event,
     String? date,
@@ -678,8 +665,16 @@ class RepertoireController with ChangeNotifier {
 
   /// Append a newly saved line to the in-memory tree and lines list
   /// without reloading the entire repertoire from disk.
-  void appendNewLine(List<String> moves, String title, String pgn) {
-    _openingTree?.appendLine(moves);
+  void appendNewLine(
+    List<String> moves,
+    String title,
+    String pgn, {
+    bool updateTree = true,
+  }) {
+    if (updateTree) {
+      final startFen = _startingFen ?? kStandardStartFen;
+      _openingTree?.appendLineFromFen(startFen, moves);
+    }
 
     final index = _repertoireLines.length;
     final service = RepertoireService();
@@ -703,6 +698,92 @@ class RepertoireController with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Extend an existing line (or create in-memory entry) after a one-click add.
+  void appendMoveToExistingLine(
+    List<String> prefix,
+    String newMove, {
+    String? updatedPgnContent,
+  }) {
+    if (updatedPgnContent != null) {
+      _repertoirePgn = updatedPgnContent;
+    }
+
+    final startFen = _startingFen ?? kStandardStartFen;
+    _openingTree?.appendLineFromFen(startFen, [...prefix, newMove]);
+
+    final lineIndex = _findLineIndexForPrefix(prefix);
+    if (lineIndex != null) {
+      final line = _repertoireLines[lineIndex];
+      final newMoves = [...line.moves, newMove];
+      final service = RepertoireService();
+      _repertoireLines[lineIndex] = RepertoireLine(
+        id: line.id,
+        name: line.name,
+        moves: newMoves,
+        color: line.color,
+        startPosition: line.startPosition,
+        fullPgn: service.appendSanToGamePgn(line.fullPgn, line.moves, newMove),
+        comments: line.comments,
+        variations: line.variations,
+        headers: line.headers,
+        importance: line.importance,
+      );
+      notifyListeners();
+      return;
+    }
+
+    final fullPath = [...prefix, newMove];
+    final service = RepertoireService();
+    final pgn = updatedPgnContent != null
+        ? _extractLastGamePgn(updatedPgnContent)
+        : service.buildMinimalGamePgn(
+            fullPath,
+            startingFen: _startingFen,
+            isWhiteRepertoire: _isRepertoireWhite,
+          );
+    appendNewLine(
+      fullPath,
+      _defaultLineTitle(fullPath),
+      pgn,
+      updateTree: false,
+    );
+  }
+
+  int? _findLineIndexForPrefix(List<String> prefix) {
+    int? bestIndex;
+    int bestLen = -1;
+    for (int i = 0; i < _repertoireLines.length; i++) {
+      final moves = _repertoireLines[i].moves;
+      if (moves.length == prefix.length &&
+          _listEquals(moves, prefix) &&
+          moves.length > bestLen) {
+        bestIndex = i;
+        bestLen = moves.length;
+      }
+    }
+    return bestIndex;
+  }
+
+  static bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
+  String _extractLastGamePgn(String fullPgn) {
+    final games = pgn.splitPgnIntoGames(fullPgn);
+    return games.isEmpty ? fullPgn : games.last;
+  }
+
+  String _defaultLineTitle(List<String> moves) {
+    if (moves.length >= 3) {
+      return 'Line: ${moves.take(3).join(' ')}';
+    }
+    return 'Repertoire Line';
+  }
+
   /// Imports PGN content into the current repertoire file.
   ///
   /// Appends the raw PGN text to the file, then reloads so the opening tree
@@ -712,19 +793,19 @@ class RepertoireController with ChangeNotifier {
     if (_currentRepertoire == null) return 0;
 
     final filePath = _currentRepertoire!['filePath'] as String;
-    final file = io.File(filePath);
-    if (!await file.exists()) return 0;
+    final storage = StorageFactory.instance;
+    if (!await storage.fileExists(filePath)) return 0;
 
-    // Count incoming games before writing.
-    final gameCount = _countPgnGames(pgnContent);
+    final gameCount = pgn.countPgnGames(pgnContent);
 
-    final existing = await file.readAsString();
+    final existing = await storage.readFile(filePath);
+    if (existing == null) return 0;
     final separator = existing.endsWith('\n\n')
         ? ''
         : existing.endsWith('\n')
             ? '\n'
             : '\n\n';
-    await file.writeAsString('$existing$separator$pgnContent\n');
+    await storage.writeFile(filePath, '$existing$separator$pgnContent\n');
 
     await loadRepertoire();
 
@@ -767,22 +848,4 @@ class RepertoireController with ChangeNotifier {
     return updated.join('\n');
   }
 
-  int _countPgnGames(String pgnContent) {
-    try {
-      final parsedGames = PgnGame.parseMultiGamePgn(pgnContent);
-      if (parsedGames.isNotEmpty) {
-        return parsedGames.length;
-      }
-    } catch (_) {
-      // Fall through to the header-based heuristic below.
-    }
-
-    final headerCount = RegExp(r'^\s*\[Event\s+"', multiLine: true)
-        .allMatches(pgnContent)
-        .length;
-    if (headerCount > 0) {
-      return headerCount;
-    }
-    return pgnContent.trim().isEmpty ? 0 : 1;
-  }
 }

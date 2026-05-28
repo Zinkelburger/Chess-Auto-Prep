@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
@@ -9,7 +10,7 @@ import 'package:chess_auto_prep/theme/app_colors.dart';
 
 export 'package:chess_auto_prep/models/analysis_node.dart';
 
-class PgnViewerController {
+class PgnViewerWidgetController {
   _PgnViewerWidgetState? _state;
 
   void _attach(_PgnViewerWidgetState state) {
@@ -77,7 +78,7 @@ class PgnViewerWidget extends StatefulWidget {
   final int? moveNumber;
   final bool? isWhiteToPlay;
   final Function(Position)? onPositionChanged;
-  final PgnViewerController? controller;
+  final PgnViewerWidgetController? controller;
   final String? initialFen;
   final bool showStartEndButtons;
   final Function(int nodeId, Offset globalPosition)? onAnalysisNodeAction;
@@ -297,7 +298,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     try {
       final content = await StorageFactory.instance.readImportedPgns();
       if (content == null || content.isEmpty) return '';
-      final games = _splitPgnIntoGames(content);
+      final games = splitPgnIntoGames(content);
       for (final gameText in games) {
         if (gameText.contains('[GameId "$gameId"]')) return gameText;
       }
@@ -305,24 +306,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       debugPrint('Error finding game PGN: $e');
     }
     return '';
-  }
-
-  List<String> _splitPgnIntoGames(String content) {
-    final games = <String>[];
-    final lines = content.split('\n');
-    String currentGame = '';
-    bool inGame = false;
-    for (final line in lines) {
-      if (line.startsWith('[Event')) {
-        if (inGame && currentGame.isNotEmpty) games.add(currentGame);
-        currentGame = '$line\n';
-        inGame = true;
-      } else if (inGame) {
-        currentGame += '$line\n';
-      }
-    }
-    if (inGame && currentGame.isNotEmpty) games.add(currentGame);
-    return games;
   }
 
   String _buildGameInfo(PgnGame game) {

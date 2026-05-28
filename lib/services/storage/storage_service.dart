@@ -1,7 +1,48 @@
 import 'dart:async';
 
-/// Abstract interface for storage operations
+import '../../models/repertoire_metadata.dart';
+
+/// Abstract interface for storage operations.
+///
+/// Domain-specific helpers (tactics CSV, repertoire PGN, etc.) build on top of
+/// the generic [readFile] / [writeFile] / [fileExists] / [deleteFile] methods
+/// so that controllers and widgets never depend on `dart:io` directly.
 abstract class StorageService {
+  // ── Generic file I/O ─────────────────────────────────────────────────────
+
+  /// Read a file at [path] (absolute or relative to the app documents root).
+  /// Returns `null` if the file does not exist or cannot be read.
+  Future<String?> readFile(String path);
+
+  /// Write [content] to the file at [path], creating parent directories as
+  /// needed.  Uses an atomic temp-file rename when possible.
+  Future<void> writeFile(String path, String content);
+
+  /// Whether a file exists at the given [path].
+  Future<bool> fileExists(String path);
+
+  /// Delete the file at [path].  No-op if it does not exist.
+  Future<void> deleteFile(String path);
+
+  /// Rename / move a file from [oldPath] to [newPath].
+  Future<void> renameFile(String oldPath, String newPath);
+
+  /// Return the parent directory path for [filePath].
+  String parentPath(String filePath);
+
+  // ── Repertoire file management ────────────────────────────────────────────
+
+  /// Lists all `.pgn` files in the repertoires directory.
+  ///
+  /// Each entry contains the file path, display name, game count, and last-
+  /// modified timestamp.
+  Future<List<RepertoireMetadata>> listRepertoireFiles();
+
+  /// Returns the absolute path for a repertoire file with the given [name].
+  Future<String> repertoireFilePath(String name);
+
+  // ── Domain-specific helpers ──────────────────────────────────────────────
+
   Future<String?> readTacticsCsv();
   Future<void> saveTacticsCsv(String csvContent);
 

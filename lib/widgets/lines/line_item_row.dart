@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../models/repertoire_line.dart';
-import '../../services/coverage_service.dart';
-import '../../services/navigation_stack.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
+import 'package:chess_auto_prep/core/navigation_stack.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/coverage_helpers.dart';
-import '../../utils/line_metrics_helpers.dart';
+import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../../utils/lines_filter_helpers.dart';
 import '../../utils/pgn_utils.dart' as pgn_utils;
 
@@ -159,6 +159,10 @@ class LineItemRow extends StatelessWidget {
                   const SizedBox(width: 4),
                   coverageBadge,
                 ],
+                if (metrics != null && metrics!.trapCount > 0) ...[
+                  const SizedBox(width: 4),
+                  _TrapLineBadges(metrics: metrics!),
+                ],
                 const SizedBox(width: 4),
                 Container(
                   padding:
@@ -222,6 +226,40 @@ class LineItemRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TrapLineBadges extends StatelessWidget {
+  final LineQualityInfo metrics;
+
+  const _TrapLineBadges({required this.metrics});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppColors.warning.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '${metrics.trapCount} trap${metrics.trapCount == 1 ? '' : 's'}',
+            style: const TextStyle(fontSize: 11, color: AppColors.warning),
+          ),
+        ),
+        if (metrics.bestTrapEvalDiff != null) ...[
+          const SizedBox(width: 4),
+          Text(
+            '+${metrics.bestTrapEvalDiff}cp',
+            style:
+                const TextStyle(fontSize: 11, color: AppColors.evalPositive),
+          ),
+        ],
+      ],
     );
   }
 }

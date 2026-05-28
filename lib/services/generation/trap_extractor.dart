@@ -10,7 +10,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../models/build_tree_node.dart';
-import '../../models/trap_line_info.dart';
+import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
+import 'package:chess_auto_prep/features/traps/models/trap_reply.dart';
 import '../../utils/ease_utils.dart' show winProbability;
 import '../../utils/eval_constants.dart';
 
@@ -58,6 +59,10 @@ class TrapExtractor {
         trickSurplus: c.trickSurplus,
         expectimaxValue: c.node.expectimaxValue,
         wpEval: c.wpEval,
+        fen: c.fen,
+        openingName: c.openingName,
+        positionEvalCp: c.positionEvalCp,
+        allReplies: c.allReplies,
       ));
     }
 
@@ -134,7 +139,29 @@ class TrapExtractor {
       evalDiffUs: evalDiffUs,
       trickSurplus: surplus,
       wpEval: wpEval,
+      fen: node.fen,
+      openingName: node.openingName,
+      positionEvalCp: evalUs,
+      allReplies: _buildAllReplies(node, bestEvalUs),
     ));
+  }
+
+  /// Builds classified opponent replies at a trap position, sorted by probability.
+  List<TrapReply> _buildAllReplies(BuildTreeNode node, int bestEvalUs) {
+    final replies = <TrapReply>[];
+    for (final child in node.children) {
+      final evalAfterCp =
+          child.hasEngineEval ? child.evalForUs(playAsWhite) : 0;
+      final diffFromBest = evalAfterCp - bestEvalUs;
+      replies.add(TrapReply(
+        san: child.moveSan,
+        probability: child.moveProbability,
+        evalAfterCp: evalAfterCp,
+        classification: TrapReply.classify(diffFromBest),
+      ));
+    }
+    replies.sort((a, b) => b.probability.compareTo(a.probability));
+    return replies;
   }
 
   /// Save trap lines to a JSON file alongside the repertoire.
@@ -191,6 +218,10 @@ class _TrapCandidate {
   final int evalDiffUs;
   final double trickSurplus;
   final double wpEval;
+  final String fen;
+  final String? openingName;
+  final int positionEvalCp;
+  final List<TrapReply> allReplies;
 
   _TrapCandidate({
     required this.node,
@@ -203,5 +234,9 @@ class _TrapCandidate {
     required this.evalDiffUs,
     required this.trickSurplus,
     required this.wpEval,
+    required this.fen,
+    this.openingName,
+    required this.positionEvalCp,
+    required this.allReplies,
   });
 }

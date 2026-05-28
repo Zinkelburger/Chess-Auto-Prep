@@ -43,7 +43,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   late final TrainingSessionController _training;
   late TabController _tabController;
 
-  final PgnViewerController _pgnController = PgnViewerController();
+  final PgnViewerWidgetController _pgnController = PgnViewerWidgetController();
   final TextEditingController _repetitionsController = TextEditingController();
   final TextEditingController _depthController = TextEditingController();
   final TextEditingController _delayController = TextEditingController();

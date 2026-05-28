@@ -280,5 +280,36 @@ void main() {
         expect(success, isFalse);
       });
     });
+
+    group('hasMove', () {
+      test('returns true when SAN exists at FEN', () {
+        const e4Fen =
+            'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+        expect(tree.hasMove(root.fen, 'e4'), isTrue);
+        expect(tree.hasMove(e4Fen, 'e5'), isTrue);
+      });
+
+      test('returns false for unexplored move', () {
+        const e4Fen =
+            'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+        expect(tree.hasMove(e4Fen, 'a6'), isFalse);
+        expect(tree.hasMove(root.fen, 'a4'), isFalse);
+      });
+    });
+
+    group('appendLineFromFen', () {
+      test('adds new branch from standard start', () {
+        tree.appendLineFromFen(root.fen, ['a4']);
+        expect(tree.hasMove(root.fen, 'a4'), isTrue);
+      });
+
+      test('extends existing line from indexed FEN', () {
+        tree.syncToMoveHistory(['e4', 'e5']);
+        final fen = tree.currentNode.fen;
+        expect(tree.hasMove(fen, 'Bc4'), isFalse);
+        tree.appendLineFromFen(fen, ['Bc4']);
+        expect(tree.hasMove(fen, 'Bc4'), isTrue);
+      });
+    });
   });
 }

@@ -6,13 +6,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
-import '../services/board_preview_controller.dart';
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import '../services/coherence_service.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../theme/app_colors.dart';
 import 'analysis/analysis_settings_sheet.dart';
 import 'interactive_pgn_editor.dart';
+import 'layout/edit_main_zone.dart';
 import 'repertoire_analysis_dock.dart';
 
 /// Analysis dock on top, PGN editor below (resizable split).
@@ -43,6 +45,12 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final bool isGenerating;
   final bool isGenerationPaused;
 
+  /// When false, only the PGN editor + toolbar are shown (analysis lives in
+  /// [EditContextZone] / wide layout context column).
+  final bool embedAnalysisDock;
+
+  final TrapIndexService? trapIndex;
+
   const PgnWithAnalysisPane({
     super.key,
     required this.controller,
@@ -70,6 +78,8 @@ class PgnWithAnalysisPane extends StatefulWidget {
     required this.isAnalysisActive,
     this.isGenerating = false,
     this.isGenerationPaused = false,
+    this.embedAnalysisDock = true,
+    this.trapIndex,
   });
 
   @override
@@ -130,7 +140,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              if (!_showDock) {
+              if (!widget.embedAnalysisDock || !_showDock) {
                 return _buildPgnEditor();
               }
               final total = constraints.maxHeight;
@@ -201,16 +211,20 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
             onPressed: () => showAnalysisSettingsSheet(context),
           ),
           TextButton.icon(
-            onPressed: () {
-              setState(() => _showDock = !_showDock);
-              _savePrefs();
-            },
+            onPressed: widget.embedAnalysisDock
+                ? () {
+                    setState(() => _showDock = !_showDock);
+                    _savePrefs();
+                  }
+                : null,
             icon: Icon(
               _showDock ? Icons.expand_more : Icons.expand_less,
               size: 16,
             ),
             label: Text(
-              _showDock ? 'Hide analysis' : 'Show analysis',
+              widget.embedAnalysisDock
+                  ? (_showDock ? 'Hide analysis' : 'Show analysis')
+                  : 'Analysis in context panel',
               style: const TextStyle(fontSize: 12),
             ),
             style: TextButton.styleFrom(
@@ -225,12 +239,11 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
   }
 
   Widget _buildPgnEditor() {
-    return InteractivePgnEditor(
-      key: ValueKey(
-          '${widget.editorKeySuffix}_${widget.startingFen ?? 'standard'}'),
-      controller: widget.pgnEditorController,
+    return EditMainZone(
+      pgnEditorController: widget.pgnEditorController,
+      editorKeySuffix: widget.editorKeySuffix,
       initialPgn: widget.initialPgn,
-      currentRepertoireName: widget.repertoireName,
+      repertoireName: widget.repertoireName,
       repertoireColor: widget.repertoireColor,
       moveHistory: widget.moveHistory,
       currentMoveIndex: widget.currentMoveIndex,
@@ -241,6 +254,8 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       isEditingExistingLine: widget.isEditingExistingLine,
       onLineEdited: widget.onLineEdited,
       onLineSaved: widget.onLineSaved,
+      trapIndex: widget.trapIndex,
+      boardPreview: widget.boardPreview,
     );
   }
 }

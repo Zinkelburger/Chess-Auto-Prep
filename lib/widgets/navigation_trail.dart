@@ -3,7 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../services/navigation_stack.dart';
+import 'package:chess_auto_prep/core/navigation_stack.dart';
 
 class NavigationTrail extends StatelessWidget {
   final NavigationStack stack;

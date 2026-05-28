@@ -10,6 +10,7 @@ import 'engine/eval_worker.dart';
 import 'engine/stockfish_pool.dart';
 import 'lichess_api_client.dart';
 import 'tactics_database.dart';
+import 'pgn_parsing_service.dart';
 import 'storage/storage_factory.dart';
 import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart' as parallel;
@@ -152,7 +153,7 @@ class TacticsImportService {
       try {
         final response = await http.get(Uri.parse('${archives[i]}/pgn'));
         if (response.statusCode == 200 && response.body.isNotEmpty) {
-          final games = _splitPgnIntoGames(response.body);
+          final games = splitPgnIntoGames(response.body);
           allGames.addAll(games);
         }
       } catch (e) {
@@ -181,7 +182,7 @@ class TacticsImportService {
   /// appears in the stored file.
   Future<void> _savePgns(String pgnContent) async {
     try {
-      final games = _splitPgnIntoGames(pgnContent);
+      final games = splitPgnIntoGames(pgnContent);
       final processedGames = games.map(_injectGameIdHeader).toList();
 
       final existing = await StorageFactory.instance.readImportedPgns() ?? '';
@@ -318,32 +319,6 @@ class TacticsImportService {
     return result.join('\n');
   }
 
-  List<String> _splitPgnIntoGames(String content) {
-    final games = <String>[];
-    final lines = content.split('\n');
-
-    String currentGame = '';
-    bool inGame = false;
-
-    for (final line in lines) {
-      if (line.startsWith('[Event')) {
-        if (inGame && currentGame.trim().isNotEmpty) {
-          games.add(currentGame);
-        }
-        currentGame = '$line\n';
-        inGame = true;
-      } else if (inGame) {
-        currentGame += '$line\n';
-      }
-    }
-
-    if (inGame && currentGame.trim().isNotEmpty) {
-      games.add(currentGame);
-    }
-
-    return games;
-  }
-
   Future<List<TacticsPosition>> _processGames(
     String pgnContent,
     String username,
@@ -353,7 +328,7 @@ class TacticsImportService {
     int? maxCores,
   }) async {
     _cancelled = false;
-    final games = _splitPgnIntoGames(pgnContent);
+    final games = splitPgnIntoGames(pgnContent);
     final usernameLower = username.toLowerCase();
 
     // ── Pre-filter: skip already-analyzed games ──────────────

@@ -18,6 +18,7 @@ import '../models/build_tree_node.dart';
 import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
 import 'engine/stockfish_pool.dart';
+import 'engine/engine_lifecycle.dart';
 import 'eval/chessdb_api_provider.dart';
 import 'generation/fen_map.dart';
 import 'generation/generation_config.dart';
@@ -91,8 +92,11 @@ class TreeBuildService {
     _pauseCompleter = null;
 
     await Future.wait([
-      if (cfg.usesStockfish)
+      if (cfg.usesStockfish &&
+          EngineLifecycle().state != EngineState.generating)
         _pool.prepareForTreeBuild(cfg.resolvedEngineThreads)
+      else if (cfg.usesStockfish)
+        Future.value()
       else
         Future.value(),
       _evalResolver.evalCache.init(),

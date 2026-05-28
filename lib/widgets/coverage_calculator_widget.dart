@@ -3,7 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
-import '../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/maia_factory.dart';
 import 'lichess_db_selector.dart';
 

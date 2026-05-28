@@ -1,5 +1,5 @@
 import '../models/repertoire_line.dart';
-import '../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 
 /// Pre-computed coverage info for a single repertoire line.
 class LineCoverageInfo {

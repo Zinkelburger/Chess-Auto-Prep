@@ -5,6 +5,7 @@ library;
 import 'dart:collection';
 
 import 'package:dartchess/dartchess.dart';
+import '../constants/chess_constants.dart';
 import '../utils/fen_utils.dart';
 
 class OpeningTreeNode {
@@ -149,9 +150,7 @@ class OpeningTree {
       : fenToNodes = fenToNodes ?? {} {
     // Ensure root and currentNode point to the same object
     final rootNode = root ??
-        OpeningTreeNode(
-            move: '',
-            fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1');
+        OpeningTreeNode(move: '', fen: kStandardStartFen);
     this.root = rootNode;
     currentNode = rootNode;
   }
@@ -202,12 +201,49 @@ class OpeningTree {
   /// Get current depth in the tree
   int get currentDepth => currentNode.getMovePath().length;
 
+  /// Whether [san] is already a child of any node at [fen].
+  bool hasMove(String fen, String san) {
+    final key = normalizeFen(fen);
+    final nodes = fenToNodes[key];
+    if (nodes != null) {
+      for (final node in nodes) {
+        if (node.children.containsKey(san)) return true;
+      }
+    }
+    if (normalizeFen(root.fen) == key && root.children.containsKey(san)) {
+      return true;
+    }
+    return false;
+  }
+
   /// Append a single line of moves to the tree without rebuilding.
   /// Each move is walked node-by-node; new nodes are created as needed.
   void appendLine(List<String> moves) {
-    Position position = Chess.initial;
-    var node = root;
-    node.updateStats(0.5); // repertoire lines have no game result
+    appendLineFromFen(kStandardStartFen, moves);
+  }
+
+  /// Append moves starting from [startFen] (supports custom setup positions).
+  void appendLineFromFen(String startFen, List<String> moves) {
+    if (moves.isEmpty) return;
+
+    Position position;
+    OpeningTreeNode node;
+
+    final normalizedStart = normalizeFen(startFen);
+    final nodesAtFen = fenToNodes[normalizedStart];
+
+    if (nodesAtFen != null && nodesAtFen.isNotEmpty) {
+      node = nodesAtFen.first;
+      position = Chess.fromSetup(Setup.parseFen(node.fen));
+    } else if (normalizedStart == normalizeFen(kStandardStartFen)) {
+      position = Chess.initial;
+      node = root;
+    } else {
+      position = Chess.fromSetup(Setup.parseFen(startFen));
+      node = root;
+    }
+
+    node.updateStats(0.5);
 
     for (final san in moves) {
       final move = position.parseSan(san);

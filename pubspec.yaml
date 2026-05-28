@@ -30,7 +30,6 @@ dependencies:
   csv: ^6.0.0
   share_plus: ^10.0.0  # For exporting/sharing tactics on mobile
 
-  flutter_bloc: ^9.1.1
   shared_preferences: ^2.5.3
   stockfish: ^1.7.1
   onnxruntime: ^1.4.1

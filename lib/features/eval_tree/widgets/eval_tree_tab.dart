@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../constants/chess_constants.dart';
 import '../../../models/build_tree_node.dart';
 import '../services/eval_tree_file_loader.dart';
 import '../../../services/generation/tree_serialization.dart';
-import '../../../utils/tree_colors.dart';
+import '../tree_colors.dart';
 import '../adapters/eval_tree_snapshot_adapter.dart';
 import '../controllers/eval_tree_controller.dart';
 import '../models/eval_tree_snapshot.dart';
@@ -12,11 +13,10 @@ import '../services/eval_tree_layout_engine.dart';
 import '../services/eval_tree_line_metrics.dart';
 import 'eval_tree_toolbar.dart';
 import 'eval_tree_viewport.dart';
+import '../../../widgets/layout/empty_state_placeholder.dart';
 import 'repertoire_tree_explorer.dart';
 
 class EvalTreePositionSelection {
-  static const String _standardFen =
-      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
   final String fen;
   final String rootFen;
@@ -34,7 +34,7 @@ class EvalTreePositionSelection {
   List<String> get fullMovePathSan => [...rootStartMovesSan, ...movePathSan];
 
   String? get startingFen {
-    if (rootStartMovesSan.isNotEmpty || rootFen == _standardFen) {
+    if (rootStartMovesSan.isNotEmpty || rootFen == kStandardStartFen) {
       return null;
     }
     return rootFen;
@@ -209,33 +209,13 @@ class _EvalTreeTabState extends State<EvalTreeTab>
             ? 'Generate a repertoire tree or load a saved tree file.'
             : 'Select a repertoire first.');
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.insights, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            const Text(
-              'No eval tree found',
-              style: TextStyle(color: Colors.grey, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: hasPath ? _reloadFromFile : null,
-              icon: const Icon(Icons.file_open),
-              label: const Text('Load from file'),
-            ),
-          ],
-        ),
-      ),
+    return EmptyStatePlaceholder(
+      icon: Icons.insights,
+      title: 'No eval tree found',
+      subtitle: message,
+      actionLabel: hasPath ? 'Load from file' : null,
+      actionIcon: Icons.file_open,
+      onAction: hasPath ? _reloadFromFile : null,
     );
   }
 

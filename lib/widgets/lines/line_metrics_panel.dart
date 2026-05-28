@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../services/coverage_service.dart';
+import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/coverage_helpers.dart';
 import '../../utils/pgn_utils.dart' as pgn_utils;
