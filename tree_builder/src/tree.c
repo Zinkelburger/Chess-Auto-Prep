@@ -801,8 +801,9 @@ static void emit_depth_complete_line(Tree *tree, int depth,
     clock_gettime(CLOCK_MONOTONIC, &now);
     double elapsed_s = (now.tv_sec - g_progress_start_time.tv_sec)
                      + (now.tv_nsec - g_progress_start_time.tv_nsec) / 1e9;
+    size_t session_added = tree->total_nodes - config->progress_baseline_nodes;
     double rate = (elapsed_s > 0.5)
-        ? tree->total_nodes / (elapsed_s / 60.0) : 0.0;
+        ? session_added / (elapsed_s / 60.0) : 0.0;
 
     char nodes_buf[32], elapsed_buf[32];
     format_int_commas(g_nodes_processed_at_depth[depth], nodes_buf, sizeof(nodes_buf));
@@ -819,8 +820,9 @@ static void emit_build_summary(Tree *tree, const TreeConfig *config) {
     clock_gettime(CLOCK_MONOTONIC, &now);
     double elapsed_s = (now.tv_sec - g_progress_start_time.tv_sec)
                      + (now.tv_nsec - g_progress_start_time.tv_nsec) / 1e9;
+    size_t session_added = tree->total_nodes - config->progress_baseline_nodes;
     double rate = (elapsed_s > 0.5)
-        ? tree->total_nodes / (elapsed_s / 60.0) : 0.0;
+        ? session_added / (elapsed_s / 60.0) : 0.0;
 
     char nodes_buf[32], elapsed_buf[32];
     format_int_commas((int)tree->total_nodes, nodes_buf, sizeof(nodes_buf));
@@ -864,8 +866,9 @@ static void emit_build_progress(Tree *tree, const TreeConfig *config,
     double depth_elapsed_s = (now.tv_sec - g_depth_enter_time.tv_sec)
                              + (now.tv_nsec - g_depth_enter_time.tv_nsec) / 1e9;
 
+    size_t session_added = tree->total_nodes - config->progress_baseline_nodes;
     double rate = (elapsed_s > 0.5)
-        ? tree->total_nodes / (elapsed_s / 60.0) : 0.0;
+        ? session_added / (elapsed_s / 60.0) : 0.0;
 
     int nodes_at = g_nodes_created_at_depth[active];
     int remaining = nodes_at - processed_at;
