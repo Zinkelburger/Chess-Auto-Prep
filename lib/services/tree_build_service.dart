@@ -207,6 +207,41 @@ class TreeBuildService {
 
   // ── BFS build loop ─────────────────────────────────────────────────────
 
+  /// Collect frontier leaves for resume — matches C `resume_prepare_frontier`.
+  static (List<BuildTreeNode> frontier, int minPly) prepareResumeFrontier(
+    BuildTreeNode root,
+  ) {
+    final frontier = <BuildTreeNode>[];
+    var minPly = 1 << 30;
+    void walk(BuildTreeNode node) {
+      if (node.children.isNotEmpty) {
+        if (!node.explored) {
+          frontier.add(node);
+          if (node.ply < minPly) minPly = node.ply;
+          return;
+        }
+        for (final child in node.children) {
+          walk(child);
+        }
+        return;
+      }
+      if (!node.explored) {
+        frontier.add(node);
+        if (node.ply < minPly) minPly = node.ply;
+      }
+    }
+
+    walk(root);
+    if (frontier.isEmpty) minPly = 0;
+    return (frontier, minPly);
+  }
+
+  /// Shallowest ply among nodes that still need expansion (for progress UI).
+  static int? minFrontierPly(BuildTreeNode root) {
+    final (_, minPly) = prepareResumeFrontier(root);
+    return minPly > 0 && minPly < (1 << 30) ? minPly : null;
+  }
+
   Future<void> _buildBfsLoop({
     required BuildTree tree,
     required TreeBuildConfig config,
@@ -214,13 +249,30 @@ class TreeBuildService {
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
   }) async {
-    final queue = Queue<BuildTreeNode>()..add(tree.root);
+    final queue = Queue<BuildTreeNode>();
+
+    final fastResume =
+        tree.totalNodes > 1 && tree.root.children.isNotEmpty;
+    if (fastResume) {
+      final (frontier, minPly) = prepareResumeFrontier(tree.root);
+      if (frontier.isEmpty) {
+        _log('No frontier positions to expand');
+        return;
+      }
+      frontier.sort((a, b) => a.ply.compareTo(b.ply));
+      queue.addAll(frontier);
+      _progress.initForResume(minFrontierPly: minPly);
+    } else {
+      queue.add(tree.root);
+    }
+
     while (_isBuilding && !isCancelled() && queue.isNotEmpty) {
       if (_isPaused && _pauseCompleter != null) {
         await _pauseCompleter!.future;
         if (!_isBuilding || isCancelled()) return;
       }
       final node = queue.removeFirst();
+      _progress.onDequeue(node.ply);
       await _processBuildNode(
         tree: tree,
         node: node,
@@ -275,8 +327,8 @@ class TreeBuildService {
       fromDequeue: true,
     );
 
-    // Resume: skip nodes that already have children — enqueue them only
-    if (node.children.isNotEmpty) {
+    // Resume: fully expanded in a prior session — enqueue children only.
+    if (node.children.isNotEmpty && node.explored) {
       fenMap.putCanonical(node.fen, node);
       for (final child in node.children) {
         if (!_isBuilding || isCancelled()) break;
@@ -329,8 +381,6 @@ class TreeBuildService {
     }
     fenMap.putCanonical(node.fen, node);
 
-    node.explored = true;
-
     if (isOurMove) {
       if (config.buildMode == BuildMode.maiaDbExplore) {
         await _buildOurMoveMaiaDb(
@@ -362,6 +412,12 @@ class TreeBuildService {
         onProgress: onProgress,
         queue: queue,
       );
+    }
+
+    // Mark explored only after expansion finishes so pause/cancel mid-call
+    // leaves the node resumable (explored=false, possibly partial children).
+    if (_isBuilding && !isCancelled()) {
+      node.explored = true;
     }
   }
 

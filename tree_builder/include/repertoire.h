@@ -70,9 +70,10 @@ typedef struct RepertoireConfig {
     double branching_factor;
     int    build_threads;
     int    build_eval_depth;
+    int    build_max_depth;         /* Tree max ply reached (for PGN stats) */
 
     /* PGN export options */
-    bool   rank_lines_by_importance;   /* Sort lines by cumP (default true) */
+    bool   rank_lines_by_importance;   /* PGN: sort by cumP desc, then ply count (default true) */
     bool   annotate_move_probabilities; /* Add per-move likelihood comments */
     bool   annotate_maia_only;         /* Maia only vs Lichess+Maia fallback */
 

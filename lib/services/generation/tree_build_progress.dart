@@ -6,12 +6,25 @@ class TreeBuildProgressTracker {
   int _lastProgressDequeues = 0;
   int _progressDequeueCount = 0;
   int _buildStartTotalNodes = 0;
+  int _depthTracker = -1;
 
   void reset({required int buildStartTotalNodes}) {
     _lastProgressNodes = 0;
     _lastProgressDequeues = 0;
     _progressDequeueCount = 0;
     _buildStartTotalNodes = buildStartTotalNodes;
+    _depthTracker = -1;
+  }
+
+  /// Seed depth display when resuming from a mid-tree frontier.
+  void initForResume({required int minFrontierPly}) {
+    _depthTracker = minFrontierPly - 1;
+    _progressDequeueCount = 0;
+    _lastProgressDequeues = 0;
+  }
+
+  void onDequeue(int ply) {
+    _depthTracker = ply;
   }
 
   void emitProgress(
@@ -39,7 +52,7 @@ class TreeBuildProgressTracker {
     }
 
     final elapsedMs = buildSw.elapsedMilliseconds;
-    final d = tree.maxPlyReached;
+    final d = _depthTracker >= 0 ? _depthTracker : tree.maxPlyReached;
 
     int totalAtDepth = 0;
     int unexploredAtDepth = 0;
