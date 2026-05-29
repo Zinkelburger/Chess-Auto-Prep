@@ -484,13 +484,14 @@ void rdb_put_ease(RepertoireDB *db, const char *fen, double ease) {
 /*
  * Each cached line is packed as:
  *   16 bytes move_uci (null-padded)
+ *   16 bytes pv_reply_uci (null-padded)
  *    4 bytes eval_cp      (int32 LE)
  *    4 bytes depth_reached (int32 LE)
  *    1 byte  is_mate
  *    4 bytes mate_in      (int32 LE)
- *   = 29 bytes per line
+ *   = 45 bytes per line
  */
-#define MPV_LINE_PACKED_SIZE 29
+#define MPV_LINE_PACKED_SIZE 45
 
 bool rdb_get_multipv(RepertoireDB *db, const char *fen, int depth,
                      int num_pvs, MultiPVJob *out) {
@@ -536,6 +537,9 @@ bool rdb_get_multipv(RepertoireDB *db, const char *fen, int depth,
         memcpy(line->move_uci, p, 16);
         line->move_uci[15] = '\0';
         p += 16;
+        memcpy(line->pv_reply_uci, p, 16);
+        line->pv_reply_uci[15] = '\0';
+        p += 16;
         memcpy(&line->eval_cp, p, 4); p += 4;
         memcpy(&line->depth_reached, p, 4); p += 4;
         line->is_mate = *p; p += 1;
@@ -560,6 +564,9 @@ void rdb_put_multipv(RepertoireDB *db, const char *fen, int depth,
         const MultiPVLine *line = &job->lines[i];
         memset(p, 0, 16);
         strncpy((char *)p, line->move_uci, 15);
+        p += 16;
+        memset(p, 0, 16);
+        strncpy((char *)p, line->pv_reply_uci, 15);
         p += 16;
         memcpy(p, &line->eval_cp, 4); p += 4;
         memcpy(p, &line->depth_reached, 4); p += 4;

@@ -113,7 +113,10 @@ class _AnalysisTabState extends State<AnalysisTab> {
   void _onControllerChanged() {
     _expandedTrapIndex = null;
     _rebuildCandidateService();
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _loadPrefs() async {

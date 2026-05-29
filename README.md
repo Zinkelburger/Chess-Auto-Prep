@@ -1,13 +1,20 @@
 # Chess Auto Prep - Flutter Edition
 
-A chess tactics trainer and PGN analyzer built with Flutter.
+A cross-platform chess app: opening repertoire builder/trainer, tactics, position analysis, and PGN viewer.
 
 ## Features
 
+- **Repertoire Builder**: Edit PGN, browse candidates, generate expectimax trees, traps, coverage
+- **Repertoire Trainer**: Spaced-repetition training on your lines
 - **Tactics Trainer**: Practice chess tactics from Lichess games
 - **Position Analysis**: Analyze weak positions from your games
 - **PGN Viewer**: Load and navigate through chess games
 - **Cross-platform**: Runs on iOS, Android, and Desktop
+
+## Documentation
+
+Current implementation map: **[docs/COMPONENT_MAP.md](docs/COMPONENT_MAP.md)**  
+Planned / incomplete work: [docs/FUTURE_FEATURES.md](docs/FUTURE_FEATURES.md)
 
 ## Getting Started
 

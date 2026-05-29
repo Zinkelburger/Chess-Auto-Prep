@@ -82,6 +82,14 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
         cJSON_AddNumberToObject(obj, "maia_frequency", node->maia_frequency);
     }
 
+    if (node->pv_continuation_move[0]) {
+        cJSON_AddStringToObject(obj, "pv_continuation_move",
+                                node->pv_continuation_move);
+    }
+    if (node->engine_injected) {
+        cJSON_AddBoolToObject(obj, "engine_injected", true);
+    }
+
     /* Per-node build timing (only when non-zero) */
     if (node->build_t_ms > 0.0)
         cJSON_AddNumberToObject(obj, "build_t_ms", node->build_t_ms);
@@ -418,6 +426,16 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
     cJSON *mf = cJSON_GetObjectItem(obj, "maia_frequency");
     if (mf && cJSON_IsNumber(mf))
         node->maia_frequency = mf->valuedouble;
+
+    cJSON *pv_cont = cJSON_GetObjectItem(obj, "pv_continuation_move");
+    if (pv_cont && cJSON_IsString(pv_cont) && pv_cont->valuestring[0]) {
+        snprintf(node->pv_continuation_move,
+                 sizeof(node->pv_continuation_move),
+                 "%s", pv_cont->valuestring);
+    }
+    cJSON *eng_inj = cJSON_GetObjectItem(obj, "engine_injected");
+    if (eng_inj && cJSON_IsTrue(eng_inj))
+        node->engine_injected = true;
 
     /* Parse per-node build timing */
     cJSON *bt = cJSON_GetObjectItem(obj, "build_t_ms");

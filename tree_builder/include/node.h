@@ -143,6 +143,15 @@ typedef struct TreeNode {
      * -1.0 means not set. */
     double maia_frequency;
 
+    /* Engine PV continuation: opponent reply stashed from MultiPV line 0
+     * on the our-move child (opponent-to-move position).  Consumed when
+     * this node is expanded; injected as a child if Maia/Lichess omit it. */
+    char pv_continuation_move[MAX_MOVE_LENGTH];
+
+    /* True when this child was injected from a stashed PV reply because
+     * human move sources did not include it. */
+    bool engine_injected;
+
     /* When true, skip ChessDB/Lichess local DB and ChessDB API for this
      * node and descendants (project cache still consulted).  Set when a
      * local DB returns a hard miss and ext_eval_subtree_skip is enabled. */

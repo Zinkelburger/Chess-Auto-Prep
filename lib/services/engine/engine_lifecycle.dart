@@ -32,15 +32,21 @@ class EngineLifecycle extends ChangeNotifier {
 
   static const _toggleKey = 'engine_lifecycle.toggle_on';
 
+  /// When true, [toggleOn]/[toggleOff] skip pool I/O (unit tests only).
+  @visibleForTesting
+  static bool testMode = false;
+
   Future<void> _serialExec(Future<void> Function() fn) async {
     _queueTail = _queueTail.then((_) => fn());
     await _queueTail;
   }
 
   /// Load persisted toggle state. Call once at app startup.
+  ///
+  /// Engine is **on** by default; only a stored `false` disables it.
   Future<void> loadPersistedState() async {
     final prefs = await SharedPreferences.getInstance();
-    final wasOn = prefs.getBool(_toggleKey) ?? false;
+    final wasOn = prefs.getBool(_toggleKey) ?? true;
     if (wasOn) {
       await _doToggleOn();
     }
@@ -51,17 +57,22 @@ class EngineLifecycle extends ChangeNotifier {
 
   Future<void> _doToggleOn() async {
     if (_state != EngineState.off) return;
-    final settings = EngineSettings();
-    await _pool.ensureWorkers(settings.workers, 1);
+    if (!testMode) {
+      final settings = EngineSettings();
+      await _pool.ensureWorkers(settings.workers, 1);
+    }
     _state = EngineState.idle;
     _persistToggle(true);
     notifyListeners();
   }
 
   Future<void> _doToggleOff() async {
+    if (_state == EngineState.off) return;
     if (_state == EngineState.generating) return;
     _analysis.cancel();
-    await Future.delayed(const Duration(milliseconds: 100));
+    if (!testMode) {
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
     _pool.dispose();
     _state = EngineState.off;
     _persistToggle(false);
@@ -71,6 +82,7 @@ class EngineLifecycle extends ChangeNotifier {
   /// Called when the current FEN changes and state is idle/analyzing.
   void onPositionChanged(String fen) {
     if (_state == EngineState.off || _state == EngineState.generating) return;
+    if (_state == EngineState.analyzing) return;
     _state = EngineState.analyzing;
     notifyListeners();
   }
@@ -87,7 +99,9 @@ class EngineLifecycle extends ChangeNotifier {
   Future<void> enterGeneration(int threads) async {
     _toggleStateBeforeGeneration = _state != EngineState.off;
     _analysis.cancel();
-    await _pool.prepareForTreeBuild(threads);
+    if (!testMode) {
+      await _pool.prepareForTreeBuild(threads);
+    }
     _state = EngineState.generating;
     notifyListeners();
   }
@@ -96,8 +110,10 @@ class EngineLifecycle extends ChangeNotifier {
   Future<void> exitGeneration() async {
     final settings = EngineSettings();
     if (_toggleStateBeforeGeneration) {
-      await _pool.reconfigureAllWorkers(1);
-      await _pool.ensureWorkers(settings.workers, 1);
+      if (!testMode) {
+        await _pool.reconfigureAllWorkers(1);
+        await _pool.ensureWorkers(settings.workers, 1);
+      }
       _state = EngineState.idle;
     } else {
       _pool.dispose();
@@ -113,5 +129,16 @@ class EngineLifecycle extends ChangeNotifier {
     } catch (e) {
       debugPrint('[EngineLifecycle] Failed to persist toggle: $e');
     }
+  }
+
+  /// Resets singleton state between tests. Does not notify listeners.
+  @visibleForTesting
+  void resetForTest() {
+    _analysis.cancel();
+    _pool.dispose();
+    _state = EngineState.off;
+    _toggleStateBeforeGeneration = false;
+    _queueTail = Future.value();
+    testMode = false;
   }
 }

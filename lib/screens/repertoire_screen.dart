@@ -1,13 +1,5 @@
 /// Repertoire screen - Full-screen repertoire view
-/// Shows repertoire positions with two-panel layout: board and tabbed panel
-///
-/// B4 zone migration target (current tabs → future zones):
-///   Tab 0 Browse  (AnalysisTab)              → AnalyzeMainZone
-///   Tab 1 PGN     (PgnWithAnalysisPane)      → EditMainZone + analysis dock
-///   Tab 2 Lines   (RepertoireLinesWithTraps) → AnalyzeContextZone / Lines view
-///   Generate      (RepertoireGenerationTab)   → modal overlay on context zone
-///   Left column   (_buildBoardZone)          → BoardZone
-///   Bottom bar    (RepertoireStatusBar)      → coverage, traps, lines, engine
+/// Shows repertoire positions with board + PGN + context tabs layout.
 library;
 
 import 'package:flutter/material.dart';
@@ -34,18 +26,19 @@ import '../widgets/analysis_tab.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
-import '../widgets/layout/generation_overlay.dart';
 import '../widgets/layout/board_zone.dart';
 import '../widgets/layout/edit_context_zone.dart';
+import '../widgets/layout/analyze_main_zone.dart';
 import '../widgets/layout/repertoire_mode.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
 import '../widgets/layout/empty_state_placeholder.dart';
-import '../widgets/repertoire_analysis_dock.dart';
 import '../constants/ui_breakpoints.dart';
-import '../widgets/layout/repertoire_layout.dart';
-import '../widgets/repertoire/repertoire_analyze_pane.dart';
+import '../widgets/layout/repertoire_layout.dart'
+    show kBoardZoneFlex, kContextZoneFlex, kMainZoneFlex;
 import '../widgets/repertoire/repertoire_tab_bar.dart';
 import '../widgets/repertoire/repertoire_toolbar.dart';
+import '../widgets/navigation_trail.dart';
+import '../theme/app_colors.dart';
 import '../features/traps/widgets/trap_navigation_buttons.dart';
 import '../features/traps/widgets/trap_walkthrough.dart';
 import '../features/traps/services/trap_index_service.dart';
@@ -69,13 +62,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     with TickerProviderStateMixin {
   late final RepertoireController _controller;
   late TabController _tabController;
-  RepertoireMode _mode = RepertoireMode.edit;
   final PgnEditorController _pgnEditorController = PgnEditorController();
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
   bool _isGenerating = false;
   bool _isGenerationPaused = false;
-  bool _generationOverlayVisible = false;
+  bool _generateModeActive = false;
   bool _isCompactLayout = false;
   final ValueNotifier<EditContextView> _editContextView =
       ValueNotifier(EditContextView.browse);
@@ -132,44 +124,20 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     });
   }
 
-  int get _editTabCount => 2;
-
-  int get _pgnTabIndex =>
-      _mode == RepertoireMode.edit ? (_isCompactLayout ? 0 : 1) : -1;
+  static const int _compactTabCount = 2;
 
   void _initTabController({int initialIndex = 0}) {
-    final length = _mode == RepertoireMode.edit ? _editTabCount : 1;
     _tabController = TabController(
-      length: length,
+      length: _compactTabCount,
       vsync: this,
-      initialIndex: initialIndex.clamp(0, length - 1),
+      initialIndex: initialIndex.clamp(0, _compactTabCount - 1),
     );
     _tabController.addListener(_onTabChanged);
   }
 
-  void _recreateTabController(int initialIndex) {
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
-    _initTabController(initialIndex: initialIndex);
-  }
-
   void _updateCompactLayout(bool isCompact) {
     if (_isCompactLayout == isCompact) return;
-
-    final oldIndex = _tabController.index;
-    final wasCompact = _isCompactLayout;
     _isCompactLayout = isCompact;
-
-    if (_mode == RepertoireMode.edit) {
-      final newIndex = isCompact
-          ? (oldIndex == 1 ? 0 : 1)
-          : (oldIndex == 0 ? 1 : 1);
-      if (isCompact && !wasCompact && oldIndex == 0) {
-        _editContextView.value = EditContextView.browse;
-      }
-      _recreateTabController(newIndex);
-    }
-
     setState(() {});
   }
 
@@ -180,55 +148,42 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     setState(() {});
   }
 
-  void _setMode(RepertoireMode mode) {
-    if (_mode == mode) return;
-    final oldMode = _mode;
-    final oldIndex = _tabController.index;
-    _tabController.removeListener(_onTabChanged);
-    _tabController.dispose();
-    _mode = mode;
-    final initialIndex = switch (mode) {
-      RepertoireMode.analyze => 0,
-      RepertoireMode.edit =>
-        oldMode == RepertoireMode.analyze ? 0 : oldIndex.clamp(0, 1),
-    };
-    _initTabController(initialIndex: initialIndex);
-    setState(() {});
-  }
-
   bool get _isPgnTabActive =>
-      _mode == RepertoireMode.edit && _tabController.index == _pgnTabIndex;
+      !_generateModeActive &&
+      (!_isCompactLayout || _tabController.index == 0);
 
   void _goToBrowseTab() {
-    if (_mode != RepertoireMode.edit) _setMode(RepertoireMode.edit);
+    if (_generateModeActive) _closeGenerateMode();
+    _editContextView.value = EditContextView.browse;
     if (_isCompactLayout) {
-      _editContextView.value = EditContextView.browse;
       _tabController.animateTo(1);
-    } else {
-      _tabController.animateTo(0);
     }
   }
 
   void _goToPgnTab() {
-    if (_mode != RepertoireMode.edit) _setMode(RepertoireMode.edit);
-    _tabController.animateTo(_pgnTabIndex);
+    if (_generateModeActive) _closeGenerateMode();
+    if (_isCompactLayout) {
+      _tabController.animateTo(0);
+    }
   }
 
   void _goToLinesTab() {
-    if (_mode != RepertoireMode.analyze) _setMode(RepertoireMode.analyze);
-    _tabController.animateTo(0);
+    if (_generateModeActive) _closeGenerateMode();
+    _editContextView.value = EditContextView.lines;
+    if (_isCompactLayout) {
+      _tabController.animateTo(1);
+    }
   }
 
-  void _openGenerationOverlay() {
-    if (_mode != RepertoireMode.edit) _setMode(RepertoireMode.edit);
-    setState(() => _generationOverlayVisible = true);
+  void _openGenerateMode() {
+    setState(() => _generateModeActive = true);
   }
 
-  void _closeGenerationOverlay() {
-    setState(() => _generationOverlayVisible = false);
+  void _closeGenerateMode() {
+    setState(() => _generateModeActive = false);
   }
 
-  /// Maps legacy tab indices (0=Browse, 1=PGN, 2=Lines, 3=Generate).
+  /// Maps navigation trail indices (0=Browse, 1=PGN, 2=Lines, 3=Generate).
   void _onNavigationJump(NavigationEntry entry) {
     switch (entry.tabIndex) {
       case 0:
@@ -238,7 +193,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       case 2:
         _goToLinesTab();
       case 3:
-        _openGenerationOverlay();
+        _openGenerateMode();
     }
     _controller.setPositionFromFen(entry.fen);
   }
@@ -293,25 +248,30 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   // 3. The listener that calls setState
   void _onRepertoireChanged() {
-    setState(() {
-      if (_controller.currentRepertoire != null && !_controller.isLoading) {
-        final currentId = _controller.currentRepertoire!['filePath'] as String?;
-        if (currentId != null && currentId != _lastRepertoireId) {
-          _lastRepertoireId = currentId;
-          _boardFlipped = !_controller.isRepertoireWhite;
-          _generatedTree = null;
-          _generatedTreeResetCounter++;
-          _coverageResult = null;
-          EngineSettings().probabilityStartMoves = _controller.rootMoves;
-          _loadTraps(currentId);
-        }
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        if (_controller.currentRepertoire != null && !_controller.isLoading) {
+          final currentId =
+              _controller.currentRepertoire!['filePath'] as String?;
+          if (currentId != null && currentId != _lastRepertoireId) {
+            _lastRepertoireId = currentId;
+            _boardFlipped = !_controller.isRepertoireWhite;
+            _generatedTree = null;
+            _generatedTreeResetCounter++;
+            _coverageResult = null;
+            EngineSettings().probabilityStartMoves = _controller.rootMoves;
+            _loadTraps(currentId);
+          }
 
-        if (_controller.needsColorSelection) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _showColorSelectionDialog();
-          });
+          if (_controller.needsColorSelection) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showColorSelectionDialog();
+            });
+          }
         }
-      }
+      });
     });
   }
 
@@ -421,13 +381,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       return KeyEventResult.handled;
     }
 
-    // 'G' key — open generation overlay (Edit mode)
+    // 'G' key — open generate mode
     if (event.logicalKey == LogicalKeyboardKey.keyG &&
         !HardwareKeyboard.instance.isControlPressed &&
         !HardwareKeyboard.instance.isShiftPressed &&
-        !HardwareKeyboard.instance.isAltPressed &&
-        _mode == RepertoireMode.edit) {
-      _openGenerationOverlay();
+        !HardwareKeyboard.instance.isAltPressed) {
+      _openGenerateMode();
       return KeyEventResult.handled;
     }
 
@@ -561,10 +520,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         },
         onSelectRepertoire: _showRepertoireSelection,
         onTrainRepertoire: _trainRepertoire,
-        onOpenGeneration: _openGenerationOverlay,
+        onOpenGeneration: _openGenerateMode,
         trapNavigation: _buildTrapNavigation(),
-        mode: _mode,
-        onModeChanged: _setMode,
       ),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
@@ -591,61 +548,20 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                           const Divider(height: 1, thickness: 1),
                           Expanded(
                             flex: 6,
-                            child: _buildGenerationOverlayHost(
-                              child: _buildTabbedPane(
-                                wideLayout: false,
-                                isCompactLayout: true,
-                              ),
-                            ),
+                            child: _buildCompactRightPane(),
                           ),
                         ],
                       );
                     }
 
-                    if (_mode == RepertoireMode.edit) {
-                      return RepertoireLayout(
-                        mode: RepertoireMode.edit,
-                        boardZone: _buildBoardZone(),
-                        editMainZone: _buildTabbedPane(
-                          wideLayout: true,
-                          isCompactLayout: false,
-                        ),
-                        editContextZone: _buildGenerationOverlayHost(
-                          child: _buildEditContextZone(),
-                        ),
-                        analyzeMainZone: const SizedBox.shrink(),
-                        analyzeContextZone: const SizedBox.shrink(),
-                        breakpoint: kCompactBreakpoint,
-                      );
-                    }
-
-                    if (constraints.maxWidth >= kWideBreakpoint) {
-                      final analyzeProps = _buildAnalyzeProps();
-                      return RepertoireLayout(
-                        mode: RepertoireMode.analyze,
-                        boardZone: _buildBoardZone(),
-                        editMainZone: const SizedBox.shrink(),
-                        editContextZone: const SizedBox.shrink(),
-                        analyzeMainZone:
-                            RepertoireAnalyzePane.buildMainZone(analyzeProps),
-                        analyzeContextZone:
-                            RepertoireAnalyzePane.buildContextZone(analyzeProps),
-                        breakpoint: kWideBreakpoint,
-                      );
-                    }
-
                     return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Expanded(flex: 4, child: _buildBoardZone()),
-                        const VerticalDivider(width: 1, thickness: 1),
+                        Expanded(flex: kBoardZoneFlex, child: _buildBoardZone()),
+                        _verticalZoneDivider(),
                         Expanded(
-                          flex: 6,
-                          child: _buildGenerationOverlayHost(
-                            child: _buildTabbedPane(
-                              wideLayout: false,
-                              isCompactLayout: false,
-                            ),
-                          ),
+                          flex: kMainZoneFlex + kContextZoneFlex,
+                          child: _buildWideRightPane(),
                         ),
                       ],
                     );
@@ -689,62 +605,140 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     );
   }
 
-  Widget _buildGenerationOverlayHost({required Widget child}) {
-    return GenerationOverlay(
-      visible: _generationOverlayVisible,
-      onClose: _closeGenerationOverlay,
-      isGenerating: _isGenerating,
-      generationContent: _buildGenerationTab(),
-      child: child,
+  Widget _buildWideRightPane() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Offstage(
+          offstage: _generateModeActive,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: kMainZoneFlex, child: _buildPgnPane()),
+              _verticalZoneDivider(),
+              Expanded(flex: kContextZoneFlex, child: _buildEditContextZone()),
+            ],
+          ),
+        ),
+        Offstage(
+          offstage: !_generateModeActive,
+          child: _buildGeneratePane(),
+        ),
+      ],
     );
   }
 
-  Widget _buildTabbedPane({
-    required bool wideLayout,
-    required bool isCompactLayout,
-  }) {
-    final tabChildren = _mode == RepertoireMode.edit
-        ? isCompactLayout
-            ? [
-                _buildPgnTab(embedAnalysisDock: false),
-                _buildEditContextZone(initialView: EditContextView.browse),
-              ]
-            : [
-                _buildAnalysisTab(),
-                _buildPgnTab(embedAnalysisDock: !wideLayout),
-              ]
-        : [
-            _buildLinesTab(),
-          ];
+  Widget _buildCompactRightPane() {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Offstage(
+          offstage: _generateModeActive,
+          child: _buildCompactTabbedPane(),
+        ),
+        Offstage(
+          offstage: !_generateModeActive,
+          child: _buildGeneratePane(),
+        ),
+      ],
+    );
+  }
 
+  Widget _buildPgnPane() {
+    return Container(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        children: [
+          NavigationTrail(
+            stack: _navigationStack,
+            onJumpTo: _onNavigationJump,
+          ),
+          Expanded(child: _buildPgnTab()),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactTabbedPane() {
     return RepertoireTabBar(
       tabController: _tabController,
       navigationStack: _navigationStack,
-      mode: _mode,
-      isCompactLayout: isCompactLayout,
       onNavigationJump: _onNavigationJump,
-      tabChildren: tabChildren,
+      tabChildren: [
+        _buildPgnTab(),
+        _buildEditContextZone(),
+      ],
     );
   }
 
-  Widget _buildEditContextZone({
-    EditContextView initialView = EditContextView.engine,
-  }) {
+  Widget _buildGeneratePane() {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: theme.dividerColor),
+            ),
+            color: _isGenerating
+                ? AppColors.warningSurface.withValues(alpha: 0.12)
+                : null,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Generate Repertoire',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      if (_isGenerating)
+                        Text(
+                          'Build continues in the background when closed',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Close (G to reopen)',
+                  onPressed: _closeGenerateMode,
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(child: _buildGenerationTab()),
+      ],
+    );
+  }
+
+  Widget _verticalZoneDivider() {
+    return Container(width: 1, color: Colors.grey[700]);
+  }
+
+  Widget _buildEditContextZone() {
     return EditContextZone(
-      initialView: initialView,
+      key: ValueKey(_generatedTreeResetCounter),
+      initialView: EditContextView.browse,
       selectedViewNotifier: _editContextView,
+      tabsLocked: _isGenerating && !_isGenerationPaused,
       browseContent: _buildAnalysisTab(),
-      engineContent: RepertoireAnalysisDock(
-        controller: _controller,
-        tree: _generatedTree,
-        treeConfig: _generatedTreeConfig,
-        fenMap: _generatedTreeFenMap,
-        boardPreview: _boardPreview,
-        coherenceResult: _coherenceService.result,
-        isActive: _isPgnTabActive,
-        isGenerating: _isGenerating,
-        isGenerationPaused: _isGenerationPaused,
-      ),
+      linesContent: _buildLinesContextTab(),
       controller: _controller,
       tree: _generatedTree,
       treeConfig: _generatedTreeConfig,
@@ -754,45 +748,39 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       isGenerationPaused: _isGenerationPaused,
     );
   }
-  RepertoireAnalyzeProps _buildAnalyzeProps() {
-    return RepertoireAnalyzeProps(
+
+  Widget _buildLinesContextTab() {
+    if (_controller.repertoireLines.isEmpty) {
+      return const EmptyStatePlaceholder(
+        icon: Icons.library_books,
+        title: 'No lines found in repertoire',
+        subtitle: 'Load a PGN repertoire file to see lines here',
+      );
+    }
+
+    return AnalyzeMainZone.withLinesBrowser(
       lines: _controller.repertoireLines,
       currentMoveSequence: _controller.currentMoveSequence,
-      coverageResult: _coverageResult,
-      onCoveragePressed: _showCoverageCalculator,
-      isCoverageRunning: _isCoverageRunning,
-      coverageProgress: _coverageProgress,
-      coverageProgressMessage: _coverageProgressMessage,
       onLineSelected: (line) {
         _controller.loadPgnLine(line);
         _goToPgnTab();
       },
       onLineRenamed: _renameLine,
+      onCoveragePressed: _showCoverageCalculator,
+      isCoverageRunning: _isCoverageRunning,
+      coverageResult: _coverageResult,
       onNavigateToPosition: (moveSequence) {
         _controller.loadMoveSequence(moveSequence);
         _goToPgnTab();
       },
-      traps: _traps,
-      onTrapSelected: (trap) {
-        _controller.loadMoveSequence(trap.movesSan);
-      },
+      coverageProgress: _coverageProgress,
+      coverageProgressMessage: _coverageProgressMessage,
       tree: _generatedTree,
       fenMap: _generatedTreeFenMap,
       isWhiteRepertoire: _controller.isRepertoireWhite,
+      traps: _traps,
       coherenceResult: _coherenceService.result,
       navigationStack: _navigationStack,
-      boardPreview: _boardPreview,
-      writer: _controller.writer,
-      currentRepertoire: _controller.currentRepertoire,
-      treeResetCounter: _generatedTreeResetCounter,
-      onEvalTreePositionSelected: (selection) {
-        _controller.setPositionFromMoveHistory(
-          fen: selection.fen,
-          moves: selection.fullMovePathSan,
-          startingFen: selection.startingFen,
-        );
-      },
-      onStartTrapTour: () => _openTrapWalkthrough(),
     );
   }
 
@@ -811,18 +799,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       _trapWalkthroughVisible = false;
       _trapWalkthroughInitialTrap = null;
     });
-  }
-
-  Widget _buildLinesTab() {
-    if (_controller.repertoireLines.isEmpty) {
-      return const EmptyStatePlaceholder(
-        icon: Icons.library_books,
-        title: 'No lines found in repertoire',
-        subtitle: 'Load a PGN repertoire file to see lines here',
-      );
-    }
-
-    return RepertoireAnalyzePane.buildCompact(_buildAnalyzeProps());
   }
 
   Future<void> _loadTraps(String filePath) async {
@@ -846,7 +822,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
 
-  Widget _buildPgnTab({bool embedAnalysisDock = true}) {
+  Widget _buildPgnTab() {
     return PgnWithAnalysisPane(
       controller: _controller,
       pgnEditorController: _pgnEditorController,
@@ -884,7 +860,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       isAnalysisActive: _isPgnTabActive,
       isGenerating: _isGenerating,
       isGenerationPaused: _isGenerationPaused,
-      embedAnalysisDock: embedAnalysisDock,
+      embedAnalysisDock: false,
       trapIndex: _trapIndex,
     );
   }
@@ -917,10 +893,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         if (!mounted) return;
         setState(() {
           _isGenerating = generating;
-          if (!generating) {
-            _isGenerationPaused = false;
+          if (generating) {
+            _generateModeActive = true;
           } else {
-            _generationOverlayVisible = true;
+            _isGenerationPaused = false;
+            _generateModeActive = false;
           }
         });
         context.read<AppState>().setRepertoireGenerating(generating);

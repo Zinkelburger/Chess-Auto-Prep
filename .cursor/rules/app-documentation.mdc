@@ -1,0 +1,45 @@
+---
+description: Keep app documentation aligned with current implementation
+alwaysApply: true
+---
+
+# App documentation
+
+## Doc structure (do not scatter specs)
+
+| File | Role |
+|------|------|
+| `docs/COMPONENT_MAP.md` | **Source of truth** for what is implemented today |
+| `docs/FUTURE_FEATURES.md` | Backlog only — not built or incomplete |
+| `docs/ALGORITHM.md` | Tree-generation pipeline detail |
+| `docs/tree-display-architecture.md` | Eval-tree graph design |
+| `known-issues.md` | Active bugs |
+
+Do **not** add new files under `docs/specs/` or one-off feature spec markdown. Extend the table above instead.
+
+## When changing code
+
+1. **Find the component** in `docs/COMPONENT_MAP.md` (screen, service, widget, data flow).
+2. **Update that section** if behavior, API, or file layout changed.
+3. **Remove or rewrite stale paragraphs** in the same edit — do not leave outdated descriptions.
+4. If you **implement** a backlog item, move or delete it in `docs/FUTURE_FEATURES.md`.
+5. If you **defer or drop** planned work, keep `FUTURE_FEATURES.md` accurate (status + notes).
+
+## COMPONENT_MAP expectations
+
+- Map files under `lib/` to purpose and key public APIs.
+- Document major data flows (repertoire edit, generation, browse, traps, engine).
+- Note test coverage and audit gaps when you discover them.
+- Cross-link algorithm docs; do not duplicate full pipeline prose.
+
+## FUTURE_FEATURES expectations
+
+- Never describe current behavior here — link to `COMPONENT_MAP.md`.
+- Use status labels: **Not started**, **Partial**, **Deferred**.
+
+## Example
+
+Adding `RepertoireWriter.splitAsNamedLine()`:
+
+- Update `lib/core/repertoire_writer.dart` row and the browse data-flow section in `COMPONENT_MAP.md`.
+- Mark **Split as named line** as **Partial** or remove it from `FUTURE_FEATURES.md` when done.

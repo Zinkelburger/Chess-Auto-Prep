@@ -129,6 +129,11 @@ pre-step:
 
 The check itself is the same either way:
 
+By default, `min_eval_cp` and `max_eval_cp` are **relative to the root
+position's eval** (our perspective): the configured offsets are added to
+the root score at build time.  Pass `--absolute` to treat the thresholds
+as fixed centipawn values instead.
+
 - If `eval_for_us > max_eval_cp` — position is already won, stop studying.
   The node is kept as a leaf with `prune_reason = PRUNE_EVAL_TOO_HIGH` and
   the triggering eval stored in `prune_eval_cp`.  PGN export annotates
@@ -526,7 +531,7 @@ all castling UCI to king-destination form at three levels:
 |-----------|------|---------|-------------|
 | `min_probability` | `-p` | 0.0001 (0.01%) | Prune branches below this cumulative probability |
 | `max_depth` | `-d` | 20 ply | Maximum tree depth |
-| `eval_depth` | `-e` | 20 | Stockfish search depth per position |
+| `eval_depth` | `-e` | 14 | Stockfish search depth per position |
 | `num_threads` | `-t` | 4 | Parallel Stockfish engines |
 
 ### Eval Window Pruning
@@ -535,7 +540,7 @@ all castling UCI to king-destination form at three levels:
 |-----------|------|---------|-------------|
 | `min_eval_cp` | `--min-eval` | W: 0, B: -200 | Stop if our eval drops below this |
 | `max_eval_cp` | `--max-eval` | W: 200, B: 100 | Stop if our eval exceeds this |
-| `relative_eval` | `--relative` | off | Make thresholds relative to root eval |
+| `relative_eval` | `--absolute` | on | Thresholds are relative to root eval; `--absolute` opts out |
 
 ### Maia
 
@@ -605,6 +610,8 @@ the novelty weight to 80.
 - **`min/max_eval_cp`**: "What eval range should we explore?" Stops expanding a branch
   when positions are too bad (lost cause) or too good (already winning,
   no need to study further). Applied during the build as inline pruning.
+  Thresholds are relative to the root eval by default; use `--absolute`
+  for fixed centipawn bounds.
 
 - **`--maia-only`** (default): Pure Maia for opponent move selection.
   Every opponent node gets a prediction (no API rate limit), which

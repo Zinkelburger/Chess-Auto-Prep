@@ -18,9 +18,13 @@ class MoveProbabilityAnnotation {
   /// True when probability came from Lichess explorer data.
   final bool fromLichess;
 
+  /// True when this opponent move was injected from engine PV continuation.
+  final bool engineInjected;
+
   const MoveProbabilityAnnotation({
     this.probability,
     this.fromLichess = false,
+    this.engineInjected = false,
   });
 
   static const none = MoveProbabilityAnnotation();
@@ -96,15 +100,18 @@ class ExtractedLine {
       }
       sb.write(movesSan[j]);
 
-      if (annotateMoveProbabilities &&
-          j < moveAnnotations.length &&
-          moveAnnotations[j].probability != null) {
+      if (annotateMoveProbabilities && j < moveAnnotations.length) {
         final ann = moveAnnotations[j];
-        final prob = ann.probability!;
-        final tag = ann.fromLichess && !annotateMaiaOnly
-            ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
-            : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
-        sb.write(' {$tag}');
+        if (ann.probability != null) {
+          final prob = ann.probability!;
+          final tag = ann.fromLichess && !annotateMaiaOnly
+              ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
+              : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
+          sb.write(' {$tag}');
+        }
+        if (ann.engineInjected) {
+          sb.write(' {engine-injected}');
+        }
       }
       sb.write(' ');
     }
@@ -146,23 +153,30 @@ class LineExtractor {
       final prob = child.maiaFrequency >= 0
           ? child.maiaFrequency
           : child.moveProbability;
-      return MoveProbabilityAnnotation(probability: prob, fromLichess: false);
+      return MoveProbabilityAnnotation(
+        probability: prob,
+        fromLichess: false,
+        engineInjected: child.engineInjected,
+      );
     }
     if (child.totalGames > 0) {
       return MoveProbabilityAnnotation(
         probability: child.moveProbability,
         fromLichess: true,
+        engineInjected: child.engineInjected,
       );
     }
     if (child.maiaFrequency >= 0) {
       return MoveProbabilityAnnotation(
         probability: child.maiaFrequency,
         fromLichess: false,
+        engineInjected: child.engineInjected,
       );
     }
     return MoveProbabilityAnnotation(
       probability: child.moveProbability,
       fromLichess: false,
+      engineInjected: child.engineInjected,
     );
   }
 

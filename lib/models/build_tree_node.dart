@@ -106,6 +106,15 @@ class BuildTreeNode {
   /// Only meaningful at our-move children. -1.0 means not computed.
   double myEase = -1.0;
 
+  /// Engine PV continuation: opponent reply stashed from MultiPV line 0
+  /// on our-move children (opponent-to-move position). Consumed when this
+  /// node is expanded; injected if Maia/Lichess omit it.
+  String? pvContinuationMove;
+
+  /// True when injected from a stashed PV reply because human move sources
+  /// did not include it.
+  bool engineInjected = false;
+
   /// External eval skip flag inherited from parent on local DB hard miss.
   ExtEvalMode extEvalMode = ExtEvalMode.none;
 

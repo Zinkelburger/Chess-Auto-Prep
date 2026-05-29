@@ -75,9 +75,12 @@ class _FloatingBoardPreviewState extends State<FloatingBoardPreview> {
   }
 
   void _showOverlay() {
+    if (!mounted) return;
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
     _overlayEntry?.remove();
     _overlayEntry = OverlayEntry(builder: (_) => _buildBoard());
-    Overlay.of(context).insert(_overlayEntry!);
+    overlay.insert(_overlayEntry!);
   }
 
   void _removeOverlay() {

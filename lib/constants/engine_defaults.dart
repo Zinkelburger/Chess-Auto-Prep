@@ -86,6 +86,10 @@ const int kTrapMistakeThreshold = 100;
 const int kTrapInaccuracyThreshold = 50;
 const int kTrapAcceptableThreshold = 20;
 
+// ── Repertoire tree generation (Phase 1 build) ───────────────────────────────
+
+const int kDefaultGenerationEvalDepth = 14;
+
 // ── Opening tree build ───────────────────────────────────────────────────────
 
 const int kOpeningTreeMaxDepth = 50;

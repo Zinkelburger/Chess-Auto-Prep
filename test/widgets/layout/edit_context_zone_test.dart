@@ -5,7 +5,7 @@ import 'package:chess_auto_prep/widgets/layout/edit_context_zone.dart';
 import 'package:chess_auto_prep/widgets/layout/repertoire_mode.dart';
 
 void main() {
-  testWidgets('renders chip bar and switches injected content',
+  testWidgets('renders tab bar and switches injected content',
       (tester) async {
     final viewNotifier = ValueNotifier(EditContextView.browse);
 
@@ -13,7 +13,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SizedBox(
-            width: 480,
+            width: 960,
             height: 400,
             child: EditContextZone(
               initialView: EditContextView.browse,
@@ -21,6 +21,7 @@ void main() {
               browseContent: const Text('Browse slot'),
               engineContent: const Text('Engine slot'),
               expectimaxContent: const Text('Expectimax slot'),
+              linesContent: const Text('Lines slot'),
               treeContent: const Text('Tree slot'),
             ),
           ),
@@ -33,6 +34,7 @@ void main() {
     expect(find.text('Browse'), findsOneWidget);
     expect(find.text('Engine'), findsOneWidget);
     expect(find.text('Expectimax'), findsOneWidget);
+    expect(find.text('Lines'), findsOneWidget);
     expect(find.text('Tree'), findsOneWidget);
     expect(find.text('Browse slot'), findsOneWidget);
 

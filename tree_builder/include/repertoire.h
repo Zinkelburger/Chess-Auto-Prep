@@ -32,7 +32,6 @@ typedef struct RepertoireConfig {
 
     /* Engine settings */
     int eval_depth;                 /* Depth for engine evaluation */
-    int quick_eval_depth;           /* Depth for quick/filtering evaluation */
     
     /* Expectimax settings */
     double leaf_confidence;         /* Blend factor between wp(eval) and a 0.5 neutral prior at leaves (1.0=trust eval fully, 0.0=assume 50/50). See tree.c:leaf_value(). */
@@ -131,6 +130,7 @@ typedef struct {
     double move_annotation_prob[128];
     double move_maia_prob[128];
     bool   move_annotation_lichess[128];
+    bool   move_engine_injected[128];
 
 } RepertoireLine;
 

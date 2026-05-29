@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../constants/engine_defaults.dart';
 import '../models/build_tree_node.dart';
 import '../models/eval_database_settings.dart';
 import '../services/storage/storage_factory.dart';
@@ -71,8 +72,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   final TextEditingController _cutoffCtrl = TextEditingController(text: '0.01');
   final TextEditingController _maxPlyCtrl = TextEditingController(text: '20');
-  final TextEditingController _engineDepthCtrl =
-      TextEditingController(text: '20');
+  final TextEditingController _engineDepthCtrl = TextEditingController(
+    text: '$kDefaultGenerationEvalDepth',
+  );
   late final TextEditingController _engineThreadsCtrl;
   final TextEditingController _evalGuardCtrl =
       TextEditingController(text: '30');
@@ -92,7 +94,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   // null = Maia only; non-null = override with that Lichess DB
   LichessDatabase? _lichessDbOverride;
-  bool _relativeEval = false;
+  bool _relativeEval = true;
   bool _preferNovelties = false;
 
   // PGN export options
@@ -315,7 +317,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   /// Current form values as a [TreeBuildConfig] (used for new builds and
   /// for [maxPly] when resuming a partial tree).
   TreeBuildConfig _treeBuildConfigFromControls() {
-    final evalDepth = int.tryParse(_engineDepthCtrl.text.trim()) ?? 20;
+    final evalDepth =
+        int.tryParse(_engineDepthCtrl.text.trim()) ??
+            kDefaultGenerationEvalDepth;
     final rawThreads = int.tryParse(_engineThreadsCtrl.text.trim());
     final engineThreads = rawThreads != null
         ? clampEngineThreads(rawThreads)
@@ -723,7 +727,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               _numField(_cutoffCtrl, 'Cum Prob Cutoff (%)'),
               _numField(_maxPlyCtrl, 'Max Ply'),
               if (_buildMode == BuildMode.stockfishExpectimax) ...[
-                _numField(_engineDepthCtrl, 'Engine Depth'),
+                _numField(
+                  _engineDepthCtrl,
+                  'Engine Depth (tree build)',
+                  tooltip:
+                      'Stockfish search depth during repertoire tree '
+                      'generation (Phase 1). Separate from on-the-fly '
+                      'expectimax in Settings → On-the-fly Expectimax.',
+                ),
                 _numField(
                   _engineThreadsCtrl,
                   'Engine Threads',
@@ -945,8 +956,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                   setState(() => _relativeEval = v);
                 },
                     tooltip:
-                        'Shift the Min/Max Eval window relative to the root\n'
-                        "position's engine eval instead of using absolute cp values."),
+                        'Thresholds are relative to the root eval (default).\n'
+                        'Turn off to use absolute centipawn limits from Min/Max Eval.'),
                 const LichessDbInfoIcon(size: 14),
               ],
             ),

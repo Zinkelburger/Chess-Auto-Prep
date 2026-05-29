@@ -55,11 +55,12 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   final OnTheFlyExpectimaxService _onTheFly = OnTheFlyExpectimaxService();
   final EngineSettings _settings = EngineSettings();
   final AnalysisService _analysis = AnalysisService();
+  bool _autoComputeScheduled = false;
 
   @override
   void initState() {
     super.initState();
-    _maybeAutoCompute();
+    _scheduleAutoCompute();
     widget.controller.addListener(_onControllerChanged);
     // Manual listener: may restart on-the-fly expectimax when dock/depth settings change.
     _settings.addListener(_onSettingsChanged);
@@ -84,19 +85,33 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
         oldWidget.treeConfig != widget.treeConfig ||
         oldWidget.isGenerating != widget.isGenerating ||
         oldWidget.isGenerationPaused != widget.isGenerationPaused) {
-      _maybeAutoCompute();
+      _scheduleAutoCompute();
     }
   }
 
-  void _onControllerChanged() => _maybeAutoCompute();
+  void _onControllerChanged() => _scheduleAutoCompute();
 
   void _onSettingsChanged() {
-    _maybeAutoCompute();
-    if (mounted) setState(() {});
+    _scheduleAutoCompute();
+    _scheduleSetState();
   }
 
-  void _onAnalysisUpdated() {
-    if (mounted) setState(() {});
+  void _onAnalysisUpdated() => _scheduleSetState();
+
+  void _scheduleAutoCompute() {
+    if (_autoComputeScheduled) return;
+    _autoComputeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _autoComputeScheduled = false;
+      if (mounted) _maybeAutoCompute();
+    });
+  }
+
+  void _scheduleSetState() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _maybeAutoCompute() {
@@ -200,7 +215,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
             ),
           if (_settings.showExpectimaxDock)
             Text(
-              'Expectimax PV',
+              'Expectimax PV (on-the-fly)',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,

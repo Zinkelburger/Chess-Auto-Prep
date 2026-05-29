@@ -238,7 +238,7 @@ TreeConfig tree_config_default(void) {
 
         .engine_pool = NULL,
         .db = NULL,
-        .eval_depth = 20,
+        .eval_depth = 14,
 
         .our_multipv = 5,
         .max_eval_loss_cp = 50,
@@ -248,7 +248,7 @@ TreeConfig tree_config_default(void) {
 
         .min_eval_cp = 0,
         .max_eval_cp = 200,
-        .relative_eval = false,
+        .relative_eval = true,
 
         .rating_range = "2000,2200,2500",
         .speeds = "blitz,rapid,classical",
@@ -779,6 +779,8 @@ static void emit_build_progress(Tree *tree, const TreeConfig *config,
             ? (int)(unexplored_at * 60.0 / rate + 0.5)
             : 0;
 
+    size_t session_added = tree->total_nodes - tree->config.progress_baseline_nodes;
+
     BuildProgressInfo info = {
         .total_nodes       = (int)tree->total_nodes,
         .current_depth     = d,
@@ -794,6 +796,15 @@ static void emit_build_progress(Tree *tree, const TreeConfig *config,
     config->progress_callback(&info);
 }
 
+static void emit_build_progress_ex(Tree *tree, const TreeConfig *config,
+                                   bool force) {
+    if (force) {
+        g_progress_last_nodes = -1;
+        g_progress_last_dequeue = -1;
+    }
+    emit_build_progress(tree, config, false);
+}
+
 static void build_process_node(Tree *tree, TreeNode *node,
                                const TreeConfig *config,
                                LichessExplorer *explorer, BuildQueue *q);
@@ -805,6 +816,69 @@ static void build_our_move(Tree *tree, TreeNode *node,
 static void build_opponent_move(Tree *tree, TreeNode *node,
                                  const TreeConfig *config,
                                  LichessExplorer *explorer, BuildQueue *q);
+
+#define PV_INJECT_EPSILON 0.01
+
+static bool child_has_move_uci(const TreeNode *node, const char *uci) {
+    for (size_t i = 0; i < node->children_count; i++) {
+        if (strcmp(node->children[i]->move_uci, uci) == 0)
+            return true;
+    }
+    return false;
+}
+
+static double maia_prob_for_uci(const MaiaResponse *resp, const char *uci) {
+    if (!resp || !resp->success) return -1.0;
+    for (int i = 0; i < resp->move_count; i++) {
+        if (strcmp(resp->moves[i].uci, uci) == 0)
+            return resp->moves[i].probability;
+    }
+    return -1.0;
+}
+
+/**
+ * After Maia/Lichess children are built, inject the stashed PV reply if
+ * human move sources omitted it (or pruned it by mass/child caps).
+ */
+static void maybe_inject_pv_continuation(Tree *tree, TreeNode *node,
+                                          const TreeConfig *config,
+                                          const MaiaResponse *maia_resp) {
+    if (node->pv_continuation_move[0] == '\0') return;
+
+    const char *uci = node->pv_continuation_move;
+    if (child_has_move_uci(node, uci)) return;
+
+    char child_fen[MAX_FEN_LENGTH];
+    if (!apply_uci(node->fen, uci, child_fen, MAX_FEN_LENGTH))
+        return;
+
+    char san_buf[MAX_MOVE_LENGTH];
+    const char *san = uci;
+    if (uci_to_san(node->fen, uci, san_buf, sizeof(san_buf)))
+        san = san_buf;
+
+    TreeNode *child = make_child(node, child_fen, san, uci, tree);
+    if (!child) return;
+
+    double prob = maia_prob_for_uci(maia_resp, uci);
+    if (prob < 0.0 && config->maia) {
+        MaiaResponse lookup;
+        double maia_t = 0;
+        if (query_maia_cached(config, node->fen, &lookup, &maia_t)) {
+            node->maia_ms += maia_t;
+            prob = maia_prob_for_uci(&lookup, uci);
+        }
+    }
+    if (prob < 0.0) prob = PV_INJECT_EPSILON;
+
+    child->move_probability = prob;
+    child->cumulative_probability = node->cumulative_probability * prob;
+    child->engine_injected = true;
+
+    emit_build_progress(tree, config, false);
+    emit_event(config, "inject", node->depth, "opp",
+               "move=%s prob=%.4f", uci, prob);
+}
 
 /**
  * OUR MOVE (Maia + DB): top-N Maia candidates, DB evals only, stop on miss.
@@ -1097,6 +1171,14 @@ static void build_our_move(Tree *tree, TreeNode *node,
             }
         }
 
+        /* Line 0 only: stash engine's preferred opponent reply on the
+         * child (opponent-to-move position after our best move). */
+        if (pv == 0 && line->pv_reply_uci[0]) {
+            snprintf(child->pv_continuation_move,
+                     sizeof(child->pv_continuation_move),
+                     "%s", line->pv_reply_uci);
+        }
+
         added++;
         emit_build_progress(tree, config, false);
     }
@@ -1154,6 +1236,8 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
     double mass_target = config->opp_mass_target;
     int children_added = 0;
     double mass_covered = 0.0;
+    MaiaResponse maia_resp_for_inject;
+    bool have_maia_for_inject = false;
 
     if (config->maia_only) {
         /* ---------- Pure Maia path ---------- */
@@ -1166,6 +1250,9 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
 
         if (!maia_ok || !maia_resp.success || maia_resp.move_count == 0)
             return;
+
+        maia_resp_for_inject = maia_resp;
+        have_maia_for_inject = true;
 
         for (int i = 0; i < maia_resp.move_count; i++) {
             const char *uci = maia_resp.moves[i].uci;
@@ -1264,6 +1351,10 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
             emit_build_progress(tree, config, false);
         }
     }
+
+    maybe_inject_pv_continuation(tree, node, config,
+                                 have_maia_for_inject ? &maia_resp_for_inject
+                                                      : NULL);
 
     if (node->children_count == 0) return;
 

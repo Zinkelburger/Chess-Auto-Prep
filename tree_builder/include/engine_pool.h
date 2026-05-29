@@ -52,7 +52,8 @@ typedef struct EvalJob {
 #define MAX_MULTIPV 16
 
 typedef struct {
-    char move_uci[16];              /* Move in UCI notation */
+    char move_uci[16];              /* Move in UCI notation (PV ply 1) */
+    char pv_reply_uci[16];          /* Opponent reply in PV (PV ply 2), line 0 only */
     int eval_cp;                     /* Centipawn evaluation (from root STM) */
     bool is_mate;
     int mate_in;
