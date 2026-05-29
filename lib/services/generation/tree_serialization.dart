@@ -235,7 +235,8 @@ BuildTreeNode _nodeFromJson(
     );
   }
 
-  node.explored = obj['explored'] as bool? ?? false;
+  final exploredExplicit = obj.containsKey('explored');
+  node.explored = exploredExplicit ? (obj['explored'] as bool) : false;
 
   if (obj.containsKey('prune_reason')) {
     final reason = obj['prune_reason'] as String;
@@ -267,7 +268,8 @@ BuildTreeNode _nodeFromJson(
       );
       node.children.add(child);
     }
-    if (!node.explored && node.children.isNotEmpty) {
+    // Backward compat: old trees without an explicit explored flag.
+    if (!exploredExplicit && node.children.isNotEmpty) {
       node.explored = true;
     }
   }

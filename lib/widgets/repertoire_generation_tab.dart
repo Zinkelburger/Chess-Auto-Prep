@@ -446,13 +446,24 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
       // Seed depth-layer counters so resume doesn't show "0 / 0 explored"
       // while BFS replays existing nodes toward the frontier.
-      if (existingTree != null && existingTree.maxPlyReached > 0) {
-        final layer = TreeBuildProgressTracker.depthLayerStats(
-          existingTree.root,
-          existingTree.maxPlyReached,
-        );
-        _totalAtDepth = layer.$1;
-        _unexploredAtDepth = layer.$2;
+      if (existingTree != null) {
+        final frontierPly = TreeBuildService.minFrontierPly(existingTree.root);
+        if (frontierPly != null) {
+          final layer = TreeBuildProgressTracker.depthLayerStats(
+            existingTree.root,
+            frontierPly,
+          );
+          _currentDepth = frontierPly;
+          _totalAtDepth = layer.$1;
+          _unexploredAtDepth = layer.$2;
+        } else if (existingTree.maxPlyReached > 0) {
+          final layer = TreeBuildProgressTracker.depthLayerStats(
+            existingTree.root,
+            existingTree.maxPlyReached,
+          );
+          _totalAtDepth = layer.$1;
+          _unexploredAtDepth = layer.$2;
+        }
       }
     });
     _pgnWriter.clear();
@@ -759,7 +770,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             dense: true,
-            title: const Text('Rank lines by importance',
+            title: const Text('Rank lines by cumulative probability',
                 style: TextStyle(fontSize: 13)),
             subtitle: const Text(
               'Sort lines by cumulative probability (most likely first).',

@@ -342,6 +342,10 @@ double win_probability(int cp);
 
 void tree_recalculate_probabilities(Tree *tree);
 
+/** Fix cumP for transposition nodes where a higher-probability path exists.
+ *  Returns number of fixup passes needed (0 = nothing to fix). */
+size_t tree_fix_transposition_probabilities(Tree *tree);
+
 size_t tree_get_line_to_node(const TreeNode *node, char (*out_moves)[MAX_MOVE_LENGTH],
                               size_t max_moves);
 

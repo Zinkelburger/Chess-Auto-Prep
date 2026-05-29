@@ -225,7 +225,7 @@ RepertoireTrainingScreen
 | `opening_tree.dart` | In-memory repertoire tree indexed by FEN; `hasMove`, `appendLine` |
 | `pgn_filter_models.dart` | PGN import filter types |
 | `position_analysis.dart` | Position analysis aggregate |
-| `repertoire_line.dart` | Trainable line extracted from PGN (moves, title, probability) |
+| `repertoire_line.dart` | Trainable line extracted from PGN (moves, title, cumulative probability) |
 | `repertoire_metadata.dart` | Side, starting FEN, headers |
 | `repertoire_move_progress.dart` | Training progress per move |
 | `repertoire_review_entry.dart` | FSRS-style review scheduling |
@@ -333,9 +333,9 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `tree_build_service.dart` | BFS tree build; MultiPV line-0 PV reply stash + opponent-node injection when Maia/Lichess omit it |
+| `tree_build_service.dart` | BFS tree build; MultiPV line-0 PV reply stash + opponent-node injection when Maia/Lichess omit it. **Resume:** partial trees (`*_partial_tree.json`) continue from frontier leaves sorted by ply; `explored` set only after expansion completes (pause/cancel mid-node retries). |
 | `generation/line_extractor.dart` | Extract lines from tree; PGN `{engine-injected}` on injected opponent moves |
-| `generation/pgn_export.dart` | Export generated lines to PGN (includes `{engine-injected}` annotation) |
+| `generation/pgn_export.dart` | Export generated lines to PGN (`[CumProb "N%"]`, `[%cumProb N%]`, `{engine-injected}`) |
 | `generation/generation_config.dart` | `TreeBuildConfig` (default `evalDepth` 14, `relativeEval` true), build modes |
 | `generation/tree_eval_resolver.dart` | Eval resolution during build |
 | `generation/tree_ease.dart` | Opponent ease calculation |
@@ -351,7 +351,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `repertoire_service.dart` | Load/save repertoire, parse lines, append moves |
+| `repertoire_service.dart` | Load/save repertoire, parse lines (CumProb header/comment, legacy Importance), append moves |
 | `repertoire_review_service.dart` | Review scheduling |
 | `pgn_service.dart` | General PGN load/save |
 | `pgn_parsing_service.dart` | Filtered PGN parsing |
@@ -506,7 +506,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `chess_utils.dart` | UCI/SAN helpers |
 | `fen_utils.dart` | FEN manipulation |
 | `pgn_utils.dart` | PGN formatting, event title extraction |
-| `pgn_comment_utils.dart` | Comment filtering |
+| `pgn_comment_utils.dart` | Comment filtering; parse `[%cumProb]` / legacy `[%importance]` |
 | `coverage_helpers.dart` | Coverage UI helpers |
 | `lines_filter_helpers.dart` | Line filter/sort/group (`getLineGroupName`) |
 | `ease_utils.dart` | Ease display formatting |
@@ -572,7 +572,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | Path | Role |
 |------|------|
-| `tree_builder/` | C expectimax tree builder (`--eval-depth` default 14), CdbDirect reader; MultiPV line-0 PV reply stash + opponent injection (`engine_injected`, PGN `{engine-injected}`) |
+| `tree_builder/` | C expectimax tree builder (`--eval-depth` default 14), CdbDirect reader; MultiPV line-0 PV reply stash + opponent injection (`engine_injected`, PGN `{engine-injected}`). **Resume:** if `<name>.tree.json` exists and `build_complete` is false, stage 1 always continues BFS from unexplored frontier leaves (`resume_prepare_frontier` in `tree.c`), sorted by ply so shallower pending work runs first; only `build_complete: true` skips building. SIGINT saves partial trees; nodes interrupted mid-expansion stay `explored: false` and are retried. `--build-now` / `--skip-build` still export without expanding. |
 | `browser-to-server-repertoire/` | Browser extension companion |
 | `python/` | Offline scripts (Lichess builder, Maia experiments, TWIC) |
 | `packages/cdbdirect_flutter_libs/` | Native ChessDB bindings |

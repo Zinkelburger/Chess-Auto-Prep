@@ -25,7 +25,10 @@ final maiaProbabilityCommentRe =
 final humanFrequencyCommentRe =
     RegExp(r'\[%humanFrequency\s+(\d+\.?\d*)\]');
 
-/// Matches `[%importance 0.85]` — cumulative line likelihood.
+/// Matches `[%cumProb 12.529%]` — cumulative line probability (percentage).
+final cumProbCommentRe = RegExp(r'\[%cumProb\s+([\d.]+)%?\]');
+
+/// Legacy `[%importance 0.85]` — cumulative line probability (0–1 fraction).
 final importanceCommentRe = RegExp(r'\[%importance\s+(\d+\.?\d*)\]');
 
 /// Matches `[%pv Nf3,Bb4,O-O,d5]`.
@@ -78,8 +81,14 @@ double? parseHumanFrequencyComment(String comment) {
   return double.tryParse(match.group(1)!);
 }
 
-/// Parse a `[%importance ...]` token into a probability (0-1).
+/// Parse cumulative line probability from `[%cumProb ...]` (percentage) or
+/// legacy `[%importance ...]` (0–1 fraction). Returns 0–1.
 double? parseImportanceComment(String comment) {
+  final cumMatch = cumProbCommentRe.firstMatch(comment);
+  if (cumMatch != null) {
+    final pct = double.tryParse(cumMatch.group(1)!);
+    if (pct != null) return pct / 100.0;
+  }
   final match = importanceCommentRe.firstMatch(comment);
   if (match == null) return null;
   return double.tryParse(match.group(1)!);
@@ -172,6 +181,7 @@ String filterDisplayComment(String comment) {
   comment = comment.replaceAll(maiaCommentRe, '');
   comment = comment.replaceAll(maiaProbabilityCommentRe, '');
   comment = comment.replaceAll(humanFrequencyCommentRe, '');
+  comment = comment.replaceAll(cumProbCommentRe, '');
   comment = comment.replaceAll(importanceCommentRe, '');
   comment = comment.replaceAll(pvCommentRe, '');
   comment = comment.replaceAll(maiaTopCommentRe, '');

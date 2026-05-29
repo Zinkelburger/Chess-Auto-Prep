@@ -73,7 +73,7 @@ String buildRepertoirePgnEntry({
   }
   if (rankByImportance) {
     annotation.write(
-        ', [%importance ${cumulativeProb.toStringAsFixed(3)}]');
+        ', [%cumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%]');
   }
   annotation.write('}');
 
@@ -89,7 +89,7 @@ String buildRepertoirePgnEntry({
     '[Result "*"]',
     '[Annotator "AutoGenerate"]',
     if (rankByImportance)
-      '[Importance "${cumulativeProb.toStringAsFixed(3)}"]',
+      '[CumProb "${(cumulativeProb * 100).toStringAsFixed(3)}%"]',
     if (needsFenHeader) '[FEN "$rootFen"]',
     if (needsFenHeader) '[SetUp "1"]',
   ];

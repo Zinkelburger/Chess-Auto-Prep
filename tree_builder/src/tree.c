@@ -689,12 +689,24 @@ static TreeNode *build_queue_pop(BuildQueue *q) {
 /**
  * On resume, register expanded FENs and enqueue only frontier leaves
  * (no children, not explored) instead of re-walking the full tree via BFS.
+ *
+ * Nodes with children but explored=false are partial expansions from an
+ * interrupted build — enqueue the parent for re-expansion instead of
+ * walking its (possibly incomplete) subtree.
  */
 static void resume_prepare_frontier(TreeNode *node, FenMap *fmap,
                                     BuildQueue *q, size_t *frontier_count,
                                     int *min_frontier_depth) {
     if (!node) return;
     if (node->children_count > 0) {
+        if (!node->explored) {
+            if (build_queue_push(q, node)) {
+                (*frontier_count)++;
+                if (node->depth < *min_frontier_depth)
+                    *min_frontier_depth = node->depth;
+            }
+            return;
+        }
         fen_map_put(fmap, node->fen, node);
         for (size_t i = 0; i < node->children_count; i++)
             resume_prepare_frontier(node->children[i], fmap, q, frontier_count,
@@ -708,6 +720,21 @@ static void resume_prepare_frontier(TreeNode *node, FenMap *fmap,
                 *min_frontier_depth = node->depth;
         }
     }
+}
+
+static int compare_node_depth(const void *a, const void *b) {
+    const TreeNode *na = *(const TreeNode * const *)a;
+    const TreeNode *nb = *(const TreeNode * const *)b;
+    if (na->depth < nb->depth) return -1;
+    if (na->depth > nb->depth) return 1;
+    return 0;
+}
+
+/** Restore BFS level order after DFS frontier collection on resume. */
+static void build_queue_sort_by_depth(BuildQueue *q) {
+    size_t len = q->tail - q->head;
+    if (len > 1)
+        qsort(q->buf + q->head, len, sizeof(TreeNode *), compare_node_depth);
 }
 
 /** Append all children in sibling order (matches former DFS order). */
@@ -898,8 +925,9 @@ static void emit_build_progress_ex(Tree *tree, const TreeConfig *config,
 
 static void on_bfs_dequeue_node(Tree *tree, TreeNode *n,
                                 const TreeConfig *config) {
-    if (n->depth > g_depth_tracker) {
-        if (g_depth_tracker >= g_session_start_depth)
+    if (n->depth != g_depth_tracker) {
+        if (n->depth > g_depth_tracker &&
+            g_depth_tracker >= g_session_start_depth)
             emit_depth_complete_line(tree, g_depth_tracker, config);
         g_depth_tracker = n->depth;
         clock_gettime(CLOCK_MONOTONIC, &g_depth_enter_time);
@@ -908,6 +936,31 @@ static void on_bfs_dequeue_node(Tree *tree, TreeNode *n,
         g_nodes_processed_at_depth[n->depth]++;
     tree->build_active_depth = n->depth;
     emit_build_progress(tree, config, false);
+}
+
+/* Scale cumP through a canonical's subtree when a transposition path
+ * has higher probability.  Optionally re-enqueue unexpanded leaves that
+ * now pass min_probability (q != NULL means build is active). */
+static void propagate_cumP_recursive(TreeNode *node, double ratio,
+                                      double min_prob, BuildQueue *q) {
+    for (size_t i = 0; i < node->children_count; i++) {
+        TreeNode *child = node->children[i];
+        child->cumulative_probability *= ratio;
+        if (child->children_count > 0) {
+            propagate_cumP_recursive(child, ratio, min_prob, q);
+        } else if (q && !child->explored &&
+                   child->cumulative_probability >= min_prob) {
+            build_queue_push(q, child);
+        }
+    }
+}
+
+static void propagate_higher_cumP(TreeNode *canonical, double new_cumP,
+                                   const TreeConfig *config, BuildQueue *q) {
+    if (!canonical || new_cumP <= canonical->cumulative_probability) return;
+    double ratio = new_cumP / canonical->cumulative_probability;
+    canonical->cumulative_probability = new_cumP;
+    propagate_cumP_recursive(canonical, ratio, config->min_probability, q);
 }
 
 static void build_process_node(Tree *tree, TreeNode *node,
@@ -1518,8 +1571,8 @@ static void build_process_node(Tree *tree, TreeNode *node,
 
     FenMap *fmap = (FenMap *)tree->expanded_fens;
 
-    /* Resume: already expanded — register FEN and enqueue children only */
-    if (node->children_count > 0) {
+    /* Resume: fully expanded in a prior session — enqueue children only */
+    if (node->children_count > 0 && node->explored) {
         emit_event(config, "resume", node->depth, "-",
                    "children=%zu", node->children_count);
         fen_map_put(fmap, node->fen, node);
@@ -1577,12 +1630,15 @@ static void build_process_node(Tree *tree, TreeNode *node,
         }
         canonical->next_equivalent = node;
         node->explored = true;
+
+        if (node->cumulative_probability > canonical->cumulative_probability)
+            propagate_higher_cumP(canonical, node->cumulative_probability,
+                                  config, q);
+
         emit_event(config, "transposition", node->depth, nt, "fen=%s", node->fen);
         return;
     }
     fen_map_put(fmap, node->fen, node);
-
-    node->explored = true;
 
     if (is_our_move) {
         if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE)
@@ -1591,6 +1647,10 @@ static void build_process_node(Tree *tree, TreeNode *node,
             build_our_move(tree, node, config, explorer, q);
     } else
         build_opponent_move(tree, node, config, explorer, q);
+
+    /* Mark explored only after expansion finishes so an interrupt mid-call
+     * leaves the node resumable (explored=false, possibly partial children). */
+    node->explored = true;
 
     emit_event(config, "expanded", node->depth, nt,
                "children=%zu total=%zu", node->children_count, tree->total_nodes);
@@ -1665,6 +1725,7 @@ bool tree_build(Tree *tree, const char *start_fen,
     if (fast_resume) {
         resume_prepare_frontier(tree->root, (FenMap *)tree->expanded_fens,
                                 &bq, &frontier_count, &min_frontier_depth);
+        build_queue_sort_by_depth(&bq);
         queued = frontier_count > 0;
     } else {
         queued = build_queue_push(&bq, tree->root);
@@ -2208,6 +2269,50 @@ void tree_recalculate_probabilities(Tree *tree) {
     for (size_t i = 0; i < tree->root->children_count; i++)
         recalc_prob_recursive(tree->root->children[i], 1.0,
                               tree->config.play_as_white);
+}
+
+
+/* ========== Post-build transposition cumP fixup ========== */
+
+static bool fix_transposition_cumP_walk(TreeNode *node, double min_prob) {
+    if (!node) return false;
+    bool any_update = false;
+
+    if (node->children_count == 0 && node->next_equivalent) {
+        TreeNode *equiv = node->next_equivalent;
+        while (equiv != node) {
+            if (equiv->children_count > 0) {
+                if (node->cumulative_probability > equiv->cumulative_probability) {
+                    double ratio = node->cumulative_probability /
+                                   equiv->cumulative_probability;
+                    equiv->cumulative_probability = node->cumulative_probability;
+                    propagate_cumP_recursive(equiv, ratio, min_prob, NULL);
+                    any_update = true;
+                }
+                break;
+            }
+            if (!equiv->next_equivalent || equiv->next_equivalent == node)
+                break;
+            equiv = equiv->next_equivalent;
+        }
+    }
+
+    for (size_t i = 0; i < node->children_count; i++) {
+        if (fix_transposition_cumP_walk(node->children[i], min_prob))
+            any_update = true;
+    }
+    return any_update;
+}
+
+size_t tree_fix_transposition_probabilities(Tree *tree) {
+    if (!tree || !tree->root) return 0;
+    size_t passes = 0;
+    while (fix_transposition_cumP_walk(tree->root,
+                                        tree->config.min_probability)) {
+        passes++;
+        if (passes > 20) break;
+    }
+    return passes;
 }
 
 

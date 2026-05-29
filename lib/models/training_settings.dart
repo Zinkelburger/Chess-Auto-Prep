@@ -10,7 +10,8 @@ enum ReviewOrder {
 
 extension ReviewOrderLabel on ReviewOrder {
   String get label => switch (this) {
-        ReviewOrder.byImportance => 'By importance (most likely first)',
+        ReviewOrder.byImportance =>
+          'By cumulative probability (most likely first)',
         ReviewOrder.random => 'Random',
         ReviewOrder.weakestFirst => 'Weakest first',
         ReviewOrder.sequential => 'Sequential',

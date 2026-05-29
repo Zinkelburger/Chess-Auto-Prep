@@ -16,7 +16,7 @@ class RepertoireLine {
   /// Raw PGN headers — includes review metadata like LastReview, Difficulty, etc.
   final Map<String, String> headers;
 
-  /// Cumulative path probability from PGN ([Importance] header or comment).
+  /// Cumulative path probability from PGN ([CumProb] header or comment).
   final double? importance;
 
   RepertoireLine({

@@ -712,14 +712,21 @@ tree_builder/
                            │
                            ▼
               build_repertoire_recursive()
-                  Our nodes: pick argmax(V) after eval-loss filter
+                  Our nodes: pick argmax(V) after eval-loss filter,
+                             then traverse every candidate subtree
                   Opp nodes: traverse all children
                            │
                            ▼
-              extract_lines()  → root-to-leaf paths
+              extract_lines()  → root-to-leaf paths (DFS order)
                            │
                            ▼
-              JSON / PGN export
+              JSON export (extract order) / PGN export
+                  PGN: qsort by cumP desc, then num_moves desc
+                  (`rank_lines_by_importance`, default on)
+                  Headers: `[CumProb "12.529%"]`; comments:
+                  `{CumProb 12.529%, Eval N cp, [%cumProb 12.529%]}`
+                  Legacy `[Importance "0.125"]` / `[%importance 0.125]` still
+                  parsed by the Flutter app on import.
 ```
 
 ---

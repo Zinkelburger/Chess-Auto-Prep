@@ -148,11 +148,17 @@ class RepertoireService {
     }
   }
 
-  /// Extract cumulative line importance from PGN headers or comments.
+  /// Extract cumulative line probability (0–1) from PGN headers or comments.
   double? _extractImportance(PgnGame game, String gameText) {
-    final headerVal = game.headers['Importance'];
-    if (headerVal != null && headerVal.isNotEmpty) {
-      final parsed = double.tryParse(headerVal);
+    final cumProbHeader = game.headers['CumProb'];
+    if (cumProbHeader != null && cumProbHeader.isNotEmpty) {
+      final parsed = _parseCumulativeProbPgnValue(cumProbHeader);
+      if (parsed != null) return parsed;
+    }
+
+    final legacyHeader = game.headers['Importance'];
+    if (legacyHeader != null && legacyHeader.isNotEmpty) {
+      final parsed = _parseCumulativeProbPgnValue(legacyHeader);
       if (parsed != null) return parsed;
     }
 
@@ -164,6 +170,19 @@ class RepertoireService {
     }
 
     return parseImportanceComment(gameText);
+  }
+
+  /// Parse `[CumProb "12.529%"]` or legacy `[Importance "0.125"]` header values.
+  double? _parseCumulativeProbPgnValue(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.endsWith('%')) {
+      final pct = double.tryParse(trimmed.substring(0, trimmed.length - 1));
+      if (pct != null) return pct / 100.0;
+    }
+    final parsed = double.tryParse(trimmed);
+    if (parsed == null) return null;
+    if (parsed <= 1.0) return parsed;
+    return parsed / 100.0;
   }
 
   /// Generates a meaningful name for the repertoire line

@@ -1077,17 +1077,11 @@ int main(int argc, char *argv[]) {
                        tree_source, tree->total_nodes);
                 printf("  Build already complete — skipping.\n\n");
                 needs_build = false;
-            } else if (tree->max_depth_reached >= max_depth) {
-                printf("[1/4] Tree loaded from %s (%zu nodes, depth %d >= target %d)\n",
-                       tree_source, tree->total_nodes,
-                       tree->max_depth_reached, max_depth);
-                printf("  Tree already meets target depth — using as-is.\n\n");
-                needs_build = false;
             } else {
                 printf("[1/4] Resuming tree build from %s (%zu nodes, depth %d, target %d)\n",
                        tree_source, tree->total_nodes,
                        tree->max_depth_reached, max_depth);
-                printf("  Continuing from unexplored leaves...\n");
+                printf("  Continuing from unexplored leaves...\n\n");
             }
         } else if (load_tree_file) {
             fprintf(stderr, "Error: Failed to load tree from %s\n", load_tree_file);
@@ -1576,6 +1570,7 @@ int main(int argc, char *argv[]) {
     rep_config.branching_factor   = tree->branching_factor;
     rep_config.build_threads      = tree->build_threads;
     rep_config.build_eval_depth   = tree->build_eval_depth;
+    rep_config.build_max_depth    = tree->max_depth_reached;
 
     /* PGN is the primary output */
     if (result) {
