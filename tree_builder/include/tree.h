@@ -98,15 +98,12 @@ typedef struct BuildStats {
  */
 typedef struct BuildProgressInfo {
     int total_nodes;
-    int current_depth;         /* deepest ply created in the tree so far */
+    int current_depth;
     int max_depth_config;
-    int total_at_depth;        /* nodes at [current_depth] */
-    int unexplored_at_depth;   /* same layer, not yet expanded (BFS backlog) */
-    int active_depth;          /* ply of the node being processed now */
-    int queue_pending;         /* BFS queue length */
+    int nodes_at_current_depth;
+    int nodes_processed_at_depth;
     double nodes_per_minute;
     int eta_depth_seconds;
-    int session_nodes_added;   /* total_nodes - baseline at build start */
 } BuildProgressInfo;
 
 /**

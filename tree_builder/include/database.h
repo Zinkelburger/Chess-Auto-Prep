@@ -273,4 +273,18 @@ void rdb_get_repertoire_moves(RepertoireDB *db,
 void rdb_get_stats(RepertoireDB *db, int *explorer_cached, 
                     int *evals_cached, int *ease_cached);
 
+/**
+ * Validate an on-disk database against the expected schema.
+ * Call before rdb_open() on an existing file so missing tables are detected
+ * (rdb_open creates them via CREATE TABLE IF NOT EXISTS).
+ *
+ * @param path          Database file path
+ * @param issues        Output buffer for human-readable problems (may be NULL)
+ * @param issues_len    Size of issues buffer
+ * @param has_data_out  If non-NULL, set true when any cache table has rows
+ * @return true if schema matches expectations
+ */
+bool rdb_validate_schema(const char *path, char *issues, size_t issues_len,
+                         bool *has_data_out);
+
 #endif /* DATABASE_H */

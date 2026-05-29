@@ -36,12 +36,37 @@
 #include "lichess_eval_db.h"
 #include "chessdb_eval_db.h"
 #include "chessdb_api.h"
+#include "eval_source.h"
 #ifdef HAS_CDBDIRECT
 #include "cdbdirect_eval.h"
 #endif
 
 
 #define DEFAULT_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+
+static bool fen_keys_match(const char *a, const char *b) {
+    char ca[128];
+    char cb[128];
+    snprintf(ca, sizeof(ca), "%s", a ? a : "");
+    snprintf(cb, sizeof(cb), "%s", b ? b : "");
+    eval_canonicalize_fen(ca);
+    eval_canonicalize_fen(cb);
+    return strcmp(ca, cb) == 0;
+}
+
+static bool confirm_yes_interactive(const char *prompt) {
+    if (!isatty(STDIN_FILENO)) {
+        fprintf(stderr,
+                "Error: confirmation required but stdin is not a terminal.\n");
+        fprintf(stderr, "  %s\n", prompt);
+        return false;
+    }
+    fprintf(stderr, "%s", prompt);
+    fflush(stderr);
+    char buf[16];
+    if (!fgets(buf, sizeof(buf), stdin)) return false;
+    return buf[0] == 'y' || buf[0] == 'Y';
+}
 
 static char g_exe_dir[PATH_MAX] = {0};
 
@@ -180,25 +205,42 @@ static char *format_eta(int sec, char *buf, size_t len) {
     return buf;
 }
 
+static void format_int_commas(int n, char *buf, size_t len) {
+    if (n < 0) {
+        snprintf(buf, len, "-%d", -n);
+        return;
+    }
+    char raw[32];
+    snprintf(raw, sizeof(raw), "%d", n);
+    size_t raw_len = strlen(raw);
+    size_t pos = 0;
+    int first_group = raw_len % 3;
+    if (first_group == 0) first_group = 3;
+    for (size_t i = 0; i < raw_len && pos + 1 < len; i++) {
+        if (i > 0 && (i - (size_t)first_group) % 3 == 0)
+            buf[pos++] = ',';
+        buf[pos++] = raw[i];
+    }
+    buf[pos] = '\0';
+}
+
 static void progress_callback(const BuildProgressInfo *info) {
-    char eta_buf[32];
+    char total_buf[32], eta_buf[32];
+    format_int_commas(info->total_nodes, total_buf, sizeof(total_buf));
+
     const char *eta = info->eta_depth_seconds > 0
         ? format_eta(info->eta_depth_seconds, eta_buf, sizeof(eta_buf))
         : NULL;
 
-    int explored = info->total_at_depth - info->unexplored_at_depth;
+    printf("\r\033[K  [Depth %d] %d/%d nodes processed | %s total | %.1f/min",
+           info->current_depth,
+           info->nodes_processed_at_depth,
+           info->nodes_at_current_depth,
+           total_buf,
+           info->nodes_per_minute);
 
-    printf("\r\033[K  [Build] %d nodes | depth %d/%d | %.0f/min | "
-           "%d/%d explored",
-           info->total_nodes,
-           info->current_depth, info->max_depth_config,
-           info->nodes_per_minute,
-           explored, info->total_at_depth);
-
-    if (info->unexplored_at_depth > 0)
-        printf(" | %d remaining", info->unexplored_at_depth);
     if (eta)
-        printf(" | ~%s", eta);
+        printf(" | ~%s remaining", eta);
 
     fflush(stdout);
 }
@@ -811,6 +853,39 @@ int main(int argc, char *argv[]) {
     struct timespec pipeline_start, pipeline_end;
     clock_gettime(CLOCK_MONOTONIC, &pipeline_start);
 
+    bool db_file_existed = access(db_path, F_OK) == 0;
+    bool tree_file_existed = access(tree_path, F_OK) == 0;
+    if ((tree_file_existed || load_tree_file) && !db_file_existed) {
+        fprintf(stderr,
+                "Warning: tree file found but database %s does not exist.\n",
+                db_path);
+        fprintf(stderr,
+                "  Explorer/eval cache will be rebuilt; node evals in the tree are kept inline.\n\n");
+    }
+
+    if (db_file_existed) {
+        char schema_issues[512];
+        bool db_has_data = false;
+        if (!rdb_validate_schema(db_path, schema_issues, sizeof(schema_issues),
+                                 &db_has_data) && db_has_data) {
+            fprintf(stderr,
+                    "Warning: database %s appears incompatible with this version.\n",
+                    db_path);
+            if (schema_issues[0]) {
+                fprintf(stderr, "  Missing: %s\n", schema_issues);
+            }
+            if (!confirm_yes_interactive(
+                    "  Continue anyway? Cached data may be ignored or cause errors. [y/N] ")) {
+                fprintf(stderr,
+                        "Aborted. Use a different base name or delete %s and retry.\n",
+                        db_path);
+                if (maia) maia_destroy(maia);
+                return 1;
+            }
+            fprintf(stderr, "\n");
+        }
+    }
+
     /* ================================================================
      *  STAGE 0: Initialize Database + Engine Pool
      * ================================================================ */
@@ -957,6 +1032,34 @@ int main(int argc, char *argv[]) {
     if (load_tree_file || build_now || (!skip_build && access(tree_path, F_OK) == 0)) {
         tree = tree_load(tree_source);
         if (tree) {
+            if (tree->root && tree->root->fen[0] &&
+                !fen_keys_match(tree->root->fen, start_fen)) {
+                char tree_fen_key[128];
+                char req_fen_key[128];
+                snprintf(tree_fen_key, sizeof(tree_fen_key), "%s", tree->root->fen);
+                snprintf(req_fen_key, sizeof(req_fen_key), "%s", start_fen);
+                eval_canonicalize_fen(tree_fen_key);
+                eval_canonicalize_fen(req_fen_key);
+
+                fprintf(stderr,
+                        "\nWarning: loaded tree root FEN differs from requested start FEN.\n");
+                fprintf(stderr, "  Tree root:  %s\n", tree_fen_key);
+                fprintf(stderr, "  Requested:  %s\n", req_fen_key);
+                if (!confirm_yes_interactive(
+                        "  Continue with the existing tree (ignore --fen/--moves)? [y/N] ")) {
+                    fprintf(stderr,
+                            "Aborted. Use a different base name, delete %s, or pass "
+                            "matching --fen/--moves.\n",
+                            tree_source);
+                    tree_destroy(tree);
+                    if (engine_pool) engine_pool_destroy(engine_pool);
+                    if (maia) maia_destroy(maia);
+                    rdb_close(db);
+                    return 1;
+                }
+                fprintf(stderr, "\n");
+            }
+
             tree->config.play_as_white = play_as_white;
             tree_recalculate_probabilities(tree);
 
@@ -1176,10 +1279,6 @@ int main(int argc, char *argv[]) {
             printf("  Resumed: %zu new nodes (total %zu) in %.1fs (max depth %d)\n",
                    new_nodes, tree->total_nodes, build_time,
                    tree->max_depth_reached);
-        else
-            printf("  Built %zu nodes in %.1fs (%.1f n/min, b=%.2f, %d threads, depth %d)\n",
-                   tree->total_nodes, build_time, tree->nodes_per_minute,
-                   tree->branching_factor, num_threads, eval_depth);
 
         /* Post-build: remove nodes where eval is too bad for us */
         size_t pruned = tree_prune_eval_too_low(tree);

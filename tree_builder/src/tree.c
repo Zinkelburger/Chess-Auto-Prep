@@ -54,6 +54,12 @@
 #include <math.h>
 #include <time.h>
 #include <stdarg.h>
+#include <limits.h>
+
+#define BUILD_PROGRESS_MAX_DEPTH 128
+
+static int g_nodes_created_at_depth[BUILD_PROGRESS_MAX_DEPTH];
+static int g_nodes_processed_at_depth[BUILD_PROGRESS_MAX_DEPTH];
 
 
 /* ========== Instrumentation helpers ========== */
@@ -328,6 +334,8 @@ static TreeNode *make_child(TreeNode *parent, const char *fen,
         return NULL;
     }
     tree->total_nodes++;
+    if (child->depth < BUILD_PROGRESS_MAX_DEPTH)
+        g_nodes_created_at_depth[child->depth]++;
     if (child->depth > tree->max_depth_reached)
         tree->max_depth_reached = child->depth;
     child->skip_ext_eval = parent->skip_ext_eval;
@@ -683,17 +691,22 @@ static TreeNode *build_queue_pop(BuildQueue *q) {
  * (no children, not explored) instead of re-walking the full tree via BFS.
  */
 static void resume_prepare_frontier(TreeNode *node, FenMap *fmap,
-                                    BuildQueue *q, size_t *frontier_count) {
+                                    BuildQueue *q, size_t *frontier_count,
+                                    int *min_frontier_depth) {
     if (!node) return;
     if (node->children_count > 0) {
         fen_map_put(fmap, node->fen, node);
         for (size_t i = 0; i < node->children_count; i++)
-            resume_prepare_frontier(node->children[i], fmap, q, frontier_count);
+            resume_prepare_frontier(node->children[i], fmap, q, frontier_count,
+                                    min_frontier_depth);
         return;
     }
     if (!node->explored) {
-        if (build_queue_push(q, node))
+        if (build_queue_push(q, node)) {
             (*frontier_count)++;
+            if (node->depth < *min_frontier_depth)
+                *min_frontier_depth = node->depth;
+        }
     }
 }
 
@@ -710,6 +723,10 @@ static void build_queue_push_children(BuildQueue *q, Tree *tree, TreeNode *node)
     }
 }
 
+
+static int g_depth_tracker = -1;
+static int g_session_start_depth = 0;
+
 static void emit_build_progress_ex(Tree *tree, const TreeConfig *config,
                                    bool force);
 
@@ -719,89 +736,174 @@ static void reset_build_progress_timer(void) {
     progress_display_reset = true;
 }
 
-static void count_depth_layer(TreeNode *node, int target_depth,
-                              int *total, int *unexplored) {
-    if (node->depth == target_depth) {
-        (*total)++;
-        if (!node->explored)
-            (*unexplored)++;
-        return;
-    }
+static void count_nodes_per_depth(TreeNode *node, int *counts) {
+    if (!node) return;
+    if (node->depth >= 0 && node->depth < BUILD_PROGRESS_MAX_DEPTH)
+        counts[node->depth]++;
     for (size_t i = 0; i < node->children_count; i++)
-        count_depth_layer(node->children[i], target_depth, total, unexplored);
+        count_nodes_per_depth(node->children[i], counts);
 }
 
-/* Progress throttle state — reset at each tree_build() call. */
+static void format_int_commas(int n, char *buf, size_t len) {
+    if (n < 0) {
+        snprintf(buf, len, "-%d", -n);
+        return;
+    }
+    char raw[32];
+    snprintf(raw, sizeof(raw), "%d", n);
+    size_t raw_len = strlen(raw);
+    size_t pos = 0;
+    int first_group = (int)(raw_len % 3);
+    if (first_group == 0) first_group = 3;
+    for (size_t i = 0; i < raw_len && pos + 1 < len; i++) {
+        if (i > 0 && (i - (size_t)first_group) % 3 == 0)
+            buf[pos++] = ',';
+        buf[pos++] = raw[i];
+    }
+    buf[pos] = '\0';
+}
+
+static void format_duration_hms(int sec, char *buf, size_t len) {
+    if (sec < 60)
+        snprintf(buf, len, "%ds", sec);
+    else if (sec < 3600) {
+        int m = sec / 60;
+        int s = sec % 60;
+        snprintf(buf, len, "%dm %ds", m, s);
+    } else {
+        int h = sec / 3600;
+        int m = (sec % 3600) / 60;
+        snprintf(buf, len, "%dh %dm", h, m);
+    }
+}
+
 static struct timespec g_progress_start_time;
-static int g_progress_last_nodes = -1;
-static int g_progress_last_dequeue = -1;
-static int g_progress_dequeue_count = 0;
+static struct timespec g_depth_enter_time;
+static struct timespec g_progress_last_emit;
+static int g_progress_last_emit_processed = -1;
 static bool g_progress_started = false;
 
 static void emit_build_progress_reset(void) {
-    g_progress_last_nodes = -1;
-    g_progress_last_dequeue = -1;
-    g_progress_dequeue_count = 0;
+    memset(g_nodes_created_at_depth, 0, sizeof(g_nodes_created_at_depth));
+    memset(g_nodes_processed_at_depth, 0, sizeof(g_nodes_processed_at_depth));
+    g_depth_tracker = -1;
+    g_session_start_depth = 0;
+    g_progress_last_emit_processed = -1;
     g_progress_started = false;
 }
 
-/** @param from_dequeue true when throttling on BFS dequeues (resume walk). */
-static void emit_build_progress(Tree *tree, const TreeConfig *config,
-                                bool from_dequeue) {
+static void emit_depth_complete_line(Tree *tree, int depth,
+                                     const TreeConfig *config) {
     if (!config->progress_callback) return;
-
-    if (!g_progress_started || tree->total_nodes <= 1) {
-        clock_gettime(CLOCK_MONOTONIC, &g_progress_start_time);
-        g_progress_started = true;
-        g_progress_last_nodes = -1;
-        g_progress_last_dequeue = -1;
-    }
-
-    if (from_dequeue) {
-        g_progress_dequeue_count++;
-        if (g_progress_dequeue_count - g_progress_last_dequeue < 200) return;
-        g_progress_last_dequeue = g_progress_dequeue_count;
-    } else {
-        if ((int)tree->total_nodes - g_progress_last_nodes < 50) return;
-        g_progress_last_nodes = (int)tree->total_nodes;
-    }
-
-    int d = tree->max_depth_reached;
-    int total_at = 0, unexplored_at = 0;
-    count_depth_layer(tree->root, d, &total_at, &unexplored_at);
+    if (depth < 0 || depth >= BUILD_PROGRESS_MAX_DEPTH) return;
 
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     double elapsed_s = (now.tv_sec - g_progress_start_time.tv_sec)
                      + (now.tv_nsec - g_progress_start_time.tv_nsec) / 1e9;
-    double rate = (elapsed_s > 0.5) ? tree->total_nodes / (elapsed_s / 60.0) : 0;
-    int eta = (rate > 0 && unexplored_at > 0)
-            ? (int)(unexplored_at * 60.0 / rate + 0.5)
-            : 0;
+    double rate = (elapsed_s > 0.5)
+        ? tree->total_nodes / (elapsed_s / 60.0) : 0.0;
 
-    size_t session_added = tree->total_nodes - tree->config.progress_baseline_nodes;
+    char nodes_buf[32], elapsed_buf[32];
+    format_int_commas(g_nodes_processed_at_depth[depth], nodes_buf, sizeof(nodes_buf));
+    format_duration_hms((int)(elapsed_s + 0.5), elapsed_buf, sizeof(elapsed_buf));
+    printf("\n  Depth %d complete: %s nodes, %.1f/min, %s elapsed\n",
+           depth, nodes_buf, rate, elapsed_buf);
+    fflush(stdout);
+}
+
+static void emit_build_summary(Tree *tree, const TreeConfig *config) {
+    if (!config->progress_callback) return;
+
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    double elapsed_s = (now.tv_sec - g_progress_start_time.tv_sec)
+                     + (now.tv_nsec - g_progress_start_time.tv_nsec) / 1e9;
+    double rate = (elapsed_s > 0.5)
+        ? tree->total_nodes / (elapsed_s / 60.0) : 0.0;
+
+    char nodes_buf[32], elapsed_buf[32];
+    format_int_commas((int)tree->total_nodes, nodes_buf, sizeof(nodes_buf));
+    format_duration_hms((int)(elapsed_s + 0.5), elapsed_buf, sizeof(elapsed_buf));
+    printf("\n  Build complete: %s nodes, depth %d/%d, %.1f/min, %s total\n",
+           nodes_buf, tree->max_depth_reached, config->max_depth,
+           rate, elapsed_buf);
+    fflush(stdout);
+}
+
+static void emit_build_progress(Tree *tree, const TreeConfig *config,
+                                bool force) {
+    if (!config->progress_callback) return;
+
+    if (!g_progress_started || tree->total_nodes <= 1) {
+        clock_gettime(CLOCK_MONOTONIC, &g_progress_start_time);
+        g_progress_started = true;
+        clock_gettime(CLOCK_MONOTONIC, &g_progress_last_emit);
+        g_progress_last_emit_processed = -1;
+    }
+
+    int active = g_depth_tracker >= 0 ? g_depth_tracker : 0;
+    if (active >= BUILD_PROGRESS_MAX_DEPTH)
+        active = BUILD_PROGRESS_MAX_DEPTH - 1;
+
+    int processed_at = g_nodes_processed_at_depth[active];
+
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    if (!force) {
+        double since_emit = (now.tv_sec - g_progress_last_emit.tv_sec)
+                          + (now.tv_nsec - g_progress_last_emit.tv_nsec) / 1e9;
+        if (since_emit < 0.5 && processed_at - g_progress_last_emit_processed < 50)
+            return;
+    }
+    g_progress_last_emit = now;
+    g_progress_last_emit_processed = processed_at;
+
+    double elapsed_s = (now.tv_sec - g_progress_start_time.tv_sec)
+                     + (now.tv_nsec - g_progress_start_time.tv_nsec) / 1e9;
+    double depth_elapsed_s = (now.tv_sec - g_depth_enter_time.tv_sec)
+                             + (now.tv_nsec - g_depth_enter_time.tv_nsec) / 1e9;
+
+    double rate = (elapsed_s > 0.5)
+        ? tree->total_nodes / (elapsed_s / 60.0) : 0.0;
+
+    int nodes_at = g_nodes_created_at_depth[active];
+    int remaining = nodes_at - processed_at;
+    if (remaining < 0) remaining = 0;
+
+    double depth_rate = (depth_elapsed_s > 0.5 && processed_at > 0)
+        ? processed_at / (depth_elapsed_s / 60.0) : rate;
+    int eta = (depth_rate > 0 && remaining > 0)
+            ? (int)(remaining * 60.0 / depth_rate + 0.5) : 0;
 
     BuildProgressInfo info = {
-        .total_nodes       = (int)tree->total_nodes,
-        .current_depth     = d,
-        .max_depth_config  = config->max_depth,
-        .total_at_depth    = total_at,
-        .unexplored_at_depth = unexplored_at,
-        .active_depth      = tree->build_active_depth,
-        .queue_pending     = (int)tree->build_queue_pending,
-        .nodes_per_minute  = rate,
-        .eta_depth_seconds = eta,
-        .session_nodes_added = (int)session_added,
+        .total_nodes              = (int)tree->total_nodes,
+        .current_depth            = active,
+        .max_depth_config         = config->max_depth,
+        .nodes_at_current_depth   = nodes_at,
+        .nodes_processed_at_depth = processed_at,
+        .nodes_per_minute         = rate,
+        .eta_depth_seconds        = eta,
     };
     config->progress_callback(&info);
 }
 
 static void emit_build_progress_ex(Tree *tree, const TreeConfig *config,
                                    bool force) {
-    if (force) {
-        g_progress_last_nodes = -1;
-        g_progress_last_dequeue = -1;
+    emit_build_progress(tree, config, force);
+}
+
+static void on_bfs_dequeue_node(Tree *tree, TreeNode *n,
+                                const TreeConfig *config) {
+    if (n->depth > g_depth_tracker) {
+        if (g_depth_tracker >= g_session_start_depth)
+            emit_depth_complete_line(tree, g_depth_tracker, config);
+        g_depth_tracker = n->depth;
+        clock_gettime(CLOCK_MONOTONIC, &g_depth_enter_time);
     }
+    if (n->depth >= 0 && n->depth < BUILD_PROGRESS_MAX_DEPTH)
+        g_nodes_processed_at_depth[n->depth]++;
+    tree->build_active_depth = n->depth;
     emit_build_progress(tree, config, false);
 }
 
@@ -1394,8 +1496,6 @@ static void build_process_node(Tree *tree, TreeNode *node,
                                LichessExplorer *explorer, BuildQueue *q) {
     if (!tree->is_building) return;
 
-    emit_build_progress(tree, config, true);
-
     if (node->depth >= config->max_depth) {
         /* Mark explored so progress/resume don't treat terminal leaves as
          * pending work when the build reaches the configured depth cap. */
@@ -1548,6 +1648,7 @@ bool tree_build(Tree *tree, const char *start_fen,
     reset_build_progress_timer();
 
     emit_build_progress_reset();
+    count_nodes_per_depth(tree->root, g_nodes_created_at_depth);
 
     BuildQueue bq;
     build_queue_init(&bq);
@@ -1555,11 +1656,12 @@ bool tree_build(Tree *tree, const char *start_fen,
     bool fast_resume = tree->root && tree->total_nodes > 1 &&
                        tree->root->children_count > 0;
     size_t frontier_count = 0;
+    int min_frontier_depth = INT_MAX;
     bool queued = false;
 
     if (fast_resume) {
         resume_prepare_frontier(tree->root, (FenMap *)tree->expanded_fens,
-                                &bq, &frontier_count);
+                                &bq, &frontier_count, &min_frontier_depth);
         queued = frontier_count > 0;
     } else {
         queued = build_queue_push(&bq, tree->root);
@@ -1575,6 +1677,17 @@ bool tree_build(Tree *tree, const char *start_fen,
         fprintf(stderr, "Error: out of memory for build queue\n");
         tree->is_building = false;
     } else if (tree->is_building) {
+        if (fast_resume && frontier_count > 0 &&
+            min_frontier_depth != INT_MAX) {
+            g_session_start_depth = min_frontier_depth;
+            g_depth_tracker = min_frontier_depth - 1;
+            for (int d = 0; d < min_frontier_depth && d < BUILD_PROGRESS_MAX_DEPTH; d++)
+                g_nodes_processed_at_depth[d] = g_nodes_created_at_depth[d];
+        } else {
+            g_session_start_depth = 0;
+            g_depth_tracker = -1;
+        }
+        clock_gettime(CLOCK_MONOTONIC, &g_depth_enter_time);
         tree->build_active_depth = 0;
         tree->build_queue_pending = 0;
         size_t last_hb_nodes = tree->total_nodes;
@@ -1584,6 +1697,7 @@ bool tree_build(Tree *tree, const char *start_fen,
         while (tree->is_building) {
             TreeNode *n = build_queue_pop(&bq);
             if (!n) break;
+            on_bfs_dequeue_node(tree, n, &tree->config);
             build_process_node(tree, n, &tree->config, explorer, &bq);
 
             struct timespec now;
@@ -1600,6 +1714,10 @@ bool tree_build(Tree *tree, const char *start_fen,
                 last_hb = now;
             }
         }
+
+        if (g_depth_tracker >= g_session_start_depth)
+            emit_depth_complete_line(tree, g_depth_tracker, &tree->config);
+        emit_build_summary(tree, &tree->config);
     }
     build_queue_free(&bq);
 
