@@ -727,6 +727,155 @@ void rdb_get_repertoire_moves(RepertoireDB *db,
 
 /* ========== Statistics ========== */
 
+/* ========== Schema validation ========== */
+
+typedef struct {
+    const char *table;
+    const char *const *columns;
+} SchemaTableSpec;
+
+static const char *schema_explorer_positions_cols[] = {
+    "fen", "total_games", "opening_eco", "opening_name", "cached_at", NULL
+};
+static const char *schema_explorer_moves_cols[] = {
+    "fen", "uci", "san", "white_wins", "black_wins", "draws", "probability", NULL
+};
+static const char *schema_evaluations_cols[] = {
+    "fen", "eval_cp", "depth", "bestmove", "pv", "is_mate", "mate_in",
+    "evaluated_at", NULL
+};
+static const char *schema_ease_scores_cols[] = {
+    "fen", "ease", "calculated_at", NULL
+};
+static const char *schema_repertoire_moves_cols[] = {
+    "fen", "move_san", "move_uci", "score", "is_selected", "created_at", NULL
+};
+static const char *schema_multipv_cache_cols[] = {
+    "fen", "depth", "num_pvs", "num_lines", "lines_blob", "cached_at", NULL
+};
+static const char *schema_maia_cache_cols[] = {
+    "fen", "elo", "move_count", "moves_blob", "cached_at", NULL
+};
+
+static const SchemaTableSpec SCHEMA_TABLES[] = {
+    { "explorer_positions", schema_explorer_positions_cols },
+    { "explorer_moves", schema_explorer_moves_cols },
+    { "evaluations", schema_evaluations_cols },
+    { "ease_scores", schema_ease_scores_cols },
+    { "repertoire_moves", schema_repertoire_moves_cols },
+    { "multipv_cache", schema_multipv_cache_cols },
+    { "maia_cache", schema_maia_cache_cols },
+};
+
+static bool schema_table_exists(sqlite3 *db, const char *table) {
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db,
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            -1, &stmt, NULL) != SQLITE_OK) {
+        return false;
+    }
+    sqlite3_bind_text(stmt, 1, table, -1, SQLITE_STATIC);
+    bool exists = sqlite3_step(stmt) == SQLITE_ROW;
+    sqlite3_finalize(stmt);
+    return exists;
+}
+
+static bool schema_column_exists(sqlite3 *db, const char *table, const char *col) {
+    char sql[128];
+    snprintf(sql, sizeof(sql), "PRAGMA table_info(%s)", table);
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return false;
+    }
+    bool found = false;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char *name = (const char *)sqlite3_column_text(stmt, 1);
+        if (name && strcmp(name, col) == 0) {
+            found = true;
+            break;
+        }
+    }
+    sqlite3_finalize(stmt);
+    return found;
+}
+
+static int schema_table_row_count(sqlite3 *db, const char *table) {
+    char sql[128];
+    snprintf(sql, sizeof(sql), "SELECT COUNT(*) FROM %s", table);
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return 0;
+    }
+    int count = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        count = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+    return count;
+}
+
+static void schema_append_issue(char *issues, size_t issues_len, const char *msg) {
+    if (!issues || issues_len == 0) return;
+    size_t used = strlen(issues);
+    if (used >= issues_len - 1) return;
+    if (used > 0) {
+        strncat(issues, "; ", issues_len - used - 1);
+        used = strlen(issues);
+    }
+    strncat(issues, msg, issues_len - used - 1);
+}
+
+bool rdb_validate_schema(const char *path, char *issues, size_t issues_len,
+                         bool *has_data_out) {
+    if (issues && issues_len > 0) issues[0] = '\0';
+    if (has_data_out) *has_data_out = false;
+
+    if (!path) return false;
+
+    sqlite3 *db = NULL;
+    if (sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK) {
+        if (issues && issues_len > 0) {
+            snprintf(issues, issues_len, "cannot open database: %s",
+                     db ? sqlite3_errmsg(db) : "unknown error");
+        }
+        if (db) sqlite3_close(db);
+        return false;
+    }
+
+    bool valid = true;
+    int total_rows = 0;
+    const size_t num_tables = sizeof(SCHEMA_TABLES) / sizeof(SCHEMA_TABLES[0]);
+
+    for (size_t i = 0; i < num_tables; i++) {
+        const SchemaTableSpec *spec = &SCHEMA_TABLES[i];
+        if (!schema_table_exists(db, spec->table)) {
+            valid = false;
+            char msg[96];
+            snprintf(msg, sizeof(msg), "missing table '%s'", spec->table);
+            schema_append_issue(issues, issues_len, msg);
+            continue;
+        }
+
+        total_rows += schema_table_row_count(db, spec->table);
+
+        for (const char *const *col = spec->columns; *col; col++) {
+            if (!schema_column_exists(db, spec->table, *col)) {
+                valid = false;
+                char msg[128];
+                snprintf(msg, sizeof(msg), "missing column '%s.%s'",
+                         spec->table, *col);
+                schema_append_issue(issues, issues_len, msg);
+            }
+        }
+    }
+
+    if (has_data_out) *has_data_out = total_rows > 0;
+
+    sqlite3_close(db);
+    return valid;
+}
+
+
 void rdb_get_stats(RepertoireDB *db, int *explorer_cached, 
                     int *evals_cached, int *ease_cached) {
     if (!db) return;
