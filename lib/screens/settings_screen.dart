@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../models/settings_enums.dart';
+import '../services/engine/engine_lifecycle.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
@@ -104,6 +105,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: 'Stockfish Engine',
       icon: Icons.bolt,
       children: [
+        ListenableBuilder(
+          listenable: EngineLifecycle(),
+          builder: (context, _) {
+            final lifecycle = EngineLifecycle();
+            final isOn = lifecycle.state != EngineState.off;
+            final isGenerating = lifecycle.state == EngineState.generating;
+            return SettingsSwitchTile(
+              label: 'Enable engine analysis',
+              tooltip: isGenerating
+                  ? 'Engine is busy during tree generation.'
+                  : 'Run Stockfish in the background for interactive analysis.',
+              value: isOn,
+              onChanged: (enabled) {
+                if (isGenerating) return;
+                if (enabled) {
+                  lifecycle.toggleOn();
+                } else {
+                  lifecycle.toggleOff();
+                }
+              },
+            );
+          },
+        ),
         SettingsSliderTile(
           label: 'Workers (interactive)',
           tooltip: 'Parallel Stockfish processes for interactive analysis.',
@@ -225,21 +249,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildExpectimaxSection() {
     return SettingsGroup(
-      title: 'Expectimax Search',
+      title: 'On-the-fly Expectimax',
       icon: Icons.analytics,
       children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            'Live expectimax in the repertoire analysis dock — not used during '
+            'main tree generation (see Engine Depth on the Generation tab).',
+            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+          ),
+        ),
         SettingsSliderTile(
-          label: 'On-the-fly depth',
+          label: 'On-the-fly search depth',
           tooltip:
-              'Search depth (plies) for positions not in the tree.',
+              'Max plies to search from the current position when the position '
+              'is not already in the generated tree.',
           value: _engine.onTheFlyMaxDepth,
           min: 1,
           max: 12,
           onChanged: (v) => _engine.onTheFlyMaxDepth = v,
         ),
         SettingsSliderTile(
-          label: 'Eval depth',
-          tooltip: 'Stockfish depth for leaf evaluation.',
+          label: 'On-the-fly eval depth',
+          tooltip:
+              'Stockfish search depth for leaf evaluations during live '
+              'expectimax (default 12). Separate from Engine Depth on the '
+              'Generation tab.',
           value: _engine.expectimaxEvalDepth,
           min: 6,
           max: 20,

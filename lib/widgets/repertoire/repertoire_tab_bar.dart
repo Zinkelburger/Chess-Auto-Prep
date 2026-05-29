@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/navigation_stack.dart';
-import '../layout/repertoire_mode.dart';
 import '../navigation_trail.dart';
 
-/// Tab bar, navigation trail, and tab views for the repertoire right pane.
+/// Tab bar and tab views for the compact repertoire right pane (PGN | Context).
 class RepertoireTabBar extends StatelessWidget {
   const RepertoireTabBar({
     super.key,
@@ -12,17 +11,15 @@ class RepertoireTabBar extends StatelessWidget {
     required this.navigationStack,
     required this.onNavigationJump,
     required this.tabChildren,
-    this.mode = RepertoireMode.edit,
-    this.isCompactLayout = false,
+    this.isCompactLayout = true,
   });
 
   final TabController tabController;
   final NavigationStack navigationStack;
   final void Function(NavigationEntry entry) onNavigationJump;
   final List<Widget> tabChildren;
-  final RepertoireMode mode;
 
-  /// Below [kCompactBreakpoint]: Edit uses PGN + Context tabs; Analyze uses one tab.
+  /// Below [kCompactBreakpoint]: PGN + Context tabs.
   final bool isCompactLayout;
 
   @override
@@ -39,7 +36,7 @@ class RepertoireTabBar extends StatelessWidget {
             controller: tabController,
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: _tabsForMode(mode, isCompactLayout),
+            tabs: _tabsForCompact(isCompactLayout),
           ),
           Expanded(
             child: TabBarView(
@@ -55,40 +52,15 @@ class RepertoireTabBar extends StatelessWidget {
     );
   }
 
-  static List<Tab> _tabsForMode(RepertoireMode mode, bool isCompactLayout) {
-    if (mode == RepertoireMode.analyze) {
-      return [
-        Tab(
-          text: isCompactLayout ? 'Analysis' : 'Lines',
-          icon: Icon(
-            isCompactLayout ? Icons.analytics_outlined : Icons.library_books,
-            size: 16,
-          ),
-        ),
-      ];
-    }
-
-    if (isCompactLayout) {
-      return const [
-        Tab(
-          text: 'PGN',
-          icon: Icon(Icons.description, size: 16),
-        ),
-        Tab(
-          text: 'Context',
-          icon: Icon(Icons.dashboard_customize_outlined, size: 16),
-        ),
-      ];
-    }
-
+  static List<Tab> _tabsForCompact(bool isCompactLayout) {
     return const [
-      Tab(
-        text: 'Browse',
-        icon: Icon(Icons.explore, size: 16),
-      ),
       Tab(
         text: 'PGN',
         icon: Icon(Icons.description, size: 16),
+      ),
+      Tab(
+        text: 'Context',
+        icon: Icon(Icons.dashboard_customize_outlined, size: 16),
       ),
     ];
   }

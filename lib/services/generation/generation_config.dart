@@ -1,6 +1,7 @@
 /// Configuration and output types for repertoire generation.
 library;
 
+import '../../constants/engine_defaults.dart';
 import '../../utils/system_info.dart';
 
 // ── Selection mode ──────────────────────────────────────────────────────
@@ -127,7 +128,7 @@ class TreeBuildConfig {
     this.maxPly = 20,
     this.maxNodes = 0,
     this.buildMode = BuildMode.stockfishExpectimax,
-    this.evalDepth = 15,
+    this.evalDepth = kDefaultGenerationEvalDepth,
     this.engineThreads = 0,
     this.ourMultipv = 4,
     this.maxEvalLossCp = 50,
@@ -135,7 +136,7 @@ class TreeBuildConfig {
     this.oppMassTarget = 0.80,
     this.minEvalCp = 0,
     this.maxEvalCp = 200,
-    this.relativeEval = false,
+    this.relativeEval = true,
     this.useLichessDb = false,
     this.useMasters = false,
     this.ratingRange = '2000,2200,2500',
@@ -174,7 +175,8 @@ class TreeBuildConfig {
       maxPly: (json['max_depth'] as num?)?.toInt() ?? 20,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
       buildMode: _parseBuildMode(json['build_mode'] as String?),
-      evalDepth: (json['eval_depth'] as num?)?.toInt() ?? 15,
+      evalDepth: (json['eval_depth'] as num?)?.toInt() ??
+          kDefaultGenerationEvalDepth,
       engineThreads: (json['engine_threads'] as num?)?.toInt() ?? 0,
       ourMultipv: (json['our_multipv'] as num?)?.toInt() ?? 4,
       maxEvalLossCp: (json['max_eval_loss_cp'] as num?)?.toInt() ?? 50,
@@ -182,7 +184,7 @@ class TreeBuildConfig {
       oppMassTarget: (json['opp_mass_target'] as num?)?.toDouble() ?? 0.80,
       minEvalCp: (json['min_eval_cp'] as num?)?.toInt() ?? 0,
       maxEvalCp: (json['max_eval_cp'] as num?)?.toInt() ?? 200,
-      relativeEval: json['relative_eval'] as bool? ?? false,
+      relativeEval: json['relative_eval'] as bool? ?? true,
       useLichessDb: json['use_lichess_db'] as bool? ?? false,
       useMasters: json['use_masters'] as bool? ?? false,
       ratingRange: json['rating_range'] as String? ?? '2000,2200,2500',
@@ -229,9 +231,6 @@ class TreeBuildConfig {
   /// Minimum depth required from external eval sources.
   int get effectiveMinEvalDepth =>
       minAcceptableEvalDepth > 0 ? minAcceptableEvalDepth : evalDepth;
-
-  /// Quick eval depth for the repertoire selection phase.
-  int get quickEvalDepth => evalDepth > 15 ? 15 : evalDepth;
 
   /// Convert a white-perspective centipawn score to "our" perspective.
   int toOurPerspective(int whiteCp) => playAsWhite ? whiteCp : -whiteCp;

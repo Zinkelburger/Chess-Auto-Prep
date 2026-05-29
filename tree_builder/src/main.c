@@ -91,7 +91,7 @@ static void print_usage(const char *prog_name) {
     printf("  -c, --color <w|b>      Play as white (w) or black (b) [REQUIRED]\n");
     printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
     printf("  -d, --ply <N>          Max tree depth in ply (half-moves) [default: 20]\n");
-    printf("  -e, --eval-depth <N>   Stockfish search depth [default: 20]\n");
+    printf("  -e, --eval-depth <N>   Stockfish search depth [default: 14]\n");
     printf("  -t, --threads <N>      Total CPU cores to use [default: 4]\n");
     printf("  --build-mode <mode>    Build algorithm: stockfish-expectimax [default],\n");
     printf("                         maia-db-explore, db-explorer, trap-finder\n");
@@ -117,7 +117,7 @@ static void print_usage(const char *prog_name) {
     printf("Eval window pruning:\n");
     printf("  --min-eval <cp>        Prune branch if our eval drops below this [default: color-dependent]\n");
     printf("  --max-eval <cp>        Prune branch if our eval exceeds this [default: color-dependent]\n");
-    printf("  --relative             Make --min-eval/--max-eval relative to root eval\n");
+    printf("  --absolute             Use absolute cp thresholds (default: relative to root eval)\n");
     printf("\n");
     printf("Preset modes (eval tolerance + novelty; omitted flags keep defaults):\n");
     printf("  --solid                Tight eval window, strict quality floor\n");
@@ -329,7 +329,7 @@ int main(int argc, char *argv[]) {
     const char *load_tree_file = NULL;
     double min_probability = 0.0001;
     int max_depth = 20;
-    int eval_depth = 20;
+    int eval_depth = 14;
     int num_threads = 4;
 
     const char *ratings = "2000,2200,2500";
@@ -349,7 +349,7 @@ int main(int argc, char *argv[]) {
     int maia_elo = 2200;
     double maia_min_prob = 0.05;
     bool maia_only = true;
-    bool relative_eval = false;
+    bool relative_eval = true;
     BuildMode build_mode = BUILD_MODE_STOCKFISH_EXPECTIMAX;
     const char *build_mode_str = NULL;
     const char *event_log_path = NULL;
@@ -416,7 +416,7 @@ int main(int argc, char *argv[]) {
         /* Eval window */
         {"min-eval",         required_argument, 0, 2020},
         {"max-eval",         required_argument, 0, 2021},
-        {"relative",         no_argument,       0, 2022},
+        {"absolute",         no_argument,       0, 2022},
         /* Expectimax scoring */
         {"leaf-confidence",  required_argument, 0, 2031},
         {"novelty-weight",   required_argument, 0, 2034},
@@ -507,7 +507,7 @@ int main(int argc, char *argv[]) {
                 user_min_eval = true;
                 break;
             case 2021: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
-            case 2022: relative_eval = true; break;
+            case 2022: relative_eval = false; break;
             /* Expectimax scoring */
             case 2031: if (!parse_double(optarg, "leaf-confidence", &leaf_confidence_arg)) return 1; break;
             case 2034: {
@@ -1121,7 +1121,7 @@ int main(int argc, char *argv[]) {
                config.opp_mass_target * 100.0);
         printf("  Eval window: [%+d, %+d] cp%s\n",
                config.min_eval_cp, config.max_eval_cp,
-               relative_eval ? " (relative)" : "");
+               relative_eval ? " (relative to root)" : " (absolute)");
 
         BuildStats build_stats;
         memset(&build_stats, 0, sizeof(build_stats));
@@ -1351,7 +1351,6 @@ int main(int argc, char *argv[]) {
     rep_config.min_probability = min_probability;
     rep_config.min_games = min_games;
     rep_config.eval_depth = eval_depth;
-    rep_config.quick_eval_depth = eval_depth > 15 ? 15 : eval_depth;
     rep_config.verbose_search = verbose;
     if (novelty_weight_arg >= 0) rep_config.novelty_weight = novelty_weight_arg;
     if (leaf_confidence_arg >= 0.0) rep_config.leaf_confidence = leaf_confidence_arg;

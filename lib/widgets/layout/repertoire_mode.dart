@@ -8,11 +8,12 @@ enum RepertoireMode {
   analyze,
 }
 
-/// Context sub-views within Edit mode.
+/// Context sub-views within Edit mode (context pane TabBar).
 enum EditContextView {
   browse,
   engine,
   expectimax,
+  lines,
   tree,
 }
 

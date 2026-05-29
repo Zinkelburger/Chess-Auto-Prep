@@ -31,6 +31,8 @@ class TreeBuildService {
   final StockfishPool _pool = StockfishPool();
   final TreeEvalResolver _evalResolver = TreeEvalResolver();
 
+  static const double _pvInjectEpsilon = 0.01;
+
   bool _isBuilding = false;
   bool _isPaused = false;
   Completer<void>? _pauseCompleter;
@@ -594,6 +596,12 @@ class TreeBuildService {
         }
       }
 
+      // Line 0 only: stash engine's preferred opponent reply on the child
+      // (opponent-to-move position after our best move).
+      if (line.pvNumber == 1 && line.pv.length >= 2) {
+        child.pvContinuationMove = line.pv[1];
+      }
+
       _progress.emitProgress(
         tree,
         child.ply,
@@ -653,6 +661,7 @@ class TreeBuildService {
         node: node,
         config: config,
         onProgress: onProgress,
+        maiaForInject: true,
       );
     } else {
       await _addOpponentChildrenFromLichess(
@@ -664,6 +673,14 @@ class TreeBuildService {
       // Fall back to Maia when the Lichess DB has no data for this position
       if (node.children.isEmpty) {
         await _addOpponentChildrenFromMaia(
+          tree: tree,
+          node: node,
+          config: config,
+          onProgress: onProgress,
+          maiaForInject: true,
+        );
+      } else {
+        await _maybeInjectPvContinuation(
           tree: tree,
           node: node,
           config: config,
@@ -748,6 +765,7 @@ class TreeBuildService {
     required BuildTreeNode node,
     required TreeBuildConfig config,
     required void Function(BuildProgress) onProgress,
+    bool maiaForInject = false,
   }) async {
     if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) return;
 
@@ -764,7 +782,17 @@ class TreeBuildService {
     }
     _stats.maiaEvals++;
     _stats.maiaTotalMs += sw.elapsedMilliseconds;
-    if (maiaResult.policy.isEmpty) return;
+    if (maiaResult.policy.isEmpty) {
+      if (maiaForInject) {
+        await _maybeInjectPvContinuation(
+          tree: tree,
+          node: node,
+          config: config,
+          onProgress: onProgress,
+        );
+      }
+      return;
+    }
 
     final sortedMoves = maiaResult.policy.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -812,6 +840,72 @@ class TreeBuildService {
         buildSw: _buildSw,
       );
     }
+
+    if (maiaForInject) {
+      await _maybeInjectPvContinuation(
+        tree: tree,
+        node: node,
+        config: config,
+        onProgress: onProgress,
+        maiaPolicy: maiaResult.policy,
+      );
+    }
+  }
+
+  Future<void> _maybeInjectPvContinuation({
+    required BuildTree tree,
+    required BuildTreeNode node,
+    required TreeBuildConfig config,
+    required void Function(BuildProgress) onProgress,
+    Map<String, double>? maiaPolicy,
+  }) async {
+    final pvUci = node.pvContinuationMove;
+    if (pvUci == null || pvUci.isEmpty) return;
+
+    if (node.children.any((c) => c.moveUci == pvUci)) return;
+
+    final childFen = playUciMove(node.fen, pvUci);
+    if (childFen == null) return;
+
+    final san = uciToSan(node.fen, pvUci);
+    final child = _makeChild(
+      parent: node,
+      fen: childFen,
+      san: san,
+      uci: pvUci,
+      tree: tree,
+    );
+    if (child == null) return;
+
+    double prob = maiaPolicy?[pvUci] ?? -1.0;
+    if (prob < 0 &&
+        MaiaFactory.isAvailable &&
+        MaiaFactory.instance != null) {
+      try {
+        final maiaResult = await MaiaFactory.instance!.evaluate(
+          node.fen,
+          config.maiaElo,
+        );
+        _stats.maiaEvals++;
+        prob = maiaResult.policy[pvUci] ?? -1.0;
+      } catch (_) {
+        // Best-effort Maia lookup for injected move probability.
+      }
+    }
+    if (prob < 0) prob = _pvInjectEpsilon;
+
+    child.moveProbability = prob;
+    child.cumulativeProbability = node.cumulativeProbability * prob;
+    child.engineInjected = true;
+
+    _progress.emitProgress(
+      tree,
+      child.ply,
+      child.fen,
+      onProgress,
+      config.maxPly,
+      buildSw: _buildSw,
+    );
   }
 
   // ── Prune eval-too-low (post-build cleanup) ────────────────────────────

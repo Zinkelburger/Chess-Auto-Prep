@@ -123,14 +123,18 @@ String movesToPgnMoveText(
 
     if (annotateMoveProbabilities && i >= prefixMoveCount) {
       final annIdx = i - prefixMoveCount;
-      if (annIdx < lineAnnotations.length &&
-          lineAnnotations[annIdx].probability != null) {
+      if (annIdx < lineAnnotations.length) {
         final ann = lineAnnotations[annIdx];
-        final prob = ann.probability!;
-        final tag = ann.fromLichess && !annotateMaiaOnly
-            ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
-            : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
-        sb.write(' {$tag}');
+        if (ann.probability != null) {
+          final prob = ann.probability!;
+          final tag = ann.fromLichess && !annotateMaiaOnly
+              ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
+              : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
+          sb.write(' {$tag}');
+        }
+        if (ann.engineInjected) {
+          sb.write(' {engine-injected}');
+        }
       }
     }
     sb.write(' ');

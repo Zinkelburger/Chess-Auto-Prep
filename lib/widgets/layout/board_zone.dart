@@ -1,7 +1,7 @@
 /// Board column in the repertoire layout (B4 Phase 1 extraction).
 ///
 /// Wraps [RepertoireBoardPane]. [BoardZoneControls] groups trap navigation
-/// and the engine toggle; they stay on [RepertoireToolbar] until B4 Phase 2.
+/// on the app bar.
 library;
 
 import 'package:dartchess/dartchess.dart';
@@ -9,7 +9,6 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../chess_board_widget.dart' show CompletedMove;
-import '../engine/engine_toggle_button.dart';
 import '../repertoire/repertoire_board_pane.dart';
 
 /// Chess board with preview overlay and generation lock UI.
@@ -56,8 +55,7 @@ class BoardZone extends StatelessWidget {
   }
 }
 
-/// Trap navigation + engine toggle. Mounted on the app bar for now;
-/// moves below the board in B4 Phase 2.
+/// Trap navigation on the app bar. Engine on/off lives in Settings.
 class BoardZoneControls extends StatelessWidget {
   const BoardZoneControls({
     super.key,
@@ -68,15 +66,10 @@ class BoardZoneControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (trapNavigation == null) return const SizedBox.shrink();
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        if (trapNavigation != null) ...[
-          trapNavigation!,
-          const SizedBox(width: 4),
-        ],
-        const EngineToggleButton(),
-      ],
+      children: [trapNavigation!],
     );
   }
 }

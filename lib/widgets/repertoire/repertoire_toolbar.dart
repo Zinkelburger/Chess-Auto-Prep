@@ -56,7 +56,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             enabled: !generationLocked,
           ),
         BoardZoneControls(trapNavigation: trapNavigation),
-        if (mode == RepertoireMode.edit && onOpenGeneration != null)
+        if (onOpenGeneration != null)
           RepertoireGenerateButton(onPressed: onOpenGeneration),
         if (isGenerating)
           RepertoireGenerationStatusChip(

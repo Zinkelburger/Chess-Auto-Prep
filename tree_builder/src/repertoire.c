@@ -26,8 +26,7 @@ RepertoireConfig repertoire_config_default(void) {
         .min_probability = 0.0001,
         .min_games = 10,
 
-        .eval_depth = 20,
-        .quick_eval_depth = 15,
+        .eval_depth = 14,
 
         .leaf_confidence = 1.0,
         .novelty_weight = 0,
@@ -205,6 +204,7 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
         double move_annotation_prob[128];
         double move_maia_prob[128];
         bool move_annotation_lichess[128];
+        bool move_engine_injected[128];
         int depth;
     } LineState;
 
@@ -219,6 +219,7 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
         stack[0].move_annotation_prob[i] = -1.0;
         stack[0].move_maia_prob[i] = -1.0;
         stack[0].move_annotation_lichess[i] = false;
+        stack[0].move_engine_injected[i] = false;
     }
     stack_top = 1;
 
@@ -251,6 +252,8 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                        sizeof(current.move_maia_prob));
                 memcpy(next->move_annotation_lichess, current.move_annotation_lichess,
                        sizeof(current.move_annotation_lichess));
+                memcpy(next->move_engine_injected, current.move_engine_injected,
+                       sizeof(current.move_engine_injected));
                 snprintf(next->moves_san[current.depth],
                          sizeof(next->moves_san[current.depth]),
                          "%s", selected->move_san);
@@ -260,6 +263,7 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                 next->move_annotation_prob[current.depth] = -1.0;
                 next->move_maia_prob[current.depth] = -1.0;
                 next->move_annotation_lichess[current.depth] = false;
+                next->move_engine_injected[current.depth] = false;
                 stack_top++;
                 pushed_any = true;
             }
@@ -280,6 +284,8 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                            sizeof(current.move_maia_prob));
                     memcpy(next->move_annotation_lichess, current.move_annotation_lichess,
                            sizeof(current.move_annotation_lichess));
+                    memcpy(next->move_engine_injected, current.move_engine_injected,
+                           sizeof(current.move_engine_injected));
                     snprintf(next->moves_san[current.depth],
                              sizeof(next->moves_san[current.depth]),
                              "%s", child->move_san);
@@ -290,6 +296,8 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                     next->move_maia_prob[current.depth] = child->maia_frequency;
                     next->move_annotation_lichess[current.depth] =
                         child->total_games > 0;
+                    next->move_engine_injected[current.depth] =
+                        child->engine_injected;
                     stack_top++;
                     pushed_any = true;
                 }
@@ -319,6 +327,8 @@ static int extract_lines(Tree *tree, const RepertoireMove *moves, int num_moves,
                    sizeof(current.move_maia_prob));
             memcpy(line->move_annotation_lichess, current.move_annotation_lichess,
                    sizeof(current.move_annotation_lichess));
+            memcpy(line->move_engine_injected, current.move_engine_injected,
+                   sizeof(current.move_engine_injected));
             line->num_moves = depth;
             line->probability = current.node
                 ? current.node->cumulative_probability : 0;
@@ -377,7 +387,6 @@ RepertoireResult* generate_repertoire(Tree *tree, RepertoireDB *db,
     if (progress) progress("Loading evals", 0, (int)tree->total_nodes);
     tree_traverse_bfs(tree, load_evals_callback, db);
 
-    /* Resolve --relative eval offsets */
     if (cfg_local.relative_eval) {
         int root_eval = node_eval_for_us(tree->root, cfg_local.play_as_white);
         printf("  Root eval (our perspective): %+dcp\n", root_eval);
@@ -908,6 +917,12 @@ bool repertoire_export_pgn(const RepertoireResult *result,
                 config->build_threads);
     }
 
+    if (result->num_lines == 0) {
+        fprintf(f,
+                "{No repertoire lines: the starting position has no legal "
+                "moves or no moves passed the eval window.}\n");
+    }
+
     for (int i = 0; i < result->num_lines; i++) {
         const RepertoireLine *line = line_order ? line_order[i] : &result->lines[i];
 
@@ -970,6 +985,8 @@ bool repertoire_export_pgn(const RepertoireResult *result,
                 double prob = export_prob_for_move(line, j, config, &from_lichess);
                 emit_move_probability_comment(f, prob, from_lichess, config);
             }
+            if (line->move_engine_injected[j])
+                fprintf(f, " {engine-injected}");
             fprintf(f, " ");
         }
         fprintf(f, "*\n");

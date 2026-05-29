@@ -69,6 +69,13 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
     obj['my_ease'] = node.myEase;
   }
 
+  if (node.pvContinuationMove != null && node.pvContinuationMove!.isNotEmpty) {
+    obj['pv_continuation_move'] = node.pvContinuationMove;
+  }
+  if (node.engineInjected) {
+    obj['engine_injected'] = true;
+  }
+
   if (node.totalGames > 0) {
     obj['white_wins'] = node.whiteWins;
     obj['black_wins'] = node.blackWins;
@@ -211,6 +218,12 @@ BuildTreeNode _nodeFromJson(
   if (obj.containsKey('my_ease')) {
     node.myEase = (obj['my_ease'] as num).toDouble();
   }
+
+  final pvCont = obj['pv_continuation_move'] as String?;
+  if (pvCont != null && pvCont.isNotEmpty) {
+    node.pvContinuationMove = pvCont;
+  }
+  node.engineInjected = obj['engine_injected'] as bool? ?? false;
 
   if (obj.containsKey('white_wins') &&
       obj.containsKey('black_wins') &&

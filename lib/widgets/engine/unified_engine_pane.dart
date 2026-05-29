@@ -134,6 +134,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
   int _analysisConfigRevision = 0;
 
+  EngineState? _lastLifecycleState;
+  bool _analysisScheduled = false;
+
   /// Whether analysis should run right now.
   bool get _isActive =>
       widget.isActive && EngineLifecycle().state != EngineState.off;
@@ -148,6 +151,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     _settings.addListener(_onSettingsChanged);
     _analysis.poolStatus.addListener(_onPoolStatusChanged);
     EngineLifecycle().addListener(_onLifecycleChanged);
+    _lastLifecycleState = EngineLifecycle().state;
 
     if (_isActive) {
       _analysis.beginEnginePaneAnalysis(widget.fen);
@@ -168,10 +172,34 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         !_listEquals(widget.currentMoveSequence, oldWidget.currentMoveSequence);
 
     if (fenChanged || becameActive) {
-      _runAnalysis();
+      _scheduleAnalysis();
     } else if (moveSeqChanged && _settings.showProbability) {
-      _calculateCumulativeProbability();
+      _scheduleCumulativeProbability();
     }
+  }
+
+  void _scheduleAnalysis() {
+    if (_analysisScheduled) return;
+    _analysisScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _analysisScheduled = false;
+      if (!mounted || !_isActive) return;
+      _runAnalysis();
+    });
+  }
+
+  void _scheduleSetState() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _scheduleCumulativeProbability() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_isActive) return;
+      _calculateCumulativeProbability();
+    });
   }
 
   static bool _listEquals(List<String> a, List<String> b) {
@@ -193,12 +221,27 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
   void _onLifecycleChanged() {
     if (!mounted) return;
-    if (_isActive) {
-      _runAnalysis();
-    } else {
-      _analysis.cancel();
+    final state = EngineLifecycle().state;
+    final prev = _lastLifecycleState;
+    _lastLifecycleState = state;
+
+    if (!_isActive) {
+      if (prev != state) _analysis.cancel();
+      _scheduleSetState();
+      return;
     }
-    setState(() {});
+
+    // Restart only when engine becomes usable again (toggle on / exit generation),
+    // not when analysis finishes (analyzing → idle) or we enter analyzing.
+    final becameUsable = (prev == null ||
+            prev == EngineState.off ||
+            prev == EngineState.generating) &&
+        (state == EngineState.idle || state == EngineState.analyzing) &&
+        !(prev == null && state == EngineState.analyzing);
+    if (becameUsable) {
+      _scheduleAnalysis();
+    }
+    _scheduleSetState();
   }
 
   void _onSettingsChanged() {
@@ -208,10 +251,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       _analysisConfigRevision = revision;
       _analysisCache.remove(widget.fen);
       if (_isActive) {
-        _runAnalysis();
+        _scheduleAnalysis();
       }
     }
-    if (mounted) setState(() {});
+    _scheduleSetState();
   }
 
   void _runAnalysis() {
@@ -503,15 +546,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
             onSetRoot: widget.onSetRoot,
           ),
         ] else
-          const Expanded(
-            child: Center(
-              child: Text(
-                'Engine off — use the toolbar toggle to enable analysis',
-                style: TextStyle(color: Colors.grey, fontSize: 14),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
+          const Expanded(child: SizedBox.shrink()),
       ],
     );
   }
@@ -522,15 +557,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Row(
         children: [
-          Text(
-            _engineEnabled ? 'Engine on' : 'Engine off',
-            style: TextStyle(
-              fontSize: 12,
-              color: _engineEnabled ? Colors.white70 : Colors.grey,
-            ),
-          ),
-          const SizedBox(width: 8),
-          // ── Status text ──
           Expanded(
             child: _engineEnabled
                 ? ListenableBuilder(
@@ -578,10 +604,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                       );
                     },
                   )
-                : Text(
-                    'Engine off',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                  ),
+                : const SizedBox.shrink(),
           ),
           IconButton(
             icon: const Icon(Icons.settings, size: 18),
@@ -728,60 +751,77 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     return Expanded(child: header);
   }
 
+  static const _narrowTableWidth = 200;
+
   Widget _buildTableHeader() {
     final dbData = _probabilityService.currentPosition.value;
     final gameCountStr =
         dbData != null ? ' (${formatCount(dbData.totalGames)})' : '';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 52,
-            child: Text(
-              'MOVE',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[500],
-                letterSpacing: 0.5,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < _narrowTableWidth;
+        final showDb = !narrow &&
+            _settings.showProbability &&
+            _settings.fetchLichessForOpponent;
+        final showMaia =
+            !narrow && _settings.showMaia && _settings.fetchMaiaForOpponent;
+        final moveWidth = narrow ? 36.0 : 52.0;
+        final evalWidth = narrow ? 44.0 : 58.0;
+        final hPad = narrow ? 4.0 : 12.0;
+
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 6),
+          child: Row(
+            children: [
+              SizedBox(
+                width: moveWidth,
+                child: Text(
+                  'MOVE',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[500],
+                    letterSpacing: 0.5,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
+              _buildColumnHeader(
+                columnId: EngineSettings.colEval,
+                label: 'EVAL',
+                textAlign: TextAlign.center,
+                width: evalWidth,
+                tooltipExtra: 'Stockfish evaluation',
+              ),
+              if (!narrow) const SizedBox(width: 8),
+              _buildColumnHeader(
+                columnId: EngineSettings.colLine,
+                label: 'LINE',
+                textAlign: TextAlign.left,
+                tooltipExtra: 'Principal variation continuation',
+              ),
+              if (showDb)
+                _buildColumnHeader(
+                  columnId: EngineSettings.colDb,
+                  label: 'DB',
+                  textAlign: TextAlign.right,
+                  width: 60,
+                  leading: const LichessDbInfoIcon(size: 12),
+                  tooltipExtra: 'Database probability$gameCountStr',
+                ),
+              if (showMaia)
+                _buildColumnHeader(
+                  columnId: EngineSettings.colMaia,
+                  label: 'MAIA',
+                  textAlign: TextAlign.right,
+                  width: 46,
+                  tooltipExtra: 'Maia ${_settings.maiaElo} prediction',
+                ),
+            ],
           ),
-          _buildColumnHeader(
-            columnId: EngineSettings.colEval,
-            label: 'EVAL',
-            textAlign: TextAlign.center,
-            width: 58,
-            tooltipExtra: 'Stockfish evaluation',
-          ),
-          const SizedBox(width: 8),
-          _buildColumnHeader(
-            columnId: EngineSettings.colLine,
-            label: 'LINE',
-            textAlign: TextAlign.left,
-            tooltipExtra: 'Principal variation continuation',
-          ),
-          if (_settings.showProbability && _settings.fetchLichessForOpponent)
-            _buildColumnHeader(
-              columnId: EngineSettings.colDb,
-              label: 'DB',
-              textAlign: TextAlign.right,
-              width: 60,
-              leading: const LichessDbInfoIcon(size: 12),
-              tooltipExtra: 'Database probability$gameCountStr',
-            ),
-          if (_settings.showMaia && _settings.fetchMaiaForOpponent)
-            _buildColumnHeader(
-              columnId: EngineSettings.colMaia,
-              label: 'MAIA',
-              textAlign: TextAlign.right,
-              width: 46,
-              tooltipExtra: 'Maia ${_settings.maiaElo} prediction',
-            ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -797,106 +837,126 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         ? AppColors.cpEval(move.effectiveCp, muted: evalMuted)
         : AppColors.onSurfaceDim;
 
-    return InkWell(
-      onTap: () => widget.onMoveSelected?.call(move.uci),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: Row(
-          children: [
-            Builder(
-              builder: (anchorContext) {
-                return MouseRegion(
-                  onEnter: widget.boardPreview != null
-                      ? (_) {
-                          final box =
-                              anchorContext.findRenderObject() as RenderBox?;
-                          if (box == null) return;
-                          final anchor = box.localToGlobal(
-                            Offset(box.size.width / 2, box.size.height),
-                          );
-                          _previewEngineMove(move, anchor);
-                        }
-                      : null,
-                  onExit: widget.boardPreview != null
-                      ? (_) => widget.boardPreview!.clearPreview()
-                      : null,
-                  child: SizedBox(
-                    width: 52,
-                    child: Text(
-                      move.san,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                        fontSize: 15,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final narrow = constraints.maxWidth < _narrowTableWidth;
+        final showDb = !narrow &&
+            _settings.showProbability &&
+            _settings.fetchLichessForOpponent;
+        final showMaia =
+            !narrow && _settings.showMaia && _settings.fetchMaiaForOpponent;
+        final moveWidth = narrow ? 36.0 : 52.0;
+        final evalWidth = narrow ? 44.0 : 58.0;
+        final hPad = narrow ? 4.0 : 12.0;
+
+        return InkWell(
+          onTap: () => widget.onMoveSelected?.call(move.uci),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 6),
+            child: Row(
+              children: [
+                Builder(
+                  builder: (anchorContext) {
+                    return MouseRegion(
+                      onEnter: widget.boardPreview != null
+                          ? (_) {
+                              final box = anchorContext.findRenderObject()
+                                  as RenderBox?;
+                              if (box == null) return;
+                              final anchor = box.localToGlobal(
+                                Offset(box.size.width / 2, box.size.height),
+                              );
+                              _previewEngineMove(move, anchor);
+                            }
+                          : null,
+                      onExit: widget.boardPreview != null
+                          ? (_) => widget.boardPreview!.clearPreview()
+                          : null,
+                      child: SizedBox(
+                        width: moveWidth,
+                        child: Text(
+                          move.san,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                            fontSize: 15,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
+                    );
+                  },
+                ),
+                Container(
+                  width: evalWidth,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: move.hasStockfish
+                        ? AppColors.cpEvalBg(move.effectiveCp, muted: evalMuted)
+                            .withValues(alpha: evalMuted ? 0.5 : 0.85)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    move.evalString,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: evalColor,
+                      fontFamily: 'monospace',
+                    ),
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (!narrow) const SizedBox(width: 8),
+                Expanded(
+                  child: _buildContinuationWidget(move, muted: lineMuted),
+                ),
+                if (showDb) ...[
+                  if (!narrow) const SizedBox(width: 6),
+                  SizedBox(
+                    width: narrow ? 40 : 46,
+                    child: Text(
+                      move.dbProb != null
+                          ? '${move.dbProb!.toStringAsFixed(0)}%'
+                          : '--',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: move.dbProb != null
+                            ? AppColors.lichessDbColor(muted: dbMuted)
+                            : AppColors.onSurfaceDim,
+                        fontFamily: 'monospace',
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                );
-              },
-            ),
-            Container(
-              width: 58,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                color: move.hasStockfish
-                    ? AppColors.cpEvalBg(move.effectiveCp, muted: evalMuted)
-                        .withValues(alpha: evalMuted ? 0.5 : 0.85)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                move.evalString,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: evalColor,
-                  fontFamily: 'monospace',
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildContinuationWidget(move, muted: lineMuted),
-            ),
-            const SizedBox(width: 6),
-            if (_settings.showProbability && _settings.fetchLichessForOpponent)
-              SizedBox(
-                width: 46,
-                child: Text(
-                  move.dbProb != null
-                      ? '${move.dbProb!.toStringAsFixed(0)}%'
-                      : '--',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: move.dbProb != null
-                        ? AppColors.lichessDbColor(muted: dbMuted)
-                        : AppColors.onSurfaceDim,
-                    fontFamily: 'monospace',
+                ],
+                if (showMaia)
+                  SizedBox(
+                    width: narrow ? 40 : 46,
+                    child: Text(
+                      move.maiaProb != null
+                          ? '${(move.maiaProb! * 100).toStringAsFixed(0)}%'
+                          : '--',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: move.maiaProb != null
+                            ? AppColors.maiaColor(muted: maiaMuted)
+                            : AppColors.onSurfaceDim,
+                        fontFamily: 'monospace',
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-              ),
-            if (_settings.showMaia && _settings.fetchMaiaForOpponent)
-              SizedBox(
-                width: 46,
-                child: Text(
-                  move.maiaProb != null
-                      ? '${(move.maiaProb! * 100).toStringAsFixed(0)}%'
-                      : '--',
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: move.maiaProb != null
-                        ? AppColors.maiaColor(muted: maiaMuted)
-                        : AppColors.onSurfaceDim,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -65,17 +65,21 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   int _maxPlies = 12;
   final GlobalKey _previewStackKey = GlobalKey();
 
+  bool _recomputeScheduled = false;
+
   @override
   void initState() {
     super.initState();
     // Manual listener: _recompute rebuilds expectimax lines when settings change.
-    _settings.addListener(_recompute);
-    _recompute();
+    _settings.addListener(_scheduleRecompute);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _recompute();
+    });
   }
 
   @override
   void dispose() {
-    _settings.removeListener(_recompute);
+    _settings.removeListener(_scheduleRecompute);
     super.dispose();
   }
 
@@ -86,8 +90,17 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
         old.tree != widget.tree ||
         old.config != widget.config ||
         old.progressiveSnapshot != widget.progressiveSnapshot) {
-      _recompute();
+      _scheduleRecompute();
     }
+  }
+
+  void _scheduleRecompute() {
+    if (_recomputeScheduled) return;
+    _recomputeScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _recomputeScheduled = false;
+      if (mounted) _recompute();
+    });
   }
 
   bool get _useProgressive =>
@@ -342,8 +355,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
             message:
                 'Best practical continuations considering how humans actually play.\n'
                 'Uses Maia probabilities and Stockfish evals to find the most\n'
-                'likely game continuations via expectimax search.',
-            child: Text('Expectimax PV',
+                'likely game continuations via expectimax search.\n\n'
+                'Depth/eval settings are in Settings → On-the-fly Expectimax '
+                '(separate from Generation tab Engine Depth).',
+            child: Text('Expectimax PV (on-the-fly)',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ),
           if (isComputing) ...[

@@ -115,7 +115,7 @@ Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line quer
 |-----------|---------|----------|-------------|
 | `depth` | 15 | EngineSettings | Stockfish eval depth |
 | `easeDepth` | 15 | EngineSettings | Ease sub-evaluation depth |
-| `evalDepth` | 15 | TreeBuildConfig | Tree build eval depth |
+| `evalDepth` | 14 | TreeBuildConfig | Tree build eval depth |
 | `candidateSourceOur` | `maia` | EngineSettings | Our candidate source |
 | `candidateSourceOpp` | `maia` | EngineSettings | Opponent candidate source |
 | `stockfishTopN` | 3 | EngineSettings | Stockfish MultiPV count |

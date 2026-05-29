@@ -595,6 +595,16 @@ static bool evaluate_multipv_on_engine(StockfishEngine *eng, const char *fen,
                         memcpy(line->move_uci, p, len);
                         line->move_uci[len] = '\0';
                     }
+                    if (space && space[1]) {
+                        const char *p2 = space + 1;
+                        while (*p2 == ' ') p2++;
+                        const char *space2 = strchr(p2, ' ');
+                        size_t len2 = space2 ? (size_t)(space2 - p2) : strlen(p2);
+                        if (len2 > 0 && len2 < sizeof(line->pv_reply_uci)) {
+                            memcpy(line->pv_reply_uci, p2, len2);
+                            line->pv_reply_uci[len2] = '\0';
+                        }
+                    }
                 }
 
                 if (pv_idx >= job->num_lines)
