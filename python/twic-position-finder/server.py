@@ -23,6 +23,7 @@ from models import (
     cleanup_expired_email_tokens, highest_twic_number, record_notification,
 )
 from email_sender import send_verification_email, send_login_email
+from booking import router as booking_router, init_booking_db
 
 log = logging.getLogger(__name__)
 
@@ -49,8 +50,15 @@ app.add_middleware(
     allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
+
+app.include_router(booking_router)
+
+
+@app.on_event("startup")
+def _startup():
+    init_booking_db()
 
 bearer_scheme = HTTPBearer()
 

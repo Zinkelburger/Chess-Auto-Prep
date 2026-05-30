@@ -1,0 +1,1116 @@
+---
+import Base from '../layouts/Base.astro';
+---
+<Base title="Bookings" wide>
+  <div class="book-page" id="book-app">
+    <header class="book-header">
+      <div class="book-icon" aria-hidden="true">
+        <img src="/piece/wN.svg" alt="" width="48" height="48" />
+      </div>
+      <h1 id="book-title">Bookings</h1>
+      <p class="book-tagline" id="book-tagline">Pick a time to meet the incredibly handsome, funny, wannabe chess master</p>
+      <p class="book-meta" id="book-meta"></p>
+    </header>
+
+    <div id="view-loading" class="book-panel book-loading">
+      <span class="spinner" aria-hidden="true"></span>
+      <span>Loading available times…</span>
+    </div>
+
+    <div id="view-error" class="book-panel book-error" hidden>
+      <p id="error-text"></p>
+      <button type="button" class="book-btn book-btn-ghost" id="btn-retry">Try again</button>
+    </div>
+
+    <div id="view-calendar" class="book-panel" hidden>
+      <div class="week-nav">
+        <button type="button" class="book-btn book-btn-icon" id="btn-prev-week" aria-label="Previous week" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="week-nav-center">
+          <span class="week-label" id="week-label"></span>
+          <span class="window-hint" id="window-hint"></span>
+        </div>
+        <button type="button" class="book-btn book-btn-icon" id="btn-next-week" aria-label="Next week" disabled>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+
+      <div class="day-picker" id="day-picker" role="tablist" aria-label="Select a day"></div>
+
+      <section class="times-section" id="times-section" hidden>
+        <h2 class="times-heading" id="times-heading">Pick a time</h2>
+        <p class="times-hint" id="times-hint">90-minute spacing · noon–9 PM</p>
+        <div class="time-pills" id="time-pills" role="group" aria-label="Available times"></div>
+        <p class="times-empty" id="times-empty" hidden>No open slots left on this day.</p>
+      </section>
+
+      <p class="calendar-hint" id="calendar-hint"></p>
+
+      <div id="booking-form-section" class="book-inline book-card" hidden>
+        <h2 class="panel-title">Almost there</h2>
+        <div class="slot-summary" id="selected-slot-label"></div>
+        <form id="book-form">
+          <div class="field">
+            <label for="book-name">Name:</label>
+            <input type="text" id="book-name" name="name" required maxlength="120" value="Stephanie" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="book-rating">How do you like this website, pretty cool right</label>
+            <select id="book-rating" name="rating" required>
+              <option value="" disabled selected>Pick a number</option>
+              <option value="1">1 — kinda cool</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5 — solid</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8 — pretty cool actually</option>
+              <option value="9">9</option>
+              <option value="10">10 — very cool tbh</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="book-message">Location / food preferences <span class="optional">optional</span></label>
+            <textarea id="book-message" name="message" maxlength="2000" rows="3" placeholder="Where to meet, coffee vs dinner, allergies, etc."></textarea>
+          </div>
+          <button type="submit" class="book-btn book-btn-primary book-btn-block" id="btn-submit">Lock it in</button>
+          <p class="form-error" id="form-error" hidden></p>
+        </form>
+      </div>
+
+      <div id="booking-success-section" class="book-inline book-card book-success" hidden>
+        <div class="success-badge" aria-hidden="true">♔</div>
+        <h2 class="panel-title">It's a date (sort of)</h2>
+        <p class="success-detail" id="success-detail"></p>
+        <p class="success-note">I'll bring my best jokes and questionable chess.</p>
+        <button type="button" class="book-btn book-btn-ghost" id="btn-another">Pick another time</button>
+      </div>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .book-page {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 8px 0 48px;
+  }
+
+  .book-header {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+
+  .book-icon {
+    margin-bottom: 14px;
+    opacity: 0.9;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+  }
+
+  .book-header h1 {
+    font-size: 1.65rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+
+  .book-tagline {
+    font-size: 0.95rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    max-width: 400px;
+    margin: 0 auto 6px;
+  }
+
+  .book-meta {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    opacity: 0.85;
+  }
+
+  .book-panel[hidden],
+  .book-inline[hidden],
+  .book-loading[hidden] {
+    display: none !important;
+  }
+
+  .book-panel {
+    animation: fadeIn 0.25s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .book-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 56px 0;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+  }
+
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.65s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .book-error {
+    text-align: center;
+    padding: 32px 20px;
+    background: var(--bg-card);
+    border: 1px solid rgba(224, 82, 82, 0.35);
+    border-radius: 12px;
+    color: var(--danger);
+    font-size: 0.9rem;
+  }
+
+  .book-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+  }
+
+  .week-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .week-nav-center {
+    flex: 1;
+    text-align: center;
+    min-width: 0;
+  }
+
+  .week-label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+
+  .window-hint {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .day-picker {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 20px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .day-picker::-webkit-scrollbar { height: 4px; }
+  .day-picker::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+
+  .day-btn {
+    flex: 1;
+    min-width: 58px;
+    max-width: 76px;
+    padding: 10px 8px 8px;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, color 0.15s, transform 0.1s, box-shadow 0.15s;
+    font-family: var(--sans);
+    text-align: center;
+  }
+
+  .day-btn:hover:not(:disabled):not(.day-btn-outside):not(.day-btn-blocked):not(.day-btn-unavailable) {
+    border-color: rgba(78, 122, 30, 0.55);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  }
+
+  .day-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .day-btn.selected {
+    border-color: var(--accent);
+    background: rgba(78, 122, 30, 0.2);
+    color: #e8f4d4;
+    box-shadow: 0 0 0 1px rgba(78, 122, 30, 0.35);
+  }
+
+  .day-btn.today:not(.selected):not(.day-btn-outside):not(.day-btn-blocked):not(.day-btn-unavailable) {
+    border-color: rgba(78, 122, 30, 0.45);
+  }
+
+  .day-btn-outside,
+  .day-btn-blocked,
+  .day-btn-unavailable {
+    background: #141820;
+    border-color: #3a4058;
+    border-style: dashed;
+    color: #7a8299;
+  }
+
+  .day-btn-outside,
+  .day-btn-blocked {
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .day-btn-unavailable {
+    cursor: not-allowed;
+  }
+
+  .day-btn-outside .day-btn-status,
+  .day-btn-blocked .day-btn-status,
+  .day-btn-unavailable .day-btn-status {
+    color: #9aa3bc;
+    font-weight: 600;
+  }
+
+  .day-btn-no-presets:not(.day-btn-outside):not(.day-btn-blocked):not(.day-btn-unavailable) {
+    border-style: solid;
+    color: var(--text-dim);
+  }
+
+  .day-btn-dow {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+
+  .day-btn-num {
+    display: block;
+    font-size: 1.15rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: inherit;
+  }
+
+  .day-btn-status {
+    display: block;
+    font-size: 0.58rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 4px;
+    min-height: 0.85em;
+    line-height: 1.2;
+  }
+
+  .day-btn-outside .day-btn-status::after {
+    content: 'Outside';
+    color: #9aa3bc;
+  }
+
+  .day-btn-blocked .day-btn-status::after {
+    content: 'Blocked';
+    color: #b89090;
+  }
+
+  .day-btn-unavailable .day-btn-status::after {
+    content: 'Unavailable';
+    color: #9aa3bc;
+  }
+
+  .day-btn.has-slots:not(.day-btn-outside):not(.day-btn-blocked):not(.day-btn-unavailable) .day-btn-status::after {
+    content: 'Open';
+    color: #9bc96a;
+  }
+
+  .times-section {
+    margin-bottom: 12px;
+    transition: opacity 0.2s;
+  }
+
+  .times-section[hidden] { display: none !important; }
+
+  .times-heading {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+  }
+
+  .times-hint {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin: -8px 0 14px;
+    line-height: 1.45;
+  }
+
+  .times-empty {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .times-empty[hidden] { display: none !important; }
+
+  .time-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .time-pill {
+    font-family: var(--sans);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 0.85rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s, background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+
+  .time-pill:hover {
+    transform: translateY(-1px);
+    border-color: var(--accent);
+    background: rgba(78, 122, 30, 0.12);
+    color: #c8e8a0;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  }
+
+  .time-pill:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .time-pill:active { transform: translateY(0); }
+
+  .time-pill.selected {
+    border-color: var(--accent);
+    background: rgba(78, 122, 30, 0.2);
+    color: #e8f4d4;
+    box-shadow: 0 0 0 1px rgba(78, 122, 30, 0.35);
+  }
+
+  .book-inline {
+    margin-top: 24px;
+    animation: fadeIn 0.25s ease;
+  }
+
+  .calendar-hint {
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin-top: 8px;
+    min-height: 1.2em;
+  }
+
+  .book-btn {
+    font-family: var(--sans);
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .book-btn:disabled {
+    opacity: 1;
+    cursor: not-allowed;
+    background: #2a3044;
+    border-color: #3a4058;
+    color: #8b93a8;
+  }
+
+  .book-btn-icon:disabled {
+    background: #141820;
+    border-color: #3a4058;
+    color: #6b7389;
+  }
+
+  .book-btn-icon {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    background: var(--bg-card);
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  .book-btn-icon:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(78, 122, 30, 0.08);
+  }
+
+  .book-btn-ghost {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text-dim);
+    padding: 10px 16px;
+  }
+
+  .book-btn-ghost:hover {
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+
+  .book-btn-primary {
+    background: var(--accent);
+    color: #f0f4e8;
+    padding: 14px 20px;
+    border: none;
+  }
+
+  .book-btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .book-btn-block { width: 100%; margin-top: 8px; }
+
+  .panel-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 14px;
+  }
+
+  .slot-summary {
+    font-size: 0.88rem;
+    color: #c8e8a0;
+    background: rgba(78, 122, 30, 0.12);
+    border: 1px solid rgba(78, 122, 30, 0.28);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 20px;
+    line-height: 1.4;
+  }
+
+  .field {
+    margin-bottom: 16px;
+  }
+
+  .field label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  .field .optional {
+    font-weight: 400;
+    opacity: 0.7;
+  }
+
+  .field input,
+  .field textarea,
+  .field select {
+    font-family: var(--sans);
+    font-size: 0.92rem;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 14px;
+    border-radius: 10px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .field input:focus,
+  .field textarea:focus,
+  .field select:focus {
+    border-color: var(--accent);
+  }
+
+  .field input::placeholder,
+  .field textarea::placeholder {
+    color: #5a6078;
+  }
+
+  .field select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b93a8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+  }
+
+  .field select:invalid {
+    color: #5a6078;
+  }
+
+  .field textarea { resize: vertical; min-height: 88px; }
+
+  .form-error {
+    margin-top: 12px;
+    font-size: 0.85rem;
+    color: var(--danger);
+    text-align: center;
+  }
+
+  .form-error[hidden] { display: none !important; }
+
+  .book-success {
+    text-align: center;
+    padding: 36px 28px;
+  }
+
+  .success-badge {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+    line-height: 1;
+    opacity: 0.9;
+  }
+
+  .success-detail {
+    font-size: 0.95rem;
+    color: var(--text);
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
+
+  .success-note {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+  }
+
+  #btn-submit:disabled { opacity: 0.5; }
+
+  @media (max-width: 480px) {
+    .book-page { padding-bottom: 32px; }
+    .book-header h1 { font-size: 1.45rem; }
+    .day-btn { min-width: 48px; padding: 10px 6px; }
+  }
+</style>
+
+<script>
+  const API = import.meta.env.PUBLIC_API_URL || 'http://localhost:8000';
+
+  const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const MONTH_NAMES = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  const PAGE_TITLE = 'Bookings';
+  const PAGE_TAGLINE =
+    'Pick a time to meet the incredibly handsome, funny, wannabe chess master';
+
+  const FALLBACK_WINDOW_START = '2026-06-01';
+  const FALLBACK_WINDOW_END = '2026-06-14';
+  const FALLBACK_DATE_EXCEPTIONS = new Set(['2026-06-13', '2026-06-14']);
+  const FALLBACK_WEEKDAYS = new Set([0, 1, 2, 3, 4]);
+
+  let weekStart = mondayOf(parseDateKey(FALLBACK_WINDOW_START));
+  let selectedDayKey: string | null = formatDateKey(parseDateKey(FALLBACK_WINDOW_START));
+  let selectedSlot: string | null = null;
+  let bookingComplete = false;
+  let slotsByDay: Record<string, string[]> = {};
+  let bookingStart: Date | null = parseDateKey(FALLBACK_WINDOW_START);
+  let bookingEnd: Date | null = parseDateKey(FALLBACK_WINDOW_END);
+  let blockedDates = new Set<string>();
+  let availableWeekdays = new Set<number>(FALLBACK_WEEKDAYS);
+  let dateExceptions = new Set<string>(FALLBACK_DATE_EXCEPTIONS);
+  let windowAligned = false;
+
+  const el = {
+    loading: document.getElementById('view-loading')!,
+    calendar: document.getElementById('view-calendar')!,
+    formSection: document.getElementById('booking-form-section')!,
+    successSection: document.getElementById('booking-success-section')!,
+    error: document.getElementById('view-error')!,
+    title: document.getElementById('book-title')!,
+    tagline: document.getElementById('book-tagline')!,
+    meta: document.getElementById('book-meta')!,
+    weekLabel: document.getElementById('week-label')!,
+    windowHint: document.getElementById('window-hint')!,
+    dayPicker: document.getElementById('day-picker')!,
+    timesSection: document.getElementById('times-section')!,
+    timesHeading: document.getElementById('times-heading')!,
+    timesHint: document.getElementById('times-hint')!,
+    timePills: document.getElementById('time-pills')!,
+    timesEmpty: document.getElementById('times-empty')!,
+    calendarHint: document.getElementById('calendar-hint')!,
+    selectedLabel: document.getElementById('selected-slot-label')!,
+    bookForm: document.getElementById('book-form') as HTMLFormElement,
+    formError: document.getElementById('form-error')!,
+    successDetail: document.getElementById('success-detail')!,
+    errorText: document.getElementById('error-text')!,
+    btnPrev: document.getElementById('btn-prev-week') as HTMLButtonElement,
+    btnNext: document.getElementById('btn-next-week') as HTMLButtonElement,
+  };
+
+  function mondayOf(d: Date): Date {
+    const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const day = copy.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    copy.setDate(copy.getDate() + diff);
+    return copy;
+  }
+
+  function parseDateKey(key: string): Date {
+    const [y, m, d] = key.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function formatDateKey(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function applyBookingWindowFromApi(data: {
+    booking_date_start?: string;
+    booking_date_end?: string;
+  }) {
+    const startKey =
+      typeof data.booking_date_start === 'string' && data.booking_date_start
+        ? data.booking_date_start
+        : FALLBACK_WINDOW_START;
+    const endKey =
+      typeof data.booking_date_end === 'string' && data.booking_date_end
+        ? data.booking_date_end
+        : FALLBACK_WINDOW_END;
+    bookingStart = parseDateKey(startKey);
+    bookingEnd = parseDateKey(endKey);
+    if (bookingEnd < bookingStart) {
+      bookingEnd = new Date(bookingStart);
+    }
+  }
+
+  function formatBookingWindowRange(): string {
+    if (!bookingStart || !bookingEnd) return '';
+    return `${MONTH_NAMES[bookingStart.getMonth()]} ${bookingStart.getDate()}–${bookingEnd.getDate()}, ${bookingEnd.getFullYear()}`;
+  }
+
+  function parseSlotLocal(iso: string): { date: Date; timeLabel: string } {
+    const dt = new Date(iso);
+    const h = dt.getHours();
+    const m = dt.getMinutes();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    const timeLabel = `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+    return { date: dt, timeLabel };
+  }
+
+  function formatSlotDisplay(iso: string): string {
+    const { date, timeLabel } = parseSlotLocal(iso);
+    const dow = DAY_NAMES[date.getDay() === 0 ? 6 : date.getDay() - 1];
+    return `${dow}, ${MONTH_NAMES[date.getMonth()]} ${date.getDate()} · ${timeLabel}`;
+  }
+
+  function setPageState(state: 'loading' | 'ready' | 'error') {
+    el.loading.hidden = state !== 'loading';
+    el.calendar.hidden = state !== 'ready';
+    el.error.hidden = state !== 'error';
+  }
+
+  function updateBookingPanels() {
+    const showForm = !!selectedSlot && !bookingComplete;
+    el.formSection.hidden = !showForm;
+    el.successSection.hidden = !bookingComplete;
+  }
+
+  function updateTimePillSelection() {
+    el.timePills.querySelectorAll('.time-pill').forEach((btn) => {
+      const pill = btn as HTMLButtonElement;
+      pill.classList.toggle('selected', pill.dataset.slot === selectedSlot);
+      pill.setAttribute('aria-pressed', pill.dataset.slot === selectedSlot ? 'true' : 'false');
+    });
+  }
+
+  function groupSlots(slots: string[]): Record<string, string[]> {
+    const map: Record<string, string[]> = {};
+    for (const iso of slots) {
+      const key = formatDateKey(parseSlotLocal(iso).date);
+      if (!map[key]) map[key] = [];
+      map[key].push(iso);
+    }
+    for (const key of Object.keys(map)) map[key].sort();
+    return map;
+  }
+
+  function weekOverlapsWindow(): boolean {
+    if (!bookingStart || !bookingEnd) return true;
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    return weekStart <= bookingEnd && weekEnd >= bookingStart;
+  }
+
+  function clampWeekToWindow() {
+    if (!bookingStart || !bookingEnd) return;
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    if (weekEnd < bookingStart) {
+      weekStart = mondayOf(bookingStart);
+    } else if (weekStart > bookingEnd) {
+      weekStart = mondayOf(bookingEnd);
+    }
+  }
+
+  function alignToBookingWindow() {
+    if (!bookingStart || !bookingEnd) return;
+    weekStart = mondayOf(bookingStart);
+    clampWeekToWindow();
+    if (!selectedDayKey || !dayInBookingWindow(parseDateKey(selectedDayKey))) {
+      selectedDayKey = formatDateKey(bookingStart);
+    }
+    windowAligned = true;
+  }
+
+  function dayInBookingWindow(day: Date): boolean {
+    if (!bookingStart || !bookingEnd) return true;
+    const d = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+    return d >= bookingStart && d <= bookingEnd;
+  }
+
+  function isBlockedDay(key: string): boolean {
+    return blockedDates.has(key);
+  }
+
+  function pythonWeekday(d: Date): number {
+    return (d.getDay() + 6) % 7;
+  }
+
+  function isDayBookableBySchedule(key: string): boolean {
+    if (dateExceptions.has(key)) return true;
+    return availableWeekdays.has(pythonWeekday(parseDateKey(key)));
+  }
+
+  function isScheduleUnavailable(key: string): boolean {
+    const day = parseDateKey(key);
+    return dayInBookingWindow(day) && !isBlockedDay(key) && !isDayBookableBySchedule(key);
+  }
+
+  function isDaySelectable(key: string): boolean {
+    return dayInBookingWindow(parseDateKey(key)) && !isBlockedDay(key) && isDayBookableBySchedule(key);
+  }
+
+  function showUnavailableDayMessage() {
+    el.calendarHint.textContent = 'Nothing open that day — try another';
+  }
+
+  function formatHour12(h: number): string {
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12} ${ampm}`;
+  }
+
+  function updateTimesHint(data: { slot_start_hour?: number; slot_end_hour?: number; slot_interval_minutes?: number }) {
+    const start = data.slot_start_hour ?? 12;
+    const end = data.slot_end_hour ?? 21;
+    const interval = data.slot_interval_minutes ?? 90;
+    el.timesHint.textContent = `${interval}-minute spacing · ${formatHour12(start)}–${formatHour12(end)}`;
+  }
+
+  function updateWeekNav() {
+    const end = new Date(weekStart);
+    end.setDate(end.getDate() + 6);
+    el.weekLabel.textContent = `${MONTH_NAMES[weekStart.getMonth()]} ${weekStart.getDate()} – ${MONTH_NAMES[end.getMonth()]} ${end.getDate()}, ${end.getFullYear()}`;
+
+    const range = formatBookingWindowRange();
+    if (range) {
+      el.windowHint.textContent = `Open ${range}`;
+    }
+
+    const prevEnd = new Date(weekStart);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    const nextStart = new Date(weekStart);
+    nextStart.setDate(nextStart.getDate() + 7);
+
+    el.btnPrev.disabled = bookingStart ? prevEnd < bookingStart : false;
+    el.btnNext.disabled = bookingEnd ? nextStart > bookingEnd : false;
+  }
+
+  function renderDayPicker() {
+    const todayKey = formatDateKey(new Date());
+    el.dayPicker.innerHTML = '';
+
+    let firstSelectable: string | null = null;
+
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(weekStart);
+      day.setDate(day.getDate() + i);
+      const key = formatDateKey(day);
+      const slots = slotsByDay[key] || [];
+      const hasOpenSlots = slots.length > 0;
+      const inWindow = dayInBookingWindow(day);
+      const blocked = isBlockedDay(key);
+      const scheduleUnavailable = isScheduleUnavailable(key);
+      const selectable = isDaySelectable(key);
+      if (selectable && !firstSelectable) firstSelectable = key;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'day-btn';
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', 'false');
+      if (key === todayKey) btn.classList.add('today');
+      if (selectable) btn.classList.add('has-slots');
+      if (!inWindow) btn.classList.add('day-btn-outside');
+      else if (blocked) btn.classList.add('day-btn-blocked');
+      else if (scheduleUnavailable) btn.classList.add('day-btn-unavailable');
+      else if (!hasOpenSlots) btn.classList.add('day-btn-no-presets');
+      if (!selectable) {
+        btn.disabled = scheduleUnavailable ? false : true;
+        btn.setAttribute('aria-disabled', scheduleUnavailable ? 'true' : 'true');
+      }
+      if (key === selectedDayKey && selectable) {
+        btn.classList.add('selected');
+        btn.setAttribute('aria-selected', 'true');
+      }
+
+      btn.innerHTML = `
+        <span class="day-btn-dow">${DAY_NAMES[i]}</span>
+        <span class="day-btn-num">${day.getDate()}</span>
+        <span class="day-btn-status" aria-hidden="true"></span>`;
+
+      if (selectable) {
+        btn.addEventListener('click', () => selectDay(key));
+      } else if (scheduleUnavailable) {
+        const onUnavailable = () => showUnavailableDayMessage();
+        btn.addEventListener('click', onUnavailable);
+        btn.addEventListener('focus', onUnavailable);
+      }
+      el.dayPicker.appendChild(btn);
+    }
+
+    if (selectedDayKey && !isDaySelectable(selectedDayKey)) {
+      selectedDayKey = firstSelectable;
+    }
+
+    if (!selectedDayKey && firstSelectable) {
+      selectDay(firstSelectable);
+    } else if (selectedDayKey && isDaySelectable(selectedDayKey)) {
+      renderTimes();
+    } else {
+      el.timesSection.hidden = true;
+      el.calendarHint.textContent = weekOverlapsWindow()
+        ? 'No open days this week — flip the week arrows.'
+        : 'This week is outside the window.';
+    }
+  }
+
+  function selectDay(key: string) {
+    selectedDayKey = key;
+    selectedSlot = null;
+    bookingComplete = false;
+    updateBookingPanels();
+    el.dayPicker.querySelectorAll('.day-btn').forEach((btn, i) => {
+      const day = new Date(weekStart);
+      day.setDate(day.getDate() + i);
+      const k = formatDateKey(day);
+      const isSel = k === key;
+      btn.classList.toggle('selected', isSel);
+      btn.setAttribute('aria-selected', isSel ? 'true' : 'false');
+    });
+    renderTimes();
+  }
+
+  function renderTimes() {
+    if (!selectedDayKey || !isDaySelectable(selectedDayKey)) {
+      el.timesSection.hidden = true;
+      return;
+    }
+
+    const day = parseDateKey(selectedDayKey);
+    const dow = DAY_NAMES[day.getDay() === 0 ? 6 : day.getDay() - 1];
+    el.timesHeading.textContent = `${dow}, ${MONTH_NAMES[day.getMonth()]} ${day.getDate()}`;
+    el.timesSection.hidden = false;
+
+    const presets = slotsByDay[selectedDayKey] || [];
+    el.timePills.innerHTML = presets
+      .map((iso) => {
+        const { timeLabel } = parseSlotLocal(iso);
+        const selected = iso === selectedSlot;
+        return `<button type="button" class="time-pill${selected ? ' selected' : ''}" data-slot="${escapeAttr(iso)}" aria-pressed="${selected}">${escapeHtml(timeLabel)}</button>`;
+      })
+      .join('');
+
+    el.timePills.querySelectorAll('.time-pill').forEach((btn) => {
+      btn.addEventListener('click', () => pickTime((btn as HTMLButtonElement).dataset.slot!));
+    });
+
+    el.timesEmpty.hidden = presets.length > 0;
+    el.calendarHint.textContent = '';
+  }
+
+  function escapeAttr(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
+
+  function escapeHtml(s: string): string {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  function pickTime(iso: string) {
+    selectedSlot = iso;
+    bookingComplete = false;
+    el.selectedLabel.textContent = formatSlotDisplay(iso);
+    el.formError.hidden = true;
+    updateTimePillSelection();
+    updateBookingPanels();
+    const nameInput = document.getElementById('book-name') as HTMLInputElement;
+    if (!nameInput.value) nameInput.focus();
+  }
+
+  async function loadWeek() {
+    setPageState('loading');
+    clampWeekToWindow();
+    const qs = new URLSearchParams({ week_start: formatDateKey(weekStart) });
+    try {
+      const res = await fetch(`${API}/api/slots?${qs}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to load slots');
+
+      el.title.textContent = PAGE_TITLE;
+      el.tagline.textContent = PAGE_TAGLINE;
+      applyBookingWindowFromApi(data);
+      blockedDates = new Set((data.blocked_dates as string[]) || []);
+      if (Array.isArray(data.available_weekdays)) {
+        availableWeekdays = new Set(data.available_weekdays as number[]);
+      }
+      if (Array.isArray(data.available_date_exceptions)) {
+        dateExceptions = new Set(data.available_date_exceptions as string[]);
+      }
+      updateTimesHint(data);
+      const windowRange = formatBookingWindowRange();
+      el.meta.textContent = windowRange || '';
+
+      if (!windowAligned) alignToBookingWindow();
+
+      const requestedWeek = qs.get('week_start');
+      const alignedWeek = formatDateKey(weekStart);
+      if (requestedWeek !== alignedWeek) {
+        await loadWeek();
+        return;
+      }
+
+      slotsByDay = groupSlots(data.slots || []);
+      updateWeekNav();
+      renderDayPicker();
+      updateBookingPanels();
+      setPageState('ready');
+    } catch (err) {
+      el.errorText.textContent =
+        err instanceof Error
+          ? err.message
+          : 'Could not reach the booking server. Is it running?';
+      setPageState('error');
+    }
+  }
+
+  document.getElementById('btn-prev-week')!.addEventListener('click', () => {
+    weekStart.setDate(weekStart.getDate() - 7);
+    selectedDayKey = null;
+    selectedSlot = null;
+    bookingComplete = false;
+    loadWeek();
+  });
+
+  document.getElementById('btn-next-week')!.addEventListener('click', () => {
+    weekStart.setDate(weekStart.getDate() + 7);
+    selectedDayKey = null;
+    selectedSlot = null;
+    bookingComplete = false;
+    loadWeek();
+  });
+
+  function resetBookForm() {
+    el.bookForm.reset();
+    const nameInput = document.getElementById('book-name') as HTMLInputElement;
+    nameInput.value = 'Stephanie';
+    const ratingSelect = document.getElementById('book-rating') as HTMLSelectElement;
+    ratingSelect.selectedIndex = 0;
+  }
+
+  document.getElementById('btn-another')!.addEventListener('click', () => {
+    selectedSlot = null;
+    bookingComplete = false;
+    resetBookForm();
+    updateBookingPanels();
+    alignToBookingWindow();
+    loadWeek();
+  });
+
+  document.getElementById('btn-retry')!.addEventListener('click', () => loadWeek());
+
+  el.bookForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!selectedSlot) return;
+    const name = (document.getElementById('book-name') as HTMLInputElement).value.trim();
+    const message = (document.getElementById('book-message') as HTMLTextAreaElement).value.trim();
+    const ratingRaw = (document.getElementById('book-rating') as HTMLSelectElement).value;
+    const rating = ratingRaw ? parseInt(ratingRaw, 10) : undefined;
+    const submitBtn = document.getElementById('btn-submit') as HTMLButtonElement;
+    el.formError.hidden = true;
+    submitBtn.disabled = true;
+    try {
+      const res = await fetch(`${API}/api/book`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slot: selectedSlot,
+          name,
+          message: message || undefined,
+          rating,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const detail = typeof data.detail === 'string' ? data.detail : 'Booking failed';
+        el.formError.textContent = detail;
+        el.formError.hidden = false;
+        return;
+      }
+      el.successDetail.textContent = `${name} — locked in for ${formatSlotDisplay(selectedSlot)}.`;
+      bookingComplete = true;
+      updateBookingPanels();
+    } catch {
+      el.formError.textContent = 'Could not reach the server. Try again.';
+      el.formError.hidden = false;
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+
+  alignToBookingWindow();
+  loadWeek();
+</script>
