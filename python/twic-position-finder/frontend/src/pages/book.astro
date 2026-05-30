@@ -75,16 +75,16 @@ import Base from '../layouts/Base.astro';
             <label for="book-message">Location / food preferences <span class="optional">optional</span></label>
             <textarea id="book-message" name="message" maxlength="2000" rows="3" placeholder="Where to meet, coffee vs dinner, allergies, etc."></textarea>
           </div>
-          <button type="submit" class="book-btn book-btn-primary book-btn-block" id="btn-submit">Lock it in</button>
+          <button type="submit" class="book-btn book-btn-primary book-btn-block" id="btn-submit">Book</button>
           <p class="form-error" id="form-error" hidden></p>
         </form>
       </div>
 
       <div id="booking-success-section" class="book-inline book-card book-success" hidden>
         <div class="success-badge" aria-hidden="true">♔</div>
-        <h2 class="panel-title">It's a date (sort of)</h2>
+        <h2 class="panel-title">It's a date</h2>
         <p class="success-detail" id="success-detail"></p>
-        <p class="success-note">I'll bring my best jokes and questionable chess.</p>
+        <p class="success-note">We can just talk too if you don't actually want to learn chess &#x1F972;</p>
         <button type="button" class="book-btn book-btn-ghost" id="btn-another">Pick another time</button>
       </div>
     </div>
@@ -122,7 +122,7 @@ import Base from '../layouts/Base.astro';
     color: var(--text-dim);
     line-height: 1.5;
     max-width: 400px;
-    margin: 0 auto 6px;
+    margin: 0 auto 12px;
   }
 
   .book-meta {
@@ -605,7 +605,10 @@ import Base from '../layouts/Base.astro';
   .success-note {
     font-size: 0.85rem;
     color: var(--text-dim);
-    margin-bottom: 24px;
+    line-height: 1.5;
+    max-width: 320px;
+    margin: 0 auto 24px;
+    opacity: 0.9;
   }
 
   #btn-submit:disabled { opacity: 0.5; }
@@ -1100,7 +1103,7 @@ import Base from '../layouts/Base.astro';
         el.formError.hidden = false;
         return;
       }
-      el.successDetail.textContent = `${name} — locked in for ${formatSlotDisplay(selectedSlot)}.`;
+      el.successDetail.textContent = `${name} — date booked for ${formatSlotDisplay(selectedSlot)}.`;
       bookingComplete = true;
       updateBookingPanels();
     } catch {
