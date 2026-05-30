@@ -20,6 +20,7 @@ python/twic-position-finder/
   lichess.py         # Import games to Lichess via API
   email_sender.py    # HTML emails via Amazon SES
   server.py          # FastAPI backend (registration, subscriptions, queries)
+  booking.py         # Lesson booking routes (SQLite bookings.db)
   weekly.py          # Weekly cron job: ingest -> match -> import -> email
   frontend/          # Astro static site (Cloudflare Pages)
 ```
@@ -97,6 +98,25 @@ npm run build   # static build to dist/
 ```
 
 Deploy `dist/` to Cloudflare Pages. Set `PUBLIC_API_URL` to `https://api.chessautoprep.com`.
+
+### Lesson booking (`/book`)
+
+Booking uses the same API server and `PUBLIC_API_URL`. Schedule env (defaults target the June 2026 promo window):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `BOOKING_DATE_START` | `2026-06-01` | First bookable calendar day (inclusive) |
+| `BOOKING_DATE_END` | `2026-06-14` | Last bookable day (inclusive) |
+| `BOOKING_BLOCKED_DATES` | `2026-06-06,2026-06-07` | Comma-separated dates with no slots |
+| `BOOKING_SLOT_START_HOUR` | `12` | First offered start time (noon) |
+| `BOOKING_SLOT_END_HOUR` | `21` | Latest lesson end time (9 PM); last start is 7:30 PM with 90-min lessons |
+| `BOOKING_SLOT_INTERVAL_MINUTES` | `90` | Spacing between offered start times |
+| `BOOKING_AVAILABLE_WEEKDAYS` | `0,1,2,3,4` | Weekdays allowed (`0`=Mon … `4`=Fri) |
+| `BOOKING_AVAILABLE_DATES` | `2026-06-13,2026-06-14` | Extra bookable calendar dates (e.g. promo weekends) |
+| `BOOKING_TIMEZONE` | `America/New_York` | Slot generation timezone |
+| `BOOKING_OWNER_NAME`, `BOOKING_TAGLINE`, `BOOKING_API_KEY`, `BOOKING_DATABASE_PATH` | — | Display, admin API key, SQLite path |
+
+Endpoints: `GET /health`, `GET /api/slots` (returns window, `blocked_dates`, `available_weekdays`, `available_date_exceptions`, slot grid metadata, and open `slots`), `POST /api/book`, `GET /api/bookings` (admin, `X-API-Key`). Offered times use a 90-minute grid from noon; each lesson is 90 minutes and the last start is 7:30 PM (ends 9 PM). Weekends are closed except dates listed in `BOOKING_AVAILABLE_DATES`. See `booking-service/README.md` for full API notes.
 
 ### Weekly Cron Job
 
