@@ -36,6 +36,7 @@
  */
 
 #include "tree.h"
+#include "fen_map.h"
 #include "repertoire.h"
 #include "lichess_api.h"
 #include "chess_logic.h"
@@ -48,6 +49,7 @@
 #include "chessdb_api.h"
 #include "cdbdirect_eval.h"
 #include "eval_chain.h"
+#include "progress_line.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -59,7 +61,11 @@
 #define BUILD_PROGRESS_MAX_DEPTH 128
 
 static int g_nodes_created_at_depth[BUILD_PROGRESS_MAX_DEPTH];
+static int g_nodes_created_baseline_at_depth[BUILD_PROGRESS_MAX_DEPTH];
 static int g_nodes_processed_at_depth[BUILD_PROGRESS_MAX_DEPTH];
+static int g_transpositions_at_depth[BUILD_PROGRESS_MAX_DEPTH];
+static int g_remaining_at_depth[BUILD_PROGRESS_MAX_DEPTH];
+static int g_depth_work_completed[BUILD_PROGRESS_MAX_DEPTH];
 
 
 /* ========== Instrumentation helpers ========== */
@@ -111,127 +117,6 @@ static void emit_event(const TreeConfig *cfg, const char *event,
     va_end(ap);
     fputc('\n', cfg->event_log);
 }
-
-
-/* ========== FEN Map (transposition table — canonical FEN → TreeNode*) ========== */
-
-#define FEN_MAP_INITIAL_BUCKETS 4096
-#define FEN_MAP_LOAD_FACTOR     0.75
-
-typedef struct FenMapEntry {
-    char *fen;
-    TreeNode *node;
-    struct FenMapEntry *next;
-} FenMapEntry;
-
-typedef struct FenMap {
-    FenMapEntry **buckets;
-    size_t num_buckets;
-    size_t count;
-} FenMap;
-
-/* Use a 4-field FEN key so move counters do not block transposition hits. */
-static void canonicalize_fen_key(const char *fen, char *out, size_t out_len) {
-    if (!out || out_len == 0) return;
-    if (!fen) {
-        out[0] = '\0';
-        return;
-    }
-
-    snprintf(out, out_len, "%s", fen);
-    int spaces = 0;
-    for (char *p = out; *p; p++) {
-        if (*p == ' ' && ++spaces == 4) {
-            *p = '\0';
-            return;
-        }
-    }
-}
-
-static uint32_t fen_hash(const char *fen, size_t num_buckets) {
-    uint32_t hash = 2166136261u;
-    for (const char *p = fen; *p; p++) {
-        hash ^= (uint8_t)*p;
-        hash *= 16777619u;
-    }
-    return hash % (uint32_t)num_buckets;
-}
-
-static FenMap *fen_map_create(void) {
-    FenMap *map = (FenMap *)calloc(1, sizeof(FenMap));
-    if (!map) return NULL;
-    map->num_buckets = FEN_MAP_INITIAL_BUCKETS;
-    map->buckets = (FenMapEntry **)calloc(map->num_buckets, sizeof(FenMapEntry *));
-    if (!map->buckets) { free(map); return NULL; }
-    return map;
-}
-
-static void fen_map_destroy(FenMap *map) {
-    if (!map) return;
-    for (size_t i = 0; i < map->num_buckets; i++) {
-        FenMapEntry *e = map->buckets[i];
-        while (e) {
-            FenMapEntry *next = e->next;
-            free(e->fen);
-            free(e);
-            e = next;
-        }
-    }
-    free(map->buckets);
-    free(map);
-}
-
-static void fen_map_resize(FenMap *map) {
-    size_t new_buckets = map->num_buckets * 2;
-    FenMapEntry **new_table = (FenMapEntry **)calloc(new_buckets, sizeof(FenMapEntry *));
-    if (!new_table) return;
-    for (size_t i = 0; i < map->num_buckets; i++) {
-        FenMapEntry *e = map->buckets[i];
-        while (e) {
-            FenMapEntry *next = e->next;
-            uint32_t idx = fen_hash(e->fen, new_buckets);
-            e->next = new_table[idx];
-            new_table[idx] = e;
-            e = next;
-        }
-    }
-    free(map->buckets);
-    map->buckets = new_table;
-    map->num_buckets = new_buckets;
-}
-
-/** Look up the canonical node for a FEN.  Returns NULL if not present. */
-static TreeNode *fen_map_get(const FenMap *map, const char *fen) {
-    if (!map) return NULL;
-    char key[MAX_FEN_LENGTH];
-    canonicalize_fen_key(fen, key, sizeof(key));
-    uint32_t idx = fen_hash(key, map->num_buckets);
-    for (FenMapEntry *e = map->buckets[idx]; e; e = e->next) {
-        if (strcmp(e->fen, key) == 0) return e->node;
-    }
-    return NULL;
-}
-
-/** Insert a FEN → node mapping.  No-op if the FEN is already present. */
-static void fen_map_put(FenMap *map, const char *fen, TreeNode *node) {
-    if (!map) return;
-
-    char key[MAX_FEN_LENGTH];
-    canonicalize_fen_key(fen, key, sizeof(key));
-    if (fen_map_get(map, key)) return;
-    if ((double)map->count / (double)map->num_buckets >= FEN_MAP_LOAD_FACTOR)
-        fen_map_resize(map);
-    uint32_t idx = fen_hash(key, map->num_buckets);
-    FenMapEntry *e = (FenMapEntry *)malloc(sizeof(FenMapEntry));
-    if (!e) return;
-    e->fen = strdup(key);
-    e->node = node;
-    e->next = map->buckets[idx];
-    map->buckets[idx] = e;
-    map->count++;
-}
-
-
 
 
 TreeConfig tree_config_default(void) {
@@ -779,11 +664,15 @@ static void format_int_commas(int n, char *buf, size_t len) {
     char raw[32];
     snprintf(raw, sizeof(raw), "%d", n);
     size_t raw_len = strlen(raw);
+    if (raw_len <= 3) {
+        snprintf(buf, len, "%s", raw);
+        return;
+    }
     size_t pos = 0;
-    int first_group = (int)(raw_len % 3);
-    if (first_group == 0) first_group = 3;
+    size_t lead = raw_len % 3;
+    if (lead == 0) lead = 3;
     for (size_t i = 0; i < raw_len && pos + 1 < len; i++) {
-        if (i > 0 && (i - (size_t)first_group) % 3 == 0)
+        if (i == lead || (i > lead && (i - lead) % 3 == 0))
             buf[pos++] = ',';
         buf[pos++] = raw[i];
     }
@@ -812,11 +701,41 @@ static bool g_progress_started = false;
 
 static void emit_build_progress_reset(void) {
     memset(g_nodes_created_at_depth, 0, sizeof(g_nodes_created_at_depth));
+    memset(g_nodes_created_baseline_at_depth, 0,
+           sizeof(g_nodes_created_baseline_at_depth));
     memset(g_nodes_processed_at_depth, 0, sizeof(g_nodes_processed_at_depth));
+    memset(g_transpositions_at_depth, 0, sizeof(g_transpositions_at_depth));
+    memset(g_remaining_at_depth, 0, sizeof(g_remaining_at_depth));
+    memset(g_depth_work_completed, 0, sizeof(g_depth_work_completed));
     g_depth_tracker = -1;
     g_session_start_depth = 0;
     g_progress_last_emit_processed = -1;
     g_progress_started = false;
+}
+
+static void count_unexplored_at_depth_walk(TreeNode *node, int depth, int *count) {
+    if (!node) return;
+    if (node->depth == depth) {
+        if (!node->explored) (*count)++;
+        return;
+    }
+    if (node->depth > depth) return;
+    for (size_t i = 0; i < node->children_count; i++)
+        count_unexplored_at_depth_walk(node->children[i], depth, count);
+}
+
+static void refresh_remaining_at_depth(Tree *tree, int depth) {
+    if (depth < 0 || depth >= BUILD_PROGRESS_MAX_DEPTH) return;
+    int remaining = 0;
+    count_unexplored_at_depth_walk(tree->root, depth, &remaining);
+    g_remaining_at_depth[depth] = remaining;
+}
+
+static void note_depth_work_done(int depth) {
+    if (depth < 0 || depth >= BUILD_PROGRESS_MAX_DEPTH) return;
+    g_depth_work_completed[depth]++;
+    if (g_remaining_at_depth[depth] > 0)
+        g_remaining_at_depth[depth]--;
 }
 
 static void emit_depth_complete_line(Tree *tree, int depth,
@@ -833,8 +752,9 @@ static void emit_depth_complete_line(Tree *tree, int depth,
         ? session_added / (elapsed_s / 60.0) : 0.0;
 
     char nodes_buf[32], elapsed_buf[32];
-    format_int_commas(g_nodes_processed_at_depth[depth], nodes_buf, sizeof(nodes_buf));
+    format_int_commas(g_nodes_created_at_depth[depth], nodes_buf, sizeof(nodes_buf));
     format_duration_hms((int)(elapsed_s + 0.5), elapsed_buf, sizeof(elapsed_buf));
+    progress_line_clear();
     printf("\n  Depth %d complete: %s nodes, %.1f/min, %s elapsed\n",
            depth, nodes_buf, rate, elapsed_buf);
     fflush(stdout);
@@ -854,6 +774,7 @@ static void emit_build_summary(Tree *tree, const TreeConfig *config) {
     char nodes_buf[32], elapsed_buf[32];
     format_int_commas((int)tree->total_nodes, nodes_buf, sizeof(nodes_buf));
     format_duration_hms((int)(elapsed_s + 0.5), elapsed_buf, sizeof(elapsed_buf));
+    progress_line_clear();
     printf("\n  Build complete: %s nodes, depth %d/%d, %.1f/min, %s total\n",
            nodes_buf, tree->max_depth_reached, config->max_depth,
            rate, elapsed_buf);
@@ -875,18 +796,22 @@ static void emit_build_progress(Tree *tree, const TreeConfig *config,
     if (active >= BUILD_PROGRESS_MAX_DEPTH)
         active = BUILD_PROGRESS_MAX_DEPTH - 1;
 
-    int processed_at = g_nodes_processed_at_depth[active];
+    if (force)
+        refresh_remaining_at_depth(tree, active);
 
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
     if (!force) {
         double since_emit = (now.tv_sec - g_progress_last_emit.tv_sec)
                           + (now.tv_nsec - g_progress_last_emit.tv_nsec) / 1e9;
-        if (since_emit < 0.5 && processed_at - g_progress_last_emit_processed < 50)
+        int completed_at = g_depth_work_completed[active];
+        if (since_emit < 0.5 && completed_at - g_progress_last_emit_processed < 50)
             return;
+        g_progress_last_emit_processed = completed_at;
+    } else {
+        g_progress_last_emit_processed = g_depth_work_completed[active];
     }
     g_progress_last_emit = now;
-    g_progress_last_emit_processed = processed_at;
 
     double elapsed_s = (now.tv_sec - g_progress_start_time.tv_sec)
                      + (now.tv_nsec - g_progress_start_time.tv_nsec) / 1e9;
@@ -898,11 +823,15 @@ static void emit_build_progress(Tree *tree, const TreeConfig *config,
         ? session_added / (elapsed_s / 60.0) : 0.0;
 
     int nodes_at = g_nodes_created_at_depth[active];
-    int remaining = nodes_at - processed_at;
+    int new_at = nodes_at - g_nodes_created_baseline_at_depth[active];
+    if (new_at < 0) new_at = 0;
+    int trans_at = g_transpositions_at_depth[active];
+    int remaining = g_remaining_at_depth[active];
     if (remaining < 0) remaining = 0;
 
-    double depth_rate = (depth_elapsed_s > 0.5 && processed_at > 0)
-        ? processed_at / (depth_elapsed_s / 60.0) : rate;
+    int completed = g_depth_work_completed[active];
+    double depth_rate = (depth_elapsed_s > 0.5 && completed > 0)
+        ? completed / (depth_elapsed_s / 60.0) : rate;
     int eta = (depth_rate > 0 && remaining > 0)
             ? (int)(remaining * 60.0 / depth_rate + 0.5) : 0;
 
@@ -911,7 +840,9 @@ static void emit_build_progress(Tree *tree, const TreeConfig *config,
         .current_depth            = active,
         .max_depth_config         = config->max_depth,
         .nodes_at_current_depth   = nodes_at,
-        .nodes_processed_at_depth = processed_at,
+        .new_nodes_at_depth       = new_at,
+        .transpositions_at_depth  = trans_at,
+        .remaining_at_depth       = remaining,
         .nodes_per_minute         = rate,
         .eta_depth_seconds        = eta,
     };
@@ -931,6 +862,7 @@ static void on_bfs_dequeue_node(Tree *tree, TreeNode *n,
             emit_depth_complete_line(tree, g_depth_tracker, config);
         g_depth_tracker = n->depth;
         clock_gettime(CLOCK_MONOTONIC, &g_depth_enter_time);
+        refresh_remaining_at_depth(tree, n->depth);
     }
     if (n->depth >= 0 && n->depth < BUILD_PROGRESS_MAX_DEPTH)
         g_nodes_processed_at_depth[n->depth]++;
@@ -950,7 +882,9 @@ static void propagate_cumP_recursive(TreeNode *node, double ratio,
             propagate_cumP_recursive(child, ratio, min_prob, q);
         } else if (q && !child->explored &&
                    child->cumulative_probability >= min_prob) {
-            build_queue_push(q, child);
+            if (build_queue_push(q, child) &&
+                child->depth >= 0 && child->depth < BUILD_PROGRESS_MAX_DEPTH)
+                g_remaining_at_depth[child->depth]++;
         }
     }
 }
@@ -1557,15 +1491,18 @@ static void build_process_node(Tree *tree, TreeNode *node,
          * pending work when the build reaches the configured depth cap. */
         node->explored = true;
         emit_event(config, "skip", node->depth, "-", "reason=max_depth");
+        note_depth_work_done(node->depth);
         return;
     }
     if (node->cumulative_probability < config->min_probability) {
         emit_event(config, "skip", node->depth, "-",
                    "reason=min_prob cum_prob=%.6f", node->cumulative_probability);
+        note_depth_work_done(node->depth);
         return;
     }
     if (config->max_nodes > 0 && tree->total_nodes >= (size_t)config->max_nodes) {
         emit_event(config, "skip", node->depth, "-", "reason=max_nodes");
+        note_depth_work_done(node->depth);
         return;
     }
 
@@ -1577,6 +1514,7 @@ static void build_process_node(Tree *tree, TreeNode *node,
                    "children=%zu", node->children_count);
         fen_map_put(fmap, node->fen, node);
         build_queue_push_children(q, tree, node);
+        note_depth_work_done(node->depth);
         return;
     }
     if (node->explored) return;
@@ -1597,6 +1535,7 @@ static void build_process_node(Tree *tree, TreeNode *node,
         if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE &&
             !node->has_engine_eval) {
             node->explored = true;
+            note_depth_work_done(node->depth);
             return;
         }
         if (node->has_engine_eval) {
@@ -1607,6 +1546,7 @@ static void build_process_node(Tree *tree, TreeNode *node,
                 node->prune_eval_cp = eval_us;
                 emit_event(config, "prune", node->depth, nt,
                            "reason=eval_high cp=%d", eval_us);
+                note_depth_work_done(node->depth);
                 return;
             }
             if (eval_us < config->min_eval_cp) {
@@ -1615,6 +1555,7 @@ static void build_process_node(Tree *tree, TreeNode *node,
                 node->prune_eval_cp = eval_us;
                 emit_event(config, "prune", node->depth, nt,
                            "reason=eval_low cp=%d", eval_us);
+                note_depth_work_done(node->depth);
                 return;
             }
         }
@@ -1635,7 +1576,10 @@ static void build_process_node(Tree *tree, TreeNode *node,
             propagate_higher_cumP(canonical, node->cumulative_probability,
                                   config, q);
 
+        if (node->depth >= 0 && node->depth < BUILD_PROGRESS_MAX_DEPTH)
+            g_transpositions_at_depth[node->depth]++;
         emit_event(config, "transposition", node->depth, nt, "fen=%s", node->fen);
+        note_depth_work_done(node->depth);
         return;
     }
     fen_map_put(fmap, node->fen, node);
@@ -1654,6 +1598,7 @@ static void build_process_node(Tree *tree, TreeNode *node,
 
     emit_event(config, "expanded", node->depth, nt,
                "children=%zu total=%zu", node->children_count, tree->total_nodes);
+    note_depth_work_done(node->depth);
 }
 
 
@@ -1707,11 +1652,18 @@ bool tree_build(Tree *tree, const char *start_fen,
     }
 
     tree->expanded_fens = fen_map_create();
+    if (!tree->expanded_fens) {
+        fprintf(stderr, "Error: out of memory for transposition table\n");
+        tree->is_building = false;
+        return false;
+    }
     tree->config.progress_baseline_nodes = tree->total_nodes;
     reset_build_progress_timer();
 
     emit_build_progress_reset();
     count_nodes_per_depth(tree->root, g_nodes_created_at_depth);
+    memcpy(g_nodes_created_baseline_at_depth, g_nodes_created_at_depth,
+           sizeof(g_nodes_created_baseline_at_depth));
 
     BuildQueue bq;
     build_queue_init(&bq);
