@@ -25,6 +25,8 @@
 #include <sys/sysinfo.h>
 
 #include "tree.h"
+#include "tree_db_build.h"
+#include "pgn_freq.h"
 #include "lichess_api.h"
 #include "serialization.h"
 #include "database.h"
@@ -37,12 +39,14 @@
 #include "chessdb_eval_db.h"
 #include "chessdb_api.h"
 #include "eval_source.h"
+#include "progress_line.h"
 #ifdef HAS_CDBDIRECT
 #include "cdbdirect_eval.h"
 #endif
 
 
 #define DEFAULT_FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+#define MAX_PGN_FILES 16
 
 static bool fen_keys_match(const char *a, const char *b) {
     char ca[128];
@@ -120,6 +124,9 @@ static void print_usage(const char *prog_name) {
     printf("  -t, --threads <N>      Total CPU cores to use [default: 4]\n");
     printf("  --build-mode <mode>    Build algorithm: stockfish-expectimax [default],\n");
     printf("                         maia-db-explore, db-explorer, trap-finder\n");
+    printf("  --pgn <file>           PGN database file (repeatable, db-explorer mode)\n");
+    printf("  --db-min-games <N>     Min games per move in PGN DB [default: 5]\n");
+    printf("  --db-min-prob <P>      Min move probability in PGN DB [default: 0.05]\n");
     printf("  -S, --stockfish <path> Stockfish binary path\n");
     printf("  -D, --database <path>  SQLite database path [default: <name>.db]\n");
     printf("  -L, --load <file>      Load tree from a different JSON file\n");
@@ -195,7 +202,30 @@ static void print_usage(const char *prog_name) {
 }
 
 
-static char *format_eta(int sec, char *buf, size_t len) {
+static void format_int_commas(int n, char *buf, size_t len) {
+    if (n < 0) {
+        snprintf(buf, len, "-%d", -n);
+        return;
+    }
+    char raw[32];
+    snprintf(raw, sizeof(raw), "%d", n);
+    size_t raw_len = strlen(raw);
+    if (raw_len <= 3) {
+        snprintf(buf, len, "%s", raw);
+        return;
+    }
+    size_t pos = 0;
+    size_t lead = raw_len % 3;
+    if (lead == 0) lead = 3;
+    for (size_t i = 0; i < raw_len && pos + 1 < len; i++) {
+        if (i == lead || (i > lead && (i - lead) % 3 == 0))
+            buf[pos++] = ',';
+        buf[pos++] = raw[i];
+    }
+    buf[pos] = '\0';
+}
+
+static const char *format_eta(int sec, char *buf, size_t len) {
     if (sec < 60)
         snprintf(buf, len, "%ds", sec);
     else if (sec < 3600)
@@ -205,54 +235,47 @@ static char *format_eta(int sec, char *buf, size_t len) {
     return buf;
 }
 
-static void format_int_commas(int n, char *buf, size_t len) {
-    if (n < 0) {
-        snprintf(buf, len, "-%d", -n);
-        return;
-    }
-    char raw[32];
-    snprintf(raw, sizeof(raw), "%d", n);
-    size_t raw_len = strlen(raw);
-    size_t pos = 0;
-    int first_group = raw_len % 3;
-    if (first_group == 0) first_group = 3;
-    for (size_t i = 0; i < raw_len && pos + 1 < len; i++) {
-        if (i > 0 && (i - (size_t)first_group) % 3 == 0)
-            buf[pos++] = ',';
-        buf[pos++] = raw[i];
-    }
-    buf[pos] = '\0';
-}
-
 static void progress_callback(const BuildProgressInfo *info) {
-    char total_buf[32], eta_buf[32];
+    char new_buf[32], trans_buf[32], total_buf[32], eta_buf[32], line[320];
+
+    format_int_commas(info->new_nodes_at_depth, new_buf, sizeof(new_buf));
+    format_int_commas(info->transpositions_at_depth, trans_buf, sizeof(trans_buf));
     format_int_commas(info->total_nodes, total_buf, sizeof(total_buf));
 
     const char *eta = info->eta_depth_seconds > 0
         ? format_eta(info->eta_depth_seconds, eta_buf, sizeof(eta_buf))
         : NULL;
 
-    printf("\r\033[K  [Depth %d] %d/%d nodes processed | %s total | %.1f/min",
-           info->current_depth,
-           info->nodes_processed_at_depth,
-           info->nodes_at_current_depth,
-           total_buf,
-           info->nodes_per_minute);
-
-    if (eta)
-        printf(" | ~%s remaining", eta);
-
-    fflush(stdout);
+    if (eta) {
+        snprintf(line, sizeof(line),
+                 "  [Depth %d] %s new + %s transpositions | %s total | %.1f/min | ~%s",
+                 info->current_depth,
+                 new_buf,
+                 trans_buf,
+                 total_buf,
+                 info->nodes_per_minute,
+                 eta);
+    } else {
+        snprintf(line, sizeof(line),
+                 "  [Depth %d] %s new + %s transpositions | %s total | %.1f/min",
+                 info->current_depth,
+                 new_buf,
+                 trans_buf,
+                 total_buf,
+                 info->nodes_per_minute);
+    }
+    progress_line_update(line);
 }
 
 static void pipeline_progress(const char *stage, int current, int total) {
+    char line[128];
     if (total > 0) {
         double pct = 100.0 * current / total;
-        printf("\r  [%s] %d/%d (%.1f%%)    ", stage, current, total, pct);
+        snprintf(line, sizeof(line), "  [%s] %d/%d (%.1f%%)", stage, current, total, pct);
     } else {
-        printf("\r  [%s] %d...    ", stage, current);
+        snprintf(line, sizeof(line), "  [%s] %d...", stage, current);
     }
-    fflush(stdout);
+    progress_line_update(line);
 }
 
 
@@ -357,6 +380,7 @@ int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
     setbuf(stderr, NULL);
     resolve_exe_dir();
+    progress_line_init();
 
     /* Configuration with defaults */
     const char *start_fen = DEFAULT_FEN;
@@ -406,6 +430,10 @@ int main(int argc, char *argv[]) {
     bool cdbdirect_read_ahead = false;
     bool batch_eval_lookups = false;
 #endif
+    const char *pgn_files[MAX_PGN_FILES];
+    int pgn_file_count = 0;
+    int db_min_games = 5;
+    double db_min_prob = 0.05;
 
     /* Our-move overrides (-1 = use default) */
     int our_multipv_arg = -1;
@@ -474,6 +502,9 @@ int main(int argc, char *argv[]) {
         {"maia-only",        no_argument,       0, 3005},
         {"lichess",          no_argument,       0, 3006},
         {"build-mode",       required_argument, 0, 3007},
+        {"pgn",              required_argument, 0, 5001},
+        {"db-min-games",     required_argument, 0, 5002},
+        {"db-min-prob",      required_argument, 0, 5003},
         /* General */
         {"event-log",        required_argument, 0, 4001},
         {"lichess-eval-db",  required_argument, 0, 4002},
@@ -575,6 +606,20 @@ int main(int argc, char *argv[]) {
             case 3005: maia_only = true; break;
             case 3006: maia_only = false; break;
             case 3007: build_mode_str = optarg; break;
+            case 5001:
+                if (pgn_file_count >= MAX_PGN_FILES) {
+                    fprintf(stderr, "Error: at most %d --pgn files allowed\n",
+                            MAX_PGN_FILES);
+                    return 1;
+                }
+                pgn_files[pgn_file_count++] = optarg;
+                break;
+            case 5002:
+                if (!parse_int(optarg, "db-min-games", &db_min_games)) return 1;
+                break;
+            case 5003:
+                if (!parse_double(optarg, "db-min-prob", &db_min_prob)) return 1;
+                break;
             case 4001: event_log_path = optarg; break;
             case 4002: lichess_eval_db_path = optarg; break;
             case 4010: chessdb_eval_db_path = optarg; break;
@@ -617,10 +662,14 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (build_mode == BUILD_MODE_DB_EXPLORER ||
-        build_mode == BUILD_MODE_TRAP_FINDER) {
+    if (build_mode == BUILD_MODE_TRAP_FINDER) {
         fprintf(stderr, "Error: build mode '%s' is not yet implemented\n",
                 build_mode_str ? build_mode_str : "?");
+        return 1;
+    }
+
+    if (build_mode == BUILD_MODE_DB_EXPLORER && pgn_file_count == 0) {
+        fprintf(stderr, "Error: --build-mode db-explorer requires at least one --pgn file\n");
         return 1;
     }
 
@@ -1103,10 +1152,123 @@ int main(int argc, char *argv[]) {
     }
 
     if (needs_build) {
+        struct timespec build_start, build_end;
+        size_t nodes_before = 0;
+        double build_time = 0.0;
+        bool success = false;
+        LichessExplorer *explorer = NULL;
+        TreeConfig config = tree_config_default();
+        BuildStats build_stats;
+        FILE *event_log_fp = NULL;
+        bool built_from_db = (build_mode == BUILD_MODE_DB_EXPLORER);
+
+        if (built_from_db) {
+            printf("[1/4] Building opening tree from PGN database (db-explorer)...\n");
+            printf("  DB filters: min_games=%d, min_prob=%.2f\n",
+                   db_min_games, db_min_prob);
+
+            if (!tree) {
+                tree = tree_create();
+                if (!tree) {
+                    fprintf(stderr, "Error: Failed to create tree\n");
+                    if (engine_pool) engine_pool_destroy(engine_pool);
+                    if (maia) maia_destroy(maia);
+                    rdb_close(db);
+                    return 1;
+                }
+            }
+
+            if (start_moves) {
+                strncpy(tree->start_moves, start_moves,
+                        sizeof(tree->start_moves) - 1);
+                tree->start_moves[sizeof(tree->start_moves) - 1] = '\0';
+            }
+
+            g_tree = tree;
+
+            PgnFreqMap *freq = pgn_freq_map_create();
+            if (!freq) {
+                fprintf(stderr, "Error: Failed to create PGN frequency map\n");
+                tree_destroy(tree);
+                if (engine_pool) engine_pool_destroy(engine_pool);
+                if (maia) maia_destroy(maia);
+                rdb_close(db);
+                return 1;
+            }
+
+            /* Parse full games from startpos; tree root (--fen) is only the
+             * BFS seed, not the PGN tracking anchor. */
+            PgnFreqConfig pgn_cfg = {
+                .start_fen = NULL,
+                .start_moves = start_moves,
+                .max_ply = 0,
+            };
+
+            int parsed_games = 0;
+            for (int i = 0; i < pgn_file_count; i++) {
+                int g = pgn_freq_load_file(freq, &pgn_cfg, pgn_files[i]);
+                printf("  Parsed %s: %d games\n", pgn_files[i], g);
+                parsed_games += g;
+            }
+            if (parsed_games == 0) {
+                fprintf(stderr, "Error: No games parsed from PGN files\n");
+                pgn_freq_map_destroy(freq);
+                tree_destroy(tree);
+                if (engine_pool) engine_pool_destroy(engine_pool);
+                if (maia) maia_destroy(maia);
+                rdb_close(db);
+                return 1;
+            }
+
+            size_t map_positions = 0;
+            uint64_t map_reach = 0;
+            pgn_freq_stats(freq, &map_positions, &map_reach);
+            printf("  Frequency map: %zu positions, %llu game reaches\n",
+                   map_positions, (unsigned long long)map_reach);
+
+            DbBuildConfig db_cfg = {
+                .start_fen = start_fen,
+                .play_as_white = play_as_white,
+                .max_depth = max_depth,
+                .min_probability = min_probability,
+                .db_min_games = db_min_games,
+                .db_min_prob = db_min_prob,
+                .max_nodes = 0,
+            };
+
+            clock_gettime(CLOCK_MONOTONIC, &build_start);
+            nodes_before = tree->total_nodes;
+            success = tree_build_from_freqmap(tree, freq, &db_cfg);
+            clock_gettime(CLOCK_MONOTONIC, &build_end);
+            build_time = (build_end.tv_sec - build_start.tv_sec) +
+                         (build_end.tv_nsec - build_start.tv_nsec) / 1e9;
+
+            pgn_freq_map_destroy(freq);
+
+            config.play_as_white = play_as_white;
+            config.build_mode = build_mode;
+            tree_config_set_color_defaults(&config);
+            config.min_probability = min_probability;
+            config.max_depth = max_depth;
+            tree->config = config;
+
+            progress_line_clear();
+
+            if (!success && !g_interrupted) {
+                fprintf(stderr, "Error: DB tree building failed\n");
+                tree_destroy(tree);
+                if (engine_pool) engine_pool_destroy(engine_pool);
+                if (maia) maia_destroy(maia);
+                rdb_close(db);
+                return 1;
+            }
+
+            printf("  DB tree built: %zu nodes in %.2fs (max depth %d, %d PGN games)\n",
+                   tree->total_nodes, build_time, tree->max_depth_reached,
+                   parsed_games);
+        } else {
         if (!tree) printf("[1/4] Building opening tree (%s)...\n",
                           maia_only ? "Maia-only" : "Lichess-backed");
-
-        LichessExplorer *explorer = NULL;
         if (!maia_only) {
             explorer = lichess_explorer_create();
             if (!explorer) {
@@ -1154,7 +1316,7 @@ int main(int argc, char *argv[]) {
         g_tree = tree;
 
         /* Configure tree build */
-        TreeConfig config = tree_config_default();
+        config = tree_config_default();
         config.play_as_white = play_as_white;
         config.build_mode = build_mode;
         tree_config_set_color_defaults(&config);
@@ -1220,11 +1382,9 @@ int main(int argc, char *argv[]) {
                config.min_eval_cp, config.max_eval_cp,
                relative_eval ? " (relative to root)" : " (absolute)");
 
-        BuildStats build_stats;
         memset(&build_stats, 0, sizeof(build_stats));
         config.stats = &build_stats;
 
-        FILE *event_log_fp = NULL;
         if (event_log_path) {
             event_log_fp = fopen(event_log_path, "w");
             if (!event_log_fp) {
@@ -1237,17 +1397,16 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        struct timespec build_start, build_end;
         clock_gettime(CLOCK_MONOTONIC, &build_start);
 
-        size_t nodes_before = tree->total_nodes;
-        bool success = tree_build(tree, start_fen, &config, explorer);
+        nodes_before = tree->total_nodes;
+        success = tree_build(tree, start_fen, &config, explorer);
 
         clock_gettime(CLOCK_MONOTONIC, &build_end);
-        double build_time = (build_end.tv_sec - build_start.tv_sec) +
-                            (build_end.tv_nsec - build_start.tv_nsec) / 1e9;
+        build_time = (build_end.tv_sec - build_start.tv_sec) +
+                     (build_end.tv_nsec - build_start.tv_nsec) / 1e9;
 
-        printf("\r%80s\r", "");  /* Always clear progress line */
+        progress_line_clear();
 
         if (!success && !g_interrupted) {
             fprintf(stderr, "Error: Tree building failed\n");
@@ -1258,6 +1417,7 @@ int main(int argc, char *argv[]) {
             rdb_close(db);
             return 1;
         }
+        } /* end standard build path */
 
         size_t new_nodes = tree->total_nodes - nodes_before;
 
@@ -1269,7 +1429,7 @@ int main(int argc, char *argv[]) {
         tree->build_threads = num_threads;
         tree->build_eval_depth = eval_depth;
 
-        if (nodes_before > 1)
+        if (!built_from_db && nodes_before > 1)
             printf("  Resumed: %zu new nodes (total %zu) in %.1fs (max depth %d)\n",
                    new_nodes, tree->total_nodes, build_time,
                    tree->max_depth_reached);
@@ -1280,6 +1440,7 @@ int main(int argc, char *argv[]) {
             printf("  Pruned %zu nodes (eval below %+dcp)\n",
                    pruned, config.min_eval_cp);
 
+        if (!built_from_db) {
         /* Print build timing breakdown */
         printf("\n  Build timing breakdown:\n");
         if (build_stats.lichess_queries > 0 || build_stats.lichess_cache_hits > 0) {
@@ -1410,6 +1571,7 @@ int main(int argc, char *argv[]) {
             lichess_explorer_print_stats(explorer);
             lichess_explorer_destroy(explorer);
         }
+        } /* !built_from_db timing breakdown */
 
         printf("  Saving tree to %s...\n", tree_path);
         SerializationOptions opts = serialization_options_default();
@@ -1428,8 +1590,24 @@ int main(int argc, char *argv[]) {
 
     RepertoireConfig rep_config = repertoire_config_default();
     rep_config.play_as_white = play_as_white;
-    rep_config.min_eval_cp = tree->config.min_eval_cp;
-    rep_config.max_eval_cp = tree->config.max_eval_cp;
+    /* Eval window: tree_build() converts relative thresholds to absolute
+     * in tree->config; generate_repertoire() applies the root offset once
+     * when relative_eval is true.  Use the original relative window here,
+     * not the already-adjusted tree->config values. */
+    if (relative_eval) {
+        TreeConfig color_defaults = tree_config_default();
+        color_defaults.play_as_white = play_as_white;
+        tree_config_set_color_defaults(&color_defaults);
+        rep_config.min_eval_cp = (min_eval_arg != -99999)
+                                 ? min_eval_arg : color_defaults.min_eval_cp;
+        rep_config.max_eval_cp = (max_eval_arg != -99999)
+                                 ? max_eval_arg : color_defaults.max_eval_cp;
+    } else {
+        rep_config.min_eval_cp = tree->config.min_eval_cp;
+        rep_config.max_eval_cp = tree->config.max_eval_cp;
+        if (min_eval_arg != -99999) rep_config.min_eval_cp = min_eval_arg;
+        if (max_eval_arg != -99999) rep_config.max_eval_cp = max_eval_arg;
+    }
     /* Prefer the tree root's FEN — it's the authoritative start
      * position even after resume/skip-build.  Fall back to the CLI
      * start_fen only if the tree somehow has no root. */
@@ -1447,8 +1625,6 @@ int main(int argc, char *argv[]) {
     rep_config.verbose_search = verbose;
     if (novelty_weight_arg >= 0) rep_config.novelty_weight = novelty_weight_arg;
     if (leaf_confidence_arg >= 0.0) rep_config.leaf_confidence = leaf_confidence_arg;
-    if (min_eval_arg != -99999) rep_config.min_eval_cp = min_eval_arg;
-    if (max_eval_arg != -99999) rep_config.max_eval_cp = max_eval_arg;
     if (max_eval_loss_arg >= 0) rep_config.max_eval_loss_cp = max_eval_loss_arg;
     if (opp_max_children_arg >= 0) rep_config.max_candidates_per_position = opp_max_children_arg;
     rep_config.relative_eval = relative_eval;
@@ -1460,7 +1636,7 @@ int main(int argc, char *argv[]) {
         verbose ? pipeline_progress : NULL
     );
 
-    if (verbose) printf("\r%80s\r", "");
+    if (verbose) progress_line_clear();
 
     if (result)
         repertoire_print_summary(result);

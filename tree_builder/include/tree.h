@@ -35,7 +35,7 @@ struct CdbDirectEval;
 typedef enum {
     BUILD_MODE_STOCKFISH_EXPECTIMAX = 0,
     BUILD_MODE_MAIA_DB_EXPLORE,
-    BUILD_MODE_DB_EXPLORER,   /* reserved — not yet implemented */
+    BUILD_MODE_DB_EXPLORER,   /* PGN frequency map seed (Phase 1) */
     BUILD_MODE_TRAP_FINDER,   /* reserved — not yet implemented */
 } BuildMode;
 
@@ -100,8 +100,14 @@ typedef struct BuildProgressInfo {
     int total_nodes;
     int current_depth;
     int max_depth_config;
+    /** Total unique nodes at [current_depth] in the tree. */
     int nodes_at_current_depth;
-    int nodes_processed_at_depth;
+    /** Nodes newly created at [current_depth] during this build session. */
+    int new_nodes_at_depth;
+    /** Transposition hits processed at [current_depth] this session. */
+    int transpositions_at_depth;
+    /** Unexplored nodes still to process at [current_depth]. */
+    int remaining_at_depth;
     double nodes_per_minute;
     int eta_depth_seconds;
 } BuildProgressInfo;
