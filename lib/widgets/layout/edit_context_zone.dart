@@ -17,6 +17,7 @@ import 'package:chess_auto_prep/widgets/engine/expectimax_lines_pane.dart';
 import 'package:chess_auto_prep/widgets/engine/unified_engine_pane.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show uciToSan;
 import 'package:chess_auto_prep/widgets/layout/empty_state_placeholder.dart';
+import 'package:chess_auto_prep/features/eval_tree/widgets/compact_tree_outline.dart';
 import 'package:chess_auto_prep/widgets/opening_tree_widget.dart';
 import 'repertoire_mode.dart';
 
@@ -314,10 +315,27 @@ class _EditContextZoneState extends State<EditContextZone>
 
   Widget? _buildDefaultTree() {
     final controller = widget.controller;
-    if (controller?.openingTree == null) return null;
+    if (controller == null) return null;
+
+    if (widget.tree != null) {
+      return CompactTreeOutline(
+        tree: widget.tree!,
+        playAsWhite: controller.isRepertoireWhite,
+        currentFen: controller.fen,
+        onNodeTapped: (node) {
+          final startMoves = widget.tree!.startMoves.trim().isEmpty
+              ? const <String>[]
+              : widget.tree!.startMoves.trim().split(RegExp(r'\s+'));
+          final movePath = [...startMoves, ...node.getLineSan()];
+          controller.navigateToLineMove(movePath);
+        },
+      );
+    }
+
+    if (controller.openingTree == null) return null;
 
     return OpeningTreeWidget(
-      tree: controller!.openingTree!,
+      tree: controller.openingTree!,
       repertoireLines: controller.repertoireLines,
       currentMoveSequence: controller.currentMoveSequence,
       onMoveSelected: controller.userPlayedMove,
