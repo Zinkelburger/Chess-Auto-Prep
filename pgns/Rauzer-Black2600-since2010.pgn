@@ -56,7 +56,6 @@
 
 1. e4 {[%eval 0.33] [%maia 0.479]} c5 {[%eval 0.40] [%maia 0.327]} 2. Nf3 {[%eval 0.30] [%maia 0.474]} d6 {[%eval 0.41] [%maia 0.285]} 3. d4 {[%eval 0.37] [%maia 0.592]} cxd4 {[%eval 0.49] [%maia 0.940]} 4. Nxd4 {[%eval 0.44] [%maia 0.770]} Nf6 {[%eval 0.39] [%maia 0.972]} 5. Nc3 {[%eval 0.36] [%maia 0.916]} Nc6 {[%eval 0.48] [%maia 0.132]} 6. Bg5 {[%eval 0.50] [%maia 0.389]} e6 {[%eval 0.44] [%maia 0.614]} 7. Qd2 {[%eval 0.45] [%maia 0.698]} a6 {[%eval 0.38] [%maia 0.674]} 8. O-O-O {[%eval 0.54] [%maia 0.005]} Bd7 {[%eval 0.54] [%maia 0.681]} 9. f3 {[%eval 0.52] [%maia 0.279]} Be7 {[%eval 0.41] [%maia 0.492]} 10. h4 {[%eval 0.50] [%maia 0.477]} h6 {[%eval 0.51] [%maia 0.220]} 11. Be3 {[%eval 0.53] [%maia 0.958]} h5 {[%eval 0.54] [%maia 0.352]} 12. Bg5 {[%eval 0.37] [%maia 0.075]} b5 {[%eval 0.40] [%maia 0.289]} 13. Nxc6 {[%eval 0.42] [%maia 0.346]} Bxc6 {[%eval 0.38] [%maia 1.000]} 14. Qe1 {[%eval -0.16] [%maia 0.003]} Qc7 {[%eval 0.13] [%maia 0.475]} 15. Bxf6 {[%eval -0.73] [%maia 0.002]} gxf6 {[%eval -0.92] [%maia 0.142]} 16. Qg3 {[%eval -0.80] [%maia 0.031]} O-O-O {[%eval -0.48] [%maia 0.041]} 17. Bd3 {[%eval -0.46] [%maia 0.090]} Bb7 {[%eval -0.38] [%maia 0.010]} 18. a3 {[%eval -0.40] [%maia 0.054]} Rhg8 {[%eval -0.43] [%maia 0.248]} 19. Qh3 {[%eval -0.36] [%maia 0.049]} Kb8 {[%eval -0.35] [%maia 0.758]} 20. g4 {[%eval -0.58] [%maia 0.389]} d5 {[%eval -0.77] [%maia 0.185]} 21. gxh5 {[%eval -0.84] [%maia 0.277]} Bxa3 {[%eval -0.89] [%maia 0.566]} 22. Ne2 {[%eval -1.42] [%maia 0.071]} Bd6 {[%eval -1.36] [%maia 0.197]} 23. h6 {[%eval -1.46] [%maia 0.114]} dxe4 {[%eval -0.84] [%maia 0.235]} 24. Bxe4 {[%eval -0.87] [%maia 0.371]} Rc8 {[%eval -0.30] [%maia 0.048]} 25. Rd2 {[%eval -3.08] [%maia 0.086]} Bxe4 {[%eval -2.81] [%maia 0.473]} 26. fxe4 {[%eval -3.14] [%maia 0.995]} Bf8 {[%eval -3.07] [%maia 0.017]} 0-1
 
-
 [Event "Corus A"]
 [Site "Wijk aan Zee NED"]
 [Date "2010.01.30"]
@@ -942,6 +941,7 @@
 1. e4 c5 2. Nf3 d6 3. d4 cxd4 4. Nxd4 Nf6 5. Nc3 Nc6 6. Bg5 e6 7. Qd2 Qb6 8. O-O-O a6 9. f3 Qxd4 10. Qxd4 Nxd4 11. Rxd4 Bd7 12. a4 Rc8 13. Be2 Be7 14. Rhd1 Rxc3 15. bxc3 Nxe4 16. Bxe7 Nxc3 17. Bxd6 Nxe2+ 18. Kb2 Nxd4 19. Rxd4 f6 20. a5 e5 21. Rd2 Bc6 22. Kc3 Kf7 23. Kd3 Ke6 24. Ke3 g5 25. Bc7 Rc8 26. Bd6 Bd5 27. Bb4 g4 28. c3 Rc4 29. Rf2 h5 30. Ke2 h4 31. Kd3 Rf4 32. Ke3 h3 33. g3 Rxf3+ 34. Rxf3 Bxf3 35. Bc5 Kd5 36. Bb6 f5 37. Bc7 f4+ 38. Kf2 Ke4 39. Bb8 Bd1 40. Bc7 Bb3 41. Bb8 Bd5 42. Bc7 Bc6 43. Bb6 Kd3 44. gxf4 exf4 45. Bc7 g3+ 46. Kg1 gxh2+ 47. Kxh2 f3 0-1
 
 [Event "1st Alpine Ski Open"]
+[StudyRating "5"]
 [Site "Anzere SUI"]
 [Date "2011.03.19"]
 [Round "4.4"]
