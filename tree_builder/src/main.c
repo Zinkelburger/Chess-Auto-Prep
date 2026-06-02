@@ -1250,6 +1250,25 @@ int main(int argc, char *argv[]) {
             tree_config_set_color_defaults(&config);
             config.min_probability = min_probability;
             config.max_depth = max_depth;
+            config.engine_pool = engine_pool;
+            config.db = db;
+            config.eval_depth = eval_depth;
+            config.lichess_eval_db = eval_db;
+            config.chessdb_eval_db = chessdb_eval_db;
+            config.chessdb_api = chessdb_api;
+#ifdef HAS_CDBDIRECT
+            config.cdbdirect = cdbdirect;
+            config.cdbdirect_read_ahead = cdbdirect_read_ahead;
+            config.batch_eval_lookups = batch_eval_lookups;
+#endif
+            config.ext_eval_subtree_skip = ext_eval_subtree_skip;
+            if (our_multipv_arg > 0) config.our_multipv = our_multipv_arg;
+            if (max_eval_loss_arg >= 0) config.max_eval_loss_cp = max_eval_loss_arg;
+            if (min_eval_arg != -99999) config.min_eval_cp = min_eval_arg;
+            if (max_eval_arg != -99999) config.max_eval_cp = max_eval_arg;
+            config.relative_eval = relative_eval;
+            memset(&build_stats, 0, sizeof(build_stats));
+            config.stats = &build_stats;
             tree->config = config;
 
             progress_line_clear();
@@ -1266,6 +1285,17 @@ int main(int argc, char *argv[]) {
             printf("  DB tree built: %zu nodes in %.2fs (max depth %d, %d PGN games)\n",
                    tree->total_nodes, build_time, tree->max_depth_reached,
                    parsed_games);
+
+            printf("  Enriching engine evaluations...\n");
+            EvalEnrichStats enrich_stats;
+            tree_enrich_evals(tree, &config, &enrich_stats);
+            printf("  Eval enrichment: %d cache hits, %d external, %d Stockfish, "
+                   "%d failed (of %d nodes)\n",
+                   enrich_stats.cache_hits, enrich_stats.ext_hits,
+                   enrich_stats.sf_evals, enrich_stats.failed,
+                   enrich_stats.total_nodes);
+
+            tree_recalculate_probabilities(tree);
         } else {
         if (!tree) printf("[1/4] Building opening tree (%s)...\n",
                           maia_only ? "Maia-only" : "Lichess-backed");
