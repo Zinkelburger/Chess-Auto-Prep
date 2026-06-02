@@ -26,4 +26,20 @@ typedef struct DbBuildConfig {
 bool tree_build_from_freqmap(Tree *tree, const PgnFreqMap *freq,
                              const DbBuildConfig *cfg);
 
+/** Counters from tree_enrich_evals(). */
+typedef struct EvalEnrichStats {
+    int total_nodes;   /* nodes that lacked eval at start */
+    int cache_hits;    /* rdb_get_eval */
+    int ext_hits;      /* external eval chain (Lichess DB, ChessDB, …) */
+    int sf_evals;      /* Stockfish evaluations performed */
+    int failed;        /* nodes still without eval after enrichment */
+} EvalEnrichStats;
+
+/**
+ * Batch-evaluate nodes missing engine evals (DB cache → external → Stockfish).
+ * Requires config->engine_pool and config->eval_depth for Stockfish fallback.
+ */
+bool tree_enrich_evals(Tree *tree, const TreeConfig *config,
+                       EvalEnrichStats *stats);
+
 #endif /* TREE_DB_BUILD_H */

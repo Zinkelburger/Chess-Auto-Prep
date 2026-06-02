@@ -202,7 +202,7 @@ $(BUILD_DIR)/node.o: $(INC_DIR)/node.h
 $(BUILD_DIR)/fen_map.o: $(INC_DIR)/fen_map.h $(INC_DIR)/node.h
 $(BUILD_DIR)/pgn_freq.o: $(INC_DIR)/pgn_freq.h $(INC_DIR)/fen_map.h $(INC_DIR)/chess_logic.h $(INC_DIR)/san_convert.h
 	$(CC) $(CFLAGS) $(INCLUDES) -I$(CHESSLIB_DIR) -c $(SRC_DIR)/pgn_freq.c -o $@
-$(BUILD_DIR)/tree_db_build.o: $(INC_DIR)/tree_db_build.h $(INC_DIR)/tree.h $(INC_DIR)/pgn_freq.h $(INC_DIR)/fen_map.h $(INC_DIR)/node.h $(INC_DIR)/chess_logic.h $(INC_DIR)/san_convert.h
+$(BUILD_DIR)/tree_db_build.o: $(INC_DIR)/tree_db_build.h $(INC_DIR)/tree.h $(INC_DIR)/pgn_freq.h $(INC_DIR)/fen_map.h $(INC_DIR)/node.h $(INC_DIR)/chess_logic.h $(INC_DIR)/san_convert.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/eval_chain.h $(INC_DIR)/progress_line.h
 $(BUILD_DIR)/main.o: $(INC_DIR)/tree.h $(INC_DIR)/tree_db_build.h $(INC_DIR)/pgn_freq.h $(INC_DIR)/lichess_api.h $(INC_DIR)/serialization.h $(INC_DIR)/database.h $(INC_DIR)/engine_pool.h $(INC_DIR)/repertoire.h $(INC_DIR)/chess_logic.h $(INC_DIR)/maia.h $(INC_DIR)/lichess_eval_db.h $(INC_DIR)/chessdb_eval_db.h $(INC_DIR)/chessdb_api.h $(INC_DIR)/progress_line.h
 $(BUILD_DIR)/tree.o: $(INC_DIR)/tree.h $(INC_DIR)/node.h $(INC_DIR)/fen_map.h $(INC_DIR)/lichess_api.h $(INC_DIR)/chess_logic.h $(INC_DIR)/san_convert.h $(INC_DIR)/maia.h $(INC_DIR)/engine_pool.h $(INC_DIR)/database.h $(INC_DIR)/repertoire.h $(INC_DIR)/lichess_eval_db.h $(INC_DIR)/chessdb_eval_db.h $(INC_DIR)/cdbdirect_eval.h $(INC_DIR)/chessdb_api.h $(INC_DIR)/eval_chain.h $(INC_DIR)/progress_line.h
 $(BUILD_DIR)/progress_line.o: $(INC_DIR)/progress_line.h

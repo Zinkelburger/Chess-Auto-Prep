@@ -6,10 +6,16 @@
 #include "fen_map.h"
 #include "chess_logic.h"
 #include "san_convert.h"
+#include "database.h"
+#include "engine_pool.h"
+#include "eval_chain.h"
+#include "progress_line.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+extern volatile int g_interrupted;
 
 typedef struct DbBuildQueue {
     TreeNode **items;
@@ -306,4 +312,163 @@ bool tree_build_from_freqmap(Tree *tree, const PgnFreqMap *freq,
     db_queue_destroy(&q);
     fen_map_destroy(fmap);
     return build_ok;
+}
+
+
+/* ========== Post-build eval enrichment ========== */
+
+typedef struct {
+    TreeNode **nodes;
+    size_t count;
+    size_t capacity;
+} NoEvalList;
+
+static bool no_eval_push(NoEvalList *list, TreeNode *node) {
+    if (list->count >= list->capacity) {
+        size_t new_cap = list->capacity ? list->capacity * 2 : 64;
+        TreeNode **ni = (TreeNode **)realloc(list->nodes,
+                                             new_cap * sizeof(TreeNode *));
+        if (!ni) return false;
+        list->nodes = ni;
+        list->capacity = new_cap;
+    }
+    list->nodes[list->count++] = node;
+    return true;
+}
+
+static void collect_no_eval_cb(TreeNode *node, void *user_data) {
+    if (!node->has_engine_eval)
+        no_eval_push((NoEvalList *)user_data, node);
+}
+
+static EvalChainContext enrich_chain_from_config(const TreeConfig *config) {
+    EvalChainContext ctx = {
+        .cdbdirect = config->cdbdirect,
+        .chessdb_eval_db = config->chessdb_eval_db,
+        .lichess_eval_db = config->lichess_eval_db,
+        .chessdb_api = config->chessdb_api,
+        .eval_depth = config->eval_depth,
+        .ext_eval_subtree_skip = config->ext_eval_subtree_skip,
+        .stats = config->stats,
+    };
+    return ctx;
+}
+
+static int find_fen_job(const EvalJob *jobs, int n_jobs, const char *fen) {
+    for (int i = 0; i < n_jobs; i++)
+        if (strcmp(jobs[i].fen, fen) == 0)
+            return i;
+    return -1;
+}
+
+static void enrich_sf_progress(int completed, int total, void *ud) {
+    (void)ud;
+    char buf[96];
+    snprintf(buf, sizeof(buf),
+             "  Enriching evals: %d/%d Stockfish...", completed, total);
+    if (progress_line_is_tty())
+        progress_line_update(buf);
+    else if (completed == total || completed % 10 == 0)
+        printf("%s\n", buf);
+}
+
+bool tree_enrich_evals(Tree *tree, const TreeConfig *config,
+                       EvalEnrichStats *stats) {
+    if (!tree || !tree->root || !config) return false;
+
+    if (stats)
+        memset(stats, 0, sizeof(*stats));
+
+    NoEvalList pending = {0};
+    tree_traverse_dfs(tree, collect_no_eval_cb, &pending);
+    if (pending.count == 0) {
+        free(pending.nodes);
+        return true;
+    }
+
+    if (stats)
+        stats->total_nodes = (int)pending.count;
+
+    EvalChainContext chain = enrich_chain_from_config(config);
+
+    /* Phase 1: project DB cache + external eval sources */
+    for (size_t i = 0; i < pending.count; i++) {
+        TreeNode *node = pending.nodes[i];
+        if (node->has_engine_eval) continue;
+
+        if (config->db) {
+            int cp, depth;
+            if (rdb_get_eval(config->db, node->fen, &cp, &depth)) {
+                node_set_eval(node, cp);
+                if (stats) stats->cache_hits++;
+                continue;
+            }
+        }
+
+        int cp = 0, depth = 0;
+        const char *src = NULL;
+        if (eval_chain_try_external(node, &chain, &cp, &depth, &src)) {
+            node_set_eval(node, cp);
+            if (config->db)
+                rdb_put_eval(config->db, node->fen, cp, depth);
+            if (stats) stats->ext_hits++;
+        }
+        (void)src;
+    }
+
+    /* Phase 2: Stockfish batch for remaining unique FENs */
+    size_t still_need = 0;
+    for (size_t i = 0; i < pending.count; i++)
+        if (!pending.nodes[i]->has_engine_eval)
+            still_need++;
+
+    if (still_need > 0 && config->engine_pool) {
+        EvalJob *jobs = (EvalJob *)calloc(still_need, sizeof(EvalJob));
+        if (!jobs) {
+            free(pending.nodes);
+            return false;
+        }
+
+        int n_jobs = 0;
+        for (size_t i = 0; i < pending.count; i++) {
+            TreeNode *node = pending.nodes[i];
+            if (node->has_engine_eval) continue;
+            if (find_fen_job(jobs, n_jobs, node->fen) >= 0) continue;
+
+            snprintf(jobs[n_jobs].fen, MAX_EVAL_FEN_LENGTH, "%s", node->fen);
+            n_jobs++;
+        }
+
+        if (n_jobs > 0) {
+            engine_pool_set_depth(config->engine_pool, config->eval_depth);
+            engine_pool_evaluate_batch(config->engine_pool, jobs, n_jobs,
+                                       enrich_sf_progress, NULL);
+            progress_line_clear();
+
+            for (int j = 0; j < n_jobs; j++) {
+                if (!jobs[j].success) continue;
+                if (stats) stats->sf_evals++;
+                if (config->db)
+                    rdb_put_eval(config->db, jobs[j].fen, jobs[j].eval_cp,
+                                 jobs[j].depth_reached);
+                for (size_t i = 0; i < pending.count; i++) {
+                    TreeNode *node = pending.nodes[i];
+                    if (!node->has_engine_eval &&
+                        strcmp(node->fen, jobs[j].fen) == 0)
+                        node_set_eval(node, jobs[j].eval_cp);
+                }
+            }
+        }
+
+        free(jobs);
+    }
+
+    if (stats) {
+        for (size_t i = 0; i < pending.count; i++)
+            if (!pending.nodes[i]->has_engine_eval)
+                stats->failed++;
+    }
+
+    free(pending.nodes);
+    return !stats || stats->failed == 0;
 }
