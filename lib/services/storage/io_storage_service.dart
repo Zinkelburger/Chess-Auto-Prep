@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import '../../utils/file_text_reader.dart';
 import '../../models/repertoire_metadata.dart';
 import '../pgn_parsing_service.dart' as pgn;
 import 'app_paths.dart';
@@ -21,8 +22,10 @@ class IOStorageService implements StorageService {
     return AppPaths.documentsFile(filename);
   }
 
-  File _resolve(String path) =>
-      p.isAbsolute(path) ? File(path) : File(path);
+  Future<File> _resolveFile(String path) async {
+    if (p.isAbsolute(path)) return File(path);
+    return AppPaths.documentsFile(path);
+  }
 
   /// Best-effort atomic replace: write to a temp file, then rename.
   Future<void> _writeAtomically(File target, String content) async {
@@ -55,22 +58,25 @@ class IOStorageService implements StorageService {
   @override
   Future<String?> readFile(String path) async {
     try {
-      final file = _resolve(path);
-      if (await file.exists()) return await file.readAsString();
-    } catch (_) {}
+      final file = await _resolveFile(path);
+      if (await file.exists()) return await readTextFile(file);
+    } catch (e, st) {
+      print('Error reading file $path: $e\n$st');
+    }
     return null;
   }
 
   @override
   Future<void> writeFile(String path, String content) async {
-    await _writeAtomically(_resolve(path), content);
+    await _writeAtomically(await _resolveFile(path), content);
   }
 
   @override
   Future<bool> fileExists(String path) async {
     try {
-      return await _resolve(path).exists();
-    } catch (_) {
+      return await (await _resolveFile(path)).exists();
+    } catch (e) {
+      print('Error checking file $path: $e');
       return false;
     }
   }
@@ -78,14 +84,16 @@ class IOStorageService implements StorageService {
   @override
   Future<void> deleteFile(String path) async {
     try {
-      final file = _resolve(path);
+      final file = await _resolveFile(path);
       if (await file.exists()) await file.delete();
-    } catch (_) {}
+    } catch (e) {
+      print('Error deleting file $path: $e');
+    }
   }
 
   @override
   Future<void> renameFile(String oldPath, String newPath) async {
-    await _resolve(oldPath).rename(newPath);
+    await (await _resolveFile(oldPath)).rename(newPath);
   }
 
   @override
@@ -100,7 +108,7 @@ class IOStorageService implements StorageService {
     await for (final entity in dir.list()) {
       if (!entity.path.toLowerCase().endsWith('.pgn')) continue;
       final stat = await entity.stat();
-      final content = await File(entity.path).readAsString();
+      final content = await readTextFile(File(entity.path));
       entries.add(RepertoireMetadata(
         filePath: entity.path,
         name: p.basenameWithoutExtension(entity.path),
@@ -169,7 +177,7 @@ class IOStorageService implements StorageService {
     try {
       final file = await _getFile(_importedGamesFileName);
       if (await file.exists()) {
-        return await file.readAsString();
+        return await readTextFile(file);
       }
     } catch (e) {
       print('Error reading imported PGNs: $e');
@@ -198,7 +206,7 @@ class IOStorageService implements StorageService {
       }
 
       if (await file.exists()) {
-        return await file.readAsString();
+        return await readTextFile(file);
       }
     } catch (e) {
       print('Error reading repertoire PGN: $e');

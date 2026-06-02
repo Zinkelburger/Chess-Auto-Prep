@@ -8,6 +8,7 @@ import 'dart:io' as io;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/repertoire_line.dart';
+import '../utils/file_text_reader.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'pgn_parsing_service.dart' as pgn;
 import 'storage/storage_factory.dart';
@@ -384,7 +385,7 @@ class RepertoireService {
     final file = io.File(filePath);
     if (!await file.exists()) return false;
 
-    final content = await file.readAsString();
+    final content = await readTextFile(file);
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
@@ -444,7 +445,7 @@ class RepertoireService {
     final file = io.File(filePath);
     if (!await file.exists()) return false;
 
-    final content = await file.readAsString();
+    final content = await readTextFile(file);
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
@@ -494,7 +495,7 @@ class RepertoireService {
     final file = io.File(filePath);
     if (!await file.exists()) return false;
 
-    final content = await file.readAsString();
+    final content = await readTextFile(file);
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
@@ -599,7 +600,7 @@ class RepertoireService {
       return (success: false, updatedContent: '');
     }
 
-    final content = await file.readAsString();
+    final content = await readTextFile(file);
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 

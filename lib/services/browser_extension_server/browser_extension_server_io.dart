@@ -12,6 +12,7 @@ import 'package:dartchess/dartchess.dart' hide File;
 
 import 'browser_extension_server.dart';
 import '../storage/app_paths.dart';
+import '../../utils/file_text_reader.dart';
 import '../pgn_parsing_service.dart';
 
 /// Factory function for creating the browser extension server.
@@ -160,7 +161,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
       await for (final file in repertoireDir.list()) {
         if (file is File && file.path.toLowerCase().endsWith('.pgn')) {
           final stat = await file.stat();
-          final content = await file.readAsString();
+          final content = await readTextFile(file);
           final lineCount = countPgnGames(content);
           final fileName = p.basename(file.path);
           final name = p.basenameWithoutExtension(file.path);
@@ -303,7 +304,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
 
   Future<int> _countGamesInFile(File file) async {
     if (!await file.exists()) return 0;
-    final content = await file.readAsString();
+    final content = await readTextFile(file);
     return countPgnGames(content);
   }
 
@@ -326,7 +327,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
   Future<bool> _isDuplicate(Map<String, dynamic> data, File file) async {
     if (!await file.exists()) return false;
 
-    final content = await file.readAsString();
+    final content = await readTextFile(file);
     if (content.trim().isEmpty) return false;
 
     final newSignature = _getLineSignature(data);
@@ -492,7 +493,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
     }
 
     // Check if file is empty or not
-    final existingContent = await file.readAsString();
+    final existingContent = await readTextFile(file);
 
     if (existingContent.isEmpty) {
       // Write directly

@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../models/analysis_player_info.dart';
 import 'lichess_api_client.dart';
 import 'pgn_parsing_service.dart';
+import '../utils/file_text_reader.dart';
 import 'storage/app_paths.dart';
 
 /// Service for downloading and managing games for position analysis.
@@ -254,7 +255,7 @@ class AnalysisGamesService {
         username: username,
       ).playerKey;
       final file = File(p.join(directory.path, '$key.pgn'));
-      return await file.exists() ? file.readAsString() : null;
+      return await file.exists() ? readTextFile(file) : null;
     } catch (_) {
       return null;
     }
