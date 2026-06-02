@@ -27,7 +27,53 @@ Open (or create) the SQLite database for caching explorer responses, engine
 evaluations. Locate and start the Stockfish engine pool
 (required for building).
 
-### Stage 1: Build Opening Tree (Interleaved)
+### Stage 1: Build Opening Tree
+
+Stage 1 algorithm is selected by `--build-mode` (see `BuildMode` in `tree.h`):
+
+| Mode | Flag value | Stage 1 behavior |
+|------|------------|------------------|
+| Stockfish expectimax | `stockfish-expectimax` (default) | Interleaved BFS below |
+| Maia DB explore | `maia-db-explore` | Maia-only BFS (no Stockfish at build time) |
+| DB explorer | `db-explorer` | PGN frequency map → tree materialization → eval enrichment (below) |
+| Trap finder | `trap-finder` | Reserved — not implemented |
+
+#### `--build-mode db-explorer` pipeline
+
+Requires at least one `--pgn <file>` (repeatable, up to 16 files). Stage 1
+runs three sub-passes before expectimax:
+
+1. **Frequency map** (`pgn_freq.c`) — parse each PGN, walk games from
+   startpos (optional `--moves` prefix skips plies before tracking begins),
+   accumulate per-position move counts keyed by canonical 4-field FEN.
+   Multiple `--pgn` files merge into one map.  The `--fen` / `--moves` root
+   only seeds the BFS tree, not the freq-map anchor.
+2. **Tree materialization** (`tree_build_from_freqmap` in `tree_db_build.c`)
+   — BFS from the root FEN through the map:
+   - **Our moves:** every move at that position (`move_probability = 1.0`,
+     cumulative probability unchanged)
+   - **Opponent moves:** filtered by `--db-min-games` (default 5) and
+     `--db-min-prob` (default 0.05); `move_probability = count / reach`
+   - Transpositions via `fen_map.c` (same equivalence-ring logic as the
+     standard build)
+   - Pruned by `-p` / `--probability`, `-d` / `--ply`, optional `max_nodes`
+3. **Eval enrichment** (`tree_enrich_evals`) — batch-fill missing evals:
+   SQLite project cache → external chain (Lichess eval DB, CdbDirect,
+   ChessDB local/API) → Stockfish at `-e` / `--eval-depth`
+
+Then `tree_recalculate_probabilities()` chains cumulative probability and
+stages 2–4 run as usual (expectimax, optional traps, export).  No Maia or
+Lichess explorer queries during materialization.
+
+Example:
+
+```
+tree_builder -c b --build-mode db-explorer --pgn games.pgn \
+  --moves "e4 c5 2. Nf3 e6 3. d4 cxd4 4. Nxd4 a6" \
+  --db-min-games 10 --db-min-prob 0.03 sicilian_kan
+```
+
+#### `--build-mode stockfish-expectimax` (default)
 
 A single BFS builds the tree by interleaving Lichess explorer queries with
 Stockfish evaluation. At each node, the algorithm dispatches based on whose
@@ -529,10 +575,19 @@ all castling UCI to king-destination form at three levels:
 
 | Parameter | Flag | Default | Description |
 |-----------|------|---------|-------------|
+| `build_mode` | `--build-mode` | `stockfish-expectimax` | `stockfish-expectimax`, `maia-db-explore`, `db-explorer`, `trap-finder` |
 | `min_probability` | `-p` | 0.0001 (0.01%) | Prune branches below this cumulative probability |
 | `max_depth` | `-d` | 20 ply | Maximum tree depth |
 | `eval_depth` | `-e` | 14 | Stockfish search depth per position |
 | `num_threads` | `-t` | 4 | Parallel Stockfish engines |
+
+### DB explorer (`--build-mode db-explorer`)
+
+| Parameter | Flag | Default | Description |
+|-----------|------|---------|-------------|
+| `pgn_files` | `--pgn` | (required) | PGN database file(s); repeatable |
+| `db_min_games` | `--db-min-games` | 5 | Min game count per opponent move |
+| `db_min_prob` | `--db-min-prob` | 0.05 | Min move probability (count/reach) for opponent moves |
 
 ### Eval Window Pruning
 
@@ -632,7 +687,10 @@ the novelty weight to 80.
 tree_builder/
 ├── include/
 │   ├── node.h          # TreeNode struct (eval, expectimax, probabilities)
-│   ├── tree.h          # Tree config + interleaved build + expectimax
+│   ├── tree.h          # Tree config, BuildMode enum, interleaved build + expectimax
+│   ├── tree_db_build.h # db-explorer: tree_build_from_freqmap, tree_enrich_evals
+│   ├── pgn_freq.h      # PGN → per-position move frequency map
+│   ├── fen_map.h       # 4-field FEN → TreeNode* transposition table
 │   ├── repertoire.h    # RepertoireConfig, move selection, export
 │   ├── lichess_api.h   # Lichess Explorer API client
 │   ├── engine_pool.h   # Multithreaded Stockfish (batch + MultiPV)
@@ -644,6 +702,9 @@ tree_builder/
 │   └── thread_pool.h   # Generic thread pool
 ├── src/
 │   ├── tree.c          # Interleaved build, expectimax, traversal
+│   ├── tree_db_build.c # db-explorer BFS + post-build eval enrichment
+│   ├── pgn_freq.c      # PGN parsing → frequency map
+│   ├── fen_map.c       # Transposition map
 │   ├── repertoire.c    # Repertoire selection, scoring, line extraction, export
 │   ├── node.c          # Node CRUD
 │   ├── main.c          # CLI entry point, pipeline orchestration
@@ -655,6 +716,7 @@ tree_builder/
 │   ├── san_convert.c   # SAN ↔ UCI move conversion
 │   ├── maia.c          # ONNX Runtime inference
 │   ├── thread_pool.c   # Thread pool implementation
+│   ├── progress_line.c # TTY progress line helper
 │   ├── cJSON.c         # JSON library (vendored)
 │   └── sqlite3_amalg.c # SQLite library (vendored)
 ```
@@ -712,21 +774,14 @@ tree_builder/
                            │
                            ▼
               build_repertoire_recursive()
-                  Our nodes: pick argmax(V) after eval-loss filter,
-                             then traverse every candidate subtree
+                  Our nodes: pick argmax(V) after eval-loss filter
                   Opp nodes: traverse all children
                            │
                            ▼
-              extract_lines()  → root-to-leaf paths (DFS order)
+              extract_lines()  → root-to-leaf paths
                            │
                            ▼
-              JSON export (extract order) / PGN export
-                  PGN: qsort by cumP desc, then num_moves desc
-                  (`rank_lines_by_importance`, default on)
-                  Headers: `[CumProb "12.529%"]`; comments:
-                  `{CumProb 12.529%, Eval N cp, [%cumProb 12.529%]}`
-                  Legacy `[Importance "0.125"]` / `[%importance 0.125]` still
-                  parsed by the Flutter app on import.
+              JSON / PGN export
 ```
 
 ---

@@ -19,6 +19,7 @@
 #include "tree.h"
 #include "database.h"
 #include "engine_pool.h"
+#include "pgn_reader.h"
 #include <stdbool.h>
 
 /**
@@ -70,10 +71,10 @@ typedef struct RepertoireConfig {
     double branching_factor;
     int    build_threads;
     int    build_eval_depth;
-    int    build_max_depth;         /* Tree max ply reached (for PGN stats) */
+    int    build_max_depth;          /* Tree ply depth reached (0 = use build_eval_depth in PGN) */
 
     /* PGN export options */
-    bool   rank_lines_by_importance;   /* PGN: sort by cumP desc, then ply count (default true) */
+    bool   rank_lines_by_importance;   /* Sort lines by cumP (default true) */
     bool   annotate_move_probabilities; /* Add per-move likelihood comments */
     bool   annotate_maia_only;         /* Maia only vs Lichess+Maia fallback */
 
@@ -132,6 +133,10 @@ typedef struct {
     double move_maia_prob[128];
     bool   move_annotation_lichess[128];
     bool   move_engine_injected[128];
+
+    /* Source game from --db-seed (highest-rated game at leaf FEN). */
+    PgnGameMeta source_game;
+    bool        has_source_game;
 
 } RepertoireLine;
 

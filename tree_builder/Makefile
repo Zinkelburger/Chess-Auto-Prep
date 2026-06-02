@@ -104,6 +104,7 @@ SRCS = $(SRC_DIR)/node.c \
        $(SRC_DIR)/database.c \
        $(SRC_DIR)/engine_pool.c \
        $(SRC_DIR)/repertoire.c \
+       $(SRC_DIR)/pgn_reader.c \
        $(SRC_DIR)/maia.c \
        $(SRC_DIR)/sqlite3_amalg.c \
        $(SRC_DIR)/cJSON.c \

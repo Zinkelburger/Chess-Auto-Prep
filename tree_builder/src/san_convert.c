@@ -163,6 +163,9 @@ bool san_to_uci(const char *fen, const char *san_input,
     size_t slen = strlen(san);
     if (slen >= sizeof(clean)) return false;
     memcpy(clean, san, slen + 1);
+    for (size_t i = 0; clean[i]; i++) {
+        if (clean[i] == '0') clean[i] = 'O';
+    }
     while (slen > 0 && (clean[slen-1] == '+' || clean[slen-1] == '#'))
         clean[--slen] = '\0';
     if (slen == 0) return false;
