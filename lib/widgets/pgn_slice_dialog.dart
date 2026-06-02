@@ -5,6 +5,7 @@
 /// backward compatibility.
 library;
 
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
@@ -311,7 +312,6 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
 
   void _addFilter() {
     setState(() => _headerFilters.add(_HeaderFilter()));
-    _recompute();
   }
 
   void _removeFilter(int i) {
@@ -323,8 +323,41 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   }
 
   int _computeGeneration = 0;
+  String? _lastFilterFingerprint;
+  Timer? _recomputeDebounce;
+
+  String _effectiveFilterFingerprint() {
+    final parts = <String>[];
+    if (_hasPositionFilter) {
+      parts.add('fen:${_positionParse.fen}');
+    }
+    if (_dateController.text.trim().isNotEmpty) {
+      parts.add(
+          'h:Date|${_dateMode.name}|${_dateController.text.trim()}');
+    }
+    for (final f in _headerFilters.where((f) => f.value.isNotEmpty)) {
+      parts.add('h:${f.field}|${f.mode.name}|${f.value}');
+    }
+    final seqText = _sequenceController.text.trim();
+    if (seqText.isNotEmpty) {
+      final seqGap = int.tryParse(_gapController.text) ?? 4;
+      final groups = pgn.parseSequenceGroups(seqText);
+      parts.add(
+          'seq:$seqText|gap:$seqGap|${groups.map((g) => g.join(',')).join(';')}');
+    }
+    return parts.join('\n');
+  }
+
+  void _scheduleRecompute() {
+    _recomputeDebounce?.cancel();
+    _recomputeDebounce = Timer(const Duration(milliseconds: 300), _recompute);
+  }
 
   void _recompute() {
+    final fingerprint = _effectiveFilterFingerprint();
+    if (fingerprint == _lastFilterFingerprint) return;
+    _lastFilterFingerprint = fingerprint;
+
     final generation = ++_computeGeneration;
     setState(() => _computing = true);
 
@@ -357,6 +390,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
 
   @override
   void dispose() {
+    _recomputeDebounce?.cancel();
     _positionController.dispose();
     _sequenceController.dispose();
     _gapController.dispose();
@@ -762,7 +796,9 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                       .toList(),
                   onChanged: (v) {
                     setState(() => _dateMode = v!);
-                    _recompute();
+                    if (_dateController.text.trim().isNotEmpty) {
+                      _recompute();
+                    }
                   },
                 ),
               ),
@@ -779,7 +815,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                     border: const OutlineInputBorder(),
                   ),
                   style: const TextStyle(fontSize: 12),
-                  onChanged: (_) => _recompute(),
+                  onChanged: (_) => _scheduleRecompute(),
                 ),
               ),
               const SizedBox(width: 4),
@@ -856,7 +892,9 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                       final modes = _modesForField(f.field);
                       if (!modes.contains(f.mode)) f.mode = modes.first;
                     });
-                    _recompute();
+                    if (f.value.isNotEmpty) {
+                      _recompute();
+                    }
                   },
                 ),
               ),
@@ -883,7 +921,9 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                       .toList(),
                   onChanged: (v) {
                     setState(() => f.mode = v!);
-                    _recompute();
+                    if (f.value.isNotEmpty) {
+                      _recompute();
+                    }
                   },
                 ),
               ),
@@ -911,7 +951,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                   style: const TextStyle(fontSize: 12),
                   onChanged: (v) {
                     f.value = v;
-                    _recompute();
+                    _scheduleRecompute();
                   },
                   controller: f.controller,
                 ),
