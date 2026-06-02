@@ -56,9 +56,24 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
   int? _activeExpectedMovePly;
   int _prevVariationDepth = 0;
 
+  /// Last classified-move row index we scrolled to; avoids re-scrolling on
+  /// every ply step when the same row stays nearest.
+  int? _lastAlignedNearestIdx;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _alignMoveListToPly(widget.currentPly);
+    });
+  }
+
   @override
   void didUpdateWidget(GameAnalysisTab oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.gamePgnText != oldWidget.gamePgnText) {
+      _lastAlignedNearestIdx = null;
+    }
     if (widget.currentPly != oldWidget.currentPly) {
       final branchPly = _activeBestLinePly != null
           ? _activeBestLinePly! - 1
@@ -72,6 +87,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
         _activeBestLineMoveIdx = null;
         _activeExpectedMovePly = null;
       }
+      _alignMoveListToPly(widget.currentPly);
     }
     // Clear highlight when user exits the variation entirely (back to mainline)
     if (widget.variationDepth == 0 && _prevVariationDepth > 0) {
@@ -80,6 +96,48 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       _activeExpectedMovePly = null;
     }
     _prevVariationDepth = widget.variationDepth;
+  }
+
+  /// Classified moves only (inaccuracy and worse, plus interesting).
+  static List<MoveEval> _interestingMoves(List<MoveEval> evals) {
+    return [
+      for (final e in evals)
+        if (e.classification != MoveClassification.normal) e,
+    ];
+  }
+
+  static int _nearestInterestingIndex(List<MoveEval> interesting, int ply) {
+    if (interesting.isEmpty) return 0;
+    var nearestIdx = 0;
+    var nearestDist = (interesting[0].ply - ply).abs();
+    for (var i = 1; i < interesting.length; i++) {
+      final dist = (interesting[i].ply - ply).abs();
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestIdx = i;
+      }
+    }
+    return nearestIdx;
+  }
+
+  void _alignMoveListToPly(int ply) {
+    final interesting = _interestingMoves(widget.analysisController.evals);
+    if (interesting.isEmpty) return;
+
+    final nearestIdx = _nearestInterestingIndex(interesting, ply);
+    if (nearestIdx == _lastAlignedNearestIdx) return;
+    _lastAlignedNearestIdx = nearestIdx;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctx = _nearestItemKey.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: Duration.zero,
+      );
+    });
   }
 
   @override
@@ -101,7 +159,6 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
   void _onPlySelected(int ply) {
     if (ply <= 0) return;
     widget.onUserNavigation?.call();
-    widget.pgnController.clearEphemeralMoves();
     widget.pgnController.goToMainLineIndex(ply);
   }
 
@@ -111,7 +168,6 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
 
     final branchPly = eval.ply - 1;
     if (branchPly < 0) return;
-    widget.pgnController.clearEphemeralMoves();
     widget.pgnController.goToMainLineIndex(branchPly);
     widget.pgnController.addEphemeralMove(eval.maiaTopMove!);
 
@@ -128,7 +184,6 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
 
     final branchPly = eval.ply - 1;
     if (branchPly < 0) return;
-    widget.pgnController.clearEphemeralMoves();
     widget.pgnController.goToMainLineIndex(branchPly);
 
     for (final san in eval.bestLine) {
@@ -299,12 +354,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       evalByPly[e.ply] = e;
     }
 
-    final interesting = <MoveEval>[];
-    for (final e in evals) {
-      if (e.classification != MoveClassification.normal) {
-        interesting.add(e);
-      }
-    }
+    final interesting = _interestingMoves(evals);
 
     if (interesting.isEmpty) {
       return Center(
@@ -318,166 +368,144 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       );
     }
 
-    final ply = widget.currentPly;
-    int nearestIdx = 0;
-    int nearestDist = (interesting[0].ply - ply).abs();
-    for (int i = 1; i < interesting.length; i++) {
-      final dist = (interesting[i].ply - ply).abs();
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestIdx = i;
-      }
-    }
+    final nearestIdx =
+        _nearestInterestingIndex(interesting, widget.currentPly);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_moveListScroll.hasClients) return;
-      // Rough scroll first so ListView.builder materialises the target item.
-      const estimatedItemHeight = 60.0;
-      final roughOffset = (nearestIdx * estimatedItemHeight) -
-          (_moveListScroll.position.viewportDimension / 2) +
-          (estimatedItemHeight / 2);
-      final clamped = roughOffset.clamp(
-        0.0,
-        _moveListScroll.position.maxScrollExtent,
-      );
-      _moveListScroll.jumpTo(clamped);
-
-      // Now the keyed widget should be built; fine-tune with ensureVisible.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final ctx = _nearestItemKey.currentContext;
-        if (ctx == null) return;
-        Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.5,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-        );
-      });
-    });
-
-    return ListView.builder(
+    return ListView(
       controller: _moveListScroll,
       padding: const EdgeInsets.symmetric(vertical: 4),
-      itemCount: interesting.length,
-      itemBuilder: (context, index) {
-        final e = interesting[index];
-        final moveNum = (e.ply + 1) ~/ 2;
-        final dots = e.isWhiteMove ? '.' : '...';
-        final isNearest = index == nearestIdx;
+      children: [
+        for (var index = 0; index < interesting.length; index++)
+          _buildMoveListRow(
+            interesting[index],
+            index: index,
+            nearestIdx: nearestIdx,
+            evalByPly: evalByPly,
+          ),
+      ],
+    );
+  }
 
-        final Color classColor;
-        final String classLabel;
-        switch (e.classification) {
-          case MoveClassification.blunder:
-            classColor = const Color(0xFFDB3B21);
-            classLabel = 'Blunder';
-          case MoveClassification.mistake:
-            classColor = const Color(0xFFE69F00);
-            classLabel = 'Mistake';
-          case MoveClassification.inaccuracy:
-            classColor = const Color(0xFF56B4E9);
-            classLabel = 'Inaccuracy';
-          case MoveClassification.interesting:
-            classColor = const Color(0xFF9C27B0);
-            classLabel = 'Interesting';
-          case MoveClassification.normal:
-            classColor = Colors.grey;
-            classLabel = '';
-        }
+  Widget _buildMoveListRow(
+    MoveEval e, {
+    required int index,
+    required int nearestIdx,
+    required Map<int, MoveEval> evalByPly,
+  }) {
+    final moveNum = (e.ply + 1) ~/ 2;
+    final dots = e.isWhiteMove ? '.' : '...';
+    final isNearest = index == nearestIdx;
 
-        final evalStr = _formatEval(e);
+    final Color classColor;
+    final String classLabel;
+    switch (e.classification) {
+      case MoveClassification.blunder:
+        classColor = const Color(0xFFDB3B21);
+        classLabel = 'Blunder';
+      case MoveClassification.mistake:
+        classColor = const Color(0xFFE69F00);
+        classLabel = 'Mistake';
+      case MoveClassification.inaccuracy:
+        classColor = const Color(0xFF56B4E9);
+        classLabel = 'Inaccuracy';
+      case MoveClassification.interesting:
+        classColor = const Color(0xFF9C27B0);
+        classLabel = 'Interesting';
+      case MoveClassification.normal:
+        classColor = Colors.grey;
+        classLabel = '';
+    }
 
-        return GestureDetector(
-          key: isNearest ? _nearestItemKey : null,
-          behavior: HitTestBehavior.translucent,
-          onTap: () => _onPlySelected(e.ply),
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: isNearest
-                ? BoxDecoration(
-                    color: Colors.white.withAlpha(12),
-                    border: Border(
-                      left: BorderSide(color: classColor, width: 3),
-                    ),
-                  )
-                : null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 48,
-                      child: Text(
-                        '$moveNum$dots',
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.grey[500]),
-                      ),
-                    ),
-                    Text(
-                      e.san,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: classColor.withAlpha(30),
-                        borderRadius: BorderRadius.circular(4),
-                        border:
-                            Border.all(color: classColor.withAlpha(80)),
-                      ),
-                      child: Text(
-                        classLabel,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: classColor,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      evalStr,
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 12,
-                        color: Colors.grey[400],
-                      ),
-                    ),
-                  ],
+    final evalStr = _formatEval(e);
+
+    return GestureDetector(
+      key: isNearest ? _nearestItemKey : null,
+      behavior: HitTestBehavior.translucent,
+      onTap: () => _onPlySelected(e.ply),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: isNearest
+            ? BoxDecoration(
+                color: Colors.white.withAlpha(12),
+                border: Border(
+                  left: BorderSide(color: classColor, width: 3),
                 ),
-                if (e.classification == MoveClassification.interesting &&
-                    e.maiaProb != null)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 48, top: 3),
-                    child: _buildInterestingMoveInfo(e, evalByPly),
+              )
+            : null,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 48,
+                  child: Text(
+                    '$moveNum$dots',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                   ),
-                if (e.bestLine.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 48, top: 3),
-                    child: ClickableMoveLineWidget(
-                      sanMoves: e.bestLine,
-                      startPly: e.ply - 1,
-                      activeMoveIndex: _activeBestLinePly == e.ply
-                          ? _computeBestLineMoveIdx()
-                          : null,
-                      onMoveTapped: (idx) =>
-                          _onBestLineMoveClicked(e, idx),
-                      label: 'Best: ',
+                ),
+                Text(
+                  e.san,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'monospace',
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: classColor.withAlpha(30),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: classColor.withAlpha(80)),
+                  ),
+                  child: Text(
+                    classLabel,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: classColor,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                ),
+                const Spacer(),
+                Text(
+                  evalStr,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    color: Colors.grey[400],
+                  ),
+                ),
               ],
             ),
-          ),
-        );
-      },
+            if (e.classification == MoveClassification.interesting &&
+                e.maiaProb != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 48, top: 3),
+                child: _buildInterestingMoveInfo(e, evalByPly),
+              ),
+            if (e.bestLine.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 48, top: 3),
+                child: ClickableMoveLineWidget(
+                  sanMoves: e.bestLine,
+                  startPly: e.ply - 1,
+                  activeMoveIndex: _activeBestLinePly == e.ply
+                      ? _computeBestLineMoveIdx()
+                      : null,
+                  onMoveTapped: (idx) => _onBestLineMoveClicked(e, idx),
+                  label: 'Best: ',
+                  fontSize: 14,
+                  movePadding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 

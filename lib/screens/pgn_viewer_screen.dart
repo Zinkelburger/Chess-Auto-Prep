@@ -17,6 +17,7 @@ import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/pgn_viewer_controller.dart';
 import '../services/game_analysis_controller.dart';
+import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/layout/responsive_split_layout.dart';
@@ -128,6 +129,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Future<void> _loadFile(String path) async {
     await _controller.loadFile(path);
+    if (!mounted) return;
+    final error = _controller.errorMessage;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+      return;
+    }
     _showPendingSliceRestoreSnackBar();
   }
 
@@ -162,6 +174,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         },
       ),
     ).then((_) => _reclaimFocus());
+  }
+
+  Future<void> _copyCurrentGamePgn() async {
+    if (_controller.filteredGames.isEmpty) return;
+    final pgnText =
+        _controller.filteredGames[_controller.currentGameIndex].pgnText;
+    await Clipboard.setData(ClipboardData(text: pgnText));
+    if (!mounted) return;
+    showAppSnackBar(context, AppMessages.pgnCopied);
+    _reclaimFocus();
   }
 
   Future<void> _exportSlice() async {
@@ -744,6 +766,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                       label: g.label,
                       studyRating: g.studyRating,
                       studySummary: g.studySummary,
+                      headers: g.headers,
                     ))
                 .toList(),
             currentIndex: _controller.currentGameIndex,
@@ -762,6 +785,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             onToggleFullScreen: _controller.toggleFullScreen,
             onSetSpeed: _controller.setAutoPlaySpeed,
             onSetAutoNext: _controller.setAutoNextGame,
+            onCopyPgn: _copyCurrentGamePgn,
+            hasEphemeralAnnotations: _pgnWidgetController.hasEphemeralMoves,
+            onClearAnnotations: () {
+              _controller.stopAutoPlay();
+              _pgnWidgetController.clearEphemeralMoves();
+              setState(() {});
+              _reclaimFocus();
+            },
           ),
       ],
     );
@@ -960,6 +991,20 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 'No PGN loaded',
                 style: TextStyle(color: Colors.grey[400], fontSize: 16),
               ),
+              if (_controller.errorMessage != null) ...[
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    _controller.errorMessage!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               FilledButton.icon(
                 onPressed: _pickFile,

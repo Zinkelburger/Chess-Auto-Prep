@@ -7,21 +7,11 @@ library;
 import 'package:flutter/material.dart';
 
 import '../models/pgn_filter_models.dart';
+import 'game_nav_item.dart';
+import 'game_search_dialog.dart';
 
 export '../models/pgn_filter_models.dart' show GameSortMode;
-
-/// Lightweight data class so the nav bar doesn't need the full game model.
-class GameNavItem {
-  final String label;
-  final int studyRating;
-  final String studySummary;
-
-  const GameNavItem({
-    required this.label,
-    required this.studyRating,
-    this.studySummary = '',
-  });
-}
+export 'game_nav_item.dart' show GameNavItem;
 
 /// Speed options shared between the nav bar and fullscreen overlay.
 const kAutoPlaySpeeds = [0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 8.0, 10.0];
@@ -42,6 +32,9 @@ class GameNavBar extends StatelessWidget {
   final ValueChanged<GameSortMode>? onSetSortMode;
   final VoidCallback? onToggleAutoPlay;
   final VoidCallback? onToggleFullScreen;
+  final VoidCallback? onCopyPgn;
+  final VoidCallback? onClearAnnotations;
+  final bool hasEphemeralAnnotations;
   final ValueChanged<double>? onSetSpeed;
   final ValueChanged<bool>? onSetAutoNext;
 
@@ -61,6 +54,9 @@ class GameNavBar extends StatelessWidget {
     this.onSetSortMode,
     this.onToggleAutoPlay,
     this.onToggleFullScreen,
+    this.onCopyPgn,
+    this.onClearAnnotations,
+    this.hasEphemeralAnnotations = false,
     this.onSetSpeed,
     this.onSetAutoNext,
   });
@@ -92,7 +88,7 @@ class GameNavBar extends StatelessWidget {
                   _buildSortDropdown(),
                 ],
               ),
-              _buildGameCounterDropdown(),
+              _buildGameCounterDropdown(context),
               _buildAutoPlayControls(),
             ],
           ),
@@ -191,91 +187,34 @@ class GameNavBar extends StatelessWidget {
     });
   }
 
-  Widget _buildGameCounterDropdown() {
-    return PopupMenuButton<int>(
-      tooltip: 'Jump to game',
-      itemBuilder: (ctx) {
-        final start = (currentIndex - 25).clamp(0, games.length);
-        final end = (currentIndex + 25).clamp(0, games.length);
-        return [
-          for (int i = start; i < end; i++)
-            PopupMenuItem(
-              value: i,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 36,
-                        child: Text(
-                          '${i + 1}.',
-                          style: TextStyle(
-                            fontWeight: i == currentIndex
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          games[i].label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: i == currentIndex
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                        ),
-                      ),
-                      if (games[i].studyRating > 0)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(width: 4),
-                            const Icon(Icons.star,
-                                size: 14, color: Colors.amber),
-                            Text(
-                              '${games[i].studyRating}',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                          ],
-                        ),
-                    ],
+  Widget _buildGameCounterDropdown(BuildContext context) {
+    return Tooltip(
+      message: 'Jump to game',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: games.isEmpty
+            ? null
+            : () async {
+                final selected = await showDialog<int>(
+                  context: context,
+                  builder: (_) => GameSearchDialog(
+                    games: games,
+                    currentIndex: currentIndex,
                   ),
-                  if (games[i].studySummary.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 36, top: 2),
-                      child: Text(
-                        games[i].studySummary,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[500],
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-        ];
-      },
-      onSelected: onGoToGame,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.grey[700]!),
-        ),
-        child: Text(
-          'Game ${currentIndex + 1} / ${games.length}',
-          style:
-              const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                );
+                if (selected != null) onGoToGame?.call(selected);
+              },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.grey[700]!),
+          ),
+          child: Text(
+            'Game ${currentIndex + 1} / ${games.length}',
+            style:
+                const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
         ),
       ),
     );
@@ -298,6 +237,24 @@ class GameNavBar extends StatelessWidget {
           onPressed: games.isNotEmpty ? onToggleFullScreen : null,
           icon: Icon(Icons.fullscreen, size: 24, color: Colors.grey[400]),
           tooltip: 'Fullscreen (Ctrl+F)',
+          visualDensity: VisualDensity.compact,
+        ),
+        IconButton(
+          onPressed: games.isNotEmpty ? onCopyPgn : null,
+          icon: Icon(Icons.copy_outlined, size: 20, color: Colors.grey[400]),
+          tooltip: 'Copy current game PGN',
+          visualDensity: VisualDensity.compact,
+        ),
+        IconButton(
+          onPressed: games.isNotEmpty && hasEphemeralAnnotations
+              ? onClearAnnotations
+              : null,
+          icon: Icon(Icons.layers_clear_outlined,
+              size: 20,
+              color: hasEphemeralAnnotations
+                  ? Colors.grey[400]
+                  : Colors.grey[700]),
+          tooltip: 'Clear analysis annotations',
           visualDensity: VisualDensity.compact,
         ),
         PopupMenuButton<double>(

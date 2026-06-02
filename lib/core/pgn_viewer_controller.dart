@@ -297,6 +297,7 @@ class PgnViewerController extends ChangeNotifier {
   bool hasActiveFilters = false;
 
   SliceConfig activeSliceConfig = const SliceConfig.empty();
+  List<int>? _activeSliceIndices;
   static const slicePrefsPrefix = 'pgn_slice:';
 
   int currentGameIndex = 0;
@@ -338,6 +339,8 @@ class PgnViewerController extends ChangeNotifier {
   Timer? persistDebounce;
 
   SliceRestoreInfo? pendingSliceRestore;
+
+  String? errorMessage;
 
   static const maxTreeCacheEntries = 500;
 
@@ -390,19 +393,49 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   Future<void> loadFile(String path) async {
+    errorMessage = null;
     final storage = StorageFactory.instance;
-    if (!await storage.fileExists(path)) return;
+    final fileName = p.basename(path);
+
+    if (!await storage.fileExists(path)) {
+      errorMessage = 'File not found: $fileName';
+      debugPrint('PgnViewerController.loadFile: file does not exist: $path');
+      notifyListeners();
+      return;
+    }
+
     isLoading = true;
     notifyListeners();
 
     final content = await storage.readFile(path);
+    if (!isActive()) return;
+
     if (content == null) {
       isLoading = false;
+      errorMessage = 'Could not read $fileName';
+      debugPrint('PgnViewerController.loadFile: read failed: $path');
       notifyListeners();
       return;
     }
+
+    if (content.trim().isEmpty) {
+      isLoading = false;
+      errorMessage = 'File is empty: $fileName';
+      debugPrint('PgnViewerController.loadFile: empty file: $path');
+      notifyListeners();
+      return;
+    }
+
     final entries = await compute(parseMultiGamePgn, content);
     if (!isActive()) return;
+
+    if (entries.isEmpty) {
+      isLoading = false;
+      errorMessage = 'No valid PGN games in $fileName';
+      debugPrint('PgnViewerController.loadFile: no games parsed: $path');
+      notifyListeners();
+      return;
+    }
 
     final perspectiveRaw = entries.isNotEmpty
         ? (entries.first.headers['StudyPerspective'] ?? '')
@@ -425,6 +458,7 @@ class PgnViewerController extends ChangeNotifier {
     filteredGames = List.of(entries);
     hasActiveFilters = false;
     activeSliceConfig = const SliceConfig.empty();
+    _activeSliceIndices = null;
     sortMode = GameSortMode.fileOrder;
     currentGameIndex = 0;
     perspective = newPerspective;
@@ -463,6 +497,7 @@ class PgnViewerController extends ChangeNotifier {
     filteredGames = indices.map((i) => allGames[i]).toList();
     hasActiveFilters = true;
     activeSliceConfig = config;
+    _activeSliceIndices = List<int>.from(indices);
     currentGameIndex = 0;
     pendingSliceRestore = SliceRestoreInfo(
       filteredCount: filteredGames.length,
@@ -533,6 +568,8 @@ class PgnViewerController extends ChangeNotifier {
     if (filteredGames.isEmpty) return;
     stopAutoPlay();
     analysisController.cancel();
+    currentPosition = Chess.initial;
+    activeEngineLineMoveIdx = null;
     orientBoardForCurrentGame();
     final game = filteredGames[currentGameIndex];
     await analysisController.tryLoadFromPgn(game.pgnText);
@@ -738,6 +775,12 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void applySlice(List<int> indices, SliceConfig config) {
+    if (_activeSliceIndices != null &&
+        listEquals(_activeSliceIndices, indices) &&
+        config.toJsonString() == activeSliceConfig.toJsonString()) {
+      return;
+    }
+    _activeSliceIndices = List<int>.from(indices);
     filteredGames = indices.map((i) => allGames[i]).toList();
     hasActiveFilters = filteredGames.length != allGames.length;
     activeSliceConfig = config;
@@ -753,6 +796,7 @@ class PgnViewerController extends ChangeNotifier {
     filteredGames = List.of(allGames);
     hasActiveFilters = false;
     activeSliceConfig = const SliceConfig.empty();
+    _activeSliceIndices = null;
     currentGameIndex = 0;
     openingTree = null;
     notifyListeners();
@@ -825,6 +869,7 @@ class PgnViewerController extends ChangeNotifier {
     filteredGames = indices.map((i) => allGames[i]).toList();
     hasActiveFilters = filteredGames.length != allGames.length;
     activeSliceConfig = newConfig;
+    _activeSliceIndices = List<int>.from(indices);
     currentGameIndex = 0;
     openingTree = null;
     notifyListeners();
