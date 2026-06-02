@@ -64,6 +64,18 @@ class PgnViewerWidgetController {
     return state._variationsByPly.values.any((list) => list.isNotEmpty);
   }
 
+  /// True when the user has added ephemeral analysis lines (not from PGN).
+  bool get hasEphemeralMoves {
+    final state = _state;
+    if (state == null) return false;
+    for (final roots in state._variationsByPly.values) {
+      for (final root in roots) {
+        if (state._subtreeHasEphemeral(root)) return true;
+      }
+    }
+    return false;
+  }
+
   int get mainLineIndex => _state?._mainLineIndex ?? 0;
 
   int get mainLineLength => _state?._moveHistory.length ?? 0;
@@ -125,7 +137,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   void initState() {
     super.initState();
     widget.controller?._attach(this);
-    _loadGame();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadGame());
   }
 
   @override
@@ -207,6 +219,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         _activeBranchPly = -1;
         _analysisPath = [];
       });
+      widget.onPositionChanged?.call(_currentPosition);
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -550,6 +563,14 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     for (final child in node.children) {
       _removeEphemeralChildren(child);
     }
+  }
+
+  bool _subtreeHasEphemeral(AnalysisNode node) {
+    if (node.isEphemeral) return true;
+    for (final child in node.children) {
+      if (_subtreeHasEphemeral(child)) return true;
+    }
+    return false;
   }
 
   void _deleteAnalysisNode(int nodeId) {

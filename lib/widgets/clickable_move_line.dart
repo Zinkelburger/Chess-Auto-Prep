@@ -65,6 +65,9 @@ class ClickableMoveLineWidget extends StatelessWidget {
   /// Font size for move text (default 11).
   final double fontSize;
 
+  /// Padding around each clickable move (larger = easier to tap).
+  final EdgeInsets movePadding;
+
   /// Whether to constrain to a single line with ellipsis overflow.
   final bool singleLine;
 
@@ -81,6 +84,8 @@ class ClickableMoveLineWidget extends StatelessWidget {
     this.startIndex = 0,
     this.maxMoves = 8,
     this.fontSize = 11,
+    this.movePadding =
+        const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
     this.singleLine = true,
   });
 
@@ -175,8 +180,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () => onMoveTapped!(idx),
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                    padding: movePadding,
                     decoration: isActive
                         ? BoxDecoration(
                             color: AppColors.expectimax,
