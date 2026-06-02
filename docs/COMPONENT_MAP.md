@@ -6,7 +6,8 @@
 |----------|---------|
 | **This file** | Current implementation — screens, services, widgets, tests |
 | [`FUTURE_FEATURES.md`](FUTURE_FEATURES.md) | Backlog only — not yet built or incomplete |
-| [`ALGORITHM.md`](ALGORITHM.md) | Expectimax / tree-generation pipeline detail |
+| [`ALGORITHM.md`](ALGORITHM.md) | Flutter expectimax / tree-generation pipeline |
+| [`../tree_builder/ALGORITHM.md`](../tree_builder/ALGORITHM.md) | C `tree_builder` CLI pipeline (incl. db-explorer) |
 | [`tree-display-architecture.md`](tree-display-architecture.md) | Eval-tree graph performance principles |
 
 Last reviewed against `lib/` (May 2026). When you change code, update the matching section here.
@@ -184,6 +185,20 @@ RepertoireTrainingScreen
   → TrainingSettings (persisted)
 ```
 
+### PGN viewer (Open PGN)
+
+```
+PgnViewerScreen._pickFile → FilePicker → PgnViewerController.loadFile(path)
+  → StorageService.fileExists / readFile (absolute paths as-is; relative → app documents)
+  → compute(parseMultiGamePgn) → allGames / filteredGames
+  → on failure: controller.errorMessage + debugPrint; screen shows SnackBar + inline error in empty state
+  → on success: recent-files prefs, optional saved slice restore, loadCurrentGame
+  → game change (N/P, dropdown, slice, sort): `loadCurrentGame` resets `currentPosition` to start; `PgnViewerWidget._loadGame` also calls `onPositionChanged` so board and inline engine stay in sync
+Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].pgnText` → `Clipboard.setData` + `AppMessages.pgnCopied` snackbar
+Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept)
+Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
+```
+
 ---
 
 ## Directory reference
@@ -203,7 +218,7 @@ RepertoireTrainingScreen
 | `app_state.dart` | Global app mode, usernames, games list | `setMode`, `switchToBuilder/Trainer`, `notifyListeners` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
-| `pgn_viewer_controller.dart` | PGN viewer game index & navigation | Used by `PgnViewerScreen` |
+| `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `loadCurrentGame` resets board to game start (`currentPosition`, engine-line highlight); `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); used by `PgnViewerScreen` |
 | `repertoire_controller.dart` | **Central repertoire session state**: FEN, move sequence, lines, tree, PGN sync | `userPlayedMove`, `loadMoveSequence`, `appendMoveToExistingLine`, `restoreRepertoireFromPgn` |
 | `repertoire_writer.dart` | Serialised PGN mutations + undo stack | `addMoveAtPosition`, `acceptSuggestion`, `undo`, `canUndo` |
 
@@ -225,7 +240,7 @@ RepertoireTrainingScreen
 | `opening_tree.dart` | In-memory repertoire tree indexed by FEN; `hasMove`, `appendLine` |
 | `pgn_filter_models.dart` | PGN import filter types |
 | `position_analysis.dart` | Position analysis aggregate |
-| `repertoire_line.dart` | Trainable line extracted from PGN (moves, title, cumulative probability) |
+| `repertoire_line.dart` | Trainable line extracted from PGN (moves, title, probability) |
 | `repertoire_metadata.dart` | Side, starting FEN, headers |
 | `repertoire_move_progress.dart` | Training progress per move |
 | `repertoire_review_entry.dart` | FSRS-style review scheduling |
@@ -282,6 +297,7 @@ RepertoireTrainingScreen
 | **widgets/eval_tree_toolbar.dart** | Graph controls |
 | **widgets/eval_tree_viewport.dart** | `graphview` wrapper |
 | **widgets/repertoire_tree_explorer.dart** | Table explorer at current FEN (candidates, metrics) |
+| **widgets/compact_tree_outline.dart** | Scrollable indented [BuildTree] outline with eval, expectimax V%, and move probability per row; expand/collapse + tap-to-navigate |
 
 Implements principles from `docs/tree-display-architecture.md` (focused window, flat index, pre-sorted children).
 
@@ -294,7 +310,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `repertoire_selection_screen.dart` | Pick/create repertoire |
 | `repertoire_training_screen.dart` | Training mode shell |
 | `analysis_screen.dart` | Game weakness / position analysis |
-| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar` |
+| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text |
 | `player_selection_screen.dart` | Lichess player pick for analysis |
 | `settings_screen.dart` | Global engine, opponent, **on-the-fly expectimax** (live dock; separate from Generation tab Engine Depth), DB settings |
 
@@ -333,9 +349,9 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `tree_build_service.dart` | BFS tree build; MultiPV line-0 PV reply stash + opponent-node injection when Maia/Lichess omit it. **Resume:** partial trees (`*_partial_tree.json`) continue from frontier leaves sorted by ply; `explored` set only after expansion completes (pause/cancel mid-node retries). |
+| `tree_build_service.dart` | BFS tree build; MultiPV line-0 PV reply stash + opponent-node injection when Maia/Lichess omit it |
 | `generation/line_extractor.dart` | Extract lines from tree; PGN `{engine-injected}` on injected opponent moves |
-| `generation/pgn_export.dart` | Export generated lines to PGN (`[CumProb "N%"]`, `[%cumProb N%]`, `{engine-injected}`) |
+| `generation/pgn_export.dart` | Export generated lines to PGN (includes `{engine-injected}` annotation) |
 | `generation/generation_config.dart` | `TreeBuildConfig` (default `evalDepth` 14, `relativeEval` true), build modes |
 | `generation/tree_eval_resolver.dart` | Eval resolution during build |
 | `generation/tree_ease.dart` | Opponent ease calculation |
@@ -351,7 +367,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `repertoire_service.dart` | Load/save repertoire, parse lines (CumProb header/comment, legacy Importance), append moves |
+| `repertoire_service.dart` | Load/save repertoire, parse lines, append moves |
 | `repertoire_review_service.dart` | Review scheduling |
 | `pgn_service.dart` | General PGN load/save |
 | `pgn_parsing_service.dart` | Filtered PGN parsing |
@@ -398,7 +414,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | File | Purpose |
 |------|---------|
 | `storage/storage_service.dart` | Abstract file I/O |
-| `storage/io_storage_service.dart` | Desktop/mobile IO |
+| `storage/io_storage_service.dart` | Desktop/mobile IO; `_resolveFile` maps relative paths to app documents; `readFile` / PGN reads use UTF-8 with Latin-1 fallback via `utils/file_text_reader.dart` |
 | `storage/storage_factory.dart` | Platform factory |
 | `storage/app_paths.dart` | App data directories |
 | `browser_extension_server/*` | Local HTTP server for browser extension (IO/stub) |
@@ -412,7 +428,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `layout/repertoire_layout.dart` | 3-zone orchestrator (board / main / context) |
 | `layout/board_zone.dart` | Board wrapper; app-bar trap navigation via `BoardZoneControls` |
 | `layout/edit_main_zone.dart` | PGN editor column shell |
-| `layout/edit_context_zone.dart` | Context TabBar: Browse / Engine / Expectimax / Lines / Tree |
+| `layout/edit_context_zone.dart` | Context TabBar: Browse / Engine / Expectimax / Lines / Tree — Tree tab shows [CompactTreeOutline] when a generated [BuildTree] is available, else [OpeningTreeWidget] |
 | `layout/analyze_main_zone.dart` | Analyze mode main column shell |
 | `layout/analyze_context_zone.dart` | Detail pane (eval graph, trap card) |
 | `layout/repertoire_mode.dart` | `RepertoireMode`, `EditContextView` enums |
@@ -472,17 +488,19 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `analysis_tab.dart` | Legacy browse/analysis tab wrapper |
 | `analysis/analysis_settings_sheet.dart` | Analysis mode settings sheet |
 | `analysis_download_dialog.dart` | Download games for analysis |
-| `game_analysis_tab.dart` | Per-game analysis tab with chart |
+| `game_analysis_tab.dart` | PGN viewer Analysis tab: chart, classified move list, best-line / Maia taps; each tap adds an **ephemeral RAV** at that ply (accumulates; does not clear prior lines); move list scrolls only when the nearest classified row changes (instant `ensureVisible`, no per-ply jump+animate) |
 | `game_analysis_chart.dart` | Eval chart for game review |
-| `game_nav_bar.dart` | Game navigation controls |
+| `game_nav_item.dart` | `GameNavItem` — label, study rating/summary, PGN `headers` for nav bar and search dialog |
+| `game_nav_bar.dart` | Game navigation controls; **Game N / Total** opens `GameSearchDialog` (replaces ±25-game popup); **Copy PGN** (`onCopyPgn`) and **Clear analysis annotations** (`onClearAnnotations`, `Icons.layers_clear_outlined`, enabled when `hasEphemeralAnnotations`) in auto-play row |
+| `game_search_dialog.dart` | Compact jump-to-game search (`GameNavItem.headers` + study fields); up to 5 matches, pure-integer query → “Go to game N”, Enter selects first, Escape dismisses |
 | `games_list_widget.dart` | Selectable games list |
 | `fullscreen_game_view.dart` | Fullscreen game + board view |
 | `fen_list_widget.dart` | FEN list display helper |
 | `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
-| `pgn_viewer_widget.dart` | Game list + board for viewer |
+| `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); PGN tab renders each root as `( … )` |
 | `pgn_import_dialog.dart` | PGN file import dialog |
-| `pgn_slice_dialog.dart` | Slice/extract PGN segment dialog |
+| `pgn_slice_dialog.dart` | Slice dataset dialog (position, sequence, header filters) | Live preview via isolate; skips recompute when effective filters unchanged, on empty filter rows, or 300ms-debounced header/date typing |
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Weakness detail dialog |
 | `lichess_db_info_icon.dart` | Lichess DB info + OAuth entry point |
@@ -506,12 +524,13 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `chess_utils.dart` | UCI/SAN helpers |
 | `fen_utils.dart` | FEN manipulation |
 | `pgn_utils.dart` | PGN formatting, event title extraction |
-| `pgn_comment_utils.dart` | Comment filtering; parse `[%cumProb]` / legacy `[%importance]` |
+| `pgn_comment_utils.dart` | Comment filtering |
 | `coverage_helpers.dart` | Coverage UI helpers |
 | `lines_filter_helpers.dart` | Line filter/sort/group (`getLineGroupName`) |
 | `ease_utils.dart` | Ease display formatting |
 | `eval_constants.dart` | Eval display thresholds |
 | `app_messages.dart` | Snackbar helpers |
+| `file_text_reader.dart` | UTF-8 file read with Latin-1 fallback (PGN / text imports) |
 | `system_info.dart` | CPU core count (native/stub) |
 
 ### `lib/theme/`
@@ -572,7 +591,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | Path | Role |
 |------|------|
-| `tree_builder/` | C expectimax tree builder (`--eval-depth` default 14), CdbDirect reader; MultiPV line-0 PV reply stash + opponent injection (`engine_injected`, PGN `{engine-injected}`). **Build progress (TTY):** live line via `progress_line.c` — `[Depth N] X new + Y transpositions | total | rate/min | ~ETA`; depth-complete line uses unique node count at that ply (`g_nodes_created_at_depth`). **Resume:** if `<name>.tree.json` exists and `build_complete` is false, stage 1 always continues BFS from unexplored frontier leaves (`resume_prepare_frontier` in `tree.c`), sorted by ply so shallower pending work runs first; only `build_complete: true` skips building. SIGINT saves partial trees; nodes interrupted mid-expansion stay `explored: false` and are retried. `--build-now` / `--skip-build` still export without expanding. **Shared C modules:** `fen_map.c` (4-field FEN → `TreeNode*` transposition table); `pgn_freq.c` (PGN movetext → per-position move frequency map); `tree_db_build.c` (`tree_build_from_freqmap`, BFS materialization for `--build-mode db-explorer`; `tree_enrich_evals` batch-fills missing evals via project DB → external chain → Stockfish). **DB explorer (Phase 1):** `--build-mode db-explorer --pgn <file>` (repeatable) parses games from startpos, builds tree from `--fen` root via frequency map (our moves: all DB lines; opponent: `--db-min-games` / `--db-min-prob` filter), runs `tree_enrich_evals`, then expectimax + PGN export. Opponent `move_probability` = count/reach; our-move children = 1.0; `cumulative_probability` chains via `tree_recalculate_probabilities`. |
+| `tree_builder/` | C expectimax tree builder (`--eval-depth` default 14), CdbDirect reader; MultiPV line-0 PV reply stash + opponent injection (`engine_injected`, PGN `{engine-injected}`). **Build modes** (`--build-mode` in `tree.h`): `stockfish-expectimax` (default interleaved BFS), `maia-db-explore`, `db-explorer`, `trap-finder` (unimplemented). **Build progress (TTY):** live line via `progress_line.c` — `[Depth N] X new + Y transpositions | total | rate/min | ~ETA`; depth-complete line uses unique node count at that ply (`g_nodes_created_at_depth`). **Resume** (stockfish-expectimax / maia-db-explore): if `<name>.tree.json` exists and `build_complete` is false, stage 1 continues BFS from unexplored frontier leaves (`resume_prepare_frontier` in `tree.c`); only `build_complete: true` skips building. SIGINT saves partial trees; nodes interrupted mid-expansion stay `explored: false` and are retried. `--build-now` / `--skip-build` still export without expanding. **DB explorer:** `--build-mode db-explorer --pgn <file>` (repeatable) → `pgn_freq.c` (freq map from startpos) → `tree_build_from_freqmap` (our moves: all lines; opponent: `--db-min-games` / `--db-min-prob`) → `tree_enrich_evals` (project DB → external chain → Stockfish) → expectimax + PGN export. Opponent `move_probability` = count/reach; our-move children = 1.0; `tree_recalculate_probabilities` chains cumulative probability. See `tree_builder/ALGORITHM.md`. |
 | `browser-to-server-repertoire/` | Browser extension companion |
 | `python/` | Offline scripts (Lichess builder, Maia experiments, TWIC) |
 | `packages/cdbdirect_flutter_libs/` | Native ChessDB bindings |

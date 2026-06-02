@@ -147,13 +147,15 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | Download & import Lichess **cloud eval JSONL** (~369M positions) | **Not started** | Separate from Flutter app; CdbDirect + SQLite chain exists |
 | FEN normalization for Lichess EP convention | **Not started** | Lookup misses possible |
 | MultiPV depth vs breadth tradeoff for cloud evals | **Not started** | Design open |
+| PGN game filters for db-explorer (`--min-year`, `--min-elo`, avg Elo) | **Deferred** | Dropped with old db-seed path; offline filtering in `tree_builder/scripts/analyze_kan_pgns.py` |
+| Leaf **Best game** PGN annotation from source database | **Deferred** | Was db-seed export metadata; not in db-explorer pipeline |
 
 ### README / docs drift
 
 | Item | Status | Notes |
 |------|--------|-------|
 | README reflects repertoire builder scope | **Partial** | Updated to point at `docs/COMPONENT_MAP.md`; expand feature list over time |
-| `docs/ALGORITHM.md` file paths | **Partial** | References moved paths (`candidate_service` → `features/browse/`, etc.) |
+| `docs/ALGORITHM.md` file paths | **Partial** | Flutter-side paths; C CLI detail is in `tree_builder/ALGORITHM.md` |
 
 ---
 
@@ -183,7 +185,8 @@ These remain **undecided**; pick one before implementing dependent UI:
 ## Related reference docs (not backlog)
 
 - `docs/COMPONENT_MAP.md` — current implementation
-- `docs/ALGORITHM.md` — pipeline description (update paths as needed)
+- `docs/ALGORITHM.md` — Flutter pipeline description
+- `tree_builder/ALGORITHM.md` — C `tree_builder` CLI (db-explorer, expectimax)
 - `docs/tree-display-architecture.md` — eval-tree graph performance principles
 - `known-issues.md` — active bugs
 - `tree_builder/TODO_cloud_evals.md` — infra backlog
