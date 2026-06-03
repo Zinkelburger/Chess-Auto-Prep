@@ -164,14 +164,20 @@ ChessBoolean chess_position_move_is_legal(const ChessPosition* position, ChessMo
 
 ChessBoolean chess_position_move_is_capture(const ChessPosition* position, ChessMove move)
 {
+    ChessSquare from = chess_move_from(move);
     ChessSquare to = chess_move_to(move);
-    ChessRank ep_rank;
+    ChessPiece piece = position->piece[from];
+
     if (position->piece[to] != CHESS_PIECE_NONE)
         return CHESS_TRUE;
 
-    /* Special case is en passant */
-    ep_rank = (position->to_move == CHESS_COLOR_WHITE) ? CHESS_RANK_6 : CHESS_RANK_3;
-    return (position->ep != CHESS_FILE_INVALID && to == chess_square_from_fr(position->ep, ep_rank));
+    if (piece == CHESS_PIECE_WHITE_PAWN || piece == CHESS_PIECE_BLACK_PAWN) {
+        ChessRank ep_rank = (position->to_move == CHESS_COLOR_WHITE)
+            ? CHESS_RANK_6 : CHESS_RANK_3;
+        return position->ep != CHESS_FILE_INVALID
+            && to == chess_square_from_fr(position->ep, ep_rank);
+    }
+    return CHESS_FALSE;
 }
 
 ChessResult chess_position_check_result(const ChessPosition* position)

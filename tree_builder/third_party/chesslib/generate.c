@@ -204,7 +204,9 @@ gen_pawn_promotes:
                                 return chess_move_make(gen->sq, gen->to);
                         }
                     }
-                    else if (chess_square_rank(gen->sq) == start_rank && gen->to == gen->sq + slide)
+                    else if (chess_square_rank(gen->sq) == start_rank
+                        && gen->to == gen->sq + slide
+                        && position->piece[gen->to] == CHESS_PIECE_NONE)
                     {
                         gen->to += slide;
                         if (position->piece[gen->to] == CHESS_PIECE_NONE)

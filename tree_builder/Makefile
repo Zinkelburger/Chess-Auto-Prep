@@ -104,7 +104,6 @@ SRCS = $(SRC_DIR)/node.c \
        $(SRC_DIR)/database.c \
        $(SRC_DIR)/engine_pool.c \
        $(SRC_DIR)/repertoire.c \
-       $(SRC_DIR)/pgn_reader.c \
        $(SRC_DIR)/maia.c \
        $(SRC_DIR)/sqlite3_amalg.c \
        $(SRC_DIR)/cJSON.c \
@@ -158,10 +157,17 @@ TEST_CDB_MOCK_OBJS = $(BUILD_DIR)/test_eval_source_cdbmock.o \
                      $(BUILD_DIR)/mock_cdbdirect.o
 TEST_CDB_MOCK_TARGET = $(BIN_DIR)/test_eval_source_cdbdirect_mock
 
+# chesslib + san_convert unit tests
+TEST_CHESSLIB_SRC = tests/test_chesslib.c
+TEST_CHESSLIB_OBJS = $(BUILD_DIR)/test_chesslib.o \
+                     $(BUILD_DIR)/san_convert.o \
+                     $(patsubst $(CHESSLIB_DIR)/%.c,$(BUILD_DIR)/chesslib_%.o,$(CHESSLIB_SRCS))
+TEST_CHESSLIB_TARGET = $(BIN_DIR)/test_chesslib
+
 # Include paths
 INCLUDES = -I$(INC_DIR) -I$(SRC_DIR) $(LOCAL_INC)
 
-.PHONY: all clean install test test-eval-source test-cdbdirect-mock setup-cdbdirect help check-deps dist etl
+.PHONY: all clean install test test-chesslib test-eval-source test-cdbdirect-mock setup-cdbdirect help check-deps dist etl
 
 all: check-deps directories $(TARGET)
 
@@ -226,6 +232,18 @@ $(BUILD_DIR)/maia.o: $(INC_DIR)/maia.h $(INC_DIR)/chess_logic.h $(SRC_DIR)/maia_
 
 $(BUILD_DIR)/test_eval_source.o: $(TEST_EVAL_SRC)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/test_chesslib.o: $(TEST_CHESSLIB_SRC)
+	$(CC) $(CFLAGS) $(INCLUDES) -I$(CHESSLIB_DIR) -c $< -o $@
+
+$(TEST_CHESSLIB_TARGET): directories $(TEST_CHESSLIB_OBJS)
+	$(CC) $(TEST_CHESSLIB_OBJS) -o $@ -lm
+	@echo "  Test binary: $(TEST_CHESSLIB_TARGET)"
+
+test-chesslib: $(TEST_CHESSLIB_TARGET)
+	@echo ""
+	@echo "Running chesslib / san_convert unit tests..."
+	@cd $(CURDIR) && $(TEST_CHESSLIB_TARGET)
 
 $(TEST_EVAL_TARGET): $(TEST_EVAL_OBJS)
 	$(CC) $(TEST_EVAL_OBJS) -o $@ $(LOCAL_LIB) $(LDFLAGS)
@@ -352,6 +370,7 @@ help:
 	@echo "  clean      - Remove build artifacts"
 	@echo "  install    - Install to /usr/local/bin"
 	@echo "  test       - Quick test (no engine)"
+	@echo "  test-chesslib - chesslib + san_convert unit tests"
 	@echo "  test-eval-source - EvalSource / ChessDB unit tests"
 	@echo "  test-cdbdirect-mock - cdbdirect mock tests (no TerarkDB required)"
 	@echo "  setup-cdbdirect - Build TerarkDB + cdbdirect (see CDBDIRECT_SETUP.md)"

@@ -20,6 +20,24 @@
 #define PGN_FREQ_INITIAL_MOVES   8
 #define PGN_MOVETEXT_BUF_SIZE    (256 * 1024)
 #define PGN_MAX_PREFIX_MOVES     256
+#define PGN_MOVE_HISTORY_LEN     16
+#define PGN_HDR_FIELD_LEN        128
+#define PGN_HDR_EVENT_LEN        256
+
+extern volatile int g_interrupted;
+
+typedef struct PgnGameHeaders {
+    char white[PGN_HDR_FIELD_LEN];
+    char black[PGN_HDR_FIELD_LEN];
+    char event[PGN_HDR_EVENT_LEN];
+    char date[PGN_HDR_FIELD_LEN];
+    char round[PGN_HDR_FIELD_LEN];
+} PgnGameHeaders;
+
+typedef struct PgnMoveHistory {
+    char entries[PGN_MOVE_HISTORY_LEN][24];
+    int count;
+} PgnMoveHistory;
 
 typedef struct PgnFreqEntry {
     PgnFreqPosition pos;
@@ -34,6 +52,125 @@ struct PgnFreqMap {
 };
 
 static bool read_line(FILE *fp, char *buf, size_t buf_len);
+static const char *skip_whitespace(const char *p);
+
+static void pgn_headers_clear(PgnGameHeaders *hdr) {
+    if (!hdr) return;
+    memset(hdr, 0, sizeof(*hdr));
+}
+
+static void pgn_headers_set(PgnGameHeaders *hdr, const char *tag, const char *value) {
+    char *dst = NULL;
+    size_t cap = 0;
+
+    if (strcmp(tag, "White") == 0) {
+        dst = hdr->white;
+        cap = sizeof(hdr->white);
+    } else if (strcmp(tag, "Black") == 0) {
+        dst = hdr->black;
+        cap = sizeof(hdr->black);
+    } else if (strcmp(tag, "Event") == 0) {
+        dst = hdr->event;
+        cap = sizeof(hdr->event);
+    } else if (strcmp(tag, "Date") == 0) {
+        dst = hdr->date;
+        cap = sizeof(hdr->date);
+    } else if (strcmp(tag, "Round") == 0) {
+        dst = hdr->round;
+        cap = sizeof(hdr->round);
+    }
+    if (dst && value)
+        snprintf(dst, cap, "%s", value);
+}
+
+static bool parse_tag_line(const char *line, PgnGameHeaders *hdr) {
+    const char *p = skip_whitespace(line);
+    if (*p != '[') return false;
+    p++;
+
+    char tag[64];
+    size_t ti = 0;
+    while (*p && *p != ' ' && *p != '\t' && *p != ']') {
+        if (ti + 1 < sizeof(tag)) tag[ti++] = *p;
+        p++;
+    }
+    tag[ti] = '\0';
+    if (!tag[0]) return false;
+
+    while (*p && *p != '"') p++;
+    if (*p != '"') return false;
+    p++;
+
+    char value[PGN_HDR_EVENT_LEN];
+    size_t vi = 0;
+    while (*p && *p != '"' && vi + 1 < sizeof(value)) value[vi++] = *p++;
+    value[vi] = '\0';
+    if (*p != '"') return false;
+
+    pgn_headers_set(hdr, tag, value);
+    return true;
+}
+
+static void format_san_ply_label(const ChessPosition *pos, const char *san,
+                                 char *out, size_t out_len) {
+    if (!pos || !san || !out || out_len == 0) return;
+    if (pos->white_to_move)
+        snprintf(out, out_len, "%d.%s", pos->fullmove_number, san);
+    else
+        snprintf(out, out_len, "%d...%s", pos->fullmove_number, san);
+}
+
+static void history_push(PgnMoveHistory *hist, const char *label) {
+    if (!hist || !label || !label[0]) return;
+    if (hist->count < PGN_MOVE_HISTORY_LEN) {
+        snprintf(hist->entries[hist->count], sizeof(hist->entries[0]),
+                 "%s", label);
+        hist->count++;
+        return;
+    }
+    for (int i = 1; i < PGN_MOVE_HISTORY_LEN; i++)
+        memcpy(hist->entries[i - 1], hist->entries[i],
+               sizeof(hist->entries[0]));
+    snprintf(hist->entries[PGN_MOVE_HISTORY_LEN - 1],
+             sizeof(hist->entries[0]), "%s", label);
+    hist->count = PGN_MOVE_HISTORY_LEN;
+}
+
+static const char *hdr_or_unknown(const char *s) {
+    return (s && s[0]) ? s : "?";
+}
+
+static void warn_move_failure(const char *reason, const char *san, int ply,
+                              const char *fen, const ChessPosition *pos,
+                              const PgnGameHeaders *hdr, int game_num,
+                              const PgnMoveHistory *hist) {
+    char failed_label[32];
+    format_san_ply_label(pos, san, failed_label, sizeof(failed_label));
+
+    fprintf(stderr, "Warning: %s '%s' at ply %d (FEN: %s)\n",
+            reason, san, ply, fen);
+    fprintf(stderr,
+            "  Game #%d: White=%s, Black=%s, Event=%s, Round=%s, Date=%s\n",
+            game_num,
+            hdr_or_unknown(hdr ? hdr->white : NULL),
+            hdr_or_unknown(hdr ? hdr->black : NULL),
+            hdr_or_unknown(hdr ? hdr->event : NULL),
+            hdr_or_unknown(hdr ? hdr->round : NULL),
+            hdr_or_unknown(hdr ? hdr->date : NULL));
+
+    fprintf(stderr, "  Recent moves:");
+    int start = 0;
+    if (hist && hist->count > 0) {
+        start = hist->count > 8 ? hist->count - 8 : 0;
+        for (int i = start; i < hist->count; i++)
+            fprintf(stderr, " %s", hist->entries[i]);
+        fprintf(stderr, " %s", failed_label);
+    } else {
+        fprintf(stderr, " %s", failed_label);
+    }
+    fprintf(stderr, "  <-- failed here\n");
+    fprintf(stderr, "  Skipping rest of game.\n");
+}
 
 static uint32_t pgn_freq_hash(const char *key, size_t num_buckets) {
     uint32_t hash = 2166136261u;
@@ -244,7 +381,7 @@ static const char *skip_variation(const char *p) {
 /** After a truncated movetext read, skip to the next game boundary. */
 static void skip_rest_of_game(FILE *fp) {
     char line[4096];
-    while (read_line(fp, line, sizeof(line))) {
+    while (!g_interrupted && read_line(fp, line, sizeof(line))) {
         const char *p = skip_whitespace(line);
         if (*p == '\0') return;
         if (*p == '[') {
@@ -286,7 +423,8 @@ static const char *next_token(const char *p, char *tok, size_t tok_len) {
 static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
                                   const char *movetext,
                                   char prefix[PGN_MAX_PREFIX_MOVES][16],
-                                  int prefix_len) {
+                                  int prefix_len,
+                                  const PgnGameHeaders *hdr, int game_num) {
     ChessPosition pos;
     const char *start_fen = (cfg && cfg->start_fen) ? cfg->start_fen : DEFAULT_START_FEN;
     if (!position_from_fen(&pos, start_fen)) return false;
@@ -296,13 +434,18 @@ static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
 
     bool tracking = (prefix_len == 0);
     int prefix_idx = 0;
+    int ply = 0;
     int ply_tracked = 0;
     int max_ply = cfg ? cfg->max_ply : 0;
+    PgnMoveHistory history;
+    memset(&history, 0, sizeof(history));
 
     const char *p = movetext;
     char tok[64];
 
     while (*p) {
+        if (g_interrupted) return false;
+
         p = next_token(p, tok, sizeof(tok));
         if (!tok[0]) break;
 
@@ -312,8 +455,8 @@ static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
 
         char uci[8];
         if (!san_to_uci(fen_buf, san, uci, sizeof(uci))) {
-            fprintf(stderr, "Warning: illegal move '%s' in PGN — skipping rest of game\n",
-                    san);
+            warn_move_failure("cannot apply move", san, ply, fen_buf, &pos,
+                              hdr, game_num, &history);
             return false;
         }
 
@@ -322,13 +465,16 @@ static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
                 !san_moves_match(san, prefix[prefix_idx])) {
                 return false;
             }
+            char label[24];
+            format_san_ply_label(&pos, san, label, sizeof(label));
             if (!position_apply_uci(&pos, uci)) {
-                fprintf(stderr,
-                        "Warning: could not apply prefix move '%s' — skipping game\n",
-                        san);
+                warn_move_failure("cannot apply move", san, ply, fen_buf, &pos,
+                                  hdr, game_num, &history);
                 return false;
             }
             position_to_fen(&pos, fen_buf, sizeof(fen_buf));
+            history_push(&history, label);
+            ply++;
             prefix_idx++;
             if (prefix_idx >= prefix_len) {
                 tracking = true;
@@ -345,13 +491,16 @@ static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
         fen_map_canonicalize_key(fen_buf, key, sizeof(key));
         pgn_freq_record_move(map, key, uci, san);
 
+        char label[24];
+        format_san_ply_label(&pos, san, label, sizeof(label));
         if (!position_apply_uci(&pos, uci)) {
-            fprintf(stderr,
-                    "Warning: could not apply move '%s' — skipping rest of game\n",
-                    tok);
+            warn_move_failure("cannot apply move", san, ply, fen_buf, &pos,
+                              hdr, game_num, &history);
             return false;
         }
         position_to_fen(&pos, fen_buf, sizeof(fen_buf));
+        history_push(&history, label);
+        ply++;
 
         char next_key[FEN_KEY_MAX_LENGTH];
         fen_map_canonicalize_key(fen_buf, next_key, sizeof(next_key));
@@ -377,7 +526,7 @@ static int load_movetext_from_file(FILE *fp, char *buf, size_t buf_len) {
     size_t len = 0;
     buf[0] = '\0';
 
-    while (read_line(fp, buf + len, buf_len - len)) {
+    while (!g_interrupted && read_line(fp, buf + len, buf_len - len)) {
         size_t line_len = strlen(buf + len);
         if (line_len == 0) continue;
 
@@ -412,8 +561,10 @@ static int pgn_freq_load_stream(PgnFreqMap *map, const PgnFreqConfig *cfg,
     char prefix[PGN_MAX_PREFIX_MOVES][16];
     int prefix_len = parse_prefix_moves(cfg ? cfg->start_moves : NULL, prefix);
     int games_parsed = 0;
+    int game_num = 0;
+    PgnGameHeaders hdr;
 
-    while (!feof(fp)) {
+    while (!feof(fp) && !g_interrupted) {
         /* Skip blank lines between games. */
         long pos = ftell(fp);
         if (!read_line(fp, line, sizeof(line))) break;
@@ -422,35 +573,42 @@ static int pgn_freq_load_stream(PgnFreqMap *map, const PgnFreqConfig *cfg,
             continue;
         }
 
-        if (!line_starts_tag(line)) {
-            /* Movetext without headers (rare). */
-            fseek(fp, pos, SEEK_SET);
-        } else {
-            /* Skip header block. */
-            while (line_starts_tag(line)) {
-                if (!read_line(fp, line, sizeof(line))) goto done;
+        pgn_headers_clear(&hdr);
+        bool has_movetext = false;
+
+        if (line_starts_tag(line)) {
+            game_num++;
+            parse_tag_line(line, &hdr);
+            while (read_line(fp, line, sizeof(line)) && line_starts_tag(line)) {
+                if (g_interrupted) goto done;
+                parse_tag_line(line, &hdr);
             }
-            /* `line` may be blank or start movetext. */
+            if (g_interrupted) goto done;
+
             if (line[0] != '\0' && line[0] != '\n' &&
                 line[strspn(line, " \t\r\n")] != '\0') {
                 snprintf(movetext, sizeof(movetext), "%s", line);
-                if (load_movetext_from_file(fp, movetext + strlen(movetext),
-                                            sizeof(movetext) - strlen(movetext))) {
-                    if (process_game_movetext(map, cfg, movetext, prefix, prefix_len)) {
-                        games_parsed++;
-                        map->total_games++;
-                    }
-                }
-                continue;
+                has_movetext = load_movetext_from_file(
+                    fp, movetext + strlen(movetext),
+                    sizeof(movetext) - strlen(movetext)) != 0;
+            } else {
+                has_movetext =
+                    load_movetext_from_file(fp, movetext, sizeof(movetext)) != 0;
             }
+        } else {
+            game_num++;
+            fseek(fp, pos, SEEK_SET);
+            has_movetext =
+                load_movetext_from_file(fp, movetext, sizeof(movetext)) != 0;
         }
 
-        if (!load_movetext_from_file(fp, movetext, sizeof(movetext))) {
+        if (!has_movetext) {
             if (feof(fp)) break;
             continue;
         }
 
-        if (process_game_movetext(map, cfg, movetext, prefix, prefix_len)) {
+        if (process_game_movetext(map, cfg, movetext, prefix, prefix_len,
+                                  &hdr, game_num)) {
             games_parsed++;
             map->total_games++;
         }

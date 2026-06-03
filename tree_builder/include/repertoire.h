@@ -19,8 +19,19 @@
 #include "tree.h"
 #include "database.h"
 #include "engine_pool.h"
-#include "pgn_reader.h"
 #include <stdbool.h>
+
+/** PGN header fields for a source game (reserved for future db-seed export). */
+typedef struct {
+    char white[64];
+    char black[64];
+    char event[128];
+    char site[64];
+    char date[16];
+    char result[8];
+    int  white_elo;
+    int  black_elo;
+} PgnGameMeta;
 
 /**
  * Configuration for repertoire generation
