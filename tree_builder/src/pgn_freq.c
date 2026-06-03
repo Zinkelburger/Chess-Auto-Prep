@@ -37,6 +37,8 @@ typedef struct PgnGameHeaders {
     char event[PGN_HDR_EVENT_LEN];
     char date[PGN_HDR_FIELD_LEN];
     char round[PGN_HDR_FIELD_LEN];
+    int white_elo;  /* 0 = missing/unparseable */
+    int black_elo;
 } PgnGameHeaders;
 
 typedef struct PgnMoveHistory {
@@ -83,9 +85,21 @@ static void pgn_headers_set(PgnGameHeaders *hdr, const char *tag, const char *va
     } else if (strcmp(tag, "Round") == 0) {
         dst = hdr->round;
         cap = sizeof(hdr->round);
+    } else if (strcmp(tag, "WhiteElo") == 0) {
+        hdr->white_elo = atoi(value);
+        return;
+    } else if (strcmp(tag, "BlackElo") == 0) {
+        hdr->black_elo = atoi(value);
+        return;
     }
     if (dst && value)
         snprintf(dst, cap, "%s", value);
+}
+
+static bool game_below_min_elo(const PgnFreqConfig *cfg, const PgnGameHeaders *hdr) {
+    if (!cfg || cfg->min_elo <= 0 || !hdr) return false;
+    if (hdr->white_elo <= 0 || hdr->black_elo <= 0) return false;
+    return hdr->white_elo < cfg->min_elo && hdr->black_elo < cfg->min_elo;
 }
 
 static bool parse_tag_line(const char *line, PgnGameHeaders *hdr) {
@@ -620,6 +634,7 @@ static int pgn_freq_load_stream(PgnFreqMap *map, const PgnFreqConfig *cfg,
 
     int games_parsed = 0;
     int prefix_skipped = 0;
+    int elo_skipped = 0;
     int game_num = 0;
     PgnGameHeaders hdr;
 
@@ -666,6 +681,11 @@ static int pgn_freq_load_stream(PgnFreqMap *map, const PgnFreqConfig *cfg,
             continue;
         }
 
+        if (game_below_min_elo(cfg, &hdr)) {
+            elo_skipped++;
+            continue;
+        }
+
         int game_result = process_game_movetext(map, cfg, movetext, target_key,
                                                 has_target, &hdr, game_num);
         if (game_result == PGN_GAME_OK) {
@@ -685,6 +705,11 @@ done:
         fprintf(stderr,
                 "  %d games skipped (did not reach starting position)\n",
                 prefix_skipped);
+    }
+    if (elo_skipped > 0 && cfg && cfg->min_elo > 0) {
+        fprintf(stderr,
+                "  %d games skipped (both players below --min-elo %d)\n",
+                elo_skipped, cfg->min_elo);
     }
     return games_parsed;
 }

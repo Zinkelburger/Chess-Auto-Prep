@@ -61,10 +61,12 @@ runs three sub-passes before expectimax:
    target, the parser builds a canonical 4-field FEN key for that position
    and **starts counting only after the live position matches that key**
    (walking forward move-by-move).  Games that never reach the target are
-   skipped (logged in aggregate).  Per-position move counts use the same
-   canonical FEN keys as `fen_map.c`.  Multiple `--pgn` files merge into one
-   map.  The `--fen` / `--moves` root seeds the BFS tree in stage 1b, not a
-   separate freq-map anchor.
+   skipped (logged in aggregate).  Games where **both** `[WhiteElo]` and
+   `[BlackElo]` are present and below `--min-elo` (default 2100) are
+   skipped; missing or partial Elo tags are kept (benefit of the doubt).
+   Per-position move counts use the same canonical FEN keys as `fen_map.c`.
+   Multiple `--pgn` files merge into one map.  The `--fen` / `--moves`
+   root seeds the BFS tree in stage 1b, not a separate freq-map anchor.
 2. **Tree materialization** (`tree_build_from_freqmap` in `tree_db_build.c`)
    — BFS from the root FEN through the map:
    - **Our moves:** every move at that position (`move_probability = 1.0`,
@@ -86,7 +88,7 @@ runs three sub-passes before expectimax:
   parsed on its own worker thread (up to `-t` threads), then maps are merged.
 - **Frequency cache** — after a full parse, the map is written to
   `<name>.freq.bin` with a JSON manifest (PGN paths, sizes, mtimes,
-  `--moves`, format version).  A later run reloads the cache when the manifest
+  `--moves`, `--min-elo`, format version).  A later run reloads the cache when the manifest
   matches; `--no-freq-cache` forces a reparse.
 - **Deferred Stockfish pool** — in db-explorer mode the engine pool is not
   started until after the frequency map is built (PGN parse / cache load only);
@@ -621,6 +623,7 @@ all castling UCI to king-destination form at three levels:
 | `pgn_files` | `--pgn` | (required) | PGN database file(s); repeatable |
 | `db_min_games` | `--db-min-games` | 5 | Min game count per opponent move |
 | `db_min_prob` | `--db-min-prob` | 0.05 | Min move probability (count/reach) for opponent moves |
+| `min_elo` | `--min-elo` | 2100 | Skip PGN games when both `[WhiteElo]` and `[BlackElo]` are present and below N |
 
 ### Eval Window Pruning
 
