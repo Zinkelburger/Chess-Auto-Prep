@@ -11,7 +11,6 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../models/engine_settings.dart';
 import '../analysis_service.dart';
 import 'stockfish_pool.dart';
 
@@ -67,10 +66,9 @@ class EngineLifecycle extends ChangeNotifier {
 
   Future<void> _doToggleOn() async {
     if (_state != EngineState.off) return;
-    if (!testMode) {
-      final settings = EngineSettings();
-      await _pool.ensureWorkers(settings.workers, 1);
-    }
+    // Workers are spawned lazily on first use (ensureWorkers is called by
+    // AnalysisService, EngineWeaknessService, etc. before any eval work).
+    // This avoids N Stockfish processes sitting idle after app launch.
     _state = EngineState.idle;
     _persistToggle(true);
     notifyListeners();
@@ -118,11 +116,9 @@ class EngineLifecycle extends ChangeNotifier {
 
   /// Called when generation finishes or is cancelled.
   Future<void> exitGeneration() async {
-    final settings = EngineSettings();
     if (_toggleStateBeforeGeneration) {
-      if (!testMode) {
+      if (!testMode && _pool.workerCount > 0) {
         await _pool.reconfigureAllWorkers(1);
-        await _pool.ensureWorkers(settings.workers, 1);
       }
       _state = EngineState.idle;
     } else {

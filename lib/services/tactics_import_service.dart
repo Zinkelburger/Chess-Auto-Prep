@@ -546,8 +546,9 @@ class TacticsImportService {
 
         final isBlunder = delta >= 0.3;
         final isMistake = delta >= 0.2 && delta < 0.3;
+        final isInaccuracy = delta >= 0.1 && delta < 0.2;
 
-        if ((isBlunder || isMistake) && evalA.pv.isNotEmpty) {
+        if ((isBlunder || isMistake || isInaccuracy) && evalA.pv.isNotEmpty) {
           final bestMoveUci = evalA.pv.first;
 
           final allPvSan = <String>[];
@@ -592,8 +593,8 @@ class TacticsImportService {
 
           final wpBefore = _winPercent(cpA);
           final wpAfter = _winPercent(cpB);
-          final mistakeType = isBlunder ? '??' : '?';
-          final label = isBlunder ? 'Blunder' : 'Mistake';
+          final mistakeType = isBlunder ? '??' : isMistake ? '?' : '?!';
+          final label = isBlunder ? 'Blunder' : isMistake ? 'Mistake' : 'Inaccuracy';
           final analysis = '$label. Win chance dropped from '
               '${wpBefore.toStringAsFixed(1)}% to '
               '${wpAfter.toStringAsFixed(1)}% '
