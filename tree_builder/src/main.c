@@ -1462,13 +1462,13 @@ int main(int argc, char *argv[]) {
                 freq = pgn_freq_map_load(freq_cache_path, manifest);
                 if (freq) {
                     size_t map_positions = 0;
-                    uint64_t map_reach = 0;
-                    pgn_freq_stats(freq, &map_positions, &map_reach);
-                    parsed_games = (int)map_reach;
+                    uint64_t map_total_games = 0;
+                    pgn_freq_stats(freq, &map_positions, &map_total_games);
+                    parsed_games = (int)map_total_games;
                     loaded_from_cache = true;
                     printf("Loading cached frequency map from %s (%zu positions, %llu games)\n",
                            freq_cache_path, map_positions,
-                           (unsigned long long)map_reach);
+                           (unsigned long long)map_total_games);
                 }
             }
 
@@ -1511,11 +1511,11 @@ int main(int argc, char *argv[]) {
             free(manifest);
 
             size_t map_positions = 0;
-            uint64_t map_reach = 0;
-            pgn_freq_stats(freq, &map_positions, &map_reach);
+            uint64_t map_total_games = 0;
+            pgn_freq_stats(freq, &map_positions, &map_total_games);
             if (!loaded_from_cache)
-                printf("  Frequency map: %zu positions, %llu game reaches\n",
-                       map_positions, (unsigned long long)map_reach);
+                printf("  Frequency map: %zu positions, %llu games parsed\n",
+                       map_positions, (unsigned long long)map_total_games);
 
             DbBuildConfig db_cfg = {
                 .start_fen = start_fen,
@@ -1592,12 +1592,33 @@ int main(int argc, char *argv[]) {
 
             printf("  Enriching engine evaluations...\n");
             EvalEnrichStats enrich_stats;
-            tree_enrich_evals(tree, &config, &enrich_stats);
+            bool enrich_ok = tree_enrich_evals(tree, &config, &enrich_stats);
             printf("  Eval enrichment: %d cache hits, %d external, %d Stockfish, "
                    "%d failed (of %d nodes)\n",
                    enrich_stats.cache_hits, enrich_stats.ext_hits,
                    enrich_stats.sf_evals, enrich_stats.failed,
                    enrich_stats.total_nodes);
+            if (!enrich_ok && enrich_stats.failed > 0) {
+                double fail_rate = enrich_stats.total_nodes > 0
+                    ? (double)enrich_stats.failed /
+                      (double)enrich_stats.total_nodes
+                    : 1.0;
+                fprintf(stderr,
+                        "\n*** WARNING: %d of %d nodes (%d%%) lack engine evals "
+                        "after enrichment — expectimax/export may be misleading ***\n",
+                        enrich_stats.failed, enrich_stats.total_nodes,
+                        (int)(fail_rate * 100.0 + 0.5));
+                if (fail_rate > 0.5) {
+                    fprintf(stderr,
+                            "Error: more than 50%% of nodes failed eval enrichment; "
+                            "aborting.\n");
+                    tree_destroy(tree);
+                    if (engine_pool) engine_pool_destroy(engine_pool);
+                    if (maia) maia_destroy(maia);
+                    rdb_close(db);
+                    return 1;
+                }
+            }
 
             tree_recalculate_probabilities(tree);
         } else {

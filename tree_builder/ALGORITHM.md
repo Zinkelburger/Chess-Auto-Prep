@@ -59,7 +59,21 @@ runs three sub-passes before expectimax:
    - Pruned by `-p` / `--probability`, `-d` / `--ply`, optional `max_nodes`
 3. **Eval enrichment** (`tree_enrich_evals`) — batch-fill missing evals:
    SQLite project cache → external chain (Lichess eval DB, CdbDirect,
-   ChessDB local/API) → Stockfish at `-e` / `--eval-depth`
+   ChessDB local/API) → Stockfish at `-e` / `--eval-depth`.  If more than
+   half of nodes still lack evals afterward, the run aborts; otherwise a
+   prominent warning is printed and expectimax continues.
+
+**PGN ingest optimizations** (see also `docs/COMPONENT_MAP.md`):
+
+- **Parallel per-file parsing** — with multiple `--pgn` files, each file is
+  parsed on its own worker thread (up to `-t` threads), then maps are merged.
+- **Frequency cache** — after a full parse, the map is written to
+  `<name>.freq.bin` with a JSON manifest (PGN paths, sizes, mtimes,
+  `--moves`, format version).  A later run reloads the cache when the manifest
+  matches; `--no-freq-cache` forces a reparse.
+- **Deferred Stockfish pool** — in db-explorer mode the engine pool is not
+  started until after the frequency map is built (PGN parse / cache load only);
+  Stockfish is then used for `tree_enrich_evals` and later stages.
 
 Then `tree_recalculate_probabilities()` chains cumulative probability and
 stages 2–4 run as usual (expectimax, optional traps, export).  No Maia or
