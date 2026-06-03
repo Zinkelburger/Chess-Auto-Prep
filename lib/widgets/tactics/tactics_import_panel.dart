@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_state.dart';
+import '../../models/tactics_position.dart';
+import '../../models/tactics_session_settings.dart';
 import '../../services/tactics_import_service.dart';
 
 /// Import controls and session start UI when no tactic is active.
-class TacticsImportPanel extends StatelessWidget {
+class TacticsImportPanel extends StatefulWidget {
   const TacticsImportPanel({
     super.key,
     this.importStatus,
@@ -27,7 +29,7 @@ class TacticsImportPanel extends StatelessWidget {
     required this.onImportChessCom,
     required this.onDismissImportStatus,
     required this.onCancelImport,
-    required this.positionCount,
+    required this.positions,
     required this.onStartSession,
     required this.onClearDatabase,
     required this.onBrowseTactics,
@@ -53,25 +55,72 @@ class TacticsImportPanel extends StatelessWidget {
   final VoidCallback onImportChessCom;
   final VoidCallback onDismissImportStatus;
   final VoidCallback onCancelImport;
-  final int positionCount;
-  final VoidCallback onStartSession;
+  final List<TacticsPosition> positions;
+  final void Function(TacticsSessionSettings settings) onStartSession;
   final VoidCallback onClearDatabase;
   final VoidCallback onBrowseTactics;
   final bool clearDatabaseEnabled;
 
   @override
+  State<TacticsImportPanel> createState() => _TacticsImportPanelState();
+}
+
+class _TacticsImportPanelState extends State<TacticsImportPanel> {
+  var _settings = const TacticsSessionSettings();
+
+  int get _matchingCount => _settings.countMatching(widget.positions);
+
+  Future<void> _showSessionSettingsDialog() async {
+    var draft = _settings;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final matching = draft.countMatching(widget.positions);
+          return AlertDialog(
+            title: const Text('Session Settings'),
+            content: SizedBox(
+              width: 360,
+              child: _SessionSettingsForm(
+                settings: draft,
+                onChanged: (s) => setDialogState(() => draft = s),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  setState(() => _settings = draft);
+                  Navigator.pop(ctx);
+                },
+                child: Text('Apply ($matching positions)'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final positionCount = widget.positions.length;
+    final matchingCount = _matchingCount;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (importStatus != null) ...[
+        if (widget.importStatus != null) ...[
           TacticsImportStatusBanner(
-            status: importStatus!,
-            isImporting: isImporting,
-            hasActiveImport: activeImport != null,
-            analyzedGameCount: analyzedGameCount,
-            onCancelImport: onCancelImport,
-            onDismiss: onDismissImportStatus,
+            status: widget.importStatus!,
+            isImporting: widget.isImporting,
+            hasActiveImport: widget.activeImport != null,
+            analyzedGameCount: widget.analyzedGameCount,
+            onCancelImport: widget.onCancelImport,
+            onDismiss: widget.onDismissImportStatus,
           ),
           const SizedBox(height: 16),
         ],
@@ -94,7 +143,7 @@ class TacticsImportPanel extends StatelessWidget {
                           Expanded(
                             flex: 2,
                             child: TextField(
-                              controller: lichessUserController,
+                              controller: widget.lichessUserController,
                               decoration: const InputDecoration(
                                 labelText: 'Lichess Username',
                                 border: OutlineInputBorder(),
@@ -111,7 +160,7 @@ class TacticsImportPanel extends StatelessWidget {
                           SizedBox(
                             width: 120,
                             child: TextField(
-                              controller: lichessCountController,
+                              controller: widget.lichessCountController,
                               decoration: const InputDecoration(
                                 labelText: 'Recent Games',
                                 border: OutlineInputBorder(),
@@ -122,8 +171,9 @@ class TacticsImportPanel extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton(
-                            onPressed: importStatus == null && importFieldsValid
-                                ? onImportLichess
+                            onPressed: widget.importStatus == null &&
+                                    widget.importFieldsValid
+                                ? widget.onImportLichess
                                 : null,
                             child: const Text('Import'),
                           ),
@@ -135,7 +185,7 @@ class TacticsImportPanel extends StatelessWidget {
                           Expanded(
                             flex: 2,
                             child: TextField(
-                              controller: chessComUserController,
+                              controller: widget.chessComUserController,
                               decoration: const InputDecoration(
                                 labelText: 'Chess.com Username',
                                 border: OutlineInputBorder(),
@@ -152,7 +202,7 @@ class TacticsImportPanel extends StatelessWidget {
                           SizedBox(
                             width: 120,
                             child: TextField(
-                              controller: chessComCountController,
+                              controller: widget.chessComCountController,
                               decoration: const InputDecoration(
                                 labelText: 'Recent Games',
                                 border: OutlineInputBorder(),
@@ -163,8 +213,9 @@ class TacticsImportPanel extends StatelessWidget {
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton(
-                            onPressed: importStatus == null && importFieldsValid
-                                ? onImportChessCom
+                            onPressed: widget.importStatus == null &&
+                                    widget.importFieldsValid
+                                ? widget.onImportChessCom
                                 : null,
                             child: const Text('Import'),
                           ),
@@ -176,32 +227,32 @@ class TacticsImportPanel extends StatelessWidget {
                           SizedBox(
                             width: 140,
                             child: TextField(
-                              controller: stockfishDepthController,
+                              controller: widget.stockfishDepthController,
                               decoration: InputDecoration(
                                 labelText: 'Stockfish Depth',
                                 border: const OutlineInputBorder(),
                                 isDense: true,
-                                errorText: depthError,
+                                errorText: widget.depthError,
                               ),
                               keyboardType: TextInputType.number,
-                              onChanged: onValidateDepth,
+                              onChanged: widget.onValidateDepth,
                             ),
                           ),
                           const SizedBox(width: 8),
                           SizedBox(
                             width: 100,
                             child: TextField(
-                              controller: coresController,
+                              controller: widget.coresController,
                               enabled:
                                   TacticsImportService.isParallelAvailable,
                               decoration: InputDecoration(
                                 labelText: 'Cores',
                                 border: const OutlineInputBorder(),
                                 isDense: true,
-                                errorText: coresError,
+                                errorText: widget.coresError,
                               ),
                               keyboardType: TextInputType.number,
-                              onChanged: onValidateCores,
+                              onChanged: widget.onValidateCores,
                             ),
                           ),
                         ],
@@ -214,28 +265,32 @@ class TacticsImportPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        if (positionCount > 0)
+        if (positionCount > 0) ...[
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: onStartSession,
+              onPressed: matchingCount > 0
+                  ? () => widget.onStartSession(_settings)
+                  : null,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.all(16),
-                backgroundColor: isImporting
+                backgroundColor: widget.isImporting
                     ? Colors.green[700]
                     : Theme.of(context).colorScheme.primaryContainer,
               ),
-              icon: Icon(isImporting ? Icons.play_circle : Icons.play_arrow),
+              icon: Icon(
+                  widget.isImporting ? Icons.play_circle : Icons.play_arrow),
               label: Text(
-                isImporting
-                    ? 'Start Training Now ($positionCount positions)'
-                    : 'Start Practice Session ($positionCount positions)',
+                widget.isImporting
+                    ? 'Start Training Now ($matchingCount positions)'
+                    : 'Start Practice Session ($matchingCount positions)',
                 style:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ),
-        if (isImporting && positionCount > 0) ...[
+        ],
+        if (widget.isImporting && positionCount > 0) ...[
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(8),
@@ -264,33 +319,179 @@ class TacticsImportPanel extends StatelessWidget {
           spacing: 16,
           runSpacing: 8,
           children: [
-            Tooltip(
+            _conditionalTooltip(
               message: positionCount == 0
                   ? 'No positions in database'
-                  : isImporting
+                  : widget.isImporting
                       ? 'Import in progress'
-                      : '',
+                      : null,
               child: TextButton.icon(
-                onPressed: clearDatabaseEnabled && positionCount > 0
-                    ? onClearDatabase
+                onPressed: widget.clearDatabaseEnabled && positionCount > 0
+                    ? widget.onClearDatabase
                     : null,
                 icon: const Icon(Icons.delete_outline, size: 16),
                 label: const Text('Clear Database'),
               ),
             ),
-            const SizedBox(width: 16),
-            Tooltip(
-              message: positionCount == 0 ? 'No tactics to browse' : '',
+            _conditionalTooltip(
+              message: positionCount == 0 ? 'No tactics to browse' : null,
               child: TextButton.icon(
                 onPressed:
-                    positionCount > 0 ? onBrowseTactics : null,
+                    positionCount > 0 ? widget.onBrowseTactics : null,
                 icon: const Icon(Icons.list_alt, size: 16),
                 label: const Text('Browse Tactics'),
               ),
             ),
+            if (positionCount > 0)
+              TextButton.icon(
+                onPressed: _showSessionSettingsDialog,
+                icon: const Icon(Icons.tune, size: 16),
+                label: const Text('Session Settings'),
+              ),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Wraps [child] in a [Tooltip] only when [message] is non-null.
+///
+/// Avoid empty tooltip messages — Flutter's OverlayPortal-based tooltips can
+/// assert if the message toggles between empty and non-empty during hover.
+Widget _conditionalTooltip({required String? message, required Widget child}) {
+  final text = message?.trim();
+  if (text == null || text.isEmpty) return child;
+  return Tooltip(message: text, child: child);
+}
+
+/// Session settings form (order, mistake-type filter, 1-star toggle).
+class _SessionSettingsForm extends StatelessWidget {
+  const _SessionSettingsForm({
+    required this.settings,
+    required this.onChanged,
+  });
+
+  final TacticsSessionSettings settings;
+  final ValueChanged<TacticsSessionSettings> onChanged;
+
+  static const _orderLabels = {
+    TacticsSessionOrder.newestFirst: 'Newest first',
+    TacticsSessionOrder.leastReviewed: 'Least reviewed',
+    TacticsSessionOrder.worstSuccessRate: 'Worst success rate',
+    TacticsSessionOrder.random: 'Random',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Text('Order:', style: TextStyle(fontSize: 13, color: Colors.grey[300])),
+            const SizedBox(width: 8),
+            DropdownButton<TacticsSessionOrder>(
+              value: settings.order,
+              isDense: true,
+              underline: const SizedBox(),
+              style: const TextStyle(fontSize: 13),
+              items: [
+                for (final entry in _orderLabels.entries)
+                  DropdownMenuItem(
+                    value: entry.key,
+                    child: Text(entry.value),
+                  ),
+              ],
+              onChanged: (v) {
+                if (v != null) onChanged(settings.copyWith(order: v));
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text('Include:', style: TextStyle(fontSize: 13, color: Colors.grey[300])),
+        _MistakeTypeCheckbox(
+          label: 'Blunders (??)',
+          type: '??',
+          selected: settings.mistakeTypes.contains('??'),
+          onChanged: (v) => _toggleMistakeType('??', v),
+        ),
+        _MistakeTypeCheckbox(
+          label: 'Mistakes (?)',
+          type: '?',
+          selected: settings.mistakeTypes.contains('?'),
+          onChanged: (v) => _toggleMistakeType('?', v),
+        ),
+        _MistakeTypeCheckbox(
+          label: 'Inaccuracies (?!)',
+          type: '?!',
+          selected: settings.mistakeTypes.contains('?!'),
+          onChanged: (v) => _toggleMistakeType('?!', v),
+        ),
+        const SizedBox(height: 8),
+        Text('Filter:', style: TextStyle(fontSize: 13, color: Colors.grey[300])),
+        _MistakeTypeCheckbox(
+          label: 'Unreviewed only',
+          type: '',
+          selected: settings.skipReviewed,
+          onChanged: (v) => onChanged(settings.copyWith(skipReviewed: v)),
+        ),
+        _MistakeTypeCheckbox(
+          label: '1-star rated',
+          type: '',
+          selected: settings.includeOneStar,
+          onChanged: (v) => onChanged(settings.copyWith(includeOneStar: v)),
+        ),
+      ],
+    );
+  }
+
+  void _toggleMistakeType(String type, bool include) {
+    final types = Set<String>.from(settings.mistakeTypes);
+    if (include) {
+      types.add(type);
+    } else {
+      types.remove(type);
+    }
+    onChanged(settings.copyWith(mistakeTypes: types));
+  }
+}
+
+class _MistakeTypeCheckbox extends StatelessWidget {
+  const _MistakeTypeCheckbox({
+    required this.label,
+    required this.type,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String type;
+  final bool selected;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 32,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: Checkbox(
+              value: selected,
+              onChanged: (v) => onChanged(v ?? false),
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(label, style: const TextStyle(fontSize: 13)),
+        ],
+      ),
     );
   }
 }

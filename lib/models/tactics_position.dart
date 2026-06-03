@@ -19,6 +19,7 @@ class TacticsPosition {
   final int hintsUsed; // Number of hints used
   final String
       opponentBestResponse; // Opponent's best reply after user's bad move
+  final int rating; // 0 = unrated, 1–5 star quality rating
 
   const TacticsPosition({
     required this.fen,
@@ -39,6 +40,7 @@ class TacticsPosition {
     this.timeToSolve = 0.0,
     this.hintsUsed = 0,
     this.opponentBestResponse = '',
+    this.rating = 0,
   });
 
   /// Create a copy with selected fields overridden.
@@ -62,6 +64,7 @@ class TacticsPosition {
     double? timeToSolve,
     int? hintsUsed,
     String? opponentBestResponse,
+    int? rating,
   }) {
     return TacticsPosition(
       fen: fen ?? this.fen,
@@ -83,6 +86,7 @@ class TacticsPosition {
       timeToSolve: timeToSolve ?? this.timeToSolve,
       hintsUsed: hintsUsed ?? this.hintsUsed,
       opponentBestResponse: opponentBestResponse ?? this.opponentBestResponse,
+      rating: rating ?? this.rating,
     );
   }
 
@@ -93,9 +97,11 @@ class TacticsPosition {
   String get bestMove => correctLine.isNotEmpty ? correctLine.first : 'unknown';
 
   // Legacy getters for backward compatibility
-  String get description => mistakeType == '??'
-      ? 'Fix the blunder - find the best move'
-      : 'Improve on the mistake - find the best move';
+  String get description => switch (mistakeType) {
+        '??' => 'Fix the blunder - find the best move',
+        '?!' => 'Correct the inaccuracy - find the best move',
+        _ => 'Improve on the mistake - find the best move',
+      };
   String get gameSource => '$gameWhite vs $gameBlack';
   int get moveNumber => _extractMoveNumber(positionContext);
   String get playerToMove =>
@@ -106,8 +112,8 @@ class TacticsPosition {
     return match != null ? int.tryParse(match.group(1)!) ?? 1 : 1;
   }
 
-  /// CSV column count.  Old files may have 17; current format has 18.
-  static const int csvColumnCount = 18;
+  /// CSV column count.  Old files may have 17 or 18; current format has 19.
+  static const int csvColumnCount = 19;
 
   /// Create from CSV row (18 columns; tolerates legacy 17-column rows).
   factory TacticsPosition.fromCsv(List<dynamic> row) {
@@ -139,6 +145,8 @@ class TacticsPosition {
       hintsUsed: int.tryParse(row[16].toString()) ?? 0,
       // Column 17 — added after initial 17-col format; tolerate old files.
       opponentBestResponse: row.length > 17 ? row[17].toString() : '',
+      // Column 18 — star rating; tolerate pre-rating files.
+      rating: row.length > 18 ? (int.tryParse(row[18].toString()) ?? 0) : 0,
     );
   }
 
@@ -177,6 +185,7 @@ class TacticsPosition {
       timeToSolve: json['time_to_solve'] as double? ?? 0.0,
       hintsUsed: json['hints_used'] as int? ?? 0,
       opponentBestResponse: json['opponent_best_response'] as String? ?? '',
+      rating: json['rating'] as int? ?? 0,
     );
   }
 
@@ -201,6 +210,7 @@ class TacticsPosition {
       'time_to_solve': timeToSolve,
       'hints_used': hintsUsed,
       'opponent_best_response': opponentBestResponse,
+      'rating': rating,
     };
   }
 
@@ -225,6 +235,7 @@ class TacticsPosition {
       timeToSolve,
       hintsUsed,
       opponentBestResponse,
+      rating,
     ];
   }
 }
