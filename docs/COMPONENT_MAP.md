@@ -52,7 +52,7 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026). When you change co
 main.dart
   ├─ EngineSettings.loadFromPrefs()
   ├─ EvalDatabaseSettings.instance.load()
-  ├─ EngineLifecycle.loadPersistedState()  // engine on unless pref `engine_lifecycle.toggle_on` is false
+  ├─ EngineLifecycle.loadPersistedState()  // marks engine idle (no process spawn); workers created lazily on first eval
   ├─ BrowserExtensionServerFactory.start()  (desktop IO only)
   ├─ DefaultPgnService.ensureExtracted()
   └─ ChessAutoPrepApp → MainScreen
@@ -173,7 +173,7 @@ CoherenceService.compute(lines)
 Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off
 UnifiedEnginePane (when lifecycle ≠ off)
   → post-frame _runAnalysis on FEN / lifecycle changes (not during parent build)
-  → AnalysisService → StockfishPool / EvalWorker
+  → AnalysisService.ensureWorkers() (lazy spawn on first use) → StockfishPool / EvalWorker
   → Eval chain: session cache → CdbDirect → Lichess API → Stockfish
   → Hover on MOVE or PV line → BoardPreviewController (floating) → FloatingBoardPreview overlay
 ExpectimaxLinesPane — same floating preview on line hover
@@ -250,7 +250,8 @@ Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu
 | `repertoire_review_entry.dart` | FSRS-style review scheduling |
 | `repertoire_review_history_entry.dart` | Review history log |
 | `settings_enums.dart` | `CandidateSource`, `SelectionMode`, `OpponentProbabilityMode`, etc. |
-| `tactics_position.dart` | Tactics puzzle position |
+| `tactics_position.dart` | Tactics puzzle position; includes `int rating` (0=unrated, 1–5 stars; 1-star excluded from training by default) |
+| `tactics_session_settings.dart` | `TacticsSessionSettings` — order (`newestFirst`/`leastReviewed`/`worstSuccessRate`/`random`), `mistakeTypes` filter, `includeOneStar` toggle; `accepts(pos)` for session filtering |
 | `training_settings.dart` | Trainer behavior (persisted) |
 
 ### `lib/features/browse/`
@@ -403,12 +404,12 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | File | Purpose |
 |------|---------|
 | `tactics_engine.dart` | Puzzle validation |
-| `tactics_database.dart` | Local puzzle store |
+| `tactics_database.dart` | Local puzzle store; `startSession(settings)` builds filtered/ordered queue; `setRating(fen, rating)` persists star rating + removes 1-star from live queue |
 | `tactics_import_service.dart` | Import from Lichess |
 | `tactics_export_import.dart` | Export/import facade |
 | `tactics_export_import_io.dart` / `tactics_export_import_stub.dart` | Platform export/import |
 | `tactics_parallel_analyzer.dart` / `tactics_parallel_analyzer_stub.dart` | Parallel puzzle analysis |
-| `tactics/tactics_session_controller.dart` | Puzzle session |
+| `tactics/tactics_session_controller.dart` | Puzzle session; `startSession(settings)` delegates to DB queue; `setRating(star)` on current position |
 | `tactics/tactics_import_coordinator.dart` | Import UI coordination |
 | `training/training_session_controller.dart` | Repertoire training flow |
 | `training/training_phase.dart` | Phase enum/state |
@@ -424,6 +425,12 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `browser_extension_server/*` | Local HTTP server for browser extension (IO/stub) |
 
 ### `lib/widgets/` (grouped)
+
+#### Shared UI patterns
+
+| File | Purpose |
+|------|---------|
+| `shortcut_tooltip.dart` | **Shortcut hover tooltips** — `actionTooltip()`, `ShortcutIconButton`, `ShortcutTooltip`, `shortcutTooltip()` (500ms hover delay via Material `Tooltip`); debug asserts if shortcut is empty. Use whenever a control shares a `LogicalKeyboardKey` handler. Cursor rule: `.cursor/rules/shortcut-tooltips.mdc`. Tests: `test/widgets/shortcut_tooltip_test.dart`. |
 
 #### Layout (repertoire builder zones)
 
@@ -514,10 +521,10 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Weakness detail dialog |
 | `lichess_db_info_icon.dart` | Lichess DB info + OAuth entry point |
-| `tactics_control_panel.dart` | Tactics mode shell |
-| `tactics/tactics_training_panel.dart` | Puzzle UI |
-| `tactics/tactics_browse_panel.dart` | Puzzle browser |
-| `tactics/tactics_import_panel.dart` | Import tactics from Lichess |
+| `tactics_control_panel.dart` | Tactics mode shell; PGN tab uses [PgnWithEngine]; shortcuts include **E** (toggle inline engine), **1-5** (rate after solve/reveal), arrows, Space/A/B/N/Esc |
+| `tactics/tactics_training_panel.dart` | Puzzle UI; star rating row shown only after solve or Show Solution |
+| `tactics/tactics_browse_panel.dart` | Puzzle browser; per-row tappable star rating, 1-star rows dimmed, hide/show 1★ filter toggle |
+| `tactics/tactics_import_panel.dart` | Import tactics from Lichess/Chess.com; **Session Settings** dialog (order, mistake-type filter, 1-star toggle) opened from toolbar button beside Browse Tactics; live matching count on Start Session |
 | `tactics/puzzle_stats_display.dart` | Puzzle statistics display |
 | `tactics/tactics_delayed_tooltip.dart` | Delayed tooltip for puzzle hints |
 | `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector) |
@@ -601,7 +608,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | Path | Role |
 |------|------|
-| `tree_builder/` | C expectimax tree builder (`--eval-depth` default 14), CdbDirect reader; MultiPV line-0 PV reply stash + opponent injection (`engine_injected`, PGN `{engine-injected}`). **Build modes** (`--build-mode` in `tree.h`): `stockfish-expectimax` (default interleaved BFS), `maia-db-explore`, `db-explorer`, `trap-finder` (unimplemented). **SQLite cache** (`database.c`): explorer/eval/Maia/repertoire tables plus `build_metadata`. **`cli_args` persistence:** each run calls `save_config_to_db()` → `rdb_save_cli_config()` with the effective CLI as JSON (color, depth, build mode, PGN paths, eval sources, presets, etc.). **`--resume`:** `load_config_from_db()` in `main.c` restores from `cli_args`; `CliExplicit` records flags passed on the command line — saved values apply only for options *not* explicitly set (e.g. `--resume --threads 8` overrides stored thread count). Restores `-c` when omitted; DBs without `cli_args` fail with a clear error. **`--resume` skips** the legacy `check_build_metadata` color/ratings/speeds gate; without `--resume`, reopening an existing `.db` still **refuses** on mismatch (prints stored vs current settings and example `--resume` / fresh / `--input-db` commands). Legacy DBs with data but no metadata get a one-time note and recorded settings. **`--input-db` / `-I`:** copy eval/explorer cache tables (`evaluations`, `explorer_positions`/`explorer_moves`, `multipv_cache`, `maia_cache`) from another DB into a new/empty target via `rdb_import_cache_from` (ATTACH + INSERT OR IGNORE); not `repertoire_moves`. **Threads:** `-t` / `--threads` default is `default_thread_count()` — half of `_SC_NPROCESSORS_ONLN`, minimum 1 (not a fixed 4). **Build progress (TTY):** live line via `progress_line.c` — `[Depth N] X new + Y transpositions | total | rate/min | ~ETA`; depth-complete line uses unique node count at that ply (`g_nodes_created_at_depth`). **Tree resume** (stockfish-expectimax / maia-db-explore): if `<name>.tree.json` exists and `build_complete` is false, stage 1 continues BFS from unexplored frontier leaves (`resume_prepare_frontier` in `tree.c`); only `build_complete: true` skips building. SIGINT saves partial trees; nodes interrupted mid-expansion stay `explored: false` and are retried. **Engine pool:** Stockfish children call `setsid()` (Ctrl+C does not kill engines); `engine_pool_request_stop` from the signal handler sets `shutting_down` and wakes waiters so batch/single eval exits without spamming "all Stockfish engines are dead". `--build-now` / `--skip-build` still export without expanding. **DB explorer:** `--build-mode db-explorer --pgn <file>` (repeatable) → `pgn_freq.c` replays each game from the standard start position; when `--fen` or `--moves` defines a target, counting starts only after the canonical 4-field FEN matches (not SAN-prefix string matching). Games that never reach the target are skipped (aggregate log). Parallel per-file parse when multiple PGNs; binary cache `<name>.freq.bin` with manifest, `--no-freq-cache` to force reparse; OOM aborts parse → `tree_build_from_freqmap` → deferred Stockfish pool start → `tree_enrich_evals` (project DB → external chain → Stockfish; abort if >50% nodes still unevaluated, else warn) → expectimax + PGN export. `fen_map_put` / PGN hash tables propagate resize OOM. Opponent `move_probability` = count/reach; our-move children = 1.0; `tree_recalculate_probabilities` chains cumulative probability. See `tree_builder/ALGORITHM.md`. |
+| `tree_builder/` | C expectimax tree builder (`--eval-depth` default 14), CdbDirect reader; MultiPV line-0 PV reply stash + opponent injection (`engine_injected`, PGN `{engine-injected}`). **Build modes** (`--build-mode` in `tree.h`): `stockfish-expectimax` (default interleaved BFS), `maia-db-explore`, `db-explorer`, `trap-finder` (unimplemented). **SQLite cache** (`database.c`): explorer/eval/Maia/repertoire tables plus `build_metadata`. **`cli_args` persistence:** each run calls `save_config_to_db()` → `rdb_save_cli_config()` with the effective CLI as JSON (color, depth, build mode, PGN paths, eval sources, presets, etc.). **`--resume`:** `load_config_from_db()` in `main.c` restores from `cli_args`; `CliExplicit` records flags passed on the command line — saved values apply only for options *not* explicitly set (e.g. `--resume --threads 8` overrides stored thread count). Restores `-c` when omitted; DBs without `cli_args` fail with a clear error. **`--resume` skips** the legacy `check_build_metadata` color/ratings/speeds gate; without `--resume`, reopening an existing `.db` still **refuses** on mismatch (prints stored vs current settings and example `--resume` / fresh / `--input-db` commands). Legacy DBs with data but no metadata get a one-time note and recorded settings. **`--input-db` / `-I`:** copy eval/explorer cache tables (`evaluations`, `explorer_positions`/`explorer_moves`, `multipv_cache`, `maia_cache`) from another DB into a new/empty target via `rdb_import_cache_from` (ATTACH + INSERT OR IGNORE); not `repertoire_moves`. **Threads:** `-t` / `--threads` default is `default_thread_count()` — half of `_SC_NPROCESSORS_ONLN`, minimum 1 (not a fixed 4). **Build progress (TTY):** live line via `progress_line.c` — `[Depth N] X new + Y transpositions | total | rate/min | ~ETA`; depth-complete line uses unique node count at that ply (`g_nodes_created_at_depth`). **Tree resume** (stockfish-expectimax / maia-db-explore): if `<name>.tree.json` exists and `build_complete` is false, stage 1 continues BFS from unexplored frontier leaves (`resume_prepare_frontier` in `tree.c`); only `build_complete: true` skips building. SIGINT saves partial trees; nodes interrupted mid-expansion stay `explored: false` and are retried. **Engine pool:** Stockfish children call `setsid()` (Ctrl+C does not kill engines); `engine_pool_request_stop` from the signal handler sets `shutting_down` and wakes waiters so batch/single eval exits without spamming "all Stockfish engines are dead". `--build-now` / `--skip-build` still export without expanding. **DB explorer:** `--build-mode db-explorer --pgn <file>` (repeatable) → `pgn_freq.c` replays each game from the standard start position; when `--fen` or `--moves` defines a target, counting starts only after the canonical 4-field FEN matches (not SAN-prefix string matching). `--min-elo` (default 2100) skips games where both `[WhiteElo]` and `[BlackElo]` are present and below threshold; missing or partial Elo tags are kept. Games that never reach the target are skipped (aggregate log). Parallel per-file parse when multiple PGNs; binary cache `<name>.freq.bin` with manifest incl. `min_elo`, `--no-freq-cache` to force reparse; OOM aborts parse → `tree_build_from_freqmap` → deferred Stockfish pool start → `tree_enrich_evals` (project DB → external chain → Stockfish; abort if >50% nodes still unevaluated, else warn) → expectimax + PGN export. `fen_map_put` / PGN hash tables propagate resize OOM. Opponent `move_probability` = count/reach; our-move children = 1.0; `tree_recalculate_probabilities` chains cumulative probability. See `tree_builder/ALGORITHM.md`. |
 | `browser-to-server-repertoire/` | Browser extension companion |
 | `python/` | Offline scripts (Lichess builder, Maia experiments, TWIC) |
 | `packages/cdbdirect_flutter_libs/` | Native ChessDB bindings |

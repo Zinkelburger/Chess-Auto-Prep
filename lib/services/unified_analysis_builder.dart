@@ -90,7 +90,7 @@ class UnifiedAnalysisBuilder {
     final receivePort = ReceivePort();
     final errorPort = ReceivePort();
 
-    await Isolate.spawn(
+    final isolate = await Isolate.spawn(
       _isolateEntryPoint,
       (
         sendPort: receivePort.sendPort,
@@ -105,16 +105,17 @@ class UnifiedAnalysisBuilder {
 
     final completer = Completer<(PositionAnalysis, OpeningTree)>();
 
-    errorPort.listen((message) {
+    late final StreamSubscription errorSub;
+    late final StreamSubscription receiveSub;
+
+    errorSub = errorPort.listen((message) {
       if (!completer.isCompleted) {
         final desc = message is List ? message.first : message;
         completer.completeError(Exception('Isolate error: $desc'));
       }
-      receivePort.close();
-      errorPort.close();
     });
 
-    receivePort.listen((message) {
+    receiveSub = receivePort.listen((message) {
       if (message is List) {
         onProgress?.call(message[0] as int, message[1] as int);
       } else if (message is Map) {
@@ -125,12 +126,18 @@ class UnifiedAnalysisBuilder {
               Map<String, dynamic>.from(message['tree'] as Map));
           completer.complete((analysis, tree));
         }
-        receivePort.close();
-        errorPort.close();
       }
     });
 
-    return completer.future;
+    try {
+      return await completer.future.timeout(const Duration(minutes: 5));
+    } finally {
+      await errorSub.cancel();
+      await receiveSub.cancel();
+      receivePort.close();
+      errorPort.close();
+      isolate.kill(priority: Isolate.immediate);
+    }
   }
 
   // ── Isolate entry point ──────────────────────────────────────────────

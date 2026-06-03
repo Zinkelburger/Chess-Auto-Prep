@@ -137,12 +137,18 @@ class EngineWeaknessService {
       onProgress?.call(completed, total);
     }
 
-    final futures = <Future<void>>[];
-    while (!_cancelled && nextIndex < positions.length) {
-      final idx = nextIndex++;
-      futures.add(evalPosition(idx));
+    final concurrency = _pool.workerCount.clamp(1, positions.length);
+    Future<void> workerLoop() async {
+      while (!_cancelled) {
+        final idx = nextIndex++;
+        if (idx >= positions.length) return;
+        await evalPosition(idx);
+      }
     }
-    await Future.wait(futures);
+
+    await Future.wait([
+      for (int i = 0; i < concurrency; i++) workerLoop(),
+    ]);
 
     if (!_cancelled && results.isEmpty && failedCount > 0) {
       throw Exception(
