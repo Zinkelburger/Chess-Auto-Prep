@@ -186,11 +186,15 @@ static uint32_t pgn_freq_hash(const char *key, size_t num_buckets) {
     return hash % (uint32_t)num_buckets;
 }
 
-static void pgn_freq_resize(PgnFreqMap *map) {
+static bool pgn_freq_resize(PgnFreqMap *map) {
     size_t new_buckets = map->num_buckets * 2;
     PgnFreqEntry **new_table =
         (PgnFreqEntry **)calloc(new_buckets, sizeof(PgnFreqEntry *));
-    if (!new_table) return;
+    if (!new_table) {
+        fprintf(stderr,
+                "Error: out of memory resizing PGN frequency map\n");
+        return false;
+    }
 
     for (size_t i = 0; i < map->num_buckets; i++) {
         PgnFreqEntry *e = map->buckets[i];
@@ -205,6 +209,7 @@ static void pgn_freq_resize(PgnFreqMap *map) {
     free(map->buckets);
     map->buckets = new_table;
     map->num_buckets = new_buckets;
+    return true;
 }
 
 static void pgn_freq_position_free(PgnFreqPosition *pos) {
@@ -228,8 +233,9 @@ static PgnFreqPosition *pgn_freq_get_or_create(PgnFreqMap *map, const char *fen_
     PgnFreqEntry *existing = pgn_freq_find_entry(map, fen_key);
     if (existing) return &existing->pos;
 
-    if ((double)map->count / (double)map->num_buckets >= PGN_FREQ_LOAD_FACTOR)
-        pgn_freq_resize(map);
+    if ((double)map->count / (double)map->num_buckets >= PGN_FREQ_LOAD_FACTOR &&
+        !pgn_freq_resize(map))
+        return NULL;
 
     PgnFreqEntry *e = (PgnFreqEntry *)calloc(1, sizeof(PgnFreqEntry));
     if (!e) return NULL;
@@ -250,15 +256,15 @@ static PgnFreqPosition *pgn_freq_get_or_create(PgnFreqMap *map, const char *fen_
     return &e->pos;
 }
 
-static void pgn_freq_record_move(PgnFreqMap *map, const char *fen_key,
+static bool pgn_freq_record_move(PgnFreqMap *map, const char *fen_key,
                                  const char *uci, const char *san) {
     PgnFreqPosition *pos = pgn_freq_get_or_create(map, fen_key);
-    if (!pos) return;
+    if (!pos) return false;
 
     for (int i = 0; i < pos->move_count; i++) {
         if (strcmp(pos->moves[i].uci, uci) == 0) {
             pos->moves[i].count++;
-            return;
+            return true;
         }
     }
 
@@ -267,9 +273,9 @@ static void pgn_freq_record_move(PgnFreqMap *map, const char *fen_key,
         PgnFreqMove *nm = (PgnFreqMove *)realloc(pos->moves,
                                                  (size_t)new_cap * sizeof(PgnFreqMove));
         if (!nm) {
-            fprintf(stderr, "Warning: out of memory recording move at '%s'\n",
-                    fen_key);
-            return;
+            fprintf(stderr,
+                    "Error: out of memory recording move at '%s'\n", fen_key);
+            return false;
         }
         pos->moves = nm;
         pos->move_capacity = new_cap;
@@ -280,12 +286,21 @@ static void pgn_freq_record_move(PgnFreqMap *map, const char *fen_key,
     snprintf(m->uci, sizeof(m->uci), "%s", uci);
     snprintf(m->san, sizeof(m->san), "%.15s", san);
     m->count = 1;
+    return true;
 }
 
-static void pgn_freq_record_reach(PgnFreqMap *map, const char *fen_key) {
+static bool pgn_freq_record_reach(PgnFreqMap *map, const char *fen_key) {
     PgnFreqPosition *pos = pgn_freq_get_or_create(map, fen_key);
-    if (pos) pos->reach_count++;
+    if (!pos) return false;
+    pos->reach_count++;
+    return true;
 }
+
+/** process_game_movetext result codes */
+#define PGN_GAME_OK            1
+#define PGN_GAME_PREFIX_SKIP   0
+#define PGN_GAME_ERROR        -1  /* illegal move etc. — skip game */
+#define PGN_GAME_OOM          -2  /* abort entire parse */
 
 static bool is_move_number_token(const char *tok) {
     if (!tok || !*tok) return false;
@@ -425,14 +440,14 @@ static const char *next_token(const char *p, char *tok, size_t tok_len) {
     return p;
 }
 
-static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
-                                  const char *movetext,
-                                  char prefix[PGN_MAX_PREFIX_MOVES][16],
-                                  int prefix_len,
-                                  const PgnGameHeaders *hdr, int game_num) {
+static int process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
+                                 const char *movetext,
+                                 char prefix[PGN_MAX_PREFIX_MOVES][16],
+                                 int prefix_len,
+                                 const PgnGameHeaders *hdr, int game_num) {
     ChessPosition pos;
     const char *start_fen = (cfg && cfg->start_fen) ? cfg->start_fen : DEFAULT_START_FEN;
-    if (!position_from_fen(&pos, start_fen)) return false;
+    if (!position_from_fen(&pos, start_fen)) return PGN_GAME_ERROR;
 
     char fen_buf[MAX_FEN_LENGTH];
     position_to_fen(&pos, fen_buf, sizeof(fen_buf));
@@ -449,7 +464,7 @@ static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
     char tok[64];
 
     while (*p) {
-        if (g_interrupted) return false;
+        if (g_interrupted) return PGN_GAME_ERROR;
 
         p = next_token(p, tok, sizeof(tok));
         if (!tok[0]) break;
@@ -462,20 +477,20 @@ static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
         if (!san_to_uci(fen_buf, san, uci, sizeof(uci))) {
             warn_move_failure("cannot apply move", san, ply, fen_buf, &pos,
                               hdr, game_num, &history);
-            return false;
+            return PGN_GAME_ERROR;
         }
 
         if (!tracking) {
             if (prefix_idx >= prefix_len ||
                 !san_moves_match(san, prefix[prefix_idx])) {
-                return false;
+                return PGN_GAME_PREFIX_SKIP;
             }
             char label[24];
             format_san_ply_label(&pos, san, label, sizeof(label));
             if (!position_apply_uci(&pos, uci)) {
                 warn_move_failure("cannot apply move", san, ply, fen_buf, &pos,
                                   hdr, game_num, &history);
-                return false;
+                return PGN_GAME_ERROR;
             }
             position_to_fen(&pos, fen_buf, sizeof(fen_buf));
             history_push(&history, label);
@@ -485,7 +500,8 @@ static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
                 tracking = true;
                 char key[FEN_KEY_MAX_LENGTH];
                 fen_map_canonicalize_key(fen_buf, key, sizeof(key));
-                pgn_freq_record_reach(map, key);
+                if (!pgn_freq_record_reach(map, key))
+                    return PGN_GAME_OOM;
             }
             continue;
         }
@@ -494,14 +510,15 @@ static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
 
         char key[FEN_KEY_MAX_LENGTH];
         fen_map_canonicalize_key(fen_buf, key, sizeof(key));
-        pgn_freq_record_move(map, key, uci, san);
+        if (!pgn_freq_record_move(map, key, uci, san))
+            return PGN_GAME_OOM;
 
         char label[24];
         format_san_ply_label(&pos, san, label, sizeof(label));
         if (!position_apply_uci(&pos, uci)) {
             warn_move_failure("cannot apply move", san, ply, fen_buf, &pos,
                               hdr, game_num, &history);
-            return false;
+            return PGN_GAME_ERROR;
         }
         position_to_fen(&pos, fen_buf, sizeof(fen_buf));
         history_push(&history, label);
@@ -509,12 +526,13 @@ static bool process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
 
         char next_key[FEN_KEY_MAX_LENGTH];
         fen_map_canonicalize_key(fen_buf, next_key, sizeof(next_key));
-        pgn_freq_record_reach(map, next_key);
+        if (!pgn_freq_record_reach(map, next_key))
+            return PGN_GAME_OOM;
 
         ply_tracked++;
     }
 
-    return tracking;
+    return tracking ? PGN_GAME_OK : PGN_GAME_PREFIX_SKIP;
 }
 
 static bool read_line(FILE *fp, char *buf, size_t buf_len) {
@@ -566,6 +584,7 @@ static int pgn_freq_load_stream(PgnFreqMap *map, const PgnFreqConfig *cfg,
     char prefix[PGN_MAX_PREFIX_MOVES][16];
     int prefix_len = parse_prefix_moves(cfg ? cfg->start_moves : NULL, prefix);
     int games_parsed = 0;
+    int prefix_skipped = 0;
     int game_num = 0;
     PgnGameHeaders hdr;
 
@@ -612,14 +631,26 @@ static int pgn_freq_load_stream(PgnFreqMap *map, const PgnFreqConfig *cfg,
             continue;
         }
 
-        if (process_game_movetext(map, cfg, movetext, prefix, prefix_len,
-                                  &hdr, game_num)) {
+        int game_result = process_game_movetext(map, cfg, movetext, prefix,
+                                                prefix_len, &hdr, game_num);
+        if (game_result == PGN_GAME_OK) {
             games_parsed++;
             map->total_games++;
+        } else if (game_result == PGN_GAME_PREFIX_SKIP) {
+            prefix_skipped++;
+        } else if (game_result == PGN_GAME_OOM) {
+            fprintf(stderr,
+                    "Error: out of memory while parsing PGN — aborting\n");
+            break;
         }
     }
 
 done:
+    if (prefix_skipped > 0 && prefix_len > 0) {
+        fprintf(stderr,
+                "  %d games skipped (did not match --moves prefix)\n",
+                prefix_skipped);
+    }
     return games_parsed;
 }
 

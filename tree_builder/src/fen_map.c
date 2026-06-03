@@ -36,11 +36,15 @@ void fen_map_canonicalize_key(const char *fen, char *out, size_t out_len) {
     }
 }
 
-static void fen_map_resize(FenMap *map) {
+static bool fen_map_resize(FenMap *map) {
     size_t new_buckets = map->num_buckets * 2;
     FenMapEntry **new_table =
         (FenMapEntry **)calloc(new_buckets, sizeof(FenMapEntry *));
-    if (!new_table) return;
+    if (!new_table) {
+        fprintf(stderr,
+                "Error: out of memory resizing transposition table\n");
+        return false;
+    }
     for (size_t i = 0; i < map->num_buckets; i++) {
         FenMapEntry *e = map->buckets[i];
         while (e) {
@@ -54,6 +58,7 @@ static void fen_map_resize(FenMap *map) {
     free(map->buckets);
     map->buckets = new_table;
     map->num_buckets = new_buckets;
+    return true;
 }
 
 FenMap *fen_map_create(void) {
@@ -94,25 +99,33 @@ TreeNode *fen_map_get(const FenMap *map, const char *fen) {
     return NULL;
 }
 
-void fen_map_put(FenMap *map, const char *fen, TreeNode *node) {
-    if (!map || !fen) return;
+bool fen_map_put(FenMap *map, const char *fen, TreeNode *node) {
+    if (!map || !fen) return false;
 
     char key[FEN_KEY_MAX_LENGTH];
     fen_map_canonicalize_key(fen, key, sizeof(key));
-    if (!key[0]) return;
-    if (fen_map_get(map, key)) return;
-    if ((double)map->count / (double)map->num_buckets >= FEN_MAP_LOAD_FACTOR)
-        fen_map_resize(map);
+    if (!key[0]) return false;
+    if (fen_map_get(map, key)) return true;
+    if ((double)map->count / (double)map->num_buckets >= FEN_MAP_LOAD_FACTOR &&
+        !fen_map_resize(map))
+        return false;
     uint32_t idx = fen_hash(key, map->num_buckets);
     FenMapEntry *e = (FenMapEntry *)malloc(sizeof(FenMapEntry));
-    if (!e) return;
+    if (!e) {
+        fprintf(stderr,
+                "Error: out of memory inserting into transposition table\n");
+        return false;
+    }
     e->fen = strdup(key);
     if (!e->fen) {
+        fprintf(stderr,
+                "Error: out of memory inserting into transposition table\n");
         free(e);
-        return;
+        return false;
     }
     e->node = node;
     e->next = map->buckets[idx];
     map->buckets[idx] = e;
     map->count++;
+    return true;
 }

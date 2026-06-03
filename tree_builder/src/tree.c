@@ -579,7 +579,7 @@ static TreeNode *build_queue_pop(BuildQueue *q) {
  * interrupted build — enqueue the parent for re-expansion instead of
  * walking its (possibly incomplete) subtree.
  */
-static void resume_prepare_frontier(TreeNode *node, FenMap *fmap,
+static void resume_prepare_frontier(Tree *tree, TreeNode *node, FenMap *fmap,
                                     BuildQueue *q, size_t *frontier_count,
                                     int *min_frontier_depth) {
     if (!node) return;
@@ -592,10 +592,15 @@ static void resume_prepare_frontier(TreeNode *node, FenMap *fmap,
             }
             return;
         }
-        fen_map_put(fmap, node->fen, node);
+        if (!fen_map_put(fmap, node->fen, node)) {
+            fprintf(stderr,
+                    "Error: out of memory for transposition table\n");
+            tree_stop_build(tree);
+            return;
+        }
         for (size_t i = 0; i < node->children_count; i++)
-            resume_prepare_frontier(node->children[i], fmap, q, frontier_count,
-                                    min_frontier_depth);
+            resume_prepare_frontier(tree, node->children[i], fmap, q,
+                                    frontier_count, min_frontier_depth);
         return;
     }
     if (!node->explored) {
@@ -1512,7 +1517,12 @@ static void build_process_node(Tree *tree, TreeNode *node,
     if (node->children_count > 0 && node->explored) {
         emit_event(config, "resume", node->depth, "-",
                    "children=%zu", node->children_count);
-        fen_map_put(fmap, node->fen, node);
+        if (!fen_map_put(fmap, node->fen, node)) {
+            fprintf(stderr,
+                    "Error: out of memory for transposition table\n");
+            tree_stop_build(tree);
+            return;
+        }
         build_queue_push_children(q, tree, node);
         note_depth_work_done(node->depth);
         return;
@@ -1582,7 +1592,11 @@ static void build_process_node(Tree *tree, TreeNode *node,
         note_depth_work_done(node->depth);
         return;
     }
-    fen_map_put(fmap, node->fen, node);
+    if (!fen_map_put(fmap, node->fen, node)) {
+        fprintf(stderr, "Error: out of memory for transposition table\n");
+        tree_stop_build(tree);
+        return;
+    }
 
     if (is_our_move) {
         if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE)
@@ -1675,7 +1689,7 @@ bool tree_build(Tree *tree, const char *start_fen,
     bool queued = false;
 
     if (fast_resume) {
-        resume_prepare_frontier(tree->root, (FenMap *)tree->expanded_fens,
+        resume_prepare_frontier(tree, tree->root, (FenMap *)tree->expanded_fens,
                                 &bq, &frontier_count, &min_frontier_depth);
         build_queue_sort_by_depth(&bq);
         queued = frontier_count > 0;

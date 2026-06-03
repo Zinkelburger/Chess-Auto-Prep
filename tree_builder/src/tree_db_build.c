@@ -238,7 +238,8 @@ static bool process_node(Tree *tree, TreeNode *node,
             return false;
         return true;
     }
-    fen_map_put(fmap, node->fen, node);
+    if (!fen_map_put(fmap, node->fen, node))
+        return false;
 
     bool is_our_move = (node->is_white_to_move == cfg->play_as_white);
     if (is_our_move) {
@@ -323,6 +324,11 @@ typedef struct {
     size_t capacity;
 } NoEvalList;
 
+typedef struct {
+    NoEvalList list;
+    bool collect_failed;
+} CollectNoEvalCtx;
+
 static bool no_eval_push(NoEvalList *list, TreeNode *node) {
     if (list->count >= list->capacity) {
         size_t new_cap = list->capacity ? list->capacity * 2 : 64;
@@ -337,8 +343,10 @@ static bool no_eval_push(NoEvalList *list, TreeNode *node) {
 }
 
 static void collect_no_eval_cb(TreeNode *node, void *user_data) {
-    if (!node->has_engine_eval)
-        no_eval_push((NoEvalList *)user_data, node);
+    CollectNoEvalCtx *ctx = (CollectNoEvalCtx *)user_data;
+    if (!node->has_engine_eval &&
+        !no_eval_push(&ctx->list, node))
+        ctx->collect_failed = true;
 }
 
 static EvalChainContext enrich_chain_from_config(const TreeConfig *config) {
@@ -379,21 +387,26 @@ bool tree_enrich_evals(Tree *tree, const TreeConfig *config,
     if (stats)
         memset(stats, 0, sizeof(*stats));
 
-    NoEvalList pending = {0};
+    CollectNoEvalCtx pending = {0};
     tree_traverse_dfs(tree, collect_no_eval_cb, &pending);
-    if (pending.count == 0) {
-        free(pending.nodes);
-        return true;
+    if (pending.collect_failed) {
+        fprintf(stderr,
+                "Warning: out of memory collecting nodes for eval enrichment — "
+                "results may be incomplete\n");
+    }
+    if (pending.list.count == 0) {
+        free(pending.list.nodes);
+        return !pending.collect_failed;
     }
 
     if (stats)
-        stats->total_nodes = (int)pending.count;
+        stats->total_nodes = (int)pending.list.count;
 
     EvalChainContext chain = enrich_chain_from_config(config);
 
     /* Phase 1: project DB cache + external eval sources */
-    for (size_t i = 0; i < pending.count && !g_interrupted; i++) {
-        TreeNode *node = pending.nodes[i];
+    for (size_t i = 0; i < pending.list.count && !g_interrupted; i++) {
+        TreeNode *node = pending.list.nodes[i];
         if (node->has_engine_eval) continue;
 
         if (config->db) {
@@ -418,20 +431,20 @@ bool tree_enrich_evals(Tree *tree, const TreeConfig *config,
 
     /* Phase 2: Stockfish batch for remaining unique FENs */
     size_t still_need = 0;
-    for (size_t i = 0; i < pending.count; i++)
-        if (!pending.nodes[i]->has_engine_eval)
+    for (size_t i = 0; i < pending.list.count; i++)
+        if (!pending.list.nodes[i]->has_engine_eval)
             still_need++;
 
     if (still_need > 0 && config->engine_pool) {
         EvalJob *jobs = (EvalJob *)calloc(still_need, sizeof(EvalJob));
         if (!jobs) {
-            free(pending.nodes);
+            free(pending.list.nodes);
             return false;
         }
 
         int n_jobs = 0;
-        for (size_t i = 0; i < pending.count; i++) {
-            TreeNode *node = pending.nodes[i];
+        for (size_t i = 0; i < pending.list.count; i++) {
+            TreeNode *node = pending.list.nodes[i];
             if (node->has_engine_eval) continue;
             if (find_fen_job(jobs, n_jobs, node->fen) >= 0) continue;
 
@@ -451,8 +464,8 @@ bool tree_enrich_evals(Tree *tree, const TreeConfig *config,
                 if (config->db)
                     rdb_put_eval(config->db, jobs[j].fen, jobs[j].eval_cp,
                                  jobs[j].depth_reached);
-                for (size_t i = 0; i < pending.count; i++) {
-                    TreeNode *node = pending.nodes[i];
+                for (size_t i = 0; i < pending.list.count; i++) {
+                    TreeNode *node = pending.list.nodes[i];
                     if (!node->has_engine_eval &&
                         strcmp(node->fen, jobs[j].fen) == 0)
                         node_set_eval(node, jobs[j].eval_cp);
@@ -464,11 +477,11 @@ bool tree_enrich_evals(Tree *tree, const TreeConfig *config,
     }
 
     if (stats) {
-        for (size_t i = 0; i < pending.count; i++)
-            if (!pending.nodes[i]->has_engine_eval)
+        for (size_t i = 0; i < pending.list.count; i++)
+            if (!pending.list.nodes[i]->has_engine_eval)
                 stats->failed++;
     }
 
-    free(pending.nodes);
+    free(pending.list.nodes);
     return !stats || stats->failed == 0;
 }

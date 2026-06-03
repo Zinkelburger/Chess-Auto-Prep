@@ -10,6 +10,7 @@
 #define FEN_MAP_H
 
 #include "node.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -37,6 +38,6 @@ void fen_map_destroy(FenMap *map);
 TreeNode *fen_map_get(const FenMap *map, const char *fen);
 
 /** Insert a FEN → node mapping.  No-op if the FEN is already present. */
-void fen_map_put(FenMap *map, const char *fen, TreeNode *node);
+bool fen_map_put(FenMap *map, const char *fen, TreeNode *node);
 
 #endif /* FEN_MAP_H */
