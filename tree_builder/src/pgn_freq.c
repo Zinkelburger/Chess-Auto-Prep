@@ -8,9 +8,11 @@
 #include "san_convert.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define DEFAULT_START_FEN \
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -23,6 +25,9 @@
 #define PGN_MOVE_HISTORY_LEN     16
 #define PGN_HDR_FIELD_LEN        128
 #define PGN_HDR_EVENT_LEN        256
+
+#define PGN_FREQ_MAGIC_BYTES     "PFREQ\x01\x00\x00"
+#define PGN_FREQ_CACHE_FILE_VERSION 1u
 
 extern volatile int g_interrupted;
 
@@ -693,4 +698,224 @@ int pgn_freq_filtered_moves(const PgnFreqPosition *pos, int min_games,
         out_moves[n++] = *m;
     }
     return n;
+}
+
+static bool pgn_freq_merge_move(PgnFreqPosition *dst, const PgnFreqMove *src) {
+    for (int i = 0; i < dst->move_count; i++) {
+        if (strcmp(dst->moves[i].uci, src->uci) == 0) {
+            dst->moves[i].count += src->count;
+            return true;
+        }
+    }
+
+    if (dst->move_count >= dst->move_capacity) {
+        int new_cap = dst->move_capacity ? dst->move_capacity * 2 : PGN_FREQ_INITIAL_MOVES;
+        PgnFreqMove *nm = (PgnFreqMove *)realloc(dst->moves,
+                                                 (size_t)new_cap * sizeof(PgnFreqMove));
+        if (!nm) return false;
+        dst->moves = nm;
+        dst->move_capacity = new_cap;
+    }
+
+    PgnFreqMove *m = &dst->moves[dst->move_count++];
+    *m = *src;
+    return true;
+}
+
+bool pgn_freq_map_merge(PgnFreqMap *dst, const PgnFreqMap *src) {
+    if (!dst || !src) return false;
+
+    dst->total_games += src->total_games;
+
+    for (size_t bi = 0; bi < src->num_buckets; bi++) {
+        for (PgnFreqEntry *e = src->buckets[bi]; e; e = e->next) {
+            const PgnFreqPosition *sp = &e->pos;
+            PgnFreqPosition *dp = pgn_freq_get_or_create(dst, sp->fen_key);
+            if (!dp) return false;
+            dp->reach_count += sp->reach_count;
+
+            for (int mi = 0; mi < sp->move_count; mi++) {
+                if (!pgn_freq_merge_move(dp, &sp->moves[mi]))
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool fread_exact(void *buf, size_t size, FILE *fp) {
+    return fread(buf, size, 1, fp) == 1;
+}
+
+static bool fwrite_exact(const void *buf, size_t size, FILE *fp) {
+    return fwrite(buf, size, 1, fp) == 1;
+}
+
+bool pgn_freq_map_save(const PgnFreqMap *map, const char *path,
+                       const char *manifest_json) {
+    if (!map || !path || !manifest_json) return false;
+
+    size_t manifest_len = strlen(manifest_json);
+    if (manifest_len > UINT32_MAX) return false;
+
+    FILE *fp = fopen(path, "wb");
+    if (!fp) {
+        fprintf(stderr, "Error: cannot write frequency cache '%s': %s\n",
+                path, strerror(errno));
+        return false;
+    }
+
+    bool ok = true;
+    uint32_t version = PGN_FREQ_CACHE_FILE_VERSION;
+    uint64_t position_count = map->count;
+    uint64_t total_games = map->total_games;
+    uint32_t mlen = (uint32_t)manifest_len;
+
+    ok = ok && fwrite_exact(PGN_FREQ_MAGIC_BYTES, 8, fp);
+    ok = ok && fwrite_exact(&version, sizeof(version), fp);
+    ok = ok && fwrite_exact(&position_count, sizeof(position_count), fp);
+    ok = ok && fwrite_exact(&total_games, sizeof(total_games), fp);
+    ok = ok && fwrite_exact(&mlen, sizeof(mlen), fp);
+    ok = ok && fwrite_exact(manifest_json, manifest_len, fp);
+
+    for (size_t bi = 0; bi < map->num_buckets && ok; bi++) {
+        for (PgnFreqEntry *e = map->buckets[bi]; e && ok; e = e->next) {
+            const PgnFreqPosition *pos = &e->pos;
+            uint32_t move_count = (uint32_t)pos->move_count;
+
+            ok = ok && fwrite_exact(pos->fen_key, 128, fp);
+            ok = ok && fwrite_exact(&pos->reach_count, sizeof(pos->reach_count), fp);
+            ok = ok && fwrite_exact(&move_count, sizeof(move_count), fp);
+
+            for (int mi = 0; mi < pos->move_count && ok; mi++) {
+                const PgnFreqMove *m = &pos->moves[mi];
+                ok = ok && fwrite_exact(m->uci, 8, fp);
+                ok = ok && fwrite_exact(m->san, 16, fp);
+                ok = ok && fwrite_exact(&m->count, sizeof(m->count), fp);
+            }
+        }
+    }
+
+    if (!ok) {
+        fprintf(stderr, "Error: failed writing frequency cache '%s'\n", path);
+        fclose(fp);
+        unlink(path);
+        return false;
+    }
+
+    if (fclose(fp) != 0) {
+        fprintf(stderr, "Error: fclose failed for '%s': %s\n",
+                path, strerror(errno));
+        unlink(path);
+        return false;
+    }
+    return true;
+}
+
+PgnFreqMap *pgn_freq_map_load(const char *path, const char *expected_manifest_json) {
+    if (!path || !expected_manifest_json) return NULL;
+    if (access(path, R_OK) != 0) return NULL;
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) return NULL;
+
+    char magic[8];
+    uint32_t version = 0;
+    uint64_t position_count = 0;
+    uint64_t total_games = 0;
+    uint32_t manifest_len = 0;
+
+    if (!fread_exact(magic, sizeof(magic), fp) ||
+        memcmp(magic, PGN_FREQ_MAGIC_BYTES, 8) != 0) {
+        fclose(fp);
+        return NULL;
+    }
+    if (!fread_exact(&version, sizeof(version), fp) ||
+        version != PGN_FREQ_CACHE_FILE_VERSION) {
+        fclose(fp);
+        return NULL;
+    }
+    if (!fread_exact(&position_count, sizeof(position_count), fp) ||
+        !fread_exact(&total_games, sizeof(total_games), fp) ||
+        !fread_exact(&manifest_len, sizeof(manifest_len), fp)) {
+        fclose(fp);
+        return NULL;
+    }
+
+    char *manifest = (char *)malloc((size_t)manifest_len + 1);
+    if (!manifest) {
+        fclose(fp);
+        return NULL;
+    }
+    if (manifest_len > 0 && !fread_exact(manifest, manifest_len, fp)) {
+        free(manifest);
+        fclose(fp);
+        return NULL;
+    }
+    manifest[manifest_len] = '\0';
+
+    if (strcmp(manifest, expected_manifest_json) != 0) {
+        free(manifest);
+        fclose(fp);
+        return NULL;
+    }
+    free(manifest);
+
+    PgnFreqMap *map = pgn_freq_map_create();
+    if (!map) {
+        fclose(fp);
+        return NULL;
+    }
+    map->total_games = total_games;
+
+    for (uint64_t pi = 0; pi < position_count; pi++) {
+        char fen_key[128];
+        uint64_t reach_count = 0;
+        uint32_t move_count = 0;
+
+        if (!fread_exact(fen_key, sizeof(fen_key), fp) ||
+            !fread_exact(&reach_count, sizeof(reach_count), fp) ||
+            !fread_exact(&move_count, sizeof(move_count), fp)) {
+            pgn_freq_map_destroy(map);
+            fclose(fp);
+            return NULL;
+        }
+        fen_key[sizeof(fen_key) - 1] = '\0';
+
+        PgnFreqPosition *pos = pgn_freq_get_or_create(map, fen_key);
+        if (!pos) {
+            pgn_freq_map_destroy(map);
+            fclose(fp);
+            return NULL;
+        }
+        pos->reach_count = reach_count;
+
+        for (uint32_t mi = 0; mi < move_count; mi++) {
+            PgnFreqMove m;
+            memset(&m, 0, sizeof(m));
+            if (!fread_exact(m.uci, 8, fp) ||
+                !fread_exact(m.san, 16, fp) ||
+                !fread_exact(&m.count, sizeof(m.count), fp)) {
+                pgn_freq_map_destroy(map);
+                fclose(fp);
+                return NULL;
+            }
+            m.uci[sizeof(m.uci) - 1] = '\0';
+            m.san[sizeof(m.san) - 1] = '\0';
+            if (!pgn_freq_merge_move(pos, &m)) {
+                pgn_freq_map_destroy(map);
+                fclose(fp);
+                return NULL;
+            }
+        }
+    }
+
+    if (map->count != position_count) {
+        pgn_freq_map_destroy(map);
+        fclose(fp);
+        return NULL;
+    }
+
+    fclose(fp);
+    return map;
 }

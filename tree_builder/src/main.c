@@ -23,8 +23,11 @@
 #include <limits.h>
 #include <math.h>
 #include <sys/sysinfo.h>
+#include <sys/stat.h>
+#include <pthread.h>
 
 #include "tree.h"
+#include "cJSON.h"
 #include "tree_db_build.h"
 #include "pgn_freq.h"
 #include "lichess_api.h"
@@ -125,6 +128,7 @@ static void print_usage(const char *prog_name) {
     printf("  --build-mode <mode>    Build algorithm: stockfish-expectimax [default],\n");
     printf("                         maia-db-explore, db-explorer, trap-finder\n");
     printf("  --pgn <file>           PGN database file (repeatable, db-explorer mode)\n");
+    printf("  --no-freq-cache        Force PGN reparse (ignore <name>.freq.bin)\n");
     printf("  --db-min-games <N>     Min games per move in PGN DB [default: 5]\n");
     printf("  --db-min-prob <P>      Min move probability in PGN DB [default: 0.05]\n");
     printf("  -S, --stockfish <path> Stockfish binary path\n");
@@ -342,6 +346,201 @@ static const char* find_maia_model(const char *user_path) {
     return NULL;
 }
 
+static EnginePool *create_stockfish_engine_pool(const char *stockfish_path,
+                                                int num_threads, int eval_depth) {
+    const char *sf_path = find_stockfish(stockfish_path);
+    if (!sf_path) {
+        fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
+        fprintf(stderr, "  Searched: ");
+        for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
+            fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
+        fprintf(stderr, "\n");
+        return NULL;
+    }
+
+    printf("Starting Stockfish engines...\n");
+    printf("  Stockfish: %s\n", sf_path);
+    printf("  Engines: %d | Depth: %d\n", num_threads, eval_depth);
+    return engine_pool_create(sf_path, num_threads, eval_depth, num_threads);
+}
+
+static char *build_pgn_freq_manifest(int pgn_file_count, const char **pgn_files,
+                                   const char *start_moves, int max_ply) {
+    cJSON *root = cJSON_CreateObject();
+    if (!root) return NULL;
+
+    cJSON_AddNumberToObject(root, "format_version", PGN_FREQ_CACHE_FORMAT_VERSION);
+    if (start_moves && start_moves[0])
+        cJSON_AddStringToObject(root, "start_moves", start_moves);
+    else
+        cJSON_AddNullToObject(root, "start_moves");
+    cJSON_AddNumberToObject(root, "max_ply", max_ply);
+
+    cJSON *files = cJSON_AddArrayToObject(root, "files");
+    if (!files) {
+        cJSON_Delete(root);
+        return NULL;
+    }
+
+    for (int i = 0; i < pgn_file_count; i++) {
+        struct stat st;
+        if (stat(pgn_files[i], &st) != 0) {
+            fprintf(stderr, "Error: cannot stat PGN file '%s': %s\n",
+                    pgn_files[i], strerror(errno));
+            cJSON_Delete(root);
+            return NULL;
+        }
+        cJSON *f = cJSON_CreateObject();
+        if (!f) {
+            cJSON_Delete(root);
+            return NULL;
+        }
+        cJSON_AddStringToObject(f, "path", pgn_files[i]);
+        cJSON_AddNumberToObject(f, "size", (double)st.st_size);
+        cJSON_AddNumberToObject(f, "mtime", (double)st.st_mtime);
+        cJSON_AddItemToArray(files, f);
+    }
+
+    char *json = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return json;
+}
+
+typedef struct {
+    const char **paths;
+    int file_count;
+    PgnFreqConfig cfg;
+    PgnFreqMap **local_maps;
+    int *local_games;
+    int next_file;
+    pthread_mutex_t lock;
+    pthread_mutex_t print_lock;
+} PgnParallelParseCtx;
+
+static void *pgn_parse_worker(void *arg) {
+    PgnParallelParseCtx *ctx = (PgnParallelParseCtx *)arg;
+
+    for (;;) {
+        int idx;
+        pthread_mutex_lock(&ctx->lock);
+        idx = ctx->next_file++;
+        pthread_mutex_unlock(&ctx->lock);
+
+        if (idx >= ctx->file_count || g_interrupted)
+            break;
+
+        PgnFreqMap *local = pgn_freq_map_create();
+        int games = 0;
+        if (local)
+            games = pgn_freq_load_file(local, &ctx->cfg, ctx->paths[idx]);
+
+        ctx->local_maps[idx] = local;
+        ctx->local_games[idx] = games;
+
+        pthread_mutex_lock(&ctx->print_lock);
+        printf("  Parsed %s: %d games\n", ctx->paths[idx], games);
+        pthread_mutex_unlock(&ctx->print_lock);
+    }
+    return NULL;
+}
+
+/** Parse PGN files into a new frequency map. Returns NULL on failure. */
+static PgnFreqMap *parse_pgn_files_parallel(const char **paths, int file_count,
+                                            const PgnFreqConfig *cfg,
+                                            int num_threads, int *out_games) {
+    PgnFreqMap *freq = pgn_freq_map_create();
+    if (!freq) return NULL;
+
+    if (file_count <= 0) {
+        *out_games = 0;
+        return freq;
+    }
+
+    if (file_count == 1) {
+        int g = pgn_freq_load_file(freq, cfg, paths[0]);
+        printf("  Parsed %s: %d games\n", paths[0], g);
+        *out_games = g;
+        return freq;
+    }
+
+    int workers = file_count < num_threads ? file_count : num_threads;
+    if (workers < 1) workers = 1;
+
+    PgnFreqMap **local_maps =
+        (PgnFreqMap **)calloc((size_t)file_count, sizeof(PgnFreqMap *));
+    int *local_games = (int *)calloc((size_t)file_count, sizeof(int));
+    pthread_t *threads = (pthread_t *)calloc((size_t)workers, sizeof(pthread_t));
+    if (!local_maps || !local_games || !threads) {
+        free(local_maps);
+        free(local_games);
+        free(threads);
+        pgn_freq_map_destroy(freq);
+        return NULL;
+    }
+
+    PgnParallelParseCtx ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.paths = paths;
+    ctx.file_count = file_count;
+    ctx.cfg = *cfg;
+    ctx.local_maps = local_maps;
+    ctx.local_games = local_games;
+    pthread_mutex_init(&ctx.lock, NULL);
+    pthread_mutex_init(&ctx.print_lock, NULL);
+
+    for (int t = 0; t < workers; t++) {
+        if (pthread_create(&threads[t], NULL, pgn_parse_worker, &ctx) != 0) {
+            fprintf(stderr, "Error: failed to create PGN parse thread\n");
+            g_interrupted = 1;
+            break;
+        }
+    }
+
+    for (int t = 0; t < workers; t++) {
+        if (threads[t])
+            pthread_join(threads[t], NULL);
+        if (g_interrupted)
+            break;
+    }
+
+    pthread_mutex_destroy(&ctx.lock);
+    pthread_mutex_destroy(&ctx.print_lock);
+    free(threads);
+
+    int total_games = 0;
+    bool merge_ok = !g_interrupted;
+
+    for (int i = 0; i < file_count && merge_ok; i++) {
+        if (!local_maps[i]) {
+            merge_ok = false;
+            break;
+        }
+        total_games += local_games[i];
+        if (!pgn_freq_map_merge(freq, local_maps[i]))
+            merge_ok = false;
+        pgn_freq_map_destroy(local_maps[i]);
+        local_maps[i] = NULL;
+    }
+
+    if (!merge_ok || g_interrupted) {
+        for (int i = 0; i < file_count; i++) {
+            if (local_maps[i])
+                pgn_freq_map_destroy(local_maps[i]);
+        }
+        free(local_maps);
+        free(local_games);
+        pgn_freq_map_destroy(freq);
+        *out_games = total_games;
+        return NULL;
+    }
+
+    free(local_maps);
+    free(local_games);
+
+    *out_games = total_games;
+    return freq;
+}
+
 
 static bool parse_int(const char *s, const char *name, int *out) {
     char *end;
@@ -434,6 +633,7 @@ int main(int argc, char *argv[]) {
     int pgn_file_count = 0;
     int db_min_games = 5;
     double db_min_prob = 0.05;
+    bool no_freq_cache = false;
 
     /* Our-move overrides (-1 = use default) */
     int our_multipv_arg = -1;
@@ -505,6 +705,7 @@ int main(int argc, char *argv[]) {
         {"pgn",              required_argument, 0, 5001},
         {"db-min-games",     required_argument, 0, 5002},
         {"db-min-prob",      required_argument, 0, 5003},
+        {"no-freq-cache",    no_argument,       0, 5004},
         /* General */
         {"event-log",        required_argument, 0, 4001},
         {"lichess-eval-db",  required_argument, 0, 4002},
@@ -620,6 +821,7 @@ int main(int argc, char *argv[]) {
             case 5003:
                 if (!parse_double(optarg, "db-min-prob", &db_min_prob)) return 1;
                 break;
+            case 5004: no_freq_cache = true; break;
             case 4001: event_log_path = optarg; break;
             case 4002: lichess_eval_db_path = optarg; break;
             case 4010: chessdb_eval_db_path = optarg; break;
@@ -1035,29 +1237,50 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    bool defer_engine_pool =
+        (!skip_build && build_mode == BUILD_MODE_DB_EXPLORER);
+
     if (!skip_build) {
         if (build_mode != BUILD_MODE_MAIA_DB_EXPLORE) {
-            const char *sf_path = find_stockfish(stockfish_path);
-            if (!sf_path) {
-                fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
-                fprintf(stderr, "  Searched: ");
-                for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
-                    fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
-                fprintf(stderr, "\n");
-                if (maia) maia_destroy(maia);
-                rdb_close(db);
-                return 1;
-            }
+            if (defer_engine_pool) {
+                const char *sf_path = find_stockfish(stockfish_path);
+                if (!sf_path) {
+                    fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
+                    fprintf(stderr, "  Searched: ");
+                    for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
+                        fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
+                    fprintf(stderr, "\n");
+                    if (maia) maia_destroy(maia);
+                    rdb_close(db);
+                    return 1;
+                }
+                printf("  Stockfish: %s\n", sf_path);
+                printf("  Engines: %d | Depth: %d (start after PGN seed)\n",
+                       num_threads, eval_depth);
+            } else {
+                const char *sf_path = find_stockfish(stockfish_path);
+                if (!sf_path) {
+                    fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
+                    fprintf(stderr, "  Searched: ");
+                    for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
+                        fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
+                    fprintf(stderr, "\n");
+                    if (maia) maia_destroy(maia);
+                    rdb_close(db);
+                    return 1;
+                }
 
-            printf("  Stockfish: %s\n", sf_path);
-            printf("  Engines: %d | Depth: %d\n", num_threads, eval_depth);
+                printf("  Stockfish: %s\n", sf_path);
+                printf("  Engines: %d | Depth: %d\n", num_threads, eval_depth);
 
-            engine_pool = engine_pool_create(sf_path, num_threads, eval_depth, num_threads);
-            if (!engine_pool) {
-                fprintf(stderr, "Error: Failed to create engine pool\n");
-                if (maia) maia_destroy(maia);
-                rdb_close(db);
-                return 1;
+                engine_pool = engine_pool_create(sf_path, num_threads, eval_depth,
+                                                 num_threads);
+                if (!engine_pool) {
+                    fprintf(stderr, "Error: Failed to create engine pool\n");
+                    if (maia) maia_destroy(maia);
+                    rdb_close(db);
+                    return 1;
+                }
             }
         } else {
             printf("  Build mode: maia-db-explore (no Stockfish)\n");
@@ -1066,6 +1289,29 @@ int main(int argc, char *argv[]) {
                 rdb_close(db);
                 return 1;
             }
+        }
+    } else if (build_mode != BUILD_MODE_MAIA_DB_EXPLORE) {
+        const char *sf_path = find_stockfish(stockfish_path);
+        if (!sf_path) {
+            fprintf(stderr, "Error: Stockfish not found. Use -S <path>.\n");
+            fprintf(stderr, "  Searched: ");
+            for (int i = 0; STOCKFISH_SEARCH_PATHS[i]; i++)
+                fprintf(stderr, "%s ", STOCKFISH_SEARCH_PATHS[i]);
+            fprintf(stderr, "\n");
+            if (maia) maia_destroy(maia);
+            rdb_close(db);
+            return 1;
+        }
+
+        printf("  Stockfish: %s\n", sf_path);
+        printf("  Engines: %d | Depth: %d\n", num_threads, eval_depth);
+
+        engine_pool = engine_pool_create(sf_path, num_threads, eval_depth, num_threads);
+        if (!engine_pool) {
+            fprintf(stderr, "Error: Failed to create engine pool\n");
+            if (maia) maia_destroy(maia);
+            rdb_close(db);
+            return 1;
         }
     }
     printf("\n");
@@ -1186,15 +1432,9 @@ int main(int argc, char *argv[]) {
 
             g_tree = tree;
 
-            PgnFreqMap *freq = pgn_freq_map_create();
-            if (!freq) {
-                fprintf(stderr, "Error: Failed to create PGN frequency map\n");
-                tree_destroy(tree);
-                if (engine_pool) engine_pool_destroy(engine_pool);
-                if (maia) maia_destroy(maia);
-                rdb_close(db);
-                return 1;
-            }
+            char freq_cache_path[PATH_MAX];
+            snprintf(freq_cache_path, sizeof(freq_cache_path),
+                     "%s.freq.bin", base_name);
 
             /* Parse full games from startpos; tree root (--fen) is only the
              * BFS seed, not the PGN tracking anchor. */
@@ -1204,26 +1444,9 @@ int main(int argc, char *argv[]) {
                 .max_ply = 0,
             };
 
-            int parsed_games = 0;
-            for (int i = 0; i < pgn_file_count && !g_interrupted; i++) {
-                int g = pgn_freq_load_file(freq, &pgn_cfg, pgn_files[i]);
-                printf("  Parsed %s: %d games\n", pgn_files[i], g);
-                parsed_games += g;
-            }
-            if (g_interrupted) {
-                fprintf(stderr,
-                        "\n  [INTERRUPTED] Stopped during PGN parse (%d games loaded).\n",
-                        parsed_games);
-                pgn_freq_map_destroy(freq);
-                tree_destroy(tree);
-                if (engine_pool) engine_pool_destroy(engine_pool);
-                if (maia) maia_destroy(maia);
-                rdb_close(db);
-                goto cleanup;
-            }
-            if (parsed_games == 0) {
-                fprintf(stderr, "Error: No games parsed from PGN files\n");
-                pgn_freq_map_destroy(freq);
+            char *manifest = build_pgn_freq_manifest(
+                pgn_file_count, pgn_files, start_moves, pgn_cfg.max_ply);
+            if (!manifest) {
                 tree_destroy(tree);
                 if (engine_pool) engine_pool_destroy(engine_pool);
                 if (maia) maia_destroy(maia);
@@ -1231,11 +1454,68 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
 
+            PgnFreqMap *freq = NULL;
+            int parsed_games = 0;
+            bool loaded_from_cache = false;
+
+            if (!no_freq_cache) {
+                freq = pgn_freq_map_load(freq_cache_path, manifest);
+                if (freq) {
+                    size_t map_positions = 0;
+                    uint64_t map_reach = 0;
+                    pgn_freq_stats(freq, &map_positions, &map_reach);
+                    parsed_games = (int)map_reach;
+                    loaded_from_cache = true;
+                    printf("Loading cached frequency map from %s (%zu positions, %llu games)\n",
+                           freq_cache_path, map_positions,
+                           (unsigned long long)map_reach);
+                }
+            }
+
+            if (!freq) {
+                printf("Frequency map cache invalid/missing, reparsing PGN files...\n");
+                freq = parse_pgn_files_parallel(
+                    (const char **)pgn_files, pgn_file_count, &pgn_cfg,
+                    num_threads, &parsed_games);
+            }
+
+            if (g_interrupted) {
+                fprintf(stderr,
+                        "\n  [INTERRUPTED] Stopped during PGN parse (%d games loaded).\n",
+                        parsed_games);
+                if (freq) pgn_freq_map_destroy(freq);
+                free(manifest);
+                tree_destroy(tree);
+                if (engine_pool) engine_pool_destroy(engine_pool);
+                if (maia) maia_destroy(maia);
+                rdb_close(db);
+                goto cleanup;
+            }
+            if (!freq || parsed_games == 0) {
+                fprintf(stderr, "Error: No games parsed from PGN files\n");
+                if (freq) pgn_freq_map_destroy(freq);
+                free(manifest);
+                tree_destroy(tree);
+                if (engine_pool) engine_pool_destroy(engine_pool);
+                if (maia) maia_destroy(maia);
+                rdb_close(db);
+                return 1;
+            }
+
+            if (!loaded_from_cache && !g_interrupted) {
+                if (!pgn_freq_map_save(freq, freq_cache_path, manifest))
+                    fprintf(stderr,
+                            "  Warning: could not save frequency map cache to %s\n",
+                            freq_cache_path);
+            }
+            free(manifest);
+
             size_t map_positions = 0;
             uint64_t map_reach = 0;
             pgn_freq_stats(freq, &map_positions, &map_reach);
-            printf("  Frequency map: %zu positions, %llu game reaches\n",
-                   map_positions, (unsigned long long)map_reach);
+            if (!loaded_from_cache)
+                printf("  Frequency map: %zu positions, %llu game reaches\n",
+                       map_positions, (unsigned long long)map_reach);
 
             DbBuildConfig db_cfg = {
                 .start_fen = start_fen,
@@ -1255,6 +1535,18 @@ int main(int argc, char *argv[]) {
                          (build_end.tv_nsec - build_start.tv_nsec) / 1e9;
 
             pgn_freq_map_destroy(freq);
+
+            if (!engine_pool) {
+                engine_pool = create_stockfish_engine_pool(
+                    stockfish_path, num_threads, eval_depth);
+                if (!engine_pool) {
+                    fprintf(stderr, "Error: Failed to create engine pool\n");
+                    tree_destroy(tree);
+                    if (maia) maia_destroy(maia);
+                    rdb_close(db);
+                    return 1;
+                }
+            }
 
             config.play_as_white = play_as_white;
             config.build_mode = build_mode;
