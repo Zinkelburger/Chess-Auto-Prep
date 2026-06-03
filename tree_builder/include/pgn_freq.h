@@ -32,6 +32,7 @@ typedef struct PgnFreqConfig {
     const char *start_fen;    /* NULL = standard startpos */
     const char *start_moves;  /* SAN prefix before tracking (NULL = from start) */
     int max_ply;              /* 0 = unlimited ply from tracking root */
+    int min_elo;              /* skip game if both players below this (0 = off) */
 } PgnFreqConfig;
 
 PgnFreqMap *pgn_freq_map_create(void);

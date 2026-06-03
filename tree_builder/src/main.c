@@ -216,7 +216,7 @@ typedef struct {
     bool leaf_confidence, novelty_weight;
     bool preset;
     bool maia_model, maia_elo, maia_min_prob, maia_only, lichess, build_mode;
-    bool pgn, db_min_games, db_min_prob, no_freq_cache;
+    bool pgn, db_min_games, db_min_prob, no_freq_cache, min_elo;
     bool event_log, lichess_eval_db, chessdb_eval_db, chessdb_api;
     bool chessdb_api_quota, chessdb_api_concurrency, no_ext_eval_subtree_skip;
 #ifdef HAS_CDBDIRECT
@@ -737,6 +737,7 @@ static void print_usage(const char *prog_name) {
     printf("  --no-freq-cache        Force PGN reparse (ignore <name>.freq.bin)\n");
     printf("  --db-min-games <N>     Min games per move in PGN DB [default: 3]\n");
     printf("  --db-min-prob <P>      Min move probability in PGN DB [default: 0.05]\n");
+    printf("  --min-elo <N>          Skip PGN games where both players are below N Elo [default: 2100]\n");
     printf("  -S, --stockfish <path> Stockfish binary path\n");
     printf("  -D, --database <path>  SQLite database path [default: <name>.db]\n");
     printf("  -I, --input-db <path>  Import eval/explorer cache from another DB\n");
@@ -976,7 +977,8 @@ static EnginePool *create_stockfish_engine_pool(const char *stockfish_path,
 }
 
 static char *build_pgn_freq_manifest(int pgn_file_count, const char **pgn_files,
-                                   const char *start_moves, int max_ply) {
+                                   const char *start_moves, int max_ply,
+                                   int min_elo) {
     cJSON *root = cJSON_CreateObject();
     if (!root) return NULL;
 
@@ -986,6 +988,7 @@ static char *build_pgn_freq_manifest(int pgn_file_count, const char **pgn_files,
     else
         cJSON_AddNullToObject(root, "start_moves");
     cJSON_AddNumberToObject(root, "max_ply", max_ply);
+    cJSON_AddNumberToObject(root, "min_elo", min_elo);
 
     cJSON *files = cJSON_AddArrayToObject(root, "files");
     if (!files) {
@@ -1245,6 +1248,7 @@ int main(int argc, char *argv[]) {
     int pgn_file_count = 0;
     int db_min_games = 3;
     double db_min_prob = 0.05;
+    int min_elo = 2100;
     bool no_freq_cache = false;
 
     /* Our-move overrides (-1 = use default) */
@@ -1323,6 +1327,7 @@ int main(int argc, char *argv[]) {
         {"db-min-games",     required_argument, 0, 5002},
         {"db-min-prob",      required_argument, 0, 5003},
         {"no-freq-cache",    no_argument,       0, 5004},
+        {"min-elo",          required_argument, 0, 5005},
         /* General */
         {"event-log",        required_argument, 0, 4001},
         {"lichess-eval-db",  required_argument, 0, 4002},
@@ -1475,6 +1480,10 @@ int main(int argc, char *argv[]) {
                 cli_exp.db_min_prob = true;
                 break;
             case 5004: no_freq_cache = true; cli_exp.no_freq_cache = true; break;
+            case 5005:
+                if (!parse_int(optarg, "min-elo", &min_elo)) return 1;
+                cli_exp.min_elo = true;
+                break;
             case 4001: event_log_path = optarg; cli_exp.event_log = true; break;
             case 4002: lichess_eval_db_path = optarg; cli_exp.lichess_eval_db = true; break;
             case 4010: chessdb_eval_db_path = optarg; cli_exp.chessdb_eval_db = true; break;
@@ -2182,8 +2191,8 @@ int main(int argc, char *argv[]) {
 
         if (built_from_db) {
             printf("[1/4] Building opening tree from PGN database (db-explorer)...\n");
-            printf("  DB filters: min_games=%d, min_prob=%.2f\n",
-                   db_min_games, db_min_prob);
+            printf("  DB filters: min_games=%d, min_prob=%.2f, min_elo=%d\n",
+                   db_min_games, db_min_prob, min_elo);
 
             if (!tree) {
                 tree = tree_create();
@@ -2216,10 +2225,12 @@ int main(int argc, char *argv[]) {
                                   : NULL,
                 .start_moves = start_moves,
                 .max_ply = 0,
+                .min_elo = min_elo,
             };
 
             char *manifest = build_pgn_freq_manifest(
-                pgn_file_count, pgn_files, start_moves, pgn_cfg.max_ply);
+                pgn_file_count, pgn_files, start_moves, pgn_cfg.max_ply,
+                pgn_cfg.min_elo);
             if (!manifest) {
                 tree_destroy(tree);
                 if (engine_pool) engine_pool_destroy(engine_pool);
