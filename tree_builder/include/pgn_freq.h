@@ -8,6 +8,7 @@
 #ifndef PGN_FREQ_H
 #define PGN_FREQ_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -49,5 +50,24 @@ void pgn_freq_stats(const PgnFreqMap *map, size_t *out_positions,
 int pgn_freq_filtered_moves(const PgnFreqPosition *pos, int min_games,
                             double min_prob, PgnFreqMove *out_moves,
                             int max_out);
+
+/** Merge src into dst (sum reach_count and move counts). Returns false on OOM. */
+bool pgn_freq_map_merge(PgnFreqMap *dst, const PgnFreqMap *src);
+
+/** Binary cache format version (manifest JSON field format_version). */
+#define PGN_FREQ_CACHE_FORMAT_VERSION 1
+
+/**
+ * Save map to path. manifest_json is stored in the file header for reload checks.
+ * Returns false on I/O or allocation failure.
+ */
+bool pgn_freq_map_save(const PgnFreqMap *map, const char *path,
+                       const char *manifest_json);
+
+/**
+ * Load map from path if manifest_json matches the file header.
+ * Returns NULL if missing, manifest mismatch, or corrupt data.
+ */
+PgnFreqMap *pgn_freq_map_load(const char *path, const char *expected_manifest_json);
 
 #endif /* PGN_FREQ_H */
