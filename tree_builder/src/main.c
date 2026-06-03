@@ -1205,10 +1205,21 @@ int main(int argc, char *argv[]) {
             };
 
             int parsed_games = 0;
-            for (int i = 0; i < pgn_file_count; i++) {
+            for (int i = 0; i < pgn_file_count && !g_interrupted; i++) {
                 int g = pgn_freq_load_file(freq, &pgn_cfg, pgn_files[i]);
                 printf("  Parsed %s: %d games\n", pgn_files[i], g);
                 parsed_games += g;
+            }
+            if (g_interrupted) {
+                fprintf(stderr,
+                        "\n  [INTERRUPTED] Stopped during PGN parse (%d games loaded).\n",
+                        parsed_games);
+                pgn_freq_map_destroy(freq);
+                tree_destroy(tree);
+                if (engine_pool) engine_pool_destroy(engine_pool);
+                if (maia) maia_destroy(maia);
+                rdb_close(db);
+                goto cleanup;
             }
             if (parsed_games == 0) {
                 fprintf(stderr, "Error: No games parsed from PGN files\n");
@@ -1281,6 +1292,7 @@ int main(int argc, char *argv[]) {
                 rdb_close(db);
                 return 1;
             }
+            if (g_interrupted) goto cleanup;
 
             printf("  DB tree built: %zu nodes in %.2fs (max depth %d, %d PGN games)\n",
                    tree->total_nodes, build_time, tree->max_depth_reached,

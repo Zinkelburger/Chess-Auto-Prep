@@ -295,7 +295,7 @@ bool tree_build_from_freqmap(Tree *tree, const PgnFreqMap *freq,
     }
 
     bool build_ok = true;
-    while (build_ok) {
+    while (build_ok && !g_interrupted) {
         TreeNode *node = db_queue_pop(&q);
         if (!node) break;
         if (node->explored) continue;
@@ -307,7 +307,7 @@ bool tree_build_from_freqmap(Tree *tree, const PgnFreqMap *freq,
     }
 
     tree->is_building = false;
-    tree->build_complete = build_ok;
+    tree->build_complete = build_ok && !g_interrupted;
 
     db_queue_destroy(&q);
     fen_map_destroy(fmap);
@@ -392,7 +392,7 @@ bool tree_enrich_evals(Tree *tree, const TreeConfig *config,
     EvalChainContext chain = enrich_chain_from_config(config);
 
     /* Phase 1: project DB cache + external eval sources */
-    for (size_t i = 0; i < pending.count; i++) {
+    for (size_t i = 0; i < pending.count && !g_interrupted; i++) {
         TreeNode *node = pending.nodes[i];
         if (node->has_engine_eval) continue;
 
