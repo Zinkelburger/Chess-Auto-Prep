@@ -1,0 +1,31 @@
+---
+description: Keyboard shortcut tooltips on interactive controls
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# Shortcut tooltips
+
+When a UI control triggers an action that also has a **keyboard shortcut** in the same screen or panel, the hover tooltip **must** show that shortcut.
+
+## Use the shared pattern (`lib/widgets/shortcut_tooltip.dart`)
+
+| API | When |
+|-----|------|
+| `actionTooltip(description, shortcut: '…')` | `IconButton.tooltip`, `Tooltip.message`, or other string-only tooltips |
+| `ShortcutIconButton` | Icon buttons with a shortcut |
+| `ShortcutTooltip` | Wrap `TextButton`, `FilledButton`, `FilterChip`, etc. |
+| `shortcutTooltip(…)` | Same as `ShortcutTooltip` with delayed hover (dense button rows) |
+
+Format is always: **`Description (Shortcut)`** — e.g. `Undo last add (Ctrl+Z)`.
+
+## Rules
+
+1. **Do not** hand-roll `(G)` suffixes; use `actionTooltip` or the widgets above.
+2. **Do not** use `ShortcutIconButton` / `ShortcutTooltip` when there is no keyboard binding for that control.
+3. If you add a `LogicalKeyboardKey` handler for an action, update the matching button tooltip in the same change.
+4. Debug builds assert when `ShortcutTooltip` / `ShortcutIconButton` get an empty `shortcut`.
+
+## Tests
+
+`test/widgets/shortcut_tooltip_test.dart` covers formatting and widget tooltips.

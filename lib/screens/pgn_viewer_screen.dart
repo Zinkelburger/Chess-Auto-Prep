@@ -268,16 +268,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     } else if (key == LogicalKeyboardKey.keyP) {
       _controller.prevGame();
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.f11) {
-      _controller.toggleFullScreen();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyF &&
-        (HardwareKeyboard.instance.isShiftPressed ||
+    } else if (key == LogicalKeyboardKey.f11 ||
+        (key == LogicalKeyboardKey.keyF &&
             HardwareKeyboard.instance.isControlPressed)) {
       _controller.toggleFullScreen();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.keyF) {
       _controller.toggleBoardFlipped();
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyE &&
+        HardwareKeyboard.instance.isControlPressed) {
+      _exportSlice();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.keyE) {
       InlineEngineBar.toggleEngine();
@@ -285,7 +286,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     } else if (key == LogicalKeyboardKey.space) {
       _controller.toggleAutoPlay();
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyA) {
+    } else if (key == LogicalKeyboardKey.keyW) {
       _controller.setAutoNextGame(!_controller.autoNextGame);
       return KeyEventResult.handled;
     } else if (digitKeys.containsKey(key)) {
@@ -308,10 +309,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.keyT) {
       _controller.toggleOpeningTree();
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyE &&
-        HardwareKeyboard.instance.isControlPressed) {
-      _exportSlice();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;

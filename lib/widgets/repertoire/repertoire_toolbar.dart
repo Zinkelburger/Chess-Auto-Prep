@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../screens/settings_screen.dart';
 import '../../theme/app_colors.dart';
 import '../app_mode_menu_button.dart';
+import '../shortcut_tooltip.dart';
 import '../layout/board_zone.dart';
 import '../layout/repertoire_mode.dart';
 import '../layout/repertoire_mode_switcher.dart';
@@ -187,15 +188,20 @@ class RepertoireGenerateButton extends StatelessWidget {
       padding: const EdgeInsets.only(right: 4),
       child: Center(
         child: compact
-            ? IconButton(
-                tooltip: 'Generate repertoire (G)',
+            ? ShortcutIconButton(
+                description: 'Generate repertoire',
+                shortcut: 'G',
                 onPressed: onPressed,
                 icon: const Icon(Icons.auto_awesome),
               )
-            : TextButton.icon(
-                onPressed: onPressed,
-                icon: const Icon(Icons.auto_awesome, size: 18),
-                label: const Text('Generate'),
+            : ShortcutTooltip(
+                description: 'Generate repertoire',
+                shortcut: 'G',
+                child: TextButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('Generate'),
+                ),
               ),
       ),
     );

@@ -3,6 +3,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../widgets/shortcut_tooltip.dart';
+
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../../services/coherence_service.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
@@ -286,10 +288,14 @@ class _BrowsePanelState extends State<BrowsePanel> {
           ),
           if (widget.canUndo && widget.onUndo != null) ...[
             const Spacer(),
-            TextButton.icon(
-              onPressed: widget.onUndo,
-              icon: const Icon(Icons.undo, size: 14),
-              label: const Text('Undo'),
+            ShortcutTooltip(
+              description: 'Undo last add',
+              shortcut: 'Ctrl+Z',
+              child: TextButton.icon(
+                onPressed: widget.onUndo,
+                icon: const Icon(Icons.undo, size: 14),
+                label: const Text('Undo'),
+              ),
             ),
           ],
         ],

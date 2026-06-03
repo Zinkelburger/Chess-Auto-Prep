@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../models/pgn_filter_models.dart';
+import 'shortcut_tooltip.dart';
 import 'game_nav_item.dart';
 import 'game_search_dialog.dart';
 
@@ -96,8 +97,9 @@ class GameNavBar extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Tooltip(
-                message: 'Previous game (P)',
+              ShortcutTooltip(
+                description: 'Previous game',
+                shortcut: 'P',
                 child: TextButton.icon(
                   onPressed: currentIndex > 0 ? onPrev : null,
                   icon: const Icon(Icons.skip_previous, size: 20),
@@ -105,8 +107,9 @@ class GameNavBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 24),
-              Tooltip(
-                message: 'Next game (N)',
+              ShortcutTooltip(
+                description: 'Next game',
+                shortcut: 'N',
                 child: TextButton.icon(
                   onPressed:
                       currentIndex < games.length - 1 ? onNext : null,
@@ -173,8 +176,9 @@ class GameNavBar extends StatelessWidget {
   List<Widget> _buildStarRating(int current) {
     return List.generate(5, (i) {
       final star = i + 1;
-      return Tooltip(
-        message: 'Rate $star star${star > 1 ? 's' : ''} ($star)',
+      return ShortcutTooltip(
+        description: 'Rate $star star${star > 1 ? 's' : ''}',
+        shortcut: '$star',
         child: GestureDetector(
           onTap: () => onSetRating?.call(current == star ? 0 : star),
           child: Icon(
@@ -224,19 +228,21 @@ class GameNavBar extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
+        ShortcutIconButton(
+          description: isAutoPlaying ? 'Pause' : 'Watch game',
+          shortcut: 'Space',
           onPressed: games.isNotEmpty ? onToggleAutoPlay : null,
           icon: Icon(
             isAutoPlaying ? Icons.pause_circle : Icons.play_circle,
             size: 28,
             color: isAutoPlaying ? Colors.amber : null,
           ),
-          tooltip: isAutoPlaying ? 'Pause (Space)' : 'Watch game (Space)',
         ),
-        IconButton(
+        ShortcutIconButton(
+          description: 'Fullscreen',
+          shortcut: 'Ctrl+F',
           onPressed: games.isNotEmpty ? onToggleFullScreen : null,
           icon: Icon(Icons.fullscreen, size: 24, color: Colors.grey[400]),
-          tooltip: 'Fullscreen (Ctrl+F)',
           visualDensity: VisualDensity.compact,
         ),
         IconButton(
@@ -278,8 +284,9 @@ class GameNavBar extends StatelessWidget {
               ),
           ],
         ),
-        Tooltip(
-          message: 'Auto next game (A)',
+        ShortcutTooltip(
+          description: 'Auto next game',
+          shortcut: 'W',
           child: FilterChip(
             label: const Text('Auto', style: TextStyle(fontSize: 11)),
             selected: autoNextGame,
