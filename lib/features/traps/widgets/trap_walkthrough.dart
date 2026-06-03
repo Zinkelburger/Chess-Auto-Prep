@@ -3,6 +3,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../widgets/shortcut_tooltip.dart';
+
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../../core/repertoire_controller.dart';
 import '../../../theme/app_colors.dart';
@@ -179,9 +181,10 @@ class _TrapWalkthroughShell extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    IconButton(
+                    ShortcutIconButton(
+                      description: 'Close tour',
+                      shortcut: 'T',
                       icon: const Icon(Icons.close, size: 20),
-                      tooltip: 'Close tour (T)',
                       onPressed: onClose,
                     ),
                   ],
@@ -220,10 +223,11 @@ class _TrapWalkthroughHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          IconButton(
+          ShortcutIconButton(
+            description: 'Previous trap',
+            shortcut: 'Shift+←',
             icon: const Icon(Icons.skip_previous, size: 22),
             color: AppColors.warning,
-            tooltip: 'Previous trap',
             onPressed: canGoPrev ? onPrevious : null,
           ),
           Container(
@@ -240,10 +244,11 @@ class _TrapWalkthroughHeader extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
+          ShortcutIconButton(
+            description: 'Next trap',
+            shortcut: 'Shift+→',
             icon: const Icon(Icons.skip_next, size: 22),
             color: AppColors.warning,
-            tooltip: 'Next trap',
             onPressed: canGoNext ? onNext : null,
           ),
         ],

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../shortcut_tooltip.dart';
+
 import '../../core/repertoire_controller.dart';
 import '../../models/repertoire_line.dart';
 import '../../services/training/training_phase.dart';
@@ -158,8 +160,9 @@ class _LearnContent extends StatelessWidget {
             if (learnWaitingForAck) ...[
               SizedBox(
                 width: double.infinity,
-                child: Tooltip(
-                  message: 'Keyboard shortcut: Space',
+                child: ShortcutTooltip(
+                  description: 'Next',
+                  shortcut: 'Space',
                   child: FilledButton.icon(
                     onPressed: onLearnAcknowledged,
                     icon: const Icon(Icons.arrow_forward, size: 18),

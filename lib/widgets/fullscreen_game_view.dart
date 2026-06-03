@@ -215,7 +215,7 @@ class FullscreenGameView extends StatelessWidget {
                       ],
                     ),
                     Tooltip(
-                      message: 'Auto next game (A)',
+                      message: 'Auto next game (W)',
                       child: GestureDetector(
                         onTap: () =>
                             onSetAutoNext?.call(!autoNextGame),

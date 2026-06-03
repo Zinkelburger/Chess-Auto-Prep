@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../shortcut_tooltip.dart';
+
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
 import '../../models/training_settings.dart';
@@ -294,8 +296,9 @@ class _RatingButton extends StatelessWidget {
     final interval = reviewService.previewInterval(previewEntry, rating);
     final intervalLabel = RepertoireReviewService.formatInterval(interval);
 
-    return Tooltip(
-      message: 'Keyboard: $shortcut',
+    return ShortcutTooltip(
+      description: label,
+      shortcut: shortcut,
       child: OutlinedButton(
         onPressed: () => onRateLine(rating),
         style: OutlinedButton.styleFrom(

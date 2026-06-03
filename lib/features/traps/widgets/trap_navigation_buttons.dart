@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../widgets/shortcut_tooltip.dart';
+
 import '../../../core/repertoire_controller.dart';
 import '../../../models/repertoire_line.dart';
 import '../../../theme/app_colors.dart';
@@ -160,10 +162,11 @@ class TrapNavigationButtons extends StatelessWidget {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
+            ShortcutIconButton(
+              description: 'Previous trap',
+              shortcut: 'Shift+←',
               icon: const Icon(Icons.skip_previous, size: 20),
               color: AppColors.warning,
-              tooltip: 'Previous trap (Shift+←)',
               onPressed: canGoPrev
                   ? () => jumpToTrap(controller, traps[currentTrapIdx - 1])
                   : null,
@@ -182,10 +185,11 @@ class TrapNavigationButtons extends StatelessWidget {
                 ),
               ),
             ),
-            IconButton(
+            ShortcutIconButton(
+              description: 'Next trap',
+              shortcut: 'Shift+→',
               icon: const Icon(Icons.skip_next, size: 20),
               color: AppColors.warning,
-              tooltip: 'Next trap (Shift+→)',
               onPressed: canGoNext
                   ? () => jumpToTrap(controller, traps[currentTrapIdx + 1])
                   : null,

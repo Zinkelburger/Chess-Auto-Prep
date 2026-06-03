@@ -719,10 +719,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Close (G to reopen)',
-                  onPressed: _closeGenerateMode,
-                  icon: const Icon(Icons.close),
+                Tooltip(
+                  message: 'Close generate panel (G reopens)',
+                  child: IconButton(
+                    onPressed: _closeGenerateMode,
+                    icon: const Icon(Icons.close),
+                  ),
                 ),
               ],
             ),
