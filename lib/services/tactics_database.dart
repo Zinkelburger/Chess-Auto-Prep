@@ -1,5 +1,8 @@
+import 'dart:math';
+
 import 'package:csv/csv.dart';
 import '../models/tactics_position.dart';
+import '../models/tactics_session_settings.dart';
 import 'storage/storage_factory.dart';
 
 /// Manages tactical positions and review data
@@ -9,6 +12,16 @@ class TacticsDatabase {
   ReviewSession currentSession = ReviewSession();
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
+
+  /// The filtered + ordered queue for the active session.
+  /// `null` when no session is active.
+  List<int> _sessionQueue = [];
+
+  /// Index into [_sessionQueue].
+  int _sessionQueueIndex = 0;
+
+  /// Settings for the current session (kept for mid-session rating logic).
+  TacticsSessionSettings _sessionSettings = const TacticsSessionSettings();
 
   /// Load positions from CSV file
   Future<int> loadPositions() async {
@@ -160,6 +173,7 @@ class TacticsDatabase {
             'time_to_solve',
             'hints_used',
             'opponent_best_response',
+            'rating',
           ]
         ];
 
@@ -184,22 +198,88 @@ class TacticsDatabase {
     await savePositions();
   }
 
-  /// Start a new review session, starting at the least-reviewed position
-  void startSession() {
+  /// Start a new review session with the given [settings].
+  void startSession([TacticsSessionSettings settings = const TacticsSessionSettings()]) {
     currentSession = ReviewSession();
+    _sessionSettings = settings;
 
-    // Start at the least-reviewed position (pick up where you left off)
-    if (positions.isNotEmpty) {
-      int minReviews = positions.first.reviewCount;
-      int minIndex = 0;
-      for (int i = 1; i < positions.length; i++) {
-        if (positions[i].reviewCount < minReviews) {
-          minReviews = positions[i].reviewCount;
-          minIndex = i;
-        }
-      }
-      sessionPositionIndex = minIndex;
+    // Build filtered queue of indices into [positions].
+    _sessionQueue = <int>[];
+    for (int i = 0; i < positions.length; i++) {
+      if (settings.accepts(positions[i])) _sessionQueue.add(i);
     }
+
+    // Sort / shuffle per ordering preference.
+    switch (settings.order) {
+      case TacticsSessionOrder.newestFirst:
+        _sessionQueue.sort((a, b) =>
+            positions[b].gameDate.compareTo(positions[a].gameDate));
+      case TacticsSessionOrder.leastReviewed:
+        _sessionQueue.sort((a, b) =>
+            positions[a].reviewCount.compareTo(positions[b].reviewCount));
+      case TacticsSessionOrder.worstSuccessRate:
+        _sessionQueue.sort((a, b) =>
+            positions[a].successRate.compareTo(positions[b].successRate));
+      case TacticsSessionOrder.random:
+        _sessionQueue.shuffle(Random());
+    }
+
+    _sessionQueueIndex = 0;
+    sessionPositionIndex =
+        _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
+  }
+
+  /// Number of positions in the current session queue.
+  int get sessionQueueLength => _sessionQueue.length;
+
+  /// Current 0-based position within the session queue.
+  int get sessionQueuePosition => _sessionQueueIndex;
+
+  /// Remove a position (by index into [positions]) from the live session queue.
+  void removeFromSessionQueue(int positionIndex) {
+    final queueIdx = _sessionQueue.indexOf(positionIndex);
+    if (queueIdx == -1) return;
+    _sessionQueue.removeAt(queueIdx);
+    if (_sessionQueueIndex >= _sessionQueue.length && _sessionQueue.isNotEmpty) {
+      _sessionQueueIndex = 0;
+    }
+  }
+
+  /// Advance to the next position in the session queue.  Returns the index
+  /// into [positions], or `null` when the queue is exhausted.
+  int? nextSessionPosition() {
+    if (_sessionQueue.isEmpty) return null;
+    _sessionQueueIndex = (_sessionQueueIndex + 1) % _sessionQueue.length;
+    sessionPositionIndex = _sessionQueue[_sessionQueueIndex];
+    return sessionPositionIndex;
+  }
+
+  /// Go to the previous position in the session queue.
+  int? previousSessionPosition() {
+    if (_sessionQueue.isEmpty) return null;
+    _sessionQueueIndex--;
+    if (_sessionQueueIndex < 0) {
+      _sessionQueueIndex = _sessionQueue.length - 1;
+    }
+    sessionPositionIndex = _sessionQueue[_sessionQueueIndex];
+    return sessionPositionIndex;
+  }
+
+  /// The current session settings.
+  TacticsSessionSettings get sessionSettings => _sessionSettings;
+
+  /// Set the star [rating] on the position matching [fen].
+  Future<void> setRating(String fen, int rating) async {
+    final index = positions.indexWhere((p) => p.fen == fen);
+    if (index == -1) return;
+    positions[index] = positions[index].copyWith(rating: rating);
+
+    // If rated 1 and 1-star is excluded, remove from live session queue.
+    if (rating == 1 && !_sessionSettings.includeOneStar) {
+      removeFromSessionQueue(index);
+    }
+
+    await savePositions();
   }
 
   /// Record an attempt at a position

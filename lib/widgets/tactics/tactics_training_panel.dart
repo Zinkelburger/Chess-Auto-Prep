@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../../core/app_state.dart';
 import '../../models/tactics_position.dart';
 import '../../services/tactics_engine.dart';
-import 'tactics_delayed_tooltip.dart';
+import '../shortcut_tooltip.dart';
 
 /// Puzzle-solving controls shown during an active tactics session.
 class TacticsTrainingPanel extends StatelessWidget {
@@ -15,6 +13,7 @@ class TacticsTrainingPanel extends StatelessWidget {
     required this.currentMoveIndex,
     required this.positionSolved,
     required this.showSolution,
+    required this.isAtStartingPosition,
     required this.feedback,
     required this.autoAdvance,
     required this.onToggleSolution,
@@ -24,6 +23,7 @@ class TacticsTrainingPanel extends StatelessWidget {
     required this.onSkipPosition,
     required this.onAutoAdvanceChanged,
     required this.onCopyFen,
+    required this.onSetRating,
   });
 
   final TacticsPosition position;
@@ -31,6 +31,7 @@ class TacticsTrainingPanel extends StatelessWidget {
   final int currentMoveIndex;
   final bool positionSolved;
   final bool showSolution;
+  final bool isAtStartingPosition;
   final String feedback;
   final bool autoAdvance;
   final VoidCallback onToggleSolution;
@@ -40,6 +41,9 @@ class TacticsTrainingPanel extends StatelessWidget {
   final VoidCallback onSkipPosition;
   final ValueChanged<bool> onAutoAdvanceChanged;
   final VoidCallback onCopyFen;
+  final ValueChanged<int> onSetRating;
+
+  bool get _showRating => positionSolved || showSolution;
 
   Color _feedbackColor() {
     if (feedback.contains('Correct')) return Colors.green;
@@ -56,41 +60,45 @@ class TacticsTrainingPanel extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: tacticsShortcutTooltip(
-                message: 'space',
-                child: ElevatedButton(
-                  onPressed: onToggleSolution,
-                  child: Text(showSolution ? 'Hide Solution' : 'Show Solution'),
+              child: shortcutTooltip(
+                description: showSolution ? 'Hide solution' : 'Show solution',
+                shortcut: 'Space',
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: onToggleSolution,
+                    child:
+                        Text(showSolution ? 'Hide Solution' : 'Show Solution'),
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Builder(
-                builder: (context) {
-                  final appState = context.watch<AppState>();
-                  final isAtStartingPosition = positionSolved ||
-                      appState.currentPosition.fen == position.fen;
-                  if (isAtStartingPosition) {
-                    return tacticsShortcutTooltip(
-                      message: 'a',
-                      child: ElevatedButton(
-                        onPressed: onAnalyze,
-                        child: const Text('Analyze'),
+              child: isAtStartingPosition
+                  ? shortcutTooltip(
+                      description: 'Analyze',
+                      shortcut: 'A',
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: onAnalyze,
+                          child: const Text('Analyze'),
+                        ),
                       ),
-                    );
-                  } else {
-                    return tacticsShortcutTooltip(
-                      message: 'a',
-                      child: ElevatedButton.icon(
-                        onPressed: onResetAnalysis,
-                        icon: const Icon(Icons.refresh, size: 16),
-                        label: const Text('Reset'),
+                    )
+                  : shortcutTooltip(
+                      description: 'Reset analysis',
+                      shortcut: 'A',
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: onResetAnalysis,
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text('Reset'),
+                        ),
                       ),
-                    );
-                  }
-                },
-              ),
+                    ),
             ),
           ],
         ),
@@ -98,21 +106,29 @@ class TacticsTrainingPanel extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: tacticsShortcutTooltip(
-                message: 'b',
-                child: ElevatedButton(
-                  onPressed: onPreviousPosition,
-                  child: const Text('Previous'),
+              child: shortcutTooltip(
+                description: 'Previous position',
+                shortcut: 'P',
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: onPreviousPosition,
+                    child: const Text('Previous'),
+                  ),
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: tacticsShortcutTooltip(
-                message: 'n',
-                child: ElevatedButton(
-                  onPressed: onSkipPosition,
-                  child: const Text('Skip'),
+              child: shortcutTooltip(
+                description: 'Skip position',
+                shortcut: 'N',
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: onSkipPosition,
+                    child: const Text('Skip'),
+                  ),
                 ),
               ),
             ),
@@ -178,6 +194,61 @@ class TacticsTrainingPanel extends StatelessWidget {
               ),
           ],
         ),
+        if (_showRating) ...[
+          const SizedBox(height: 12),
+          _TacticsStarRating(
+            rating: position.rating,
+            onSetRating: onSetRating,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Compact 1-5 star rating row for tactic quality.
+class _TacticsStarRating extends StatelessWidget {
+  const _TacticsStarRating({
+    required this.rating,
+    required this.onSetRating,
+  });
+
+  final int rating;
+  final ValueChanged<int> onSetRating;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          'Rate:',
+          style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+        ),
+        const SizedBox(width: 8),
+        for (int star = 1; star <= 5; star++)
+          ShortcutTooltip(
+            description: 'Rate $star star${star > 1 ? 's' : ''}',
+            shortcut: '$star',
+            child: GestureDetector(
+              onTap: () => onSetRating(rating == star ? 0 : star),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Icon(
+                  star <= rating ? Icons.star : Icons.star_border,
+                  size: 24,
+                  color: star <= rating ? Colors.amber : Colors.grey[600],
+                ),
+              ),
+            ),
+          ),
+        if (rating > 0)
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: Text(
+              rating == 1 ? '(hidden from training)' : '',
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            ),
+          ),
       ],
     );
   }

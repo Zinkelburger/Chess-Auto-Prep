@@ -7,17 +7,23 @@ import 'package:dartchess/dartchess.dart';
 
 import '../core/app_state.dart';
 import '../models/engine_settings.dart';
+import '../models/tactics_session_settings.dart';
 import '../services/tactics/tactics_import_coordinator.dart';
 import '../services/tactics/tactics_session_controller.dart';
 import '../services/tactics_database.dart';
 import '../services/tactics_import_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
+import 'engine/inline_engine_bar.dart';
 import 'pgn_viewer_widget.dart';
 import 'pgn_with_engine.dart';
 import 'tactics/tactics_browse_panel.dart';
 import 'tactics/tactics_import_panel.dart';
 import 'tactics/tactics_training_panel.dart';
+
+class _ToggleInlineEngineIntent extends Intent {
+  const _ToggleInlineEngineIntent();
+}
 
 /// Tactics training control panel with import, review, and analysis.
 class TacticsControlPanel extends StatefulWidget {
@@ -99,6 +105,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         final appState = context.read<AppState>();
         if (_tabController.index == 1) {
           appState.enterAnalysisMode();
+          _focusNode.requestFocus();
           // Sync the board to the PGN viewer's current position so that
           // moves made on the board match the PGN viewer's state.
           // Without this, solving a tactic advances the board past the
@@ -197,36 +204,62 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
+  bool _isTextInputFocused() {
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    return primaryFocus?.context?.widget is EditableText;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: true,
-      onKeyEvent: _handleKeyEvent,
-      child: Column(
-        children: [
-          // Tab bar
-          TabBar(
-            controller: _tabController,
-            tabs: [
-              const Tab(text: 'Tactic'),
-              Tab(text: _session.currentPosition != null ? 'PGN' : 'Browse'),
-            ],
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.keyE): _ToggleInlineEngineIntent(),
+      },
+      child: Actions(
+        actions: {
+          _ToggleInlineEngineIntent: CallbackAction<_ToggleInlineEngineIntent>(
+            onInvoke: (_) {
+              if (_session.currentPosition == null || _isTextInputFocused()) {
+                return null;
+              }
+              InlineEngineBar.toggleEngine();
+              return null;
+            },
           ),
-
-          // Tab content
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
+        },
+        child: Focus(
+          focusNode: _focusNode,
+          autofocus: true,
+          onKeyEvent: _handleKeyEvent,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () => _focusNode.requestFocus(),
+            child: Column(
               children: [
-                _buildTacticTab(),
-                _session.currentPosition != null
-                    ? _buildAnalysisTab()
-                    : _buildBrowseTab(),
+                TabBar(
+                  controller: _tabController,
+                  tabs: [
+                    const Tab(text: 'Tactic'),
+                    Tab(
+                      text: _session.currentPosition != null ? 'PGN' : 'Browse',
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildTacticTab(),
+                      _session.currentPosition != null
+                          ? _buildAnalysisTab()
+                          : _buildBrowseTab(),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -237,16 +270,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return KeyEventResult.ignored;
     }
 
-    // Don't handle shortcuts when a text field has focus
-    final primaryFocus = FocusManager.instance.primaryFocus;
-    if (primaryFocus != null && primaryFocus != _focusNode) {
-      final context = primaryFocus.context;
-      if (context != null) {
-        final widget = context.widget;
-        if (widget is EditableText) {
-          return KeyEventResult.ignored;
-        }
-      }
+    if (_isTextInputFocused()) {
+      return KeyEventResult.ignored;
     }
 
     final key = event.logicalKey;
@@ -268,8 +293,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return KeyEventResult.handled;
     }
 
-    // b — Previous position
-    if (key == LogicalKeyboardKey.keyB) {
+    // p — Previous position
+    if (key == LogicalKeyboardKey.keyP) {
       _loadCurrentPosition(_session.previousPosition());
       return KeyEventResult.handled;
     }
@@ -293,6 +318,22 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return KeyEventResult.handled;
     }
 
+    // 1-5 — Rate tactic (only after solve / show solution)
+    if (_session.positionSolved || _session.showSolution) {
+      int? star;
+      if (key == LogicalKeyboardKey.digit1) star = 1;
+      if (key == LogicalKeyboardKey.digit2) star = 2;
+      if (key == LogicalKeyboardKey.digit3) star = 3;
+      if (key == LogicalKeyboardKey.digit4) star = 4;
+      if (key == LogicalKeyboardKey.digit5) star = 5;
+      if (star != null) {
+        final current = _session.currentPosition?.rating ?? 0;
+        _session.setRating(current == star ? 0 : star);
+        setState(() {});
+        return KeyEventResult.handled;
+      }
+    }
+
     // Escape — Return to Tactic tab from PGN analysis
     if (key == LogicalKeyboardKey.escape) {
       if (_tabController.index != 0) {
@@ -305,59 +346,73 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   Widget _buildTacticTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(12.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_session.currentPosition != null)
-            TacticsTrainingPanel(
-              position: _session.currentPosition!,
-              engine: _session.engine,
-              currentMoveIndex: _session.currentMoveIndex,
-              positionSolved: _session.positionSolved,
-              showSolution: _session.showSolution,
-              feedback: _session.feedback,
-              autoAdvance: _session.autoAdvance,
-              onToggleSolution: () => _session.toggleSolution(),
-              onAnalyze: _onAnalyze,
-              onResetAnalysis: _resetAnalysis,
-              onPreviousPosition: () =>
-                  _loadCurrentPosition(_session.previousPosition()),
-              onSkipPosition: () =>
-                  _loadCurrentPosition(_session.skipPosition()),
-              onAutoAdvanceChanged: _session.setAutoAdvance,
-              onCopyFen: _copyFen,
-            )
-          else
-            TacticsImportPanel(
-              importStatus: _import.importStatus,
-              isImporting: _import.isImporting,
-              activeImport: _import.activeImport,
-              analyzedGameCount: _database.analyzedGameIds.length,
-              lichessUserController: _lichessUserController,
-              lichessCountController: _lichessCountController,
-              chessComUserController: _chessComUserController,
-              chessComCountController: _chessComCountController,
-              stockfishDepthController: _stockfishDepthController,
-              coresController: _coresController,
-              depthError: _depthError,
-              coresError: _coresError,
-              importFieldsValid: _importFieldsValid,
-              onValidateDepth: _validateDepth,
-              onValidateCores: _validateCores,
-              onImportLichess: _importLichess,
-              onImportChessCom: _importChessCom,
-              onDismissImportStatus: _import.dismissImportStatus,
-              onCancelImport: _import.cancelImport,
-              positionCount: _database.positions.length,
-              onStartSession: _onStartSession,
-              clearDatabaseEnabled: !_import.isImporting,
-              onClearDatabase: _confirmClearDatabase,
-              onBrowseTactics: () => _tabController.animateTo(1),
-            ),
-        ],
-      ),
+    return Consumer<AppState>(
+      builder: (context, appState, _) {
+        final current = _session.currentPosition;
+        final isAtStartingPosition = current == null ||
+            _session.positionSolved ||
+            appState.currentPosition.fen == current.fen;
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (current != null)
+                TacticsTrainingPanel(
+                  position: current,
+                  engine: _session.engine,
+                  currentMoveIndex: _session.currentMoveIndex,
+                  positionSolved: _session.positionSolved,
+                  isAtStartingPosition: isAtStartingPosition,
+                  showSolution: _session.showSolution,
+                  feedback: _session.feedback,
+                  autoAdvance: _session.autoAdvance,
+                  onToggleSolution: () => _session.toggleSolution(),
+                  onAnalyze: _onAnalyze,
+                  onResetAnalysis: _resetAnalysis,
+                  onPreviousPosition: () =>
+                      _loadCurrentPosition(_session.previousPosition()),
+                  onSkipPosition: () =>
+                      _loadCurrentPosition(_session.skipPosition()),
+                  onAutoAdvanceChanged: _session.setAutoAdvance,
+                  onCopyFen: _copyFen,
+                  onSetRating: (rating) {
+                    _session.setRating(rating);
+                    setState(() {});
+                  },
+                )
+              else
+                TacticsImportPanel(
+                  importStatus: _import.importStatus,
+                  isImporting: _import.isImporting,
+                  activeImport: _import.activeImport,
+                  analyzedGameCount: _database.analyzedGameIds.length,
+                  lichessUserController: _lichessUserController,
+                  lichessCountController: _lichessCountController,
+                  chessComUserController: _chessComUserController,
+                  chessComCountController: _chessComCountController,
+                  stockfishDepthController: _stockfishDepthController,
+                  coresController: _coresController,
+                  depthError: _depthError,
+                  coresError: _coresError,
+                  importFieldsValid: _importFieldsValid,
+                  onValidateDepth: _validateDepth,
+                  onValidateCores: _validateCores,
+                  onImportLichess: _importLichess,
+                  onImportChessCom: _importChessCom,
+                  onDismissImportStatus: _import.dismissImportStatus,
+                  onCancelImport: _import.cancelImport,
+                  positions: _database.positions,
+                  onStartSession: _onStartSession,
+                  clearDatabaseEnabled: !_import.isImporting,
+                  onClearDatabase: _confirmClearDatabase,
+                  onBrowseTactics: () => _tabController.animateTo(1),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -415,6 +470,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       onDeleteTactic: _deleteTactic,
       onEditTactic: _showEditDialog,
       onClearAll: _confirmClearDatabase,
+      onSetRating: (index, rating) async {
+        final pos = _database.positions[index];
+        await _database.setRating(pos.fen, rating);
+        if (mounted) setState(() {});
+      },
     );
   }
 
@@ -736,8 +796,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
-  void _onStartSession() {
-    final setup = _session.startSession();
+  void _onStartSession(TacticsSessionSettings settings) {
+    final setup = _session.startSession(settings);
     if (setup == null) return;
     _loadPositionSetup(setup);
   }
@@ -760,6 +820,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   void _onAnalyze() {
     _tabController.animateTo(1);
+    _focusNode.requestFocus();
   }
 
   Future<void> _copyFen() async {

@@ -5,6 +5,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../models/tactics_position.dart';
+import '../../models/tactics_session_settings.dart';
 import '../../utils/fen_utils.dart';
 import '../tactics_database.dart';
 import '../tactics_engine.dart';
@@ -93,10 +94,12 @@ class TacticsSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Start a review session and load the first (least-reviewed) position.
-  TacticsPositionSetup? startSession() {
-    database.startSession();
-    if (database.positions.isEmpty) return null;
+  /// Start a review session and load the first position per [settings].
+  TacticsPositionSetup? startSession([
+    TacticsSessionSettings settings = const TacticsSessionSettings(),
+  ]) {
+    database.startSession(settings);
+    if (database.sessionQueueLength == 0) return null;
     return showCurrentPosition();
   }
 
@@ -104,12 +107,11 @@ class TacticsSessionController extends ChangeNotifier {
   ///
   /// Returns setup for the board, or `null` when the session has no positions.
   TacticsPositionSetup? showCurrentPosition() {
-    if (database.positions.isEmpty) {
+    if (database.sessionQueueLength == 0) {
       endSession();
       return null;
     }
 
-    database.sessionPositionIndex %= database.positions.length;
     final position = database.positions[database.sessionPositionIndex];
 
     currentPosition = position;
@@ -132,18 +134,22 @@ class TacticsSessionController extends ChangeNotifier {
   }
 
   TacticsPositionSetup? previousPosition() {
-    if (database.positions.isEmpty) return null;
-    database.sessionPositionIndex--;
-    if (database.sessionPositionIndex < 0) {
-      database.sessionPositionIndex = database.positions.length - 1;
-    }
+    if (database.sessionQueueLength == 0) return null;
+    database.previousSessionPosition();
     return showCurrentPosition();
   }
 
   TacticsPositionSetup? skipPosition() {
-    if (database.positions.isEmpty) return null;
-    database.sessionPositionIndex++;
+    if (database.sessionQueueLength == 0) return null;
+    database.nextSessionPosition();
     return showCurrentPosition();
+  }
+
+  /// Set the star [rating] on the current position.
+  Future<void> setRating(int rating) async {
+    if (currentPosition == null) return;
+    await database.setRating(currentPosition!.fen, rating);
+    refreshCurrentPosition();
   }
 
   /// Browse: select a position without starting a scored session.
