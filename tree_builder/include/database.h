@@ -271,6 +271,17 @@ bool rdb_set_metadata(RepertoireDB *rdb, const char *key, const char *value);
  */
 char *rdb_get_metadata(RepertoireDB *rdb, const char *key);
 
+/**
+ * Upsert serialized CLI configuration JSON under build_metadata key "cli_args".
+ */
+bool rdb_save_cli_config(RepertoireDB *rdb, const char *json_str);
+
+/**
+ * Load serialized CLI configuration JSON. Returns malloc'd string or NULL.
+ * Caller frees.
+ */
+char *rdb_load_cli_config(RepertoireDB *rdb);
+
 
 /* ========== Statistics ========== */
 

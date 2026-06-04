@@ -206,6 +206,472 @@ static bool check_build_metadata(RepertoireDB *db, const char *db_path,
     return false;
 }
 
+/** Tracks which CLI options the user passed explicitly (for --resume overrides). */
+typedef struct {
+    bool fen, moves, color, probability, ply, eval_depth, threads;
+    bool ratings, speeds, min_games, stockfish, database, name;
+    bool masters, skip_build, build_now, traps, traps_in_repertoire;
+    bool our_multipv, max_eval_loss, opp_max_children, opp_mass;
+    bool min_eval, max_eval, absolute;
+    bool leaf_confidence, novelty_weight;
+    bool preset;
+    bool maia_model, maia_elo, maia_min_prob, maia_only, lichess, build_mode;
+    bool pgn, db_min_games, db_min_prob, no_freq_cache;
+    bool event_log, lichess_eval_db, chessdb_eval_db, chessdb_api;
+    bool chessdb_api_quota, chessdb_api_concurrency, no_ext_eval_subtree_skip;
+#ifdef HAS_CDBDIRECT
+    bool cdbdirect_path, cdbdirect_read_ahead, batch_eval_lookups;
+#endif
+    bool verbose;
+} CliExplicit;
+
+/** Heap/static buffers for strings loaded from saved cli_args JSON. */
+typedef struct {
+    char fen[256];
+    char moves[2048];
+    char ratings[128];
+    char speeds[128];
+    char stockfish[PATH_MAX];
+    char repertoire_name[256];
+    char event_log[PATH_MAX];
+    char lichess_eval_db[PATH_MAX];
+    char chessdb_eval_db[PATH_MAX];
+    char maia_model[PATH_MAX];
+    char build_mode[64];
+    char preset[32];
+    char pgn[MAX_PGN_FILES][PATH_MAX];
+#ifdef HAS_CDBDIRECT
+    char cdbdirect[PATH_MAX];
+#endif
+} CliLoadedStrings;
+
+static const char *build_mode_to_str(BuildMode mode) {
+    switch (mode) {
+    case BUILD_MODE_STOCKFISH_EXPECTIMAX: return "stockfish-expectimax";
+    case BUILD_MODE_MAIA_DB_EXPLORE:     return "maia-db-explore";
+    case BUILD_MODE_DB_EXPLORER:         return "db-explorer";
+    case BUILD_MODE_TRAP_FINDER:         return "trap-finder";
+    default:                             return "stockfish-expectimax";
+    }
+}
+
+static bool build_mode_from_str(const char *s, BuildMode *out) {
+    if (!s || !out) return false;
+    if (strcmp(s, "stockfish-expectimax") == 0 ||
+        strcmp(s, "stockfishExpectimax") == 0) {
+        *out = BUILD_MODE_STOCKFISH_EXPECTIMAX;
+        return true;
+    }
+    if (strcmp(s, "maia-db-explore") == 0 ||
+        strcmp(s, "maiaDbExplore") == 0) {
+        *out = BUILD_MODE_MAIA_DB_EXPLORE;
+        return true;
+    }
+    if (strcmp(s, "db-explorer") == 0 ||
+        strcmp(s, "dbExplorer") == 0) {
+        *out = BUILD_MODE_DB_EXPLORER;
+        return true;
+    }
+    if (strcmp(s, "trap-finder") == 0 ||
+        strcmp(s, "trapFinder") == 0) {
+        *out = BUILD_MODE_TRAP_FINDER;
+        return true;
+    }
+    return false;
+}
+
+static void cli_json_add_str(cJSON *obj, const char *key, const char *val) {
+    if (val && val[0]) cJSON_AddStringToObject(obj, key, val);
+}
+
+static cJSON *cli_build_config_json(
+    const char *start_fen, const char *start_moves, bool play_as_white,
+    double min_probability, int max_depth, int eval_depth, int num_threads,
+    const char *ratings, const char *speeds, int min_games,
+    const char *stockfish_path, bool use_masters, bool skip_build, bool build_now,
+    bool find_traps, bool find_traps_in_repertoire, const char *repertoire_name,
+    const char *maia_model_path, int maia_elo, double maia_min_prob,
+    bool maia_only, bool relative_eval, BuildMode build_mode,
+    const char *event_log_path, const char *lichess_eval_db_path,
+    const char *chessdb_eval_db_path, bool chessdb_api_enabled,
+    int chessdb_api_quota, int chessdb_api_concurrency, bool ext_eval_subtree_skip,
+#ifdef HAS_CDBDIRECT
+    const char *cdbdirect_path, bool cdbdirect_read_ahead, bool batch_eval_lookups,
+#endif
+    const char **pgn_files, int pgn_file_count, int db_min_games, double db_min_prob,
+    bool no_freq_cache, int our_multipv, int max_eval_loss, int opp_max_children,
+    double opp_mass_target, int min_eval, int max_eval, int novelty_weight,
+    double leaf_confidence, const char *mode_name, bool verbose) {
+    cJSON *obj = cJSON_CreateObject();
+    if (!obj) return NULL;
+
+    cJSON_AddStringToObject(obj, "color", play_as_white ? "w" : "b");
+    if (start_fen && strcmp(start_fen, DEFAULT_FEN) != 0)
+        cJSON_AddStringToObject(obj, "fen", start_fen);
+    cli_json_add_str(obj, "moves", start_moves);
+    cJSON_AddNumberToObject(obj, "probability", min_probability);
+    cJSON_AddNumberToObject(obj, "ply", max_depth);
+    cJSON_AddNumberToObject(obj, "eval_depth", eval_depth);
+    cJSON_AddNumberToObject(obj, "threads", num_threads);
+    cJSON_AddStringToObject(obj, "build_mode", build_mode_to_str(build_mode));
+
+    if (pgn_file_count > 0) {
+        cJSON *arr = cJSON_AddArrayToObject(obj, "pgn");
+        for (int i = 0; i < pgn_file_count; i++)
+            cJSON_AddItemToArray(arr, cJSON_CreateString(pgn_files[i]));
+    }
+
+    cJSON_AddBoolToObject(obj, "no_freq_cache", no_freq_cache);
+    cJSON_AddNumberToObject(obj, "db_min_games", db_min_games);
+    cJSON_AddNumberToObject(obj, "db_min_prob", db_min_prob);
+    cli_json_add_str(obj, "stockfish", stockfish_path);
+    cJSON_AddNumberToObject(obj, "our_multipv", our_multipv);
+    cJSON_AddNumberToObject(obj, "max_eval_loss", max_eval_loss);
+    cJSON_AddNumberToObject(obj, "opp_max_children", opp_max_children);
+    cJSON_AddNumberToObject(obj, "opp_mass", opp_mass_target);
+    cJSON_AddBoolToObject(obj, "maia_only", maia_only);
+    cJSON_AddBoolToObject(obj, "lichess", !maia_only);
+    cli_json_add_str(obj, "maia_model", maia_model_path);
+    cJSON_AddNumberToObject(obj, "maia_elo", maia_elo);
+    cJSON_AddNumberToObject(obj, "maia_min_prob", maia_min_prob);
+    cJSON_AddNumberToObject(obj, "min_eval", min_eval);
+    cJSON_AddNumberToObject(obj, "max_eval", max_eval);
+    cJSON_AddBoolToObject(obj, "absolute", !relative_eval);
+    cli_json_add_str(obj, "preset", mode_name);
+    cJSON_AddNumberToObject(obj, "novelty_weight", novelty_weight);
+    cJSON_AddNumberToObject(obj, "leaf_confidence", leaf_confidence);
+    cJSON_AddStringToObject(obj, "ratings", ratings);
+    cJSON_AddStringToObject(obj, "speeds", speeds);
+    cJSON_AddNumberToObject(obj, "min_games", min_games);
+    cJSON_AddBoolToObject(obj, "masters", use_masters);
+    cli_json_add_str(obj, "lichess_eval_db", lichess_eval_db_path);
+    cli_json_add_str(obj, "chessdb_eval_db", chessdb_eval_db_path);
+    cJSON_AddBoolToObject(obj, "chessdb_api", chessdb_api_enabled);
+    cJSON_AddNumberToObject(obj, "chessdb_api_quota", chessdb_api_quota);
+    cJSON_AddNumberToObject(obj, "chessdb_api_concurrency", chessdb_api_concurrency);
+    cJSON_AddBoolToObject(obj, "no_ext_eval_subtree_skip", !ext_eval_subtree_skip);
+#ifdef HAS_CDBDIRECT
+    cli_json_add_str(obj, "cdbdirect_path", cdbdirect_path);
+    cJSON_AddBoolToObject(obj, "cdbdirect_read_ahead", cdbdirect_read_ahead);
+    cJSON_AddBoolToObject(obj, "batch_eval_lookups", batch_eval_lookups);
+#endif
+    cli_json_add_str(obj, "name", repertoire_name);
+    cli_json_add_str(obj, "event_log", event_log_path);
+    cJSON_AddBoolToObject(obj, "verbose", verbose);
+    cJSON_AddBoolToObject(obj, "skip_build", skip_build && !build_now);
+    cJSON_AddBoolToObject(obj, "build_now", build_now);
+    cJSON_AddBoolToObject(obj, "traps", find_traps);
+    cJSON_AddBoolToObject(obj, "traps_in_repertoire", find_traps_in_repertoire);
+
+    return obj;
+}
+
+static bool save_config_to_db(
+    RepertoireDB *db, bool play_as_white, const char *ratings, const char *speeds,
+    const char *start_fen, const char *start_moves, double min_probability,
+    int max_depth, int eval_depth, int num_threads, int min_games,
+    const char *stockfish_path, bool use_masters, bool skip_build, bool build_now,
+    bool find_traps, bool find_traps_in_repertoire, const char *repertoire_name,
+    const char *maia_model_path, int maia_elo, double maia_min_prob,
+    bool maia_only, bool relative_eval, BuildMode build_mode,
+    const char *event_log_path, const char *lichess_eval_db_path,
+    const char *chessdb_eval_db_path, bool chessdb_api_enabled,
+    int chessdb_api_quota, int chessdb_api_concurrency, bool ext_eval_subtree_skip,
+#ifdef HAS_CDBDIRECT
+    const char *cdbdirect_path, bool cdbdirect_read_ahead, bool batch_eval_lookups,
+#endif
+    const char **pgn_files, int pgn_file_count, int db_min_games, double db_min_prob,
+    bool no_freq_cache, int our_multipv_arg, int max_eval_loss_arg,
+    int opp_max_children_arg, double opp_mass_target_arg, int min_eval_arg,
+    int max_eval_arg, int novelty_weight_arg, double leaf_confidence_arg,
+    const char *mode_name, bool verbose) {
+    TreeConfig cd = tree_config_default();
+    cd.play_as_white = play_as_white;
+    tree_config_set_color_defaults(&cd);
+
+    int eff_our_multipv = our_multipv_arg > 0 ? our_multipv_arg : cd.our_multipv;
+    int eff_max_eval_loss = max_eval_loss_arg >= 0 ? max_eval_loss_arg : cd.max_eval_loss_cp;
+    int eff_opp_max = opp_max_children_arg >= 0 ? opp_max_children_arg : cd.opp_max_children;
+    double eff_opp_mass = opp_mass_target_arg >= 0.0 ? opp_mass_target_arg
+                                                     : cd.opp_mass_target;
+    int eff_min_eval = min_eval_arg != -99999 ? min_eval_arg : cd.min_eval_cp;
+    int eff_max_eval = max_eval_arg != -99999 ? max_eval_arg : cd.max_eval_cp;
+    int eff_novelty = novelty_weight_arg >= 0 ? novelty_weight_arg : 0;
+    double eff_leaf_conf = leaf_confidence_arg >= 0.0 ? leaf_confidence_arg : 1.0;
+
+    cJSON *obj = cli_build_config_json(
+        start_fen, start_moves, play_as_white, min_probability, max_depth,
+        eval_depth, num_threads, ratings, speeds, min_games, stockfish_path,
+        use_masters, skip_build, build_now, find_traps, find_traps_in_repertoire,
+        repertoire_name, maia_model_path, maia_elo, maia_min_prob, maia_only,
+        relative_eval, build_mode, event_log_path, lichess_eval_db_path,
+        chessdb_eval_db_path, chessdb_api_enabled, chessdb_api_quota,
+        chessdb_api_concurrency, ext_eval_subtree_skip,
+#ifdef HAS_CDBDIRECT
+        cdbdirect_path, cdbdirect_read_ahead, batch_eval_lookups,
+#endif
+        pgn_files, pgn_file_count, db_min_games, db_min_prob, no_freq_cache,
+        eff_our_multipv, eff_max_eval_loss, eff_opp_max, eff_opp_mass,
+        eff_min_eval, eff_max_eval, eff_novelty, eff_leaf_conf, mode_name,
+        verbose);
+    if (!obj) return false;
+
+    char *json = cJSON_PrintUnformatted(obj);
+    cJSON_Delete(obj);
+    if (!json) return false;
+
+    bool ok = rdb_save_cli_config(db, json);
+    cJSON_free(json);
+    if (ok)
+        store_build_metadata(db, play_as_white, ratings, speeds, false);
+    return ok;
+}
+
+static void print_resume_banner(
+    bool play_as_white, const char *start_fen, int max_depth, int eval_depth,
+    int num_threads, bool maia_only, const char *ratings, const char *speeds,
+    const char *mode_name, const char *db_path) {
+    fprintf(stderr, "\n");
+    fprintf(stderr, "══════════════════════════════════════════════════════════\n");
+    fprintf(stderr, "  Resuming with stored configuration:\n");
+    fprintf(stderr, "══════════════════════════════════════════════════════════\n");
+    fprintf(stderr, "  Color:      %s\n", play_as_white ? "white" : "black");
+    fprintf(stderr, "  FEN:        %.56s%s\n", start_fen,
+            strlen(start_fen) > 56 ? "..." : "");
+    fprintf(stderr, "  Depth:      %d ply | eval %d | %d threads\n",
+            max_depth, eval_depth, num_threads);
+    fprintf(stderr, "  Opponent:   %s\n", maia_only ? "Maia" : "Lichess");
+    if (!maia_only) {
+        fprintf(stderr, "  Ratings:    %s\n", ratings);
+        fprintf(stderr, "  Speeds:     %s\n", speeds);
+    }
+    if (mode_name && mode_name[0])
+        fprintf(stderr, "  Preset:     %s\n", mode_name);
+    fprintf(stderr, "  Database:   %s\n", db_path);
+    fprintf(stderr, "══════════════════════════════════════════════════════════\n\n");
+}
+
+static bool load_config_from_db(
+    const char *db_path, const char *base_name, CliExplicit *exp,
+    CliLoadedStrings *loaded, const char **start_fen, const char **start_moves,
+    bool *play_as_white, bool *color_specified, double *min_probability,
+    int *max_depth, int *eval_depth, int *num_threads, const char **ratings,
+    const char **speeds, int *min_games, const char **stockfish_path,
+    bool *use_masters, bool *skip_build, bool *build_now, bool *find_traps,
+    bool *find_traps_in_repertoire, const char **repertoire_name,
+    const char **maia_model_path, int *maia_elo, double *maia_min_prob,
+    bool *maia_only, bool *relative_eval, BuildMode *build_mode,
+    const char **build_mode_str, const char **event_log_path,
+    const char **lichess_eval_db_path, const char **chessdb_eval_db_path,
+    bool *chessdb_api_enabled, int *chessdb_api_quota,
+    int *chessdb_api_concurrency, bool *ext_eval_subtree_skip,
+#ifdef HAS_CDBDIRECT
+    const char **cdbdirect_path, bool *cdbdirect_read_ahead,
+    bool *batch_eval_lookups,
+#endif
+    const char **pgn_files, int *pgn_file_count, int *db_min_games,
+    double *db_min_prob, bool *no_freq_cache, int *our_multipv_arg,
+    int *max_eval_loss_arg, int *opp_max_children_arg, double *opp_mass_target_arg,
+    int *min_eval_arg, int *max_eval_arg, int *novelty_weight_arg,
+    double *leaf_confidence_arg, const char **mode_name, int *mode_id,
+    bool *user_min_eval, bool *user_max_eval_loss, bool *user_novelty_weight,
+    bool *verbose) {
+    (void)base_name;
+
+    if (access(db_path, F_OK) != 0) {
+        fprintf(stderr,
+                "Error: No database found for '%s'. Run without --resume first.\n",
+                db_path);
+        return false;
+    }
+
+    RepertoireDB *db = rdb_open(db_path);
+    if (!db) {
+        fprintf(stderr, "Error: Failed to open database '%s'\n", db_path);
+        return false;
+    }
+
+    char *json_str = rdb_load_cli_config(db);
+    rdb_close(db);
+    if (!json_str) {
+        fprintf(stderr,
+                "Error: No saved configuration found. "
+                "This database was created before --resume support.\n");
+        return false;
+    }
+
+    cJSON *root = cJSON_Parse(json_str);
+    free(json_str);
+    if (!root) {
+        fprintf(stderr, "Error: Corrupt saved configuration in '%s'\n", db_path);
+        return false;
+    }
+
+#define LOAD_STR(field, key, buf, ptr) \
+    do { \
+        if (!(exp)->field) { \
+            cJSON *_it = cJSON_GetObjectItemCaseSensitive(root, key); \
+            if (cJSON_IsString(_it) && _it->valuestring) { \
+                snprintf((buf), sizeof(buf), "%s", _it->valuestring); \
+                *(ptr) = (buf); \
+            } \
+        } \
+    } while (0)
+
+#define LOAD_BOOL(field, key, var) \
+    do { \
+        if (!(exp)->field) { \
+            cJSON *_it = cJSON_GetObjectItemCaseSensitive(root, key); \
+            if (cJSON_IsBool(_it)) *(var) = cJSON_IsTrue(_it); \
+        } \
+    } while (0)
+
+#define LOAD_NUM(field, key, var) \
+    do { \
+        if (!(exp)->field) { \
+            cJSON *_it = cJSON_GetObjectItemCaseSensitive(root, key); \
+            if (cJSON_IsNumber(_it)) *(var) = _it->valueint; \
+        } \
+    } while (0)
+
+#define LOAD_DBL(field, key, var) \
+    do { \
+        if (!(exp)->field) { \
+            cJSON *_it = cJSON_GetObjectItemCaseSensitive(root, key); \
+            if (cJSON_IsNumber(_it)) *(var) = _it->valuedouble; \
+        } \
+    } while (0)
+
+    if (!exp->color) {
+        cJSON *c = cJSON_GetObjectItemCaseSensitive(root, "color");
+        if (cJSON_IsString(c) && c->valuestring) {
+            *play_as_white = (c->valuestring[0] == 'w' || c->valuestring[0] == 'W');
+            *color_specified = true;
+        }
+    }
+
+    LOAD_STR(fen, "fen", loaded->fen, start_fen);
+    LOAD_STR(moves, "moves", loaded->moves, start_moves);
+    LOAD_DBL(probability, "probability", min_probability);
+    LOAD_NUM(ply, "ply", max_depth);
+    LOAD_NUM(eval_depth, "eval_depth", eval_depth);
+    LOAD_NUM(threads, "threads", num_threads);
+    LOAD_STR(ratings, "ratings", loaded->ratings, ratings);
+    LOAD_STR(speeds, "speeds", loaded->speeds, speeds);
+    LOAD_NUM(min_games, "min_games", min_games);
+    LOAD_STR(stockfish, "stockfish", loaded->stockfish, stockfish_path);
+    LOAD_BOOL(masters, "masters", use_masters);
+    if (!exp->build_now && !exp->skip_build) {
+        cJSON *bn = cJSON_GetObjectItemCaseSensitive(root, "build_now");
+        if (cJSON_IsTrue(bn)) {
+            *build_now = true;
+            *skip_build = true;
+        } else {
+            cJSON *sb = cJSON_GetObjectItemCaseSensitive(root, "skip_build");
+            if (cJSON_IsBool(sb)) *skip_build = cJSON_IsTrue(sb);
+        }
+    }
+    LOAD_BOOL(traps, "traps", find_traps);
+    LOAD_BOOL(traps_in_repertoire, "traps_in_repertoire", find_traps_in_repertoire);
+    LOAD_STR(name, "name", loaded->repertoire_name, repertoire_name);
+    LOAD_STR(maia_model, "maia_model", loaded->maia_model, maia_model_path);
+    LOAD_NUM(maia_elo, "maia_elo", maia_elo);
+    LOAD_DBL(maia_min_prob, "maia_min_prob", maia_min_prob);
+    if (!exp->maia_only && !exp->lichess) {
+        cJSON *mo = cJSON_GetObjectItemCaseSensitive(root, "maia_only");
+        cJSON *li = cJSON_GetObjectItemCaseSensitive(root, "lichess");
+        if (cJSON_IsBool(mo)) *maia_only = cJSON_IsTrue(mo);
+        else if (cJSON_IsBool(li)) *maia_only = !cJSON_IsTrue(li);
+    }
+    if (!exp->absolute) {
+        cJSON *ab = cJSON_GetObjectItemCaseSensitive(root, "absolute");
+        if (cJSON_IsBool(ab)) *relative_eval = !cJSON_IsTrue(ab);
+    }
+    if (!exp->build_mode) {
+        cJSON *bm = cJSON_GetObjectItemCaseSensitive(root, "build_mode");
+        if (cJSON_IsString(bm) && bm->valuestring) {
+            BuildMode parsed;
+            if (build_mode_from_str(bm->valuestring, &parsed)) {
+                *build_mode = parsed;
+                snprintf(loaded->build_mode, sizeof(loaded->build_mode),
+                         "%s", bm->valuestring);
+                *build_mode_str = loaded->build_mode;
+            }
+        }
+    }
+    LOAD_STR(event_log, "event_log", loaded->event_log, event_log_path);
+    LOAD_STR(lichess_eval_db, "lichess_eval_db", loaded->lichess_eval_db,
+             lichess_eval_db_path);
+    LOAD_STR(chessdb_eval_db, "chessdb_eval_db", loaded->chessdb_eval_db,
+             chessdb_eval_db_path);
+    LOAD_BOOL(chessdb_api, "chessdb_api", chessdb_api_enabled);
+    LOAD_NUM(chessdb_api_quota, "chessdb_api_quota", chessdb_api_quota);
+    LOAD_NUM(chessdb_api_concurrency, "chessdb_api_concurrency",
+             chessdb_api_concurrency);
+    if (!exp->no_ext_eval_subtree_skip) {
+        cJSON *sk = cJSON_GetObjectItemCaseSensitive(root, "no_ext_eval_subtree_skip");
+        if (cJSON_IsBool(sk)) *ext_eval_subtree_skip = !cJSON_IsTrue(sk);
+    }
+#ifdef HAS_CDBDIRECT
+    LOAD_STR(cdbdirect_path, "cdbdirect_path", loaded->cdbdirect, cdbdirect_path);
+    LOAD_BOOL(cdbdirect_read_ahead, "cdbdirect_read_ahead", cdbdirect_read_ahead);
+    LOAD_BOOL(batch_eval_lookups, "batch_eval_lookups", batch_eval_lookups);
+#endif
+    if (!exp->pgn) {
+        cJSON *pgn_arr = cJSON_GetObjectItemCaseSensitive(root, "pgn");
+            if (cJSON_IsArray(pgn_arr)) {
+            *pgn_file_count = 0;
+            cJSON *item;
+            cJSON_ArrayForEach(item, pgn_arr) {
+                if (*pgn_file_count >= MAX_PGN_FILES) break;
+                if (cJSON_IsString(item) && item->valuestring) {
+                    int idx = *pgn_file_count;
+                    snprintf(loaded->pgn[idx], PATH_MAX, "%s", item->valuestring);
+                    pgn_files[idx] = loaded->pgn[idx];
+                    (*pgn_file_count)++;
+                }
+            }
+        }
+    }
+    LOAD_NUM(db_min_games, "db_min_games", db_min_games);
+    LOAD_DBL(db_min_prob, "db_min_prob", db_min_prob);
+    LOAD_BOOL(no_freq_cache, "no_freq_cache", no_freq_cache);
+    LOAD_NUM(our_multipv, "our_multipv", our_multipv_arg);
+    LOAD_NUM(max_eval_loss, "max_eval_loss", max_eval_loss_arg);
+    if (!exp->max_eval_loss && *max_eval_loss_arg >= 0) *user_max_eval_loss = true;
+    LOAD_NUM(opp_max_children, "opp_max_children", opp_max_children_arg);
+    LOAD_DBL(opp_mass, "opp_mass", opp_mass_target_arg);
+    LOAD_NUM(min_eval, "min_eval", min_eval_arg);
+    if (!exp->min_eval && *min_eval_arg != -99999) *user_min_eval = true;
+    LOAD_NUM(max_eval, "max_eval", max_eval_arg);
+    LOAD_NUM(novelty_weight, "novelty_weight", novelty_weight_arg);
+    if (!exp->novelty_weight && *novelty_weight_arg >= 0) *user_novelty_weight = true;
+    LOAD_DBL(leaf_confidence, "leaf_confidence", leaf_confidence_arg);
+    LOAD_BOOL(verbose, "verbose", verbose);
+
+    if (!exp->preset) {
+        cJSON *pr = cJSON_GetObjectItemCaseSensitive(root, "preset");
+        if (cJSON_IsString(pr) && pr->valuestring && pr->valuestring[0]) {
+            snprintf(loaded->preset, sizeof(loaded->preset), "%s",
+                     pr->valuestring);
+            *mode_name = loaded->preset;
+            if (strcmp(loaded->preset, "solid") == 0) *mode_id = 1;
+            else if (strcmp(loaded->preset, "practical") == 0) *mode_id = 2;
+            else if (strcmp(loaded->preset, "tricky") == 0) *mode_id = 3;
+            else if (strcmp(loaded->preset, "traps") == 0) *mode_id = 4;
+            else if (strcmp(loaded->preset, "fresh") == 0) *mode_id = 5;
+        }
+    }
+
+#undef LOAD_STR
+#undef LOAD_BOOL
+#undef LOAD_NUM
+#undef LOAD_DBL
+
+    cJSON_Delete(root);
+    return true;
+}
+
 static char g_exe_dir[PATH_MAX] = {0};
 
 static void resolve_exe_dir(void) {
@@ -236,6 +702,13 @@ static Tree *g_tree = NULL;
 static EnginePool *g_engine_pool = NULL;
 volatile int g_interrupted = 0;
 
+/** Default -t: half of online CPU cores, at least 1. */
+static int default_thread_count(void) {
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    if (n < 1) n = 1;
+    int half = (int)(n / 2);
+    return half < 1 ? 1 : half;
+}
 
 static void print_usage(const char *prog_name) {
     printf("\n");
@@ -256,7 +729,8 @@ static void print_usage(const char *prog_name) {
     printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
     printf("  -d, --ply <N>          Max tree depth in ply (half-moves) [default: 20]\n");
     printf("  -e, --eval-depth <N>   Stockfish search depth [default: 16]\n");
-    printf("  -t, --threads <N>      Total CPU cores to use [default: 4]\n");
+    printf("  -t, --threads <N>      Total CPU cores to use [default: %d, half of CPUs]\n",
+           default_thread_count());
     printf("  --build-mode <mode>    Build algorithm: stockfish-expectimax [default],\n");
     printf("                         maia-db-explore, db-explorer, trap-finder\n");
     printf("  --pgn <file>           PGN database file (repeatable, db-explorer mode)\n");
@@ -268,6 +742,7 @@ static void print_usage(const char *prog_name) {
     printf("  -I, --input-db <path>  Import eval/explorer cache from another DB\n");
     printf("                         (only for new/empty target databases)\n");
     printf("  -L, --load <file>      Load tree from a different JSON file\n");
+    printf("  --resume               Restore CLI flags from <name>.db (overrides optional)\n");
     printf("  --skip-build           Skip tree building (use existing tree)\n");
     printf("  --build-now            Use existing partial tree as-is (skip to repertoire generation)\n");
     printf("\n");
@@ -335,6 +810,7 @@ static void print_usage(const char *prog_name) {
     printf("  %s -c b -f \"FEN\" -n \"Modern Benoni\" modern_benoni\n", prog_name);
     printf("  %s -c w --moves \"e4 d5 exd5 Qxd5\" scandinavian\n", prog_name);
     printf("  %s -c b -v modern_benoni   # resumes from modern_benoni.tree.json\n", prog_name);
+    printf("  %s SicilianKan --resume      # restore all flags from SicilianKan.db\n", prog_name);
     printf("  %s -c b --build-now modern_benoni  # use partial tree as-is, generate lines\n", prog_name);
     printf("\n");
 }
@@ -731,7 +1207,7 @@ int main(int argc, char *argv[]) {
     double min_probability = 0.0001;
     int max_depth = 20;
     int eval_depth = 16;
-    int num_threads = 4;
+    int num_threads = default_thread_count();
 
     const char *ratings = "2000,2200,2500";
     const char *speeds = "blitz,rapid,classical";
@@ -791,6 +1267,10 @@ int main(int argc, char *argv[]) {
     bool user_min_eval = false;
     bool user_max_eval_loss = false;
     double leaf_confidence_arg = -1.0;
+
+    bool resume_flag = false;
+    CliExplicit cli_exp = {0};
+    CliLoadedStrings cli_loaded = {0};
 
     static struct option long_options[] = {
         {"fen",              required_argument, 0, 'f'},
@@ -856,6 +1336,7 @@ int main(int argc, char *argv[]) {
         {"cdbdirect-read-ahead", no_argument,   0, 4021},
         {"batch-eval-lookups", no_argument,     0, 4022},
 #endif
+        {"resume",           no_argument,       0, 1003},
         {"verbose",          no_argument,       0, 'v'},
         {"help",             no_argument,       0, 'h'},
         {0, 0, 0, 0}
@@ -865,63 +1346,87 @@ int main(int argc, char *argv[]) {
     while ((opt = getopt_long(argc, argv, "f:c:p:d:e:t:r:s:g:S:D:I:L:n:mvh",
                               long_options, &option_index)) != -1) {
         switch (opt) {
-            case 'f': start_fen = optarg; break;
-            case 1010: start_moves = optarg; break;
+            case 'f': start_fen = optarg; cli_exp.fen = true; break;
+            case 1010: start_moves = optarg; cli_exp.moves = true; break;
             case 'c':
                 play_as_white = (optarg[0] == 'w' || optarg[0] == 'W');
                 color_specified = true;
+                cli_exp.color = true;
                 break;
             case 'p':
                 if (!parse_double(optarg, "probability", &min_probability)) return 1;
                 if (min_probability <= 0 || min_probability > 1) {
                     fprintf(stderr, "Error: probability must be in (0, 1]\n"); return 1;
                 }
+                cli_exp.probability = true;
                 break;
             case 'd':
                 if (!parse_int(optarg, "ply", &max_depth)) return 1;
+                cli_exp.ply = true;
                 break;
             case 'e':
                 if (!parse_int(optarg, "eval-depth", &eval_depth)) return 1;
+                cli_exp.eval_depth = true;
                 break;
             case 't':
                 if (!parse_int(optarg, "threads", &num_threads)) return 1;
+                cli_exp.threads = true;
                 break;
-            case 'r': ratings = optarg; break;
-            case 's': speeds = optarg; break;
+            case 'r': ratings = optarg; cli_exp.ratings = true; break;
+            case 's': speeds = optarg; cli_exp.speeds = true; break;
             case 'g':
                 if (!parse_int(optarg, "min-games", &min_games)) return 1;
+                cli_exp.min_games = true;
                 break;
-            case 'S': stockfish_path = optarg; break;
-            case 'D': db_path = optarg; break;
+            case 'S': stockfish_path = optarg; cli_exp.stockfish = true; break;
+            case 'D': db_path = optarg; cli_exp.database = true; break;
             case 'I': input_db_path = optarg; break;
             case 'L': load_tree_file = optarg; break;
-            case 'n': repertoire_name = optarg; break;
-            case 'm': use_masters = true; break;
-            case 'v': verbose = true; break;
+            case 'n': repertoire_name = optarg; cli_exp.name = true; break;
+            case 'm': use_masters = true; cli_exp.masters = true; break;
+            case 'v': verbose = true; cli_exp.verbose = true; break;
             case 'h': print_usage(argv[0]); return 0;
-            case 1001: skip_build = true; break;
-            case 1002: build_now = true; skip_build = true; break;
-            case 1004: mode_id = 4; find_traps = true; break;
-            case 1005: find_traps_in_repertoire = true; break;
+            case 1001: skip_build = true; cli_exp.skip_build = true; break;
+            case 1002: build_now = true; skip_build = true; cli_exp.build_now = true; break;
+            case 1003: resume_flag = true; break;
+            case 1004: mode_id = 4; find_traps = true; cli_exp.traps = true; break;
+            case 1005: find_traps_in_repertoire = true; cli_exp.traps_in_repertoire = true; break;
             case 1006: lichess_token = optarg; break;
             /* Our-move */
-            case 2001: if (!parse_int(optarg, "our-multipv", &our_multipv_arg)) return 1; break;
+            case 2001:
+                if (!parse_int(optarg, "our-multipv", &our_multipv_arg)) return 1;
+                cli_exp.our_multipv = true;
+                break;
             case 2005:
                 if (!parse_int(optarg, "max-eval-loss", &max_eval_loss_arg)) return 1;
                 user_max_eval_loss = true;
+                cli_exp.max_eval_loss = true;
                 break;
             /* Opponent-move */
-            case 2010: if (!parse_int(optarg, "opp-max-children", &opp_max_children_arg)) return 1; break;
-            case 2011: if (!parse_double(optarg, "opp-mass", &opp_mass_target_arg)) return 1; break;
+            case 2010:
+                if (!parse_int(optarg, "opp-max-children", &opp_max_children_arg)) return 1;
+                cli_exp.opp_max_children = true;
+                break;
+            case 2011:
+                if (!parse_double(optarg, "opp-mass", &opp_mass_target_arg)) return 1;
+                cli_exp.opp_mass = true;
+                break;
             /* Eval window */
             case 2020:
                 if (!parse_int(optarg, "min-eval", &min_eval_arg)) return 1;
                 user_min_eval = true;
+                cli_exp.min_eval = true;
                 break;
-            case 2021: if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1; break;
-            case 2022: relative_eval = false; break;
+            case 2021:
+                if (!parse_int(optarg, "max-eval", &max_eval_arg)) return 1;
+                cli_exp.max_eval = true;
+                break;
+            case 2022: relative_eval = false; cli_exp.absolute = true; break;
             /* Expectimax scoring */
-            case 2031: if (!parse_double(optarg, "leaf-confidence", &leaf_confidence_arg)) return 1; break;
+            case 2031:
+                if (!parse_double(optarg, "leaf-confidence", &leaf_confidence_arg)) return 1;
+                cli_exp.leaf_confidence = true;
+                break;
             case 2034: {
                 int nw;
                 if (!parse_int(optarg, "novelty-weight", &nw)) return 1;
@@ -931,20 +1436,27 @@ int main(int argc, char *argv[]) {
                 }
                 novelty_weight_arg = nw;
                 user_novelty_weight = true;
+                cli_exp.novelty_weight = true;
                 break;
             }
-            case 2040: mode_id = 1; break;
-            case 2041: mode_id = 2; break;
-            case 2042: mode_id = 3; break;
-            case 2044: mode_id = 5; break;
+            case 2040: mode_id = 1; cli_exp.preset = true; break;
+            case 2041: mode_id = 2; cli_exp.preset = true; break;
+            case 2042: mode_id = 3; cli_exp.preset = true; break;
+            case 2044: mode_id = 5; cli_exp.preset = true; break;
             /* 2006 removed: --sf-threads folded into -t */
             /* Maia */
-            case 3001: maia_model_path = optarg; break;
-            case 3002: if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1; break;
-            case 3004: if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1; break;
-            case 3005: maia_only = true; break;
-            case 3006: maia_only = false; break;
-            case 3007: build_mode_str = optarg; break;
+            case 3001: maia_model_path = optarg; cli_exp.maia_model = true; break;
+            case 3002:
+                if (!parse_int(optarg, "maia-elo", &maia_elo)) return 1;
+                cli_exp.maia_elo = true;
+                break;
+            case 3004:
+                if (!parse_double(optarg, "maia-min-prob", &maia_min_prob)) return 1;
+                cli_exp.maia_min_prob = true;
+                break;
+            case 3005: maia_only = true; cli_exp.maia_only = true; break;
+            case 3006: maia_only = false; cli_exp.lichess = true; break;
+            case 3007: build_mode_str = optarg; cli_exp.build_mode = true; break;
             case 5001:
                 if (pgn_file_count >= MAX_PGN_FILES) {
                     fprintf(stderr, "Error: at most %d --pgn files allowed\n",
@@ -952,33 +1464,99 @@ int main(int argc, char *argv[]) {
                     return 1;
                 }
                 pgn_files[pgn_file_count++] = optarg;
+                cli_exp.pgn = true;
                 break;
             case 5002:
                 if (!parse_int(optarg, "db-min-games", &db_min_games)) return 1;
+                cli_exp.db_min_games = true;
                 break;
             case 5003:
                 if (!parse_double(optarg, "db-min-prob", &db_min_prob)) return 1;
+                cli_exp.db_min_prob = true;
                 break;
-            case 5004: no_freq_cache = true; break;
-            case 4001: event_log_path = optarg; break;
-            case 4002: lichess_eval_db_path = optarg; break;
-            case 4010: chessdb_eval_db_path = optarg; break;
-            case 4011: chessdb_api_enabled = true; break;
+            case 5004: no_freq_cache = true; cli_exp.no_freq_cache = true; break;
+            case 4001: event_log_path = optarg; cli_exp.event_log = true; break;
+            case 4002: lichess_eval_db_path = optarg; cli_exp.lichess_eval_db = true; break;
+            case 4010: chessdb_eval_db_path = optarg; cli_exp.chessdb_eval_db = true; break;
+            case 4011: chessdb_api_enabled = true; cli_exp.chessdb_api = true; break;
             case 4012:
                 if (!parse_int(optarg, "chessdb-api-quota", &chessdb_api_quota)) return 1;
+                cli_exp.chessdb_api_quota = true;
                 break;
             case 4013:
                 if (!parse_int(optarg, "chessdb-api-concurrency",
                                &chessdb_api_concurrency)) return 1;
+                cli_exp.chessdb_api_concurrency = true;
                 break;
-            case 4014: ext_eval_subtree_skip = false; break;
+            case 4014: ext_eval_subtree_skip = false; cli_exp.no_ext_eval_subtree_skip = true; break;
 #ifdef HAS_CDBDIRECT
-            case 4020: cdbdirect_path = optarg; break;
-            case 4021: cdbdirect_read_ahead = true; break;
-            case 4022: batch_eval_lookups = true; break;
+            case 4020: cdbdirect_path = optarg; cli_exp.cdbdirect_path = true; break;
+            case 4021: cdbdirect_read_ahead = true; cli_exp.cdbdirect_read_ahead = true; break;
+            case 4022: batch_eval_lookups = true; cli_exp.batch_eval_lookups = true; break;
 #endif
             default: print_usage(argv[0]); return 1;
         }
+    }
+
+    if (optind < argc) {
+        base_name = argv[optind];
+    } else {
+        fprintf(stderr, "Error: base name required\n");
+        print_usage(argv[0]);
+        return 1;
+    }
+
+    /* Strip common extensions if the user passed e.g. "foo.json" or "foo.pgn" */
+    static char base_buf[512];
+    {
+        size_t len = strlen(base_name);
+        const char *exts[] = { ".tree.json", ".json", ".pgn", ".db", NULL };
+        for (int i = 0; exts[i]; i++) {
+            size_t elen = strlen(exts[i]);
+            if (len > elen && strcmp(base_name + len - elen, exts[i]) == 0) {
+                memcpy(base_buf, base_name, len - elen);
+                base_buf[len - elen] = '\0';
+                base_name = base_buf;
+                break;
+            }
+        }
+    }
+
+    if (!db_path) {
+        snprintf(db_path_buf, sizeof(db_path_buf), "%s.db", base_name);
+        db_path = db_path_buf;
+    }
+
+    snprintf(pgn_path, sizeof(pgn_path), "%s.pgn", base_name);
+    snprintf(tree_path, sizeof(tree_path), "%s.tree.json", base_name);
+
+    if (resume_flag) {
+        if (!load_config_from_db(
+                db_path, base_name, &cli_exp, &cli_loaded,
+                &start_fen, &start_moves, &play_as_white, &color_specified,
+                &min_probability, &max_depth, &eval_depth, &num_threads,
+                &ratings, &speeds, &min_games, &stockfish_path,
+                &use_masters, &skip_build, &build_now, &find_traps,
+                &find_traps_in_repertoire, &repertoire_name, &maia_model_path,
+                &maia_elo, &maia_min_prob, &maia_only, &relative_eval,
+                &build_mode, &build_mode_str, &event_log_path,
+                &lichess_eval_db_path, &chessdb_eval_db_path,
+                &chessdb_api_enabled, &chessdb_api_quota,
+                &chessdb_api_concurrency, &ext_eval_subtree_skip,
+#ifdef HAS_CDBDIRECT
+                &cdbdirect_path, &cdbdirect_read_ahead, &batch_eval_lookups,
+#endif
+                pgn_files, &pgn_file_count, &db_min_games, &db_min_prob,
+                &no_freq_cache, &our_multipv_arg, &max_eval_loss_arg,
+                &opp_max_children_arg, &opp_mass_target_arg, &min_eval_arg,
+                &max_eval_arg, &novelty_weight_arg, &leaf_confidence_arg,
+                &mode_name, &mode_id, &user_min_eval, &user_max_eval_loss,
+                &user_novelty_weight, &verbose)) {
+            return 1;
+        }
+        print_resume_banner(play_as_white, start_fen, max_depth, eval_depth,
+                            num_threads, maia_only, ratings, speeds,
+                            mode_name, db_path);
     }
 
     if (build_mode_str) {
@@ -1046,37 +1624,11 @@ int main(int argc, char *argv[]) {
     }
 
     if (!color_specified) {
-        fprintf(stderr, "Error: --color (-c) is required. Specify 'w' for white or 'b' for black.\n");
+        fprintf(stderr, "Error: --color (-c) is required. Specify 'w' for white or 'b' for black,\n");
+        fprintf(stderr, "       or use --resume to restore settings from a previous run.\n");
         fprintf(stderr, "Usage: %s --color <w|b> [options] <name>\n", argv[0]);
         return 1;
     }
-
-    if (optind < argc) {
-        base_name = argv[optind];
-    } else {
-        fprintf(stderr, "Error: base name required\n");
-        print_usage(argv[0]);
-        return 1;
-    }
-
-    /* Strip common extensions if the user passed e.g. "foo.json" or "foo.pgn" */
-    static char base_buf[512];
-    {
-        size_t len = strlen(base_name);
-        const char *exts[] = { ".tree.json", ".json", ".pgn", ".db", NULL };
-        for (int i = 0; exts[i]; i++) {
-            size_t elen = strlen(exts[i]);
-            if (len > elen && strcmp(base_name + len - elen, exts[i]) == 0) {
-                memcpy(base_buf, base_name, len - elen);
-                base_buf[len - elen] = '\0';
-                base_name = base_buf;
-                break;
-            }
-        }
-    }
-
-    snprintf(pgn_path, sizeof(pgn_path), "%s.pgn", base_name);
-    snprintf(tree_path, sizeof(tree_path), "%s.tree.json", base_name);
 
     /* Convert --moves to a FEN by applying each SAN move from startpos */
     if (start_moves) {
@@ -1141,12 +1693,6 @@ int main(int argc, char *argv[]) {
             token_buf = read_token_from_config();
             if (token_buf) lichess_token = token_buf;
         }
-    }
-
-    /* Auto-derive DB path from base name */
-    if (!db_path) {
-        snprintf(db_path_buf, sizeof(db_path_buf), "%s.db", base_name);
-        db_path = db_path_buf;
     }
 
     /* Signal handlers */
@@ -1350,11 +1896,31 @@ int main(int argc, char *argv[]) {
         printf("\n");
     }
 
-    if (!check_build_metadata(db, db_path, argv[0], db_file_existed, db_has_data,
+    if (resume_flag) {
+        store_build_metadata(db, play_as_white, ratings, speeds, false);
+    } else if (!check_build_metadata(db, db_path, argv[0], db_file_existed, db_has_data,
                               play_as_white, ratings, speeds)) {
         rdb_close(db);
         if (maia) maia_destroy(maia);
         return 1;
+    }
+
+    if (!save_config_to_db(
+            db, play_as_white, ratings, speeds, start_fen, start_moves,
+            min_probability, max_depth, eval_depth, num_threads, min_games,
+            stockfish_path, use_masters, skip_build, build_now, find_traps,
+            find_traps_in_repertoire, repertoire_name, maia_model_path, maia_elo, maia_min_prob, maia_only,
+            relative_eval, build_mode, event_log_path, lichess_eval_db_path,
+            chessdb_eval_db_path, chessdb_api_enabled, chessdb_api_quota,
+            chessdb_api_concurrency, ext_eval_subtree_skip,
+#ifdef HAS_CDBDIRECT
+            cdbdirect_path, cdbdirect_read_ahead, batch_eval_lookups,
+#endif
+            pgn_files, pgn_file_count, db_min_games, db_min_prob, no_freq_cache,
+            our_multipv_arg, max_eval_loss_arg, opp_max_children_arg,
+            opp_mass_target_arg, min_eval_arg, max_eval_arg, novelty_weight_arg,
+            leaf_confidence_arg, mode_name, verbose)) {
+        fprintf(stderr, "Warning: failed to save CLI configuration to database\n");
     }
 
     /* Optional: open the read-only Lichess community eval DB. */
@@ -1642,10 +2208,12 @@ int main(int argc, char *argv[]) {
             snprintf(freq_cache_path, sizeof(freq_cache_path),
                      "%s.freq.bin", base_name);
 
-            /* Parse full games from startpos; tree root (--fen) is only the
-             * BFS seed, not the PGN tracking anchor. */
+            /* Parse full games from startpos; match --moves/--fen by position. */
+            bool pgn_custom_fen = strcmp(start_fen, DEFAULT_FEN) != 0;
             PgnFreqConfig pgn_cfg = {
-                .start_fen = NULL,
+                .start_fen = (start_moves == NULL && pgn_custom_fen)
+                                  ? start_fen
+                                  : NULL,
                 .start_moves = start_moves,
                 .max_ply = 0,
             };

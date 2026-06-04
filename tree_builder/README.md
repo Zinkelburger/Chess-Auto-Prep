@@ -79,11 +79,12 @@ The `<name>` argument is the base name for all output files:
 | `-p, --probability <P>` | Min probability threshold | 0.0001 (0.01%) |
 | `-d, --ply <N>` | Max tree depth in ply (half-moves) | 20 |
 | `-e, --eval-depth <N>` | Stockfish search depth | 20 |
-| `-t, --threads <N>` | Parallel Stockfish engines | 4 |
+| `-t, --threads <N>` | Parallel Stockfish engines | half of online CPUs (min 1) |
 | `-S, --stockfish <path>` | Stockfish binary path | auto-detect |
 | `-n, --name <name>` | Repertoire name (shown in PGN headers) | |
 | `--build-now` | Use existing partial tree as-is, skip to repertoire generation | |
 | `--skip-build` | Skip tree building entirely (requires existing complete tree) | |
+| `--resume` | Restore all CLI flags from `<name>.db` (explicit flags override) | |
 | `-v, --verbose` | Verbose progress | |
 
 ### Our-Move Candidates (Engine-Driven)
@@ -130,7 +131,17 @@ Build from a custom FEN:
   e4_repertoire
 ```
 
-Resume an interrupted build:
+Resume an interrupted build (same flags as the previous run):
+```bash
+./bin/tree_builder SicilianKan --resume
+```
+
+Override a single setting while resuming:
+```bash
+./bin/tree_builder SicilianKan --resume --threads 8
+```
+
+Resume without `--resume` (must pass `-c` and other flags manually):
 ```bash
 ./bin/tree_builder -c b -v modern_benoni  # resumes from modern_benoni.tree.json
 ```

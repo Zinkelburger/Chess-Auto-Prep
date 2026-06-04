@@ -745,6 +745,14 @@ char *rdb_get_metadata(RepertoireDB *rdb, const char *key) {
     return result;
 }
 
+bool rdb_save_cli_config(RepertoireDB *rdb, const char *json_str) {
+    return rdb_set_metadata(rdb, "cli_args", json_str);
+}
+
+char *rdb_load_cli_config(RepertoireDB *rdb) {
+    return rdb_get_metadata(rdb, "cli_args");
+}
+
 
 void rdb_get_repertoire_moves(RepertoireDB *db,
                                void (*callback)(const char *fen, const char *move_san,
