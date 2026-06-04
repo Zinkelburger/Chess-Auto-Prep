@@ -105,7 +105,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
   }
 
   Future<void> _pickLocalChessDbFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       dialogTitle: 'Select ChessDB SQLite file',
       type: FileType.custom,
       allowedExtensions: ['db'],

@@ -41,7 +41,7 @@ class TacticsExportImport {
   Future<int> importTactics() async {
     try {
       // Keep withData enabled so file content is always available from picker.
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['csv'],
         withData: true,

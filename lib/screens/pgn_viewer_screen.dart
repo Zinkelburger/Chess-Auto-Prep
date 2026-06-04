@@ -118,7 +118,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Future<void> _pickFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pgn', 'txt'],
       initialDirectory: _controller.pickFileInitialDirectory(),
@@ -194,7 +194,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final defaultName = _controller.defaultExportFileName();
     if (defaultName == null) return;
 
-    final outPath = await FilePicker.platform.saveFile(
+    final outPath = await FilePicker.saveFile(
       dialogTitle: 'Export ${_controller.filteredGames.length} filtered games',
       fileName: defaultName,
       type: FileType.custom,
