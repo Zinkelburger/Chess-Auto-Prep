@@ -7,6 +7,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/engine_settings.dart';
@@ -27,6 +29,14 @@ class EngineLifecycle extends ChangeNotifier {
   EngineState get state => _state;
 
   bool _toggleStateBeforeGeneration = false;
+
+  void _notifyListenersSafe() {
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+      notifyListeners();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => notifyListeners());
+    }
+  }
 
   Future<void> _queueTail = Future.value();
 
@@ -84,14 +94,14 @@ class EngineLifecycle extends ChangeNotifier {
     if (_state == EngineState.off || _state == EngineState.generating) return;
     if (_state == EngineState.analyzing) return;
     _state = EngineState.analyzing;
-    notifyListeners();
+    _notifyListenersSafe();
   }
 
   /// Called when AnalysisService completes.
   void onAnalysisComplete() {
     if (_state == EngineState.analyzing) {
       _state = EngineState.idle;
-      notifyListeners();
+      _notifyListenersSafe();
     }
   }
 
