@@ -220,6 +220,30 @@ ExpectimaxLine? generateLineForFirstMove(
   );
 }
 
+/// True when [fen] exists in [tree] with expectimax and the subtree reaches
+/// at least [targetPly] (suitable for multi-move precomputed PV).
+bool hasPrecomputedExpectimaxAtPly(
+  BuildTree tree,
+  String fen,
+  int targetPly,
+) {
+  final node = findNodeByFen(tree, fen);
+  if (node == null || !node.hasExpectimax || node.children.isEmpty) {
+    return false;
+  }
+  return maxSubtreePly(node) >= targetPly;
+}
+
+/// Deepest [BuildTreeNode.ply] in [node]'s subtree (including [node]).
+int maxSubtreePly(BuildTreeNode node) {
+  var max = node.ply;
+  for (final child in node.children) {
+    final childMax = maxSubtreePly(child);
+    if (childMax > max) max = childMax;
+  }
+  return max;
+}
+
 /// Whether [node]'s subtree has been fully explored up to [targetPly].
 bool isBranchCompleteToPly(BuildTreeNode node, int targetPly) {
   if (node.ply >= targetPly) return true;
