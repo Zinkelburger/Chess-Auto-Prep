@@ -339,18 +339,12 @@ static bool token_to_san(const char *tok, char *san_out, size_t san_len) {
     return san_out[0] != '\0';
 }
 
-static bool san_moves_match(const char *a, const char *b) {
-    if (!a || !b) return false;
-    if (strcmp(a, b) == 0) return true;
-
-    /* Castling: PGN may use 0-0 while SAN converter normalizes to O-O. */
-    if ((strcmp(a, "O-O") == 0 || strcmp(a, "0-0") == 0) &&
-        (strcmp(b, "O-O") == 0 || strcmp(b, "0-0") == 0))
-        return true;
-    if ((strcmp(a, "O-O-O") == 0 || strcmp(a, "0-0-0") == 0) &&
-        (strcmp(b, "O-O-O") == 0 || strcmp(b, "0-0-0") == 0))
-        return true;
-    return false;
+static bool fen_keys_equal(const char *fen_a, const char *fen_b) {
+    char key_a[FEN_KEY_MAX_LENGTH];
+    char key_b[FEN_KEY_MAX_LENGTH];
+    fen_map_canonicalize_key(fen_a, key_a, sizeof(key_a));
+    fen_map_canonicalize_key(fen_b, key_b, sizeof(key_b));
+    return key_a[0] && key_b[0] && strcmp(key_a, key_b) == 0;
 }
 
 static int parse_prefix_moves(const char *start_moves,
@@ -371,6 +365,44 @@ static int parse_prefix_moves(const char *start_moves,
         count++;
     }
     return count;
+}
+
+/**
+ * Build the 4-field FEN key games must reach before frequency tracking.
+ * Returns true on success; sets *has_target false when no filter is needed.
+ */
+static bool build_tracking_target(const PgnFreqConfig *cfg,
+                                  char *target_key, size_t key_len,
+                                  bool *has_target) {
+    if (!target_key || key_len == 0 || !has_target) return false;
+    *has_target = false;
+    target_key[0] = '\0';
+
+    char prefix[PGN_MAX_PREFIX_MOVES][16];
+    int prefix_len = parse_prefix_moves(cfg ? cfg->start_moves : NULL, prefix);
+    bool want_fen = cfg && cfg->start_fen && cfg->start_fen[0];
+
+    if (prefix_len == 0 && !want_fen) return true;
+
+    const char *base_fen = want_fen ? cfg->start_fen : DEFAULT_START_FEN;
+    ChessPosition pos;
+    if (!position_from_fen(&pos, base_fen)) return false;
+
+    char fen_buf[MAX_FEN_LENGTH];
+    position_to_fen(&pos, fen_buf, sizeof(fen_buf));
+
+    for (int i = 0; i < prefix_len; i++) {
+        char uci[8];
+        if (!san_to_uci(fen_buf, prefix[i], uci, sizeof(uci)) ||
+            !position_apply_uci(&pos, uci)) {
+            return false;
+        }
+        position_to_fen(&pos, fen_buf, sizeof(fen_buf));
+    }
+
+    fen_map_canonicalize_key(fen_buf, target_key, key_len);
+    *has_target = target_key[0] != '\0';
+    return true;
 }
 
 static const char *skip_whitespace(const char *p) {
@@ -442,18 +474,21 @@ static const char *next_token(const char *p, char *tok, size_t tok_len) {
 
 static int process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
                                  const char *movetext,
-                                 char prefix[PGN_MAX_PREFIX_MOVES][16],
-                                 int prefix_len,
+                                 const char *target_key, bool has_target,
                                  const PgnGameHeaders *hdr, int game_num) {
     ChessPosition pos;
-    const char *start_fen = (cfg && cfg->start_fen) ? cfg->start_fen : DEFAULT_START_FEN;
-    if (!position_from_fen(&pos, start_fen)) return PGN_GAME_ERROR;
+    if (!position_from_fen(&pos, DEFAULT_START_FEN)) return PGN_GAME_ERROR;
 
     char fen_buf[MAX_FEN_LENGTH];
     position_to_fen(&pos, fen_buf, sizeof(fen_buf));
 
-    bool tracking = (prefix_len == 0);
-    int prefix_idx = 0;
+    bool tracking = !has_target;
+    if (has_target && fen_keys_equal(fen_buf, target_key)) {
+        tracking = true;
+        if (!pgn_freq_record_reach(map, target_key))
+            return PGN_GAME_OOM;
+    }
+
     int ply = 0;
     int ply_tracked = 0;
     int max_ply = cfg ? cfg->max_ply : 0;
@@ -481,10 +516,6 @@ static int process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
         }
 
         if (!tracking) {
-            if (prefix_idx >= prefix_len ||
-                !san_moves_match(san, prefix[prefix_idx])) {
-                return PGN_GAME_PREFIX_SKIP;
-            }
             char label[24];
             format_san_ply_label(&pos, san, label, sizeof(label));
             if (!position_apply_uci(&pos, uci)) {
@@ -495,12 +526,10 @@ static int process_game_movetext(PgnFreqMap *map, const PgnFreqConfig *cfg,
             position_to_fen(&pos, fen_buf, sizeof(fen_buf));
             history_push(&history, label);
             ply++;
-            prefix_idx++;
-            if (prefix_idx >= prefix_len) {
+
+            if (fen_keys_equal(fen_buf, target_key)) {
                 tracking = true;
-                char key[FEN_KEY_MAX_LENGTH];
-                fen_map_canonicalize_key(fen_buf, key, sizeof(key));
-                if (!pgn_freq_record_reach(map, key))
+                if (!pgn_freq_record_reach(map, target_key))
                     return PGN_GAME_OOM;
             }
             continue;
@@ -581,8 +610,14 @@ static int pgn_freq_load_stream(PgnFreqMap *map, const PgnFreqConfig *cfg,
                                 FILE *fp) {
     char line[4096];
     char movetext[PGN_MOVETEXT_BUF_SIZE];
-    char prefix[PGN_MAX_PREFIX_MOVES][16];
-    int prefix_len = parse_prefix_moves(cfg ? cfg->start_moves : NULL, prefix);
+    char target_key[FEN_KEY_MAX_LENGTH];
+    bool has_target = false;
+    if (!build_tracking_target(cfg, target_key, sizeof(target_key), &has_target)) {
+        fprintf(stderr,
+                "Error: invalid --moves/--fen starting position in PGN config\n");
+        return 0;
+    }
+
     int games_parsed = 0;
     int prefix_skipped = 0;
     int game_num = 0;
@@ -631,8 +666,8 @@ static int pgn_freq_load_stream(PgnFreqMap *map, const PgnFreqConfig *cfg,
             continue;
         }
 
-        int game_result = process_game_movetext(map, cfg, movetext, prefix,
-                                                prefix_len, &hdr, game_num);
+        int game_result = process_game_movetext(map, cfg, movetext, target_key,
+                                                has_target, &hdr, game_num);
         if (game_result == PGN_GAME_OK) {
             games_parsed++;
             map->total_games++;
@@ -646,9 +681,9 @@ static int pgn_freq_load_stream(PgnFreqMap *map, const PgnFreqConfig *cfg,
     }
 
 done:
-    if (prefix_skipped > 0 && prefix_len > 0) {
+    if (prefix_skipped > 0 && has_target) {
         fprintf(stderr,
-                "  %d games skipped (did not match --moves prefix)\n",
+                "  %d games skipped (did not reach starting position)\n",
                 prefix_skipped);
     }
     return games_parsed;

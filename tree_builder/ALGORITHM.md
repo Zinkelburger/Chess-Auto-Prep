@@ -593,7 +593,7 @@ all castling UCI to king-destination form at three levels:
 | `min_probability` | `-p` | 0.0001 (0.01%) | Prune branches below this cumulative probability |
 | `max_depth` | `-d` | 20 ply | Maximum tree depth |
 | `eval_depth` | `-e` | 14 | Stockfish search depth per position |
-| `num_threads` | `-t` | 4 | Parallel Stockfish engines |
+| `num_threads` | `-t` | half of online CPUs (min 1) | Parallel Stockfish engines |
 
 ### DB explorer (`--build-mode db-explorer`)
 
