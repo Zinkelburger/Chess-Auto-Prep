@@ -69,8 +69,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   bool _isGenerationPaused = false;
   bool _generateModeActive = false;
   bool _isCompactLayout = false;
-  final ValueNotifier<EditContextView> _editContextView =
-      ValueNotifier(EditContextView.browse);
+  final ValueNotifier<Set<EditContextView>> _editContextViews =
+      ValueNotifier({EditContextView.browse});
 
   BuildTree? _generatedTree;
   TreeBuildConfig? _generatedTreeConfig;
@@ -154,7 +154,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _goToBrowseTab() {
     if (_generateModeActive) _closeGenerateMode();
-    _editContextView.value = EditContextView.browse;
+    _editContextViews.value = {
+      ..._editContextViews.value,
+      EditContextView.browse,
+    };
     if (_isCompactLayout) {
       _tabController.animateTo(1);
     }
@@ -169,7 +172,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _goToLinesTab() {
     if (_generateModeActive) _closeGenerateMode();
-    _editContextView.value = EditContextView.lines;
+    _editContextViews.value = {
+      ..._editContextViews.value,
+      EditContextView.lines,
+    };
     if (_isCompactLayout) {
       _tabController.animateTo(1);
     }
@@ -308,7 +314,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   @override
   void dispose() {
     _focusNode.dispose();
-    _editContextView.dispose();
+    _editContextViews.dispose();
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _boardPreview.dispose();
@@ -735,7 +741,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return EditContextZone(
       key: ValueKey(_generatedTreeResetCounter),
       initialView: EditContextView.browse,
-      selectedViewNotifier: _editContextView,
+      selectedViewsNotifier: _editContextViews,
       tabsLocked: _isGenerating && !_isGenerationPaused,
       browseContent: _buildAnalysisTab(),
       linesContent: _buildLinesContextTab(),
