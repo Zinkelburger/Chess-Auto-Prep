@@ -118,6 +118,13 @@ class RepertoireController with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Advance one ply along the current line (Browse candidates, etc.).
+  /// Unlike [userPlayedMove], does not use the "next SAN matches" shortcut,
+  /// which can follow the wrong branch when the same SAN appears elsewhere.
+  void userPlayedMoveOnCurrentPath(String sanMove) {
+    navigateToLineMove([...currentMoveSequence, sanMove]);
+  }
+
   /// Called when user selects a move in the opening tree.
   /// Uses the tree node's own path as the base so we branch from where the
   /// tree visually IS, not from a potentially stale currentDepth comparison.
@@ -787,8 +794,8 @@ class RepertoireController with ChangeNotifier {
   /// Imports PGN content into the current repertoire file.
   ///
   /// Appends the raw PGN text to the file, then reloads so the opening tree
-  /// and lines list reflect the new games.  Returns the number of games
-  /// successfully added.
+  /// and lines list reflect the new games.  Returns the number of PGN chunks
+  /// ([Event]-delimited lines) added.
   Future<int> importPgnContent(String pgnContent) async {
     if (_currentRepertoire == null) return 0;
 

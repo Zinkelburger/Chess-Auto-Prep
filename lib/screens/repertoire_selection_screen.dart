@@ -313,7 +313,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          '${importResult!.gameCount} game${importResult!.gameCount == 1 ? '' : 's'} ready to import',
+                          '${importResult!.gameCount} line${importResult!.gameCount == 1 ? '' : 's'} ready to import',
                           style: TextStyle(
                             color: Theme.of(context)
                                 .colorScheme
@@ -417,7 +417,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
           showAppSnackBar(
             context,
             'Created "$name" with ${pgnImport.gameCount} '
-            'game${pgnImport.gameCount == 1 ? '' : 's'}.',
+            'line${pgnImport.gameCount == 1 ? '' : 's'}.',
           );
         }
       } else {
