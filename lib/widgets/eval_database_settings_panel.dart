@@ -88,7 +88,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
 
   Future<void> _pickDirectory() async {
     if (!_libraryAvailable) return;
-    final result = await FilePicker.platform.getDirectoryPath(
+    final result = await FilePicker.getDirectoryPath(
       dialogTitle: 'Select ChessDB data directory',
     );
     if (result == null) return;

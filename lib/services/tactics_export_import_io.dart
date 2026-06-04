@@ -30,7 +30,7 @@ Future<void> exportCsvContent(
     } catch (_) { /* temp-file cleanup — ignore */ }
   } else {
     // On desktop, let user choose save location
-    final savePath = await FilePicker.platform.saveFile(
+    final savePath = await FilePicker.saveFile(
       dialogTitle: 'Export Tactics',
       fileName: filename,
       type: FileType.custom,

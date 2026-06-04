@@ -78,7 +78,7 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
       final count = pgn.countPgnGames(text);
       setState(() {
         _gameCount = count;
-        _error = count == 0 ? 'No valid games found in PGN.' : null;
+        _error = count == 0 ? 'No valid lines found in PGN.' : null;
       });
     } catch (e) {
       setState(() {
@@ -90,7 +90,7 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
 
   Future<void> _pickFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pgn', 'txt'],
         withData: false,
@@ -273,7 +273,7 @@ class _PgnImportSheetState extends State<_PgnImportSheet> {
                               size: 18, color: cs.onPrimaryContainer),
                           const SizedBox(width: 8),
                           Text(
-                            '$_gameCount game${_gameCount == 1 ? '' : 's'} found',
+                            '$_gameCount line${_gameCount == 1 ? '' : 's'} found',
                             style: TextStyle(
                               color: cs.onPrimaryContainer,
                               fontSize: 13,
