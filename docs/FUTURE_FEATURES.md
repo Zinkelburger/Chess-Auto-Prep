@@ -155,7 +155,7 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | Item | Status | Notes |
 |------|--------|-------|
 | README reflects repertoire builder scope | **Partial** | Updated to point at `docs/COMPONENT_MAP.md`; expand feature list over time |
-| `docs/ALGORITHM.md` file paths | **Partial** | Flutter-side paths; C CLI detail is in `tree_builder/ALGORITHM.md` |
+| `docs/ALGORITHM.md` file paths | **Partial** | Flutter-side paths; top-level doc links to `tree_builder/ALGORITHM.md` for C CLI |
 
 ---
 

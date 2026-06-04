@@ -4,6 +4,8 @@
 
 Chess Auto-Prep builds repertoire trees using a BFS-based expectimax algorithm that combines engine evaluation, human move prediction (Maia), and database statistics to produce practical repertoire recommendations.
 
+This document describes the **Flutter/Dart** generation pipeline in `lib/`. The native C `tree_builder` CLI (including `--resume`, `cli_args` persistence, db-explorer PGN ingest, and default thread count) is documented in [`tree_builder/ALGORITHM.md`](../tree_builder/ALGORITHM.md) and summarized under **External & non-Flutter components** in [`COMPONENT_MAP.md`](COMPONENT_MAP.md).
+
 ## Pipeline Stages
 
 ### 1. Candidate Generation
