@@ -27,6 +27,7 @@
  */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdio.h>
 
 #include "generate.h"
@@ -75,18 +76,15 @@ static int rook_dirs = DIR_N | DIR_E | DIR_S | DIR_W;
 static int bishop_dirs = DIR_NE | DIR_SE | DIR_SW | DIR_NW;
 static int queen_dirs = 0xff;
 
-void chess_generate_init(void)
+static pthread_once_t generate_init_once = PTHREAD_ONCE_INIT;
+
+static void chess_generate_init_body(void)
 {
-    static int initialized = 0;
     ChessSquare sq;
     int dirs, d;
     int slide, jump;
     int file, rank;
     int to_file, to_rank;
-
-    if (initialized)
-        return;
-    initialized = 1;
 
     for (sq = CHESS_SQUARE_A1; sq <= CHESS_SQUARE_H8; sq++)
     {
@@ -123,6 +121,11 @@ void chess_generate_init(void)
 
         jump_dirs[sq] = dirs;
     }
+}
+
+void chess_generate_init(void)
+{
+    pthread_once(&generate_init_once, chess_generate_init_body);
 }
 
 static ChessBoolean move_is_legal(const ChessPosition* position, ChessMove move)

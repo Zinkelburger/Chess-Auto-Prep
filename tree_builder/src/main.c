@@ -75,6 +75,137 @@ static bool confirm_yes_interactive(const char *prompt) {
     return buf[0] == 'y' || buf[0] == 'Y';
 }
 
+static void format_iso_timestamp(char *buf, size_t len) {
+    time_t now = time(NULL);
+    struct tm tm_utc;
+    gmtime_r(&now, &tm_utc);
+    strftime(buf, len, "%Y-%m-%dT%H:%M:%SZ", &tm_utc);
+}
+
+static void format_settings_flags(char *buf, size_t len, bool play_as_white,
+                                  const char *ratings, const char *speeds) {
+    snprintf(buf, len, "-c %c --ratings %s --speeds %s",
+             play_as_white ? 'w' : 'b', ratings, speeds);
+}
+
+static void suggest_alternate_db_path(const char *db_path, bool play_as_white,
+                                      char *out, size_t out_len) {
+    if (!db_path || !out || out_len == 0) {
+        if (out && out_len > 0) out[0] = '\0';
+        return;
+    }
+    const char *suffix = play_as_white ? "_white" : "_black";
+    size_t plen = strlen(db_path);
+    if (plen > 3 && strcmp(db_path + plen - 3, ".db") == 0) {
+        snprintf(out, out_len, "%.*s%s.db", (int)(plen - 3), db_path, suffix);
+    } else {
+        snprintf(out, out_len, "%s%s.db", db_path, suffix);
+    }
+}
+
+static void store_build_metadata(RepertoireDB *db, bool play_as_white,
+                                const char *ratings, const char *speeds,
+                                bool set_created_at) {
+    char paw[8];
+    snprintf(paw, sizeof(paw), "%d", play_as_white ? 1 : 0);
+    rdb_set_metadata(db, "play_as_white", paw);
+    rdb_set_metadata(db, "rating_range", ratings);
+    rdb_set_metadata(db, "speeds", speeds);
+    if (set_created_at) {
+        char ts[32];
+        format_iso_timestamp(ts, sizeof(ts));
+        rdb_set_metadata(db, "created_at", ts);
+    }
+}
+
+/**
+ * Compare stored build metadata with current CLI flags.
+ * Returns false on any mismatch (caller should exit non-zero).
+ */
+static bool check_build_metadata(RepertoireDB *db, const char *db_path,
+                                 const char *prog_name,
+                                 bool db_file_existed, bool db_has_data,
+                                 bool play_as_white, const char *ratings,
+                                 const char *speeds) {
+    char *stored_paw = rdb_get_metadata(db, "play_as_white");
+
+    if (!stored_paw) {
+        if (db_file_existed && db_has_data) {
+            fprintf(stderr,
+                    "Note: Database '%s' has cached data but no build metadata "
+                    "(pre-existing DB).\n",
+                    db_path);
+            fprintf(stderr,
+                    "  Current settings will be recorded. Cached explorer/eval "
+                    "data will be reused.\n\n");
+        }
+        store_build_metadata(db, play_as_white, ratings, speeds, true);
+        return true;
+    }
+
+    char cur_paw[8];
+    snprintf(cur_paw, sizeof(cur_paw), "%d", play_as_white ? 1 : 0);
+    bool paw_match = strcmp(stored_paw, cur_paw) == 0;
+
+    char *stored_ratings = rdb_get_metadata(db, "rating_range");
+    char *stored_speeds = rdb_get_metadata(db, "speeds");
+
+    bool stored_white = stored_paw[0] == '1';
+    bool ratings_match =
+        stored_ratings && strcmp(stored_ratings, ratings) == 0;
+    bool speeds_match =
+        stored_speeds && strcmp(stored_speeds, speeds) == 0;
+
+    if (paw_match && ratings_match && speeds_match) {
+        if (db_file_existed) {
+            fprintf(stderr,
+                    "Resuming previous build with database '%s'.\n\n",
+                    db_path);
+        }
+        free(stored_paw);
+        free(stored_ratings);
+        free(stored_speeds);
+        return true;
+    }
+
+    char stored_flags[256];
+    char current_flags[256];
+    char alt_db[PATH_MAX];
+    format_settings_flags(stored_flags, sizeof(stored_flags),
+                          stored_white,
+                          stored_ratings ? stored_ratings : "",
+                          stored_speeds ? stored_speeds : "");
+    format_settings_flags(current_flags, sizeof(current_flags),
+                          play_as_white, ratings, speeds);
+    suggest_alternate_db_path(db_path, play_as_white, alt_db, sizeof(alt_db));
+
+    fprintf(stderr,
+            "Error: Database '%s' was built with different settings.\n",
+            db_path);
+    fprintf(stderr, "  Stored:  %s\n", stored_flags);
+    fprintf(stderr, "  Current: %s\n\n", current_flags);
+    fprintf(stderr,
+            "To resume this database, run with the original settings:\n");
+    fprintf(stderr,
+            "  %s [options] %s -D %s\n\n",
+            prog_name, stored_flags, db_path);
+    fprintf(stderr,
+            "To start fresh with your current settings, use a different database:\n");
+    fprintf(stderr,
+            "  %s [options] %s -D %s\n\n",
+            prog_name, current_flags, alt_db);
+    fprintf(stderr,
+            "To reuse cached evaluations from the old database in a new one:\n");
+    fprintf(stderr,
+            "  %s [options] %s -D %s --input-db %s\n\n",
+            prog_name, current_flags, alt_db, db_path);
+
+    free(stored_paw);
+    free(stored_ratings);
+    free(stored_speeds);
+    return false;
+}
+
 static char g_exe_dir[PATH_MAX] = {0};
 
 static void resolve_exe_dir(void) {
@@ -102,6 +233,7 @@ static const char *MAIA_SEARCH_PATHS[] = {
 };
 
 static Tree *g_tree = NULL;
+static EnginePool *g_engine_pool = NULL;
 volatile int g_interrupted = 0;
 
 
@@ -123,16 +255,18 @@ static void print_usage(const char *prog_name) {
     printf("  -c, --color <w|b>      Play as white (w) or black (b) [REQUIRED]\n");
     printf("  -p, --probability <P>  Min probability threshold [default: 0.0001]\n");
     printf("  -d, --ply <N>          Max tree depth in ply (half-moves) [default: 20]\n");
-    printf("  -e, --eval-depth <N>   Stockfish search depth [default: 14]\n");
+    printf("  -e, --eval-depth <N>   Stockfish search depth [default: 16]\n");
     printf("  -t, --threads <N>      Total CPU cores to use [default: 4]\n");
     printf("  --build-mode <mode>    Build algorithm: stockfish-expectimax [default],\n");
     printf("                         maia-db-explore, db-explorer, trap-finder\n");
     printf("  --pgn <file>           PGN database file (repeatable, db-explorer mode)\n");
     printf("  --no-freq-cache        Force PGN reparse (ignore <name>.freq.bin)\n");
-    printf("  --db-min-games <N>     Min games per move in PGN DB [default: 5]\n");
+    printf("  --db-min-games <N>     Min games per move in PGN DB [default: 3]\n");
     printf("  --db-min-prob <P>      Min move probability in PGN DB [default: 0.05]\n");
     printf("  -S, --stockfish <path> Stockfish binary path\n");
     printf("  -D, --database <path>  SQLite database path [default: <name>.db]\n");
+    printf("  -I, --input-db <path>  Import eval/explorer cache from another DB\n");
+    printf("                         (only for new/empty target databases)\n");
     printf("  -L, --load <file>      Load tree from a different JSON file\n");
     printf("  --skip-build           Skip tree building (use existing tree)\n");
     printf("  --build-now            Use existing partial tree as-is (skip to repertoire generation)\n");
@@ -287,6 +421,7 @@ static void signal_handler(int sig) {
     (void)sig;
     g_interrupted = 1;
     if (g_tree) tree_stop_build(g_tree);
+    if (g_engine_pool) engine_pool_request_stop(g_engine_pool);
 }
 
 
@@ -589,12 +724,13 @@ int main(int argc, char *argv[]) {
     char pgn_path[PATH_MAX] = {0};
     char tree_path[PATH_MAX] = {0};
     const char *db_path = NULL;
+    const char *input_db_path = NULL;
     char db_path_buf[PATH_MAX] = {0};
     const char *stockfish_path = NULL;
     const char *load_tree_file = NULL;
     double min_probability = 0.0001;
     int max_depth = 20;
-    int eval_depth = 14;
+    int eval_depth = 16;
     int num_threads = 4;
 
     const char *ratings = "2000,2200,2500";
@@ -631,7 +767,7 @@ int main(int argc, char *argv[]) {
 #endif
     const char *pgn_files[MAX_PGN_FILES];
     int pgn_file_count = 0;
-    int db_min_games = 5;
+    int db_min_games = 3;
     double db_min_prob = 0.05;
     bool no_freq_cache = false;
 
@@ -669,6 +805,7 @@ int main(int argc, char *argv[]) {
         {"min-games",        required_argument, 0, 'g'},
         {"stockfish",        required_argument, 0, 'S'},
         {"database",         required_argument, 0, 'D'},
+        {"input-db",         required_argument, 0, 'I'},
         {"load",             required_argument, 0, 'L'},
         {"name",             required_argument, 0, 'n'},
         {"masters",          no_argument,       0, 'm'},
@@ -725,7 +862,7 @@ int main(int argc, char *argv[]) {
     };
 
     int opt, option_index = 0;
-    while ((opt = getopt_long(argc, argv, "f:c:p:d:e:t:r:s:g:S:D:L:n:mvh",
+    while ((opt = getopt_long(argc, argv, "f:c:p:d:e:t:r:s:g:S:D:I:L:n:mvh",
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'f': start_fen = optarg; break;
@@ -756,6 +893,7 @@ int main(int argc, char *argv[]) {
                 break;
             case 'S': stockfish_path = optarg; break;
             case 'D': db_path = optarg; break;
+            case 'I': input_db_path = optarg; break;
             case 'L': load_tree_file = optarg; break;
             case 'n': repertoire_name = optarg; break;
             case 'm': use_masters = true; break;
@@ -1105,6 +1243,7 @@ int main(int argc, char *argv[]) {
     clock_gettime(CLOCK_MONOTONIC, &pipeline_start);
 
     bool db_file_existed = access(db_path, F_OK) == 0;
+    bool db_has_data = false;
     bool tree_file_existed = access(tree_path, F_OK) == 0;
     if ((tree_file_existed || load_tree_file) && !db_file_existed) {
         fprintf(stderr,
@@ -1116,7 +1255,6 @@ int main(int argc, char *argv[]) {
 
     if (db_file_existed) {
         char schema_issues[512];
-        bool db_has_data = false;
         if (!rdb_validate_schema(db_path, schema_issues, sizeof(schema_issues),
                                  &db_has_data) && db_has_data) {
             fprintf(stderr,
@@ -1152,6 +1290,72 @@ int main(int argc, char *argv[]) {
     rdb_get_stats(db, &cached_explorer, &cached_evals, &cached_ease);
     printf("  Cached: %d explorer | %d evals\n",
            cached_explorer, cached_evals);
+
+    if (input_db_path) {
+        if (strcmp(input_db_path, db_path) == 0) {
+            fprintf(stderr,
+                    "Error: --input-db must differ from the target -D database.\n");
+            rdb_close(db);
+            if (maia) maia_destroy(maia);
+            return 1;
+        }
+        if (db_file_existed && db_has_data) {
+            fprintf(stderr,
+                    "Error: --input-db can only be used with a new/empty "
+                    "target database.\n");
+            fprintf(stderr,
+                    "  '%s' already exists and contains data.\n", db_path);
+            rdb_close(db);
+            if (maia) maia_destroy(maia);
+            return 1;
+        }
+        if (rdb_has_cache_data(db)) {
+            fprintf(stderr,
+                    "Error: --input-db can only be used with a new/empty "
+                    "target database.\n");
+            fprintf(stderr,
+                    "  '%s' already contains cached rows.\n", db_path);
+            rdb_close(db);
+            if (maia) maia_destroy(maia);
+            return 1;
+        }
+        char import_issues[512];
+        bool import_has_data = false;
+        if (!rdb_validate_schema(input_db_path, import_issues,
+                                 sizeof(import_issues), &import_has_data)) {
+            fprintf(stderr,
+                    "Error: cannot use '%s' as --input-db", input_db_path);
+            if (import_issues[0])
+                fprintf(stderr, ": %s", import_issues);
+            fprintf(stderr, "\n");
+            rdb_close(db);
+            if (maia) maia_destroy(maia);
+            return 1;
+        }
+        RdbCacheImportCounts imported;
+        if (!rdb_import_cache_from(db, input_db_path, &imported)) {
+            fprintf(stderr,
+                    "Error: failed to import cache from '%s'\n",
+                    input_db_path);
+            rdb_close(db);
+            if (maia) maia_destroy(maia);
+            return 1;
+        }
+        printf("  Imported cache from %s:\n", input_db_path);
+        printf("    evaluations:        %d rows\n", imported.evaluations);
+        printf("    explorer_positions: %d rows\n", imported.explorer_positions);
+        printf("    explorer_moves:     %d rows\n", imported.explorer_moves);
+        printf("    multipv_cache:      %d rows\n", imported.multipv_cache);
+        printf("    maia_cache:         %d rows\n", imported.maia_cache);
+        printf("\n");
+    }
+
+    if (!check_build_metadata(db, db_path, argv[0], db_file_existed, db_has_data,
+                              play_as_white, ratings, speeds)) {
+        rdb_close(db);
+        if (maia) maia_destroy(maia);
+        return 1;
+    }
 
     /* Optional: open the read-only Lichess community eval DB. */
     LichessEvalDB *eval_db = NULL;
@@ -1281,6 +1485,7 @@ int main(int argc, char *argv[]) {
                     rdb_close(db);
                     return 1;
                 }
+                g_engine_pool = engine_pool;
             }
         } else {
             printf("  Build mode: maia-db-explore (no Stockfish)\n");
@@ -1313,6 +1518,7 @@ int main(int argc, char *argv[]) {
             rdb_close(db);
             return 1;
         }
+        g_engine_pool = engine_pool;
     }
     printf("\n");
 
@@ -1546,6 +1752,7 @@ int main(int argc, char *argv[]) {
                     rdb_close(db);
                     return 1;
                 }
+                g_engine_pool = engine_pool;
             }
 
             config.play_as_white = play_as_white;
@@ -2129,6 +2336,12 @@ int main(int argc, char *argv[]) {
            total_time, total_time / 60.0);
     printf("\nDone! Repertoire saved to %s\n\n", pgn_path);
 
+    if (!g_interrupted) {
+        char last_run[32];
+        format_iso_timestamp(last_run, sizeof(last_run));
+        rdb_set_metadata(db, "last_run_at", last_run);
+    }
+
 cleanup:
     if (g_interrupted && tree && base_name) {
         printf("\n  [INTERRUPTED] Saving partial tree to %s...\n", tree_path);
@@ -2140,7 +2353,10 @@ cleanup:
                tree->total_nodes);
     }
     if (result) repertoire_result_free(result);
-    if (engine_pool) engine_pool_destroy(engine_pool);
+    if (engine_pool) {
+        engine_pool_destroy(engine_pool);
+        g_engine_pool = NULL;
+    }
     if (maia) maia_destroy(maia);
     if (tree) tree_destroy(tree);
     if (eval_db) lichess_eval_db_close(eval_db);

@@ -24,6 +24,9 @@
 /* Timeout for engine response (seconds) */
 #define ENGINE_TIMEOUT_SEC 120
 
+/* select() slice while waiting for engine output (seconds) */
+#define ENGINE_SELECT_SLICE_SEC 2
+
 /* Defined in main.c; lets engine I/O loops break out on SIGINT/SIGTERM */
 extern volatile int g_interrupted;
 
@@ -70,6 +73,7 @@ struct EnginePool {
     pthread_mutex_t alloc_lock;
     pthread_cond_t engine_available;
     bool *engine_in_use;        /* Which engines are currently in use */
+    bool shutting_down;
 };
 
 
@@ -96,7 +100,9 @@ static bool spawn_engine(StockfishEngine *eng, const char *path) {
     }
     
     if (pid == 0) {
-        /* Child process */
+        /* Child process — new session so Ctrl+C (SIGINT) does not kill Stockfish */
+        setsid();
+
         close(stdin_pipe[1]);   /* Close write end of stdin pipe */
         close(stdout_pipe[0]);  /* Close read end of stdout pipe */
         
@@ -159,35 +165,45 @@ static void engine_send(StockfishEngine *eng, const char *cmd) {
 static char* engine_readline(StockfishEngine *eng, char *buf, size_t buf_size) {
     if (!eng || !eng->is_alive || !eng->stdout_fp) return NULL;
     
-    /* Use select() for timeout */
-    fd_set fds;
-    struct timeval tv;
-    
-    FD_ZERO(&fds);
-    FD_SET(eng->stdout_fd, &fds);
-    tv.tv_sec = ENGINE_TIMEOUT_SEC;
-    tv.tv_usec = 0;
-    
-    int ret = select(eng->stdout_fd + 1, &fds, NULL, NULL, &tv);
-    if (ret <= 0) {
-        if (ret == 0)
+    time_t deadline = time(NULL) + ENGINE_TIMEOUT_SEC;
+
+    while (!g_interrupted) {
+        if (time(NULL) >= deadline) {
             fprintf(stderr, "Warning: engine %d timed out after %ds\n",
                     eng->id, ENGINE_TIMEOUT_SEC);
-        return NULL; /* Timeout or error */
-    }
-    
-    if (fgets(buf, buf_size, eng->stdout_fp)) {
-        /* Strip trailing newline */
-        size_t len = strlen(buf);
-        while (len > 0 && (buf[len-1] == '\n' || buf[len-1] == '\r')) {
-            buf[--len] = '\0';
+            return NULL;
         }
-        return buf;
+
+        fd_set fds;
+        struct timeval tv;
+
+        FD_ZERO(&fds);
+        FD_SET(eng->stdout_fd, &fds);
+        tv.tv_sec = ENGINE_SELECT_SLICE_SEC;
+        tv.tv_usec = 0;
+
+        int ret = select(eng->stdout_fd + 1, &fds, NULL, NULL, &tv);
+        if (ret < 0) {
+            if (errno == EINTR) continue;
+            return NULL;
+        }
+        if (ret == 0) continue;
+
+        if (fgets(buf, buf_size, eng->stdout_fp)) {
+            /* Strip trailing newline */
+            size_t len = strlen(buf);
+            while (len > 0 && (buf[len-1] == '\n' || buf[len-1] == '\r')) {
+                buf[--len] = '\0';
+            }
+            return buf;
+        }
+
+        /* EOF — process exited or pipe broke */
+        eng->is_alive = false;
+        eng->is_ready = false;
+        return NULL;
     }
 
-    /* EOF — process exited or pipe broke */
-    eng->is_alive = false;
-    eng->is_ready = false;
     return NULL;
 }
 
@@ -361,8 +377,20 @@ EnginePool* engine_pool_create(const char *stockfish_path, int num_engines,
 }
 
 
+void engine_pool_request_stop(EnginePool *pool) {
+    if (!pool) return;
+
+    pthread_mutex_lock(&pool->alloc_lock);
+    pool->shutting_down = true;
+    pthread_cond_broadcast(&pool->engine_available);
+    pthread_mutex_unlock(&pool->alloc_lock);
+}
+
+
 void engine_pool_destroy(EnginePool *pool) {
     if (!pool) return;
+
+    engine_pool_request_stop(pool);
     
     /* Destroy thread pool first */
     if (pool->thread_pool) {
@@ -390,8 +418,18 @@ void engine_pool_destroy(EnginePool *pool) {
  */
 static int acquire_engine(EnginePool *pool) {
     pthread_mutex_lock(&pool->alloc_lock);
+
+    if (pool->shutting_down) {
+        pthread_mutex_unlock(&pool->alloc_lock);
+        return -1;
+    }
     
     while (1) {
+        if (pool->shutting_down) {
+            pthread_mutex_unlock(&pool->alloc_lock);
+            return -1;
+        }
+
         int alive = 0;
         for (int i = 0; i < pool->num_engines; i++) {
             if (pool->engines[i].is_alive) alive++;
@@ -403,7 +441,9 @@ static int acquire_engine(EnginePool *pool) {
             }
         }
         if (alive == 0) {
-            fprintf(stderr, "Error: all Stockfish engines are dead\n");
+            if (!pool->shutting_down) {
+                fprintf(stderr, "Error: all Stockfish engines are dead\n");
+            }
             pthread_mutex_unlock(&pool->alloc_lock);
             return -1;
         }
@@ -711,6 +751,12 @@ typedef struct {
 
 static void batch_eval_task(void *arg) {
     BatchTaskArg *bta = (BatchTaskArg *)arg;
+
+    if (g_interrupted || bta->pool->shutting_down) {
+        bta->job->success = false;
+        free(bta);
+        return;
+    }
     
     int eng_idx = acquire_engine(bta->pool);
     if (eng_idx < 0) {
@@ -764,8 +810,10 @@ int engine_pool_evaluate_batch(EnginePool *pool, EvalJob *jobs, int num_jobs,
     int extra_threads = pool->total_cores % (active > 0 ? active : 1);
     if (base_threads < 1) base_threads = 1;
 
-    /* Submit all jobs to thread pool */
+    /* Submit jobs to thread pool (stop early on interrupt/shutdown) */
     for (int i = 0; i < num_jobs; i++) {
+        if (g_interrupted || pool->shutting_down) break;
+
         BatchTaskArg *bta = (BatchTaskArg *)malloc(sizeof(BatchTaskArg));
         if (!bta) continue;
         
