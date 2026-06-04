@@ -23,9 +23,22 @@ The CLI runs five stages (`[0/4]` through `[4/4]`).
 
 ### Stage 0: Database + Engine Initialization
 
-Open (or create) the SQLite database for caching explorer responses, engine
-evaluations. Locate and start the Stockfish engine pool
-(required for building).
+Open (or create) the SQLite database for caching explorer responses and engine
+evaluations.
+
+**CLI configuration.** On every run, `save_config_to_db()` in `main.c`
+serializes the effective CLI (including preset-derived defaults) to JSON and
+stores it under `build_metadata` key `cli_args` via `rdb_save_cli_config()`.
+Pass **`--resume`** to reload that JSON from `<name>.db` before building:
+`load_config_from_db()` fills unset options from the saved snapshot, while
+`CliExplicit` ensures any flag you pass on the command line overrides the
+stored value (e.g. `--resume --threads 8`). Databases created before this
+feature lack `cli_args` and cannot be resumed this way. Without `--resume`,
+reopening an existing DB still runs `check_build_metadata()` (color, Lichess
+`-r` / `-s`) and exits on mismatch.
+
+Locate and start the Stockfish engine pool when building requires it (deferred
+in db-explorer until after the frequency map is built).
 
 ### Stage 1: Build Opening Tree
 
@@ -43,11 +56,15 @@ Stage 1 algorithm is selected by `--build-mode` (see `BuildMode` in `tree.h`):
 Requires at least one `--pgn <file>` (repeatable, up to 16 files). Stage 1
 runs three sub-passes before expectimax:
 
-1. **Frequency map** (`pgn_freq.c`) — parse each PGN, walk games from
-   startpos (optional `--moves` prefix skips plies before tracking begins),
-   accumulate per-position move counts keyed by canonical 4-field FEN.
-   Multiple `--pgn` files merge into one map.  The `--fen` / `--moves` root
-   only seeds the BFS tree, not the freq-map anchor.
+1. **Frequency map** (`pgn_freq.c`) — parse each PGN; every game replays
+   from the standard start position.  When `--fen` or `--moves` defines a
+   target, the parser builds a canonical 4-field FEN key for that position
+   and **starts counting only after the live position matches that key**
+   (walking forward move-by-move).  Games that never reach the target are
+   skipped (logged in aggregate).  Per-position move counts use the same
+   canonical FEN keys as `fen_map.c`.  Multiple `--pgn` files merge into one
+   map.  The `--fen` / `--moves` root seeds the BFS tree in stage 1b, not a
+   separate freq-map anchor.
 2. **Tree materialization** (`tree_build_from_freqmap` in `tree_db_build.c`)
    — BFS from the root FEN through the map:
    - **Our moves:** every move at that position (`move_probability = 1.0`,
@@ -214,9 +231,11 @@ When it's the opponent's turn, `child.cumP = parent.cumP × child.move_probabili
 This ensures sidelines get explored just as deeply as the mainline — tree
 depth depends on how likely the *opponent* is to reach each position.
 
-**Resume support.** If an output file already exists, the tree is loaded and
-building resumes from unexplored leaves. Nodes with children or marked
-`explored` are skipped. Interrupted builds are saved on SIGINT.
+**Tree resume.** If `<name>.tree.json` already exists, the tree is loaded and
+building resumes from unexplored leaves (`resume_prepare_frontier`). Nodes
+with children or marked `explored` are skipped. Interrupted builds are saved on
+SIGINT. Use **`--resume`** (see Stage 0) to restore CLI flags from the DB;
+that is separate from reloading the partial tree JSON.
 
 **Evals are cached.** Every evaluation is stored in SQLite so re-runs skip
 already-evaluated positions. The DB also caches Lichess explorer responses.
