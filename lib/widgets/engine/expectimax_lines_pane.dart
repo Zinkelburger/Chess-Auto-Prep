@@ -86,10 +86,19 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   @override
   void didUpdateWidget(covariant ExpectimaxLinesPane old) {
     super.didUpdateWidget(old);
+    final oldProg = old.progressiveSnapshot;
+    final newProg = widget.progressiveSnapshot;
+    final progChanged = oldProg != newProg &&
+        (oldProg == null ||
+            newProg == null ||
+            oldProg.lines != newProg.lines ||
+            oldProg.bestCompletedDepth != newProg.bestCompletedDepth ||
+            oldProg.isComputing != newProg.isComputing);
     if (old.fen != widget.fen ||
         old.tree != widget.tree ||
         old.config != widget.config ||
-        old.progressiveSnapshot != widget.progressiveSnapshot) {
+        old.onTheFlyMode != widget.onTheFlyMode ||
+        progChanged) {
       _scheduleRecompute();
     }
   }

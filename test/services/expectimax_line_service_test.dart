@@ -127,6 +127,15 @@ void main() {
       startMoves: '',
       configSnapshot: config.toJson(),
     );
+
+    void markExplored(BuildTreeNode n) {
+      n.explored = true;
+      for (final c in n.children) {
+        markExplored(c);
+      }
+    }
+
+    markExplored(root);
   });
 
   group('followExpectimaxLine', () {
@@ -247,6 +256,22 @@ void main() {
       // c5 is opponent's move
       expect(line.moveInfo[1].isOurMove, false);
       expect(line.moveInfo[1].moveProbability, 0.41);
+    });
+  });
+
+  group('hasPrecomputedExpectimaxAtPly', () {
+    test('false when subtree not explored to target ply', () {
+      expect(
+        hasPrecomputedExpectimaxAtPly(tree, tree.root.fen, 10),
+        isFalse,
+      );
+    });
+
+    test('true when subtree is complete to target ply', () {
+      expect(
+        hasPrecomputedExpectimaxAtPly(tree, tree.root.fen, 3),
+        isTrue,
+      );
     });
   });
 

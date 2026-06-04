@@ -11,7 +11,8 @@ import '../services/analysis_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../services/coherence_service.dart';
 import '../services/engine/engine_lifecycle.dart';
-import '../services/expectimax_line_service.dart' show findNodeByFen;
+import '../services/expectimax_line_service.dart'
+    show hasPrecomputedExpectimaxAtPly;
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/on_the_fly_expectimax_service.dart';
@@ -19,7 +20,7 @@ import '../theme/app_colors.dart';
 import '../utils/chess_utils.dart' show formatEvalDisplay, uciToSan;
 import '../utils/eval_constants.dart';
 import 'analysis/analysis_settings_sheet.dart';
-import 'engine/expectimax_lines_pane.dart';
+import 'engine/expectimax_panel_host.dart';
 import 'engine/unified_engine_pane.dart';
 
 /// Stockfish PV and expectimax PV shown together (split horizontally).
@@ -348,29 +349,28 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
 
   bool _hasPrecomputedExpectimax(String fen) {
     if (widget.tree == null || widget.treeConfig == null) return false;
-    final node = findNodeByFen(widget.tree!, fen);
-    return node != null && node.hasExpectimax && node.children.isNotEmpty;
+    return hasPrecomputedExpectimaxAtPly(
+      widget.tree!,
+      fen,
+      _settings.onTheFlyMaxDepth,
+    );
   }
 
   Widget _buildExpectimaxPane() {
-    final fen = widget.controller.fen;
-    final useMain = _hasPrecomputedExpectimax(fen);
-
-    return ExpectimaxLinesPane(
-      fen: fen,
-      tree: useMain ? widget.tree : _onTheFly.currentTree,
-      config: useMain ? widget.treeConfig : _onTheFly.currentConfig,
-      fenMap: useMain ? widget.fenMap : _onTheFly.currentFenMap,
-      isWhiteRepertoire: widget.controller.isRepertoireWhite,
+    return ExpectimaxPanelHost(
+      controller: widget.controller,
+      tree: widget.tree,
+      treeConfig: widget.treeConfig,
+      fenMap: widget.fenMap,
       boardPreview: widget.boardPreview,
       coherenceResult: widget.coherenceResult,
-      progressiveSnapshot: useMain ? null : _onTheFly.progressiveLines,
-      onTheFlyMode: !useMain,
+      isGenerating: widget.isGenerating,
+      isGenerationPaused: widget.isGenerationPaused,
+      onTheFlyService: _onTheFly,
       compact: true,
       onOpenSettings: () => showAnalysisSettingsSheet(context),
-      onMoveSelected: (san) {
-        widget.controller.userPlayedMove(san);
-      },
+      autoComputeEnabled: false,
+      onMoveSelected: (san) => widget.controller.userPlayedMove(san),
       onLineMoveClicked: (sanMoves, index) {
         widget.controller.applyLineFromCurrent(sanMoves, index);
         widget.boardPreview.clearPreview();
