@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/file_text_reader.dart';
 import 'storage/app_paths.dart';
 
 /// Extracts bundled PGN game collections from Flutter assets into the app's
@@ -44,8 +45,12 @@ class DefaultPgnService {
       if (await target.exists()) continue;
 
       try {
-        final data =
-            await rootBundle.loadString('assets/$_directoryName/$name');
+        final byteData =
+            await rootBundle.load('assets/$_directoryName/$name');
+        final data = decodeTextBytes(byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        ));
         await target.writeAsString(data, flush: true);
       } catch (e) {
         // Asset missing from bundle (e.g. stripped for size) — skip silently.
