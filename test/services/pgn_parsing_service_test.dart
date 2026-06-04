@@ -36,6 +36,17 @@ void main() {
       expect(games[0], isNot(contains('// Color')));
     });
 
+    test('strips top-level brace comment before first Event', () {
+      const pgn = '''
+{Build stats: 1 nodes}
+[Event "Only Game"]
+1. e4 *
+''';
+      final games = splitPgnIntoGames(pgn);
+      expect(games, hasLength(1));
+      expect(games[0], isNot(contains('Build stats')));
+    });
+
     test('wraps bare movetext without headers', () {
       const pgn = '1. e4 e5 2. Nf3 *';
       final games = splitPgnIntoGames(pgn);
@@ -92,6 +103,31 @@ void main() {
     test('counts games with leading BOM', () {
       const pgn = '\uFEFF[Event "G1"]\n1. e4 *\n\n[Event "G2"]\n1. d4 *';
       expect(countPgnGames(stripBom(pgn)), 2);
+    });
+
+    test('counts back-to-back [Event] games without blank lines', () {
+      const pgn = '''
+[Event "Line 1"]
+1. e4 *
+[Event "Line 2"]
+1. d4 *
+[Event "Line 3"]
+1. c4 *
+''';
+      expect(countPgnGames(pgn), 3);
+      expect(countPgnGames(pgn), splitPgnIntoGames(pgn).length);
+    });
+
+    test('ignores brace preamble before first Event', () {
+      const pgn = '''
+{Build stats: example}
+[Event "Line 1"]
+1. e4 *
+[Event "Line 2"]
+1. d4 *
+''';
+      expect(countPgnGames(pgn), 2);
+      expect(splitPgnIntoGames(pgn), hasLength(2));
     });
   });
 

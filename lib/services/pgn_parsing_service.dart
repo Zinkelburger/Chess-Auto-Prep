@@ -45,7 +45,10 @@ List<String> splitPgnIntoGames(String content) {
   for (final line in lines) {
     final trimmedLine = line.trim();
 
-    if (trimmedLine.startsWith('//') && !inGame) continue;
+    if (!inGame &&
+        (trimmedLine.startsWith('//') || trimmedLine.startsWith('{'))) {
+      continue;
+    }
 
     if (trimmedLine.startsWith('[Event')) {
       if (inGame && currentGame.trim().isNotEmpty) {
@@ -85,17 +88,12 @@ Map<String, String> extractHeaders(String pgnText) {
 
 /// Returns the number of games in a PGN string.
 ///
-/// Prefers the dartchess multi-game parser for accuracy, falling back to
-/// header-counting for malformed input.
+/// Uses [splitPgnIntoGames] so the count matches repertoire import and the
+/// Lines list. dartchess [PgnGame.parseMultiGamePgn] under-counts when games
+/// are separated only by `[Event` headers (no blank line), as in tree_builder
+/// repertoire exports.
 int countPgnGames(String pgnContent) {
-  try {
-    final parsed = PgnGame.parseMultiGamePgn(pgnContent);
-    if (parsed.isNotEmpty) return parsed.length;
-  } catch (_) {}
-
-  return RegExp(r'^\s*\[Event\s+"', multiLine: true)
-      .allMatches(pgnContent)
-      .length;
+  return splitPgnIntoGames(stripBom(pgnContent)).length;
 }
 
 // ── Position replay ──────────────────────────────────────────────────────────
