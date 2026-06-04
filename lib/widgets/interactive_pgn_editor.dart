@@ -1179,7 +1179,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     String? fenAfterMove,
   }) {
     final isSelected = move.id == _selectedMoveId;
-    final isCurrent = _currentPath.any((m) => m.id == move.id);
 
     late final Color textColor;
     Color? bgColor;
@@ -1189,10 +1188,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (isSelected) {
       textColor = Colors.white;
       bgColor = AppColors.pgnMoveSelectedBg;
-      fontWeight = FontWeight.w500;
-    } else if (isCurrent) {
-      textColor = AppColors.pgnMoveCurrent;
-      bgColor = AppColors.pgnMoveCurrentBg;
       fontWeight = FontWeight.w500;
     } else {
       textColor = AppColors.pgnMove;
