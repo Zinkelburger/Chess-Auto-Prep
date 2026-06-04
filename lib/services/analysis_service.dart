@@ -8,7 +8,10 @@
 library;
 
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 
 import 'engine/stockfish_pool.dart';
 import 'engine/eval_worker.dart';
@@ -46,6 +49,16 @@ class AnalysisService {
       ValueNotifier(const PoolStatus());
 
   int get workerCount => _pool.workerCount;
+
+  /// Applies [apply] synchronously when idle; otherwise after the current frame.
+  /// Avoids "widget tree was locked" when notifiers rebuild [ListenableBuilder]s.
+  void _publishUi(void Function() apply) {
+    if (SchedulerBinding.instance.schedulerPhase == SchedulerPhase.idle) {
+      apply();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+    }
+  }
 
   // ── Engine-pane priority gate ─────────────────────────────────────────
   //
@@ -140,8 +153,10 @@ class AnalysisService {
     _pool.stopAll();
     _workerCurrentMoves.clear();
     _currentBaseFen = null;
-    results.value = {};
-    discoveryResult.value = const DiscoveryResult();
+    _publishUi(() {
+      results.value = {};
+      discoveryResult.value = const DiscoveryResult();
+    });
 
     await _pool.ensureWorkers();
 
@@ -152,11 +167,13 @@ class AnalysisService {
     final fenParts = fen.split(' ');
     final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
 
-    poolStatus.value = PoolStatus(
-      phase: 'discovering',
-      activeWorkers: _pool.workerCount,
-      hashPerWorkerMb: kPoolHashPerWorkerMb,
-    );
+    _publishUi(() {
+      poolStatus.value = PoolStatus(
+        phase: 'discovering',
+        activeWorkers: _pool.workerCount,
+        hashPerWorkerMb: kPoolHashPerWorkerMb,
+      );
+    });
 
     if (kDebugMode) {
       debugPrint('[Analysis] Discovery START — MultiPV=$multiPv, depth=$depth, '
@@ -174,15 +191,17 @@ class AnalysisService {
         isWhiteToMove: isWhiteToMove,
         onProgress: (intermediate) {
           if (_generation != myGen) return;
-          discoveryResult.value = intermediate;
-          poolStatus.value = PoolStatus(
-            phase: 'discovering',
-            discoveryDepth: intermediate.depth,
-            discoveryNodes: intermediate.nodes,
-            discoveryNps: intermediate.nps,
-            activeWorkers: _pool.workerCount,
-            hashPerWorkerMb: kPoolHashPerWorkerMb,
-          );
+          _publishUi(() {
+            discoveryResult.value = intermediate;
+            poolStatus.value = PoolStatus(
+              phase: 'discovering',
+              discoveryDepth: intermediate.depth,
+              discoveryNodes: intermediate.nodes,
+              discoveryNps: intermediate.nps,
+              activeWorkers: _pool.workerCount,
+              hashPerWorkerMb: kPoolHashPerWorkerMb,
+            );
+          });
           if (kDebugMode &&
               intermediate.depth > lastLoggedDiscoveryDepth &&
               intermediate.lines.isNotEmpty) {
@@ -196,7 +215,7 @@ class AnalysisService {
 
       if (_generation != myGen) return const DiscoveryResult();
 
-      discoveryResult.value = result;
+      _publishUi(() => discoveryResult.value = result);
       if (kDebugMode) {
         debugPrint('[Analysis] Discovery DONE — ${result.lines.length} lines, '
             'depth ${result.depth}');
@@ -225,14 +244,16 @@ class AnalysisService {
     _moveQueue = List.from(moveUcis);
     _nextMoveIndex = 0;
     _workerCurrentMoves.clear();
-    results.value = {};
+    _publishUi(() => results.value = {});
 
     if (moveUcis.isEmpty) {
-      poolStatus.value = const PoolStatus(
-        phase: 'complete',
-        totalMoves: 0,
-        completedMoves: 0,
-      );
+      _publishUi(() {
+        poolStatus.value = const PoolStatus(
+          phase: 'complete',
+          totalMoves: 0,
+          completedMoves: 0,
+        );
+      });
       return;
     }
 
@@ -241,20 +262,24 @@ class AnalysisService {
     await _pool.ensureWorkers();
 
     if (_generation != myGen || _pool.workerCount == 0) {
-      poolStatus.value = PoolStatus(
-        phase: 'complete',
-        totalMoves: moveUcis.length,
-        completedMoves: 0,
-      );
+      _publishUi(() {
+        poolStatus.value = PoolStatus(
+          phase: 'complete',
+          totalMoves: moveUcis.length,
+          completedMoves: 0,
+        );
+      });
       return;
     }
 
-    poolStatus.value = PoolStatus(
-      phase: 'evaluating',
-      totalMoves: moveUcis.length,
-      activeWorkers: _pool.workerCount,
-      hashPerWorkerMb: kPoolHashPerWorkerMb,
-    );
+    _publishUi(() {
+      poolStatus.value = PoolStatus(
+        phase: 'evaluating',
+        totalMoves: moveUcis.length,
+        activeWorkers: _pool.workerCount,
+        hashPerWorkerMb: kPoolHashPerWorkerMb,
+      );
+    });
 
     if (kDebugMode) {
       debugPrint('[Analysis] Evaluation START — ${moveUcis.length} moves, '
@@ -271,9 +296,11 @@ class AnalysisService {
     _moveQueue = [];
     _nextMoveIndex = 0;
     _pool.stopAll();
-    discoveryResult.value = const DiscoveryResult();
-    results.value = {};
-    poolStatus.value = const PoolStatus();
+    _publishUi(() {
+      discoveryResult.value = const DiscoveryResult();
+      results.value = {};
+      poolStatus.value = const PoolStatus();
+    });
     endEnginePaneAnalysis();
   }
 
@@ -285,14 +312,16 @@ class AnalysisService {
   }
 
   void _emitPoolStatus() {
-    poolStatus.value = PoolStatus(
-      phase: 'evaluating',
-      evaluatingUcis: _workerCurrentMoves.values.toList(),
-      totalMoves: _moveQueue.length,
-      completedMoves: results.value.length,
-      activeWorkers: _pool.workerCount,
-      hashPerWorkerMb: kPoolHashPerWorkerMb,
-    );
+    _publishUi(() {
+      poolStatus.value = PoolStatus(
+        phase: 'evaluating',
+        evaluatingUcis: _workerCurrentMoves.values.toList(),
+        totalMoves: _moveQueue.length,
+        completedMoves: results.value.length,
+        activeWorkers: _pool.workerCount,
+        hashPerWorkerMb: kPoolHashPerWorkerMb,
+      );
+    });
   }
 
   void _startWorkerLoops(int generation) {
@@ -307,13 +336,15 @@ class AnalysisService {
     Future.wait(futures).then((_) {
       if (_generation == generation) {
         _workerCurrentMoves.clear();
-        poolStatus.value = PoolStatus(
-          phase: 'complete',
-          totalMoves: _moveQueue.length,
-          completedMoves: results.value.length,
-          activeWorkers: _pool.workerCount,
-          hashPerWorkerMb: kPoolHashPerWorkerMb,
-        );
+        _publishUi(() {
+          poolStatus.value = PoolStatus(
+            phase: 'complete',
+            totalMoves: _moveQueue.length,
+            completedMoves: results.value.length,
+            activeWorkers: _pool.workerCount,
+            hashPerWorkerMb: kPoolHashPerWorkerMb,
+          );
+        });
       }
     });
   }
@@ -376,9 +407,11 @@ class AnalysisService {
   }
 
   void _emitResult(String uci, MoveAnalysisResult result) {
-    final updated = Map<String, MoveAnalysisResult>.from(results.value);
-    updated[uci] = result;
-    results.value = updated;
+    _publishUi(() {
+      final updated = Map<String, MoveAnalysisResult>.from(results.value);
+      updated[uci] = result;
+      results.value = updated;
+    });
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────

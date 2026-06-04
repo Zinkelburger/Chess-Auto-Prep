@@ -360,7 +360,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         evalDepth: _settings.depth,
       );
 
-      if (mounted) setState(() {});
+      _scheduleSetState();
     } catch (e) {
       _analysis.endEnginePaneAnalysis(widget.fen);
       if (kDebugMode) print('[Engine] Pipeline FAILED — $e');
@@ -474,25 +474,28 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   // ── Cache ──────────────────────────────────────────────────────────────
 
   void _restoreFromCache(_PositionSnapshot cached) {
-    _selectedMoveUcis = List.from(cached.selectedMoveUcis);
-    _maiaProbs = Map.from(cached.maiaProbs);
-    _analysis.results.value = Map.from(cached.poolResults);
-    _analysis.discoveryResult.value = cached.discoveryResult;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _selectedMoveUcis = List.from(cached.selectedMoveUcis);
+      _maiaProbs = Map.from(cached.maiaProbs);
+      _analysis.results.value = Map.from(cached.poolResults);
+      _analysis.discoveryResult.value = cached.discoveryResult;
 
-    // Restore DB data so the merge table shows correct play rates.
-    _probabilityService.currentPosition.value = cached.dbResponse;
+      // Restore DB data so the merge table shows correct play rates.
+      _probabilityService.currentPosition.value = cached.dbResponse;
 
-    _analysis.poolStatus.value = PoolStatus(
-      phase: 'complete',
-      totalMoves: cached.selectedMoveUcis.length,
-      completedMoves: cached.poolResults.length,
-    );
+      _analysis.poolStatus.value = PoolStatus(
+        phase: 'complete',
+        totalMoves: cached.selectedMoveUcis.length,
+        completedMoves: cached.poolResults.length,
+      );
 
-    if (_settings.showProbability) {
-      _calculateCumulativeProbability();
-    }
+      if (_settings.showProbability) {
+        _calculateCumulativeProbability();
+      }
 
-    setState(() {});
+      _scheduleSetState();
+    });
   }
 
   void _trySaveCurrentToCache() {
@@ -515,13 +518,17 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   }
 
   void _onPoolStatusChanged() {
-    final ps = _analysis.poolStatus.value;
-    if (ps.isComplete) {
-      EngineLifecycle().onAnalysisComplete();
-      _analysis.endEnginePaneAnalysis(_currentAnalysisFen);
-      _perfLog('Evaluation COMPLETE — ${_analysis.results.value.length} evals');
-      _trySaveCurrentToCache();
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ps = _analysis.poolStatus.value;
+      if (ps.isComplete) {
+        EngineLifecycle().onAnalysisComplete();
+        _analysis.endEnginePaneAnalysis(_currentAnalysisFen);
+        _perfLog(
+            'Evaluation COMPLETE — ${_analysis.results.value.length} evals');
+        _trySaveCurrentToCache();
+      }
+    });
   }
 
   // ─── Build ──────────────────────────────────────────────────────────────
