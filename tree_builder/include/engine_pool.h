@@ -102,6 +102,12 @@ EnginePool* engine_pool_create(const char *stockfish_path, int num_engines,
 void engine_pool_destroy(EnginePool *pool);
 
 /**
+ * Request graceful shutdown of the pool (e.g. on SIGINT).
+ * Wakes blocked acquire_engine waiters without printing errors.
+ */
+void engine_pool_request_stop(EnginePool *pool);
+
+/**
  * Evaluate a single position
  * 
  * Blocks until evaluation is complete.

@@ -435,7 +435,7 @@ bool tree_enrich_evals(Tree *tree, const TreeConfig *config,
         if (!pending.list.nodes[i]->has_engine_eval)
             still_need++;
 
-    if (still_need > 0 && config->engine_pool) {
+    if (still_need > 0 && config->engine_pool && !g_interrupted) {
         EvalJob *jobs = (EvalJob *)calloc(still_need, sizeof(EvalJob));
         if (!jobs) {
             free(pending.list.nodes);

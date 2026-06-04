@@ -226,12 +226,14 @@ static void release_slot(ChessDBAPI *api) {
     pthread_mutex_unlock(&api->mutex);
 }
 
+static pthread_once_t curl_global_once = PTHREAD_ONCE_INIT;
+
+static void curl_global_init_once(void) {
+    curl_global_init(CURL_GLOBAL_ALL);
+}
+
 ChessDBAPI *chessdb_api_create(const ChessDBAPIConfig *config) {
-    static int curl_initialized = 0;
-    if (!curl_initialized) {
-        curl_global_init(CURL_GLOBAL_ALL);
-        curl_initialized = 1;
-    }
+    pthread_once(&curl_global_once, curl_global_init_once);
 
     ChessDBAPI *api = calloc(1, sizeof(*api));
     if (!api) return NULL;

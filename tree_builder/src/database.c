@@ -13,6 +13,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include <limits.h>
 
 struct RepertoireDB {
     sqlite3 *db;
@@ -128,6 +129,12 @@ static const char *SCHEMA_SQL =
     "  moves_blob BLOB,"
     "  cached_at INTEGER,"
     "  PRIMARY KEY (fen, elo)"
+    ");"
+
+    /* Build configuration metadata (color, ratings, speeds, timestamps) */
+    "CREATE TABLE IF NOT EXISTS build_metadata ("
+    "  key TEXT PRIMARY KEY,"
+    "  value TEXT NOT NULL"
     ");"
 
     /* Indexes for performance */
@@ -700,6 +707,45 @@ void rdb_save_repertoire_move(RepertoireDB *db, const char *fen,
 }
 
 
+bool rdb_set_metadata(RepertoireDB *rdb, const char *key, const char *value) {
+    if (!rdb || !key || !value) return false;
+
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(rdb->db,
+            "INSERT OR REPLACE INTO build_metadata (key, value) VALUES (?, ?)",
+            -1, &stmt, NULL) != SQLITE_OK) {
+        return false;
+    }
+
+    sqlite3_bind_text(stmt, 1, key, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, value, -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE;
+}
+
+
+char *rdb_get_metadata(RepertoireDB *rdb, const char *key) {
+    if (!rdb || !key) return NULL;
+
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(rdb->db,
+            "SELECT value FROM build_metadata WHERE key = ?",
+            -1, &stmt, NULL) != SQLITE_OK) {
+        return NULL;
+    }
+
+    sqlite3_bind_text(stmt, 1, key, -1, SQLITE_STATIC);
+    char *result = NULL;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char *val = (const char *)sqlite3_column_text(stmt, 0);
+        if (val) result = strdup(val);
+    }
+    sqlite3_finalize(stmt);
+    return result;
+}
+
+
 void rdb_get_repertoire_moves(RepertoireDB *db,
                                void (*callback)(const char *fen, const char *move_san,
                                                 const char *move_uci, double score,
@@ -726,6 +772,8 @@ void rdb_get_repertoire_moves(RepertoireDB *db,
 
 
 /* ========== Statistics ========== */
+
+static int schema_table_row_count(sqlite3 *db, const char *table);
 
 /* ========== Schema validation ========== */
 
@@ -873,6 +921,125 @@ bool rdb_validate_schema(const char *path, char *issues, size_t issues_len,
 
     sqlite3_close(db);
     return valid;
+}
+
+
+static int rdb_table_row_count(RepertoireDB *db, const char *table) {
+    if (!db || !table) return 0;
+    return schema_table_row_count(db->db, table);
+}
+
+bool rdb_has_cache_data(RepertoireDB *db) {
+    if (!db) return false;
+    static const char *tables[] = {
+        "explorer_positions", "explorer_moves", "evaluations",
+        "ease_scores", "repertoire_moves", "multipv_cache", "maia_cache",
+        NULL
+    };
+    for (int i = 0; tables[i]; i++) {
+        if (rdb_table_row_count(db, tables[i]) > 0)
+            return true;
+    }
+    return false;
+}
+
+static bool rdb_escape_sql_string(const char *in, char *out, size_t out_len) {
+    if (!in || !out || out_len < 3) return false;
+    size_t pos = 0;
+    out[pos++] = '\'';
+    for (const char *p = in; *p; p++) {
+        if (*p == '\'') {
+            if (pos + 2 >= out_len) return false;
+            out[pos++] = '\'';
+            out[pos++] = '\'';
+        } else {
+            if (pos + 1 >= out_len) return false;
+            out[pos++] = *p;
+        }
+    }
+    if (pos + 1 >= out_len) return false;
+    out[pos++] = '\'';
+    out[pos] = '\0';
+    return true;
+}
+
+static int rdb_exec_import(RepertoireDB *dst, const char *sql) {
+    if (!execute_sql(dst->db, sql))
+        return -1;
+    return sqlite3_changes(dst->db);
+}
+
+bool rdb_import_cache_from(RepertoireDB *dst, const char *src_path,
+                           RdbCacheImportCounts *counts_out) {
+    if (!dst || !src_path) return false;
+
+    RdbCacheImportCounts counts;
+    memset(&counts, 0, sizeof(counts));
+    if (counts_out) *counts_out = counts;
+
+    char escaped[PATH_MAX * 2 + 4];
+    if (!rdb_escape_sql_string(src_path, escaped, sizeof(escaped))) {
+        fprintf(stderr, "Error: input database path too long\n");
+        return false;
+    }
+
+    char attach_sql[PATH_MAX * 2 + 64];
+    snprintf(attach_sql, sizeof(attach_sql),
+             "ATTACH DATABASE %s AS import_src", escaped);
+    if (!execute_sql(dst->db, attach_sql)) {
+        fprintf(stderr, "Error: cannot attach input database '%s'\n", src_path);
+        return false;
+    }
+
+    bool ok = true;
+    int n;
+
+    n = rdb_exec_import(dst,
+        "INSERT OR IGNORE INTO evaluations "
+        "(fen, eval_cp, depth, bestmove, pv, is_mate, mate_in, evaluated_at) "
+        "SELECT fen, eval_cp, depth, bestmove, pv, is_mate, mate_in, evaluated_at "
+        "FROM import_src.evaluations");
+    if (n < 0) ok = false;
+    else counts.evaluations = n;
+
+    n = rdb_exec_import(dst,
+        "INSERT OR IGNORE INTO explorer_positions "
+        "(fen, total_games, opening_eco, opening_name, cached_at) "
+        "SELECT fen, total_games, opening_eco, opening_name, cached_at "
+        "FROM import_src.explorer_positions");
+    if (n < 0) ok = false;
+    else counts.explorer_positions = n;
+
+    n = rdb_exec_import(dst,
+        "INSERT OR IGNORE INTO explorer_moves "
+        "(fen, uci, san, white_wins, black_wins, draws, probability) "
+        "SELECT fen, uci, san, white_wins, black_wins, draws, probability "
+        "FROM import_src.explorer_moves");
+    if (n < 0) ok = false;
+    else counts.explorer_moves = n;
+
+    n = rdb_exec_import(dst,
+        "INSERT OR IGNORE INTO multipv_cache "
+        "(fen, depth, num_pvs, num_lines, lines_blob, cached_at) "
+        "SELECT fen, depth, num_pvs, num_lines, lines_blob, cached_at "
+        "FROM import_src.multipv_cache");
+    if (n < 0) ok = false;
+    else counts.multipv_cache = n;
+
+    n = rdb_exec_import(dst,
+        "INSERT OR IGNORE INTO maia_cache "
+        "(fen, elo, move_count, moves_blob, cached_at) "
+        "SELECT fen, elo, move_count, moves_blob, cached_at "
+        "FROM import_src.maia_cache");
+    if (n < 0) ok = false;
+    else counts.maia_cache = n;
+
+    if (!execute_sql(dst->db, "DETACH DATABASE import_src"))
+        ok = false;
+
+    if (counts_out)
+        *counts_out = counts;
+    return ok;
 }
 
 

@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <ctype.h>
+#include <pthread.h>
 
 /* chesslib (third_party) — legal move generation + FEN parsing */
 #include "../third_party/chesslib/chess.h"
@@ -51,7 +52,7 @@ typedef struct HashEntry {
 } HashEntry;
 
 static HashEntry *vocab_table[HASH_BUCKETS];
-static bool vocab_ready = false;
+static pthread_once_t vocab_once = PTHREAD_ONCE_INIT;
 
 static unsigned hash_uci(const char *s) {
     unsigned h = 5381;
@@ -60,8 +61,7 @@ static unsigned hash_uci(const char *s) {
     return h & (HASH_BUCKETS - 1);
 }
 
-static void vocab_init(void) {
-    if (vocab_ready) return;
+static void vocab_init_body(void) {
     memset(vocab_table, 0, sizeof(vocab_table));
     for (int i = 0; i < MAIA_VOCAB_SIZE; i++) {
         unsigned bucket = hash_uci(MAIA_VOCAB[i]);
@@ -71,7 +71,10 @@ static void vocab_init(void) {
         e->next = vocab_table[bucket];
         vocab_table[bucket] = e;
     }
-    vocab_ready = true;
+}
+
+static void vocab_init(void) {
+    pthread_once(&vocab_once, vocab_init_body);
 }
 
 #ifdef HAVE_ONNXRUNTIME
@@ -105,9 +108,11 @@ static void mirror_fen(const char *fen, char *out, size_t out_len) {
 
     /* Tokenise: placement, color, castling, ep, halfmove, fullmove */
     char *tokens[6] = {NULL};
+    char *saveptr_space = NULL;
+    char *saveptr_rank = NULL;
     int t = 0;
-    char *p = strtok(buf, " ");
-    while (p && t < 6) { tokens[t++] = p; p = strtok(NULL, " "); }
+    char *p = strtok_r(buf, " ", &saveptr_space);
+    while (p && t < 6) { tokens[t++] = p; p = strtok_r(NULL, " ", &saveptr_space); }
 
     /* Reverse ranks and swap piece colors */
     char ranks[8][16];
@@ -116,12 +121,12 @@ static void mirror_fen(const char *fen, char *out, size_t out_len) {
     strncpy(placement, tokens[0], sizeof(placement) - 1);
     placement[sizeof(placement) - 1] = '\0';
 
-    char *rp = strtok(placement, "/");
+    char *rp = strtok_r(placement, "/", &saveptr_rank);
     while (rp && nr < 8) {
         strncpy(ranks[nr], rp, 15);
         ranks[nr][15] = '\0';
         nr++;
-        rp = strtok(NULL, "/");
+        rp = strtok_r(NULL, "/", &saveptr_rank);
     }
 
     char mirrored_placement[128];

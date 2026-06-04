@@ -45,17 +45,20 @@ ChessBoolean chess_fen_load(const char* s, ChessPosition* position)
     ChessPiece piece;
     char s_copy[CHESS_FEN_MAX_LENGTH];
     char *tokens[6], *token, *c;
+    char *saveptr_space = NULL;
+    char *saveptr_rank = NULL;
     int t, m, skip;
 
-    /* Clone the string, as strtok will clobber it */
+    /* Clone the string, as strtok_r will clobber it */
     strncpy(s_copy, s, CHESS_FEN_MAX_LENGTH - 1);
+    s_copy[CHESS_FEN_MAX_LENGTH - 1] = '\0';
 
     t = 0;
-    token = strtok(s_copy, " ");
+    token = strtok_r(s_copy, " ", &saveptr_space);
     while (token && t < 6)
     {
         tokens[t++] = token;
-        token = strtok(NULL, " ");
+        token = strtok_r(NULL, " ", &saveptr_space);
     }
 
     /* Clear the position before filling it in */
@@ -65,7 +68,7 @@ ChessBoolean chess_fen_load(const char* s, ChessPosition* position)
 
     /* The first token is the board */
     rank = CHESS_RANK_8;
-    token = strtok(tokens[0], "/");
+    token = strtok_r(tokens[0], "/", &saveptr_rank);
     while (token && *token && rank >= CHESS_RANK_1)
     {
         m = 0;
@@ -89,7 +92,7 @@ ChessBoolean chess_fen_load(const char* s, ChessPosition* position)
             }
             m++;
         }
-        token = strtok(NULL, "/");
+        token = strtok_r(NULL, "/", &saveptr_rank);
         rank--;
     }
 

@@ -259,6 +259,18 @@ void rdb_get_repertoire_moves(RepertoireDB *db,
                                                 void *user_data),
                                void *user_data);
 
+/* ========== Build metadata ========== */
+
+/**
+ * Store a build-metadata key (INSERT OR REPLACE).
+ */
+bool rdb_set_metadata(RepertoireDB *rdb, const char *key, const char *value);
+
+/**
+ * Read a build-metadata value. Returns malloc'd string or NULL. Caller frees.
+ */
+char *rdb_get_metadata(RepertoireDB *rdb, const char *key);
+
 
 /* ========== Statistics ========== */
 
@@ -286,5 +298,30 @@ void rdb_get_stats(RepertoireDB *db, int *explorer_cached,
  */
 bool rdb_validate_schema(const char *path, char *issues, size_t issues_len,
                          bool *has_data_out);
+
+/**
+ * True when any cache or repertoire table has at least one row.
+ */
+bool rdb_has_cache_data(RepertoireDB *db);
+
+/**
+ * Per-table row counts from INSERT OR IGNORE import (src → dst).
+ */
+typedef struct {
+    int evaluations;
+    int explorer_positions;
+    int explorer_moves;
+    int multipv_cache;
+    int maia_cache;
+} RdbCacheImportCounts;
+
+/**
+ * Copy evaluation/explorer cache tables from src_path into dst.
+ * Does not copy repertoire_moves or build_metadata.
+ *
+ * @return true on success; false on attach/import error (counts may be partial)
+ */
+bool rdb_import_cache_from(RepertoireDB *dst, const char *src_path,
+                           RdbCacheImportCounts *counts_out);
 
 #endif /* DATABASE_H */
