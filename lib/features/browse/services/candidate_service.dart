@@ -146,7 +146,11 @@ class CandidateService {
             child.hasExpectimax ? child.expectimaxValue : null,
         subtreeTrapCount: trapCount,
         isRepertoireMove: child.isRepertoireMove,
-        inRepertoire: openingTree?.hasMove(fen, child.moveSan) ?? false,
+        inRepertoire: openingTree?.hasMoveOnPath(
+              pathFromRoot,
+              child.moveSan,
+            ) ??
+            false,
         coverageDelta: coverageDeltaForMove(
           coverage,
           pathFromRoot,
@@ -306,7 +310,8 @@ class CandidateService {
       dbWhiteWin: whiteWin,
       dbDraw: draw,
       dbBlackWin: blackWin,
-      inRepertoire: openingTree?.hasMove(fen, move.san) ?? false,
+      inRepertoire: openingTree?.hasMoveOnPath(pathFromRoot, move.san) ??
+          false,
       coverageDelta: coverageDeltaForMove(coverage, pathFromRoot, move.san),
       evalSource: 'db',
     );
