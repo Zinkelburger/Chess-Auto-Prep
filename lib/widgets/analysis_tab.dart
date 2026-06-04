@@ -209,7 +209,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
 
   Future<void> _onCandidateTap(CandidateMove move) async {
     if (move.inRepertoire) {
-      widget.controller.userPlayedMove(move.san);
+      widget.controller.userPlayedMoveOnCurrentPath(move.san);
       return;
     }
 
@@ -219,7 +219,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
         san: move.san,
         pathFromRoot: widget.controller.currentMoveSequence,
       );
-      widget.controller.userPlayedMove(move.san);
+      widget.controller.userPlayedMoveOnCurrentPath(move.san);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

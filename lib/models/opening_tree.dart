@@ -216,6 +216,15 @@ class OpeningTree {
     return false;
   }
 
+  /// Whether [san] is a child along [pathFromRoot] (path-aware repertoire check).
+  bool hasMoveOnPath(List<String> pathFromRoot, String san) {
+    reset();
+    for (final move in pathFromRoot) {
+      if (!makeMove(move)) return false;
+    }
+    return currentNode.children.containsKey(san);
+  }
+
   /// Append a single line of moves to the tree without rebuilding.
   /// Each move is walked node-by-node; new nodes are created as needed.
   void appendLine(List<String> moves) {
