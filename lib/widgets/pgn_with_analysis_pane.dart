@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/repertoire_controller.dart';
 import '../models/build_tree_node.dart';
+import '../models/move_tree.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import '../services/coherence_service.dart';
@@ -13,30 +14,26 @@ import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../theme/app_colors.dart';
 import 'analysis/analysis_settings_sheet.dart';
-import 'interactive_pgn_editor.dart';
 import 'layout/edit_main_zone.dart';
 import 'repertoire_analysis_dock.dart';
 
 /// Analysis dock on top, PGN editor below (resizable split).
 class PgnWithAnalysisPane extends StatefulWidget {
   final RepertoireController controller;
-  final PgnEditorController pgnEditorController;
-  final String editorKeySuffix;
-  final String initialPgn;
+  final MoveTree tree;
+  final TreePath currentPath;
+  final ValueChanged<TreePath>? onJump;
+  final void Function(TreePath, String?)? onCommentChanged;
+  final void Function(TreePath)? onDelete;
+  final void Function(TreePath)? onPromote;
   final String? repertoireName;
   final String repertoireColor;
-  final List<String> moveHistory;
-  final int currentMoveIndex;
-  final String? startingFen;
-  final void Function(int moveIndex, List<String> moves) onMoveStateChanged;
-  final void Function(dynamic position) onPositionChanged;
-  final void Function(String pgn) onPgnChanged;
   final bool isEditingExistingLine;
   final void Function(String updatedPgn)? onLineEdited;
   final void Function(List<String> moves, String title, String pgn)? onLineSaved;
   final VoidCallback onImportPgn;
   final VoidCallback onReload;
-  final BuildTree? tree;
+  final BuildTree? generatedTree;
   final TreeBuildConfig? treeConfig;
   final FenMap? fenMap;
   final BoardPreviewController boardPreview;
@@ -44,33 +41,26 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final bool isAnalysisActive;
   final bool isGenerating;
   final bool isGenerationPaused;
-
-  /// When false, only the PGN editor + toolbar are shown (analysis lives in
-  /// [EditContextZone] / wide layout context column).
   final bool embedAnalysisDock;
-
   final TrapIndexService? trapIndex;
 
   const PgnWithAnalysisPane({
     super.key,
     required this.controller,
-    required this.pgnEditorController,
-    required this.editorKeySuffix,
-    required this.initialPgn,
+    required this.tree,
+    required this.currentPath,
+    this.onJump,
+    this.onCommentChanged,
+    this.onDelete,
+    this.onPromote,
     this.repertoireName,
     required this.repertoireColor,
-    required this.moveHistory,
-    required this.currentMoveIndex,
-    this.startingFen,
-    required this.onMoveStateChanged,
-    required this.onPositionChanged,
-    required this.onPgnChanged,
     required this.isEditingExistingLine,
     this.onLineEdited,
     this.onLineSaved,
     required this.onImportPgn,
     required this.onReload,
-    this.tree,
+    this.generatedTree,
     this.treeConfig,
     this.fenMap,
     required this.boardPreview,
@@ -91,7 +81,6 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
   static const _kLegacyPgnFraction = 'pgn_analysis.pgn_fraction';
   static const _kShowDock = 'pgn_analysis.show_dock';
 
-  /// Share of vertical space for Stockfish + expectimax (top of tab).
   double _analysisFraction = 0.42;
   bool _showDock = true;
 
@@ -154,7 +143,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
                     height: dockHeight,
                     child: RepertoireAnalysisDock(
                       controller: widget.controller,
-                      tree: widget.tree,
+                      tree: widget.generatedTree,
                       treeConfig: widget.treeConfig,
                       fenMap: widget.fenMap,
                       boardPreview: widget.boardPreview,
@@ -240,17 +229,14 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
 
   Widget _buildPgnEditor() {
     return EditMainZone(
-      pgnEditorController: widget.pgnEditorController,
-      editorKeySuffix: widget.editorKeySuffix,
-      initialPgn: widget.initialPgn,
+      tree: widget.tree,
+      currentPath: widget.currentPath,
+      onJump: widget.onJump,
+      onCommentChanged: widget.onCommentChanged,
+      onDelete: widget.onDelete,
+      onPromote: widget.onPromote,
       repertoireName: widget.repertoireName,
       repertoireColor: widget.repertoireColor,
-      moveHistory: widget.moveHistory,
-      currentMoveIndex: widget.currentMoveIndex,
-      startingFen: widget.startingFen,
-      onMoveStateChanged: widget.onMoveStateChanged,
-      onPositionChanged: widget.onPositionChanged,
-      onPgnChanged: widget.onPgnChanged,
       isEditingExistingLine: widget.isEditingExistingLine,
       onLineEdited: widget.onLineEdited,
       onLineSaved: widget.onLineSaved,

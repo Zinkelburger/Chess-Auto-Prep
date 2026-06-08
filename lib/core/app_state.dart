@@ -30,6 +30,10 @@ class AppState extends ChangeNotifier {
   String? pendingRepertoirePath;
   String? pendingLineId;
 
+  /// When non-null the builder should open the generation tab in DB Explorer
+  /// mode, pre-seeded with these PGN file paths.
+  List<String>? pendingGenerationPgnPaths;
+
   AppMode get currentMode => _currentMode;
   List<ChessGameModel> get loadedGames => _loadedGames;
   Position get currentPosition => _currentPosition;
@@ -65,6 +69,19 @@ class AppState extends ChangeNotifier {
   void switchToBuilder({required String repertoirePath, String? lineId}) {
     pendingRepertoirePath = repertoirePath;
     pendingLineId = lineId;
+    _currentMode = AppMode.repertoire;
+    notifyListeners();
+  }
+
+  /// Switch to builder and auto-open the generation tab in DB Explorer mode
+  /// with the given PGN files pre-loaded.
+  void switchToBuilderWithGeneration({
+    required String repertoirePath,
+    required List<String> pgnPaths,
+  }) {
+    pendingRepertoirePath = repertoirePath;
+    pendingGenerationPgnPaths = pgnPaths;
+    pendingLineId = null;
     _currentMode = AppMode.repertoire;
     notifyListeners();
   }

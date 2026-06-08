@@ -22,6 +22,7 @@ import 'engine/engine_lifecycle.dart';
 import 'eval/chessdb_api_provider.dart';
 import 'generation/fen_map.dart';
 import 'generation/generation_config.dart';
+import 'generation/pgn_freq_map.dart';
 import 'generation/tree_build_progress.dart';
 import 'generation/tree_eval_resolver.dart';
 import 'maia_factory.dart';
@@ -197,12 +198,385 @@ class TreeBuildService {
 
   void stopBuild() {
     _isBuilding = false;
-    // If paused, unblock the BFS loop so it can exit cleanly
     if (_isPaused) {
       _isPaused = false;
       _pauseCompleter?.complete();
       _pauseCompleter = null;
     }
+  }
+
+  // ── DB Explorer: build tree from PGN frequency map ─────────────────────
+
+  /// Build a tree by parsing PGN files into a frequency map, then BFS-
+  /// expanding from the root using move frequencies.  Matches C
+  /// `tree_build_from_freqmap` + `tree_enrich_evals`.
+  Future<BuildTree> buildFromPgnFreqMap({
+    required TreeBuildConfig config,
+    required bool Function() isCancelled,
+    required void Function(BuildProgress) onProgress,
+    void Function(String status)? onStatusChanged,
+  }) async {
+    _stats = BuildStats();
+    _evalResolver.stats = _stats;
+    _buildSw = Stopwatch()..start();
+    _progress.reset(buildStartTotalNodes: 0);
+    _isPaused = false;
+    _pauseCompleter = null;
+
+    if (config.pgnFilePaths.isEmpty) {
+      throw StateError('DB Explorer requires at least one PGN file.');
+    }
+
+    // Phase 0: Parse PGN files into frequency map (isolate)
+    onStatusChanged?.call('Parsing PGN files...');
+    final (freqMap, freqStats) = await parsePgnFiles(
+      paths: config.pgnFilePaths,
+      config: PgnFreqConfig(
+        startFen: config.startFen,
+        maxPly: config.maxPly,
+        minElo: config.minElo,
+      ),
+      onProgress: (games, file) {
+        onProgress(BuildProgress(
+          totalNodes: 0,
+          maxPlyConfig: config.maxPly,
+          elapsedMs: _buildSw.elapsedMilliseconds,
+        ));
+      },
+    );
+
+    if (isCancelled()) {
+      _buildSw.stop();
+      throw StateError('Cancelled during PGN parsing.');
+    }
+
+    _log('Freq map: ${freqStats.totalGames} games, '
+        '${freqStats.positions} positions, '
+        '${freqStats.skippedElo} elo-filtered, '
+        '${freqStats.parseErrors} errors');
+
+    if (freqStats.totalGames == 0) {
+      _buildSw.stop();
+      throw StateError(
+        'No games parsed from ${config.pgnFilePaths.length} file(s). '
+        '${freqStats.skippedElo > 0 ? "${freqStats.skippedElo} skipped by Elo filter. " : ""}'
+        '${freqStats.parseErrors > 0 ? "${freqStats.parseErrors} parse errors." : ""}',
+      );
+    }
+
+    // Phase 1: BFS tree build from frequency map
+    onStatusChanged?.call(
+      'Building tree from ${freqStats.totalGames} games, '
+      '${freqStats.positions} positions...',
+    );
+
+    _nextNodeId = 1;
+    final rootFen = config.startFen;
+    final isWhiteToMove = rootFen.split(' ')[1] == 'w';
+    final root = BuildTreeNode(
+      fen: rootFen,
+      moveSan: '',
+      moveUci: '',
+      ply: 0,
+      isWhiteToMove: isWhiteToMove,
+      nodeId: _nextNodeId++,
+    );
+    final tree = BuildTree(
+      root: root,
+      configSnapshot: config.toJson(),
+    );
+    tree.registerNode(root);
+    _currentTree = tree;
+    _isBuilding = true;
+
+    final rootFreq = freqMap.get(rootFen);
+    if (rootFreq != null) {
+      root.totalGames = rootFreq.reachCount;
+    }
+    root.cumulativeProbability = 1.0;
+
+    final fenMap = FenMap();
+    final queue = Queue<BuildTreeNode>();
+    queue.add(root);
+
+    while (_isBuilding && !isCancelled() && queue.isNotEmpty) {
+      if (_isPaused && _pauseCompleter != null) {
+        await _pauseCompleter!.future;
+        if (!_isBuilding || isCancelled()) break;
+      }
+
+      final node = queue.removeFirst();
+      if (node.explored) continue;
+
+      _processDbExplorerNode(
+        tree: tree,
+        node: node,
+        freqMap: freqMap,
+        config: config,
+        fenMap: fenMap,
+        queue: queue,
+        onProgress: onProgress,
+      );
+    }
+
+    tree.buildComplete = _isBuilding && !isCancelled();
+
+    _log('DB Explorer tree: ${tree.totalNodes} nodes, '
+        'ply ${tree.maxPlyReached}');
+
+    // Phase 1.5: Eval enrichment
+    if (_isBuilding && !isCancelled()) {
+      onStatusChanged?.call('Enriching evals (${tree.totalNodes} nodes)...');
+
+      await _evalResolver.evalCache.init();
+      await _evalResolver.initProviders(config);
+
+      if (config.usesStockfish || config.needsStockfish) {
+        if (EngineLifecycle().state != EngineState.generating) {
+          await _pool.prepareForTreeBuild(config.resolvedEngineThreads);
+        }
+      }
+
+      try {
+        await _enrichEvals(
+          tree: tree,
+          config: config,
+          fenMap: fenMap,
+          isCancelled: isCancelled,
+          onProgress: onProgress,
+        );
+      } finally {
+        fenMap.clear();
+        await _evalResolver.teardownProviders();
+      }
+    }
+
+    _isBuilding = false;
+    _buildSw.stop();
+
+    _log('DB Explorer complete: ${tree.totalNodes} nodes, '
+        '${_buildSw.elapsedMilliseconds}ms');
+
+    return tree;
+  }
+
+  void _processDbExplorerNode({
+    required BuildTree tree,
+    required BuildTreeNode node,
+    required PgnFreqMap freqMap,
+    required TreeBuildConfig config,
+    required FenMap fenMap,
+    required Queue<BuildTreeNode> queue,
+    required void Function(BuildProgress) onProgress,
+  }) {
+    if (node.ply >= config.maxPly) {
+      node.explored = true;
+      return;
+    }
+    if (node.cumulativeProbability < config.minProbability) {
+      node.explored = true;
+      return;
+    }
+    if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) {
+      node.explored = true;
+      return;
+    }
+
+    final pos = freqMap.get(node.fen);
+    if (pos == null || pos.moves.isEmpty) {
+      node.explored = true;
+      return;
+    }
+
+    node.totalGames = pos.reachCount;
+
+    // Transposition detection
+    final canonical = fenMap.getCanonical(node.fen);
+    if (canonical != null) {
+      fenMap.addTransposition(node.fen, node);
+      node.explored = true;
+      return;
+    }
+    fenMap.putCanonical(node.fen, node);
+
+    final isOurMove = node.isWhiteToMove == config.playAsWhite;
+
+    if (isOurMove) {
+      // Our move: add all moves from the frequency map
+      for (final m in pos.moves) {
+        if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) break;
+
+        final childFen = playUciMove(node.fen, m.uci);
+        if (childFen == null) continue;
+
+        final san = m.san.isNotEmpty ? m.san : uciToSan(node.fen, m.uci);
+        final child = _makeChild(
+          parent: node,
+          fen: childFen,
+          san: san,
+          uci: m.uci,
+          tree: tree,
+        );
+        if (child == null) continue;
+
+        child.moveProbability = 1.0;
+        child.cumulativeProbability = node.cumulativeProbability;
+        queue.add(child);
+      }
+    } else {
+      // Opponent move: filter by min-games and min-prob
+      final filtered = freqMap.filteredMoves(
+        pos,
+        minGames: config.dbMinGames,
+        minProb: config.dbMinProb,
+      );
+
+      int reach = pos.reachCount;
+      if (reach == 0) {
+        reach = pos.moves.fold(0, (sum, m) => sum + m.count);
+      }
+      if (reach == 0) {
+        node.explored = true;
+        return;
+      }
+
+      for (final m in filtered) {
+        if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) break;
+
+        final prob = m.count / reach;
+        final newCumul = node.cumulativeProbability * prob;
+        if (newCumul < config.minProbability) continue;
+
+        final childFen = playUciMove(node.fen, m.uci);
+        if (childFen == null) continue;
+
+        final san = m.san.isNotEmpty ? m.san : uciToSan(node.fen, m.uci);
+        final child = _makeChild(
+          parent: node,
+          fen: childFen,
+          san: san,
+          uci: m.uci,
+          tree: tree,
+        );
+        if (child == null) continue;
+
+        child.moveProbability = prob;
+        child.cumulativeProbability = newCumul;
+        queue.add(child);
+      }
+    }
+
+    node.explored = true;
+
+    _progress.emitProgress(
+      tree,
+      node.ply,
+      node.fen,
+      onProgress,
+      config.maxPly,
+      buildSw: _buildSw,
+    );
+  }
+
+  /// Batch-evaluate tree nodes that lack engine evals.
+  /// Matches C `tree_enrich_evals`: cache → external chain → Stockfish.
+  Future<void> _enrichEvals({
+    required BuildTree tree,
+    required TreeBuildConfig config,
+    required FenMap fenMap,
+    required bool Function() isCancelled,
+    required void Function(BuildProgress) onProgress,
+  }) async {
+    final noEval = <BuildTreeNode>[];
+    void collectNoEval(BuildTreeNode node) {
+      if (!node.hasEngineEval) noEval.add(node);
+      for (final child in node.children) {
+        collectNoEval(child);
+      }
+    }
+    collectNoEval(tree.root);
+
+    if (noEval.isEmpty) return;
+
+    _log('Enriching evals: ${noEval.length} nodes without eval');
+
+    // Phase 1: external eval sources (cache + cdbdirect + ChessDB)
+    int enriched = 0;
+    for (final node in noEval) {
+      if (isCancelled()) return;
+
+      final gotEval = await _evalResolver.ensureEval(
+        node,
+        config,
+        fenMap: fenMap,
+        pool: _pool,
+        dbOnly: true,
+      );
+      if (gotEval) enriched++;
+
+      if (enriched % 50 == 0) {
+        _progress.emitProgress(
+          tree,
+          node.ply,
+          node.fen,
+          onProgress,
+          config.maxPly,
+          buildSw: _buildSw,
+        );
+      }
+    }
+
+    _log('External eval enrichment: $enriched / ${noEval.length} resolved');
+
+    // Phase 2: Stockfish batch for remaining
+    final stillNeed = noEval.where((n) => !n.hasEngineEval).toList();
+    if (stillNeed.isNotEmpty && _pool.workerCount > 0) {
+      _log('Stockfish enrichment: ${stillNeed.length} nodes remaining');
+
+      // Deduplicate by FEN
+      final uniqueFens = <String>{};
+      final toEval = <BuildTreeNode>[];
+      for (final node in stillNeed) {
+        if (uniqueFens.add(node.fen)) {
+          toEval.add(node);
+        }
+      }
+
+      for (int i = 0; i < toEval.length; i++) {
+        if (isCancelled()) return;
+
+        final node = toEval[i];
+        await _evalResolver.ensureEval(
+          node,
+          config,
+          fenMap: fenMap,
+          pool: _pool,
+        );
+
+        // Propagate eval to other nodes with the same FEN
+        if (node.hasEngineEval) {
+          for (final other in stillNeed) {
+            if (!other.hasEngineEval && other.fen == node.fen) {
+              other.engineEvalCp = node.engineEvalCp;
+            }
+          }
+        }
+
+        if (i % 10 == 0) {
+          _progress.emitProgress(
+            tree,
+            node.ply,
+            node.fen,
+            onProgress,
+            config.maxPly,
+            buildSw: _buildSw,
+          );
+        }
+      }
+    }
+
+    final failed = noEval.where((n) => !n.hasEngineEval).length;
+    _log('Eval enrichment done: $failed / ${noEval.length} still missing');
   }
 
   // ── BFS build loop ─────────────────────────────────────────────────────

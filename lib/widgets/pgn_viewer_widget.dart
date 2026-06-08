@@ -4,7 +4,7 @@ import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
-    show filterDisplayComment, buildMovetext;
+    show filterDisplayComment, buildMovetext, formatProseComment;
 import 'package:chess_auto_prep/models/analysis_node.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 
@@ -120,6 +120,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   List<PgnNodeData> _moveHistory = [];
   int _mainLineIndex = 0;
   Position _currentPosition = Chess.initial;
+  Position _startPosition = Chess.initial;
   String _gameInfo = '';
   bool _isLoading = true;
   String? _error;
@@ -206,13 +207,15 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       final moveHistory = game.moves.mainline().toList();
       if (!mounted) return;
 
-      final pgnVariations = _extractPgnVariations(game);
+      final startPos = startPositionFromGame(game);
+      final pgnVariations = _extractPgnVariations(game, startPos);
 
       setState(() {
         _game = game;
         _moveHistory = moveHistory;
         _mainLineIndex = 0;
-        _currentPosition = Chess.initial;
+        _startPosition = startPos;
+        _currentPosition = startPos;
         _gameInfo = _buildGameInfo(game);
         _isLoading = false;
         _variationsByPly = pgnVariations;
@@ -241,13 +244,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   // ── PGN variation extraction ──
 
   /// Walk the parsed PGN tree and extract sideline variations at each ply.
-  Map<int, List<AnalysisNode>> _extractPgnVariations(PgnGame game) {
+  Map<int, List<AnalysisNode>> _extractPgnVariations(
+      PgnGame game, Position startPos) {
     final result = <int, List<AnalysisNode>>{};
 
-    // Walk the mainline using the PgnNode tree (not the flattened list)
-    // to find sideline children at each node.
     PgnNode<PgnNodeData> node = game.moves;
-    Position pos = Chess.initial;
+    Position pos = startPos;
     int ply = 0;
 
     while (node.children.isNotEmpty) {
@@ -266,10 +268,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         }
       }
 
-      // Advance position along mainline
-      final move = pos.parseSan(mainChild.data.san);
-      if (move == null) break;
-      pos = pos.play(move);
+      // Advance position along mainline (skip null moves)
+      if (mainChild.data.san != '--') {
+        final move = pos.parseSan(mainChild.data.san);
+        if (move == null) break;
+        pos = pos.play(move);
+      }
       ply++;
       node = mainChild;
     }
@@ -280,20 +284,31 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   /// Recursively convert a PgnChildNode subtree into an AnalysisNode tree.
   AnalysisNode? _convertPgnSubtree(
       PgnChildNode<PgnNodeData> pgnNode, Position posBeforeMove) {
-    final move = posBeforeMove.parseSan(pgnNode.data.san);
-    if (move == null) return null;
+    final san = pgnNode.data.san;
 
     Position posAfter;
-    try {
-      posAfter = posBeforeMove.play(move);
-    } catch (_) {
-      return null;
+    if (san == '--') {
+      posAfter = posBeforeMove;
+    } else {
+      final move = posBeforeMove.parseSan(san);
+      if (move == null) return null;
+      try {
+        posAfter = posBeforeMove.play(move);
+      } catch (_) {
+        return null;
+      }
     }
 
+    final comment = (pgnNode.data.comments != null &&
+            pgnNode.data.comments!.isNotEmpty)
+        ? pgnNode.data.comments!.first
+        : null;
+
     final node = AnalysisNode(
-      san: pgnNode.data.san,
+      san: san,
       fenAfter: posAfter.fen,
       isEphemeral: false,
+      comment: comment,
     );
 
     // Convert children: children[0] is main continuation, [1+] are sub-variations
@@ -324,6 +339,18 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   String _buildGameInfo(PgnGame game) {
     final white = game.headers['White'] ?? '?';
     final black = game.headers['Black'] ?? '?';
+
+    // Book-style PGN detection: Black is "?" and White is a chapter title
+    final isBookChapter = black == '?' &&
+        white != '?' &&
+        (game.headers['Event'] == '?' || game.headers['Event'] == null);
+    if (isBookChapter) {
+      final annotator = game.headers['Annotator'];
+      final parts = <String>[white];
+      if (annotator != null && annotator.isNotEmpty) parts.add('by $annotator');
+      return parts.join(' ');
+    }
+
     final wElo = game.headers['WhiteElo'];
     final bElo = game.headers['BlackElo'];
     final wStr = wElo != null && wElo.isNotEmpty && wElo != '?'
@@ -351,9 +378,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   void _jumpToFen(String targetFen) {
     if (_moveHistory.isEmpty) return;
     final target = normalizeFen(targetFen);
-    Position pos = Chess.initial;
+    Position pos = _startPosition;
     for (int i = 0; i < _moveHistory.length; i++) {
-      final move = pos.parseSan(_moveHistory[i].san);
+      final san = _moveHistory[i].san;
+      if (san == '--') continue;
+      final move = pos.parseSan(san);
       if (move == null) break;
       pos = pos.play(move);
       if (normalizeFen(pos.fen) == target) {
@@ -365,9 +394,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   void _goToMainLineMove(int moveIndex) {
     if (moveIndex < 0 || moveIndex > _moveHistory.length) return;
-    Position pos = Chess.initial;
+    Position pos = _startPosition;
     for (int i = 0; i < moveIndex; i++) {
-      final move = pos.parseSan(_moveHistory[i].san);
+      final san = _moveHistory[i].san;
+      if (san == '--') continue;
+      final move = pos.parseSan(san);
       if (move == null) break;
       pos = pos.play(move);
     }
@@ -387,13 +418,16 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final path = _findPathToNode(targetNode, roots);
     if (path == null) return;
 
-    Position pos = Chess.initial;
+    Position pos = _startPosition;
     for (int i = 0; i < branchPly; i++) {
-      final move = pos.parseSan(_moveHistory[i].san);
+      final san = _moveHistory[i].san;
+      if (san == '--') continue;
+      final move = pos.parseSan(san);
       if (move == null) break;
       pos = pos.play(move);
     }
     for (final node in path) {
+      if (node.san == '--') continue;
       final move = pos.parseSan(node.san);
       if (move == null) break;
       pos = pos.play(move);
@@ -748,7 +782,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   Widget _buildPgnDisplay() {
-    if (_moveHistory.isEmpty && _variationsByPly.isEmpty) {
+    if (_moveHistory.isEmpty && _variationsByPly.isEmpty &&
+        (_game == null || _game!.comments.isEmpty)) {
       return const SizedBox();
     }
 
@@ -757,7 +792,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     var moveNumber = 1;
     var isWhiteTurn = true;
 
-    final baseStyle = TextStyle(
+    const baseStyle = TextStyle(
       fontFamily: 'monospace',
       fontSize: 14,
       color: AppColors.pgnMove,
@@ -772,6 +807,16 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       }
     }
 
+    // Game-level comments (before any moves) — common in book PGNs
+    if (_game != null && _game!.comments.isNotEmpty) {
+      for (final comment in _game!.comments) {
+        final paragraphs = formatProseComment(comment);
+        if (paragraphs.isNotEmpty) {
+          children.add(_buildProseBlock(paragraphs));
+        }
+      }
+    }
+
     // Variations at ply 0 (before any move)
     final varsAtZero = _variationsByPly[0];
     if (varsAtZero != null && varsAtZero.isNotEmpty) {
@@ -781,6 +826,37 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     for (int i = 0; i < _moveHistory.length; i++) {
       final moveData = _moveHistory[i];
       final san = moveData.san;
+
+      // Render startingComments (comments before the move)
+      if (moveData.startingComments != null &&
+          moveData.startingComments!.isNotEmpty) {
+        for (final sc in moveData.startingComments!) {
+          final paragraphs = formatProseComment(sc);
+          if (paragraphs.isNotEmpty) {
+            flushSpans();
+            children.add(_buildProseBlock(paragraphs));
+          }
+        }
+      }
+
+      // Skip rendering null-move SAN but still show its comments
+      if (san == '--') {
+        if (moveData.comments != null && moveData.comments!.isNotEmpty) {
+          final comment = _filterComment(moveData.comments!.first);
+          if (comment.isNotEmpty) {
+            final paragraphs = formatProseComment(moveData.comments!.first);
+            if (paragraphs.isNotEmpty) {
+              flushSpans();
+              children.add(_buildProseBlock(paragraphs));
+            } else {
+              spans.add(_buildCommentSpan(comment));
+            }
+          }
+        }
+        if (!isWhiteTurn) moveNumber++;
+        isWhiteTurn = !isWhiteTurn;
+        continue;
+      }
 
       if (isWhiteTurn) {
         spans.add(TextSpan(
@@ -845,25 +921,16 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           onCancel: _cancelEditingComment,
         ));
       } else if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-        final comment = _filterComment(moveData.comments!.first);
+        final raw = moveData.comments!.first;
+        final comment = _filterComment(raw);
         if (comment.isNotEmpty) {
-          spans.add(
-            WidgetSpan(
-              alignment: PlaceholderAlignment.baseline,
-              baseline: TextBaseline.alphabetic,
-              child: GestureDetector(
-                onTap: canEditComments ? () => _startEditingComment(i) : null,
-                child: Text(
-                  '$comment ',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    height: 1.35,
-                    color: AppColors.pgnComment,
-                  ),
-                ),
-              ),
-            ),
-          );
+          final paragraphs = formatProseComment(raw);
+          if (paragraphs.length > 1 || comment.length > 200) {
+            flushSpans();
+            children.add(_buildProseBlock(paragraphs));
+          } else {
+            spans.add(_buildCommentSpan(comment));
+          }
         }
       }
 
@@ -891,6 +958,57 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.center,
       children: children,
+    );
+  }
+
+  /// Build an inline comment WidgetSpan (short comments alongside moves).
+  WidgetSpan _buildCommentSpan(String comment) {
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: Text(
+        '$comment ',
+        style: const TextStyle(
+          fontSize: 14,
+          height: 1.35,
+          color: AppColors.pgnComment,
+        ),
+      ),
+    );
+  }
+
+  /// Build a prose block widget for long/multi-paragraph comments (book-style).
+  Widget _buildProseBlock(List<String> paragraphs) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.pgnComment.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          left: BorderSide(
+            color: AppColors.pgnComment.withValues(alpha: 0.3),
+            width: 3,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (int i = 0; i < paragraphs.length; i++) ...[
+            if (i > 0) const SizedBox(height: 8),
+            Text(
+              paragraphs[i],
+              style: const TextStyle(
+                fontSize: 13.5,
+                height: 1.5,
+                color: AppColors.pgnComment,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -935,12 +1053,35 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final spans = <InlineSpan>[];
     final moveColor =
         node.isEphemeral ? AppColors.pgnEphemeralMove : AppColors.pgnVariation;
-    final numColor = AppColors.pgnMoveNumber;
+    const numColor = AppColors.pgnMoveNumber;
+
+    // For null-move variation nodes, skip the move display entirely and just
+    // show the comment inline.
+    if (node.san == '--') {
+      if (node.comment != null && node.comment!.isNotEmpty) {
+        final filtered = _filterComment(node.comment!);
+        if (filtered.isNotEmpty) {
+          spans.add(WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: Text(
+              '$filtered ',
+              style: const TextStyle(
+                fontSize: 13.5,
+                height: 1.4,
+                color: AppColors.pgnComment,
+              ),
+            ),
+          ));
+        }
+      }
+      return spans;
+    }
 
     if (isWhiteTurn) {
       spans.add(TextSpan(
         text: '$moveNumber. ',
-        style: TextStyle(
+        style: const TextStyle(
           color: numColor,
           fontFamily: 'monospace',
         ),
@@ -948,7 +1089,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     } else if (isFirst) {
       spans.add(TextSpan(
         text: '$moveNumber... ',
-        style: TextStyle(
+        style: const TextStyle(
           color: numColor,
           fontFamily: 'monospace',
         ),
@@ -1004,6 +1145,25 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     );
 
     spans.add(const TextSpan(text: ' '));
+
+    // Show comment after the move (for non-null-move variation nodes)
+    if (node.comment != null && node.comment!.isNotEmpty) {
+      final filtered = _filterComment(node.comment!);
+      if (filtered.isNotEmpty) {
+        spans.add(WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: Text(
+            '$filtered ',
+            style: const TextStyle(
+              fontSize: 13.5,
+              height: 1.4,
+              color: AppColors.pgnComment,
+            ),
+          ),
+        ));
+      }
+    }
 
     final nextMoveNumber = isWhiteTurn ? moveNumber : moveNumber + 1;
     final nextIsWhite = !isWhiteTurn;

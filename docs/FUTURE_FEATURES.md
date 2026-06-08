@@ -71,6 +71,7 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | Entry: **Build manually** (empty repertoire, DB-only) | **Partial** | DB fallback in `CandidateService` works; no dedicated entry CTA |
 | Entry: **Browse Result** after generation | **Partial** | Tree loads; no explicit post-gen browse button |
 | PGN editor writes exclusively through `RepertoireWriter` | **Partial** | Browse/suggestions use writer; editor may still write directly |
+| Tree-path navigation (single source of truth) | **Done** | `MoveTree` + `TreePath` cursor in `RepertoireController`; PGN editor is a pure view; no `addPostFrameCallback` sync; arrow keys always go through controller |
 
 ### Expectimax lines & hover
 
@@ -147,7 +148,7 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | Download & import Lichess **cloud eval JSONL** (~369M positions) | **Not started** | Separate from Flutter app; CdbDirect + SQLite chain exists |
 | FEN normalization for Lichess EP convention | **Not started** | Lookup misses possible |
 | MultiPV depth vs breadth tradeoff for cloud evals | **Not started** | Design open |
-| PGN game filters for db-explorer (`--min-year`, `--min-elo`, avg Elo) | **Deferred** | Dropped with old db-seed path; offline filtering in `tree_builder/scripts/analyze_kan_pgns.py` |
+| PGN game filters for db-explorer (`--min-year`, avg Elo) | **Partial** | `--min-elo` implemented in both C and Flutter; year/avg-elo filters not yet added |
 | Leaf **Best game** PGN annotation from source database | **Deferred** | Was db-seed export metadata; not in db-explorer pipeline |
 
 ### README / docs drift

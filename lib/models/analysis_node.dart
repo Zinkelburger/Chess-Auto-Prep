@@ -6,6 +6,7 @@ class AnalysisNode {
   final List<AnalysisNode> children;
   final int id;
   final bool isEphemeral; // true = user-added, false = from PGN
+  final String? comment;
 
   static int _nextId = 0;
 
@@ -13,6 +14,7 @@ class AnalysisNode {
     required this.san,
     required this.fenAfter,
     this.isEphemeral = true,
+    this.comment,
   })  : children = [],
         id = _nextId++;
 

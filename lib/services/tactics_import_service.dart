@@ -4,14 +4,18 @@ import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
+import '../constants/engine_defaults.dart';
 import '../models/tactics_position.dart';
+import 'tactics_engine.dart';
 import '../models/engine_settings.dart';
 import 'engine/eval_worker.dart';
 import 'engine/stockfish_pool.dart';
 import 'lichess_api_client.dart';
+import 'maia_factory.dart';
 import 'tactics_database.dart';
 import 'pgn_parsing_service.dart';
 import 'storage/storage_factory.dart';
+import '../utils/chesscom_lichess_elo.dart';
 import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart' as parallel;
 
@@ -96,8 +100,14 @@ class TacticsImportService {
 
     await _savePgns(response.body);
     return _processGames(
-        response.body, username, depth, progressCallback, onPositionFound,
-        maxCores: maxCores);
+      response.body,
+      username,
+      depth,
+      progressCallback,
+      onPositionFound,
+      maxCores: maxCores,
+      mapChessComEloForMaia: false,
+    );
   }
 
   /// Fetch the list of monthly archive URLs from Chess.com.
@@ -172,8 +182,14 @@ class TacticsImportService {
     await _savePgns(gamesToProcess);
 
     return _processGames(
-        gamesToProcess, username, depth, progressCallback, onPositionFound,
-        maxCores: maxCores);
+      gamesToProcess,
+      username,
+      depth,
+      progressCallback,
+      onPositionFound,
+      maxCores: maxCores,
+      mapChessComEloForMaia: true,
+    );
   }
 
   /// Save raw PGNs to storage with GameId headers injected.
@@ -319,6 +335,26 @@ class TacticsImportService {
     return result.join('\n');
   }
 
+  /// Extract the user's Elo from the first game in the batch.
+  ///
+  /// Parses PGN headers to find `WhiteElo` / `BlackElo` for the side matching
+  /// [username]. Returns `null` if the header is missing or unparseable.
+  static int? _extractUserElo(String gameText, String username) {
+    final game = PgnGame.parsePgn(gameText);
+    final white = (game.headers['White'] ?? '').toLowerCase();
+    final black = (game.headers['Black'] ?? '').toLowerCase();
+    final uLower = username.toLowerCase();
+
+    String? eloHeader;
+    if (white == uLower || white.contains(uLower)) {
+      eloHeader = game.headers['WhiteElo'];
+    } else if (black == uLower || black.contains(uLower)) {
+      eloHeader = game.headers['BlackElo'];
+    }
+    if (eloHeader == null) return null;
+    return int.tryParse(eloHeader.replaceAll('?', ''));
+  }
+
   Future<List<TacticsPosition>> _processGames(
     String pgnContent,
     String username,
@@ -326,6 +362,9 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound, {
     int? maxCores,
+    /// When true, PGN [WhiteElo]/[BlackElo] are Chess.com blitz and converted
+    /// via [chessComBlitzToLichessBlitz] before Maia line extension.
+    bool mapChessComEloForMaia = false,
   }) async {
     _cancelled = false;
     final games = splitPgnIntoGames(pgnContent);
@@ -357,6 +396,32 @@ class TacticsImportService {
         'All ${games.length} games already analyzed!',
       );
       return [];
+    }
+
+    // ── Initialize Maia for line extension (desktop only) ────
+    MaiaEvaluator? maia;
+    int maiaElo = kDefaultMaiaElo;
+    if (MaiaFactory.isAvailable) {
+      maia = MaiaFactory.instance;
+      if (maia != null) {
+        try {
+          await maia.initialize();
+        } catch (e) {
+          if (kDebugMode) print('Maia init failed, falling back: $e');
+          maia = null;
+        }
+      }
+      if (maia != null) {
+        final firstGame = gameTasks.first['gameText'] as String;
+        final userElo = _extractUserElo(firstGame, usernameLower);
+        if (userElo != null) {
+          final lichessElo = mapChessComEloForMaia
+              ? chessComBlitzToLichessBlitz(userElo)
+              : userElo;
+          maiaElo = lichessElo.clamp(kMinMaiaElo, kMaxMaiaElo);
+        }
+        if (kDebugMode) print('Maia line extension enabled (Elo=$maiaElo)');
+      }
     }
 
     // ── Ensure the shared pool has enough workers ─────────────
@@ -418,6 +483,8 @@ class TacticsImportService {
                 username: usernameLower,
                 depth: depth,
                 gameId: gameId,
+                maia: maia,
+                maiaElo: maiaElo,
               );
               if (_cancelled) break;
               gamePositions[gameId] = positions;
@@ -478,6 +545,8 @@ class TacticsImportService {
     required String username,
     required int depth,
     required String gameId,
+    MaiaEvaluator? maia,
+    int maiaElo = 2200,
   }) async {
     final game = PgnGame.parsePgn(gameText);
 
@@ -560,31 +629,16 @@ class TacticsImportService {
             tempPos = newPos;
           }
 
-          final correctLine = <String>[];
-          const maxUserMoves = 5;
-
-          if (allPvSan.isNotEmpty) {
-            correctLine.add(allPvSan[0]);
-            int userMoveCount = 1;
-            int i = 0;
-            while (userMoveCount < maxUserMoves) {
-              final currentUserSan = allPvSan[i];
-              final currentIsTactical = currentUserSan.contains('x') ||
-                  currentUserSan.contains('+') ||
-                  currentUserSan.contains('#');
-              if (!currentIsTactical) break;
-              if (i + 2 >= allPvSan.length) break;
-              final nextUserSan = allPvSan[i + 2];
-              final nextIsTactical = nextUserSan.contains('x') ||
-                  nextUserSan.contains('+') ||
-                  nextUserSan.contains('#');
-              if (!nextIsTactical) break;
-              correctLine.add(allPvSan[i + 1]);
-              correctLine.add(nextUserSan);
-              userMoveCount++;
-              i += 2;
-            }
-          }
+          final solutionPv = allPvSan
+              .take(TacticsEngine.maxSolutionPvPlies)
+              .toList();
+          final correctLine = await TacticsEngine.buildTrainableLine(
+            allPvSan,
+            maia: maia,
+            worker: worker,
+            maiaElo: maiaElo,
+            startFen: fenBefore,
+          );
 
           final bestMoveSan = _formatUciToSan(fenBefore, bestMoveUci);
           final opponentResponse = evalB.pv.isNotEmpty
@@ -604,6 +658,7 @@ class TacticsImportService {
             fen: fenBefore,
             userMove: san,
             correctLine: correctLine,
+            solutionPv: solutionPv,
             mistakeType: mistakeType,
             mistakeAnalysis: analysis,
             opponentBestResponse: opponentResponse,

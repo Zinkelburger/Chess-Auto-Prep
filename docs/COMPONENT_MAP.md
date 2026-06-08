@@ -40,6 +40,8 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026). When you change co
 
 **State management:** Provider (`ChangeNotifier`) — primarily `AppState`, `RepertoireController`, singletons (`EngineSettings`, `EngineLifecycle`, `EvalDatabaseSettings`).
 
+**Repertoire navigation model:** `RepertoireController` owns a `MoveTree` (editable PGN tree) and a `TreePath` cursor. All navigation goes through `controller.jump(path)`. The PGN editor (`InteractivePgnEditor`) is a pure view that receives `tree` + `currentPath` as props and fires `onJump` / `onCommentChanged` / `onDelete` / `onPromote` callbacks. No secondary state, no `addPostFrameCallback` sync.
+
 **Chess logic:** `dartchess` for rules/FEN; `flutter_chess_board` for display.
 
 ---
@@ -68,7 +70,7 @@ main.dart
 
 | Mode | Screen | Primary use |
 |------|--------|-------------|
-| `tactics` | Embedded `_TacticsModeView` | Lichess tactics puzzles |
+| `tactics` | Embedded `_TacticsModeView` | Tactics from user's own games (Stockfish analysis + Maia line extension) |
 | `positionAnalysis` | `AnalysisScreen` | Weak positions from user games |
 | `repertoire` | `RepertoireScreen` | Opening repertoire builder |
 | `repertoireTrainer` | `RepertoireTrainingScreen` | Spaced repetition training |
@@ -80,7 +82,7 @@ Mode switcher: `widgets/app_mode_menu_button.dart`.
 
 ```
 RepertoireScreen
-  ├─ RepertoireController (position, PGN, lines, opening tree)
+  ├─ RepertoireController (MoveTree + TreePath cursor, opening tree, lines)
   ├─ BoardPreviewController (hover preview FEN)
   ├─ NavigationStack (breadcrumb trail)
   ├─ CoherenceService, TrapIndexService, CoverageResult
@@ -105,8 +107,9 @@ Settings: gear → `screens/settings_screen.dart` (from repertoire toolbar).
 ```
 RepertoireSelectionScreen
   → RepertoireService.loadRepertoire(path)
-  → RepertoireController (OpeningTree, RepertoireLine list, PGN text)
-  → InteractivePgnEditor + OpeningTreeWidget
+  → RepertoireController (MoveTree + TreePath, OpeningTree, RepertoireLine list)
+  → InteractivePgnEditor (pure view: tree + path props, onJump callback)
+  → OpeningTreeWidget (unchanged — read-only statistics tree)
   → disk writes via RepertoireService / RepertoireWriter (browse adds)
 ```
 
@@ -115,7 +118,12 @@ RepertoireSelectionScreen
 ```
 RepertoireGenerationTab
   → EngineLifecycle.enterGeneration(threads)
-  → TreeBuildService.build(TreeBuildConfig)     [Phase 1 BFS]
+  → TreeBuildService.build(TreeBuildConfig)     [Phase 1 BFS — Stockfish/Maia modes]
+    OR
+  → TreeBuildService.buildFromPgnFreqMap(…)     [Phase 1 DB Explorer mode]
+      → parsePgnFiles (isolate) → PgnFreqMap
+      → BFS expand from freq map
+      → _enrichEvals (cache → external chain → Stockfish batch)
   → calculateTreeEase + EcaCalculator           [Phase 2]
   → calculateMyEase                               [myEase on our moves]
   → RepertoireSelector + LineExtractor
@@ -123,6 +131,12 @@ RepertoireGenerationTab
   → tree.json persisted beside repertoire PGN
   → EngineLifecycle.exitGeneration()
 ```
+
+**Build modes** (enum `BuildMode` in `generation_config.dart`):
+- `stockfishExpectimax` — default; Stockfish MultiPV + Maia/Lichess opponent
+- `maiaDbExplore` — Maia moves, DB evals only, no engine at build time
+- `dbExplorer` — PGN file parsing → frequency map → BFS tree → eval enrichment
+- `trapFinder` — not yet implemented
 
 See `docs/ALGORITHM.md` for algorithm detail.
 
@@ -132,12 +146,11 @@ See `docs/ALGORITHM.md` for algorithm detail.
 BrowsePanel
   → CandidateService.getCandidates(fen, tree + Lichess Explorer)
        → inRepertoire via OpeningTree.hasMoveOnPath(pathFromRoot, san)
-  → tap in repertoire → RepertoireController.userPlayedMoveOnCurrentPath(san)
-       (navigateToLineMove on currentMoveSequence + san; avoids SAN-only branch ambiguity)
+  → tap in repertoire → RepertoireController.playMove(san) (jump to existing child)
   → tap unexplored → RepertoireWriter.addMoveAtPosition()
        → RepertoireService.appendMoveAtPath (atomic PGN)
        → RepertoireController.appendMoveToExistingLine
-       → userPlayedMoveOnCurrentPath(san)
+       → playMove(san)
   → Ctrl+Z → RepertoireWriter.undo()
 ```
 
@@ -203,6 +216,24 @@ Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetCon
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
 ```
 
+### Generate repertoire from PGN viewer games
+
+Toolbar ⋮ menu → "Generate repertoire from games":
+
+```
+PgnViewerScreen._generateRepertoireFromGames
+  → dialog: user enters repertoire name + color
+  → name sanitised (filesystem-unsafe chars stripped; apostrophes preserved)
+  → saves filteredGames PGN to {name}_raw_games.pgn in repertoires/
+  → creates empty {name}.pgn repertoire (header only)
+  → AppState.switchToBuilderWithGeneration(repertoirePath, pgnPaths)
+  → RepertoireScreen._onAppStateChanged consumes pendingGenerationPgnPaths
+    (initState skips selection-screen push when pending data exists)
+  → opens generate mode + seeds RepertoireGenerationTabState.seedDbExplorer
+    (pgnPaths, minGames: 1, autoStart: true)
+  → build starts automatically in DB Explorer mode
+```
+
 ---
 
 ## Directory reference
@@ -223,7 +254,7 @@ Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
 | `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `loadCurrentGame` resets board to game start (`currentPosition`, engine-line highlight); `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); used by `PgnViewerScreen` |
-| `repertoire_controller.dart` | **Central repertoire session state**: FEN, move sequence, lines, tree, PGN sync | `userPlayedMove`, `userPlayedMoveOnCurrentPath`, `userSelectedTreeMove`, `navigateToLineMove`, `loadMoveSequence`, `appendMoveToExistingLine`, `restoreRepertoireFromPgn` |
+| `repertoire_controller.dart` | **Central repertoire session state**: owns `MoveTree` + `TreePath` cursor, lines, opening tree. Single navigation entry point `jump(path)`. | `jump`, `playMove`, `playMoveAtTreePath`, `goBack`/`goForward`/`goToStart`/`goToEnd`, `loadMoveSequence`, `deleteAtPath`, `promoteVariation`, `setCommentAtPath`, backward-compat wrappers `userPlayedMove`/`userSelectedTreeMove` |
 | `repertoire_writer.dart` | Serialised PGN mutations + undo stack | `addMoveAtPosition`, `acceptSuggestion`, `undo`, `canUndo` |
 
 ### `lib/models/`
@@ -241,7 +272,8 @@ Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu
 | `engine_weakness_result.dart` | Weak square / position analysis output |
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
 | `explorer_response.dart` | Lichess opening explorer API shape |
-| `opening_tree.dart` | In-memory repertoire tree indexed by FEN; `hasMove`, `appendLine` |
+| `move_tree.dart` | Editable PGN move tree (`MoveNode`, `TreePath`, `MoveTree`). FEN cached per node. PGN round-trip via `fromPgn`/`toPgn`. Used by `RepertoireController` as the single source of truth for the move cursor. |
+| `opening_tree.dart` | In-memory repertoire statistics tree indexed by FEN; `hasMove`, `appendLine` (read-only reference, separate from `MoveTree`) |
 | `pgn_filter_models.dart` | PGN import filter types |
 | `position_analysis.dart` | Position analysis aggregate |
 | `repertoire_line.dart` | Trainable line extracted from PGN (moves, title, probability) |
@@ -315,7 +347,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `repertoire_selection_screen.dart` | Pick/create repertoire |
 | `repertoire_training_screen.dart` | Training mode shell |
 | `analysis_screen.dart` | Game weakness / position analysis |
-| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text |
+| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games" |
 | `player_selection_screen.dart` | Lichess player pick for analysis |
 | `settings_screen.dart` | Global engine, opponent, **on-the-fly expectimax** (live dock; separate from Generation tab Engine Depth), DB settings |
 
@@ -354,10 +386,11 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `tree_build_service.dart` | BFS tree build; MultiPV line-0 PV reply stash + opponent-node injection when Maia/Lichess omit it |
+| `tree_build_service.dart` | BFS tree build; MultiPV line-0 PV reply stash + opponent-node injection when Maia/Lichess omit it; `buildFromPgnFreqMap()` for DB Explorer mode |
+| `generation/pgn_freq_map.dart` | PGN frequency map (Dart port of C `pgn_freq.c`): isolate-based PGN parsing, per-position move frequencies, min-elo filtering, move probability filtering |
 | `generation/line_extractor.dart` | Extract lines from tree; PGN `{engine-injected}` on injected opponent moves |
 | `generation/pgn_export.dart` | Export generated lines to PGN (includes `{engine-injected}` annotation) |
-| `generation/generation_config.dart` | `TreeBuildConfig` (default `evalDepth` 14, `relativeEval` true), build modes |
+| `generation/generation_config.dart` | `TreeBuildConfig` (default `evalDepth` 14, `relativeEval` true), build modes; DB Explorer fields: `pgnFilePaths`, `dbMinGames`, `dbMinProb`, `minElo` |
 | `generation/tree_eval_resolver.dart` | Eval resolution during build |
 | `generation/tree_ease.dart` | Opponent ease calculation |
 | `generation/tree_my_ease.dart` | Our-move naturalness + line playability |
@@ -403,9 +436,9 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `tactics_engine.dart` | Puzzle validation |
+| `tactics_engine.dart` | Puzzle validation; `buildTrainableLine` extends lines using **Maia opponent-probability** (≥ 85% threshold) when available — agreement with PV continues from PV, disagreement triggers a fresh Stockfish depth-14 eval for the user's best reply then stops, low confidence stops at single move; falls back to captures/checks/mates heuristic when Maia is unavailable; max 6 ply (3 user moves); `solutionPv` + `solutionLineToSan` for Show Solution |
 | `tactics_database.dart` | Local puzzle store; `startSession(settings)` builds filtered/ordered queue; `setRating(fen, rating)` persists star rating + removes 1-star from live queue |
-| `tactics_import_service.dart` | Import from Lichess |
+| `tactics_import_service.dart` | Import from Lichess/Chess.com; initializes Maia at import start; extracts user Elo from first game PGN headers (`WhiteElo`/`BlackElo`) — Lichess uses PGN Elo as-is; Chess.com maps blitz Elo via `chesscom_lichess_elo.dart` then clamps 600–2400 (default 2200); passes `MaiaEvaluator` + `EvalWorker` to `buildTrainableLine` for line extension |
 | `tactics_export_import.dart` | Export/import facade |
 | `tactics_export_import_io.dart` / `tactics_export_import_stub.dart` | Platform export/import |
 | `tactics_parallel_analyzer.dart` / `tactics_parallel_analyzer_stub.dart` | Parallel puzzle analysis |
@@ -419,7 +452,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | File | Purpose |
 |------|---------|
 | `storage/storage_service.dart` | Abstract file I/O |
-| `storage/io_storage_service.dart` | Desktop/mobile IO; `_resolveFile` maps relative paths to app documents; `readFile` / PGN reads use UTF-8 with Latin-1 fallback via `utils/file_text_reader.dart` |
+| `storage/io_storage_service.dart` | Desktop/mobile IO; `_resolveFile` maps relative paths to app documents; `readFile` / PGN reads use UTF-8 with Latin-1 fallback via `utils/file_text_reader.dart`; `listRepertoireFiles` filters out `*_raw_games.pgn` companion files |
 | `storage/storage_factory.dart` | Platform factory |
 | `storage/app_paths.dart` | App data directories |
 | `browser_extension_server/*` | Local HTTP server for browser extension (IO/stub) |
@@ -430,7 +463,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `shortcut_tooltip.dart` | **Shortcut hover tooltips** — `actionTooltip()`, `ShortcutIconButton`, `ShortcutTooltip`, `shortcutTooltip()` (500ms hover delay via Material `Tooltip`); debug asserts if shortcut is empty. Use whenever a control shares a `LogicalKeyboardKey` handler. Cursor rule: `.cursor/rules/shortcut-tooltips.mdc`. Tests: `test/widgets/shortcut_tooltip_test.dart`. |
+| `shortcut_tooltip.dart` | **Shortcut hover tooltips** — `AppShortcuts` shared keys (e.g. **J** auto-advance); `actionTooltip()`, `ShortcutIconButton`, `ShortcutTooltip`, `shortcutTooltip()` (500ms hover delay); debug asserts if shortcut is empty. Cursor rule: `.cursor/rules/shortcut-tooltips.mdc`. Tests: `test/widgets/shortcut_tooltip_test.dart`. |
 
 #### Layout (repertoire builder zones)
 
@@ -480,7 +513,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `engine/unified_engine_pane.dart` | MultiPV table, hoverable PV via `ClickableMoveLineWidget`; FEN changes schedule analysis post-frame (avoids setState-during-build) |
 | `engine/expectimax_lines_pane.dart` | Precomputed + on-the-fly expectimax lines; floating hover preview |
 | `engine/expectimax_panel_host.dart` | Owns [OnTheFlyExpectimaxService] (or accepts external); auto-computes when [hasPrecomputedExpectimaxAtPly] is false at FEN (`onTheFlyMaxDepth`); used by [EditContextZone] and [RepertoireAnalysisDock] |
-| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer |
+| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only) |
 | `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |
 | `engine/engine_pane_footer.dart` | Engine pane footer controls |
 | `engine/floating_board_preview.dart` | Cursor-following mini board overlay on engine/expectimax line hover |
@@ -503,7 +536,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `clickable_move_line.dart` | SAN line with tap + hover callbacks |
 | `navigation_trail.dart` | Breadcrumb trail widget (used by repertoire tab bar) |
 | `analysis_tab.dart` | Legacy browse/analysis tab wrapper |
-| `analysis/analysis_settings_sheet.dart` | Analysis mode settings sheet |
+| `analysis/analysis_settings_sheet.dart` | Context-aware analysis/engine settings dialog. Accepts `AnalysisSettingsContext` (`full` or `tacticsEngine`) to gate which sections are shown: engine depth + multiPv always; panel visibility + Lichess DB filters only in `full` mode. |
 | `analysis_download_dialog.dart` | Download games for analysis |
 | `game_analysis_tab.dart` | PGN viewer Analysis tab: chart, classified move list, best-line / Maia taps; each tap adds an **ephemeral RAV** at that ply (accumulates; does not clear prior lines); move list scrolls only when the nearest classified row changes (instant `ensureVisible`, no per-ply jump+animate) |
 | `game_analysis_chart.dart` | Eval chart for game review |
@@ -521,13 +554,13 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Weakness detail dialog |
 | `lichess_db_info_icon.dart` | Lichess DB info + OAuth entry point |
-| `tactics_control_panel.dart` | Tactics mode shell; PGN tab uses [PgnWithEngine]; shortcuts include **E** (toggle inline engine), **1-5** (rate after solve/reveal), arrows, Space/A/B/N/Esc |
-| `tactics/tactics_training_panel.dart` | Puzzle UI; star rating row shown only after solve or Show Solution |
+| `tactics_control_panel.dart` | Tactics mode shell; **eagerly warms up** StockfishPool + Maia on page load (`_warmUpEngines` in `initState`) so imports start instantly; PGN tab uses [PgnWithEngine] — moves sync to PGN in real time (correct user moves and opponent replies are added via `addEphemeralMove` as they happen; no lazy replay on tab switch); `TacticsBoardUpdate.san` carries the SAN so `_applyBoardUpdate` pushes to PGN; FEN comparison in `onPositionChanged` prevents double-updates; shortcuts include **E** (inline engine), **J** (auto-advance), **1-5** (rate), arrows, Space/A/P/N/Esc |
+| `tactics/tactics_training_panel.dart` | Puzzle UI; **Show Solution** = numbered SAN line + highlight only; star rating after solve/reveal |
 | `tactics/tactics_browse_panel.dart` | Puzzle browser; per-row tappable star rating, 1-star rows dimmed, hide/show 1★ filter toggle |
 | `tactics/tactics_import_panel.dart` | Import tactics from Lichess/Chess.com; **Session Settings** dialog (order, mistake-type filter, 1-star toggle) opened from toolbar button beside Browse Tactics; live matching count on Start Session |
 | `tactics/puzzle_stats_display.dart` | Puzzle statistics display |
 | `tactics/tactics_delayed_tooltip.dart` | Delayed tooltip for puzzle hints |
-| `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector) |
+| `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **J** toggles learn auto-advance (`learnRequiresClick`) on training screen + settings tooltip |
 | `settings/settings_widgets.dart` | Reusable settings tiles |
 | `eval_database_settings_panel.dart` | CdbDirect configuration |
 | `lichess_db_selector.dart` | Explorer DB/speed/rating filters |
@@ -546,6 +579,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `lines_filter_helpers.dart` | Line filter/sort/group (`getLineGroupName`) |
 | `ease_utils.dart` | Ease display formatting |
 | `eval_constants.dart` | Eval display thresholds |
+| `chesscom_lichess_elo.dart` | Chess.com blitz → Lichess blitz Elo table + `chessComBlitzToLichessBlitz()` for Maia (tactics Chess.com import) |
 | `app_messages.dart` | Snackbar helpers |
 | `file_text_reader.dart` | UTF-8 file read with Latin-1 fallback (PGN / text imports) |
 | `system_info.dart` | CPU core count (native/stub) |
@@ -563,7 +597,8 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | Test file | Verifies |
 |-----------|----------|
 | `test/core/board_preview_controller_test.dart` | Preview debounce, clear |
-| `test/core/repertoire_controller_test.dart` | Controller navigation, line sync |
+| `test/core/repertoire_controller_test.dart` | Controller navigation (tree-path model), line sync, invariants |
+| `test/models/move_tree_test.dart` | MoveTree: parse PGN, round-trip, addMove, navigation, variations, TreePath equality |
 | `test/core/repertoire_writer_test.dart` | Add move, PGN append |
 | `test/core/repertoire_writer_undo_test.dart` | Undo stack |
 | `test/features/browse/candidate_service_test.dart` | Candidate merge/sort |
@@ -592,13 +627,14 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `test/services/repertoire_service_test.dart` | Repertoire I/O |
 | `test/services/trap_extractor_test.dart` | Trap extraction |
 | `test/services/tactics/tactics_session_controller_test.dart` | Tactics session |
-| `test/services/tactics_engine_test.dart` | `checkMoveAtIndex`, SAN normalization, mate-in-1 from mid-game FEN |
+| `test/services/tactics_engine_test.dart` | `checkMoveAtIndex`, SAN normalization, mate-in-1 from mid-game FEN; `buildTrainableLine` fallback + Maia agree/disagree/low-confidence paths with mock evaluator |
 | `test/services/eval/test_*.dart` | Eval provider chain (helpers) |
 | `test/widgets/layout/edit_context_zone_test.dart` | Context zone multi-panel chips |
 | `test/widgets/position_analysis_widget_test.dart` | Analysis widget |
 | `test/screens/main_screen_test.dart` | Main screen smoke |
 | `test/widget_test.dart` | App smoke |
 | `test/utils/lines_filter_helpers_test.dart` | `filterSortAndGroupLines`, grouping, sort invariants |
+| `test/utils/chesscom_lichess_elo_test.dart` | Chess.com→Lichess blitz anchor, interpolation, clamp |
 
 **Gaps:** Few widget/integration tests for full `RepertoireScreen` layout, generate mode, or settings screen.
 

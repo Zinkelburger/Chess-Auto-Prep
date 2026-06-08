@@ -23,7 +23,8 @@ enum BuildMode {
   /// Top-N Maia moves for our side, DB evals only, stop on DB miss.
   maiaDbExplore,
 
-  /// Pure ChessDB queryall walk — not yet implemented in Flutter.
+  /// PGN database-seeded tree: parse game files, build frequency map,
+  /// then BFS with eval enrichment — matches C `--build-mode db-explorer`.
   dbExplorer,
 
   /// Maia × eval surprise highlights — not yet implemented in Flutter.
@@ -108,6 +109,12 @@ class TreeBuildConfig {
   final double leafConfidence;
   final int noveltyWeight;
 
+  // ── DB Explorer (PGN frequency seeding) ──
+  final List<String> pgnFilePaths;
+  final int dbMinGames;
+  final double dbMinProb;
+  final int minElo;
+
   // ── External eval sources (ChessDB local + API) ──
   final bool enableCdbDirect;
   final String cdbDirectPath;
@@ -151,6 +158,10 @@ class TreeBuildConfig {
     this.selectionMode = SelectionMode.expectimax,
     this.leafConfidence = 1.0,
     this.noveltyWeight = 0,
+    this.pgnFilePaths = const [],
+    this.dbMinGames = 5,
+    this.dbMinProb = 0.05,
+    this.minElo = 0,
     this.enableCdbDirect = false,
     this.cdbDirectPath = '',
     this.cdbDirectReadAhead = false,
@@ -201,6 +212,12 @@ class TreeBuildConfig {
       selectionMode: _parseSelectionMode(json['selection_mode'] as String?),
       leafConfidence: (json['leaf_confidence'] as num?)?.toDouble() ?? 1.0,
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
+      pgnFilePaths: (json['pgn_file_paths'] as List<dynamic>?)
+              ?.cast<String>() ??
+          const [],
+      dbMinGames: (json['db_min_games'] as num?)?.toInt() ?? 5,
+      dbMinProb: (json['db_min_prob'] as num?)?.toDouble() ?? 0.05,
+      minElo: (json['min_elo'] as num?)?.toInt() ?? 0,
       enableCdbDirect: json['enable_cdbdirect'] as bool? ?? false,
       cdbDirectPath: json['cdbdirect_path'] as String? ?? '',
       cdbDirectReadAhead: json['cdbdirect_read_ahead'] as bool? ?? false,
@@ -219,9 +236,15 @@ class TreeBuildConfig {
     );
   }
 
-  /// Whether this build uses Stockfish at all during Phase 1.
+  /// Whether this build uses Stockfish during BFS tree construction.
+  /// DB Explorer defers engine startup to the eval enrichment phase.
   bool get usesStockfish =>
       buildMode == BuildMode.stockfishExpectimax;
+
+  /// Whether the build needs Stockfish at any phase (build or enrichment).
+  bool get needsStockfish =>
+      buildMode == BuildMode.stockfishExpectimax ||
+      buildMode == BuildMode.dbExplorer;
 
   /// Clamped engine thread count (defaults to half of logical cores).
   int get resolvedEngineThreads => engineThreads > 0
@@ -265,6 +288,10 @@ class TreeBuildConfig {
         'selection_mode': selectionMode.name,
         'leaf_confidence': leafConfidence,
         'novelty_weight': noveltyWeight,
+        'pgn_file_paths': pgnFilePaths,
+        'db_min_games': dbMinGames,
+        'db_min_prob': dbMinProb,
+        'min_elo': minElo,
         'enable_cdbdirect': enableCdbDirect,
         'cdbdirect_path': cdbDirectPath,
         'cdbdirect_read_ahead': cdbDirectReadAhead,
@@ -308,6 +335,10 @@ class TreeBuildConfig {
     SelectionMode? selectionMode,
     double? leafConfidence,
     int? noveltyWeight,
+    List<String>? pgnFilePaths,
+    int? dbMinGames,
+    double? dbMinProb,
+    int? minElo,
     bool? enableCdbDirect,
     String? cdbDirectPath,
     bool? cdbDirectReadAhead,
@@ -352,6 +383,10 @@ class TreeBuildConfig {
       selectionMode: selectionMode ?? this.selectionMode,
       leafConfidence: leafConfidence ?? this.leafConfidence,
       noveltyWeight: noveltyWeight ?? this.noveltyWeight,
+      pgnFilePaths: pgnFilePaths ?? this.pgnFilePaths,
+      dbMinGames: dbMinGames ?? this.dbMinGames,
+      dbMinProb: dbMinProb ?? this.dbMinProb,
+      minElo: minElo ?? this.minElo,
       enableCdbDirect: enableCdbDirect ?? this.enableCdbDirect,
       cdbDirectPath: cdbDirectPath ?? this.cdbDirectPath,
       cdbDirectReadAhead: cdbDirectReadAhead ?? this.cdbDirectReadAhead,

@@ -8,22 +8,20 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
+import 'package:chess_auto_prep/models/move_tree.dart';
 import '../interactive_pgn_editor.dart';
 
 class EditMainZone extends StatelessWidget {
   const EditMainZone({
     super.key,
-    required this.pgnEditorController,
-    required this.editorKeySuffix,
-    required this.initialPgn,
+    required this.tree,
+    required this.currentPath,
+    this.onJump,
+    this.onCommentChanged,
+    this.onDelete,
+    this.onPromote,
     this.repertoireName,
     required this.repertoireColor,
-    required this.moveHistory,
-    required this.currentMoveIndex,
-    this.startingFen,
-    required this.onMoveStateChanged,
-    required this.onPositionChanged,
-    required this.onPgnChanged,
     required this.isEditingExistingLine,
     this.onLineEdited,
     this.onLineSaved,
@@ -31,17 +29,14 @@ class EditMainZone extends StatelessWidget {
     this.boardPreview,
   });
 
-  final PgnEditorController pgnEditorController;
-  final String editorKeySuffix;
-  final String initialPgn;
+  final MoveTree tree;
+  final TreePath currentPath;
+  final ValueChanged<TreePath>? onJump;
+  final void Function(TreePath path, String? comment)? onCommentChanged;
+  final void Function(TreePath path)? onDelete;
+  final void Function(TreePath path)? onPromote;
   final String? repertoireName;
   final String repertoireColor;
-  final List<String> moveHistory;
-  final int currentMoveIndex;
-  final String? startingFen;
-  final void Function(int moveIndex, List<String> moves) onMoveStateChanged;
-  final void Function(dynamic position) onPositionChanged;
-  final void Function(String pgn) onPgnChanged;
   final bool isEditingExistingLine;
   final void Function(String updatedPgn)? onLineEdited;
   final void Function(List<String> moves, String title, String pgn)? onLineSaved;
@@ -51,17 +46,14 @@ class EditMainZone extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InteractivePgnEditor(
-      key: ValueKey('${editorKeySuffix}_${startingFen ?? 'standard'}'),
-      controller: pgnEditorController,
-      initialPgn: initialPgn,
+      tree: tree,
+      currentPath: currentPath,
+      onJump: onJump,
+      onCommentChanged: onCommentChanged,
+      onDelete: onDelete,
+      onPromote: onPromote,
       currentRepertoireName: repertoireName,
       repertoireColor: repertoireColor,
-      moveHistory: moveHistory,
-      currentMoveIndex: currentMoveIndex,
-      startingFen: startingFen,
-      onMoveStateChanged: onMoveStateChanged,
-      onPositionChanged: onPositionChanged,
-      onPgnChanged: onPgnChanged,
       isEditingExistingLine: isEditingExistingLine,
       onLineEdited: onLineEdited,
       onLineSaved: onLineSaved,

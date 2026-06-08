@@ -8,10 +8,11 @@ import 'dart:convert';
 
 // ── Match mode ───────────────────────────────────────────────────────────────
 
-enum MatchMode { contains, exact, regex, after, before }
+enum MatchMode { contains, notContains, exact, regex, after, before }
 
 String matchModeLabel(MatchMode m) => switch (m) {
       MatchMode.contains => 'contains',
+      MatchMode.notContains => 'not contains',
       MatchMode.exact => 'exact',
       MatchMode.regex => 'regex',
       MatchMode.after => '≥ (after)',

@@ -1,12 +1,14 @@
-/// PGN-tab analysis settings dialog.
+/// Analysis settings dialog — context-aware.
 ///
-/// Owns analysis dock **panel visibility** only (PV docks and move-table
-/// columns). Engine tuning, opponent prediction mode, cumulative probability,
-/// and offline database paths live on the global [SettingsScreen].
+/// Shows different sections depending on [AnalysisSettingsContext]:
+/// - [AnalysisSettingsContext.full]: panel visibility, Lichess DB filters,
+///   engine depth/multiPv, and a link to the global settings screen.
+/// - [AnalysisSettingsContext.tacticsEngine]: engine depth and multiPv only.
 library;
 
 import 'package:flutter/material.dart';
 
+import '../../constants/engine_defaults.dart';
 import '../../models/engine_settings.dart';
 import '../../screens/settings_screen.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
@@ -14,8 +16,20 @@ import '../../theme/app_colors.dart';
 import '../lichess_db_selector.dart';
 import '../settings/settings_widgets.dart';
 
-/// Opens a wide dialog with PGN-tab analysis settings.
-Future<void> showAnalysisSettingsSheet(BuildContext context) async {
+/// Which surface opened the sheet — controls which sections are shown.
+enum AnalysisSettingsContext {
+  /// Full analysis (PGN editor, repertoire dock): all sections.
+  full,
+
+  /// Tactics inline engine: depth and number of variations only.
+  tacticsEngine,
+}
+
+/// Opens a dialog with analysis settings scoped to [mode].
+Future<void> showAnalysisSettingsSheet(
+  BuildContext context, {
+  AnalysisSettingsContext mode = AnalysisSettingsContext.full,
+}) async {
   await Future<void>.delayed(Duration.zero);
   if (!context.mounted) return;
 
@@ -30,14 +44,15 @@ Future<void> showAnalysisSettingsSheet(BuildContext context) async {
       child: SizedBox(
         width: width,
         height: height,
-        child: const _AnalysisSettingsSheet(),
+        child: _AnalysisSettingsSheet(mode: mode),
       ),
     ),
   );
 }
 
 class _AnalysisSettingsSheet extends StatefulWidget {
-  const _AnalysisSettingsSheet();
+  final AnalysisSettingsContext mode;
+  const _AnalysisSettingsSheet({required this.mode});
 
   @override
   State<_AnalysisSettingsSheet> createState() => _AnalysisSettingsSheetState();
@@ -45,6 +60,8 @@ class _AnalysisSettingsSheet extends StatefulWidget {
 
 class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
   final _settings = EngineSettings();
+
+  bool get _isFull => widget.mode == AnalysisSettingsContext.full;
 
   @override
   Widget build(BuildContext context) {
@@ -62,17 +79,26 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildPanelsSection(),
-                    if (_settings.fetchLichessForOpponent) ...[
+                    _buildEngineSection(),
+                    if (_isFull) ...[
+                      const SizedBox(height: 16),
+                      const Divider(height: 1, color: AppColors.divider),
+                      const SizedBox(height: 16),
+                      _buildPanelsSection(),
+                    ],
+                    if (_isFull &&
+                        _settings.fetchLichessForOpponent) ...[
                       const SizedBox(height: 16),
                       const Divider(height: 1, color: AppColors.divider),
                       const SizedBox(height: 16),
                       _buildLichessDbFiltersSection(),
                     ],
-                    const SizedBox(height: 16),
-                    const Divider(height: 1, color: AppColors.divider),
-                    const SizedBox(height: 12),
-                    _buildOpenSettingsLink(context),
+                    if (_isFull) ...[
+                      const SizedBox(height: 16),
+                      const Divider(height: 1, color: AppColors.divider),
+                      const SizedBox(height: 12),
+                      _buildOpenSettingsLink(context),
+                    ],
                   ],
                 ),
               ),
@@ -84,6 +110,7 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
   }
 
   Widget _buildTitleBar(ThemeData theme) {
+    final title = _isFull ? 'Analysis settings' : 'Engine settings';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 8, 8),
       child: Row(
@@ -91,7 +118,7 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
           Icon(Icons.tune, color: theme.colorScheme.primary, size: 22),
           const SizedBox(width: 10),
           Text(
-            'Analysis settings',
+            title,
             style: theme.textTheme.titleLarge
                 ?.copyWith(fontWeight: FontWeight.w600),
           ),
@@ -102,6 +129,39 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
             onPressed: () => Navigator.pop(context),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Engine depth & multiPv (shown in all contexts) ─────────────────────────
+
+  Widget _buildEngineSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: SettingsSection(
+        icon: Icons.memory,
+        title: 'Engine',
+        showDivider: false,
+        child: SettingsIntGrid(
+          fields: [
+            SettingsIntSpec(
+              label: 'Depth',
+              tooltip: 'Stockfish search depth per position.',
+              value: _settings.depth,
+              min: kMinDepth,
+              max: kMaxDepth,
+              onChanged: (v) => _settings.depth = v,
+            ),
+            SettingsIntSpec(
+              label: 'Lines (MultiPV)',
+              tooltip: 'Number of top variations to evaluate.',
+              value: _settings.multiPv,
+              min: kMinMultiPv,
+              max: kMaxMultiPv,
+              onChanged: (v) => _settings.multiPv = v,
+            ),
+          ],
+        ),
       ),
     );
   }

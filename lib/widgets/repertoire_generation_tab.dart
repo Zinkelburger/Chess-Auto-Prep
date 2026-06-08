@@ -2,6 +2,7 @@ library;
 
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -92,6 +93,15 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   final TextEditingController _leafConfidenceCtrl =
       TextEditingController(text: '1.0');
 
+  // ── DB Explorer state ──
+  final List<String> _pgnFilePaths = [];
+  final TextEditingController _dbMinGamesCtrl =
+      TextEditingController(text: '5');
+  final TextEditingController _dbMinProbCtrl =
+      TextEditingController(text: '0.05');
+  final TextEditingController _minEloCtrl =
+      TextEditingController(text: '0');
+
   // null = Maia only; non-null = override with that Lichess DB
   LichessDatabase? _lichessDbOverride;
   bool _relativeEval = true;
@@ -149,6 +159,31 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     });
   }
 
+  /// Pre-configure DB Explorer mode with the given PGN file paths and
+  /// minimum game count. Called by [RepertoireScreen] when the user triggers
+  /// "Generate repertoire from games" in the PGN Viewer.
+  ///
+  /// When [autoStart] is true the build kicks off automatically after the
+  /// next frame (gives the widget tree time to rebuild with the new config).
+  void seedDbExplorer({
+    required List<String> pgnPaths,
+    int minGames = 1,
+    bool autoStart = false,
+  }) {
+    setState(() {
+      _buildMode = BuildMode.dbExplorer;
+      _pgnFilePaths
+        ..clear()
+        ..addAll(pgnPaths);
+      _dbMinGamesCtrl.text = minGames.toString();
+    });
+    if (autoStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isGenerating) _startTreeBuild();
+      });
+    }
+  }
+
   @override
   void dispose() {
     _cutoffCtrl.dispose();
@@ -160,6 +195,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _maxEvalCtrl.dispose();
     _maiaEloCtrl.dispose();
     _lichessMinGamesCtrl.dispose();
+    _dbMinGamesCtrl.dispose();
+    _dbMinProbCtrl.dispose();
+    _minEloCtrl.dispose();
     _multipvCtrl.dispose();
     _oppMaxChildrenCtrl.dispose();
     _oppMassTargetCtrl.dispose();
@@ -314,6 +352,25 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   // ── Tree build generation ─────────────────────────────────────────────
 
+  void _handleBuildProgress(BuildProgress p) {
+    if (!mounted) return;
+    _nodes = p.totalNodes;
+    _maxPlyConfig = p.maxPlyConfig;
+    _elapsedMs = p.elapsedMs;
+    _nodesPerMinute = p.nodesPerMinute;
+    _currentDepth = p.currentDepth;
+    _unexploredAtDepth = p.unexploredAtDepth;
+    _totalAtDepth = p.totalAtDepth;
+    _etaDepthSec = p.etaDepthSeconds;
+
+    final now = DateTime.now();
+    if (now.difference(_lastProgressUpdate).inMilliseconds < 150) {
+      return;
+    }
+    _lastProgressUpdate = now;
+    setState(() {});
+  }
+
   /// Current form values as a [TreeBuildConfig] (used for new builds and
   /// for [maxPly] when resuming a partial tree).
   TreeBuildConfig _treeBuildConfigFromControls() {
@@ -341,6 +398,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       ),
       maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 20,
       buildMode: _buildMode,
+      pgnFilePaths: List.unmodifiable(_pgnFilePaths),
+      dbMinGames: int.tryParse(_dbMinGamesCtrl.text.trim()) ?? 5,
+      dbMinProb: double.tryParse(_dbMinProbCtrl.text.trim()) ?? 0.05,
+      minElo: int.tryParse(_minEloCtrl.text.trim()) ?? 0,
       evalDepth: evalDepth,
       engineThreads: engineThreads,
       maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
@@ -385,10 +446,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
   Future<void> _startTreeBuild({BuildTree? existingTree}) async {
     if (_isGenerating) return;
-    if (_buildMode == BuildMode.dbExplorer ||
-        _buildMode == BuildMode.trapFinder) {
+    if (_buildMode == BuildMode.trapFinder) {
       setState(() => _status =
           '${_buildModeLabel(_buildMode)} is not yet available in the app.');
+      return;
+    }
+    if (_buildMode == BuildMode.dbExplorer && _pgnFilePaths.isEmpty) {
+      setState(() => _status = 'Add at least one PGN file for DB Explorer.');
       return;
     }
     final evalSources = _evalSourcesKey.currentState;
@@ -473,49 +537,22 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
     var engineGenerationEntered = false;
     try {
-      if (config.usesStockfish) {
+      if (config.needsStockfish) {
         await EngineLifecycle().enterGeneration(config.resolvedEngineThreads);
         engineGenerationEntered = true;
       }
 
-      // If the tree already reaches the target depth, skip Phase 1
-      // entirely and use what we have — BFS guarantees shallower plies
-      // are complete, so the tree is usable as-is.
-      final bool skipBuild =
-          existingTree != null && existingTree.maxPlyReached >= config.maxPly;
-
       final BuildTree tree;
-      if (skipBuild) {
-        tree = existingTree;
-        if (mounted) {
-          setState(() =>
-              _status = 'Tree already at depth ${existingTree.maxPlyReached}, '
-                  'skipping build...');
-        }
-      } else {
-        // Phase 1: Build tree
-        tree = await _buildService.build(
+
+      if (config.buildMode == BuildMode.dbExplorer) {
+        // DB Explorer: PGN parse → freq map → BFS → eval enrichment
+        tree = await _buildService.buildFromPgnFreqMap(
           config: config,
           isCancelled: () => _cancelRequested,
-          existingTree: existingTree,
-          onProgress: (p) {
-            if (!mounted) return;
-            _nodes = p.totalNodes;
-            _maxPlyConfig = p.maxPlyConfig;
-            _elapsedMs = p.elapsedMs;
-            _nodesPerMinute = p.nodesPerMinute;
-            _currentDepth = p.currentDepth;
-            _unexploredAtDepth = p.unexploredAtDepth;
-            _totalAtDepth = p.totalAtDepth;
-            _etaDepthSec = p.etaDepthSeconds;
-
-            final now = DateTime.now();
-            if (now.difference(_lastProgressUpdate).inMilliseconds < 150) {
-              return;
-            }
-            _lastProgressUpdate = now;
-            setState(() {});
+          onStatusChanged: (status) {
+            if (mounted) setState(() => _status = status);
           },
+          onProgress: _handleBuildProgress,
         );
 
         if (_cancelRequested) {
@@ -524,6 +561,34 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 () => _status = 'Build cancelled. ${tree.totalNodes} nodes.');
           }
           return;
+        }
+      } else {
+        // Standard build modes (Stockfish/Maia)
+        final bool skipBuild =
+            existingTree != null && existingTree.maxPlyReached >= config.maxPly;
+
+        if (skipBuild) {
+          tree = existingTree;
+          if (mounted) {
+            setState(() =>
+                _status = 'Tree already at depth ${existingTree.maxPlyReached}, '
+                    'skipping build...');
+          }
+        } else {
+          tree = await _buildService.build(
+            config: config,
+            isCancelled: () => _cancelRequested,
+            existingTree: existingTree,
+            onProgress: _handleBuildProgress,
+          );
+
+          if (_cancelRequested) {
+            if (mounted) {
+              setState(
+                  () => _status = 'Build cancelled. ${tree.totalNodes} nodes.');
+            }
+            return;
+          }
         }
       }
 
@@ -710,7 +775,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               ),
               DropdownMenuItem(
                 value: BuildMode.dbExplorer,
-                child: Text('DB Explorer (coming soon)'),
+                child: Text('DB Explorer (PGN database)'),
               ),
               DropdownMenuItem(
                 value: BuildMode.trapFinder,
@@ -729,6 +794,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
           const SizedBox(height: 8),
+
+          // DB Explorer: PGN file picker and config
+          if (_buildMode == BuildMode.dbExplorer) ...[
+            _buildPgnFilePickerSection(),
+            const SizedBox(height: 8),
+          ],
 
           // Main config fields
           Wrap(
@@ -1245,6 +1316,139 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     return Tooltip(message: tooltip, child: row);
   }
 
+  // ── DB Explorer file picker ──────────────────────────────────────────
+
+  Future<void> _pickPgnFiles() async {
+    final result = await FilePicker.pickFiles(
+      dialogTitle: 'Select PGN files for DB Explorer',
+      type: FileType.custom,
+      allowedExtensions: ['pgn', 'txt'],
+      allowMultiple: true,
+      lockParentWindow: true,
+    );
+    if (result == null) return;
+    final newPaths = result.files
+        .where((f) => f.path != null)
+        .map((f) => f.path!)
+        .where((p) => !_pgnFilePaths.contains(p))
+        .toList();
+    if (newPaths.isNotEmpty) {
+      setState(() => _pgnFilePaths.addAll(newPaths));
+    }
+  }
+
+  Widget _buildPgnFilePickerSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.folder_open,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                'PGN Database Files',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const Spacer(),
+              FilledButton.tonalIcon(
+                onPressed: _isGenerating ? null : _pickPgnFiles,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add Files'),
+              ),
+            ],
+          ),
+          if (_pgnFilePaths.isEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'No PGN files selected. Add one or more PGN files to seed '
+              'the repertoire tree from game data.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+          if (_pgnFilePaths.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...List.generate(_pgnFilePaths.length, (i) {
+              final path = _pgnFilePaths[i];
+              final name = p.basename(path);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.description,
+                        size: 14, color: Colors.grey[500]),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Tooltip(
+                        message: path,
+                        child: Text(
+                          name,
+                          style: const TextStyle(fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    if (!_isGenerating)
+                      InkWell(
+                        onTap: () =>
+                            setState(() => _pgnFilePaths.removeAt(i)),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(Icons.close,
+                              size: 14, color: Colors.grey[500]),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 4),
+            Text(
+              '${_pgnFilePaths.length} file${_pgnFilePaths.length != 1 ? 's' : ''} selected',
+              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _numField(_dbMinGamesCtrl, 'Min Games',
+                  tooltip:
+                      'Minimum game count for an opponent move to be '
+                      'included (default 5)'),
+              _numField(_dbMinProbCtrl, 'Min Prob',
+                  tooltip:
+                      'Minimum move probability threshold for opponent '
+                      'moves (default 0.05 = 5%)'),
+              _numField(_minEloCtrl, 'Min Elo',
+                  tooltip:
+                      'Skip games where both players are rated below this '
+                      '(0 = no filter). Missing ratings are kept.'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   String _buildModeLabel(BuildMode mode) {
     switch (mode) {
       case BuildMode.stockfishExpectimax:
@@ -1269,8 +1473,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             'side, database evals only. Branches stop when a position is '
             'missing from the database — natural pruning by DB coverage.';
       case BuildMode.dbExplorer:
-        return 'Walk the tree using only ChessDB move rankings and scores '
-            '(queryall). No engine, no Maia — pure database-guided exploration.';
+        return 'Build a tree from PGN game databases: parse files into a '
+            'frequency map, then BFS-expand using actual game statistics. '
+            'Evals are enriched from DB sources + Stockfish after the tree '
+            'is built.';
       case BuildMode.trapFinder:
         return 'Surface positions where human-likely moves (Maia) lead to '
             'bad database evals — a highlights reel of tactical moments, '

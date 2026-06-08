@@ -2,7 +2,8 @@
 class TacticsPosition {
   final String fen;
   final String userMove; // The move the user actually played (mistake)
-  final List<String> correctLine; // The correct continuation moves
+  final List<String> correctLine; // Trainable line (tactical plies only)
+  final List<String> solutionPv; // Longer engine PV for display (Show Solution)
   final String mistakeType; // "?" or "??" or "?!"
   final String mistakeAnalysis; // Full analysis from Lichess
   final String positionContext; // "Move X, Color to play"
@@ -25,6 +26,7 @@ class TacticsPosition {
     required this.fen,
     required this.userMove,
     required this.correctLine,
+    this.solutionPv = const [],
     required this.mistakeType,
     required this.mistakeAnalysis,
     required this.positionContext,
@@ -48,6 +50,7 @@ class TacticsPosition {
     String? fen,
     String? userMove,
     List<String>? correctLine,
+    List<String>? solutionPv,
     String? mistakeType,
     String? mistakeAnalysis,
     String? positionContext,
@@ -70,6 +73,7 @@ class TacticsPosition {
       fen: fen ?? this.fen,
       userMove: userMove ?? this.userMove,
       correctLine: correctLine ?? this.correctLine,
+      solutionPv: solutionPv ?? this.solutionPv,
       mistakeType: mistakeType ?? this.mistakeType,
       mistakeAnalysis: mistakeAnalysis ?? this.mistakeAnalysis,
       positionContext: positionContext ?? this.positionContext,
@@ -112,8 +116,8 @@ class TacticsPosition {
     return match != null ? int.tryParse(match.group(1)!) ?? 1 : 1;
   }
 
-  /// CSV column count.  Old files may have 17 or 18; current format has 19.
-  static const int csvColumnCount = 19;
+  /// CSV column count.  Old files may have 17–19; current format has 20.
+  static const int csvColumnCount = 20;
 
   /// Create from CSV row (18 columns; tolerates legacy 17-column rows).
   factory TacticsPosition.fromCsv(List<dynamic> row) {
@@ -147,6 +151,14 @@ class TacticsPosition {
       opponentBestResponse: row.length > 17 ? row[17].toString() : '',
       // Column 18 — star rating; tolerate pre-rating files.
       rating: row.length > 18 ? (int.tryParse(row[18].toString()) ?? 0) : 0,
+      // Column 19 — full PV for display; tolerate pre-PV files.
+      solutionPv: row.length > 19
+          ? row[19]
+              .toString()
+              .split('|')
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : const [],
     );
   }
 
@@ -162,10 +174,21 @@ class TacticsPosition {
                 .toList() ??
             [];
 
+    final solutionPv = json['solution_pv'] is String
+        ? (json['solution_pv'] as String)
+            .split('|')
+            .where((s) => s.isNotEmpty)
+            .toList()
+        : (json['solution_pv'] as List<dynamic>?)
+                ?.map((e) => e as String)
+                .toList() ??
+            [];
+
     return TacticsPosition(
       fen: json['fen'] as String,
       userMove: json['user_move'] ?? '',
       correctLine: correctLine,
+      solutionPv: solutionPv,
       mistakeType: json['mistake_type'] ?? '?',
       mistakeAnalysis: json['mistake_analysis'] ?? json['description'] ?? '',
       positionContext: json['position_context'] ?? 'Move 1, White to play',
@@ -195,6 +218,7 @@ class TacticsPosition {
       'fen': fen,
       'user_move': userMove,
       'correct_line': correctLine,
+      'solution_pv': solutionPv,
       'mistake_type': mistakeType,
       'mistake_analysis': mistakeAnalysis,
       'position_context': positionContext,
@@ -236,6 +260,7 @@ class TacticsPosition {
       hintsUsed,
       opponentBestResponse,
       rating,
+      solutionPv.join('|'),
     ];
   }
 }

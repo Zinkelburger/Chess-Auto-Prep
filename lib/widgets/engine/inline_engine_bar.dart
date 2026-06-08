@@ -260,7 +260,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             IconButton(
               icon: const Icon(Icons.settings, size: 18),
               tooltip: 'Engine Settings',
-              onPressed: () => showAnalysisSettingsSheet(context),
+              onPressed: () => showAnalysisSettingsSheet(
+                context,
+                mode: AnalysisSettingsContext.tacticsEngine,
+              ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             ),

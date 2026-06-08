@@ -16,6 +16,7 @@ import '../widgets/training/repertoire_selector_panel.dart';
 import '../widgets/training/training_board_controls.dart';
 import '../widgets/training/training_progress_panel.dart';
 import '../widgets/training/training_results_panel.dart';
+import '../widgets/shortcut_tooltip.dart';
 import '../widgets/training/training_settings_panel.dart';
 import 'repertoire_selection_screen.dart';
 
@@ -146,6 +147,19 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final primaryFocus = FocusManager.instance.primaryFocus;
+    if (primaryFocus?.context?.widget is EditableText) {
+      return KeyEventResult.ignored;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.keyJ) {
+      final settings = _training.settings;
+      settings.learnRequiresClick = !settings.learnRequiresClick;
+      settings.save();
+      setState(() {});
+      return KeyEventResult.handled;
+    }
 
     if (event.logicalKey == LogicalKeyboardKey.space &&
         _training.learnWaitingForAck) {
