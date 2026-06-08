@@ -606,7 +606,9 @@ class _EditContextZoneState extends State<EditContextZone> {
       tree: controller.openingTree!,
       repertoireLines: controller.repertoireLines,
       currentMoveSequence: controller.currentMoveSequence,
-      onMoveSelected: controller.userPlayedMove,
+      onMoveSelected: controller.userSelectedTreeMove,
+      onGoBack: controller.goBack,
+      onGoForward: controller.goForward,
     );
   }
 }

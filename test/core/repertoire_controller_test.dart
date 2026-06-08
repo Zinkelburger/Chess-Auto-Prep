@@ -39,11 +39,8 @@ String fenAfterMoves(
 void assertNavigationInvariants(RepertoireController controller) {
   expect(controller.currentMoveIndex, greaterThanOrEqualTo(-1));
 
-  if (controller.moveHistory.isEmpty) {
-    expect(controller.currentMoveIndex, -1);
-  } else {
-    expect(controller.currentMoveIndex, lessThan(controller.moveHistory.length));
-  }
+  // In tree-path model, moveHistory == currentMoveSequence (always up to cursor).
+  expect(controller.moveHistory, controller.currentMoveSequence);
 
   if (controller.currentMoveIndex < 0) {
     expect(controller.currentMoveSequence, isEmpty);
@@ -51,10 +48,6 @@ void assertNavigationInvariants(RepertoireController controller) {
     expect(
       controller.currentMoveSequence.length,
       controller.currentMoveIndex + 1,
-    );
-    expect(
-      controller.currentMoveSequence,
-      controller.moveHistory.sublist(0, controller.currentMoveIndex + 1),
     );
   }
 
@@ -173,8 +166,9 @@ void main() {
       expect(controller.fen, afterE4.fen);
       expect(controller.currentMoveIndex, afterE4.moveIndex);
       expect(controller.currentMoveSequence, afterE4.history);
-      // Full history is preserved; only the cursor moves back.
-      expect(controller.moveHistory, ['e4', 'e5']);
+      // e5 still exists in the tree as a child — goForward reaches it.
+      controller.goForward();
+      expect(controller.currentMoveSequence, ['e4', 'e5']);
       assertNavigationInvariants(controller);
     });
 
@@ -270,16 +264,16 @@ void main() {
       assertNavigationInvariants(controller);
     });
 
-    test('userPlayedMove after goBack truncates future history', () {
+    test('userPlayedMove after goBack creates variation', () {
       controller.loadMoveHistory(['e4', 'e5', 'Nf3']);
       controller.goBack();
       controller.goBack();
       expect(controller.currentMoveIndex, 0);
-      expect(controller.moveHistory, ['e4', 'e5', 'Nf3']);
 
       controller.userPlayedMove('c5');
 
-      expect(controller.moveHistory, ['e4', 'c5']);
+      // c5 is a new variation; cursor is now on the e4 → c5 line.
+      expect(controller.currentMoveSequence, ['e4', 'c5']);
       expect(controller.currentMoveIndex, 1);
       expect(controller.fen, fenAfterMoves(['e4', 'c5']));
       assertNavigationInvariants(controller);

@@ -16,6 +16,7 @@ import 'package:window_manager/window_manager.dart';
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/pgn_viewer_controller.dart';
+import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
@@ -225,6 +226,96 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       );
     }
     _reclaimFocus();
+  }
+
+  Future<void> _generateRepertoireFromGames() async {
+    if (_controller.filteredGames.isEmpty) return;
+
+    final suggestedName = _suggestRepertoireName();
+    final result = await showDialog<({String name, String color})>(
+      context: context,
+      builder: (ctx) => _GenerateRepertoireDialog(suggestedName: suggestedName),
+    );
+    if (result == null || !mounted) {
+      _reclaimFocus();
+      return;
+    }
+
+    final storage = StorageFactory.instance;
+    final safeName = result.name
+        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .trim();
+    if (safeName.isEmpty) {
+      showAppSnackBar(context, 'Invalid repertoire name.', isError: true);
+      _reclaimFocus();
+      return;
+    }
+
+    try {
+      final repertoirePath = await storage.repertoireFilePath(safeName);
+      if (await storage.fileExists(repertoirePath)) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            'A repertoire named "$safeName" already exists.',
+            isError: true,
+          );
+        }
+        _reclaimFocus();
+        return;
+      }
+
+      // Write raw games PGN for the DB Explorer seed.
+      final rawGamesName = '${safeName}_raw_games';
+      final rawGamesPath = await storage.repertoireFilePath(rawGamesName);
+      await storage.writeFile(
+        rawGamesPath,
+        _controller.buildExportContent(),
+      );
+
+      // Create the actual (empty) repertoire file.
+      final header = '// $safeName Repertoire\n'
+          '// Color: ${result.color}\n'
+          '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
+      await storage.writeFile(repertoirePath, header);
+
+      if (!mounted) return;
+      final gameCount = _controller.filteredGames.length;
+      showAppSnackBar(
+        context,
+        'Created "$safeName" — switching to builder with $gameCount games.',
+      );
+
+      context.read<AppState>().switchToBuilderWithGeneration(
+            repertoirePath: repertoirePath,
+            pgnPaths: [rawGamesPath],
+          );
+    } catch (e) {
+      debugPrint('Generate repertoire from games failed: $e');
+      if (mounted) {
+        showAppSnackBar(context, 'Failed to create repertoire.', isError: true);
+      }
+    }
+    _reclaimFocus();
+  }
+
+  String _suggestRepertoireName() {
+    final config = _controller.activeSliceConfig;
+    final parts = <String>[];
+
+    for (final filter in config.headerFilters) {
+      if (filter.value.isNotEmpty &&
+          (filter.field == 'White' || filter.field == 'Black')) {
+        parts.add(filter.value);
+      }
+    }
+
+    if (parts.isEmpty && _controller.filePath != null) {
+      parts.add(p.basenameWithoutExtension(_controller.filePath!));
+    }
+
+    return parts.isEmpty ? 'My Repertoire' : parts.join(' ');
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -471,6 +562,26 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               tooltip: 'Flip board (F)',
             ),
             _buildPerspectiveButton(),
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, size: 20),
+              tooltip: 'More actions',
+              onSelected: (value) {
+                if (value == 'generate_repertoire') {
+                  _generateRepertoireFromGames();
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'generate_repertoire',
+                  child: ListTile(
+                    leading: Icon(Icons.auto_fix_high, size: 20),
+                    title: Text('Generate repertoire from games'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
           ],
           const AppModeMenuButton(),
         ],
@@ -1084,5 +1195,83 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         ),
       ],
     );
+  }
+}
+
+class _GenerateRepertoireDialog extends StatefulWidget {
+  final String suggestedName;
+  const _GenerateRepertoireDialog({required this.suggestedName});
+
+  @override
+  State<_GenerateRepertoireDialog> createState() =>
+      _GenerateRepertoireDialogState();
+}
+
+class _GenerateRepertoireDialogState extends State<_GenerateRepertoireDialog> {
+  late final TextEditingController _nameCtrl;
+  String _color = 'White';
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.suggestedName);
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Generate Repertoire from Games'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Repertoire name',
+                hintText: 'e.g. Caruana Kan',
+              ),
+              autofocus: true,
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 16),
+            const Text('Color'),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'White', label: Text('White')),
+                ButtonSegment(value: 'Black', label: Text('Black')),
+              ],
+              selected: {_color},
+              onSelectionChanged: (s) => setState(() => _color = s.first),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: const Text('Create & Generate'),
+        ),
+      ],
+    );
+  }
+
+  void _submit() {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty) return;
+    Navigator.of(context).pop((name: name, color: _color));
   }
 }

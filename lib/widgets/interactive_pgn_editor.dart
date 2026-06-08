@@ -1,5 +1,7 @@
-/// Interactive PGN editor widget for repertoire building
-/// Allows real-time editing, move addition, variation management, and commenting
+/// Interactive PGN editor widget for repertoire building.
+///
+/// Pure view: receives a [MoveTree] + [TreePath] from the controller and
+/// fires callbacks for user actions.  No internal move state.
 library;
 
 import 'dart:async';
@@ -9,6 +11,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:chess_auto_prep/constants/chess_constants.dart';
+import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
@@ -18,109 +22,39 @@ import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart'
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import 'package:chess_auto_prep/features/traps/widgets/trap_move_indicator.dart';
 
-// Simple counter for unique move IDs
-int _pgnMoveIdCounter = 0;
-
-class PgnMove {
-  final String san;
-  final String? comment;
-  final List<PgnMove>
-      children; // First child is mainline, subsequent are variations
-
-  // Helper to identify this move instance in the tree
-  final int id;
-
-  PgnMove({
-    required this.san,
-    this.comment,
-    List<PgnMove>? children,
-    int? id,
-  })  : children = children ?? [],
-        id = id ?? _pgnMoveIdCounter++;
-
-  PgnMove copyWith({
-    String? san,
-    String? comment,
-    List<PgnMove>? children,
-  }) {
-    return PgnMove(
-      san: san ?? this.san,
-      comment: comment ?? this.comment,
-      children: children ?? this.children,
-      id: id,
-    );
-  }
-}
-
-class PgnEditorController {
-  _InteractivePgnEditorState? _state;
-
-  void _bindState(_InteractivePgnEditorState state) {
-    _state = state;
-  }
-
-  void _unbindState() {
-    _state = null;
-  }
-
-  void addMove(String san) {
-    _state?.addMove(san);
-  }
-
-  /// Sync editor to a specific move index with given move list
-  /// Note: This legacy method flattens the tree or assumes a linear history
-  void syncToMoveHistory(List<String> moves, int moveIndex) {
-    _state?._syncToMoveHistory(moves, moveIndex);
-  }
-
-  void clearLine() {
-    _state?._clearLine();
-  }
-
-  void goBack() {
-    _state?._goBack();
-  }
-
-  void goForward() {
-    _state?._goForward();
-  }
-
-  /// Get current move index in the flattened current line
-  int get currentMoveIndex => _state?._currentMoveIndex ?? -1;
-
-  /// Get current moves list (flattened current line)
-  List<String> get moves => _state?._currentLineSan ?? [];
-}
-
 class InteractivePgnEditor extends StatefulWidget {
-  final Function(Position)? onPositionChanged;
+  /// The move tree to display (owned by controller).
+  final MoveTree tree;
 
-  /// Called when move state changes - reports current move index and full move list
-  final Function(int moveIndex, List<String> moves)? onMoveStateChanged;
-  final String? initialPgn;
-  final Function(String)? onPgnChanged;
-  final PgnEditorController? controller;
-  final String? currentRepertoireName;
-  final String? repertoireColor; // "White" or "Black"
-  final List<String> moveHistory;
-  final int currentMoveIndex;
+  /// Current cursor path (owned by controller).
+  final TreePath currentPath;
 
-  /// Starting FEN if different from standard position (for custom positions)
-  final String? startingFen;
+  /// Jump the cursor to a different path (click on a move).
+  final ValueChanged<TreePath>? onJump;
 
-  /// Called after a line is successfully saved to the repertoire file.
-  /// Provides the moves list, title, and full PGN so the caller can
-  /// append to the in-memory tree without a full reload.
-  final Function(List<String> moves, String title, String pgn)? onLineSaved;
+  /// Called when the user edits a comment.
+  final void Function(TreePath path, String? comment)? onCommentChanged;
 
-  /// Called when the user edits an existing line (adds moves, comments, etc.)
-  /// so the caller can persist changes back to disk.
-  final Function(String updatedPgn)? onLineEdited;
+  /// Called to delete a subtree.
+  final void Function(TreePath path)? onDelete;
+
+  /// Called to promote a variation.
+  final void Function(TreePath path)? onPromote;
+
+  /// Called when the user clicks "Add to Repertoire".
+  final void Function(List<String> moves, String title, String pgn)?
+      onLineSaved;
+
+  /// Called when the user edits an existing line.
+  final void Function(String updatedPgn)? onLineEdited;
 
   /// Whether the editor is showing an existing line being edited in-place.
   final bool isEditingExistingLine;
 
-  /// Optional trap index for orange dot markers on trap positions in the PGN.
+  final String? currentRepertoireName;
+  final String? repertoireColor;
+
+  /// Optional trap index for orange dot markers.
   final TrapIndexService? trapIndex;
 
   /// Optional board preview on trap dot hover.
@@ -128,19 +62,17 @@ class InteractivePgnEditor extends StatefulWidget {
 
   const InteractivePgnEditor({
     super.key,
-    this.onPositionChanged,
-    this.onMoveStateChanged,
-    this.initialPgn,
-    this.onPgnChanged,
-    this.controller,
-    this.currentRepertoireName,
-    this.repertoireColor,
-    this.moveHistory = const [],
-    this.currentMoveIndex = -1,
-    this.startingFen,
+    required this.tree,
+    required this.currentPath,
+    this.onJump,
+    this.onCommentChanged,
+    this.onDelete,
+    this.onPromote,
     this.onLineSaved,
     this.onLineEdited,
     this.isEditingExistingLine = false,
+    this.currentRepertoireName,
+    this.repertoireColor,
     this.trapIndex,
     this.boardPreview,
   });
@@ -150,303 +82,99 @@ class InteractivePgnEditor extends StatefulWidget {
 }
 
 class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
-  // Game state
-  Position _currentPosition = Chess.initial;
-  List<PgnMove> _roots = []; // The root moves (usually 1, e.g. 1. e4)
-  List<PgnMove> _currentPath = []; // The path of moves to the current position
-
-  // Derived state for compatibility/display
-  List<String> get _currentLineSan => _currentPath.map((m) => m.san).toList();
-  int get _currentMoveIndex =>
-      _currentPath.isEmpty ? -1 : _currentPath.length - 1;
-
-  // UI state — derived from _currentPath so it can never go stale
-  int? get _selectedMoveId =>
-      _currentPath.isNotEmpty ? _currentPath.last.id : null;
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
   bool _showingContextMenu = false;
   Offset _contextMenuPosition = Offset.zero;
-  int? _contextMenuMoveId;
-
-  // Workflow state
-  String _workingPgn = '';
-
-  // Flag to prevent callback loops when syncing from external source (controller)
-  bool _isSyncingFromExternal = false;
-
-  // Debounced auto-save for existing line edits
+  TreePath? _contextMenuPath;
   Timer? _autoSaveTimer;
-  static const _autoSaveDelay = Duration(milliseconds: 800);
+  static const _autoSaveDelay = Duration(seconds: 2);
+  String? _lastLoadedPgnSignature;
 
   @override
   void initState() {
     super.initState();
-
-    // Bind controller
-    widget.controller?._bindState(this);
-
-    if (widget.initialPgn != null && widget.initialPgn!.isNotEmpty) {
-      _loadInitialPgn(widget.initialPgn!);
-    }
-
-    // Sync to initial move history if provided
-    if (widget.moveHistory.isNotEmpty || widget.currentMoveIndex != -1) {
-      _syncToMoveHistory(widget.moveHistory, widget.currentMoveIndex);
-    } else {
-      _updatePosition();
-    }
+    _syncComment();
+    _tryLoadTitle();
   }
 
   @override
   void didUpdateWidget(InteractivePgnEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialPgn != oldWidget.initialPgn) {
-      _flushAutoSave();
-      _roots = [];
-      _currentPath = [];
-      if (widget.initialPgn != null && widget.initialPgn!.isNotEmpty) {
-        _loadInitialPgn(widget.initialPgn!);
-      }
-      _syncToMoveHistory(widget.moveHistory, widget.currentMoveIndex);
-      return;
+    if (widget.currentPath != oldWidget.currentPath) {
+      _syncComment();
     }
-    if (!_listsEqual(widget.moveHistory, oldWidget.moveHistory) ||
-        widget.currentMoveIndex != oldWidget.currentMoveIndex) {
-      _syncToMoveHistory(widget.moveHistory, widget.currentMoveIndex);
+    if (!identical(widget.tree, oldWidget.tree)) {
+      _tryLoadTitle();
     }
-  }
-
-  bool _listsEqual(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
   }
 
   @override
   void dispose() {
-    _autoSaveTimer?.cancel();
-    _flushAutoSave();
-    widget.controller?._unbindState();
     _commentController.dispose();
     _titleController.dispose();
+    _autoSaveTimer?.cancel();
     super.dispose();
   }
 
-  void _flushAutoSave() {
-    if (_autoSaveTimer?.isActive ?? false) {
-      _autoSaveTimer!.cancel();
-      if (widget.isEditingExistingLine && _workingPgn.isNotEmpty) {
-        widget.onLineEdited?.call(_buildFullPgnForSave());
-      }
-    }
+  void _syncComment() {
+    final node = widget.tree.nodeAt(widget.currentPath);
+    _commentController.text = node?.comment ?? '';
   }
 
-  void _loadInitialPgn(String pgn) {
-    try {
-      final game = PgnGame.parsePgn(pgn);
-      // Convert dartchess PgnNode tree to our PgnMove tree
-      final rootNodes = game.moves.children;
-      _roots = _convertNodes(rootNodes);
-      // Default path is empty (start position)
-      _currentPath = [];
-
-      // Pre-populate title from [Event] header (skip placeholders)
-      final event = game.headers['Event'] ?? '';
-      if (event.isNotEmpty &&
-          event != '?' &&
-          event != 'Repertoire Line' &&
-          event != 'Edited Line') {
-        _titleController.text = event;
-      }
-    } catch (e) {
-      _roots = [];
-      _currentPath = [];
-    }
+  void _tryLoadTitle() {
+    final sig = '${widget.tree.startingFen}_${widget.tree.roots.length}';
+    if (sig == _lastLoadedPgnSignature) return;
+    _lastLoadedPgnSignature = sig;
   }
 
-  List<PgnMove> _convertNodes(List<PgnChildNode<PgnNodeData>> nodes) {
-    final moves = <PgnMove>[];
-    for (final node in nodes) {
-      // Recursive conversion - dartchess uses node.data to access PgnNodeData
-      moves.add(PgnMove(
-        san: node.data.san,
-        comment: node.data.comments?.join(' '),
-        children: _convertNodes(node.children),
-      ));
-    }
-    return moves;
-  }
+  // ── Callbacks into controller ─────────────────────────────────────
 
-  /// Called when user makes a move on the chess board
-  void addMove(String san) {
-    final move = _currentPosition.parseSan(san);
-    if (move == null) return;
+  void _jumpTo(TreePath path) => widget.onJump?.call(path);
 
-    setState(() {
-      final newMove = PgnMove(san: san);
-
-      if (_currentPath.isEmpty) {
-        // Adding at root level (move 1)
-        _addToSiblingList(_roots, newMove);
-      } else {
-        // Adding to current leaf
-        final parent = _currentPath.last;
-        _addToSiblingList(parent.children, newMove);
-      }
-
-      // Advance path to include the new move
-      if (_currentPath.isEmpty) {
-        final added = _roots.firstWhere((m) => m.san == san);
-        _currentPath = [added];
-      } else {
-        final parent = _currentPath.last;
-        final added = parent.children.firstWhere((m) => m.san == san);
-        _currentPath = List.from(_currentPath)..add(added);
-      }
-
-      _updatePosition();
-      _generateWorkingPgn();
-    });
-  }
-
-  void _addToSiblingList(List<PgnMove> siblings, PgnMove newMove) {
-    // Check if move already exists
-    for (final sibling in siblings) {
-      if (sibling.san == newMove.san) {
-        // Move exists, no need to add
-        return;
-      }
-    }
-    siblings.add(newMove);
-  }
-
-  void _updatePosition() {
-    Position position;
-    try {
-      position = widget.startingFen != null
-          ? Chess.fromSetup(Setup.parseFen(widget.startingFen!))
-          : Chess.initial;
-    } catch (_) {
-      position = Chess.initial;
-    }
-    for (final moveNode in _currentPath) {
-      final move = position.parseSan(moveNode.san);
-      if (move == null) break;
-      position = position.play(move);
-    }
-    _currentPosition = position;
-    widget.onPositionChanged?.call(_currentPosition);
-    _notifyMoveStateChanged();
-  }
-
-  void _notifyMoveStateChanged() {
-    // Don't notify if we're syncing from external source (prevents loops)
-    if (_isSyncingFromExternal) return;
-
-    widget.onMoveStateChanged?.call(
-      _currentMoveIndex,
-      _currentLineSan,
-    );
-  }
-
-  void _syncToMoveHistory(List<String> moves, int moveIndex) {
-    if (!mounted) return;
-
-    // Mark that we're syncing from external source to prevent callback loops
-    _isSyncingFromExternal = true;
-
-    setState(() {
-      // Reset to root
-      _currentPath = [];
-      var currentSiblings = _roots;
-
-      for (int i = 0; i < moves.length; i++) {
-        final san = moves[i];
-        // Find or create
-        PgnMove? match;
-        for (final m in currentSiblings) {
-          if (m.san == san) {
-            match = m;
-            break;
-          }
-        }
-
-        if (match == null) {
-          match = PgnMove(san: san);
-          currentSiblings.add(match);
-        }
-
-        _currentPath.add(match);
-        currentSiblings = match.children;
-      }
-
-      // Now truncate path if moveIndex is less than full history
-      if (moveIndex < _currentPath.length - 1) {
-        if (moveIndex == -1) {
-          _currentPath = [];
-        } else {
-          _currentPath = _currentPath.sublist(0, moveIndex + 1);
-        }
-      }
-
-      _updatePositionWithoutCallback();
-      _generateWorkingPgn();
-
-      _commentController.text =
-          _currentPath.isNotEmpty ? (_currentPath.last.comment ?? '') : '';
-    });
-
-    _isSyncingFromExternal = false;
-  }
-
-  /// Update position without triggering external callbacks (used during sync)
-  void _updatePositionWithoutCallback() {
-    Position position;
-    try {
-      position = widget.startingFen != null
-          ? Chess.fromSetup(Setup.parseFen(widget.startingFen!))
-          : Chess.initial;
-    } catch (_) {
-      position = Chess.initial;
-    }
-    for (final moveNode in _currentPath) {
-      final move = position.parseSan(moveNode.san);
-      if (move == null) break;
-      position = position.play(move);
-    }
-    _currentPosition = position;
-  }
-
-  void _generateWorkingPgn() {
-    final buffer = StringBuffer();
-
-    // Add FEN header if we have a custom starting position
-    if (widget.startingFen != null) {
-      buffer.writeln('[FEN "${widget.startingFen}"]');
-      buffer.writeln('[SetUp "1"]');
-      buffer.writeln();
-    }
-
-    if (_roots.isNotEmpty) {
-      _writePgnTree(buffer, _roots);
-    }
-    _workingPgn = buffer.toString().trim();
-    widget.onPgnChanged?.call(_workingPgn);
+  void _updateComment(String comment) {
+    if (widget.currentPath.isEmpty) return;
+    final trimmed = comment.isEmpty ? null : comment;
+    widget.onCommentChanged?.call(widget.currentPath, trimmed);
     _scheduleAutoSave();
   }
 
+  void _deleteFromHere() {
+    if (_contextMenuPath == null) return;
+    widget.onDelete?.call(_contextMenuPath!);
+    _hideContextMenu();
+  }
+
+  void _promoteVariation() {
+    if (_contextMenuPath == null) return;
+    widget.onPromote?.call(_contextMenuPath!);
+    _hideContextMenu();
+  }
+
+  void _copyPgnFromHere() {
+    if (_contextMenuPath == null) return;
+    final node = widget.tree.nodeAt(_contextMenuPath!);
+    if (node == null) {
+      _hideContextMenu();
+      return;
+    }
+    final subtree = MoveTree(
+      startingFen: widget.tree.fenAt(_contextMenuPath!.parent),
+      roots: [node],
+    );
+    final text = subtree.toPgnMoveText();
+    Clipboard.setData(ClipboardData(text: text));
+    showAppSnackBar(context, AppMessages.pgnCopied);
+    _hideContextMenu();
+  }
+
   void _scheduleAutoSave() {
-    if (!widget.isEditingExistingLine || _isSyncingFromExternal) return;
+    if (!widget.isEditingExistingLine) return;
     _autoSaveTimer?.cancel();
     _autoSaveTimer = Timer(_autoSaveDelay, () {
       if (!mounted) return;
-      if (_workingPgn.isNotEmpty) {
-        final fullPgn = _buildFullPgnForSave();
-        widget.onLineEdited?.call(fullPgn);
-      }
+      final pgn = _buildFullPgnForSave();
+      widget.onLineEdited?.call(pgn);
     });
   }
 
@@ -454,301 +182,27 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final title = _titleController.text.trim().isNotEmpty
         ? _titleController.text.trim()
         : 'Repertoire Line';
-    final normalizedColor =
-        (widget.repertoireColor ?? 'White').trim().toLowerCase();
-    final whiteHeader = normalizedColor == 'black' ? 'Training' : 'Me';
-    final blackHeader = normalizedColor == 'black' ? 'Me' : 'Training';
-
-    final splitPgn = _splitWorkingPgn(_workingPgn);
-    final extraHeaders =
-        splitPgn.headers.where((line) => !_isManagedHeader(line));
-
-    final lines = <String>[
-      '[Event "$title"]',
-      '[Date "${DateTime.now().toIso8601String().split('T').first}"]',
-      '[White "$whiteHeader"]',
-      '[Black "$blackHeader"]',
-      '[Result "*"]',
-      ...extraHeaders,
-      '',
-    ];
-    if (splitPgn.moveText.isNotEmpty) {
-      lines.add(splitPgn.moveText);
-    }
-    return lines.join('\n');
+    return widget.tree.toPgn(
+      event: title,
+      white: _whiteHeader(),
+      black: _blackHeader(),
+      result: '*',
+    );
   }
 
-  void _writePgnTree(StringBuffer buffer, List<PgnMove> siblings) {
-    if (siblings.isEmpty) return;
-
-    // Determine starting move number and side to move from FEN
-    int startMoveNumber = 1;
-    bool startIsWhite = true;
-
-    if (widget.startingFen != null) {
-      final fenParts = widget.startingFen!.split(' ');
-      if (fenParts.length >= 2) {
-        startIsWhite = fenParts[1] == 'w';
-      }
-      if (fenParts.length >= 6) {
-        startMoveNumber = int.tryParse(fenParts[5]) ?? 1;
-      }
-    }
-
-    _writeNodes(buffer, siblings, startMoveNumber, startIsWhite,
-        isFirstMove: true);
+  String _whiteHeader() {
+    final c = (widget.repertoireColor ?? 'White').trim().toLowerCase();
+    return c == 'black' ? 'Training' : 'Me';
   }
 
-  void _writeNodes(
-      StringBuffer buffer, List<PgnMove> siblings, int moveNumber, bool isWhite,
-      {bool isFirstMove = false}) {
-    if (siblings.isEmpty) return;
-
-    final main = siblings[0];
-
-    // Write main move - move number for White, or "X..." for Black on first move
-    if (isWhite) {
-      buffer.write('$moveNumber. ');
-    } else if (isFirstMove) {
-      buffer.write('$moveNumber... ');
-    }
-
-    buffer.write('${main.san} ');
-    if (main.comment != null && main.comment!.isNotEmpty) {
-      buffer.write('{${_sanitizeComment(main.comment!)}} ');
-    }
-
-    // Write variations (siblings 1..n)
-    for (int i = 1; i < siblings.length; i++) {
-      buffer.write('(');
-      // Variation starts at same move number and color
-      if (isWhite) {
-        buffer.write('$moveNumber. ');
-      } else {
-        buffer.write('$moveNumber... ');
-      }
-
-      final variant = siblings[i];
-      buffer.write('${variant.san} ');
-      if (variant.comment != null && variant.comment!.isNotEmpty) {
-        buffer.write('{${_sanitizeComment(variant.comment!)}} ');
-      }
-
-      // Continue variation line
-      _writeNodes(buffer, variant.children,
-          isWhite ? moveNumber : moveNumber + 1, !isWhite);
-
-      buffer.write(') ');
-    }
-
-    // Continue main line
-    _writeNodes(
-        buffer, main.children, isWhite ? moveNumber : moveNumber + 1, !isWhite);
-  }
-
-  void _goToMove(int moveId) {
-    final path = <PgnMove>[];
-    if (_findPathRecursive(_roots, moveId, path)) {
-      setState(() {
-        _currentPath = path;
-        _updatePosition();
-
-        _commentController.text = path.last.comment ?? '';
-      });
-    }
-  }
-
-  bool _findPathRecursive(
-      List<PgnMove> nodes, int targetId, List<PgnMove> currentPath) {
-    for (final node in nodes) {
-      currentPath.add(node);
-      if (node.id == targetId) {
-        return true;
-      }
-      if (_findPathRecursive(node.children, targetId, currentPath)) {
-        return true;
-      }
-      currentPath.removeLast();
-    }
-    return false;
-  }
-
-  void _goBack() {
-    if (_currentPath.isNotEmpty) {
-      setState(() {
-        _currentPath.removeLast();
-        if (_currentPath.isNotEmpty) {
-          _commentController.text = _currentPath.last.comment ?? '';
-        } else {
-          _commentController.text = '';
-        }
-        _updatePosition();
-      });
-    }
-  }
-
-  void _goForward() {
-    if (_currentPath.isEmpty) {
-      if (_roots.isNotEmpty) {
-        _goToMove(_roots[0].id);
-      }
-    } else {
-      final last = _currentPath.last;
-      if (last.children.isNotEmpty) {
-        _goToMove(last.children[0].id);
-      }
-    }
-  }
-
-  void _showContextMenu(int moveId, Offset globalPosition) {
-    setState(() {
-      _contextMenuMoveId = moveId;
-      _contextMenuPosition = globalPosition;
-      _showingContextMenu = true;
-    });
-  }
-
-  void _hideContextMenu() {
-    setState(() {
-      _showingContextMenu = false;
-      _contextMenuMoveId = null;
-    });
-  }
-
-  void _addComment() {
-    _hideContextMenu();
-    FocusScope.of(context).requestFocus();
-  }
-
-  void _deleteFromHere() {
-    if (_contextMenuMoveId == null) return;
-
-    final path = <PgnMove>[];
-    if (_findPathRecursive(_roots, _contextMenuMoveId!, path)) {
-      setState(() {
-        if (path.length == 1) {
-          _roots.remove(path.last);
-        } else {
-          final parent = path[path.length - 2];
-          parent.children.remove(path.last);
-        }
-
-        final index = _currentPath.indexOf(path.last);
-        if (index != -1) {
-          _currentPath = _currentPath.sublist(0, index);
-          _updatePosition();
-        }
-
-        _hideContextMenu();
-        _generateWorkingPgn();
-      });
-    }
-  }
-
-  void _copyPgnFromHere() {
-    if (_contextMenuMoveId == null) return;
-
-    final path = <PgnMove>[];
-    if (_findPathRecursive(_roots, _contextMenuMoveId!, path)) {
-      final buffer = StringBuffer();
-
-      // Determine starting move number and side from FEN
-      int startMoveNumber = 1;
-      bool startIsWhite = true;
-
-      if (widget.startingFen != null) {
-        final fenParts = widget.startingFen!.split(' ');
-        if (fenParts.length >= 2) {
-          startIsWhite = fenParts[1] == 'w';
-        }
-        if (fenParts.length >= 6) {
-          startMoveNumber = int.tryParse(fenParts[5]) ?? 1;
-        }
-      }
-
-      // Calculate current move number based on path position
-      int moveNumber = startMoveNumber;
-      bool isWhite = startIsWhite;
-      for (int i = 0; i < path.length - 1; i++) {
-        if (isWhite) {
-          isWhite = false;
-        } else {
-          isWhite = true;
-          moveNumber++;
-        }
-      }
-
-      if (!isWhite) {
-        buffer.write('$moveNumber... ');
-      } else {
-        buffer.write('$moveNumber. ');
-      }
-
-      _writeNodes(buffer, [path.last], moveNumber, isWhite);
-
-      Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
-      showAppSnackBar(context, AppMessages.pgnCopied);
-    }
-    _hideContextMenu();
-  }
-
-  void _promoteVariation() {
-    if (_contextMenuMoveId == null) return;
-
-    final path = <PgnMove>[];
-    if (_findPathRecursive(_roots, _contextMenuMoveId!, path)) {
-      final target = path.last;
-
-      setState(() {
-        if (path.length == 1) {
-          if (_roots.indexOf(target) > 0) {
-            _roots.remove(target);
-            _roots.insert(0, target);
-            _generateWorkingPgn();
-          }
-        } else {
-          final parent = path[path.length - 2];
-          if (parent.children.indexOf(target) > 0) {
-            parent.children.remove(target);
-            parent.children.insert(0, target);
-            _generateWorkingPgn();
-          }
-        }
-      });
-    }
-    _hideContextMenu();
-  }
-
-  void _updateSelectedMoveComment(String comment) {
-    if (_selectedMoveId == null) return;
-
-    final path = <PgnMove>[];
-    if (_findPathRecursive(_roots, _selectedMoveId!, path)) {
-      setState(() {
-        final target = path.last;
-        final newMove = target.copyWith(comment: comment);
-
-        if (path.length == 1) {
-          final idx = _roots.indexOf(target);
-          if (idx != -1) _roots[idx] = newMove;
-        } else {
-          final parent = path[path.length - 2];
-          final idx = parent.children.indexOf(target);
-          if (idx != -1) parent.children[idx] = newMove;
-        }
-
-        final pathIdx = _currentPath.indexOf(target);
-        if (pathIdx != -1) {
-          _currentPath[pathIdx] = newMove;
-        }
-
-        _generateWorkingPgn();
-      });
-    }
+  String _blackHeader() {
+    final c = (widget.repertoireColor ?? 'White').trim().toLowerCase();
+    return c == 'black' ? 'Me' : 'Training';
   }
 
   Future<void> _addToRepertoire() async {
-    if (_workingPgn.isEmpty) return;
+    final moveText = widget.tree.toPgnMoveText();
+    if (moveText.isEmpty) return;
     String? repertoireName = widget.currentRepertoireName;
     if (repertoireName == null || repertoireName.isEmpty) {
       repertoireName = await _showAddToRepertoireDialog();
@@ -756,12 +210,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     }
 
     try {
-      await _saveToRepertoireFile(repertoireName, _workingPgn);
-
-      // Notify parent to append to in-memory tree
-      final moves = _currentLineSan;
+      final fullPgn = _buildFullPgnForSave();
+      await _saveToRepertoireFile(repertoireName, fullPgn);
+      final moves = widget.tree.sanSequenceAt(
+          widget.tree.mainlineEndFrom(TreePath.empty));
       final title = _titleController.text.trim();
-      widget.onLineSaved?.call(moves, title, _workingPgn);
+      widget.onLineSaved?.call(moves, title, fullPgn);
     } catch (e) {
       debugPrint('Save to repertoire failed: $e');
       if (mounted) {
@@ -797,94 +251,35 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   Future<void> _saveToRepertoireFile(String repertoireName, String pgn) async {
-    // Append to repertoire file via StorageService
-    // Note: This logic previously used dart:io append mode.
-    // StorageService read/write implies full overwrite.
-    // So we read, append, write.
-
-    // Repertoire files live in the repertoires/ subdirectory
     final filename = 'repertoires/$repertoireName.pgn';
     final currentContent =
         await StorageFactory.instance.readRepertoirePgn(filename) ?? '';
 
-    // Use user-provided title, falling back to "Repertoire Line"
-    final title = _titleController.text.trim().isNotEmpty
-        ? _titleController.text.trim()
-        : 'Repertoire Line';
-
-    final normalizedColor =
-        (widget.repertoireColor ?? 'White').trim().toLowerCase();
-    final whiteHeader = normalizedColor == 'black' ? 'Training' : 'Me';
-    final blackHeader = normalizedColor == 'black' ? 'Me' : 'Training';
-    final splitPgn = _splitWorkingPgn(pgn);
-    final extraHeaders =
-        splitPgn.headers.where((line) => !_isManagedHeader(line));
-    final entryLines = <String>[
-      '[Event "$title"]',
-      '[Date "${DateTime.now().toIso8601String().split('T').first}"]',
-      '[White "$whiteHeader"]',
-      '[Black "$blackHeader"]',
-      '[Result "*"]',
-      ...extraHeaders,
-      '',
-    ];
-    if (splitPgn.moveText.isNotEmpty) {
-      entryLines.add(splitPgn.moveText);
-    }
-
     final separator = currentContent.trimRight().isEmpty ? '' : '\n\n';
-    final entry = '$separator${entryLines.join('\n')}\n';
+    final entry = '$separator$pgn\n';
 
     await StorageFactory.instance
         .saveRepertoirePgn(filename, currentContent + entry);
   }
 
-  ({List<String> headers, String moveText}) _splitWorkingPgn(String pgn) {
-    final headers = <String>[];
-    final moveLines = <String>[];
-    var readingHeaders = true;
+  // ── Context menu ──────────────────────────────────────────────────
 
-    for (final rawLine in pgn.split('\n')) {
-      final line = rawLine.trim();
-      if (line.isEmpty) {
-        if (readingHeaders && headers.isNotEmpty) {
-          readingHeaders = false;
-        }
-        continue;
-      }
-
-      if (readingHeaders && line.startsWith('[') && line.endsWith(']')) {
-        headers.add(line);
-        continue;
-      }
-
-      readingHeaders = false;
-      moveLines.add(line);
-    }
-
-    return (
-      headers: headers,
-      moveText: moveLines.join(' ').trim(),
-    );
-  }
-
-  bool _isManagedHeader(String line) {
-    final trimmed = line.trimLeft();
-    return trimmed.startsWith('[Event ') ||
-        trimmed.startsWith('[Date ') ||
-        trimmed.startsWith('[White ') ||
-        trimmed.startsWith('[Black ') ||
-        trimmed.startsWith('[Result ');
-  }
-
-  void _clearLine() {
+  void _showContextMenu(TreePath path, Offset globalPosition) {
     setState(() {
-      _roots.clear();
-      _currentPath.clear();
-      _workingPgn = '';
-      _updatePosition();
+      _contextMenuPath = path;
+      _contextMenuPosition = globalPosition;
+      _showingContextMenu = true;
     });
   }
+
+  void _hideContextMenu() {
+    setState(() {
+      _showingContextMenu = false;
+      _contextMenuPath = null;
+    });
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -892,7 +287,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       children: [
         Column(
           children: [
-            // PGN Display
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(8),
@@ -904,7 +298,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Line title
                     TextField(
                       controller: _titleController,
                       decoration: InputDecoration(
@@ -919,13 +312,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                     ),
                     Divider(height: 1, color: Colors.grey[800]),
                     const SizedBox(height: 4),
-                    // Moves display
                     Expanded(
                       child: SingleChildScrollView(
                         child: _buildMovesDisplay(),
                       ),
                     ),
-                    // Comment for selected move
                     Divider(height: 1, color: Colors.grey[800]),
                     TextField(
                       controller: _commentController,
@@ -938,19 +329,19 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                         contentPadding: const EdgeInsets.symmetric(vertical: 4),
                       ),
                       style: TextStyle(fontSize: 12, color: Colors.grey[300]),
-                      onChanged: _updateSelectedMoveComment,
+                      onChanged: _updateComment,
                     ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            // Workflow buttons
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _roots.isNotEmpty ? _addToRepertoire : null,
+                    onPressed:
+                        widget.tree.isNotEmpty ? _addToRepertoire : null,
                     icon: const Icon(Icons.add_box, size: 18),
                     label: const Text('Add to Repertoire',
                         style: TextStyle(fontSize: 13)),
@@ -967,7 +358,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _roots.isNotEmpty ? _clearLine : null,
+                    onPressed: widget.tree.isNotEmpty
+                        ? () => widget.onDelete?.call(TreePath.from([0]))
+                        : null,
                     icon: const Icon(Icons.clear, size: 18),
                     label: const Text('Clear Line',
                         style: TextStyle(fontSize: 13)),
@@ -991,36 +384,25 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   Widget _buildMovesDisplay() {
-    if (_roots.isEmpty) {
+    if (widget.tree.isEmpty) {
       return const Text(
         'Make moves on the board to start building your line...',
         style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
       );
     }
 
-    // Determine starting move number and side to move from FEN
-    int startMoveNumber = 1;
-    bool startIsWhite = true;
+    final (startMoveNumber, startIsWhite) =
+        MoveTree.moveNumberFromFen(widget.tree.startingFen);
 
-    if (widget.startingFen != null) {
-      final fenParts = widget.startingFen!.split(' ');
-      if (fenParts.length >= 2) {
-        startIsWhite = fenParts[1] == 'w';
-      }
-      if (fenParts.length >= 6) {
-        startMoveNumber = int.tryParse(fenParts[5]) ?? 1;
-      }
-    }
-
-    // Recursive rendering
     return Wrap(
       spacing: 2,
       runSpacing: 4,
       children: _buildMoveWidgets(
-        _roots,
+        widget.tree.roots,
         startMoveNumber,
         startIsWhite,
         isFirstMove: true,
+        parentPath: TreePath.empty,
         positionBefore: _startingPosition(),
       ),
     );
@@ -1028,8 +410,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   Position _startingPosition() {
     try {
-      return widget.startingFen != null
-          ? Chess.fromSetup(Setup.parseFen(widget.startingFen!))
+      return widget.tree.startingFen != kStandardStartFen
+          ? Chess.fromSetup(Setup.parseFen(widget.tree.startingFen))
           : Chess.initial;
     } catch (_) {
       return Chess.initial;
@@ -1037,13 +419,19 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   List<Widget> _buildMoveWidgets(
-      List<PgnMove> siblings, int moveNumber, bool isWhite,
-      {bool isFirstMove = false, required Position positionBefore}) {
+    List<MoveNode> siblings,
+    int moveNumber,
+    bool isWhite, {
+    bool isFirstMove = false,
+    required TreePath parentPath,
+    required Position positionBefore,
+  }) {
     final widgets = <Widget>[];
     if (siblings.isEmpty) return widgets;
 
     final main = siblings[0];
-    final mainMove = positionBefore.parseSan(main.san);
+    final mainPath = parentPath.child(0);
+    final mainMove = main.san == '--' ? null : positionBefore.parseSan(main.san);
     Position positionAfterMain = positionBefore;
     TrapLineInfo? mainTrap;
     if (mainMove != null) {
@@ -1051,7 +439,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       mainTrap = widget.trapIndex?.trapAtFen(positionAfterMain.fen);
     }
 
-    // Main move - show move number for White, or "X..." for Black on first move
     if (isWhite) {
       widgets.add(Text('$moveNumber. ',
           style: const TextStyle(
@@ -1070,15 +457,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     widgets.add(_buildSingleMoveWidget(
       main,
+      mainPath,
       trap: mainTrap,
-      fenAfterMove: mainMove != null ? positionAfterMain.fen : null,
     ));
 
     if (main.comment != null && main.comment!.isNotEmpty) {
       widgets.add(_buildInlineComment(main.comment!));
     }
 
-    // Check for variations (siblings 1+)
     if (siblings.length > 1) {
       for (int i = 1; i < siblings.length; i++) {
         widgets.add(const Text(' ( ',
@@ -1089,7 +475,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             )));
 
         final variant = siblings[i];
-        final variantMove = positionBefore.parseSan(variant.san);
+        final variantPath = parentPath.child(i);
+        final variantMove =
+            variant.san == '--' ? null : positionBefore.parseSan(variant.san);
         Position positionAfterVariant = positionBefore;
         TrapLineInfo? variantTrap;
         if (variantMove != null) {
@@ -1116,20 +504,19 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
         widgets.add(_buildSingleMoveWidget(
           variant,
+          variantPath,
           trap: variantTrap,
-          fenAfterMove:
-              variantMove != null ? positionAfterVariant.fen : null,
         ));
 
         if (variant.comment != null && variant.comment!.isNotEmpty) {
           widgets.add(_buildInlineComment(variant.comment!));
         }
 
-        // Recursively build the rest of the variation
         widgets.addAll(_buildMoveWidgets(
           variant.children,
           isWhite ? moveNumber : moveNumber + 1,
           !isWhite,
+          parentPath: variantPath,
           positionBefore: positionAfterVariant,
         ));
 
@@ -1142,23 +529,20 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       }
     }
 
-    // Continue main line
     widgets.addAll(_buildMoveWidgets(
       main.children,
       isWhite ? moveNumber : moveNumber + 1,
       !isWhite,
+      parentPath: mainPath,
       positionBefore: positionAfterMain,
     ));
 
     return widgets;
   }
 
-  /// Strip curly braces from comment text so it can't break PGN structure.
-  static String _sanitizeComment(String comment) =>
-      comment.replaceAll('{', '').replaceAll('}', '');
-
   Widget _buildInlineComment(String comment) {
-    final sanitized = filterDisplayComment(_sanitizeComment(comment));
+    final sanitized =
+        filterDisplayComment(comment.replaceAll('{', '').replaceAll('}', ''));
     if (sanitized.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(left: 4, right: 2),
@@ -1174,11 +558,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   Widget _buildSingleMoveWidget(
-    PgnMove move, {
+    MoveNode node,
+    TreePath nodePath, {
     TrapLineInfo? trap,
-    String? fenAfterMove,
   }) {
-    final isSelected = move.id == _selectedMoveId;
+    final isSelected = widget.currentPath == nodePath;
 
     late final Color textColor;
     Color? bgColor;
@@ -1195,8 +579,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     }
 
     return GestureDetector(
-      onTap: () => _goToMove(move.id),
-      onSecondaryTapDown: (d) => _showContextMenu(move.id, d.globalPosition),
+      onTap: () => _jumpTo(nodePath),
+      onSecondaryTapDown: (d) => _showContextMenu(nodePath, d.globalPosition),
       child: Container(
         decoration: BoxDecoration(
           color: bgColor,
@@ -1207,7 +591,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              move.san,
+              node.san,
               style: TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 13,
@@ -1222,7 +606,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
               TrapMoveIndicator(
                 trap: trap,
                 boardPreview: widget.boardPreview,
-                previewFen: fenAfterMove,
+                previewFen: node.fen,
                 ownerTag: this,
               ),
           ],
@@ -1233,10 +617,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   Widget _buildContextMenu() {
     String moveName = 'Move';
-    final path = <PgnMove>[];
-    if (_contextMenuMoveId != null &&
-        _findPathRecursive(_roots, _contextMenuMoveId!, path)) {
-      moveName = path.last.san;
+    if (_contextMenuPath != null) {
+      final node = widget.tree.nodeAt(_contextMenuPath!);
+      if (node != null) moveName = node.san;
     }
 
     return Positioned.fill(
@@ -1279,7 +662,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                       _buildContextMenuItem(
                         icon: Icons.comment,
                         text: 'Add Comment',
-                        onTap: _addComment,
+                        onTap: () {
+                          _hideContextMenu();
+                          FocusScope.of(context).requestFocus();
+                        },
                       ),
                       _buildContextMenuItem(
                         icon: Icons.arrow_upward,

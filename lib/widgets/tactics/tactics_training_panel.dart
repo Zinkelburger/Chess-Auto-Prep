@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/tactics_position.dart';
 import '../../services/tactics_engine.dart';
+import '../clickable_move_line.dart';
 import '../shortcut_tooltip.dart';
 
 /// Puzzle-solving controls shown during an active tactics session.
@@ -24,6 +25,10 @@ class TacticsTrainingPanel extends StatelessWidget {
     required this.onAutoAdvanceChanged,
     required this.onCopyFen,
     required this.onSetRating,
+    this.solutionSanMoves = const [],
+    this.solutionStartPly = 0,
+    this.activeSolutionMoveIndex,
+    this.onSolutionMoveTapped,
   });
 
   final TacticsPosition position;
@@ -42,8 +47,15 @@ class TacticsTrainingPanel extends StatelessWidget {
   final ValueChanged<bool> onAutoAdvanceChanged;
   final VoidCallback onCopyFen;
   final ValueChanged<int> onSetRating;
+  final List<String> solutionSanMoves;
+  final int solutionStartPly;
+  final int? activeSolutionMoveIndex;
+  final void Function(List<String> sanMoves, int clickedIndex)?
+      onSolutionMoveTapped;
 
   bool get _showRating => positionSolved || showSolution;
+
+  bool get _useNextLabel => positionSolved || showSolution;
 
   Color _feedbackColor() {
     if (feedback.contains('Correct')) return Colors.green;
@@ -121,13 +133,14 @@ class TacticsTrainingPanel extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: shortcutTooltip(
-                description: 'Skip position',
+                description:
+                    _useNextLabel ? 'Next position' : 'Skip position',
                 shortcut: 'N',
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: onSkipPosition,
-                    child: const Text('Skip'),
+                    child: Text(_useNextLabel ? 'Next' : 'Skip'),
                   ),
                 ),
               ),
@@ -135,65 +148,68 @@ class TacticsTrainingPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        CheckboxListTile(
-          value: autoAdvance,
-          onChanged: (value) => onAutoAdvanceChanged(value ?? true),
-          title: const Text('Auto-advance to next position'),
-          contentPadding: EdgeInsets.zero,
+        ShortcutTooltip(
+          description: 'Toggle auto-advance to next position',
+          shortcut: AppShortcuts.autoAdvanceToggle,
+          preferDelayed: true,
+          child: CheckboxListTile(
+            value: autoAdvance,
+            onChanged: (value) => onAutoAdvanceChanged(value ?? true),
+            title: const Text('Auto-advance to next position'),
+            contentPadding: EdgeInsets.zero,
+          ),
         ),
-        Stack(
-          children: [
-            Visibility(
-              visible: showSolution && feedback.isEmpty,
-              maintainSize: true,
-              maintainAnimation: true,
-              maintainState: true,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
+        if (feedback.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _feedbackColor().withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _feedbackColor()),
+            ),
+            child: Text(
+              feedback,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: _feedbackColor(),
+                fontSize: 16,
+              ),
+            ),
+          ),
+          if (showSolution) const SizedBox(height: 8),
+        ],
+        if (showSolution)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.grey),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        'Solution: ${engine.getSolution(position, fromIndex: currentMoveIndex)}',
-                        style: const TextStyle(
-                          fontFamily: 'monospace',
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
+                    Expanded(child: _buildSolutionLine(context)),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: showSolution ? onCopyFen : null,
+                      onPressed: onCopyFen,
                       child: const Text('Copy FEN'),
                     ),
                   ],
                 ),
-              ),
-            ),
-            if (feedback.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _feedbackColor().withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _feedbackColor()),
-                ),
-                child: Text(
-                  feedback,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: _feedbackColor(),
-                    fontSize: 16,
+                if (solutionSanMoves.isEmpty &&
+                    position.correctLine.isEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'No solution available',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[500]),
                   ),
-                ),
-              ),
-          ],
-        ),
+                ],
+              ],
+            ),
+          ),
         if (_showRating) ...[
           const SizedBox(height: 12),
           _TacticsStarRating(
@@ -202,6 +218,41 @@ class TacticsTrainingPanel extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildSolutionLine(BuildContext context) {
+    final san = solutionSanMoves;
+    if (san.isEmpty) {
+      final fallback = engine.getSolution(position, fromIndex: 0);
+      if (fallback == 'No solution available') {
+        return Text(
+          fallback,
+          style: TextStyle(fontSize: 13, color: Colors.grey[500]),
+        );
+      }
+      return Text(
+        fallback,
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
+      );
+    }
+
+    final trainablePlies = position.correctLine.length;
+    final highlightIndex = activeSolutionMoveIndex ??
+        (currentMoveIndex < trainablePlies ? currentMoveIndex : null);
+
+    return ClickableMoveLineWidget(
+      key: const Key('tactic-solution-line'),
+      sanMoves: san,
+      startPly: solutionStartPly,
+      maxMoves: san.length,
+      singleLine: false,
+      fontSize: 14,
+      movePadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      activeMoveIndex: highlightIndex,
+      onMoveTapped: onSolutionMoveTapped != null
+          ? (idx) => onSolutionMoveTapped!(san, idx)
+          : null,
     );
   }
 }
@@ -303,7 +354,7 @@ class TacticsPositionInfo extends StatelessWidget {
         if (engine.userMoveCount(pos) > 1) ...[
           const SizedBox(height: 4),
           Text(
-            'Multi-move tactic (${engine.userMoveCount(pos)} moves)',
+            '${engine.userMoveCount(pos)}-move tactic',
             style: const TextStyle(fontSize: 14),
           ),
         ],

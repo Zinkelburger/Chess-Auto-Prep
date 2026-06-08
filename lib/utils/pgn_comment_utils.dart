@@ -194,6 +194,22 @@ String filterDisplayComment(String comment) {
 }
 
 // ---------------------------------------------------------------------------
+// Prose comment formatting (book-style PGNs)
+// ---------------------------------------------------------------------------
+
+/// Split `---` delimiters and collapse whitespace into readable paragraphs.
+/// Returns a list of non-empty paragraph strings ready for display.
+List<String> formatProseComment(String comment) {
+  final filtered = filterDisplayComment(comment);
+  if (filtered.isEmpty) return const [];
+  return filtered
+      .split('---')
+      .map((p) => p.trim())
+      .where((p) => p.isNotEmpty)
+      .toList();
+}
+
+// ---------------------------------------------------------------------------
 // Movetext serialization
 // ---------------------------------------------------------------------------
 

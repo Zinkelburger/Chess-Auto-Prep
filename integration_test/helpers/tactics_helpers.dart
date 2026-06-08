@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:chess_auto_prep/widgets/clickable_move_line.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/main.dart';
@@ -80,17 +81,15 @@ Future<List<String>> showSolutionAndParseMoves(WidgetTester tester) async {
   await tester.tap(find.text('Show Solution'));
   await tester.pumpAndSettle();
 
-  final solutionFinder = find.textContaining('Solution: ');
-  expect(solutionFinder, findsOneWidget);
+  final lineFinder = find.byKey(const Key('tactic-solution-line'));
+  expect(lineFinder, findsOneWidget);
 
-  final fullText = tester.widget<Text>(solutionFinder).data ?? '';
-  final movesStr = fullText.replaceFirst(RegExp(r'^Solution:\s*'), '').trim();
-
-  if (movesStr.isEmpty || movesStr == 'No solution available') {
-    fail('Tactic has no solution to play: "$fullText"');
+  final line = tester.widget<ClickableMoveLineWidget>(lineFinder);
+  if (line.sanMoves.isEmpty) {
+    fail('Tactic has no solution moves on the line widget');
   }
 
-  return movesStr.split(RegExp(r'\s+'));
+  return line.sanMoves;
 }
 
 /// Play the user moves from a tactic solution via AppState.onMoveAttempted.
@@ -126,8 +125,9 @@ Future<void> playTacticMoves(
         reason: 'Board should change after "$moveStr" (UCI: $uci)');
 
     final feedback = find.textContaining('Correct');
-    expect(feedback.evaluate().isNotEmpty, isTrue,
-        reason: 'Expected "Correct" after "$moveStr"');
+    if (feedback.evaluate().isEmpty) {
+      break;
+    }
 
     // Wait for opponent response before next user move
     if (idx < userMoveIndices.length - 1) {

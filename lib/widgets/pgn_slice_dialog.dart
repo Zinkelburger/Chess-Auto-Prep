@@ -230,7 +230,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
         field == 'BlackElo') {
       return MatchMode.values;
     }
-    return [MatchMode.contains, MatchMode.exact, MatchMode.regex];
+    return [MatchMode.contains, MatchMode.notContains, MatchMode.exact, MatchMode.regex];
   }
 
   @override
@@ -449,14 +449,15 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: !_computing && _matchingIndices.isNotEmpty
+          onPressed: _matchingIndices.isNotEmpty
               ? () {
                   widget.onApply(_matchingIndices, _buildConfig());
                   Navigator.pop(context);
                 }
               : null,
-          child: Text(
-              _computing ? 'Apply (…)' : 'Apply (${_matchingIndices.length})'),
+          child: Text(_computing
+              ? 'Apply (${_matchingIndices.isEmpty ? '…' : _matchingIndices.length})'
+              : 'Apply (${_matchingIndices.length})'),
         ),
       ],
     );

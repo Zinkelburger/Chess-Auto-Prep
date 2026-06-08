@@ -15,10 +15,14 @@ class TacticsBoardUpdate {
   const TacticsBoardUpdate({
     this.applyMoveUci,
     this.setFen,
+    this.san,
   });
 
   final String? applyMoveUci;
   final String? setFen;
+
+  /// SAN of the move, so the PGN viewer can stay in sync in real time.
+  final String? san;
 }
 
 /// FEN and orientation for loading a tactic onto the main board.
@@ -90,7 +94,6 @@ class TacticsSessionController extends ChangeNotifier {
 
   void toggleSolution() {
     showSolution = !showSolution;
-    if (showSolution) feedback = '';
     notifyListeners();
   }
 
@@ -252,6 +255,22 @@ class TacticsSessionController extends ChangeNotifier {
     required TacticsSchedule schedule,
     required TacticsIsMounted isMounted,
   }) {
+    // Advance currentTacticFen to include the user's just-played move so the
+    // opponent callback (and the next FEN-validation check) see the right state.
+    if (moveUci != null) {
+      try {
+        final pos = Chess.fromSetup(
+          Setup.parseFen(currentTacticFen ?? currentPosition!.fen),
+        );
+        final move = Move.parse(moveUci);
+        if (move != null) {
+          currentTacticFen = pos.play(move).fen;
+        }
+      } catch (e) {
+        debugPrint('[TacticsSession] FEN advance after user move failed: $e');
+      }
+    }
+
     currentMoveIndex++;
 
     final totalUserMoves = engine.userMoveCount(currentPosition!);
@@ -268,17 +287,19 @@ class TacticsSessionController extends ChangeNotifier {
       schedule(const Duration(milliseconds: 500), () {
         if (!isMounted() || currentPosition == null) return;
 
-        final opponentSan =
+        final opponentToken =
             currentPosition!.correctLine[currentMoveIndex];
         try {
           final pos = Chess.fromSetup(
             Setup.parseFen(currentTacticFen ?? currentPosition!.fen),
           );
-          final opponentMove = pos.parseSan(opponentSan);
+          final opponentMove = pos.parseSan(opponentToken);
           if (opponentMove != null) {
-            final newPos = pos.play(opponentMove);
+            final (newPos, canonicalSan) = pos.makeSan(opponentMove);
             currentTacticFen = newPos.fen;
-            onBoardUpdate?.call(TacticsBoardUpdate(setFen: newPos.fen));
+            onBoardUpdate?.call(
+              TacticsBoardUpdate(setFen: newPos.fen, san: canonicalSan),
+            );
           }
         } catch (e) {
           debugPrint('[TacticsSession] Opponent move failed: $e');

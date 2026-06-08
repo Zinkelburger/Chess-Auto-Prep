@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../shortcut_tooltip.dart';
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
 import '../../models/training_settings.dart';
@@ -174,20 +175,25 @@ class TrainingSettingsPanel extends StatelessWidget {
           const Divider(height: 32),
           Text('Learning new lines', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title:
-                Text('Manual advance', style: theme.textTheme.titleSmall),
-            subtitle: const Text(
-              'Press Next (or Space) to see the next move when '
-              'learning. Turn off to auto-advance after a delay.',
+          ShortcutTooltip(
+            description: 'Toggle auto-advance when learning new lines',
+            shortcut: AppShortcuts.autoAdvanceToggle,
+            preferDelayed: true,
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title:
+                  Text('Manual advance', style: theme.textTheme.titleSmall),
+              subtitle: const Text(
+                'Press Next (or Space) to see the next move when '
+                'learning. Turn off to auto-advance after a delay.',
+              ),
+              value: settings.learnRequiresClick,
+              onChanged: (v) {
+                settings.learnRequiresClick = v;
+                settings.save();
+                onSettingsChanged();
+              },
             ),
-            value: settings.learnRequiresClick,
-            onChanged: (v) {
-              settings.learnRequiresClick = v;
-              settings.save();
-              onSettingsChanged();
-            },
           ),
           if (!settings.learnRequiresClick) ...[
             const SizedBox(height: 12),

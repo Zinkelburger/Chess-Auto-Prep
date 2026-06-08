@@ -21,7 +21,6 @@ import '../services/generation/generation_config.dart';
 import '../widgets/chess_board_widget.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../widgets/coverage_calculator_widget.dart';
-import '../widgets/interactive_pgn_editor.dart';
 import '../widgets/analysis_tab.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
 import '../widgets/pgn_import_dialog.dart';
@@ -62,7 +61,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     with TickerProviderStateMixin {
   late final RepertoireController _controller;
   late TabController _tabController;
-  final PgnEditorController _pgnEditorController = PgnEditorController();
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
   bool _isGenerating = false;
@@ -109,18 +107,20 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     // 2. Add a listener to rebuild the UI when state changes
     _controller.addListener(_onRepertoireChanged);
 
-    // 3. Show repertoire selection on first load
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _controller.currentRepertoire == null) {
-        _showRepertoireSelection();
-      }
-    });
-
-    // 4. Listen for mode switches that pass a repertoire/line to load
+    // 3. Register AppState listener and handle initial state.
+    //    Must happen before the selection-screen check so pending generation
+    //    data from PGN Viewer's "Generate repertoire from games" is consumed
+    //    before we'd push the selection screen.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final appState = context.read<AppState>();
       appState.addListener(_onAppStateChanged);
+
+      if (appState.pendingRepertoirePath != null) {
+        _onAppStateChanged();
+      } else if (_controller.currentRepertoire == null) {
+        _showRepertoireSelection();
+      }
     });
   }
 
@@ -249,35 +249,46 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           if (mounted) waitForLine();
         });
       }
+
+      final pendingPgnPaths = appState.pendingGenerationPgnPaths;
+      if (pendingPgnPaths != null) {
+        appState.pendingGenerationPgnPaths = null;
+        _openGenerateMode();
+        // Seed DB Explorer after the generation tab widget mounts,
+        // then auto-start the build so the user lands on a running generation.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _generationTabKey.currentState?.seedDbExplorer(
+            pgnPaths: pendingPgnPaths,
+            autoStart: true,
+          );
+        });
+      }
     }
   }
 
-  // 3. The listener that calls setState
   void _onRepertoireChanged() {
     if (!mounted) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        if (_controller.currentRepertoire != null && !_controller.isLoading) {
-          final currentId =
-              _controller.currentRepertoire!['filePath'] as String?;
-          if (currentId != null && currentId != _lastRepertoireId) {
-            _lastRepertoireId = currentId;
-            _boardFlipped = !_controller.isRepertoireWhite;
-            _generatedTree = null;
-            _generatedTreeResetCounter++;
-            _coverageResult = null;
-            EngineSettings().probabilityStartMoves = _controller.rootMoves;
-            _loadTraps(currentId);
-          }
-
-          if (_controller.needsColorSelection) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _showColorSelectionDialog();
-            });
-          }
+    setState(() {
+      if (_controller.currentRepertoire != null && !_controller.isLoading) {
+        final currentId =
+            _controller.currentRepertoire!['filePath'] as String?;
+        if (currentId != null && currentId != _lastRepertoireId) {
+          _lastRepertoireId = currentId;
+          _boardFlipped = !_controller.isRepertoireWhite;
+          _generatedTree = null;
+          _generatedTreeResetCounter++;
+          _coverageResult = null;
+          EngineSettings().probabilityStartMoves = _controller.rootMoves;
+          _loadTraps(currentId);
         }
-      });
+
+        if (_controller.needsColorSelection) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _showColorSelectionDialog();
+          });
+        }
+      }
     });
   }
 
@@ -425,7 +436,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       }
     }
 
-    // Arrow keys — navigate regardless of tab
+    // Arrow keys — always through controller (single source of truth).
     if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       if (HardwareKeyboard.instance.isShiftPressed) {
         if (TrapNavigationButtons.goToPreviousTrap(
@@ -434,11 +445,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         )) {
           return KeyEventResult.handled;
         }
-      } else if (_isPgnTabActive) {
-        _pgnEditorController.goBack();
-      } else {
-        _controller.goBack();
       }
+      _controller.goBack();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
@@ -449,11 +457,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         )) {
           return KeyEventResult.handled;
         }
-      } else if (_isPgnTabActive) {
-        _pgnEditorController.goForward();
-      } else {
-        _controller.goForward();
       }
+      _controller.goForward();
       return KeyEventResult.handled;
     }
 
@@ -833,24 +838,15 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   Widget _buildPgnTab() {
     return PgnWithAnalysisPane(
       controller: _controller,
-      pgnEditorController: _pgnEditorController,
-      editorKeySuffix: _controller.selectedPgnLine?.id ?? 'no_selection',
-      initialPgn: _getInitialPgnForEditor() ?? '',
+      tree: _controller.tree,
+      currentPath: _controller.path,
+      onJump: (path) => _controller.jump(path),
+      onCommentChanged: (path, comment) =>
+          _controller.setCommentAtPath(path, comment),
+      onDelete: (path) => _controller.deleteAtPath(path),
+      onPromote: (path) => _controller.promoteVariation(path),
       repertoireName: _controller.currentRepertoire?['name'] as String?,
       repertoireColor: _controller.isRepertoireWhite ? 'White' : 'Black',
-      moveHistory: _controller.moveHistory,
-      currentMoveIndex: _controller.currentMoveIndex,
-      startingFen: _controller.startingFen,
-      onMoveStateChanged: (moveIndex, moves) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          if (!_controller.isInternalUpdate) {
-            _controller.syncFromMoveIndex(moveIndex, moves);
-          }
-        });
-      },
-      onPositionChanged: (_) {},
-      onPgnChanged: (_) {},
       isEditingExistingLine: _controller.selectedPgnLine != null,
       onLineEdited: (updatedPgn) {
         _controller.updateSelectedLineContent(updatedPgn);
@@ -860,7 +856,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       },
       onImportPgn: _importPgn,
       onReload: _reloadRepertoire,
-      tree: _generatedTree,
+      generatedTree: _generatedTree,
       treeConfig: _generatedTreeConfig,
       fenMap: _generatedTreeFenMap,
       boardPreview: _boardPreview,
@@ -1009,16 +1005,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             isError: true);
       }
     }
-  }
-
-  String? _getInitialPgnForEditor() {
-    // If a specific PGN line is selected, return its full PGN
-    if (_controller.selectedPgnLine != null) {
-      return _controller.selectedPgnLine!.fullPgn;
-    }
-    // No line selected — let the editor build from moveHistory instead of
-    // dumping the entire multi-game repertoire file into the parser.
-    return null;
   }
 
   // --- METHODS (Now simple calls to the controller) ---

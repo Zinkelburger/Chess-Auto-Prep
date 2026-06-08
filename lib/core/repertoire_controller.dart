@@ -1,12 +1,16 @@
-// Centralized repertoire session state shared across board, PGN, engine, and tree.
-// This was extracted from the repertoire screen so it can be reused (e.g., trainer).
-// It owns the canonical chess state: move history, current ply index, derived FEN,
-// and synchronizes the opening tree and parsed repertoire lines.
+/// Centralized repertoire session state shared across board, PGN, engine, and tree.
+///
+/// Owns a [MoveTree] and a [TreePath] cursor as the single source of truth.
+/// All UI components derive their chess position from this class.
+/// Navigation funnels through [jump] — there is no secondary state to sync.
+library;
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/chess_constants.dart';
 import '../constants/engine_defaults.dart';
+import '../models/move_tree.dart';
 import '../models/opening_tree.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../models/repertoire_line.dart';
@@ -52,186 +56,179 @@ class RepertoireController with ChangeNotifier {
   bool get needsColorSelection => _needsColorSelection;
 
   /// Root position move string (e.g. "1. d4 d5 2. c4") persisted in the PGN.
-  /// Used as the starting point for cumulative probability calculations.
   String _rootMoves = '';
   String get rootMoves => _rootMoves;
 
-  /// The canonical move history - source of truth for position.
-  List<String> _moveHistory = [];
-  List<String> get moveHistory => List.unmodifiable(_moveHistory);
+  // ── Tree + path (single source of truth) ─────────────────────────
 
-  /// Current move index (-1 = starting position, 0 = after first move, etc.)
-  int _currentMoveIndex = -1;
-  int get currentMoveIndex => _currentMoveIndex;
+  /// The editable PGN move tree.
+  MoveTree _tree = MoveTree();
+  MoveTree get tree => _tree;
 
-  /// Derived position from move history.
-  Position _position = Chess.initial;
-  Position get position => _position;
-  String get fen => _position.fen;
+  /// Cursor into [_tree].  Empty = starting position.
+  TreePath _path = TreePath.empty;
+  TreePath get path => _path;
 
-  /// Starting FEN if different from standard position (for PGN FEN header).
-  String? _startingFen;
-  String? get startingFen => _startingFen;
+  // ── Derived state (backward-compatible getters) ──────────────────
 
-  /// Get current move sequence (moves up to current index).
-  List<String> get currentMoveSequence {
-    if (_currentMoveIndex < 0) return [];
-    return _moveHistory.sublist(0, _currentMoveIndex + 1);
+  /// SAN sequence from root to cursor (replaces old _moveHistory getter).
+  List<String> get moveHistory => _tree.sanSequenceAt(_path);
+
+  /// Alias — always identical to [moveHistory] now.
+  List<String> get currentMoveSequence => moveHistory;
+
+  /// Ply index (replaces old _currentMoveIndex).
+  int get currentMoveIndex => _path.length - 1;
+
+  /// Board FEN at cursor.  O(1) — stored on each [MoveNode].
+  String get fen => _tree.fenAt(_path);
+
+  /// Derived position (lazy; most callers only need [fen]).
+  Position get position {
+    try {
+      return Chess.fromSetup(Setup.parseFen(fen));
+    } catch (_) {
+      return Chess.initial;
+    }
   }
 
-  String? _normalizeStartingFen(String? fen) {
-    final trimmedFen = fen?.trim();
-    if (trimmedFen == null ||
-        trimmedFen.isEmpty ||
-        trimmedFen == kStandardStartFen) {
-      return null;
-    }
-    return trimmedFen;
+  /// Starting FEN if different from standard position.
+  String? get startingFen {
+    final f = _tree.startingFen;
+    return f == kStandardStartFen ? null : f;
   }
 
   // Flag to prevent update loops between board and PGN editor.
-  bool _isInternalUpdate = false;
+  final bool _isInternalUpdate = false;
   bool get isInternalUpdate => _isInternalUpdate;
 
-  /// Called when user makes a move on the board or clicks an explorer move.
-  /// The move has already been validated by the caller (e.g., ChessBoardWidget).
-  /// This is the entrypoint for new moves.
-  void userPlayedMove(String sanMove) {
-    // If we're not at the end of the line, check if this creates a variation.
-    if (_currentMoveIndex < _moveHistory.length - 1) {
-      final existingNextMove = _moveHistory[_currentMoveIndex + 1];
-      if (existingNextMove == sanMove) {
-        _currentMoveIndex++;
-        _rebuildPosition();
-        _syncOpeningTree();
-        notifyListeners();
-        return;
-      }
-      _moveHistory = _moveHistory.sublist(0, _currentMoveIndex + 1);
-    }
+  // ── Navigation (single entry point) ──────────────────────────────
 
-    _moveHistory.add(sanMove);
-    _currentMoveIndex++;
-
-    _rebuildPosition();
-    _syncOpeningTree();
-    notifyListeners();
-  }
-
-  /// Advance one ply along the current line (Browse candidates, etc.).
-  /// Unlike [userPlayedMove], does not use the "next SAN matches" shortcut,
-  /// which can follow the wrong branch when the same SAN appears elsewhere.
-  void userPlayedMoveOnCurrentPath(String sanMove) {
-    navigateToLineMove([...currentMoveSequence, sanMove]);
-  }
-
-  /// Called when user selects a move in the opening tree.
-  /// Uses the tree node's own path as the base so we branch from where the
-  /// tree visually IS, not from a potentially stale currentDepth comparison.
-  void userSelectedTreeMove(String sanMove) {
-    if (_openingTree == null) return;
-
-    final treePath = _openingTree!.currentNode.getMovePath();
-    _moveHistory = [...treePath, sanMove];
-    _currentMoveIndex = _moveHistory.length - 1;
-
-    _rebuildPosition();
-    _syncOpeningTree();
-    notifyListeners();
-  }
-
-  /// Atomically navigate to a specific position within a line.
-  /// Replaces the pattern of calling userPlayedMove in a loop, which caused
-  /// multiple intermediate rebuilds/syncs and left the tree cursor stale.
-  void navigateToLineMove(List<String> fullPath, {int? targetIndex}) {
-    _moveHistory = List.from(fullPath);
-    _currentMoveIndex =
-        targetIndex ?? (fullPath.isEmpty ? -1 : fullPath.length - 1);
-    _rebuildPosition();
-    _syncOpeningTree();
-    notifyListeners();
-  }
-
-  /// Append [lineMoves] from the current position, keep the full line in
-  /// history/PGN, and jump the board to [lineMoveIndex] within that line.
-  void applyLineFromCurrent(List<String> lineMoves, int lineMoveIndex) {
-    if (lineMoves.isEmpty) return;
-    final base = currentMoveSequence;
-    final clamped = lineMoveIndex.clamp(0, lineMoves.length - 1);
-    navigateToLineMove(
-      [...base, ...lineMoves],
-      targetIndex: base.length + clamped,
-    );
-  }
-
-  /// Jump to a specific move index in the history (-1 = starting position).
-  void jumpToMoveIndex(int index) {
-    if (index < -1 || index >= _moveHistory.length) return;
-    if (index == _currentMoveIndex) return;
-
-    _currentMoveIndex = index;
-    _rebuildPosition();
+  /// Jump the cursor to [target].  All navigation funnels here.
+  void jump(TreePath target) {
+    if (_path == target) return;
+    if (!_tree.isValidPath(target)) return;
+    _path = target;
     _syncOpeningTree();
     notifyListeners();
   }
 
   void goBack() {
-    if (_currentMoveIndex >= 0) {
-      jumpToMoveIndex(_currentMoveIndex - 1);
-    }
+    if (_path.isNotEmpty) jump(_path.parent);
   }
 
   void goForward() {
-    if (_currentMoveIndex < _moveHistory.length - 1) {
-      jumpToMoveIndex(_currentMoveIndex + 1);
+    final children = _path.isEmpty
+        ? _tree.roots
+        : (_tree.nodeAt(_path)?.children ?? const []);
+    if (children.isNotEmpty) jump(_path.child(0));
+  }
+
+  void goToStart() => jump(TreePath.empty);
+
+  void goToEnd() {
+    if (_tree.isEmpty) return;
+    jump(_tree.mainlineEndFrom(_path));
+  }
+
+  // ── Move entry ───────────────────────────────────────────────────
+
+  /// Play a move from the current cursor position.
+  ///
+  /// If the SAN already exists as a child, jumps to it (no duplicate).
+  /// Otherwise adds a new node and jumps.  Replaces the old
+  /// `userPlayedMove`, `userPlayedMoveOnCurrentPath`, and most uses of
+  /// `userSelectedTreeMove`.
+  void playMove(String sanMove) {
+    final newPath = _tree.addMove(_path, sanMove);
+    if (newPath != null) jump(newPath);
+  }
+
+  /// Play a move from an explicit tree position (for opening-tree clicks
+  /// where the base is the tree widget's current node, not the controller
+  /// cursor).  Equivalent to old `userSelectedTreeMove`.
+  void playMoveAtTreePath(TreePath basePath, String sanMove) {
+    final newPath = _tree.addMove(basePath, sanMove);
+    if (newPath != null) jump(newPath);
+  }
+
+  // ── Backward-compatible entry points (thin wrappers) ─────────────
+
+  /// Called when user makes a move on the board.
+  void userPlayedMove(String sanMove) => playMove(sanMove);
+
+  /// Advance along current line without the "next SAN matches" shortcut.
+  void userPlayedMoveOnCurrentPath(String sanMove) => playMove(sanMove);
+
+  /// Called when user selects a move in the opening tree.
+  void userSelectedTreeMove(String sanMove) {
+    if (_openingTree == null) return;
+    final treeMoves = _openingTree!.currentNode.getMovePath();
+    final basePath = _pathForMoveSequence(treeMoves);
+    playMoveAtTreePath(basePath, sanMove);
+  }
+
+  /// Atomically navigate to a specific position within a line.
+  void navigateToLineMove(List<String> fullPath, {int? targetIndex}) {
+    _ensureMovesInTree(fullPath);
+    final tp = _pathForMoveSequence(fullPath);
+    if (targetIndex != null && targetIndex >= 0 && targetIndex < tp.length) {
+      jump(tp.take(targetIndex + 1));
+    } else {
+      jump(tp);
     }
   }
 
-  void goToStart() {
-    jumpToMoveIndex(-1);
+  /// Append [lineMoves] from the current position and jump to [lineMoveIndex].
+  void applyLineFromCurrent(List<String> lineMoves, int lineMoveIndex) {
+    if (lineMoves.isEmpty) return;
+    final base = currentMoveSequence;
+    final full = [...base, ...lineMoves];
+    _ensureMovesInTree(full);
+    final clamped = lineMoveIndex.clamp(0, lineMoves.length - 1);
+    final tp = _pathForMoveSequence(full);
+    jump(tp.take(base.length + clamped + 1));
   }
 
-  void goToEnd() {
-    jumpToMoveIndex(_moveHistory.length - 1);
+  /// Jump to a specific move index in the history.
+  void jumpToMoveIndex(int index) {
+    if (index < -1) return;
+    if (index == -1) {
+      jump(TreePath.empty);
+      return;
+    }
+    final clamped = index.clamp(0, _path.length - 1);
+    jump(_path.take(clamped + 1));
   }
+
+  // ── Line / sequence loading ──────────────────────────────────────
 
   /// Replace current history with provided moves.
   void loadMoveHistory(List<String> moves) {
-    _moveHistory = List.from(moves);
-    _currentMoveIndex = moves.isEmpty ? -1 : moves.length - 1;
-    _rebuildPosition();
+    _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
+    _path = _tree.mainlineEndFrom(TreePath.empty);
     _syncOpeningTree();
     notifyListeners();
   }
 
   /// Clear the current line.
   void clearMoveHistory() {
-    _moveHistory.clear();
-    _currentMoveIndex = -1;
-    _position = _startingFen != null
-        ? Chess.fromSetup(Setup.parseFen(_startingFen!))
-        : Chess.initial;
-    _startingFen = null;
+    _tree = MoveTree(startingFen: _tree.startingFen);
+    _path = TreePath.empty;
     _syncOpeningTree();
     notifyListeners();
   }
 
   /// Set the board position from a FEN string.
-  /// Returns true if the FEN was valid and position was set.
   bool setPositionFromFen(String fen) {
     try {
       final trimmedFen = fen.trim();
       if (trimmedFen.isEmpty) return false;
+      Chess.fromSetup(Setup.parseFen(trimmedFen));
 
-      final newPos = Chess.fromSetup(Setup.parseFen(trimmedFen));
-
-      _position = newPos;
-      _moveHistory.clear();
-      _currentMoveIndex = -1;
-      _startingFen = _normalizeStartingFen(trimmedFen);
-
+      _tree = MoveTree(startingFen: trimmedFen);
+      _path = TreePath.empty;
       _selectedPgnLine = null;
-
       _syncOpeningTree();
       notifyListeners();
       return true;
@@ -250,17 +247,11 @@ class RepertoireController with ChangeNotifier {
     try {
       final trimmedFen = fen.trim();
       if (trimmedFen.isEmpty) return false;
+      Chess.fromSetup(Setup.parseFen(trimmedFen));
 
-      final targetPosition = Chess.fromSetup(Setup.parseFen(trimmedFen));
-      _startingFen = _normalizeStartingFen(startingFen);
-      _moveHistory = List.from(moves);
-      _currentMoveIndex = _moveHistory.isEmpty ? -1 : _moveHistory.length - 1;
-      _rebuildPosition();
-
-      if (_position.fen != targetPosition.fen) {
-        _position = targetPosition;
-      }
-
+      final effStart = _normalizeStartingFen(startingFen) ?? kStandardStartFen;
+      _tree = MoveTree.fromMoves(moves, startingFen: effStart);
+      _path = _tree.mainlineEndFrom(TreePath.empty);
       _selectedPgnLine = null;
       _syncOpeningTree();
       notifyListeners();
@@ -271,32 +262,152 @@ class RepertoireController with ChangeNotifier {
     }
   }
 
-  /// Rebuild the chess position from move history up to current index.
-  void _rebuildPosition() {
-    Position pos;
-    if (_startingFen != null) {
-      try {
-        pos = Chess.fromSetup(Setup.parseFen(_startingFen!));
-      } catch (_) {
-        pos = Chess.initial;
-      }
-    } else {
-      pos = Chess.initial;
-    }
-    for (int i = 0; i <= _currentMoveIndex && i < _moveHistory.length; i++) {
-      final move = pos.parseSan(_moveHistory[i]);
-      if (move == null) break;
-      pos = pos.play(move);
-    }
-    _position = pos;
+  /// Loads a specific PGN line for editing.
+  void loadPgnLine(RepertoireLine line) {
+    _selectedPgnLine = line;
+    _tree = MoveTree.fromMoves(line.moves, startingFen: _tree.startingFen);
+    _path = _tree.mainlineEndFrom(TreePath.empty);
+    _syncOpeningTree();
+    notifyListeners();
   }
 
-  /// Sync the opening tree to match current move history.
+  /// Load a raw move sequence onto the board.
+  void loadMoveSequence(List<String> moves) {
+    _selectedPgnLine = null;
+    _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
+    _path = _tree.mainlineEndFrom(TreePath.empty);
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  /// Syncs the game state from the PGN editor (still needed during transition).
+  void syncFromMoveIndex(int moveIndex, List<String> moves) {
+    if (_isInternalUpdate) return;
+    _ensureMovesInTree(moves);
+    final tp = _pathForMoveSequence(moves);
+    final target = moveIndex < 0
+        ? TreePath.empty
+        : tp.take((moveIndex + 1).clamp(0, tp.length));
+    _path = target;
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  // ── Tree mutation (for PGN editor actions) ───────────────────────
+
+  /// Delete the subtree at [path] and adjust cursor.
+  void deleteAtPath(TreePath target) {
+    if (!_tree.isValidPath(target)) return;
+    final newCursor = target.parent;
+    _tree.deleteAt(target);
+    _path = _tree.isValidPath(newCursor) ? newCursor : TreePath.empty;
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  /// Promote variation at [target] to mainline.
+  void promoteVariation(TreePath target) {
+    _tree.promoteVariation(target);
+    // After promotion the node is now at index 0 among siblings.
+    if (target.isNotEmpty && target.last != 0) {
+      // Recompute cursor if it pointed at the promoted node.
+      final promoted = TreePath([
+        ...target.parent.toList(),
+        0,
+      ]);
+      if (_path == target) _path = promoted;
+    }
+    notifyListeners();
+  }
+
+  /// Update comment on the node at [target].
+  void setCommentAtPath(TreePath target, String? comment) {
+    _tree.setComment(target, comment);
+    notifyListeners();
+  }
+
+  // ── Private helpers ──────────────────────────────────────────────
+
+  String? _normalizeStartingFen(String? fen) {
+    final trimmedFen = fen?.trim();
+    if (trimmedFen == null ||
+        trimmedFen.isEmpty ||
+        trimmedFen == kStandardStartFen) {
+      return null;
+    }
+    return trimmedFen;
+  }
+
+  /// Sync the opening tree to match current move sequence.
   void _syncOpeningTree() {
     if (_openingTree != null) {
       _openingTree!.syncToMoveHistory(currentMoveSequence);
     }
   }
+
+  /// Ensure a SAN sequence exists in the tree (adding nodes as needed).
+  void _ensureMovesInTree(List<String> moves) {
+    var parentPath = TreePath.empty;
+    for (final san in moves) {
+      final result = _tree.addMove(parentPath, san);
+      if (result == null) break;
+      parentPath = result;
+    }
+  }
+
+  /// Get the TreePath for a SAN sequence, assuming it exists in the tree.
+  TreePath _pathForMoveSequence(List<String> moves) {
+    final indices = <int>[];
+    var siblings = _tree.roots;
+    for (final san in moves) {
+      var found = false;
+      for (int i = 0; i < siblings.length; i++) {
+        if (siblings[i].san == san) {
+          indices.add(i);
+          siblings = siblings[i].children;
+          found = true;
+          break;
+        }
+      }
+      if (!found) break;
+    }
+    return TreePath(indices);
+  }
+
+  /// Parses a PGN move text string into SAN moves.
+  List<String> _parsePgnMoveText(String movesStr) {
+    if (movesStr.trim().isEmpty) return [];
+    final cleaned = movesStr
+        .replaceAll(RegExp(r'\d+\.+\s*'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (cleaned.isEmpty) return [];
+    return cleaned.split(' ').where((m) => m.isNotEmpty).toList();
+  }
+
+  /// If a root position is set, navigate to it so the tree starts there.
+  void _navigateToRootPosition() {
+    if (_rootMoves.isEmpty) return;
+    final sanMoves = _parsePgnMoveText(_rootMoves);
+    if (sanMoves.isEmpty) return;
+    _ensureMovesInTree(sanMoves);
+    _path = _pathForMoveSequence(sanMoves);
+    _syncOpeningTree();
+  }
+
+  /// Converts a SAN move list to PGN move text.
+  String _movesToPgnMoveText(List<String> moves) {
+    if (moves.isEmpty) return '';
+    final sb = StringBuffer();
+    for (int i = 0; i < moves.length; i++) {
+      if (i.isEven) sb.write('${(i ~/ 2) + 1}. ');
+      sb.write(moves[i]);
+      if (i < moves.length - 1) sb.write(' ');
+    }
+    return sb.toString();
+  }
+
+  // ── Repertoire lifecycle ─────────────────────────────────────────
 
   /// Sets a new repertoire and triggers loading.
   Future<void> setRepertoire(Map<String, dynamic> repertoire) async {
@@ -320,52 +431,6 @@ class RepertoireController with ChangeNotifier {
     await loadRepertoire();
   }
 
-  /// Parses a PGN move text string (e.g. "1. d4 d5 2. c4") into SAN moves.
-  List<String> _parsePgnMoveText(String movesStr) {
-    if (movesStr.trim().isEmpty) return [];
-    final cleaned = movesStr
-        .replaceAll(RegExp(r'\d+\.+\s*'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    if (cleaned.isEmpty) return [];
-    return cleaned.split(' ').where((m) => m.isNotEmpty).toList();
-  }
-
-  /// If a root position is set, navigate to it so the tree starts there.
-  void _navigateToRootPosition() {
-    if (_rootMoves.isEmpty) return;
-    final sanMoves = _parsePgnMoveText(_rootMoves);
-    if (sanMoves.isEmpty) return;
-
-    Position pos = Chess.initial;
-    final validMoves = <String>[];
-    for (final san in sanMoves) {
-      final move = pos.parseSan(san);
-      if (move == null) break;
-      pos = pos.play(move);
-      validMoves.add(san);
-    }
-
-    if (validMoves.isNotEmpty) {
-      _moveHistory = validMoves;
-      _currentMoveIndex = validMoves.length - 1;
-      _position = pos;
-      _syncOpeningTree();
-    }
-  }
-
-  /// Converts a SAN move list to PGN move text (e.g. "1. d4 d5 2. c4").
-  String _movesToPgnMoveText(List<String> moves) {
-    if (moves.isEmpty) return '';
-    final sb = StringBuffer();
-    for (int i = 0; i < moves.length; i++) {
-      if (i.isEven) sb.write('${(i ~/ 2) + 1}. ');
-      sb.write(moves[i]);
-      if (i < moves.length - 1) sb.write(' ');
-    }
-    return sb.toString();
-  }
-
   /// Sets the current move sequence as the root position and persists it.
   Future<void> setRootPosition() async {
     if (_currentRepertoire == null) return;
@@ -385,10 +450,10 @@ class RepertoireController with ChangeNotifier {
 
   /// Restores repertoire state from a PGN snapshot (used by undo).
   Future<void> restoreRepertoireFromPgn(
-    String pgn, {
+    String pgnContent, {
     List<String>? syncPath,
   }) async {
-    _repertoirePgn = pgn.isEmpty ? null : pgn;
+    _repertoirePgn = pgnContent.isEmpty ? null : pgnContent;
     await _buildOpeningTree();
     await _parseRepertoireLines();
     if (syncPath != null) {
@@ -412,10 +477,8 @@ class RepertoireController with ChangeNotifier {
       if (await storage.fileExists(filePath)) {
         _repertoirePgn = await storage.readFile(filePath);
 
-        _position = Chess.initial;
-        _moveHistory.clear();
-        _currentMoveIndex = -1;
-        _startingFen = null;
+        _tree = MoveTree();
+        _path = TreePath.empty;
 
         await _buildOpeningTree();
         await _parseRepertoireLines();
@@ -424,20 +487,16 @@ class RepertoireController with ChangeNotifier {
         _repertoirePgn = null;
         _openingTree = null;
         _repertoireLines = [];
-        _position = Chess.initial;
-        _moveHistory.clear();
-        _currentMoveIndex = -1;
-        _startingFen = null;
+        _tree = MoveTree();
+        _path = TreePath.empty;
       }
     } catch (e) {
       debugPrint('Failed to load repertoire: $e');
       _repertoirePgn = null;
       _openingTree = null;
       _repertoireLines = [];
-      _position = Chess.initial;
-      _moveHistory.clear();
-      _currentMoveIndex = -1;
-      _startingFen = null;
+      _tree = MoveTree();
+      _path = TreePath.empty;
     } finally {
       _setLoading(false);
     }
@@ -451,11 +510,11 @@ class RepertoireController with ChangeNotifier {
     }
 
     try {
-      final pgn = _repertoirePgn!;
+      final pgnContent = _repertoirePgn!;
       final color = _isRepertoireWhite ? 'white' : 'black';
       _repertoireLines = await compute(
         _parseRepertoireInIsolate,
-        (pgn: pgn, color: color),
+        (pgn: pgnContent, color: color),
       );
       debugPrint(
           'Parsed ${_repertoireLines.length} repertoire lines for PGN browser');
@@ -539,62 +598,7 @@ class RepertoireController with ChangeNotifier {
     }
   }
 
-  /// Syncs the game state from an external source (like the PGN editor).
-  /// Use syncFromMoveIndex instead for move-based sync.
-  void syncGameFromFen(String fen) {
-    if (_position.fen == fen || _isInternalUpdate) {
-      return;
-    }
-    setPositionFromFen(fen);
-  }
-
-  /// Sync to a specific move index from the PGN editor.
-  void syncFromMoveIndex(int moveIndex, List<String> moves) {
-    if (_isInternalUpdate) return;
-
-    _moveHistory = List.from(moves);
-    _currentMoveIndex = moveIndex;
-    _rebuildPosition();
-    _syncOpeningTree();
-    notifyListeners();
-  }
-
-  /// Handles position changes from the opening tree (current node path).
-  void onTreePositionChanged(String fen) {
-    if (_openingTree == null) return;
-
-    final moves = _openingTree!.currentNode.getMovePath();
-
-    _isInternalUpdate = true;
-    _moveHistory = List.from(moves);
-    _currentMoveIndex = moves.isEmpty ? -1 : moves.length - 1;
-    _rebuildPosition();
-    _isInternalUpdate = false;
-
-    notifyListeners();
-  }
-
-  /// Loads a specific PGN line for editing.
-  void loadPgnLine(RepertoireLine line) {
-    _selectedPgnLine = line;
-
-    _moveHistory = List.from(line.moves);
-    _currentMoveIndex = line.moves.isEmpty ? -1 : line.moves.length - 1;
-    _rebuildPosition();
-    _syncOpeningTree();
-
-    notifyListeners();
-  }
-
-  /// Load a raw move sequence onto the board (e.g. from trap lines).
-  void loadMoveSequence(List<String> moves) {
-    _selectedPgnLine = null;
-    _moveHistory = List.from(moves);
-    _currentMoveIndex = moves.isEmpty ? -1 : moves.length - 1;
-    _rebuildPosition();
-    _syncOpeningTree();
-    notifyListeners();
-  }
+  // ── PGN line management ──────────────────────────────────────────
 
   RepertoireLine? _selectedPgnLine;
   RepertoireLine? get selectedPgnLine => _selectedPgnLine;
@@ -604,8 +608,7 @@ class RepertoireController with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Persist edits (comments, moves, variations) made to the currently
-  /// selected line back to the PGN file on disk and update in-memory state.
+  /// Persist edits made to the currently selected line.
   Future<bool> updateSelectedLineContent(String newPgn) async {
     if (_selectedPgnLine == null || _currentRepertoire == null) return false;
     final filePath = _currentRepertoire!['filePath'] as String?;
@@ -616,8 +619,6 @@ class RepertoireController with ChangeNotifier {
     final success = await service.updateLineContent(filePath, lineId, newPgn);
     if (!success) return false;
 
-    // Update the in-memory line so the Lines browser reflects changes
-    // without a full reload.
     final idx = _repertoireLines.indexWhere((l) => l.id == lineId);
     if (idx != -1) {
       final old = _repertoireLines[idx];
@@ -670,16 +671,15 @@ class RepertoireController with ChangeNotifier {
     return [...headers, '', moves].join('\n');
   }
 
-  /// Append a newly saved line to the in-memory tree and lines list
-  /// without reloading the entire repertoire from disk.
+  /// Append a newly saved line to the in-memory tree and lines list.
   void appendNewLine(
     List<String> moves,
     String title,
-    String pgn, {
+    String pgnContent, {
     bool updateTree = true,
   }) {
     if (updateTree) {
-      final startFen = _startingFen ?? kStandardStartFen;
+      final startFen = startingFen ?? kStandardStartFen;
       _openingTree?.appendLineFromFen(startFen, moves);
     }
 
@@ -691,7 +691,7 @@ class RepertoireController with ChangeNotifier {
         : (moves.length >= 3
             ? 'Line: ${moves.take(3).join(' ')}'
             : 'Repertoire Line ${index + 1}');
-    final startPosition = service.extractStartPositionFromPgn(pgn);
+    final startPosition = service.extractStartPositionFromPgn(pgnContent);
 
     _repertoireLines.add(RepertoireLine(
       id: id,
@@ -699,13 +699,13 @@ class RepertoireController with ChangeNotifier {
       moves: moves,
       color: _isRepertoireWhite ? 'white' : 'black',
       startPosition: startPosition,
-      fullPgn: pgn,
+      fullPgn: pgnContent,
     ));
 
     notifyListeners();
   }
 
-  /// Extend an existing line (or create in-memory entry) after a one-click add.
+  /// Extend an existing line after a one-click add.
   void appendMoveToExistingLine(
     List<String> prefix,
     String newMove, {
@@ -715,7 +715,7 @@ class RepertoireController with ChangeNotifier {
       _repertoirePgn = updatedPgnContent;
     }
 
-    final startFen = _startingFen ?? kStandardStartFen;
+    final startFen = startingFen ?? kStandardStartFen;
     _openingTree?.appendLineFromFen(startFen, [...prefix, newMove]);
 
     final lineIndex = _findLineIndexForPrefix(prefix);
@@ -741,17 +741,17 @@ class RepertoireController with ChangeNotifier {
 
     final fullPath = [...prefix, newMove];
     final service = RepertoireService();
-    final pgn = updatedPgnContent != null
+    final pgnForLine = updatedPgnContent != null
         ? _extractLastGamePgn(updatedPgnContent)
         : service.buildMinimalGamePgn(
             fullPath,
-            startingFen: _startingFen,
+            startingFen: startingFen,
             isWhiteRepertoire: _isRepertoireWhite,
           );
     appendNewLine(
       fullPath,
       _defaultLineTitle(fullPath),
-      pgn,
+      pgnForLine,
       updateTree: false,
     );
   }
@@ -792,10 +792,6 @@ class RepertoireController with ChangeNotifier {
   }
 
   /// Imports PGN content into the current repertoire file.
-  ///
-  /// Appends the raw PGN text to the file, then reloads so the opening tree
-  /// and lines list reflect the new games.  Returns the number of PGN chunks
-  /// ([Event]-delimited lines) added.
   Future<int> importPgnContent(String pgnContent) async {
     if (_currentRepertoire == null) return 0;
 
@@ -854,5 +850,4 @@ class RepertoireController with ChangeNotifier {
 
     return updated.join('\n');
   }
-
 }

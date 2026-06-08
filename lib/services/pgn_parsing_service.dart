@@ -46,7 +46,9 @@ List<String> splitPgnIntoGames(String content) {
     final trimmedLine = line.trim();
 
     if (!inGame &&
-        (trimmedLine.startsWith('//') || trimmedLine.startsWith('{'))) {
+        (trimmedLine.startsWith('//') ||
+            trimmedLine.startsWith('{') ||
+            trimmedLine.startsWith('%'))) {
       continue;
     }
 
@@ -175,6 +177,8 @@ bool matchesField(String headerVal, String query, MatchMode mode) {
   switch (mode) {
     case MatchMode.contains:
       return headerVal.toLowerCase().contains(query.toLowerCase());
+    case MatchMode.notContains:
+      return !headerVal.toLowerCase().contains(query.toLowerCase());
     case MatchMode.exact:
       return headerVal.toLowerCase() == query.toLowerCase();
     case MatchMode.regex:

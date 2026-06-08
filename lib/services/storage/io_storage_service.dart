@@ -107,6 +107,8 @@ class IOStorageService implements StorageService {
     final entries = <RepertoireMetadata>[];
     await for (final entity in dir.list()) {
       if (!entity.path.toLowerCase().endsWith('.pgn')) continue;
+      final base = p.basenameWithoutExtension(entity.path);
+      if (base.endsWith('_raw_games')) continue;
       final stat = await entity.stat();
       final content = await readTextFile(File(entity.path));
       entries.add(RepertoireMetadata(
