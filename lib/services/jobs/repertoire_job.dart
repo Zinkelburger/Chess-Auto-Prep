@@ -39,6 +39,9 @@ class RepertoireJob extends ChangeNotifier {
   final String? subtreeFen;
   final DateTime createdAt;
 
+  /// Snapshot of the config used to start this job (e.g. AuditConfig.toMap()).
+  Map<String, dynamic>? configSnapshot;
+
   JobStatus _status = JobStatus.queued;
   JobProgress _progress = JobProgress.zero;
   String? _error;
@@ -49,6 +52,7 @@ class RepertoireJob extends ChangeNotifier {
     required this.type,
     required this.label,
     this.subtreeFen,
+    this.configSnapshot,
   }) : createdAt = DateTime.now();
 
   JobStatus get status => _status;

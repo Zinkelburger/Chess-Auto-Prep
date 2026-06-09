@@ -226,6 +226,20 @@ class MoveTree {
   bool get isEmpty => roots.isEmpty;
   bool get isNotEmpty => roots.isNotEmpty;
 
+  /// Collect all FENs in the tree (position part only, first 4 fields).
+  /// Useful for transposition detection.
+  Set<String> collectFenPrefixes() {
+    final fens = <String>{};
+    void walk(List<MoveNode> nodes) {
+      for (final node in nodes) {
+        fens.add(node.fen.split(' ').take(4).join(' '));
+        walk(node.children);
+      }
+    }
+    walk(roots);
+    return fens;
+  }
+
   /// Whether [path] points to a valid node.
   bool isValidPath(TreePath path) {
     if (path.isEmpty) return true;

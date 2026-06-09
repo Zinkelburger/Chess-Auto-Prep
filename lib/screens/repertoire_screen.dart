@@ -9,35 +9,32 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../core/repertoire_controller.dart';
-import '../models/build_tree_node.dart';
+import '../core/generation_session_controller.dart';
+import '../core/audit_session_controller.dart';
+import '../core/coverage_controller.dart';
 import '../models/engine_settings.dart';
 import '../models/repertoire_line.dart';
 import '../services/repertoire_service.dart';
 import '../utils/app_messages.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import '../services/coherence_service.dart';
-import '../services/generation/fen_map.dart';
-import '../services/generation/generation_config.dart';
 import '../widgets/chess_board_widget.dart';
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
 import '../widgets/generation_config_dialog.dart';
-import '../widgets/explorer_section.dart';
 import '../widgets/layout/board_zone.dart';
+import '../widgets/layout/bottom_pane.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
 import '../widgets/layout/empty_state_placeholder.dart';
 import '../widgets/layout/jobs_panel.dart';
+import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';
 import '../widgets/repertoire/repertoire_toolbar.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/engine/inline_expectimax_bar.dart';
 import '../services/jobs/repertoire_job.dart';
 import '../features/audit/models/audit_finding.dart';
-import '../features/audit/models/audit_result.dart';
-import '../features/audit/widgets/audit_config_panel.dart';
 import '../features/audit/widgets/audit_config_dialog.dart';
 import '../features/audit/widgets/audit_findings_panel.dart';
 import '../features/traps/widgets/trap_navigation_buttons.dart';
@@ -59,36 +56,29 @@ class RepertoireScreen extends StatefulWidget {
   State<RepertoireScreen> createState() => _RepertoireScreenState();
 }
 
-class _RepertoireScreenState extends State<RepertoireScreen>
-    with TickerProviderStateMixin {
+class _RepertoireScreenState extends State<RepertoireScreen> {
   late final RepertoireController _controller;
+  final GenerationSessionController _generationController =
+      GenerationSessionController();
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
-  final GlobalKey<AuditConfigPanelState> _auditConfigKey =
-      GlobalKey<AuditConfigPanelState>();
-  bool _isGenerating = false;
-  bool _isGenerationPaused = false;
-  bool _isAuditing = false;
+  final AuditSessionController _auditController = AuditSessionController();
+  final GlobalKey<BottomPaneState> _bottomPaneKey =
+      GlobalKey<BottomPaneState>();
   bool _isCompactLayout = false;
 
-  /// Audit results held at screen level so both config and findings panels
-  /// can access them, and board annotations can read them directly.
-  AuditResult? _auditResult;
-  final List<AuditFinding> _liveFindings = [];
-
   final JobManager _jobManager = JobManager.instance;
-  RepertoireJob? _currentGenJob;
-  RepertoireJob? _currentAuditJob;
 
-  BuildTree? _generatedTree;
-  TreeBuildConfig? _generatedTreeConfig;
-  FenMap? _generatedTreeFenMap;
   final BoardPreviewController _boardPreview = BoardPreviewController();
   final NavigationStack _navigationStack = NavigationStack();
 
   bool _boardFlipped = false;
 
-  final CoherenceService _coherenceService = CoherenceService();
+  /// Currently previewed missing-move finding (ephemeral board state).
+  AuditFinding? _ephemeralFinding;
+
+  /// FEN with the missing move played (ephemeral, not saved to tree).
+  String? _ephemeralFen;
 
   List<TrapLineInfo> _traps = [];
   TrapIndexService? _trapIndex;
@@ -96,10 +86,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   TrapLineInfo? _trapWalkthroughInitialTrap;
   int _trapWalkthroughSession = 0;
 
-  CoverageResult? _coverageResult;
-  bool _isCoverageRunning = false;
-  double? _coverageProgress;
-  String? _coverageProgressMessage;
+  final CoverageController _coverageController = CoverageController();
 
   String? _lastRepertoireId;
 
@@ -111,6 +98,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
+    _generationController.addListener(_onGenerationChanged);
+    _auditController.addListener(_onAuditChanged);
+    _coverageController.addListener(_onCoverageChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -131,94 +121,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     setState(() {});
   }
 
-  /// PGN is always active in the unified right pane (no tabs hiding it).
-  bool get _isPgnTabActive => true;
-
-  void _openJobsDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 550, maxHeight: 500),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
-                child: Row(
-                  children: [
-                    const Icon(Icons.work_outline, size: 20),
-                    const SizedBox(width: 8),
-                    Text('Jobs', style: Theme.of(ctx).textTheme.titleMedium),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(),
-              Flexible(child: _buildJobsContent()),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _openBottomPane(BottomPaneTab tab) {
+    _bottomPaneKey.currentState?.open(tab);
   }
 
-  void _openFindingsDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => Dialog(
-        insetPadding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
-                child: Row(
-                  children: [
-                    const Icon(Icons.assignment_outlined, size: 20),
-                    const SizedBox(width: 8),
-                    Text('Audit Findings',
-                        style: Theme.of(ctx).textTheme.titleMedium),
-                    if (_auditResult != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Theme.of(ctx).colorScheme.error,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '${_auditResult!.activeFindingCount}',
-                          style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 20),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(),
-              Flexible(child: _buildFindingsContent()),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _toggleBottomPane(BottomPaneTab tab) {
+    _bottomPaneKey.currentState?.toggle(tab);
+  }
+
+  void _closeBottomPane() {
+    _bottomPaneKey.currentState?.close();
   }
 
   void _openGenerationDialog() {
@@ -229,53 +141,57 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       currentRepertoire: _controller.currentRepertoire,
       currentMoveSequence: _controller.currentMoveSequence,
       generationTabKey: _generationTabKey,
-      onGeneratingChanged: _onGeneratingChanged,
-      onPauseChanged: _onPauseChanged,
+      generationController: _generationController,
       onLineSaved: (moves, title, pgn) {
         _controller.appendNewLine(moves, title, pgn);
       },
-      onTreeReset: _onTreeReset,
-      onTreeBuilt: _onTreeBuilt,
     );
   }
 
-  void _openAuditDialog() {
+  void _openAuditDialog({bool forceConfig = false}) {
+    if (!forceConfig) {
+      if (_auditController.isAuditing || _auditController.hasResults) {
+        _openBottomPane(BottomPaneTab.findings);
+        return;
+      }
+    }
+    _launchAuditConfig();
+  }
+
+  String? get _repertoireFilePath =>
+      _controller.currentRepertoire?['filePath'] as String?;
+
+  void _launchAuditConfig() {
+    final ac = _auditController;
     showAuditConfigDialog(
       context,
       openingTree: _controller.openingTree,
       isWhiteRepertoire: _controller.isRepertoireWhite,
       currentFen: _controller.fen,
       currentMoveSequence: _controller.currentMoveSequence,
-      repertoireFilePath:
-          _controller.currentRepertoire?['filePath'] as String?,
-      auditConfigKey: _auditConfigKey,
+      repertoireFilePath: _repertoireFilePath,
+      auditService: ac.service,
+      onConfigChanged: ac.onConfigChanged,
       onAuditingChanged: (auditing) {
         if (!mounted) return;
-        if (auditing && _currentAuditJob == null) {
-          _currentAuditJob = _jobManager.createJob(
-            type: JobType.audit,
-            label:
-                _controller.currentRepertoire?['name'] as String? ?? 'Audit',
-          );
-          _currentAuditJob!.updateStatus(JobStatus.running);
-          _liveFindings.clear();
-          _auditResult = null;
-        } else if (!auditing && _currentAuditJob != null) {
-          _currentAuditJob!.updateStatus(JobStatus.completed);
-          _currentAuditJob = null;
-        }
-        setState(() => _isAuditing = auditing);
+        ac.onAuditingChanged(
+          auditing,
+          _jobManager,
+          _controller.currentRepertoire?['name'] as String? ?? 'Audit',
+        );
+        if (auditing) _openBottomPane(BottomPaneTab.findings);
       },
       onResultReady: (result) {
         if (!mounted) return;
-        setState(() {
-          _auditResult = result;
-          _liveFindings.clear();
-        });
+        ac.onResultReady(result, _repertoireFilePath);
       },
       onLiveFinding: (finding) {
         if (!mounted) return;
-        setState(() => _liveFindings.add(finding));
+        ac.onLiveFinding(finding);
+      },
+      onProgress: (checked, total) {
+        if (!mounted) return;
+        ac.onProgress(checked, total);
       },
     );
   }
@@ -354,19 +270,30 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     }
   }
 
+  bool _navigatingToFinding = false;
+
   void _onRepertoireChanged() {
     if (!mounted) return;
+
+    String? newRepertoireId;
     setState(() {
+      // Clear ephemeral state when the user navigates normally (not via finding).
+      if (!_navigatingToFinding && _ephemeralFinding != null) {
+        _ephemeralFinding = null;
+        _ephemeralFen = null;
+      }
+
       if (_controller.currentRepertoire != null && !_controller.isLoading) {
         final currentId =
             _controller.currentRepertoire!['filePath'] as String?;
         if (currentId != null && currentId != _lastRepertoireId) {
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
-          _generatedTree = null;
-          _coverageResult = null;
+          _generationController.clearTree();
+          _coverageController.clear();
           EngineSettings().probabilityStartMoves = _controller.rootMoves;
           _loadTraps(currentId);
+          newRepertoireId = currentId;
         }
 
         if (_controller.needsColorSelection) {
@@ -376,6 +303,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         }
       }
     });
+
+    if (newRepertoireId != null) {
+      _auditController.tryRestore(newRepertoireId!);
+    }
   }
 
   Future<void> _showColorSelectionDialog() async {
@@ -410,8 +341,17 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   @override
   void dispose() {
+    if (_auditController.isAuditing) {
+      _auditController.saveProgress(_repertoireFilePath);
+    }
     _focusNode.dispose();
     _boardPreview.dispose();
+    _coverageController.removeListener(_onCoverageChanged);
+    _coverageController.dispose();
+    _auditController.removeListener(_onAuditChanged);
+    _auditController.dispose();
+    _generationController.removeListener(_onGenerationChanged);
+    _generationController.dispose();
     _controller.removeListener(_onRepertoireChanged);
     _controller.dispose();
 
@@ -508,20 +448,37 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       return KeyEventResult.handled;
     }
 
-    // '1' key — open Jobs dialog
+    // '1' key — toggle Jobs in bottom pane
     if (event.logicalKey == LogicalKeyboardKey.digit1 &&
         !HardwareKeyboard.instance.isControlPressed &&
         !HardwareKeyboard.instance.isShiftPressed) {
-      _openJobsDialog();
+      _toggleBottomPane(BottomPaneTab.jobs);
       return KeyEventResult.handled;
     }
 
-    // '2' key — open Findings dialog
+    // '2' key — toggle Findings in bottom pane
     if (event.logicalKey == LogicalKeyboardKey.digit2 &&
         !HardwareKeyboard.instance.isControlPressed &&
         !HardwareKeyboard.instance.isShiftPressed) {
-      _openFindingsDialog();
+      _toggleBottomPane(BottomPaneTab.findings);
       return KeyEventResult.handled;
+    }
+
+    // '3' key — toggle Lines in bottom pane
+    if (event.logicalKey == LogicalKeyboardKey.digit3 &&
+        !HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isShiftPressed) {
+      _toggleBottomPane(BottomPaneTab.lines);
+      return KeyEventResult.handled;
+    }
+
+    // Escape — collapse bottom pane
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      final pane = _bottomPaneKey.currentState;
+      if (pane != null && !pane.isCollapsed) {
+        _closeBottomPane();
+        return KeyEventResult.handled;
+      }
     }
 
     // 'F' key - Flip the board
@@ -646,11 +603,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           repertoireName: repertoire['name'] as String?,
           gameCount: repertoire['gameCount'] as int?,
         ),
-        isGenerating: _isGenerating,
-        isGenerationPaused: _isGenerationPaused,
+        isGenerating: _generationController.isGenerating,
+        isGenerationPaused: _generationController.isPaused,
         showTrainButton: true,
         showSelectRepertoireAction: true,
-        generationLocked: _isGenerating,
+        generationLocked: _generationController.isGenerating,
         onOpenSettings: () async {
           await openRepertoireSettings(context);
           _reclaimFocus();
@@ -700,19 +657,18 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   initialTrap: _trapWalkthroughInitialTrap,
                   onClose: _closeTrapWalkthrough,
                 ),
+              _buildBottomPane(),
               RepertoireStatusBar(
-                tree: _generatedTree,
-                trapCount: _traps.length,
-                lineCount: _controller.repertoireLines.length,
-                coveragePercent: _coverageResult?.coveragePercent,
-                findingsCount: _auditResult?.activeFindingCount ?? 0,
-                jobsStatus: _isGenerating
-                    ? (_isGenerationPaused ? 'paused' : 'running')
-                    : _isAuditing
-                        ? 'auditing'
+                findingsCount: _auditController.activeFindingCount,
+                jobsStatus: _generationController.isGenerating
+                    ? (_generationController.isPaused ? 'Paused' : 'Generating...')
+                    : _auditController.isAuditing
+                        ? 'Auditing...'
                         : null,
-                onFindingsTap: _openFindingsDialog,
-                onJobsTap: _openJobsDialog,
+                onFindingsTap: () =>
+                    _toggleBottomPane(BottomPaneTab.findings),
+                onJobsTap: () =>
+                    _toggleBottomPane(BottomPaneTab.jobs),
               ),
             ],
           ),
@@ -751,18 +707,76 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildBoardZone() {
-    return BoardZone(
-      boardPreview: _boardPreview,
-      fen: _controller.fen,
-      positionFromFen: _positionFromFen,
-      boardFlipped: _boardFlipped,
-      isGenerating: _isGenerating,
-      isGenerationPaused: _isGenerationPaused,
-      onMove: _handleMove,
-      onPause: () => _generationTabKey.currentState?.togglePause(),
-      onResume: () => _generationTabKey.currentState?.togglePause(),
-      onCancel: () => _generationTabKey.currentState?.cancelGeneration(),
-      annotations: _buildBoardAnnotations(),
+    return Column(
+      children: [
+        Expanded(
+          child: BoardZone(
+            boardPreview: _boardPreview,
+            fen: _ephemeralFen ?? _controller.fen,
+            positionFromFen: _positionFromFen,
+            boardFlipped: _boardFlipped,
+            isGenerating: _generationController.isGenerating,
+            isGenerationPaused: _generationController.isPaused,
+            onMove: _handleMove,
+            onPause: _generationController.pauseBuild,
+            onResume: _generationController.resumeBuild,
+            onCancel: _generationController.cancelBuild,
+            annotations: _buildBoardAnnotations(),
+          ),
+        ),
+        if (_ephemeralFinding != null) _buildEphemeralBar(),
+      ],
+    );
+  }
+
+  Widget _buildEphemeralBar() {
+    final finding = _ephemeralFinding!;
+    final move = finding.missingMove ?? '?';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.blue.withAlpha(30),
+        border: Border(top: BorderSide(color: Colors.blue.withAlpha(80))),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.visibility_off_outlined, size: 14,
+              color: Colors.blue),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Missing: $move (preview)',
+              style: const TextStyle(fontSize: 12, color: Colors.blue),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _createNewLineFromEphemeral,
+            icon: const Icon(Icons.add, size: 14),
+            label: const Text('New line from here',
+                style: TextStyle(fontSize: 11)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.blue,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.close, size: 14, color: Colors.grey),
+            onPressed: () {
+              setState(() {
+                _ephemeralFinding = null;
+                _ephemeralFen = null;
+              });
+            },
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          ),
+        ],
+      ),
     );
   }
 
@@ -771,7 +785,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   /// Uses the dartchess library to resolve SAN moves to origin/dest squares
   /// for drawing arrows. Limited to 6 annotations to avoid visual clutter.
   List<BoardAnnotation> _buildBoardAnnotations() {
-    final result = _auditResult;
+    final result = _auditController.result;
     if (result == null) return const [];
 
     final currentFen = _controller.fen;
@@ -837,35 +851,35 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return '$file$rank';
   }
 
-  /// Unified right pane: engine bar + expectimax bar + explorer + PGN + nav.
+  /// Unified right pane: engine + expectimax (horizontal) + PGN + nav.
   Widget _buildToolsColumn() {
     return Column(
       children: [
-        InlineEngineBar(
-          fen: _controller.fen,
-          isActive: _isPgnTabActive,
-        ),
-        const Divider(height: 1),
-        InlineExpectimaxBar(
-          controller: _controller,
-          tree: _generatedTree,
-          treeConfig: _generatedTreeConfig,
-          fenMap: _generatedTreeFenMap,
-          boardPreview: _boardPreview,
-          coherenceResult: _coherenceService.result,
-          isGenerating: _isGenerating,
-          isGenerationPaused: _isGenerationPaused,
-        ),
-        const Divider(height: 1),
-        ExplorerSection(
-          controller: _controller,
-          tree: _generatedTree,
-          fenMap: _generatedTreeFenMap,
-          boardPreview: _boardPreview,
-          coherenceResult: _coherenceService.result,
-          traps: _traps,
-          coverageResult: _coverageResult,
-          navigationStack: _navigationStack,
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: InlineEngineBar(
+                  fen: _controller.fen,
+                  isActive: true,
+                ),
+              ),
+              VerticalDivider(width: 1, thickness: 1, color: Theme.of(context).dividerColor),
+              Expanded(
+                child: InlineExpectimaxBar(
+                  controller: _controller,
+                  tree: _generationController.generatedTree,
+                  treeConfig: _generationController.generatedTreeConfig,
+                  fenMap: _generationController.generatedTreeFenMap,
+                  boardPreview: _boardPreview,
+                  coherenceResult: _generationController.coherenceService.result,
+                  isGenerating: _generationController.isGenerating,
+                  isGenerationPaused: _generationController.isPaused,
+                ),
+              ),
+            ],
+          ),
         ),
         const Divider(height: 1),
         Expanded(
@@ -881,7 +895,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   Widget _buildNavControls() {
     return Container(
-      height: 36,
+      height: 28,
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(color: Theme.of(context).dividerColor),
@@ -891,41 +905,41 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           IconButton(
-            icon: const Icon(Icons.skip_previous, size: 20),
+            icon: const Icon(Icons.skip_previous, size: 16),
             onPressed: () => _controller.loadMoveSequence([]),
             tooltip: 'Go to start',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
           IconButton(
-            icon: const Icon(Icons.chevron_left, size: 24),
+            icon: const Icon(Icons.chevron_left, size: 20),
             onPressed: _controller.goBack,
             tooltip: 'Back (←)',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
           IconButton(
-            icon: const Icon(Icons.chevron_right, size: 24),
+            icon: const Icon(Icons.chevron_right, size: 20),
             onPressed: _controller.goForward,
             tooltip: 'Forward (→)',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           IconButton(
             onPressed: _generateFromHere,
-            icon: const Icon(Icons.add, size: 20),
+            icon: const Icon(Icons.add, size: 16),
             tooltip: 'Generate line from here',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           IconButton(
-            icon: const Icon(Icons.flip, size: 18),
+            icon: const Icon(Icons.flip, size: 14),
             onPressed: () => setState(() => _boardFlipped = !_boardFlipped),
             tooltip: 'Flip board (F)',
             padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
           ),
         ],
       ),
@@ -937,34 +951,143 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       listenable: _jobManager,
       builder: (context, _) => JobsPanel(
         jobManager: _jobManager,
-        isGenerating: _isGenerating,
-        isGenerationPaused: _isGenerationPaused,
-        isAuditing: _isAuditing,
+        isGenerating: _generationController.isGenerating,
+        isGenerationPaused: _generationController.isPaused,
+        isAuditing: _auditController.isAuditing,
+        isAuditPaused: _auditController.isPaused,
+        auditNodesChecked: _auditController.nodesChecked,
+        auditTotalNodes: _auditController.totalNodes,
+        lastAuditConfig: _auditController.lastConfig,
         onOpenGenerationDialog: _openGenerationDialog,
-        onPauseGeneration: () {
-          _generationTabKey.currentState?.togglePause();
-        },
-        onResumeGeneration: () {
-          _generationTabKey.currentState?.togglePause();
-        },
-        onCancelGeneration: () {
-          _generationTabKey.currentState?.cancelGeneration();
-        },
+        onPauseAudit: _auditController.pause,
+        onResumeAudit: _auditController.resume,
+        onCancelAudit: () => _auditController.cancel(_repertoireFilePath),
+        onPauseGeneration: _generationController.pauseBuild,
+        onResumeGeneration: _generationController.resumeBuild,
+        onCancelGeneration: _generationController.cancelBuild,
       ),
     );
   }
 
   Widget _buildFindingsContent() {
+    final ac = _auditController;
     return AuditFindingsPanel(
-      result: _auditResult,
-      liveFindings: _liveFindings,
-      isAuditing: _isAuditing,
-      onNavigateToPosition: (movePath) {
-        _controller.loadMoveSequence(movePath);
-      },
+      result: ac.result,
+      liveFindings: ac.liveFindings,
+      isAuditing: ac.isAuditing,
+      auditNodesChecked: ac.nodesChecked,
+      auditTotalNodes: ac.totalNodes,
+      onFindingSelected: _onFindingSelected,
       onResultChanged: (updatedResult) {
-        setState(() => _auditResult = updatedResult);
+        ac.onResultChanged(updatedResult, _repertoireFilePath);
       },
+      onRerunAudit: () => _openAuditDialog(forceConfig: true),
+      interruptedSnapshot: ac.interruptedSnapshot,
+      onResumeAudit: ac.interruptedSnapshot != null ? _resumeInterruptedAudit : null,
+      onStartFreshAudit: ac.interruptedSnapshot != null ? _startFreshAudit : null,
+    );
+  }
+
+  void _resumeInterruptedAudit() {
+    final snap = _auditController.interruptedSnapshot;
+    if (snap == null) return;
+    final tree = _controller.openingTree;
+    if (tree == null) return;
+    _openBottomPane(BottomPaneTab.findings);
+    _auditController.launchResume(
+      snapshot: snap,
+      tree: tree,
+      isWhiteRepertoire: _controller.isRepertoireWhite,
+      jobManager: _jobManager,
+      repertoireLabel: _controller.currentRepertoire?['name'] as String?,
+      repertoireFilePath: _repertoireFilePath,
+    );
+  }
+
+  void _startFreshAudit() {
+    _auditController.startFresh();
+    _openAuditDialog(forceConfig: true);
+  }
+
+  void _onFindingSelected(AuditFinding finding) {
+    _navigatingToFinding = true;
+    _controller.navigateToLineMove(finding.movePath);
+    _navigatingToFinding = false;
+
+    if (finding.type == AuditFindingType.missingResponse &&
+        finding.missingMove != null) {
+      try {
+        final parentFen = _controller.fen;
+        final pos = Chess.fromSetup(Setup.parseFen(parentFen));
+        final move = pos.parseSan(finding.missingMove!);
+        if (move != null) {
+          final after = pos.play(move);
+          setState(() {
+            _ephemeralFinding = finding;
+            _ephemeralFen = after.fen;
+          });
+          return;
+        }
+      } catch (_) {}
+    }
+
+    if (_ephemeralFinding != null) {
+      setState(() {
+        _ephemeralFinding = null;
+        _ephemeralFen = null;
+      });
+    }
+  }
+
+  void _createNewLineFromEphemeral() {
+    final finding = _ephemeralFinding;
+    if (finding == null || finding.missingMove == null) return;
+
+    final lineMoves = [...finding.movePath, finding.missingMove!];
+
+    setState(() {
+      _ephemeralFinding = null;
+      _ephemeralFen = null;
+    });
+
+    _controller.navigateToLineMove(lineMoves);
+  }
+
+  Widget _buildLinesContent() {
+    return RepertoireLinesBrowser(
+      lines: _controller.repertoireLines,
+      currentMoveSequence: _controller.currentMoveSequence,
+      isWhiteRepertoire: _controller.isRepertoireWhite,
+      coverageResult: _coverageController.result,
+      isCoverageRunning: _coverageController.isRunning,
+      coverageProgress: _coverageController.progress,
+      coverageProgressMessage: _coverageController.progressMessage,
+      tree: _generationController.generatedTree,
+      fenMap: _generationController.generatedTreeFenMap,
+      traps: _traps,
+      coherenceResult: _generationController.coherenceService.result,
+      navigationStack: _navigationStack,
+      onLineSelected: _selectLine,
+      onLineRenamed: _renameLine,
+      onCoveragePressed: _showCoverageCalculator,
+      onNavigateToPosition: (moves) {
+        _controller.loadMoveSequence(moves);
+      },
+    );
+  }
+
+  Widget _buildBottomPane() {
+    return ListenableBuilder(
+      listenable: _jobManager,
+      builder: (context, _) => BottomPane(
+        key: _bottomPaneKey,
+        findingsContent: _buildFindingsContent(),
+        jobsContent: _buildJobsContent(),
+        linesContent: _buildLinesContent(),
+        findingsBadge: _auditController.activeFindingCount,
+        jobsBadge: _jobManager.activeJobs.length,
+        linesBadge: _controller.repertoireLines.length,
+      ),
     );
   }
 
@@ -1020,6 +1143,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           _controller.setCommentAtPath(path, comment),
       onDelete: (path) => _controller.deleteAtPath(path),
       onPromote: (path) => _controller.promoteVariation(path),
+      onMakeMainLine: (path) => _controller.makeMainLine(path),
       repertoireName: _controller.currentRepertoire?['name'] as String?,
       repertoireColor: _controller.isRepertoireWhite ? 'White' : 'Black',
       isEditingExistingLine: _controller.selectedPgnLine != null,
@@ -1031,14 +1155,14 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       },
       onImportPgn: _importPgn,
       onReload: _reloadRepertoire,
-      generatedTree: _generatedTree,
-      treeConfig: _generatedTreeConfig,
-      fenMap: _generatedTreeFenMap,
+      generatedTree: _generationController.generatedTree,
+      treeConfig: _generationController.generatedTreeConfig,
+      fenMap: _generationController.generatedTreeFenMap,
       boardPreview: _boardPreview,
-      coherenceResult: _coherenceService.result,
-      isAnalysisActive: _isPgnTabActive,
-      isGenerating: _isGenerating,
-      isGenerationPaused: _isGenerationPaused,
+      coherenceResult: _generationController.coherenceService.result,
+      isAnalysisActive: true,
+      isGenerating: _generationController.isGenerating,
+      isGenerationPaused: _generationController.isPaused,
       embedAnalysisDock: false,
       trapIndex: _trapIndex,
     );
@@ -1046,71 +1170,45 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
 
 
-  void _onGeneratingChanged(bool generating) {
+  void _onGenerationChanged() {
     if (!mounted) return;
-    if (generating && _currentGenJob == null) {
-      _currentGenJob = _jobManager.createJob(
+    final ctrl = _generationController;
+
+    // Job tracking
+    if (ctrl.isGenerating && ctrl.currentJob == null) {
+      ctrl.currentJob = _jobManager.createJob(
         type: JobType.generation,
         label: _controller.currentRepertoire?['name'] as String? ??
             'Generation',
         subtreeFen: _controller.fen,
       );
-      _currentGenJob!.updateStatus(JobStatus.running);
-    } else if (!generating && _currentGenJob != null) {
-      _currentGenJob!.updateStatus(JobStatus.completed);
-      _currentGenJob = null;
+      ctrl.currentJob!.updateStatus(JobStatus.running);
+      _openBottomPane(BottomPaneTab.jobs);
     }
-    setState(() {
-      _isGenerating = generating;
-      if (!generating) _isGenerationPaused = false;
-    });
-    context.read<AppState>().setRepertoireGenerating(generating);
-    if (!generating) {
+
+    context.read<AppState>().setRepertoireGenerating(ctrl.isGenerating);
+
+    // Run coherence when tree is built
+    if (ctrl.generatedTree != null) {
+      _runCoherence();
+    }
+
+    if (!ctrl.isGenerating) {
       final fp = _controller.currentRepertoire?['filePath'] as String?;
       if (fp != null) _loadTraps(fp);
     }
-    // Jobs dialog opens automatically only if not already generating
-    // (avoid spam on pause/resume cycles)
+
+    setState(() {});
   }
 
-  void _onPauseChanged(bool paused) {
+  void _onAuditChanged() {
     if (!mounted) return;
-    _currentGenJob?.updateStatus(
-        paused ? JobStatus.paused : JobStatus.running);
-    setState(() => _isGenerationPaused = paused);
+    setState(() {});
   }
 
-  void _onTreeReset() {
+  void _onCoverageChanged() {
     if (!mounted) return;
-    _coherenceService.invalidate();
-    setState(() {
-      _generatedTree = null;
-      _generatedTreeConfig = null;
-      _generatedTreeFenMap = null;
-    });
-  }
-
-  void _onTreeBuilt(dynamic tree) {
-    if (!mounted) return;
-    final t = tree as BuildTree;
-    final fenMap = FenMap()..populate(t.root);
-    TreeBuildConfig? config;
-    if (t.configSnapshot.isNotEmpty) {
-      try {
-        config = TreeBuildConfig.fromJson(
-          t.configSnapshot,
-          startFen: t.root.fen,
-        );
-      } catch (e) {
-        debugPrint('[RepertoireScreen] Tree operation failed: $e');
-      }
-    }
-    setState(() {
-      _generatedTree = t;
-      _generatedTreeFenMap = fenMap;
-      _generatedTreeConfig = config;
-    });
-    _runCoherence();
+    setState(() {});
   }
 
   void _generateFromHere() {
@@ -1209,50 +1307,19 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     final config = await showCoverageConfigDialog(context);
     if (config == null || !mounted) return;
 
-    if (_controller.openingTree == null) {
+    final tree = _controller.openingTree;
+    if (tree == null) {
       showAppSnackBar(context, 'No repertoire tree loaded');
       return;
     }
 
-    setState(() {
-      _isCoverageRunning = true;
-      _coverageResult = null;
-      _coverageProgress = 0.0;
-      _coverageProgressMessage = 'Starting analysis...';
-    });
-
-    // Coverage results will be visible in the status bar
-
-    final service = CoverageService(
-      database: config.database,
-      ratings: config.ratingsString,
-      speeds: config.speedsString,
-      useMaia: config.useMaia,
-      maiaElo: config.maiaElo,
-    );
-
     try {
-      final result = await service.analyzeOpeningTree(
-        _controller.openingTree!,
-        targetPercent: config.targetPercent,
+      final result = await _coverageController.calculate(
+        config: config,
+        tree: tree,
         isWhiteRepertoire: _controller.isRepertoireWhite,
-        onProgress: (message, progress) {
-          if (mounted) {
-            setState(() {
-              _coverageProgressMessage = message;
-              _coverageProgress = progress;
-            });
-          }
-        },
       );
-
-      if (mounted) {
-        setState(() {
-          _coverageResult = result;
-          _isCoverageRunning = false;
-          _coverageProgress = null;
-          _coverageProgressMessage = null;
-        });
+      if (result != null && mounted) {
         showAppSnackBar(
           context,
           'Coverage: ${result.coveragePercent.toStringAsFixed(1)}% covered, '
@@ -1263,11 +1330,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isCoverageRunning = false;
-          _coverageProgress = null;
-          _coverageProgressMessage = null;
-        });
         showAppSnackBar(context, 'Coverage analysis failed: $e');
       }
     }
@@ -1275,16 +1337,17 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _runCoherence() {
     if (_controller.repertoireLines.length < 5) return;
-    _coherenceService.compute(
+    final cs = _generationController.coherenceService;
+    cs.compute(
       lines: _controller.repertoireLines,
       playAsWhite: _controller.isRepertoireWhite,
     );
-    _coherenceService.addListener(_onCoherenceUpdated);
+    cs.addListener(_onCoherenceUpdated);
   }
 
   void _onCoherenceUpdated() {
     if (mounted) setState(() {});
-    _coherenceService.removeListener(_onCoherenceUpdated);
+    _generationController.coherenceService.removeListener(_onCoherenceUpdated);
   }
 
   void _trainRepertoire() {

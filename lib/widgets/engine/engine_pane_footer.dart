@@ -42,85 +42,26 @@ class EnginePaneFooter extends StatelessWidget {
           top: BorderSide(color: Colors.grey[800]!, width: 0.5),
         ),
       ),
+      // Mothballed: Lichess Explorer stats hidden.
+      // Keep "Set as root" button if available.
       child: Row(
         children: [
-          if (settings.showProbability) ...[
-            ValueListenableBuilder<double>(
-              valueListenable: probabilityService.cumulativeProbability,
-              builder: (_, cumulative, __) {
-                final dbMuted =
-                    settings.isAnalysisColumnMuted(EngineSettings.colDb);
-                return Tooltip(
-                  message: 'Cumulative probability along this line\n'
-                      'Tap value to dim the DB column.',
-                  child: InkWell(
-                    onTap: () {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        settings.toggleAnalysisColumnMuted(
-                            EngineSettings.colDb);
-                      });
-                    },
-                    borderRadius: BorderRadius.circular(4),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Cumulative DB',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500]),
-                          ),
-                          const LichessDbInfoIcon(size: 12),
-                          const SizedBox(width: 2),
-                          Text(
-                            '${cumulative.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color:
-                                  AppColors.lichessDbColor(muted: dbMuted),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-            if (onSetRoot != null) ...[
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 26,
-                child: TextButton.icon(
-                  onPressed: onSetRoot,
-                  icon: const Icon(Icons.my_location, size: 14),
-                  label:
-                      const Text('Set as root', style: TextStyle(fontSize: 11)),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
+          if (onSetRoot != null)
+            SizedBox(
+              height: 26,
+              child: TextButton.icon(
+                onPressed: onSetRoot,
+                icon: const Icon(Icons.my_location, size: 14),
+                label:
+                    const Text('Set as root', style: TextStyle(fontSize: 11)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
-            ],
-          ],
-          const Spacer(),
-          if (settings.showProbability)
-            ValueListenableBuilder<ExplorerResponse?>(
-              valueListenable: probabilityService.currentPosition,
-              builder: (_, posData, __) {
-                if (posData == null || posData.totalGames == 0) {
-                  return const SizedBox.shrink();
-                }
-                return Text(
-                  '${formatCount(posData.totalGames)} games',
-                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                );
-              },
             ),
+          const Spacer(),
         ],
       ),
     );

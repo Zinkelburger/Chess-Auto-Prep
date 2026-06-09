@@ -320,6 +320,23 @@ class RepertoireController with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Recursively promote a variation so it becomes the main line
+  /// from the root down to [target].
+  void makeMainLine(TreePath target) {
+    if (target.isEmpty) return;
+    final indices = target.toList();
+    for (int depth = 0; depth < indices.length; depth++) {
+      if (indices[depth] != 0) {
+        final pathAtDepth = TreePath(indices.sublist(0, depth + 1));
+        _tree.promoteVariation(pathAtDepth);
+        indices[depth] = 0;
+      }
+    }
+    _path = _pathForMoveSequence(moveHistory);
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
   /// Update comment on the node at [target].
   void setCommentAtPath(TreePath target, String? comment) {
     _tree.setComment(target, comment);

@@ -138,7 +138,7 @@ class _InlineExpectimaxBarState extends State<InlineExpectimaxBar> {
               tooltip: 'Expectimax Settings',
               onPressed: () => showAnalysisSettingsSheet(
                 context,
-                mode: AnalysisSettingsContext.full,
+                mode: AnalysisSettingsContext.expectimaxOnly,
               ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

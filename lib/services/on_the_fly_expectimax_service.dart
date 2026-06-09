@@ -133,19 +133,18 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
 
     final gen = ++_runGeneration;
 
-    // Let the engine pane finish Maia + DB + discovery + eval first.
-    await AnalysisService().waitForEnginePaneAnalysis(fen);
-    if (_runGeneration != gen) return;
-
     _currentFen = fen;
     _moveLines.clear();
     _bestCompletedDepth = 0;
     _computingDepth = null;
     _sourceLabel = 'on-the-fly';
     _lastError = null;
-
     _state = OnTheFlyState.computing;
     notifyListeners();
+
+    // Let the engine pane finish Maia + DB + discovery + eval first.
+    await AnalysisService().waitForEnginePaneAnalysis(fen);
+    if (_runGeneration != gen) return;
 
     await _runProgressiveBuild(
       fen: fen,

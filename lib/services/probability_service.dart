@@ -245,6 +245,9 @@ class ProbabilityService {
 
   /// Internal fetch with caching.  Delegates HTTP + JSON parsing to
   /// [LichessApiClient.fetchExplorer] so there is exactly one parser.
+  ///
+  /// MOTHBALLED: Lichess Explorer API calls are disabled. Returns null
+  /// immediately. Remove the early return to re-enable.
   Future<ExplorerResponse?> _fetchInternal(
     String fen, {
     String variant = 'standard',
@@ -252,31 +255,8 @@ class ProbabilityService {
     String ratings = '1800,2000,2200,2500',
     bool useMasters = false,
   }) async {
-    final key = _cacheKey(
-      fen,
-      variant: variant,
-      speeds: speeds,
-      ratings: ratings,
-      useMasters: useMasters,
-    );
-    if (_cache.containsKey(key)) return _cache[key];
-
-    final sw = Stopwatch()..start();
-    final result = await LichessApiClient().fetchExplorer(
-      fen,
-      variant: variant,
-      speeds: speeds,
-      ratings: ratings,
-      useMasters: useMasters,
-    );
-    final ms = sw.elapsedMilliseconds;
-
-    if (kDebugMode && result != null) {
-      debugPrint('[ProbService] ${ms}ms  ${result.moves.length} moves');
-    }
-
-    if (result != null) _cache[key] = result;
-    return result;
+    // Mothballed: no Lichess Explorer API calls.
+    return null;
   }
 
   /// Get probability for a specific move from the current position.

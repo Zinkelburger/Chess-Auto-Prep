@@ -104,10 +104,10 @@ class AnalysisService {
   }
 
   Future<void> waitForEnginePaneAnalysis(String fen) async {
-    // The engine pane registers its gate from a post-frame callback; expectimax
-    // may start earlier on controller changes, so poll briefly for the gate.
+    // The engine pane registers its gate synchronously before starting work;
+    // poll briefly in case of minor scheduling skew.
     const poll = Duration(milliseconds: 16);
-    const maxWait = Duration(seconds: 3);
+    const maxWait = Duration(milliseconds: 200);
     final deadline = DateTime.now().add(maxWait);
 
     while (DateTime.now().isBefore(deadline)) {

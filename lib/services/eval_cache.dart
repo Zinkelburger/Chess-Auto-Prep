@@ -46,7 +46,7 @@ class EvalCache {
       _db = await factory.openDatabase(
         path,
         options: OpenDatabaseOptions(
-          version: 1,
+          version: 2,
           onCreate: (db, _) async {
             await db.execute('''
               CREATE TABLE evals(
@@ -56,6 +56,30 @@ class EvalCache {
                 created_at INTEGER NOT NULL
               )
             ''');
+            await db.execute('''
+              CREATE TABLE maia_cache(
+                fen TEXT NOT NULL,
+                elo INTEGER NOT NULL,
+                policy_json TEXT NOT NULL,
+                win_prob REAL NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY (fen, elo)
+              )
+            ''');
+          },
+          onUpgrade: (db, oldVersion, newVersion) async {
+            if (oldVersion < 2) {
+              await db.execute('''
+                CREATE TABLE IF NOT EXISTS maia_cache(
+                  fen TEXT NOT NULL,
+                  elo INTEGER NOT NULL,
+                  policy_json TEXT NOT NULL,
+                  win_prob REAL NOT NULL,
+                  created_at INTEGER NOT NULL,
+                  PRIMARY KEY (fen, elo)
+                )
+              ''');
+            }
           },
         ),
       );
@@ -158,4 +182,95 @@ class _Entry {
   final int cpWhite;
   final int depth;
   const _Entry(this.cpWhite, this.depth);
+}
+
+// ── Maia policy cache ──────────────────────────────────────────────────
+
+class MaiaCache {
+  static final MaiaCache instance = MaiaCache._();
+  MaiaCache._();
+
+  final Map<String, Map<String, double>> _mem = {};
+  final Map<String, double> _winMem = {};
+
+  String _key(String fen, int elo) => '$fen|$elo';
+
+  Future<({Map<String, double> policy, double winProb})?> get(
+      String fen, int elo) async {
+    final k = _key(fen, elo);
+    if (_mem.containsKey(k)) {
+      return (policy: _mem[k]!, winProb: _winMem[k] ?? 0.0);
+    }
+
+    final db = EvalCache.instance._db;
+    if (db == null) return null;
+    try {
+      final rows = await db.query(
+        'maia_cache',
+        columns: ['policy_json', 'win_prob'],
+        where: 'fen = ? AND elo = ?',
+        whereArgs: [fen, elo],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      final json = rows.first['policy_json'] as String;
+      final winProb = (rows.first['win_prob'] as num).toDouble();
+      final map = _decodePolicyJson(json);
+      _mem[k] = map;
+      _winMem[k] = winProb;
+      return (policy: map, winProb: winProb);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[MaiaCache] read failed: $e');
+      return null;
+    }
+  }
+
+  Future<void> put(
+      String fen, int elo, Map<String, double> policy, double winProb) async {
+    final k = _key(fen, elo);
+    _mem[k] = policy;
+    _winMem[k] = winProb;
+
+    final db = EvalCache.instance._db;
+    if (db == null) return;
+    try {
+      final json = _encodePolicyJson(policy);
+      await db.execute('''
+        INSERT INTO maia_cache(fen, elo, policy_json, win_prob, created_at)
+        VALUES(?, ?, ?, ?, ?)
+        ON CONFLICT(fen, elo) DO UPDATE SET
+          policy_json = excluded.policy_json,
+          win_prob    = excluded.win_prob,
+          created_at  = excluded.created_at
+      ''', [fen, elo, json, winProb, DateTime.now().millisecondsSinceEpoch]);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[MaiaCache] write failed: $e');
+    }
+  }
+
+  static String _encodePolicyJson(Map<String, double> policy) {
+    final sb = StringBuffer('{');
+    var first = true;
+    for (final e in policy.entries) {
+      if (!first) sb.write(',');
+      sb.write('"${e.key}":${e.value}');
+      first = false;
+    }
+    sb.write('}');
+    return sb.toString();
+  }
+
+  static Map<String, double> _decodePolicyJson(String json) {
+    final map = <String, double>{};
+    final stripped = json.substring(1, json.length - 1);
+    if (stripped.isEmpty) return map;
+    for (final pair in stripped.split(',')) {
+      final colon = pair.indexOf(':');
+      if (colon < 0) continue;
+      final key = pair.substring(1, colon - 1);
+      final val = double.tryParse(pair.substring(colon + 1));
+      if (val != null) map[key] = val;
+    }
+    return map;
+  }
 }
