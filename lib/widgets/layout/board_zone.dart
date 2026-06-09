@@ -8,7 +8,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
-import '../chess_board_widget.dart' show CompletedMove;
+import '../chess_board_widget.dart' show BoardAnnotation, CompletedMove;
 import '../repertoire/repertoire_board_pane.dart';
 
 /// Chess board with preview overlay and generation lock UI.
@@ -25,6 +25,7 @@ class BoardZone extends StatelessWidget {
     required this.onPause,
     required this.onResume,
     required this.onCancel,
+    this.annotations = const [],
   });
 
   final BoardPreviewController boardPreview;
@@ -37,6 +38,7 @@ class BoardZone extends StatelessWidget {
   final VoidCallback onPause;
   final VoidCallback onResume;
   final VoidCallback onCancel;
+  final List<BoardAnnotation> annotations;
 
   @override
   Widget build(BuildContext context) {
@@ -51,6 +53,7 @@ class BoardZone extends StatelessWidget {
       onPause: onPause,
       onResume: onResume,
       onCancel: onCancel,
+      annotations: annotations,
     );
   }
 }

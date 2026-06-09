@@ -10,7 +10,6 @@ import 'package:chess_auto_prep/features/browse/services/candidate_service.dart'
 
 class CandidateRow extends StatelessWidget {
   final CandidateMove candidate;
-  final bool isOurTurn;
   final bool isHovered;
   final VoidCallback onTap;
   final VoidCallback onHover;
@@ -23,7 +22,6 @@ class CandidateRow extends StatelessWidget {
   const CandidateRow({
     super.key,
     required this.candidate,
-    required this.isOurTurn,
     required this.isHovered,
     required this.onTap,
     required this.onHover,
@@ -53,22 +51,17 @@ class CandidateRow extends StatelessWidget {
             border: Border(
               left: BorderSide(
                 width: 3,
-                color: candidate.inRepertoire
-                    ? AppColors.success
-                    : _trapCount > 0
-                        ? AppColors.warning
-                        : Colors.transparent,
+                color: _trapCount > 0
+                    ? AppColors.warning
+                    : Colors.transparent,
               ),
             ),
           ),
           child: Row(
             children: [
-              _buildRepertoireIndicator(),
-              const SizedBox(width: 8),
               _buildMoveSan(theme),
               const Spacer(),
-              if (isOurTurn) ..._buildOurTurnColumns(),
-              if (!isOurTurn) ..._buildOpponentTurnColumns(theme),
+              ..._buildColumns(theme),
             ],
           ),
         ),
@@ -76,32 +69,37 @@ class CandidateRow extends StatelessWidget {
     );
   }
 
-  Widget _buildRepertoireIndicator() {
-    if (candidate.inRepertoire) {
-      return const Icon(Icons.check_circle, size: 14, color: AppColors.success);
-    }
-    if (candidate.isRepertoireMove == true) {
-      return const Icon(Icons.star, size: 14, color: AppColors.difficulty);
-    }
-    return const SizedBox(width: 14);
-  }
-
   Widget _buildMoveSan(ThemeData theme) {
     return Text(
       candidate.san,
       style: theme.textTheme.bodyMedium?.copyWith(
         fontWeight: FontWeight.w600,
-        color: candidate.inRepertoire
-            ? theme.colorScheme.primary
-            : null,
       ),
     );
   }
 
-  List<Widget> _buildOurTurnColumns() {
+  List<Widget> _buildColumns(ThemeData theme) {
     return [
       if (candidate.evalCp != null) ...[
         _EvalChip(candidate.evalCp!),
+        const SizedBox(width: 6),
+      ],
+      if (candidate.dbFrequency != null) ...[
+        Text('${(candidate.dbFrequency! * 100).toStringAsFixed(0)}%',
+            style: const TextStyle(fontSize: 11)),
+        const SizedBox(width: 6),
+      ],
+      if (candidate.dbGames != null) ...[
+        Text(_formatGames(candidate.dbGames!),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        const SizedBox(width: 6),
+      ],
+      if (candidate.dbWhiteWin != null) ...[
+        _ResultBar(
+          white: candidate.dbWhiteWin!,
+          draw: candidate.dbDraw ?? 0,
+          black: candidate.dbBlackWin ?? 0,
+        ),
         const SizedBox(width: 6),
       ],
       if (candidate.myEase != null) ...[
@@ -122,27 +120,6 @@ class CandidateRow extends StatelessWidget {
         const SizedBox(width: 6),
         _CoherenceChip(hint: coherenceHint!),
       ],
-    ];
-  }
-
-  List<Widget> _buildOpponentTurnColumns(ThemeData theme) {
-    return [
-      if (candidate.dbFrequency != null) ...[
-        Text('${(candidate.dbFrequency! * 100).toStringAsFixed(0)}%',
-            style: const TextStyle(fontSize: 11)),
-        const SizedBox(width: 8),
-      ],
-      if (candidate.dbGames != null) ...[
-        Text(_formatGames(candidate.dbGames!),
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-        const SizedBox(width: 8),
-      ],
-      if (candidate.dbWhiteWin != null)
-        _ResultBar(
-          white: candidate.dbWhiteWin!,
-          draw: candidate.dbDraw ?? 0,
-          black: candidate.dbBlackWin ?? 0,
-        ),
     ];
   }
 

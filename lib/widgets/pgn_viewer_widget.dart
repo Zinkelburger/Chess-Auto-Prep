@@ -222,10 +222,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         _activeBranchPly = -1;
         _analysisPath = [];
       });
-      widget.onPositionChanged?.call(_currentPosition);
 
+      // Defer the position notification so it doesn't fire during
+      // didUpdateWidget's build phase (which would cause setState-during-build).
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
+        widget.onPositionChanged?.call(_currentPosition);
         if (widget.moveNumber != null && widget.isWhiteToPlay != null) {
           _jumpToMove(widget.moveNumber!, widget.isWhiteToPlay!);
         } else if (widget.initialFen != null) {

@@ -25,6 +25,9 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onSelectRepertoire,
     this.onTrainRepertoire,
     this.onOpenGeneration,
+    this.onOpenAudit,
+    this.isWhiteRepertoire,
+    this.onSwitchColor,
   });
 
   final Widget title;
@@ -40,6 +43,9 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onSelectRepertoire;
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
+  final VoidCallback? onOpenAudit;
+  final bool? isWhiteRepertoire;
+  final VoidCallback? onSwitchColor;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -59,6 +65,8 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         BoardZoneControls(trapNavigation: trapNavigation),
         if (onOpenGeneration != null)
           RepertoireGenerateButton(onPressed: onOpenGeneration),
+        if (onOpenAudit != null)
+          RepertoireAuditButton(onPressed: onOpenAudit),
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
@@ -68,10 +76,44 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           RepertoireTrainButton(
             onPressed: generationLocked ? null : onTrainRepertoire,
           ),
-        IconButton(
+        PopupMenuButton<String>(
           icon: const Icon(Icons.settings, size: 20),
           tooltip: 'Settings',
-          onPressed: onOpenSettings,
+          onSelected: (value) {
+            switch (value) {
+              case 'switch_color':
+                onSwitchColor?.call();
+              case 'settings':
+                onOpenSettings();
+            }
+          },
+          itemBuilder: (_) => [
+            if (isWhiteRepertoire != null && onSwitchColor != null)
+              PopupMenuItem(
+                value: 'switch_color',
+                child: ListTile(
+                  leading: Icon(
+                    Icons.circle,
+                    size: 20,
+                    color: isWhiteRepertoire! ? Colors.black : Colors.white,
+                  ),
+                  title: Text(
+                    'Switch to ${isWhiteRepertoire! ? 'Black' : 'White'}',
+                  ),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            const PopupMenuItem(
+              value: 'settings',
+              child: ListTile(
+                leading: Icon(Icons.settings, size: 20),
+                title: Text('Settings'),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ],
         ),
         const AppModeMenuButton(),
         if (showSelectRepertoireAction && onSelectRepertoire != null)
@@ -263,6 +305,41 @@ class RepertoireTrainButton extends StatelessWidget {
                 onPressed: onPressed,
                 icon: const Icon(Icons.school),
                 label: const Text('Train'),
+              ),
+      ),
+    );
+  }
+}
+
+class RepertoireAuditButton extends StatelessWidget {
+  const RepertoireAuditButton({
+    super.key,
+    required this.onPressed,
+  });
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 900;
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Center(
+        child: compact
+            ? ShortcutIconButton(
+                description: 'Audit repertoire',
+                shortcut: 'A',
+                onPressed: onPressed,
+                icon: const Icon(Icons.policy_outlined),
+              )
+            : ShortcutTooltip(
+                description: 'Audit repertoire',
+                shortcut: 'A',
+                child: TextButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.policy_outlined, size: 18),
+                  label: const Text('Audit'),
+                ),
               ),
       ),
     );

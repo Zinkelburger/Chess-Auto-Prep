@@ -205,15 +205,12 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   final TextEditingController _gapController = TextEditingController(text: '4');
   String? _sequenceError;
 
-  // Permanent Date filter row
-  final TextEditingController _dateController = TextEditingController();
-  MatchMode _dateMode = MatchMode.after;
-
   static const _fieldOptions = [
     'White',
     'Black',
     'Event',
     'Result',
+    'Date',
     'ECO',
     'Opening',
     'Site',
@@ -237,6 +234,9 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   void initState() {
     super.initState();
     _restoreFromConfig(widget.initialConfig);
+    if (_headerFilters.isEmpty) {
+      _headerFilters.add(_HeaderFilter(field: 'Date', mode: MatchMode.after));
+    }
     _recompute();
   }
 
@@ -254,11 +254,6 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     }
     for (final f in config.headerFilters) {
       if (f.value.isEmpty) continue;
-      if (f.field == 'Date') {
-        _dateController.text = f.value;
-        _dateMode = f.mode;
-        continue;
-      }
       _headerFilters.add(_HeaderFilter(
         field: _fieldOptions.contains(f.field) ? f.field : 'Black',
         mode: f.mode,
@@ -287,17 +282,24 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   bool get _hasPositionFilter =>
       _positionParse.isValid && _positionParse.fen != null;
 
+  /// True when the position text field has content that hasn't been applied yet.
+  bool get _hasUnappliedInput {
+    final text = _positionController.text.trim();
+    if (text.isEmpty) return false;
+    // If we already parsed and it matches, it's applied.
+    if (_positionParse.isValid && _positionParse.fen != null) return false;
+    // If it errored, it's been attempted (error is shown).
+    if (_positionParse.error != null) return false;
+    // Text present but parse result is still null (never applied).
+    return true;
+  }
+
   SliceConfig _buildConfig() {
-    final filters = <HeaderFilterConfig>[];
-    if (_dateController.text.trim().isNotEmpty) {
-      filters.add(HeaderFilterConfig(
-        field: 'Date',
-        mode: _dateMode,
-        value: _dateController.text.trim(),
-      ));
-    }
-    filters.addAll(_headerFilters.where((f) => f.value.isNotEmpty).map((f) =>
-        HeaderFilterConfig(field: f.field, mode: f.mode, value: f.value)));
+    final filters = _headerFilters
+        .where((f) => f.value.isNotEmpty)
+        .map((f) =>
+            HeaderFilterConfig(field: f.field, mode: f.mode, value: f.value))
+        .toList();
     return SliceConfig(
       positionInput: _positionController.text.trim().isEmpty
           ? null
@@ -331,10 +333,6 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     if (_hasPositionFilter) {
       parts.add('fen:${_positionParse.fen}');
     }
-    if (_dateController.text.trim().isNotEmpty) {
-      parts.add(
-          'h:Date|${_dateMode.name}|${_dateController.text.trim()}');
-    }
     for (final f in _headerFilters.where((f) => f.value.isNotEmpty)) {
       parts.add('h:${f.field}|${f.mode.name}|${f.value}');
     }
@@ -362,14 +360,10 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     setState(() => _computing = true);
 
     final targetFen = _hasPositionFilter ? _positionParse.fen : null;
-    final filters = <({String field, MatchMode mode, String value})>[];
-    if (_dateController.text.trim().isNotEmpty) {
-      filters.add(
-          (field: 'Date', mode: _dateMode, value: _dateController.text.trim()));
-    }
-    filters.addAll(_headerFilters
+    final filters = _headerFilters
         .where((f) => f.value.isNotEmpty)
-        .map((f) => (field: f.field, mode: f.mode, value: f.value)));
+        .map((f) => (field: f.field, mode: f.mode, value: f.value))
+        .toList();
     final games = widget.allGames;
 
     final seqText = _sequenceController.text.trim();
@@ -394,7 +388,6 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     _positionController.dispose();
     _sequenceController.dispose();
     _gapController.dispose();
-    _dateController.dispose();
     for (final f in _headerFilters) {
       f.controller.dispose();
     }
@@ -433,12 +426,12 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
               _sequenceController.clear();
               _gapController.text = '4';
               _sequenceError = null;
-              _dateController.clear();
-              _dateMode = MatchMode.after;
               for (final f in _headerFilters) {
                 f.controller.dispose();
               }
               _headerFilters.clear();
+              _headerFilters
+                  .add(_HeaderFilter(field: 'Date', mode: MatchMode.after));
             });
             _recompute();
           },
@@ -449,15 +442,23 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: _matchingIndices.isNotEmpty
+          onPressed: _matchingIndices.isNotEmpty || _hasUnappliedInput
               ? () {
+                  if (_hasUnappliedInput) {
+                    _applyPositionInput();
+                    // After applying, wait for recompute then the user can
+                    // click Apply again with the updated count.
+                    return;
+                  }
                   widget.onApply(_matchingIndices, _buildConfig());
                   Navigator.pop(context);
                 }
               : null,
-          child: Text(_computing
-              ? 'Apply (${_matchingIndices.isEmpty ? '…' : _matchingIndices.length})'
-              : 'Apply (${_matchingIndices.length})'),
+          child: Text(_hasUnappliedInput
+              ? 'Apply position filter first'
+              : _computing
+                  ? 'Apply (${_matchingIndices.isEmpty ? '…' : _matchingIndices.length})'
+                  : 'Apply (${_matchingIndices.length})'),
         ),
       ],
     );
@@ -743,7 +744,6 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   // ── Header filters section ──
 
   Widget _buildHeaderSection() {
-    final dateModes = _modesForField('Date');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -757,74 +757,6 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
           ),
         ),
         const SizedBox(height: 8),
-        // Permanent Date filter row
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 120,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.grey[700]!),
-                  ),
-                  child: Text('Date',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[300])),
-                ),
-              ),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 120,
-                child: DropdownButtonFormField<MatchMode>(
-                  value: _dateMode,
-                  isDense: true,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    border: OutlineInputBorder(),
-                  ),
-                  items: dateModes
-                      .map((m) => DropdownMenuItem(
-                            value: m,
-                            child: Text(matchModeLabel(m),
-                                style: const TextStyle(fontSize: 12)),
-                          ))
-                      .toList(),
-                  onChanged: (v) {
-                    setState(() => _dateMode = v!);
-                    if (_dateController.text.trim().isNotEmpty) {
-                      _recompute();
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: TextField(
-                  controller: _dateController,
-                  decoration: InputDecoration(
-                    hintText: 'e.g. 2000',
-                    hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    isDense: true,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    border: const OutlineInputBorder(),
-                  ),
-                  style: const TextStyle(fontSize: 12),
-                  onChanged: (_) => _scheduleRecompute(),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // Spacer to align with removable rows (which have an X button)
-              const SizedBox(width: 28),
-            ],
-          ),
-        ),
         for (int i = 0; i < _headerFilters.length; i++) _buildFilterRow(i),
         TextButton.icon(
           onPressed: _addFilter,

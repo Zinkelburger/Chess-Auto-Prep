@@ -1,8 +1,47 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../utils/chess_utils.dart' show roleChar, parseSquare, toAlgebraic;
+
+// ── Board annotations (arrows, circles, labels) ─────────────────────────
+
+/// Predefined annotation brushes (color + opacity + stroke width).
+enum AnnotationBrush {
+  green(Color(0xCC15781B), 3.0),
+  red(Color(0xCCCC2222), 3.0),
+  blue(Color(0xCC003088), 3.0),
+  yellow(Color(0xCCE6A800), 3.0),
+  purple(Color(0xCC9B59B6), 3.0);
+
+  final Color color;
+  final double strokeWidthFactor;
+  const AnnotationBrush(this.color, this.strokeWidthFactor);
+}
+
+/// A single annotation drawn on the board.
+///
+/// - Arrow: both [orig] and [dest] set, different squares.
+/// - Circle: only [orig] set (or [dest] == [orig]).
+/// - Either may carry an optional [label] rendered at the target square.
+class BoardAnnotation {
+  final String orig;
+  final String? dest;
+  final AnnotationBrush brush;
+  final String? label;
+
+  const BoardAnnotation({
+    required this.orig,
+    this.dest,
+    this.brush = AnnotationBrush.green,
+    this.label,
+  });
+
+  bool get isArrow => dest != null && dest != orig;
+  bool get isCircle => !isArrow;
+}
 
 /// Rich move object that contains complete information about a move
 class CompletedMove {
@@ -36,6 +75,7 @@ class ChessBoardWidget extends StatefulWidget {
   final Set<String> highlightedSquares;
   final Function(String)? onSquareClicked;
   final Function(String)? onPieceSelected;
+  final List<BoardAnnotation> annotations;
 
   const ChessBoardWidget({
     super.key,
@@ -46,6 +86,7 @@ class ChessBoardWidget extends StatefulWidget {
     this.highlightedSquares = const {},
     this.onSquareClicked,
     this.onPieceSelected,
+    this.annotations = const [],
   });
 
   @override
@@ -115,6 +156,14 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                   size: Size(boardSize, boardSize),
                 ),
                 ..._buildPieceWidgets(boardSize, squareSize),
+                if (widget.annotations.isNotEmpty)
+                  CustomPaint(
+                    painter: _AnnotationPainter(
+                      annotations: widget.annotations,
+                      flipped: widget.flipped,
+                    ),
+                    size: Size(boardSize, boardSize),
+                  ),
                 if (_isDragging &&
                     _draggedPiece != null &&
                     _currentDragPosition != null)
@@ -285,9 +334,44 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     final targets = widget.position.legalMoves[fromSq];
     if (targets == null) return;
 
+    final piece = widget.position.board.pieceAt(fromSq);
+    final isKing = piece?.role == Role.king;
+
     for (final toSq in targets.squares) {
-      _internalHighlights.add(toAlgebraic(toSq));
+      if (isKing) {
+        final mapped = _castlingKingDest(fromSq, toSq);
+        _internalHighlights.add(toAlgebraic(mapped));
+      } else {
+        _internalHighlights.add(toAlgebraic(toSq));
+      }
     }
+  }
+
+  /// Dartchess encodes castling as king→rook-square. Map to king destination.
+  Square _castlingKingDest(Square from, Square to) {
+    final diff = (to - from).abs();
+    if (diff <= 2) return to; // normal king move, not castling
+    // Kingside: rook on h-file → king lands on g-file
+    if (to > from) return Square(from + 2);
+    // Queenside: rook on a-file → king lands on c-file
+    return Square(from - 2);
+  }
+
+  /// Reverse map: if user clicks the king destination, return the rook square
+  /// that dartchess expects for castling.
+  Square? _reverseCastlingTarget(Square from, Square clickedTo) {
+    final piece = widget.position.board.pieceAt(from);
+    if (piece?.role != Role.king) return null;
+
+    final targets = widget.position.legalMoves[from];
+    if (targets == null) return null;
+
+    for (final legalTo in targets.squares) {
+      if (_castlingKingDest(from, legalTo) == clickedTo && legalTo != clickedTo) {
+        return legalTo;
+      }
+    }
+    return null;
   }
 
   Widget _buildDraggedPiece(double squareSize) {
@@ -322,7 +406,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       final fenBefore = widget.position.fen;
 
       final fromSq = parseSquare(from);
-      final toSq = parseSquare(to);
+      var toSq = parseSquare(to);
       if (fromSq == null || toSq == null) {
         _clearSelection();
         return;
@@ -331,8 +415,14 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       // Check if there are legal moves from this square to the target
       final targets = widget.position.legalMoves[fromSq];
       if (targets == null || !targets.has(toSq)) {
-        _clearSelection();
-        return;
+        // User may have clicked the king destination; map back to rook square
+        final castlingTarget = _reverseCastlingTarget(fromSq, toSq);
+        if (castlingTarget != null) {
+          toSq = castlingTarget;
+        } else {
+          _clearSelection();
+          return;
+        }
       }
 
       final piece = widget.position.board.pieceAt(fromSq);
@@ -348,7 +438,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
       final (newPosition, san) = widget.position.makeSan(move);
       final fenAfter = newPosition.fen;
-      final uci = isPromotion ? '${from}${to}q' : '$from$to';
+      final uci = isPromotion ? '$from${to}q' : '$from$to';
 
       _clearSelection();
 
@@ -471,4 +561,123 @@ class _BoardPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+/// Paints arrows, circles, and labels on top of the board and pieces.
+class _AnnotationPainter extends CustomPainter {
+  final List<BoardAnnotation> annotations;
+  final bool flipped;
+
+  _AnnotationPainter({required this.annotations, required this.flipped});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sq = size.width / 8;
+
+    for (final a in annotations) {
+      if (a.isArrow) {
+        _drawArrow(canvas, sq, a);
+      } else {
+        _drawCircle(canvas, sq, a);
+      }
+      if (a.label != null) {
+        _drawLabel(canvas, sq, a);
+      }
+    }
+  }
+
+  Offset _center(String square, double sq) {
+    final (col, row) = _BoardPainter._squareToCoords(square, flipped);
+    return Offset((col + 0.5) * sq, (row + 0.5) * sq);
+  }
+
+  void _drawArrow(Canvas canvas, double sq, BoardAnnotation a) {
+    final from = _center(a.orig, sq);
+    final to = _center(a.dest!, sq);
+    final delta = to - from;
+    final dist = delta.distance;
+    if (dist < 1) return;
+
+    final strokeW = sq * 0.15 * a.brush.strokeWidthFactor / 3.0;
+    final headLen = sq * 0.35;
+    final headHalfW = sq * 0.22;
+
+    final dir = delta / dist;
+    final perp = Offset(-dir.dy, dir.dx);
+
+    // Shorten arrow so the head doesn't overshoot the center
+    final shaftEnd = to - dir * headLen;
+
+    final paint = Paint()
+      ..color = a.brush.color
+      ..strokeWidth = strokeW
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    // Shaft
+    canvas.drawLine(from, shaftEnd, paint);
+
+    // Arrowhead (filled triangle)
+    final headPath = Path()
+      ..moveTo(to.dx, to.dy)
+      ..lineTo(shaftEnd.dx + perp.dx * headHalfW,
+          shaftEnd.dy + perp.dy * headHalfW)
+      ..lineTo(shaftEnd.dx - perp.dx * headHalfW,
+          shaftEnd.dy - perp.dy * headHalfW)
+      ..close();
+
+    canvas.drawPath(
+        headPath,
+        Paint()
+          ..color = a.brush.color
+          ..style = PaintingStyle.fill);
+  }
+
+  void _drawCircle(Canvas canvas, double sq, BoardAnnotation a) {
+    final center = _center(a.orig, sq);
+    final radius = sq * 0.42;
+    final strokeW = sq * 0.06 * a.brush.strokeWidthFactor / 3.0;
+
+    canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..color = a.brush.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(strokeW, 2.0));
+  }
+
+  void _drawLabel(Canvas canvas, double sq, BoardAnnotation a) {
+    final target = a.isArrow ? a.dest! : a.orig;
+    final center = _center(target, sq);
+    // Offset label to top-right corner of the square
+    final pos = Offset(center.dx + sq * 0.25, center.dy - sq * 0.25);
+    final radius = sq * 0.17;
+
+    // Background circle
+    canvas.drawCircle(
+        pos,
+        radius,
+        Paint()
+          ..color = a.brush.color
+          ..style = PaintingStyle.fill);
+
+    // Text
+    final tp = TextPainter(
+      text: TextSpan(
+        text: a.label,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: radius * 1.1,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(pos.dx - tp.width / 2, pos.dy - tp.height / 2));
+  }
+
+  @override
+  bool shouldRepaint(covariant _AnnotationPainter old) =>
+      annotations != old.annotations || flipped != old.flipped;
 }

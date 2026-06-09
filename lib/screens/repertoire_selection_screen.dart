@@ -367,6 +367,14 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
                   setState(() => nameError = 'Please enter a name');
                   return;
                 }
+                final exists = _repertoires.any(
+                  (r) => r.name.toLowerCase() == name.toLowerCase(),
+                );
+                if (exists) {
+                  setState(() =>
+                      nameError = 'A repertoire named "$name" already exists');
+                  return;
+                }
                 Navigator.of(context).pop({
                   'name': name,
                   'color': selectedColor,
@@ -471,40 +479,60 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
   Future<void> _renameRepertoire(RepertoireMetadata repertoire) async {
     final nameController = TextEditingController(text: repertoire.name);
+    String? nameError;
 
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename Repertoire'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Enter new name for the repertoire:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Repertoire Name',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Rename Repertoire'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Enter new name for the repertoire:'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                decoration: InputDecoration(
+                  labelText: 'Repertoire Name',
+                  errorText: nameError,
+                ),
+                autofocus: true,
+                onChanged: (_) {
+                  if (nameError != null) setState(() => nameError = null);
+                },
               ),
-              autofocus: true,
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final newName = nameController.text.trim();
+                if (newName.isEmpty) {
+                  setState(() => nameError = 'Please enter a name');
+                  return;
+                }
+                if (newName == repertoire.name) return;
+                final exists = _repertoires.any(
+                  (r) =>
+                      r.name.toLowerCase() == newName.toLowerCase() &&
+                      r.filePath != repertoire.filePath,
+                );
+                if (exists) {
+                  setState(() => nameError =
+                      'A repertoire named "$newName" already exists');
+                  return;
+                }
+                Navigator.of(context).pop(newName);
+              },
+              child: const Text('Rename'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final newName = nameController.text.trim();
-              if (newName.isNotEmpty && newName != repertoire.name) {
-                Navigator.of(context).pop(newName);
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
       ),
     );
 
@@ -514,14 +542,6 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
       try {
         final storage = StorageFactory.instance;
         final newPath = await storage.repertoireFilePath(result);
-
-        if (await storage.fileExists(newPath)) {
-          if (mounted) {
-            showAppSnackBar(context, AppMessages.repertoireExists(result));
-          }
-          return;
-        }
-
         await storage.renameFile(repertoire.filePath, newPath);
         await _loadRepertoires();
       } catch (e) {
