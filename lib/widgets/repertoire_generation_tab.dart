@@ -2,7 +2,6 @@ library;
 
 import 'dart:async';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
@@ -25,23 +24,23 @@ import '../services/generation/pgn_export.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/engine/engine_lifecycle.dart';
 import '../services/tree_build_service.dart';
+import '../core/generation_session_controller.dart';
 import '../utils/system_info.dart';
 import 'lichess_db_info_icon.dart';
 import '../theme/app_colors.dart';
 import 'generation/build_progress_display.dart';
 import 'lichess_db_selector.dart';
 import 'generation/eval_sources_section.dart';
+import 'pgn_sources_panel.dart';
+import '../models/pgn_source.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
   final bool isWhiteRepertoire;
   final Map<String, dynamic>? currentRepertoire;
   final List<String> currentMoveSequence;
-  final void Function(bool generating) onGeneratingChanged;
-  final void Function(bool paused) onPauseChanged;
   final void Function(List<String> moves, String title, String pgn) onLineSaved;
-  final void Function(BuildTree tree)? onTreeBuilt;
-  final VoidCallback? onTreeReset;
+  final GenerationSessionController generationController;
 
   const RepertoireGenerationTab({
     super.key,
@@ -49,11 +48,8 @@ class RepertoireGenerationTab extends StatefulWidget {
     required this.isWhiteRepertoire,
     required this.currentRepertoire,
     required this.currentMoveSequence,
-    required this.onGeneratingChanged,
-    required this.onPauseChanged,
     required this.onLineSaved,
-    this.onTreeBuilt,
-    this.onTreeReset,
+    required this.generationController,
   });
 
   @override
@@ -62,7 +58,7 @@ class RepertoireGenerationTab extends StatefulWidget {
 }
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
-  final TreeBuildService _buildService = TreeBuildService();
+  TreeBuildService get _buildService => widget.generationController.buildService;
   final GlobalKey<EvalSourcesSectionState> _evalSourcesKey =
       GlobalKey<EvalSourcesSectionState>();
   bool _cdbDirectAvailable = false;
@@ -94,6 +90,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       TextEditingController(text: '1.0');
 
   // ── DB Explorer state ──
+  final GlobalKey<PgnSourcesPanelState> _pgnSourcesKey =
+      GlobalKey<PgnSourcesPanelState>();
   final List<String> _pgnFilePaths = [];
   final TextEditingController _dbMinGamesCtrl =
       TextEditingController(text: '5');
@@ -177,11 +175,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         ..addAll(pgnPaths);
       _dbMinGamesCtrl.text = minGames.toString();
     });
-    if (autoStart) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_isGenerating) _startTreeBuild();
-      });
-    }
+    // Also seed the PgnSourcesPanel if mounted
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final panelState = _pgnSourcesKey.currentState;
+      if (panelState != null) {
+        final sources = pgnPaths
+            .map((path) => PgnSource(
+                  id: PgnSource.generateId(),
+                  name: p.basenameWithoutExtension(path),
+                  filePath: path,
+                ))
+            .toList();
+        panelState.seedSources(sources);
+      }
+      if (autoStart && mounted && !_isGenerating) _startTreeBuild();
+    });
   }
 
   @override
@@ -315,6 +323,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     if (!_isGenerating) return;
     _cancelRequested = true;
     _buildService.stopBuild();
+    _savePartialTree();
     if (mounted) {
       setState(() {
         _isPaused = false;
@@ -325,28 +334,26 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       });
     }
     _stopUiPulse();
-    widget.onPauseChanged(false);
-    widget.onGeneratingChanged(false);
+    widget.generationController.markGenerating(false);
     _checkForPartialTree();
   }
 
   void togglePause() {
     if (!_isGenerating) return;
+    final ctrl = widget.generationController;
     if (_isPaused) {
-      _buildService.resumeBuild();
+      ctrl.resumeBuild();
       setState(() {
         _isPaused = false;
         _status = 'Building: resumed...';
       });
-      widget.onPauseChanged(false);
     } else {
-      _buildService.pauseBuild();
+      ctrl.pauseBuild();
       _savePartialTree();
       setState(() {
         _isPaused = true;
         _status = 'Paused ($_nodes nodes)';
       });
-      widget.onPauseChanged(true);
     }
   }
 
@@ -452,8 +459,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       return;
     }
     if (_buildMode == BuildMode.dbExplorer && _pgnFilePaths.isEmpty) {
-      setState(() => _status = 'Add at least one PGN file for DB Explorer.');
-      return;
+      final sources = _pgnSourcesKey.currentState?.sources ?? [];
+      if (sources.isEmpty) {
+        setState(() => _status = 'Add at least one PGN file for DB Explorer.');
+        return;
+      }
     }
     final evalSources = _evalSourcesKey.currentState;
     if (_buildMode == BuildMode.maiaDbExplore &&
@@ -531,8 +541,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       }
     });
     _pgnWriter.clear();
-    widget.onTreeReset?.call();
-    widget.onGeneratingChanged(true);
+    widget.generationController.onTreeReset();
+    widget.generationController.markGenerating(true);
     _startUiPulse();
 
     var engineGenerationEntered = false;
@@ -633,8 +643,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       }
       _lines = extractedLines.length;
 
-      // Pass completed tree to parent for the eval-tree viewer
-      widget.onTreeBuilt?.call(tree);
+      widget.generationController.onTreeBuilt(tree);
 
       // Save lines to PGN file
       final rootFen = _rootFen();
@@ -716,7 +725,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       }
       if (mounted && gen == _buildGeneration) {
         setState(() => _isGenerating = false);
-        widget.onGeneratingChanged(false);
+        widget.generationController.markGenerating(false);
       }
       _stopUiPulse();
       _checkForPartialTree();
@@ -795,9 +804,20 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           ),
           const SizedBox(height: 8),
 
-          // DB Explorer: PGN file picker and config
+          // DB Explorer: PGN sources panel
           if (_buildMode == BuildMode.dbExplorer) ...[
-            _buildPgnFilePickerSection(),
+            PgnSourcesPanel(
+              key: _pgnSourcesKey,
+              initialSources: null,
+              onSourcesChanged: (sources) {
+                // Keep _pgnFilePaths in sync for TreeBuildConfig compatibility
+                _pgnFilePaths
+                  ..clear()
+                  ..addAll(sources
+                      .where((s) => s.filePath != null)
+                      .map((s) => s.filePath!));
+              },
+            ),
             const SizedBox(height: 8),
           ],
 
@@ -1316,138 +1336,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     return Tooltip(message: tooltip, child: row);
   }
 
-  // ── DB Explorer file picker ──────────────────────────────────────────
-
-  Future<void> _pickPgnFiles() async {
-    final result = await FilePicker.pickFiles(
-      dialogTitle: 'Select PGN files for DB Explorer',
-      type: FileType.custom,
-      allowedExtensions: ['pgn', 'txt'],
-      allowMultiple: true,
-      lockParentWindow: true,
-    );
-    if (result == null) return;
-    final newPaths = result.files
-        .where((f) => f.path != null)
-        .map((f) => f.path!)
-        .where((p) => !_pgnFilePaths.contains(p))
-        .toList();
-    if (newPaths.isNotEmpty) {
-      setState(() => _pgnFilePaths.addAll(newPaths));
-    }
-  }
-
-  Widget _buildPgnFilePickerSection() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.folder_open,
-                  size: 18,
-                  color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                'PGN Database Files',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const Spacer(),
-              FilledButton.tonalIcon(
-                onPressed: _isGenerating ? null : _pickPgnFiles,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('Add Files'),
-              ),
-            ],
-          ),
-          if (_pgnFilePaths.isEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'No PGN files selected. Add one or more PGN files to seed '
-              'the repertoire tree from game data.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[500],
-              ),
-            ),
-          ],
-          if (_pgnFilePaths.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            ...List.generate(_pgnFilePaths.length, (i) {
-              final path = _pgnFilePaths[i];
-              final name = p.basename(path);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    Icon(Icons.description,
-                        size: 14, color: Colors.grey[500]),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Tooltip(
-                        message: path,
-                        child: Text(
-                          name,
-                          style: const TextStyle(fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    if (!_isGenerating)
-                      InkWell(
-                        onTap: () =>
-                            setState(() => _pgnFilePaths.removeAt(i)),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(Icons.close,
-                              size: 14, color: Colors.grey[500]),
-                        ),
-                      ),
-                  ],
-                ),
-              );
-            }),
-            const SizedBox(height: 4),
-            Text(
-              '${_pgnFilePaths.length} file${_pgnFilePaths.length != 1 ? 's' : ''} selected',
-              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _numField(_dbMinGamesCtrl, 'Min Games',
-                  tooltip:
-                      'Minimum game count for an opponent move to be '
-                      'included (default 5)'),
-              _numField(_dbMinProbCtrl, 'Min Prob',
-                  tooltip:
-                      'Minimum move probability threshold for opponent '
-                      'moves (default 0.05 = 5%)'),
-              _numField(_minEloCtrl, 'Min Elo',
-                  tooltip:
-                      'Skip games where both players are rated below this '
-                      '(0 = no filter). Missing ratings are kept.'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  // ── DB Explorer file picker (legacy — now uses PgnSourcesPanel) ─────
 
   String _buildModeLabel(BuildMode mode) {
     switch (mode) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/board_preview_controller.dart';
 import '../../models/repertoire_line.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
@@ -8,6 +9,7 @@ import '../../utils/coverage_helpers.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../../utils/lines_filter_helpers.dart';
 import '../../utils/pgn_utils.dart' as pgn_utils;
+import '../hoverable_move_chips.dart';
 
 /// A single repertoire line row with stats, coverage, and move preview.
 class LineItemRow extends StatelessWidget {
@@ -23,6 +25,7 @@ class LineItemRow extends StatelessWidget {
   final void Function(RepertoireLine line, String newTitle)? onLineRenamed;
   final void Function(List<String> moveSequence)? onNavigateToPosition;
   final NavigationStack? navigationStack;
+  final BoardPreviewController? boardPreview;
 
   const LineItemRow({
     super.key,
@@ -38,6 +41,7 @@ class LineItemRow extends StatelessWidget {
     this.onLineRenamed,
     this.onNavigateToPosition,
     this.navigationStack,
+    this.boardPreview,
   });
 
   static void showRenameDialog(
@@ -200,6 +204,7 @@ class LineItemRow extends StatelessWidget {
               line: line,
               matchDepth: matchDepth,
               isExpanded: isExpanded,
+              boardPreview: boardPreview,
             ),
             _LineMetricsRow(metrics: metrics),
             _HardMoveWarning(
@@ -538,11 +543,13 @@ class _MovesPreview extends StatelessWidget {
   final RepertoireLine line;
   final int matchDepth;
   final bool isExpanded;
+  final BoardPreviewController? boardPreview;
 
   const _MovesPreview({
     required this.line,
     required this.matchDepth,
     required this.isExpanded,
+    this.boardPreview,
   });
 
   @override
@@ -550,50 +557,14 @@ class _MovesPreview extends StatelessWidget {
     final moves = line.moves;
     final maxPreviewMoves = isExpanded ? 12 : 8;
 
-    return Wrap(
-      spacing: 2,
-      runSpacing: 2,
-      children: [
-        for (int i = 0; i < moves.length && i < maxPreviewMoves; i++) ...[
-          if (i % 2 == 0)
-            Text(
-              '${(i ~/ 2) + 1}.',
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.grey[500],
-                fontFamily: 'monospace',
-              ),
-            ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-            decoration: BoxDecoration(
-              color: i < matchDepth
-                  ? AppColors.info.withValues(alpha: 0.35)
-                  : null,
-              borderRadius: BorderRadius.circular(2),
-            ),
-            child: Text(
-              moves[i],
-              style: TextStyle(
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: i < matchDepth ? AppColors.lichessDb : Colors.grey[300],
-                fontWeight:
-                    i < matchDepth ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ),
-        ],
-        if (moves.length > maxPreviewMoves)
-          Text(
-            '... +${moves.length - maxPreviewMoves}',
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey[500],
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-      ],
+    return HoverableMoveChips(
+      moves: moves,
+      maxMoves: maxPreviewMoves,
+      fontSize: 11,
+      highlightDepth: matchDepth,
+      highlightColor: AppColors.lichessDb,
+      boardPreview: boardPreview,
+      ownerTag: this,
     );
   }
 }

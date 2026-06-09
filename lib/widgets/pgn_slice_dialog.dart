@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import '../models/pgn_filter_models.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../utils/fen_utils.dart';
+import 'lines_preview_panel.dart';
 
 export '../models/pgn_filter_models.dart';
 
@@ -915,39 +916,19 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   // ── Results preview ──
 
   Widget _buildResultsPreview() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey[850],
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[700]!),
-      ),
-      child: Row(
-        children: [
-          if (_computing)
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            Icon(Icons.filter_list, size: 18, color: Colors.grey[400]),
-          const SizedBox(width: 8),
-          Text(
-            _computing
-                ? 'Computing…'
-                : '${_matchingIndices.length} / ${widget.allGames.length} games match',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: _computing
-                  ? Colors.grey[400]
-                  : _matchingIndices.isEmpty
-                      ? Colors.red[300]
-                      : Colors.green[300],
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          height: 200,
+          child: LinesPreviewPanel(
+            allGames: widget.allGames,
+            matchedIndices: _matchingIndices,
+            computing: _computing,
+            maxHeight: 200,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
