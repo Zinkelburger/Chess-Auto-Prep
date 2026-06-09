@@ -66,6 +66,10 @@ class AuditFinding {
   /// Product of opponent move frequencies along the path.
   final double? cumulativeProbability;
 
+  /// True when the missing move transposes into a position already covered
+  /// elsewhere in the repertoire (the resulting FEN exists in the tree).
+  final bool transposesIntoRepertoire;
+
   /// Whether the user has dismissed this finding.
   bool dismissed;
 
@@ -85,6 +89,7 @@ class AuditFinding {
     this.source,
     this.continuationCount,
     this.cumulativeProbability,
+    this.transposesIntoRepertoire = false,
     this.dismissed = false,
   });
 
@@ -113,19 +118,34 @@ class AuditFinding {
     return '<1%';
   }
 
+  /// Format a SAN with its move number, e.g. "3. Nf3" or "3...Nd2".
+  String _sanWithMoveNumber(String san, int plyIndex) {
+    final moveNum = (plyIndex ~/ 2) + 1;
+    return plyIndex.isEven ? '$moveNum. $san' : '$moveNum...$san';
+  }
+
   String get summary {
     switch (type) {
       case AuditFindingType.mistake:
-        return 'Mistake: ${ourMove ?? "?"} loses ${evalLossCp}cp '
+        final move = ourMove ?? '?';
+        final numbered = movePath.isNotEmpty
+            ? _sanWithMoveNumber(move, movePath.length - 1)
+            : move;
+        return 'Mistake: $numbered loses ${evalLossCp}cp '
             '(best: ${bestMove ?? "?"})';
       case AuditFindingType.inaccuracy:
-        return 'Inaccuracy: ${ourMove ?? "?"} loses ${evalLossCp}cp '
+        final move = ourMove ?? '?';
+        final numbered = movePath.isNotEmpty
+            ? _sanWithMoveNumber(move, movePath.length - 1)
+            : move;
+        return 'Inaccuracy: $numbered loses ${evalLossCp}cp '
             '(best: ${bestMove ?? "?"})';
       case AuditFindingType.missingResponse:
+        final move = missingMove ?? '?';
+        final numbered = _sanWithMoveNumber(move, movePath.length);
         final probLabel = _missingMoveLocalProbLabel;
-        final reach = reachProbLabel;
-        final reachSuffix = reach != null ? ' · $reach reach' : '';
-        return 'Missing: ${missingMove ?? "?"} ($probLabel$reachSuffix)';
+        final transTag = transposesIntoRepertoire ? ' · transposes' : '';
+        return 'Missing: $numbered ($probLabel$transTag)';
       case AuditFindingType.weakPosition:
         return 'Weak position: eval ${positionEvalCp}cp';
       case AuditFindingType.deadEnd:
@@ -134,13 +154,20 @@ class AuditFinding {
   }
 
   String get _missingMoveLocalProbLabel {
+    final p = probability ?? 0;
+    final probStr = _formatProbability(p);
     if (source == MissingResponseSource.lichess) {
-      final pct = probability != null
-          ? '${(probability! * 100).toStringAsFixed(1)}%'
-          : '?';
-      return '$pct play rate, ${gameCount ?? 0} games';
+      return 'p=$probStr, ${gameCount ?? 0} games';
     }
-    return '${((probability ?? 0) * 100).toStringAsFixed(0)}% Maia';
+    return 'p=$probStr Maia';
+  }
+
+  static String _formatProbability(double p) {
+    if (p >= 0.1) return '${(p * 100).toStringAsFixed(0)}%';
+    if (p >= 0.01) return '${(p * 100).toStringAsFixed(1)}%';
+    if (p >= 0.001) return p.toStringAsFixed(3);
+    if (p > 0) return p.toStringAsExponential(1);
+    return '0';
   }
 
   // ── JSON serialization ──────────────────────────────────────────────────
@@ -162,6 +189,7 @@ class AuditFinding {
         if (continuationCount != null) 'continuationCount': continuationCount,
         if (cumulativeProbability != null)
           'cumulativeProbability': cumulativeProbability,
+        if (transposesIntoRepertoire) 'transposesIntoRepertoire': true,
         if (dismissed) 'dismissed': true,
       };
 
@@ -184,6 +212,8 @@ class AuditFinding {
         continuationCount: j['continuationCount'] as int?,
         cumulativeProbability:
             (j['cumulativeProbability'] as num?)?.toDouble(),
+        transposesIntoRepertoire:
+            j['transposesIntoRepertoire'] as bool? ?? false,
         dismissed: j['dismissed'] as bool? ?? false,
       );
 }

@@ -23,6 +23,12 @@ enum AnalysisSettingsContext {
 
   /// Tactics inline engine: depth and number of variations only.
   tacticsEngine,
+
+  /// Inline engine bar: engine depth/multiPv only.
+  engineOnly,
+
+  /// Inline expectimax bar: expectimax-specific settings only.
+  expectimaxOnly,
 }
 
 /// Opens a dialog with analysis settings scoped to [mode].
@@ -62,6 +68,11 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
   final _settings = EngineSettings();
 
   bool get _isFull => widget.mode == AnalysisSettingsContext.full;
+  bool get _isExpectimaxOnly =>
+      widget.mode == AnalysisSettingsContext.expectimaxOnly;
+  bool get _isEngineOnly =>
+      widget.mode == AnalysisSettingsContext.engineOnly ||
+      widget.mode == AnalysisSettingsContext.tacticsEngine;
 
   @override
   Widget build(BuildContext context) {
@@ -79,21 +90,18 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildEngineSection(),
+                    if (_isExpectimaxOnly)
+                      _buildExpectimaxSection()
+                    else
+                      _buildEngineSection(),
                     if (_isFull) ...[
                       const SizedBox(height: 16),
                       const Divider(height: 1, color: AppColors.divider),
                       const SizedBox(height: 16),
                       _buildPanelsSection(),
                     ],
-                    if (_isFull &&
-                        _settings.fetchLichessForOpponent) ...[
-                      const SizedBox(height: 16),
-                      const Divider(height: 1, color: AppColors.divider),
-                      const SizedBox(height: 16),
-                      _buildLichessDbFiltersSection(),
-                    ],
-                    if (_isFull) ...[
+                    // Mothballed: Lichess Explorer filter section hidden.
+                    if (_isFull || _isExpectimaxOnly || _isEngineOnly) ...[
                       const SizedBox(height: 16),
                       const Divider(height: 1, color: AppColors.divider),
                       const SizedBox(height: 12),
@@ -110,7 +118,12 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
   }
 
   Widget _buildTitleBar(ThemeData theme) {
-    final title = _isFull ? 'Analysis settings' : 'Engine settings';
+    final title = switch (widget.mode) {
+      AnalysisSettingsContext.full => 'Analysis settings',
+      AnalysisSettingsContext.tacticsEngine => 'Engine settings',
+      AnalysisSettingsContext.engineOnly => 'Stockfish settings',
+      AnalysisSettingsContext.expectimaxOnly => 'Expectimax settings',
+    };
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 8, 8),
       child: Row(
@@ -166,6 +179,55 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
     );
   }
 
+  // ── Expectimax-specific settings ────────────────────────────────────────────
+
+  Widget _buildExpectimaxSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: SettingsSection(
+        icon: Icons.auto_graph,
+        title: 'Expectimax',
+        showDivider: false,
+        child: SettingsIntGrid(
+          fields: [
+            SettingsIntSpec(
+              label: 'Lookahead depth',
+              tooltip: 'Max ply depth for on-the-fly expectimax computation.',
+              value: _settings.onTheFlyMaxDepth,
+              min: 1,
+              max: 10,
+              onChanged: (v) => _settings.onTheFlyMaxDepth = v,
+            ),
+            SettingsIntSpec(
+              label: 'Our lines (MultiPV)',
+              tooltip: 'Number of top candidate moves to explore for your side.',
+              value: _settings.expectimaxOurMultipv,
+              min: kMinExpOurMultipv,
+              max: kMaxExpOurMultipv,
+              onChanged: (v) => _settings.expectimaxOurMultipv = v,
+            ),
+            SettingsIntSpec(
+              label: 'Eval depth',
+              tooltip: 'Stockfish depth for evaluating expectimax positions.',
+              value: _settings.expectimaxEvalDepth,
+              min: kMinExpEvalDepth,
+              max: kMaxExpEvalDepth,
+              onChanged: (v) => _settings.expectimaxEvalDepth = v,
+            ),
+            SettingsIntSpec(
+              label: 'Max eval loss (cp)',
+              tooltip: 'Maximum centipawn loss to consider a move viable.',
+              value: _settings.expectimaxMaxEvalLoss,
+              min: kMinExpMaxEvalLoss,
+              max: kMaxExpMaxEvalLoss,
+              onChanged: (v) => _settings.expectimaxMaxEvalLoss = v,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Panel visibility (owned here; not duplicated on SettingsScreen) ───────
 
   Widget _buildPanelsSection() {
@@ -203,12 +265,12 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
               value: _settings.showMaia,
               onChanged: (v) => _settings.showMaia = v,
             ),
-            SettingsSwitchRow(
-              label: 'Show DB % column',
-              tooltip: 'Show the Lichess database frequency column.',
-              value: _settings.showProbability,
-              onChanged: (v) => _settings.showProbability = v,
-            ),
+            // Mothballed: Lichess Explorer DB column hidden.
+            // SettingsSwitchRow(
+            //   label: 'Show DB % column',
+            //   value: _settings.showProbability,
+            //   onChanged: (v) => _settings.showProbability = v,
+            // ),
           ],
         ),
       ),

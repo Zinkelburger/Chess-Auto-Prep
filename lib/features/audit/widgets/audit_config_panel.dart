@@ -4,14 +4,11 @@
 /// back to the screen via callbacks.
 library;
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/engine_lifecycle.dart';
 import '../../../services/engine/stockfish_pool.dart';
-import '../../../services/storage/storage_factory.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
 import '../services/audit_config.dart';
@@ -24,9 +21,14 @@ class AuditConfigPanel extends StatefulWidget {
   final List<String> currentMoveSequence;
   final String? repertoireFilePath;
 
+  /// External service reference so pause/resume/cancel are accessible.
+  final RepertoireAuditService? auditService;
+
   final void Function(bool auditing) onAuditingChanged;
   final void Function(AuditResult result) onResultReady;
   final void Function(AuditFinding finding)? onLiveFinding;
+  final void Function(int checked, int total)? onProgress;
+  final void Function(AuditConfig config)? onConfigChanged;
 
   const AuditConfigPanel({
     super.key,
@@ -35,9 +37,12 @@ class AuditConfigPanel extends StatefulWidget {
     required this.currentFen,
     required this.currentMoveSequence,
     this.repertoireFilePath,
+    this.auditService,
     required this.onAuditingChanged,
     required this.onResultReady,
     this.onLiveFinding,
+    this.onProgress,
+    this.onConfigChanged,
   });
 
   @override
@@ -45,7 +50,9 @@ class AuditConfigPanel extends StatefulWidget {
 }
 
 class AuditConfigPanelState extends State<AuditConfigPanel> {
-  final RepertoireAuditService _service = RepertoireAuditService();
+  RepertoireAuditService? _ownedService;
+  RepertoireAuditService get _service =>
+      widget.auditService ?? (_ownedService ??= RepertoireAuditService());
 
   final TextEditingController _mistakeCtrl =
       TextEditingController(text: '100');
@@ -63,7 +70,8 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       TextEditingController(text: '2200');
 
   bool _useStockfish = true;
-  bool _useLichessDb = true;
+  // Mothballed: Lichess Explorer disabled.
+  bool _useLichessDb = false;
   bool _useMaia = true;
   bool _auditSubtreeOnly = false;
 
@@ -76,7 +84,6 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   @override
   void initState() {
     super.initState();
-    _tryLoadSavedResult();
   }
 
   @override
@@ -89,34 +96,6 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     _maxPlyCtrl.dispose();
     _maiaEloCtrl.dispose();
     super.dispose();
-  }
-
-  // ── Persistence ──────────────────────────────────────────────────────
-
-  String? get _auditFilePath {
-    final fp = widget.repertoireFilePath;
-    if (fp == null || fp.isEmpty) return null;
-    final base = fp.endsWith('.pgn') ? fp.substring(0, fp.length - 4) : fp;
-    return '${base}_audit.json';
-  }
-
-  Future<void> _tryLoadSavedResult() async {
-    final path = _auditFilePath;
-    if (path == null) return;
-    try {
-      final json = await StorageFactory.instance.readFile(path);
-      if (json != null && json.isNotEmpty && mounted) {
-        widget.onResultReady(AuditResult.fromJsonString(json));
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _saveResult(AuditResult result) async {
-    final path = _auditFilePath;
-    if (path == null) return;
-    try {
-      await StorageFactory.instance.writeFile(path, result.toJsonString());
-    } catch (_) {}
   }
 
   // ── Audit lifecycle ──────────────────────────────────────────────────
@@ -147,12 +126,23 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     if (widget.openingTree == null) return;
 
     final config = _buildConfig();
+    widget.onConfigChanged?.call(config);
+
+    // Capture callbacks before the dialog potentially closes and unmounts us.
+    final onProgressCb = widget.onProgress;
+    final onLiveFindingCb = widget.onLiveFinding;
+    final onResultReadyCb = widget.onResultReady;
+    final onAuditingChangedCb = widget.onAuditingChanged;
+    final tree = widget.openingTree!;
+    final startFen = _auditSubtreeOnly ? widget.currentFen : null;
+    final isWhite = widget.isWhiteRepertoire;
+
     setState(() {
       _isAuditing = true;
       _progress = null;
       _liveFindingCount = 0;
     });
-    widget.onAuditingChanged(true);
+    onAuditingChangedCb(true);
 
     if (config.useStockfish) {
       await EngineLifecycle().enterGeneration(1);
@@ -161,30 +151,26 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
 
     try {
       final result = await _service.audit(
-        tree: widget.openingTree!,
-        isWhiteRepertoire: widget.isWhiteRepertoire,
+        tree: tree,
+        isWhiteRepertoire: isWhite,
         config: config,
-        startFen: _auditSubtreeOnly ? widget.currentFen : null,
+        startFen: startFen,
         onProgress: (p) {
           if (mounted) setState(() => _progress = p);
+          onProgressCb?.call(p.nodesChecked, p.totalNodes);
         },
         onFinding: (f) {
-          if (mounted) {
-            setState(() => _liveFindingCount++);
-            widget.onLiveFinding?.call(f);
-          }
+          if (mounted) setState(() => _liveFindingCount++);
+          onLiveFindingCb?.call(f);
         },
       );
 
-      if (mounted) {
-        setState(() => _isAuditing = false);
-        widget.onResultReady(result);
-        unawaited(_saveResult(result));
-      }
+      if (mounted) setState(() => _isAuditing = false);
+      onResultReadyCb(result);
     } catch (e) {
       if (mounted) setState(() => _isAuditing = false);
     } finally {
-      widget.onAuditingChanged(false);
+      onAuditingChangedCb(false);
       if (config.useStockfish) {
         EngineLifecycle().exitGeneration();
       }
@@ -234,12 +220,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
                 onSelected:
                     _isAuditing ? null : (v) => setState(() => _useStockfish = v),
               ),
-              FilterChip(
-                label: const Text('Lichess DB'),
-                selected: _useLichessDb,
-                onSelected:
-                    _isAuditing ? null : (v) => setState(() => _useLichessDb = v),
-              ),
+              // Mothballed: Lichess Explorer chip hidden.
               FilterChip(
                 label: const Text('Maia'),
                 selected: _useMaia,

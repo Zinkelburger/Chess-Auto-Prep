@@ -60,12 +60,58 @@ class AuditConfig {
     this.maxPly = 30,
     this.maiaElo = 2200,
     this.useStockfish = true,
-    this.useLichessDb = true,
+    this.useLichessDb = false,
     this.useMaia = true,
     this.explorerSpeeds = 'blitz,rapid,classical',
     this.explorerRatings = '1800,2000,2200,2500',
     this.multiPv = 3,
   });
+
+  Map<String, dynamic> toMap() => {
+    'mistakeThresholdCp': mistakeThresholdCp,
+    'inaccuracyThresholdCp': inaccuracyThresholdCp,
+    'minGames': minGames,
+    'minMaiaProb': minMaiaProb,
+    'weakPositionThresholdCp': weakPositionThresholdCp,
+    'deadEndMinContinuations': deadEndMinContinuations,
+    'evalDepth': evalDepth,
+    'maxPly': maxPly,
+    'maiaElo': maiaElo,
+    'useStockfish': useStockfish,
+    'useLichessDb': useLichessDb,
+    'useMaia': useMaia,
+    'explorerSpeeds': explorerSpeeds,
+    'explorerRatings': explorerRatings,
+    'multiPv': multiPv,
+  };
+
+  factory AuditConfig.fromMap(Map<String, dynamic> m) => AuditConfig(
+    mistakeThresholdCp: m['mistakeThresholdCp'] as int? ?? 100,
+    inaccuracyThresholdCp: m['inaccuracyThresholdCp'] as int? ?? 40,
+    minGames: m['minGames'] as int? ?? 50,
+    minMaiaProb: (m['minMaiaProb'] as num?)?.toDouble() ?? 0.10,
+    weakPositionThresholdCp: m['weakPositionThresholdCp'] as int? ?? -150,
+    deadEndMinContinuations: m['deadEndMinContinuations'] as int? ?? 2,
+    evalDepth: m['evalDepth'] as int? ?? 14,
+    maxPly: m['maxPly'] as int? ?? 30,
+    maiaElo: m['maiaElo'] as int? ?? 2200,
+    useStockfish: m['useStockfish'] as bool? ?? true,
+    useLichessDb: m['useLichessDb'] as bool? ?? true,
+    useMaia: m['useMaia'] as bool? ?? true,
+    explorerSpeeds: m['explorerSpeeds'] as String? ?? 'blitz,rapid,classical',
+    explorerRatings: m['explorerRatings'] as String? ?? '1800,2000,2200,2500',
+    multiPv: m['multiPv'] as int? ?? 3,
+  );
+
+  /// Compact one-line summary for display in Jobs tab.
+  String get summaryLabel {
+    final sources = <String>[
+      if (useStockfish) 'SF d$evalDepth',
+      if (useLichessDb) 'Lichess',
+      if (useMaia) 'Maia $maiaElo',
+    ];
+    return '${sources.join(' + ')} · ${maxPly}ply · mistake≥${mistakeThresholdCp}cp';
+  }
 
   AuditConfig copyWith({
     int? mistakeThresholdCp,

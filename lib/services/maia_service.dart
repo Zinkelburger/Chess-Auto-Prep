@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:onnxruntime/onnxruntime.dart';
+import 'eval_cache.dart';
 import 'maia_tensor.dart';
 
 class MaiaResult {
@@ -46,6 +47,17 @@ class MaiaService {
   }
 
   Future<MaiaResult> evaluate(String fen, int elo) async {
+    final cached = await MaiaCache.instance.get(fen, elo);
+    if (cached != null) {
+      return MaiaResult(policy: cached.policy, winProbability: cached.winProb);
+    }
+
+    final result = await _evaluateOnnx(fen, elo);
+    MaiaCache.instance.put(fen, elo, result.policy, result.winProbability);
+    return result;
+  }
+
+  Future<MaiaResult> _evaluateOnnx(String fen, int elo) async {
     if (!_isInitialized) {
       await initialize();
       if (!_isInitialized) throw Exception('Maia not initialized');

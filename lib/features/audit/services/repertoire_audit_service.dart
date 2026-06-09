@@ -46,6 +46,11 @@ class RepertoireAuditService {
   bool _cancelled = false;
   bool _paused = false;
 
+  /// FENs checked in the current (or most recent) audit run.
+  /// Useful for saving progress on cancellation.
+  Set<String> get checkedFens => Set.unmodifiable(_checkedFens);
+  final Set<String> _checkedFens = {};
+
   void cancel() => _cancelled = true;
   void pause() => _paused = true;
   void resume() => _paused = false;
@@ -54,6 +59,10 @@ class RepertoireAuditService {
   ///
   /// If [startFen] is null, audits from the tree root.
   /// [isWhiteRepertoire] determines which side's moves are "ours".
+  ///
+  /// Pass [skipFens] and [priorFindings] to resume a previously
+  /// interrupted audit. Nodes whose FEN is in [skipFens] are traversed
+  /// (so their children are enqueued) but not re-checked.
   Future<AuditResult> audit({
     required OpeningTree tree,
     required bool isWhiteRepertoire,
@@ -61,11 +70,15 @@ class RepertoireAuditService {
     String? startFen,
     AuditProgressCallback? onProgress,
     void Function(AuditFinding)? onFinding,
+    Set<String> skipFens = const {},
+    List<AuditFinding> priorFindings = const [],
   }) async {
     _cancelled = false;
     _paused = false;
+    _checkedFens.clear();
+    _checkedFens.addAll(skipFens);
     final stopwatch = Stopwatch()..start();
-    final findings = <AuditFinding>[];
+    final findings = <AuditFinding>[...priorFindings];
 
     int ourMoveNodes = 0;
     int oppNodes = 0;
@@ -130,8 +143,12 @@ class RepertoireAuditService {
       }
 
       final isLeaf = node.children.isEmpty;
+      final alreadyChecked = skipFens.contains(node.fen);
+      if (!alreadyChecked) _checkedFens.add(node.fen);
 
-      if (isOurTurn && !isLeaf) {
+      if (alreadyChecked) {
+        // Still enqueue children so we reach unchecked nodes.
+      } else if (isOurTurn && !isLeaf) {
         ourMoveNodes++;
         if (config.useStockfish) {
           final (newFindings, hits, misses) = await _checkOurMoves(
@@ -382,6 +399,8 @@ class RepertoireAuditService {
               probability: move.playFraction,
               source: MissingResponseSource.lichess,
               cumulativeProbability: cumulativeProbability * move.playFraction,
+              transposesIntoRepertoire:
+                  _doesMoveTranspose(node.fen, move.san, tree),
             ));
           }
         }
@@ -421,6 +440,8 @@ class RepertoireAuditService {
             probability: entry.value,
             source: MissingResponseSource.maia,
             cumulativeProbability: cumulativeProbability * entry.value,
+            transposesIntoRepertoire:
+                _doesMoveTranspose(node.fen, san, tree),
           ));
         }
       } catch (e) {
@@ -431,6 +452,22 @@ class RepertoireAuditService {
     }
 
     return findings;
+  }
+
+  /// Check if playing [san] from [fen] transposes into a position already
+  /// covered in [tree] (the FEN after the move exists as a tree node).
+  bool _doesMoveTranspose(String fen, String san, OpeningTree tree) {
+    try {
+      final pos = Chess.fromSetup(Setup.parseFen(fen));
+      final move = pos.parseSan(san);
+      if (move == null) return false;
+      final after = pos.play(move);
+      final afterPrefix = after.fen.split(' ').take(4).join(' ');
+      for (final key in tree.fenToNodes.keys) {
+        if (key.split(' ').take(4).join(' ') == afterPrefix) return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   // ── Dead-end check ───────────────────────────────────────────────────────

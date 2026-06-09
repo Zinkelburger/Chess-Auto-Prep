@@ -26,6 +26,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final void Function(TreePath, String?)? onCommentChanged;
   final void Function(TreePath)? onDelete;
   final void Function(TreePath)? onPromote;
+  final void Function(TreePath)? onMakeMainLine;
   final String? repertoireName;
   final String repertoireColor;
   final bool isEditingExistingLine;
@@ -53,6 +54,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
     this.onCommentChanged,
     this.onDelete,
     this.onPromote,
+    this.onMakeMainLine,
     this.repertoireName,
     required this.repertoireColor,
     required this.isEditingExistingLine,
@@ -199,29 +201,26 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             onPressed: () => showAnalysisSettingsSheet(context),
           ),
-          TextButton.icon(
-            onPressed: widget.embedAnalysisDock
-                ? () {
-                    setState(() => _showDock = !_showDock);
-                    _savePrefs();
-                  }
-                : null,
-            icon: Icon(
-              _showDock ? Icons.expand_more : Icons.expand_less,
-              size: 16,
+          if (widget.embedAnalysisDock)
+            TextButton.icon(
+              onPressed: () {
+                setState(() => _showDock = !_showDock);
+                _savePrefs();
+              },
+              icon: Icon(
+                _showDock ? Icons.expand_more : Icons.expand_less,
+                size: 16,
+              ),
+              label: Text(
+                _showDock ? 'Hide analysis' : 'Show analysis',
+                style: const TextStyle(fontSize: 12),
+              ),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
-            label: Text(
-              widget.embedAnalysisDock
-                  ? (_showDock ? 'Hide analysis' : 'Show analysis')
-                  : 'Analysis in context panel',
-              style: const TextStyle(fontSize: 12),
-            ),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
         ],
       ),
     );
@@ -235,6 +234,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       onCommentChanged: widget.onCommentChanged,
       onDelete: widget.onDelete,
       onPromote: widget.onPromote,
+      onMakeMainLine: widget.onMakeMainLine,
       repertoireName: widget.repertoireName,
       repertoireColor: widget.repertoireColor,
       isEditingExistingLine: widget.isEditingExistingLine,

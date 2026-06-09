@@ -211,33 +211,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Mothballed: only Maia prediction source available.
               SettingsDropdown<OpponentProbabilityMode>(
                 label: 'Prediction source',
-                tooltip:
-                    'Maia: neural net trained on human games.\n'
-                    'Lichess DB: raw move frequencies.\n'
-                    'Maia + DB fallback: blends both.',
+                tooltip: 'Maia: neural net trained on human games.',
                 value: _engine.opponentProbabilityMode,
-                items: [
-                  for (final m in OpponentProbabilityMode.values)
-                    (m, m.label),
+                items: const [
+                  (OpponentProbabilityMode.maia, 'Maia neural net'),
                 ],
                 onChanged: (v) {
                   if (v != null) _engine.opponentProbabilityMode = v;
                 },
               ),
-              if (_engine.fetchLichessForOpponent) ...[
-                const SizedBox(height: 12),
-                LichessDbSelector(
-                  database: database,
-                  onDatabaseChanged: (db) => _engine.explorerDatabase =
-                      db == LichessDatabase.masters ? 'masters' : 'lichess',
-                  selectedSpeeds: speeds,
-                  onSpeedsChanged: _engine.setExplorerSpeedSet,
-                  selectedRatings: ratings,
-                  onRatingsChanged: _engine.setExplorerRatingSet,
-                ),
-              ],
             ],
           ),
         ),

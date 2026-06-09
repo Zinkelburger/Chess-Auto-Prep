@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import '../../../models/opening_tree.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
+import '../services/audit_config.dart';
+import '../services/repertoire_audit_service.dart';
 import 'audit_config_panel.dart';
 
 /// Shows the audit config dialog.
@@ -19,9 +21,12 @@ Future<void> showAuditConfigDialog(
   required String currentFen,
   required List<String> currentMoveSequence,
   String? repertoireFilePath,
+  RepertoireAuditService? auditService,
   required void Function(bool) onAuditingChanged,
   required void Function(AuditResult) onResultReady,
   void Function(AuditFinding)? onLiveFinding,
+  void Function(int checked, int total)? onProgress,
+  void Function(AuditConfig config)? onConfigChanged,
   GlobalKey<AuditConfigPanelState>? auditConfigKey,
 }) {
   return showDialog(
@@ -59,6 +64,7 @@ Future<void> showAuditConfigDialog(
                 currentFen: currentFen,
                 currentMoveSequence: currentMoveSequence,
                 repertoireFilePath: repertoireFilePath,
+                auditService: auditService,
                 onAuditingChanged: (auditing) {
                   onAuditingChanged(auditing);
                   if (auditing) {
@@ -67,6 +73,8 @@ Future<void> showAuditConfigDialog(
                 },
                 onResultReady: onResultReady,
                 onLiveFinding: onLiveFinding,
+                onProgress: onProgress,
+                onConfigChanged: onConfigChanged,
               ),
             ),
           ],

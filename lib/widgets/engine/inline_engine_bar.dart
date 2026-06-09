@@ -14,6 +14,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
 import '../../models/analysis/discovery_result.dart';
+import '../../services/analysis_service.dart';
+import '../../services/eval_cache.dart';
 import '../../services/engine/eval_worker.dart';
 import '../../services/engine/stockfish_connection_factory.dart';
 import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
@@ -169,23 +171,29 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     if (widget.fen == _lastAnalyzedFen && _discovery.lines.isNotEmpty) return;
 
     final myGen = ++_generation;
-    _lastAnalyzedFen = widget.fen;
+    final fen = widget.fen;
+    _lastAnalyzedFen = fen;
 
     setState(() => _isSearching = true);
+    AnalysisService().beginEnginePaneAnalysis(fen);
 
-    final fenParts = widget.fen.split(' ');
+    final fenParts = fen.split(' ');
     final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
 
     try {
       final worker = await _ensureWorker();
-      if (!mounted || _generation != myGen) return;
+      if (!mounted || _generation != myGen) {
+        AnalysisService().endEnginePaneAnalysis(fen);
+        return;
+      }
       if (worker == null) {
+        AnalysisService().endEnginePaneAnalysis(fen);
         setState(() => _isSearching = false);
         return;
       }
 
       final result = await worker.runDiscovery(
-        widget.fen,
+        fen,
         _settings.depth,
         _settings.multiPv,
         isWhiteToMove,
@@ -195,16 +203,30 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         },
       );
 
-      if (!mounted || _generation != myGen) return;
+      if (!mounted || _generation != myGen) {
+        AnalysisService().endEnginePaneAnalysis(fen);
+        return;
+      }
+      AnalysisService().endEnginePaneAnalysis(fen);
       setState(() {
         _discovery = result;
         _isSearching = false;
       });
+      _persistBestEvalToCache(fen, result);
     } catch (e) {
+      AnalysisService().endEnginePaneAnalysis(fen);
       if (!mounted || _generation != myGen) return;
       if (kDebugMode) debugPrint('[InlineEngine] Discovery failed: $e');
       setState(() => _isSearching = false);
     }
+  }
+
+  void _persistBestEvalToCache(String fen, DiscoveryResult result) {
+    if (result.lines.isEmpty) return;
+    final best = result.lines.first;
+    final cp = best.scoreCp;
+    if (cp == null) return;
+    EvalCache.instance.putEvalCpWhite(fen, cp, best.depth);
   }
 
   @override
@@ -262,7 +284,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
               tooltip: 'Engine Settings',
               onPressed: () => showAnalysisSettingsSheet(
                 context,
-                mode: AnalysisSettingsContext.tacticsEngine,
+                mode: AnalysisSettingsContext.engineOnly,
               ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

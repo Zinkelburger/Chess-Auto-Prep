@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/engine/engine_lifecycle.dart';
+import '../../services/eval_cache.dart';
 import '../../services/maia_factory.dart';
 import '../../services/probability_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -298,8 +299,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         _settings.fetchMaiaForOpponent &&
         MaiaFactory.isAvailable &&
         MaiaFactory.instance != null;
-    final useDb =
-        _settings.showProbability && _settings.fetchLichessForOpponent;
+    // Mothballed: Lichess Explorer API calls are disabled.
+    const useDb = false;
 
     _perfLog('Pipeline START — SF=${useStockfish ? "ON" : "OFF"}, '
         'Maia=${useMaia ? "ON" : "OFF"}, DB=${useDb ? "ON" : "OFF"}');
@@ -515,6 +516,17 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     while (_analysisCache.length > _maxCacheSize) {
       _analysisCache.remove(_analysisCache.keys.first);
     }
+
+    _persistBestEvalToCache(fen);
+  }
+
+  void _persistBestEvalToCache(String fen) {
+    final discovery = _analysis.discoveryResult.value;
+    if (discovery.lines.isEmpty) return;
+    final best = discovery.lines.first;
+    final cp = best.scoreCp;
+    if (cp == null) return;
+    EvalCache.instance.putEvalCpWhite(fen, cp, best.depth);
   }
 
   void _onPoolStatusChanged() {
@@ -761,16 +773,11 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   static const _narrowTableWidth = 200;
 
   Widget _buildTableHeader() {
-    final dbData = _probabilityService.currentPosition.value;
-    final gameCountStr =
-        dbData != null ? ' (${formatCount(dbData.totalGames)})' : '';
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final narrow = constraints.maxWidth < _narrowTableWidth;
-        final showDb = !narrow &&
-            _settings.showProbability &&
-            _settings.fetchLichessForOpponent;
+        // Mothballed: Lichess Explorer column always hidden.
+        const showDb = false;
         final showMaia =
             !narrow && _settings.showMaia && _settings.fetchMaiaForOpponent;
         final moveWidth = narrow ? 36.0 : 52.0;
@@ -815,7 +822,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                   textAlign: TextAlign.right,
                   width: 60,
                   leading: const LichessDbInfoIcon(size: 12),
-                  tooltipExtra: 'Database probability$gameCountStr',
+                  tooltipExtra: 'Database probability',
                 ),
               if (showMaia)
                 _buildColumnHeader(
@@ -847,9 +854,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final narrow = constraints.maxWidth < _narrowTableWidth;
-        final showDb = !narrow &&
-            _settings.showProbability &&
-            _settings.fetchLichessForOpponent;
+        // Mothballed: Lichess Explorer column always hidden.
+        const showDb = false;
         final showMaia =
             !narrow && _settings.showMaia && _settings.fetchMaiaForOpponent;
         final moveWidth = narrow ? 36.0 : 52.0;

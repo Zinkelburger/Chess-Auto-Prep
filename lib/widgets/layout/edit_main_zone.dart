@@ -20,6 +20,7 @@ class EditMainZone extends StatelessWidget {
     this.onCommentChanged,
     this.onDelete,
     this.onPromote,
+    this.onMakeMainLine,
     this.repertoireName,
     required this.repertoireColor,
     required this.isEditingExistingLine,
@@ -35,6 +36,7 @@ class EditMainZone extends StatelessWidget {
   final void Function(TreePath path, String? comment)? onCommentChanged;
   final void Function(TreePath path)? onDelete;
   final void Function(TreePath path)? onPromote;
+  final void Function(TreePath path)? onMakeMainLine;
   final String? repertoireName;
   final String repertoireColor;
   final bool isEditingExistingLine;
@@ -52,6 +54,7 @@ class EditMainZone extends StatelessWidget {
       onCommentChanged: onCommentChanged,
       onDelete: onDelete,
       onPromote: onPromote,
+      onMakeMainLine: onMakeMainLine,
       currentRepertoireName: repertoireName,
       repertoireColor: repertoireColor,
       isEditingExistingLine: isEditingExistingLine,

@@ -218,55 +218,11 @@ class CoverageService {
     }
   }
 
+  /// MOTHBALLED: Lichess Explorer API calls are disabled. Returns null
+  /// immediately. Remove the early return to re-enable.
   Future<Map<String, dynamic>?> getPositionData(String fen) async {
-    final cacheKey = normalizeFen(fen);
-
-    if (_cache.containsKey(cacheKey)) {
-      _cacheHits++;
-      return _cache[cacheKey];
-    }
-    _cacheMisses++;
-
-    final params = <String, String>{
-      'variant': 'standard',
-      'fen': fen,
-    };
-
-    if (database == LichessDatabase.lichess) {
-      params['ratings'] = ratings;
-      params['speeds'] = speeds;
-    } else if (database == LichessDatabase.player) {
-      if (playerName == null) {
-        throw ArgumentError('playerName required for player database');
-      }
-      params['player'] = playerName!;
-      if (playerColor != null) {
-        params['color'] = playerColor!;
-      }
-    }
-
-    _apiCalls++;
-    final uri = Uri.parse(_baseUrl).replace(queryParameters: params);
-    final response = await LichessApiClient().get(uri);
-
-    if (response == null) return null;
-
-    if (response.statusCode == 404) {
-      final result = <String, dynamic>{
-        'white': 0,
-        'black': 0,
-        'draws': 0,
-        'moves': <dynamic>[],
-      };
-      _cache[cacheKey] = result;
-      return result;
-    }
-
-    if (response.statusCode != 200) return null;
-
-    final result = response.body.isNotEmpty ? _parseJson(response.body) : null;
-    if (result != null) _cache[cacheKey] = result;
-    return result;
+    // Mothballed: no Lichess Explorer API calls.
+    return null;
   }
 
   static Map<String, dynamic>? _parseJson(String body) {

@@ -1,0 +1,1145 @@
+1. e4 and now:
+
+A)	Sicilian Defense
+1 …c5, 2. Nf3 and now:
+
+A1)	Moscow Variation
+2 …d6, 3. Bb5+ and now:
+
+A11)	3 …Bd7, 4. Bxd7+ and now:
+
+A111)	4 …Qxd7, 5. c4 and now:
+
+A1111)	5 …Nc6, 6. Nc3 and now:
+
+A11111)	6 …g6, 7. d4 cxd4, (8 …Bg7, 9. d5 +.23) 8. Nxd4 Bg7, 9. Be3 and now:
+
+A111111)	9 … Nf6, 10. f3 0-0, (10 …Rc8, 11. b3 0-0 transposes) 11. 0-0 and now:
+
+A1111111)	11 …Rfc8, 12. b3 and now:
+
+A11111111)	12 …Qd8, 13. Qd2 Qa5, (13 …a6, 14. Rad1 +.32) 14. Rad1 a6, 15. Nxc6 Rxc6, (15 …bxc6, 16. Na4 +.63) 16. Nd5 Qxd2, 17. Rxd2 +.26
+
+A11111112)	12 …Nxd4, 13. Bxd4 Ne8, 14. Bxg7 Nxg7, 15. f4 +.58
+
+A11111113)	12 …e6, 13. Rc1 d5, 14. cxd5 exd5, 15. Nxc6 bxc6, 16. Bd4 +.23
+
+A1111112)	11 …Rac8, 12. b3 and now:
+
+A11111121)	12 …Rfd8, 13. Qd2 e6, 14. Rad1 +.42
+
+A11111122)	12 …a6, 13. Qd3 +.20
+
+A11111123)	12 …Ne5, 13. Qd2 a6, 14. Rac1 +.28
+
+A11111124)	12 …h5, 13. Qd2 +.39
+
+A1111113)	11 …a6, 12. Qd3 +.11
+
+A1111114)	11 …Ne5, 12. b3 a5, 13. Qe2 +.61
+
+A1111115)	11 …Qd8, 12. Qd2 +.22
+
+A1111116)	11 …Qc7, 12. Rc1 +.23
+
+A111112)	9 …Rc8, 10. b3 a6, 11. 0-0 Nf6, 12. Nd5 +.18
+
+A111113)	9 … e6, 10. Ndb5 Rd8, 11. Nxa7 Nxa7, 12. Bxa7 Bxc3+, 13. bxc3 Qc6, 14. 0-0 +.30
+
+A11112)	6 …Nf6, 7. d4 cxd4, 8. Nxd4 and now:
+
+A111121)	8 …g6, 9. f3 Bg7, (9 …Nxd4, 10. Qxd4 Bg7, 11. Be3 0-0, 12. Qd3 Rfc8, 13. Rd1 +.17) 10. Be3 transposes to A11111.
+
+A111122)	8 …e6, 9. 0-0 Be7, 10. Be3 0-0, 11. Qe2 +.17
+
+A111123)	8 …Qg4, 9. Qxg4 Nxg4, 10. Nxc6 bxc6, 11. f4 and now:
+
+A1111231)	11 …g6, 12. h3 Nf6, 13. Be3 Bg7, 14. 0-0-0 +.25
+
+A1111232)	11 …Rb8, 12. h3 Nf6, 13. b3 g6, 14. Bb2 Nd7, (14 …Bg7, 15. 0-0-0 +.30) 15. 0-0-0 +.17
+
+A111124)	8 …Nxd4, 9. Qxd4 g6, 10. 0-0 +.30
+
+A111125)	8 …a6, 9. Nd5 Rd8, 10. f3 +.42
+
+A11113)	6 …e6, 7. d4 cxd4, 8. Nxd4 a6, 9. 0-0 Nf6, (9 …Nge7, 10. Be3 Nxd4, 11. Bxd4 Nc6, 12. Na4 +.57) 10. Be3 Be7, 11. Qe2 Rc8, 12. b3 +.15
+
+A11114)	6 …e5, 7. d3 transposes to A1113.
+
+A11115)	6 …h6, 7. d4 cxd4, 8. Nxd4 +.18
+
+A11116)	6 …f6, 7. 0-0 +.46
+
+A1112)	5 …Nf6, 6. Nc3 and now:
+
+A11121)	6 …g6, 7. d4 cxd4, 8. Nxd4 Bg7, 9. f3 0-0, (9 …Nc6, 10. Be3 0-0, 11. 0-0 transposes to the text) 10. Be3 and now:
+
+A111211)	10 …Nc6, 11. 0-0 transposes to A11111.
+
+A111212)	10 …Rc8, 11. b3 and now:
+
+A1112121)	11 …Nc6, 12. 0-0 transposes to A1111111.
+
+A1112122)	11 …Qd8, 12. 0-0 Nc6, 13. Qd2 Nxd4, 14. Bxd4 Nd7, 15. Bxg7 Kxg7, 16. Qd4+ Kg8, 17. f4 +.44
+
+A1112123)	11 …d5, 12. exd5 +1.29
+
+A11122)	6 …Nc6, 7. d4 transposes to A11112.
+
+A11123)	6 …e6, 7. 0-0 Be7, 8. d4 cxd4, 9. Nxd4 a6, 10. Qe2 +.17
+
+A1113)	5 …e5, 6. Nc3 Nc6, (6 …g6, 7. d3 Bg7, 8. 0-0 Ne7, 9. Rb1 Nc6, 10. a3 a5, 11. Qa4 0-0, 12. Bg5 f6, 13. Bd2 f5, 14. exf5 Qxf5, 15. Rbd1 +.30) 7. d3 g6, (7 …h6, 8. Rb1 Nf6, 9. a3 a6, 10. b4 Nd4, 11. bxc5 Nxf3+, 12. Qxf3 dxc5, 13. 0-0 +1.28) 8. a3 Bg7, 9. Rb1 +.36
+
+A1114)	5 …g6, 6. Nc3 Bg7, 7. d4 cxd4, 8. Nxd4 Nc6, (8 …e6, 9. Ndb5 +2.02) 9. Be3 transposes to A11111.
+
+A1115)	5 …Qg4, 6. 0-0 Qxe4, 7. d4 cxd4, 8. Nxd4 Nc6, 9. Nb5 0-0-0, 10. Be3 +.13
+
+A1116)	5 …e6, 6. Nc3 a6, 7. d4 cxd4, 8. Nxd4 Qc7, 9. Be3 +.17
+
+A1117)	5 …a6, 6. Nc3 Nc6, 7. d4 cxd4, 8. Nxd4 e6 transposes to A11113.
+
+A112)	4 …Nxd7, 5. 0-0 and now:
+
+A1121)	5 …Ngf6, 6. Qe2 e6, (6 …g6, 7. c3 Bg7, 8. d4 0-0, 9. e5 +.56) 7. b3 Be7, 8. Bb2 +.12
+
+A1122)	5 …g6, 6. c3 Bg7, 7. d4 cxd4, 8. cxd4 Nf6, 9. e5 dxe5, 10. dxe5 Ng4, 11. e6 fxe6, 12. Ng5 +.46
+
+A1123)	5 …e5, 6. d3 +.40
+
+A12)	3 …Nd7, 4. d4 and now:
+
+A121)	4 …Nf6, 5. Nc3 and now:
+
+A1211)	5 …cxd4, 6. Qxd4 and now:
+
+A12111)	6 …e5, 7. Qd3 h6, 8. Be3 Be7, (8 …a6, 9. Bc4 +.20) 9. Bc4 a6, 10. a4 Qc7, 11. 0-0 Nc5, 12. Bxc5 Qxc5, 13. Nd5 Nxd5, 14. Bxd5 +.31
+
+A12112)	6 …a6, 7. Bxd7+ Nxd7, 8. Be3 e6, (8 …e5, 9. Qd3 Nf6, 10. Bg5 +.44) 9. 0-0-0 +.52
+
+A12113)	6 …g6, 7. Bg5 Bg7, 8. 0-0-0 0-0, 9. e5 +.72
+
+A12114)	6 …e6, 7. Bg5 +.38
+
+A1212)	5 …a6, 6. Bxd7+ and now:
+
+A12121)	6 …Nxd7, 7. 0-0 e6, 8. dxc5 Nxc5, 9. Bg5 Qc7, 10. Re1 f6, 11. Bd2 Be7, 12. Nd4 +.49
+
+A12122)	6 …Bxd7, 7. dxc5 +.74
+
+A12123)	6 …Qxd7, 7. dxc5 dxc5, 8. Qe2 +.72
+
+A1213)	5 …e6, 6. dxc5 dxc5, 7. e5 +.62
+
+A122)	4 …a6, 5. Bxd7+ and now:
+
+A1231)	5 …a6, 6. Bxd7+ Bxd7, (6 …Qxd7, 7. Nc3 e6, 8. 0-0 Nf6, 9. Bg5 Be7, 10. Rfd1 b5, 11. a4 b4, 12. Qxb4 +.86) 7. 0-0 and now:
+
+A12311)	7 …e5, 8. Qd3 h6, (8 …b5, 9. a4 +.46) 9. c4 Nf6, 10. Nc3 Be7, 11. a4 +.23
+
+A12312)	7 …Nf6, 8. Bg5 e6, 9. Nc3 +.24
+
+A12313)	7 …e6, 8. Nc3 +.16
+
+A12314)	7 …h6, 8. e5 dxe5, 9. Nxe5 Bb5, 10. Qf4 Nf6, 11. c4 Bc6, 12. Nxc6 bxc6, 13. Qf3 +.71
+
+A1232)	5 …Ngf6, 6. Bg5 a6, (6 …e6, 7. Nc3 Be7, 8. 0-0-0 +.43) 7. Bxd7+ Bxd7, 8. Nc3 e6, 9. 0-0-0 Be7, 10. e5 dxe5, 11. Nxe5 Bc6, 12. Nxc6 bxc6, 13. Bxf6 Bxf6, 14. Qc5 Qc7, 15. Ne4 +.39
+
+A1233)	5 …e5, 6. Qd3 and now:
+
+A12331)	6 …h6, 7. 0-0 +.29
+
+A12332)	6 …a6, 7. Bc4 Nc5, 8. Qe2 +.06
+
+A12333)	6 …Be7, 7. Nc3 +.36
+
+A1234)	5 …e6, 6. Nc3 a6, 7. Bxd7+ Bxd7, 8. 0-0 +.24
+
+A123)	4 …cxd4, 5. Qxd4 and now:
+
+A1221)	5 …Bxd7, 6. dxc5 dxc5, 7. Qe2 Qc7, 8. 0-0 +.36
+
+A1222)	5 …Qxd7, 6. dxc5 dxc5, (6 …Nf6, 7. Nc3 transposes to A12123) 7. Qe2 +.58
+
+A124)	4 …Qc7, 5. Nc3 e6, 6. d5 +.76
+
+A13)	3 …Nc6, 4. 0-0 and now:
+
+A131)	4 …Bd7, 5. Re1 Nf6, (5 …e5, 6. h3 Be7, 7. d3 +.09) 6. c3 and now:
+
+A1311)	6 …a6, 7. Bf1 Bg4, (7 …e5, 8. d4 +.29) 8. d4 cxd4, (8 …Bxf3, 9. gxf3 cxd4, 10. cxd4 +.36) 9. cxd4 and now:
+
+A13111)	9 …d5, 10. exd5 and now:
+
+A131111)	10 …Nxd5, 11. Nc3 e6, 12. h3 Bxf3, 13. Qxf3 Be7, 14. Nxd5 Qxd5, 15. Qxd5 exd5, 16. Be3 0-0, 17. Rac1 Rfd8, 18. g3 Bf6, 19. Red1 Rac8, 20. Bg2 +.41
+
+A131112)	10 …Bxf3, 11. Qxf3 Qxd5, (11 …Nxd4, 12. Qf4 +.79) 12. Qxd5 Nxd5, 13. Nc3 +.51
+
+A13112)	9 …e5, 10. d5 Nd4, 11. Be3 Nxf3+, 12. gxf3 +.41
+
+A13113)	9 …Bxg4, 10. gxf3 d5, 11. Nc3 +.43
+
+A1312)	6 …e6, 7. d4 cxd4, (7 …Be7, 8. d5 Ne5, 9. Bxd7+ Qxd7, 10. Nxe5 dxe5, 11. c4 +.47) 8. cxd4 Be7, 9. Nc3 +.43
+
+A1313)	6 …g6, 7. d4 cxd4, 8. cxd4 Bg7, 9. Nc3 0-0, 10. e5 +.36
+
+A1314)	6 …e5, 7. d4 +.33
+
+A132)	4 …Bg4, 5. h3 Bh5, 6. d3 Nf6, 7. e5 dxe5, 8. g4 +.72
+
+A133)	4 …Nf6, 5. e5 dxe5, 6. Nxe5 +.33
+
+A134)	4 …a6, 5. Bxc6 bxc6, 6. e5 +.34
+
+A135)	4 …g6, 5. d4 cxd4, 6. Qxd4 +.64
+
+A2)	Rossolimo Variation
+2 …Nc6, 3. Bb5 and now:
+
+A21)	3 …g6, 4. 0-0 and now:
+
+A211)	4 …Bg7, 5. Nc3 and now:
+
+A2111)	5 …Nd4, 6. Ba4 a6, 7. Nxd4 cxd4, 8. Ne2 b5, 9. Bb3 Bb7, 10. d3 e6, 11. Bf4 Ne7, 12. Qd2 0-0, 13. Bd6 Re8, 14. Qf4 Qb6, 15. a4 Rac8, 16. h4 Nc6, 17. axb5 axb5, 18. h5 Qd8, 19. e5 +.39
+
+A2112)	5 …Nf6, 6. e5 Ng4, 7. Bxc6 dxc6, 8. Re1 +.20
+
+A2113)	5 …e6, 6. Bxc6 bxc6, 7. e5 f6, 8. Ne4 +.31
+
+A212)	4 …Nf6, 5. Nc3 Bg7, 6. e5 transposes to A2112.
+
+A213)	4 …b6, 5. c3 +.50
+
+A22)	3 …e6, 4. 0-0 and now:
+
+A221)	4 …Nge7, 5. c3 and now:
+
+A2211)	5 …a6, 6. Bxc6 Nxc6, 7. d4 d5, (7 …d6, 8. d5 Nb8, 9. Nbd2 +.43) 8. exd5 Qxd5, 9. Be3 c4, 10. Nbd2 +.19
+
+A2212)	5 …g6, 6. d4 cxd4, 7. cxd4 d5, (7 …a6, 8. Bxc6 dxc6, 9. Bf4 +.66) 8. Nc3 Bg7, 9. e5 0-0, 10. Be3 Bd7, 11. Rc1 +.35
+
+A222)	4 …a6, 5. Bxc6 bxc6, 6. b3 +.37
+
+A223)	4 …Nf6, 5. Re1 Be7, 6. e5 Nd5, 7. Bxc6 dxc6, 8. c4 Nb6, 9. d3 0-0, 10. Nc3 +.82
+
+A224)	4 …Be7, 5. Re1 d6, 6. d4 cxd4, 7. Qxd4 +.24
+
+A225)	4 …d5, 5. exd5 exd5, 6. Re1+ Be7, 7. Ne5 +.61
+
+A23)	3 …d6, 4. 0-0 transposes to A13.
+
+A24)	3 …Nf6, 4. Bxc6 dxc6, 5. d3 Bg4, 6. h3 Bh5, 7. 0-0 +.21
+
+A25)	3 …a6, 4. Bxc6 and now:
+
+A251)	4 …dxc6, 5. 0-0 Bg4, 6. h3 Bxf3, (6 …Bh5, 7. d3 +.62) 7. Qxf3 e5, 8. Qg3 Qc7, (8 …Qf6, 9. d3 +.67) 9. d3 +.80
+
+A252)	4 …bxc6, 5. 0-0 d5, (5 …d6, 6. e5 +.49) 6. d3 Bg4, 7. h3 +.47
+
+A26)	3 …Qb6, 4. Nc3 e6, (4 …Nd4, 5. Nxd4 cxd4, 6. Nd5 Qd6, 7. d3 +.40) 5. Bxc6 bxc6, 6. 0-0 +.28
+
+A27)	3 …Qc7, 4. 0-0 g6, 5. Nc3 +.38
+
+A28)	3 …Nd4, 4. Nxd4 cxd4, 5. 0-0 g6, (5 …a6, 6. Bd3 Nf6, 7. e5 Nd5, 8. Be4 Nb6, 9. d3 +.44) 6. c3 Bg7, 7. cxd4 Bxd4, 8. Nc3 e6, 9. Ne2 Bg7, 10. d4 a6, 11. Bd3 +.43
+
+A29)	3 …Na5, 4. 0-0 a6, 5. Be2 d6, (5 …g6, 6. d4 cxd4, 7. Qxd4 Nf6, 8. e5 Nc6, 9. Qh4 Nd5, 10. Rd1 +1.61) 6. c3 +.44
+
+A3)	2 …e6, 3. Nc3 and now:
+
+A31)	3 …a6, 4. g3 and now:
+
+A311)	4 …b5, 5. Bg2 Bb7, 6. d3 and now:
+
+A3111)	6 …d6, 7. 0-0 and now:
+
+A31111)	7 …Nf6, 8. Bf4 +.21
+
+A31112)	7 …Be7, 8. e5 dxe5, 9. Nxe5 Bxg2, 10. Kxg2 Nd7, 11. f4 Rc8, 12. Qg4 +.11
+
+A31113)	7 …Qc7, 8. Re1 +.16
+
+A3112)	6 …Nc6, 7. 0-0 and now:
+
+A31121)	7 …d6, 8. Re1 +.26
+
+A31122)	7 …g6, 8. Be3 +.59
+
+A31123)	7 …h5, 8. a4 b4, 9. Ne2 +.26
+
+A3113)	6 …Be7, 7. 0-0 d6, 8. e5 transposes to A31112.
+
+A312)	4 …Nc6, 5. Bg2 and now:
+
+A3121)	5 …d6, 6. 0-0 Nf6, 7. d4 cxd4, 8. Nxd4 and now:
+
+A31211)	8 …Bd7, 9. Nxc6 Bxc6, 10. a4 Be7, 11. a5 +.12
+
+A31212)	8 …Qc7, 9. Re1 +.14
+
+A31213)	8 …Nxd4, 9. Qxd4 Be7, 10. e5 dxe5, 11. Qxe5 Qd6, 12. Qxd6 Bxd6, 13. Na4 +.77
+
+A3122)	5 …Nf6, 6. 0-0 d6 transposes to A3121.
+
+A3123)	5 …g6, 6. d4 cxd4, (6 …d6, 7. dxc5 dxc5, 8. 0-0 +1.11) 7. Nxd4 Bg7, 8. Nxc6 bxc6, 9. 0-0 d5, 10. Re1 +.51
+
+A3124)	5 …e5, 6. Nd5 +.33
+
+A3125)	5 …Nd4, 6. 0-0 b5, 7. e5 +.58
+
+A3126)	5 …Rb8, 6. d4 cxd4, 7. Nxd4 +.39
+
+A313)	4 …Qc7, 5. Bg2 and now:
+
+A3131)	5 …Nc6, 6. 0-0 Nf6, 7. Re1 +.15
+
+A3132)	5 …d6, 6. d4 +.15
+
+A3133)	5 …Nf6, 6. 0-0 d6, 7. d4 +.07
+
+A3134)	5 …b5, 6. 0-0 Bb7, 7. d4 b4, 8. Na4 Bxe4, 9. dxc5 Bxc5, 10. Bf4 Qa5, 11. Nxc5 Qxc5, 12. Bd6 Qd5, 13. Re1 +.80
+
+A314)	4 …Ne7, 5. Bg2 Nec6, (5 …g6, 6. d4 Bg7, 7. dxc5 Bxc3+, 8. bxc3 0-0, 9. Bh6 +3.43) 6. Ne2 +.35
+
+A315)	4 …Be7, 5. d4 +.36
+
+A316)	4 …h5, 5. Bg2 Nc6, 6. d4 cxd4, 7. Nxd4 h4, 8. Bf3 +.25
+
+A32)	3 …Nc6, 4. Bb5 Nge7, (4 …Nd4, 5. 0-0 a6, 6. Bd3 Ne7, 7. b3 Nec6, 8. Bb2 Nxf3+, 8. Qxf3 Ne5, 9. Qg3 Nxd3, 10. Qxd3 +.31) 5. 0-0 a6, (5 …Nd4, 6. Nxd4 cxd4, 7. Ne2 a6, 8. Bd3 Nc6, 9. c3 Bc5, 10. b4 Ba7, 11. cxd4 +.17) 6. Bxc6 Nxc6, 7. d4 cxd4, 8. Nxd4 Qc7, (8 …Qb6, 9. Nxc6 Qxc6, 10. Re1 b5, 11. Nd5 Bb7, 12. Bf4 Rc8, 13. Qg4 +.76) 9. Re1 Bd6, 10. Nxc6 bxc6, 11. Qh5 Be5, 12. f4 Bxf4, 13. Bxf4 Qxf4, 14. Qc5 +.05
+
+A33)	3 …d5, 4. exd5 exd5, 5. Bb5+ Bd7, 6. Qe2+ Qe7, (6 …Be7, 7. Nxd5 Bxb5, 8. Qxb5+ Nc6, 9. Qxb7 +2.86) 7. Bxd7+ Nxd7, 8. Qxe7+ Bxe7, (8 …Nxe7, 9. Nb5 +1.38) 9. Nxd5 0-0-0, 10. 0-0 +1.07
+
+A34)	3 …Qa5, 4. Be2 +.47
+
+A4)	Hyper-Accelerated Dragon
+2 …g6, 3. d4 cxd4, (3 …Bg7, 4. dxc5 Qa5+, 5. c3 Qxc5, 6. Na3 Bxc3+, 7. bxc3 Qxc3+, 8. Qd2 Qxa1, 9. Nb5 Na6, 10. Nc3 +2.72) 4. Qxd4 Nf6, 5. Nc3 Nc6, (5 …Bg7, 6. e5 Nc6, 7. Qa4 Ng8, 8. Bf4 transposes to A42) 6. Qa4 and now:
+
+A41)	6 …d6, 7. e5 and now:
+
+A411)	7 …dxe5, 8. Nxe5 and now:
+
+A4111)	8 …Bd7, 9. Nxd7 and now:
+
+A41111)	9 …Qxd7, 10. Be3 and now:
+
+A411111)	10 …Bg7, 11. Rd1 and now:
+
+A4111111)	11 …Qc8, 12. Be2 0-0, 13. 0-0 +.60
+
+A4111112)	11 …Qc7, 12. g3 0-0, (12 …a6, 13. Bg2 0-0, 14. 0-0 +.54) 13. Bg2 a6, 14. 0-0 +.53
+
+A4111113)	11 …Qe6, 12. Bc4 and now:
+
+A41111131)	12 …Qc8, 13. Be2 0-0, 14. 0-0 +.59
+
+A41111132)	12 …Qf5, 13. 0-0 0-0, 14. h3 +.50
+
+A41111133)	12 …Qg4, 13. 0-0 0-0, 14. h3 Qf5, 15. Be2 +.72
+
+A4111114)	11 …Qg4, 12. Qb3 Qb4, 13. Qxb4 Nxb4, 14. Bb5+ Nc6, (14 …Kf8, 15. Ba4 b6, 16. a3 Na6, 17. Bc6 Rb8, 18. Bf4 +1.69) 15. f3 0-0, 16. Kf2 +.43
+
+A411112)	10 …a6, 11. Rd1 +.57
+
+A411113)	10 …Ng4, 11. Rd1 and now:
+
+A4111131)	11 …Qc8, 12. Bc5 +.77
+
+A4111132)	11 …Qe6, 12. Bc4 Qc8, (12 …Qf5, 13. Nb5 +2.06) 13. Qb3 e6, 14. Bf4 +.78
+
+A4111133)	11 …Qf5, 12. Nb5 +1.48
+
+A411114)	10 …Qg4, 11. Qb3 Qc8, (11 …Rb8, 12. h3 +.94) 12. Bc4 +.57
+
+A411115)	10 …Ne5, 11. Nb5 +2.43
+
+A41112)	9 …Nxd7, 10. Bb5 and now:
+
+A411121)	10 …Bg7, 11. 0-0 0-0, 12. Rd1 +.36
+
+A411122)	10 …Qc8, 11. 0-0 and now:
+
+A4111221)	11 …Bg7, 12. Rd1 +.35
+
+A4111222)	11 …a6, 12. Nd5 e6, 13. Bxc6 bxc6, 14. Nb4 Bg7, (14 …c5, 15. Nd5 +1.18) 15. Be3 c5, (15 …Bxb2, 16. Rab1 Bf6, 17. Nxc6 +.59) 16. Nd3 +.12
+
+A4112)	8 …Bg7, 9. Bb5 0-0, 10. Nxc6 bxc6, 11. Bxc6 Bd7, 12. Bxd7 Nxd7, 13. 0-0 +.35
+
+A4113)	8 …Qd4, 9. Qxd4 Nxd4, 10. Bd3 Bg7, 11. Be3 Nf5, 12. Bb5+ and now:
+
+A41131)	12 …Nd7, 13. Bf4 Bxe5, (13 …a6, 14. Bxd7+ Bxd7, 15. Nd5 +.72) 14. Bxe5 0-0, 15. Bc7 a6, 16. Be2 +.36
+
+A41132)	12 …Kf8, 13. 0-0-0 Be6, 14. Bd2 Nd4, (14 …Nd6, 15. Rhe1 +.46) 15. Ba4 a6, 16. Be3 Nf5, 17. Bb6 +.43
+
+A412)	7 …Ng4, 8. exd6 and now:
+
+A4121)	8 …Qxd6, 9. Bb5 Bg7, 10. 0-0 0-0, 11. Bf4 +.32
+
+A4122)	8 …exd6, 9. Bb5 Bd7, 10. 0-0 Be7, 11. h3 Nge5, 12. Nxe5 dxe5, (12 …Nxe5, 13. Bh6 +1.85) 13. Rd1 +.79
+
+A413)	7 …Nh5, 8. Be2 +.90
+
+A42)	6 …Bg7, 7. e5 Ng8, (7 …b5, 8. Bxb5 Ng8, 9. Bxc6 bxc6, 10. Bg5 Bf4 +2.65) 8. Bf4 and now:
+
+A421)	8 …f6, 9. exf6 Nxf6, 10. 0-0-0 0-0, 11. Kb1 and now:
+
+A4211)	11 …Qa5, 12. Qxa5 Nxa5, 13. Nb5 Ne8, 14. Be3 and now:
+
+A42111)	14 …b6, 15. h4 a6, 16. Nbd4 +.29
+
+A42112)	14 …Nc6, 15. h4 +.63
+
+A42113)	14 …a6, 15. Na7 +.36
+
+A4212)	11 …Nh5, 12. Bg5 +.76
+
+A4213)	11 …Qb6, 12. Be3 +.67
+
+A4214)	11 …d6, 12. h3 +.51
+
+A422)	8 …Nh6, 9. h3 0-0, 10. 0-0-0 +1.43
+
+A423)	8 …Qb6, 9. 0-0-0 Qb4, 10. Qxb4 Nxb4, 11. Nb5 +1.85
+
+A424)	8 …a6, 9. 0-0-0 Nh6, 10. h3 +1.12
+
+A425)	8 …e6, 9. Nb5 +2.00
+
+A426)	8 …d5, 9. exd6 exd6, 10. Nb5 +2.79
+
+A43)	6 …d5, 7. exd5 Nxd5, 8. Bb5 +.42
+
+A44)	6 …Qa5, 7. Qxa5 Nxa5, 8. e5 Ng4, 9. Nb5 +1.45
+
+A5)	2 …a6, 3. c3 d5, (3 …d6, 4. d4 Nd7, 5. Bd3 b5, 6. 0-0 c4, 7. Bc2 Bb7, 8. Qe2 +.81) 4. exd5 Qxd5, 5. d4 e6, 6. Bd3 Nf6, 7. 0-0 Be7, 8. dxc5 +.34
+
+A6)	2 …Nf6, 3. e5 Nd5, 4. Nc3 and now:
+
+A61)	4 …e6, 5. Nxd5 exd5, 6. d4 Nc6, (6 …d6, 7. Bb5+ Nc6, 8. 0-0 +.75) 7. dxc5 Bxc5, 8. Qxd5 Qb6, (8 …d6, 9. exd6 Qb6, 10. Be3 Qxb2, 11. Bb5 Qxb5, 12. Qxc5 Qxc5, 13. Bxc5 +.12) 9. Bc4 Bxf2+, 10. Ke2 0-0, 11. Rf1 Bc5, 12. Ng5 Nd4+, 13. Kd1 Ne6, 14. Ne4 Be7, 15. c3 +.38
+
+A62)	4 …Nxc3, 5. dxc3 Nc6, 6. Bc4 +.46
+
+A63)	4 …Nb4, 5. Bc4 e6, 6. 0-0 d5, 7. exd6 Bxd6, 8. d4 0-0, 9. dxc5 Bxc5, 10. a4 N4c6, 11. Bf4 +.93
+
+B)	Open Game
+1 …e5, 2. Nf3 and now:
+
+B1)	Scotch Game
+2 …Nc6, 3. d4 and now:
+
+B11)	3 …exd4, 4. Nxd4 and now:
+
+B111)	4 …Nf6, 5. Nxc6 bxc6, (5 …dxc6, 6. Qxd8+ Kxd8, 7. f3 Bc5, 8. Nd2 +.44) 6. e5 and now:
+
+B1111)	6 …Qe7, 7. Qe2 Nd5, 8. c4 and now:
+
+B11111)	8 …Ba6, 9. b3 and now:
+
+B111111)	9 …g6, 10. f4 and now:
+
+B1111111)	10 …Bg7, 11. Qf2 Nb6, 12. Ba3 Qe6, 13. Nd2 d6, 14. Ne4 +.47
+
+B1111112)	10 …f6, 11. Ba3 +.02
+
+B1111113)	10 …d6, 11. Qf2 Nf6, 12. Ba3 -.05
+
+B1111114)	10 …Qh4+, 11. g3 Bb4+, 12. Bd2 Qe7, 13. Bxb4 +.70
+
+B111112)	9 …0-0-0, 10. g3 and now:
+
+B1111121)	10 …Re8, 11. Bb2 f6, 12. Qd2 +.11
+
+B1111122)	10 …f6, 11. Bg2 fxe5, 12. 0-0 +.03
+
+B1111123)	10 …g5, 11. Bb2 Bg7, 12. Nd2 Rhe8, (12 …Nb4 transposes to B1112) 13. 0-0-0 Nb6, 14. f4 d5, 15. h4 +1.44
+
+B111113)	9 …Qh4, 10. Bb2 Bb4+, 11. Nd2 and now:
+
+B1111131)	11 …Nc3, 12. Qe3 Ne4, 13. g3 Qh6, 14. Qxh6 gxh6, 15. Bc1 +.06
+
+B1111132)	11 …0-0, 12. g3 Bxd2+, (12 …Qg5, 13. f4 Nxf4, 14. gxf4 Qh4+, 15. Kd1 Qxf4, 16. Kc2 +1.53) 13. Kxd2 +.21
+
+B1111133)	11 …Bc3, 12. Bxc3 Nxc3, 13. Qe3 0-0, 14. Qxc3 Rfe8, 15. Bd3 +3.22
+
+B111114)	9 …g5, 10. g3 Bg7, 11. Bb2 0-0-0, (11 …0-0, 12. Nd2 Nb4, 13. 0-0-0 +.08) 12. Nd2 Nb4, 13. 0-0-0 Nxa2+, 14. Kb1 Nb4, 15. f4 gxf4, 16. gxf4 Rhe8, (16 …c5, 17. Rg1 Rhg8, 18. Qh5 +.45) 17. Ne4 and now:
+
+B1111141)	17 …c5, 18. Bg2 Bb7, 19. Rhe1 Kb8, (19 …Bh8, 20. Qf2 Kb8, 21. Bh1 +.58) 20. Qf2 Rg8, 21. Bh1 +.47
+
+B1111142)	17 …Bb7, 18. Rg1 Bh8, 19. Bd4 +.35
+
+B1111143)	17 …d6, 18. Qg4+ +1.84
+
+B1111144)	17 …f6, 18. exf6 +1.30
+
+B1111145)	17 …Kb8, 18. Bg2 f6, 19. Bd4 fxe5, 20. Bc5 d6, 21. Bxb4 exf4, 22. Qh5 +.35
+
+B111115)	9 …Nb6, 10. Nd2 0-0-0, 11. Bb2 Re8, 12. 0-0-0 +.51
+
+B11112)	8 …Nb6, 9. Nc3 and now:
+
+B111121)	9 …Qe6, 10. Qe4 and now:
+
+B1111211)	10 …g6, 11. Bd3 Bg7, 12. f4 0-0, 13. 0-0 Ba6, 14. c5 Bxd3, 15. Qxd3 Nd5, 16. Nxd5 cxd5, 17. Bd2 0.00
+
+B1111212)	10 …Ba6, 11. b3 0-0-0, 12. Bb2 Re8, 13. f4 f6, 14. 0-0-0 fxe5, 15. c5 Bxf1, 16. cxb6 Ba6, 17. bxa7 Kb7, 18. Na4 exf4, 19. Qxe6 dxe6, 20. Rd7 e5, 21. Re1 e4, 22. Rxe4 Rxe4, 23. Rxc7+ Kxc7, 24. a8=Q Re1+, 25. Kc2 Re2+, 26. Kd1 Re1+ 0.00
+
+B1111213)	10 …Bb4, 11. Bd2 Ba6, 12. b3 Bxc3, 13. Bxc3 d5, 14. Qh4 dxc4, 15. Be2 Nd5, 16. Bxc4 Bxc4, (16 …g5, 17. Bxd5 Qxd5, 18. Qd4 +.53) 17. Qxc4 +.53
+
+B1111214)	10 …d5, 11. exd6 Bxd6, 12. Bd3 +.07
+
+B1111215)	10 …f6, 11. exf6 d5, (11 …Qxe4, 12. Nxe5 d5, 13. cxd5 exd5, 14. Nc3 +.31) 12. Qxe6 Bxe6, 13. cxd5 Nxd5, 14. fxg7 Bxg7, 15. Bc4 +.62
+
+B111122)	9 …a5, 10. Bd2 Ba6, 11. b3 a4, 12. Qe4 and now:
+
+B1111221)	12 …g6, 13. Bd3 Bg7, 14. 0-0 0-0, 15. f4 d6, 16. Rad1 axb3, (16 …dxe5, 17. f5 -.11) 17. axb3 d5, 18. cxd5 cxd5, 19. Qe2 Bxd3, 20. Qxd3 c6, (20 …Rfd8, 21. Qb5 -.09) 21. Be3 Nd7, 22. Rc1 Rac8, (22 …Rfe8, 23. Na4 Qe6, 24. Nc5 Nxc5, 25. Bxc5 f6, 26. f5 gxf5, 27. exf6 Qxf6, 28. Rxf5 -.13) 23. Na4 f6, 24. Nb6 Nxb6, 25. Bxb6 fxe5, 26. Bc5 Qd7, 27. Bxf8 e4, 28. Qa6 Kxf8, (28 …Bxf8, 29. Rfd1 +.03) 29. b4 Bd4+, 30. Kh1 Kg7, 31. Rc2 0.00
+
+B1111222)	12 …axb3, 13. axb3 g6, 14. Bd3 Bg7, 15. 0-0 0-0, 16. f4 d6, 17. Rad1 transposes to B1111221.
+
+B1111223)	12 …Qa3, 13. Rb1 axb3, (13 …Bb4, 14. Be2 +.60) 14. axb3 g6, 15. e6 Qe7, 16. exd7+ Nxd7, 17. g3 +.19
+
+B111123)	9 …Ba6, 10. Qe4 Qe6 transposes to B1111212.
+
+B111124)	9 …g6, 10. Ne4 Bg7, (10 …Qe6, 11. Nf6+ Kd8, 12. b3 +.23) 11. Bg5 Qb4+, (11 …Qe6, 12. Nf6+ Bxf6, 13. Bxf6 Rg8, 14. Rd1 +1.42) 12. Qd2 Qxd2+, 13. Kxd2 h6, (13 …Bxe5, 14. Nf6+ +.77) 14. Bf6 +.24
+
+B111125)	9 …Bb7, 10. Bd2 Qe6, (10 …0-0-0, 11. 0-0-0 +.29) 11. f4 0-0-0, 12. 0-0-0 Re8, 13. Re1 +.46
+
+B111126)	9 …d6, 10. Bf4 +.48
+
+B111127)	9 …d5, 10. exd6 cxd6, (10 …Qxe2+, 11. Bxe2 cxd6, 12. 0-0 +.55) 11. Be3 +.26
+
+B111128)	9 …Qb4, 10. Qe4 +.28
+
+B11113)	8 …Qb4+, 9. Nd2 Nf4, 10. Qe4 +.17
+
+B11114)	8 …Qc5, 9. a3 Ba6, 10. Qe4 +1.24
+
+B1112)	6 …Nd5, 7. c4 Nb6, (7 …Bb4+, 8. Bd2 Bxd2+, 9. Qxd2 Ne7, 10. Nc3 +.28) 8. Bd3 and now:
+
+B11121)	8 …Bb4+, 9. Bd2 Bxd2+, (9 …Qe7, 10. 0-0 0-0, 11. Qc2 h6, 12. Bxb4 Qxb4, 13. Nd2 Re8, 14. Nf3 +.44) 10. Nxd2 0-0, 11. 0-0 Qe7, (13 …Ba6, 14. Qc2 Qe7, 15. Bxh7+ Kh8, 16. Bd3 Qxe5, 17. Rae1 +1.36) 14. Qc2 h6, 15. Rfe1 a5, 16. Rad1 +.74
+
+B11122)	8 …d5, 9. cxd5 cxd5, 10. 0-0 Be7, 11. Qc2 h6, 12. Rd1 +.30
+
+B11123)	8 …Bc5, 9. 0-0 0-0, 10. Nd2 Re8, 11. Ne4 Rxe5, 12. Nxc5 Rxc5, 13. Re1 +1.08
+
+B11124)	8 …d6, 9. exd6 Bxd6, (9 …cxd6, 10. 0-0 +.54) 10. 0-0 0-0, 11. Qc2 Qh4, 12. g3 Qh5, 13. Be3 Nd7, (13 …Bh3, 14. c5 +.29) 14. Be2 Qh3, 15. Nd2 +.33
+
+B11125)	8 …Be7, 9. 0-0 0-0, 10. Qc2 g6, 11. Nc3 +.47
+
+B1113)	6 …Ne4, 7. Bd3 Nc5, 8. 0-0 and now:
+
+B11131)	8 …Be7, 9. Qg4 +.50
+
+B11132)	8 …d5, 9. Nd2 Be7, 10. Nb3 Nxd3, (10 …Ne6, 11. f4 +1.04) 11. cxd3 0-0, 12. Be3 f6, 13. f4 +.41
+
+B11133)	8 …d6, 9. Re1 Be6, 10. Qf3 Nxd3, 11. cxd3 Qd7, 12. Bf4 +.25
+
+B112)	4 …Bc5, 5. Be3 and now:
+
+B1121)	5 …Qf6, 6. c3 and now:
+
+B11211)	6 …Nge7, 7. Bc4 and now:
+
+B112111)	7 …Ne5, 8. Be2 and now:
+
+B1121111)	8 …Qg6, 9. 0-0 and now:
+
+B11211111)	9 …d6, 10. f3 0-0, 11. Nd2 d5, (11 …Bb6, 12. a4 a6, 13. a5 Ba7, 14. f4 Ng4, 15. Bxg4 Bxg4, 16. Qb3 +.41) 12. Kh1 dxe4, 13. fxe4 Bg4, 14. Bf4 Bxe2, 15. Qxe2 Bd6, 16. Rad1 +.36
+
+B11211112)	9 …d5, 10. Bh5 Bg4, (10 …Qxe4, 11. Nd2 Qd3, 12. N4f3 +.64) 11. Bxg6 Bxd1, 12. Bxf7+ Kxf7, 13. Rxd1 Nc4, (13 …dxe4, 14. Nd2 +.64) 14. b4 +.39
+
+B11211113)	9 …0-0, 10. Nd2 d5, 11. Bh5 Qd6, 12. Qe2 +.36
+
+B11211114)	9 …Qxe4, 10. Nb5 Bxe3, (10 …Qc6, 11. Bxc5 Qxc5, 12. Qd4 +2.25) 11. Nxc7+ Kd8, 12. Nxa8 and now:
+
+B112111141)	12 …Bf4, 13. g3 Bh6, (13 …Bc1, 14. c4 Bxb2, 15. Nd2 +.87) 14. f3 Be3+, 15. Kg2 Qc6, 16. Re1 0.00
+
+B112111142)	12 …Bh6, 13. Re1 +.88
+
+B112111143)	12 …Bc1, 13. Qxc1 +2.67
+
+B112111144)	12 …Bc5, 13. b4 +2.03
+
+B1121112)	8 …d5, 9. 0-0 0-0, (9 …dxe4, 10. Nb5 Bd6, 11. Bc5 0-0, 12. Nxd6 cxd6, 13. Qxd6 Qxd6, 14. Bxd6 N5g6, 15. Nd2 +.60) 10. f4 and now:
+
+B11211121)	10 …N5c6, 11. e5 +.29
+
+B11211122)	10 …Nc4, 11. Bxc4 dxc4, 12. Nd2 +.61
+
+B11211123)	10 …Qh6, 11. Qd2 Ng4, 12. Bxg4 Bxg4, 13. f5 Qh5, 14. h3 Bxh3, 15. gxh3 Qxh3, 16. Rf3 Qg4+, 17. Qg2 Qxg2+, 18. Kxg2 dxe4, 19. Rf1 +.19
+
+B1121113)	8 …d6, 9. Nd2 Qg6, 10. f4 Ng4, 11. f5 Nxe3, 12. fxg6 Nxd1, 13. gxf7+ Kxf7, 14. Rf1+ Kg6, 15. Kxd1 +.27
+
+B1121114)	8 …0-0, 9. 0-0 d5, 10. f4 transposes to B1121112.
+
+B112112)	7 …0-0, 8. 0-0 and now:
+
+B1121121)	8 …Bb6, 9. Na3 d6, (9 …d5, 10. exd5 Nxd4, 11. Bxd4 Bxd4, 12. Qxd4 Qxd4, 13. cxd4 Nf5, 14. Rac1 +.68) 10. f4 and now:
+
+B11211211)	10 …Be6, 11. Be2 Nxd4, (12 …Rad8, 13. Nac2 +.28) 13. cxd4 +.19
+
+B11211212)	10 …Ng6, 11. Nac2 Re8, (11 …Bd7, 12. Qh5 Rae8, 13. f5 Qh4, 14. Qxh4 Nxh4, 15. g3 Nxd4, 16. cxd4 Rxe4, 17. gxh4 +.45) 12. Bd3 Bd7, 13. Nb5 +.35
+
+B1121122)	8 …Ne5, 9. Be2 d6, 10. f4 N5c6, 11. Qd2 +.32
+
+B1121123)	8 …a6, 9. f4 b5, 10. Be2 Ng6, 11. Qd3 +.44
+
+B112113)	7 …d6, 8. 0-0 and now:
+
+B1121131)	8 …Ne5, 9. Be2 g5, 10. Nb5 0-0, 11. Nxc7 Rb8, 12. Qd2 +1.44
+
+B1121132)	8 …0-0, 9. f4 and now:
+
+B11211321)	9 …Be6, 10. Be2 Rae8, 11. Qd2 +.17
+
+B11211322)	9 …Bb6, 10. Na3 transposes to B112112.
+
+B11211323)	9 …a6, 10. Nc2 +.14
+
+B11211324)	9 …Qg6, 10. Nd2 Kh8, 11. f5 Qf6, 12. N2f3 h6, 13. a4 a5, 14. Nc2 Bxe3, 15. Nxe3 +.56
+
+B1121133)	8 …Bb6, 9. Nb5 Kd8, (9 …a6, 10. Nxd6+ cxd6, 11. Bxb6 Qg6, 12. Nd2 Bh3, 13. Qf3 Bd7, 14. Qe2 Ne5, 15. Bb3 h5, 16. f4 +2.42) 10. Bxb6 axb6, 11. f4 Bd7, 12. a4 Ng6, 13. Qd2 +.90
+
+B112114)	7 …b6, 8. 0-0 Bb7, 9. f4 0-0-0, 10. Qd2 +.13
+
+B112115)	7 …Qg6, 8. Nxc6 Qxc6, 9. Qh5 Bxe3, 10. Qxf7+ Kd8, 11. fxe3 Qxe4, 12. Qxg7 Ng6, 13. Qf6+ Qe7, 14. 0-0 +.96
+
+B112116)	7 …Bb6, 8. 0-0 0-0, (8 …d6 transposes to B1121133) 9. Na3 transposes to B1121121.
+
+B11212)	6 …Qg6, 7. Nb5 Bxe3, 8. Nxc7+ Kd8, 9. Nxa8 Bf4, (9 …Bh6, 10. f3 +.79) 10. Qc2 +.44
+
+B11213)	6 …d6, 7. Be2 Nge7, 8. 0-0 0-0, 9. Nb5 Bxe3, 10. fxe3 Qg5, 11. Nxc7 Qxe3+, 12. Rf2 Rb8, 13. Nd2 -.10
+
+B11214)	6 …Bb6, 7. Na3 +.42
+
+B1122)	5 …Bb6, 6. Nc3 and now:
+
+B11221)	6 …d6, 7. Qd2 Nf6, 8. f3 +.30
+
+B11222)	6 …Nf6, 7. Nxc6 bxc6, (7 …dxc6, 8. Qxd8+ Kxd8, 9. Bf4 +.36) 8. e5 Bxe3, 9. fxe3 Nd5, (9 …Ng8, 10. Qg4 +1.15) 10. Qd4 Nxc3, 11. bxc3 Qg5, 12. Bc4 0-0, (12 …Qxg2, 13. 0-0-0 +.69) 13. 0-0 d5, 14. exd6 cxd6, 15. Qxd6 Qxe3+, 16. Kh1 +.06
+
+B11223)	6 …Nge7, 7. Qd2 0-0, (7 …d6, 8. 0-0-0 0-0, 9. Kb1 transposes) 8. 0-0-0 d6, 9. Kb1 and now:
+
+B112231)	9 …Nxd4, 10. Bxd4 Nc6, 11. Bxb6 axb6, 12. Be2 +.45
+
+B112232)	9 …h6, 10. Be2 +.42
+
+B112233)	9 …Be6, 10. Nxe6 fxe6, 11. f4 +.82
+
+B1123)	5 …Nxd4, 6. Bxd4 Bxd4, 7. Qxd4 Qf6, (7 …Nf6, 8. e5 Qe7, 9. Be2 Ng8, 10. Nc3 c6, 11. Ne4 +2.09) 8. e5 Qb6, 9. Qxb6 axb6, 10. Nc3 Ne7, (10 …f6, 11. Nd5 Kd8, 12. exf6 Nxf6, 13. Nxf6 gxf6, 14. Bd3 Rg8, 15. g3 h6, 16. Kd2 d6, 17. Rhe1 +.42) 11. 0-0-0 +.70
+
+B1124)	5 …Bxd4, 6. Bxd4 and now:
+
+B11241)	6 …Nxd4, 7. Qxd4 transposes to B1123.
+
+B11242)	6 …Nf6, 7. Nc3 0-0, (7 …d6, 8. Be2 +.22) 8. Bxf6 Qxf6, 9. Qd2 +.22
+
+B11243)	6 …f6, 7. Bc4 +.82
+
+B1125)	5 …Qe7, 6. Nc3 +.26
+
+B113)	4 …Qh4, 5. Nc3 Bb4, (5 …Bc5, 6. Be3 Nh6, 7. Ndb5 Bxe3, 8. Nxc7+ Kd8, 9. g3 +1.25) 6. Be2 Qxe4, (6 …Nf6, 7. Nf5 Qxe4, 8. Nxg7+ Kf8, 9. Bh6 +.80) 7. Ndb5 Bxc3+, (7 …Kd8, 8. 0-0 Qg6, 9. Bf4 d6, 10. Nd5 Ba5, 11. Bh5 +5.17) 8. bxc3 Kd8, 9. 0-0 a6, 10. Nd4 Nxd4, 11. cxd4 Nf6, 12. c4 +.50
+
+B114)	4 …Nxd4, 5. Qxd4 and now:
+
+B1141)	5 …d6, 6. Nc3 Nf6, 7. Bf4 Be7, 8. 0-0-0 0-0, 9. Kb1 a6, (9 …Be6, 10. h4 +.43) 10. f3 Be6, 11. g4 b5, 12. h4 +.49
+
+B1142)	5 …Nf6, 6. e5 Ng8, 7. Bc4 d6, 8. 0-0 dxe5, 9. Bxf7+ Ke7, 10. Qc4 +2.45
+
+B1143)	5 …Qf6, 6. e5 Qb6, 7. Qxb6 axb6, 8. Nc3 Bb4, 9. Bd2 f6, (9 …Bxc3, 10. Bxc3 Ne7, 11. Bc4 Nc6, 12. 0-0 0-0, 13. Rfe1 +1.28) 10. f4 +.54
+
+B1144)	5 …Ne7, 6. Nc3 Nc6, 7. Qe3 and now:
+
+B11441)	7 …d6, 8. Bd2 Be7, 9. Nd5 0-0, 10. Bc3 Be6, 11. Qg3 +.38
+
+B11442)	7 …Bb4, 8. Bd2 0-0, 9. 0-0-0 d6, 10. Qg3 Be6, 11. Kb1 +.51
+
+B11443)	7 …Nb4, 8. Qe2 Be7, 9. g3 0-0, 10. Bg2 +.31
+
+B1145)	5 …h6, 6. Bc4 c6, 7. 0-0 +.89
+
+B115)	4 …Qf6, 5. Be3 Bc5, 6. c3 transposes to B1121.
+
+B116)	4 …d6, 5. Nc3 Nf6, (5 …Bd7, 6. Be3 Nf6, 7. Nxc6 +.37) 6. Be2 Be7, (6 …g6, 7. Bg5 +.72) 7. 0-0 0-0, 8. Be3 +.33
+
+B117)	4 …Bb4+, 5. c3 Bc5, 6. Be3 Bb6, (6 …Qf6, 7. Bc4 +.32) 7. Qg4 Qf6, 8. Qg3 Qg6, 9. Nd2 Nge7, 10. Nb5 Qxg3, 11. hxg3 Kd8, 12. Nc4 Bxe3, 13. Nxe3 d6, 14. 0-0-0 +.40
+
+B118)	4 …Nge7, 5. Nc3 Nxd4, 6. Qxd4 Nc6, 7. Qe3 transposes to B114.
+
+B119)	4 …g6, 5. Nc3 Bg7, 6. Be3 Nf6, (6 …d6, 7. Qd2 Nf6, 8. f3 +.39) 7. Nxc6 bxc6, 8. e5 Ng8, 9. f4 +.34
+
+B120)	4 …Ne5, 5. Nc3 +.50
+
+B121)	4 …Be7, 5. Nc3 Nf6, 6. Nxc6 dxc6, 7. Qxd8+ Bxd8, 8. Bf4 Ne7, 9. Qf3 +.44
+
+B122)	4 …d5, 5. Bb5 dxe4, 6. Nc3 Bd7, 7. 0-0 Nf6, (7 …Nxd4, 8. Qxd4 Bxb5, 9. Qxe4+ +.65) 8. Bxc6 +.39
+
+B12)	3 …d6, 4. dxe5 Nxe5, 5. Nxe5 dxe5, 6. Qxd8+ Kxd8, 7. Bc4 f6, 8. Be3 +.35
+
+B13)	3 …Nf6, 4. d5 Ne7, 5. Nxe5 +.99
+
+B14)	3 …Nxd4, 4. Nxd4 exd4, 5. Qxd4 transposes to B114.
+
+B2)	Petroff's Defense
+2 …Nf6, 3. d4 and now:
+
+B21)	3 …Nxe4, 4. Bd3 d5, (4 …Nc6, 5. d5 Nc5, 6. 0-0 +.30) 5. Nxe5 and now:
+
+B211)	5 …Nd7, 6. Nxd7 Bxd7, 7. 0-0 and now:
+
+B2111)	7 …Bd6, 8. c4 and now:
+
+B21111)	8 …c6, 9. Nd2 Nxd2, 10. Bxd2 0-0, 11. cxd5 cxd5, 12. Qh5 f5, 13. Qf3 Bc6, 14. Bf4 +.05
+
+B21112)	8 …0-0, 9. cxd5 f5, (9 …Qh4, 10. g3 Nxg3, 11. fxg3 Bxg3, 12. Qc2 Bxh2+, 13. Qxh2 Qxd4+, 14. Kg2 Qxd3, 15. Nc3 +.25) 10. Nc3 +.29
+
+B21113)	8 …Qh4, 9. g3 +.91
+
+B2112)	7 …Qh4, 8. g3 Qf6, (8 …Qh3, 9. f3 Nd6, 10. Re1+ +1.16) 9. Nc3 +.26
+
+B212)	5 …Bd6, 6. 0-0 0-0, (6 …Bxe5, 7. dxe5 0-0, 8. Nc3 +.36) 7. c4 Bxe5, (7 …c6, 8. Nc3 +.41) 8. dxe5 Nc6, (8 …c6, 9. cxd5 cxd5, 10. Nc3 +.46) 9. cxd5 Qxd5, 10. Qc2 Nb4, 11. Bxe4 Nxc2, 12. Bxd5 Bf5, (12 …Nxa1, 13. Be4 +.38) 13. g4 Bxg4, 14. Bxb7 Rab8, 15. Be4 Nxa1, 16. Nc3 Bh3, 17. Re1 Rb4, 18. f3 +.22
+
+B213)	5 …Be7, 6. Nd2 Nxd2, (6 …Nf6, 7. 0-0 0-0, 8. Ndf3 +.42) 7. Bxd2 0-0, 8. 0-0 Nd7, (8 …Nc6, 9. Nxc6 bxc6, 10. Re1 +.37) 9. Nxd7 +.49
+
+B22)	3 …exd4, 4. e5 and now:
+
+B221)	4 …Ne4, 5. Qxd4 d5, 6. exd6 Nxd6, 7. Nc3 Nc6, 8. Qf4 Be6, (8 …Bf5, 9. Bb5+ +.29) 9. Bd3 g6, 10. Bd2 +.33
+
+B222)	4 …Qe7, 5. Be2 and now:
+
+B2221)	5 …Ng4, 6. Qxd4 d6, 7. exd6 Qxd6, 8. h3 +.65
+
+B2222)	5 …Nd5, 6. Qxd4 Qb4+, 7. Qxb4 Bxb4+, 8. c3 +.61
+
+B2223)	5 …Ne4, 6. Qxd4 Qb4+, 7. Nd2 +.54
+
+B223)	4 …Nd5, 5. Qxd4 Nb6, 6. Qe4 +.71
+
+B23)	3 …d5, 4. exd5 and now:
+
+B231)	4 …exd4, 5. Bb5+ c6, 6. dxc6 Qe7+, (6 …Qa5+, 7. Nc3 +.74) 7. Be2 +.56
+
+B232)	4 …e4, 5. Ne5 +.57
+
+B233)	4 …Nxd5, 5. Nxe5 +.84
+
+B234)	4 …Qxd5, 5. Nc3 Bb4, 6. dxe5 Bxc3+, 7. bxc3 Qxd1+, 8. Kxd1 Ne4, 9. Be3 +.16
+
+B24)	3 …d6, 4. dxe5 Nxe4, 5. Bc4 +.54
+
+B3)	Philidor's Defense
+2 …d6, 3. d4 and now:
+
+B31)	3 …exd4, 4. Nxd4 and now:
+
+B311)	4 …Nf6, 5. Nc3 Be7, 6. Bf4 0-0, 7. Qd2 Nc6, 8. 0-0-0 Nxd4, 9. Qxd4 Be6, (9 …a6, 10. e5 dxe5, 11. Qxe5 Bd6, 12. Qd4 +.29) 10. Kb1 Nd7, 11. Nd5 +.42
+
+B312)	4 …g6, 5. Nc3 Bg7, 6. Be3 Nf6, 7. Qd2 +.43
+
+B313)	4 …Be7, 5. Nc3 Nf6 transposes to B311.
+
+B32)	3 …Nd7, 4. Bc4 transposes to E4.
+
+B33)	3 …Bg4, 4. dxe5 Nd7, 5. exd6 Bxd6, 6. Nc3 Ngf6, 7. h3 Bh5, 8. Be2 Qe7, 9. 0-0 +.48
+
+B34)	3 …Nc6, 4. dxe5 dxe5, 5. Qxd8+ Kxd8, (5 …Nxd8, 6. Nxe5 Bd6, 7. Nc4 +1.22) 6. Bc4 Be6, 7. Bxe6 fxe6, 8. Be3 +.44
+
+B35)	3 …f6, 4. Bc4 +1.22
+
+B4)	Latvian Gambit
+2 …f5, 3. Nxe5 Qf6, (3 …Nf6, 4. Bc4 Qe7, 5. d4 Nc6, 6. 0-0 Nxe5, 7. fxe5 Nxe4, 8. Nc3 Nxc3, 9. bxc3 +2.05) 4. d4 +1.16
+
+B5)	Elephant Gambit
+2 …d5, 3. exd5 e4, 4. Qe2 Nf6, 5. Nc3 Be7, 6. Nxe4 0-0, 7. Nxf6+ Bxf6, 8. d4 Re8, 9. Bd3 +.87
+
+B6)	2 …Bc5, 3. c3 Nc6, 4. d4 exd4, 5. cxd4 Bb4+, 6. Nc3 d5, (6 …Nf6, 7. Bd3 d5, 8. e5 Ne4, 9. Qc2 Bg4, 10. Be3 +.38) 7. exd5 Qxd5, 8. Bd3 +.53
+
+C)	French Defense
+1 …e6, 2. d4 and now:
+
+C1)	2 …d5, 3. Nc3 and now:
+
+C11)	Winawer Variation
+3 …Bb4, 4. exd5 and now:
+
+C111)	4 …exd5, 5. Bd3 and now:
+
+C1111)	5 …Nc6, 6. a3 Bxc3+, (6 …Be7, 7. Nf3 Bg4, 8. h3 Bxf3, 9. Qxf3 Nxd4, 10. Nxd5 c6, 11. Qa2 +.95) 7. bxc3 Nge7, (7 …Nf6, 8. Ne2 +.29) 8. Rb1 b6, 9. Qf3 Be6, 10. Ne2 Qd7, 11. 0-0 Bf5, 12. Ng3 Bxd3, 13. cxd3 0-0, 14. a4 +.25
+
+C1112)	5 …Nf6, 6. Nf3 and now:
+
+C11121)	6 …0-0, 7. 0-0 Bg4, 8. h3 Bh5, 9. Bg5 c6, 10. Bf5 0.00
+
+C11122)	6 …Bg4, 7. h3 Bh5, 8. Qe2+ +.63
+
+C11123)	6 …h6, 7. 0-0 +.24
+
+C1113)	5 …Ne7, 6. Qh5 Nbc6, (6 …c5, 7. dxc5 d4, 8. a3 Qa5, 9. axb4 Qxa1, 10. Nce2 Nbc6, 11. Nf3 Nxb4, 12. Bb5+ Nec6, 13. 0-0 Qc2, 14. Ng5 +2.15) 7. a3 Bxc3+, 8. bxc3 Be6, 9. Rb1 b6, 10. Nf3 Qd7, 11. Ng5 +.16
+
+C1114)	5 …c6, 6. Nf3 and now:
+
+C11141)	6 …Ne7, 7. 0-0 0-0, (7 …h6, 8. Bf4 +.39) 8. Ne2 +.30
+
+C11142)	6 …Bg4, 7. 0-0 +.65
+
+C11143)	6 …Qe7+, 7. Be3 Nf6, 8. 0-0 0-0, 9. Re1 Qc7, 10. h3 +.38
+
+C112)	4 …Qxd5, 5. Nf3 and now:
+
+C1121)	5 …Nf6, 6. Bd3 +.57
+
+C1122)	5 …b6, 6. Bd3 Bb7, 7. 0-0 Bxc3, 8. bxc3 Nf6, 9. c4 +.56
+
+C1123)	5 …c5, 6. Qd2 +.90
+
+C12)	3 …Nf6, 4. Bg5 and now:
+
+C121)	4 …Be7, 5. e5 Nfd7, (5 …Ne4, 6. Nxe4 Bxe3 +.38) 6. Bxe7 Qxe7, 7. f4 a6, (7 …0-0, 8. Nf3 c5, 9. dxc5 Nc6, 10. Qd2 +.08) 8. Qg4 f5, (8 …g6, 9. Nf3 c5, 10. 0-0-0 Nc6, 11. Ne2 cxd4, 12. Nexd4 Nc5, 13. Qg3 Bd7, 14. h4 +.22) 9. Qh5 g6, 10. Qh6 +.27
+
+C122)	4 …dxe4, 5. Nxe4 Be7, 6. Bxf6 gxf6, 7. Nf3 b6, (7 …f5, 8. Nc3 a6, 9. g3 b5, 10. Bg2 Bb7, 11. 0-0 0-0, 12. Ne5 +.20) 8. Bc4 +.27
+
+C123)	McCutcheon Variation
+4 …Bb4, 5. e5 h6, 6. Be3 Ne4, 7. Qg4 g6, (7 …Kf8, 8. Nge2 c5, 9. f3 -.65) 8. a3 and now:
+
+C1231)	8 …Bxc3+, 9. bxc3 and now:
+
+C12311)	9 …c5, 10. Bd3 h5, (10 …Nxc3, 11. dxc5 Nc6, 12. Nf3 h5, 13. Qf4 +1.21) 11. Qf4 g5, 12. Qf3 +.11
+
+C12312)	9 …Nxc3, 10. Bd3 Nc6, (10 …Qe7, 11. Nf3 c5, 12. dxc5 Bd7, 13. Qb4 +1.26) 11. h4 Ne7, 12. h5 g5, 13. Ne2 Nxe2, 14. Qxe2 +.20
+
+C1232)	8 …Ba5, 9. Nge2 +.30
+
+C1233)	8 …Nxc3, 9. axb4 Ne4, 10. h4 +2.23
+
+C13)	3 …dxe4, 4. Nxe4 and now:
+
+C131)	4 …Nd7, 5. Nf3 Ngf6, 6. Nxf6+ Nxf6, (6 …gxf6, 7. g3 Be7, 8. Bg2 c5, 9. 0-0 +.91) 7. Bd3 c5, (7 …Be7, 8. 0-0 0-0, 9. Ne5 +.31) 8. Be3 Qc7, 9. Qe2 a6, 10. 0-0 +.37
+
+C132)	4 …Be7, 5. Nf3 Nf6, 6. Nxf6+ Bxf6, 7. c3 +.54
+
+C133)	4 …f5, 5. Nc3 Nf6, 6. Nf3 h6, 7. Bc4 +.88
+
+C14)	3 …Nc6, 4. Nf3 Nf6, (4 …Bb4, 5. e5 +.49) 5. Bd3 and now:
+
+C141)	5 …Bb4, 6. Bg5 h6, 7. Bxf6 Qxf6, 8. 0-0 Bxc3, 9. bxc3 0-0, 10. Re1 +.37
+
+C142)	5 …Nb4, 6. Bg5 dxe4, (6 …Nxd3+, 7. Qxd3 Be7, 8. e5 Nd7, 9. Bxe7 Qxe7, 10. 0-0 0-0, 11. a4 +.22) 7. Nxe4 Be7, 8. 0-0 Nxd3, 9. Qxd3 +.18
+
+C15)	3 …c5, 4. exd5 exd5, 5. dxc5 d4, 6. Bb5+ Nc6, 7. Qe2+ Be6, 8. Ne4 +1.20
+
+C16)	3 …Be7, 4. Bd3 dxe4, 5. Nxe4 Nf6, 6. Nf3 +.43
+
+C2)	2 …c5, 3. d5 exd5, 4. exd5 d6, 5. Nf3 Nf6, 6. Be2 Be7, 7. c4 +.52
+
+C3)	2 …b6, 3. Nf3 Bb7, 4. Bd3 Be7, 5. 0-0 Nf6, 6. e5 +.55
+
+C4)	2 …Nf6, 3. e5 Ne4, 4. Bd3 Nxf7, 5. Kxf7 Qh4+, 6. Ke3 +1.83
+
+D)	1 …c6, 2. d4 and now:
+
+D1)	2 …d5, (2 …d6 transposes to E5) 3. e5 and now:
+
+D11)	Caro-Kann Defense
+3 …Bf5, 4. Nf3 e6, (4 …a6, 5. Bd3 +.30) 5. Be2 and now:
+
+D111)	5 …Nd7, 6. 0-0 and now:
+
+D1111)	6 …Ne7, 7. Nh4 and now:
+
+D11111)	7 …Bg6, 8. Nd2 and now:
+
+D111111)	8 …c5, 9. c3 Nc6, 10. Nxg6 hxg6, 11. Nf3 Rc8, (11 …Qc7, 12. a3 Be7, 13. b4 +.23) 12. Be3 Be7, 13. a3 +.38
+
+D111112)	8 …Nf5, 9. Nxg6 hxg6, 10. Nf3 Be7, 11. c3 +.29
+
+D111113)	8 …f6, 9. exf6 gxf6, 10. Re1 +.62
+
+D11112)	7 …c5, 8. c3 Be4, 9. Nd2 Nc6, 10. Nxe4 Qxh4, 11. Bg5 +3.93
+
+D11113)	7 …Qc7, 8. c3 h6, 9. Nxf5 Nxf5, 10. Bd3 g6, 11. Nd2 Bg7, 12. Nf3 +.22
+
+D1112)	6 …c5, 7. c4 and now:
+
+D11121)	7 …dxc4, 8. Na3 Ne7, 9. Nxc4 +.82
+
+D11122)	7 …Ne7, 8. Nc3 dxc4, 9. Bg5 Qb6, 10. Nd2 +1.42
+
+D11123)	7 …cxd4, 8. cxd5 exd5, 9. Nxd4 Be6, 10. f4 Bc5, 11. f5 +1.27
+
+D1113)	6 …f6, 7. c4 +.40
+
+D1114)	6 …Nh6, 7. c4 +.46
+
+D112)	5 …c5, 6. Be3 and now:
+
+D1121)	6 …Qb6, 7. Nc3 Nc6, (7 …c4, 8. Rb1 Nc6, 9. 0-0 Bb4, 10. Bxc4 dxc4, 11. d5 Qa5, 12. dxc6 bxc6, 13. Nd2 +.99) 8. 0-0 cxd4, 9. Nxd4 Nxd4, 10. Bxd4 +2.28
+
+D1122)	6 …cxd4, 7. Nxd4 and now:
+
+D11221)	7 …Ne7, 8. Nd2 Nbc6, 9. N2f3 +.21
+
+D11222)	7 …Bg6, 8. 0-0 Ne7, 9. c4 +.57
+
+D11223)	7 …Nd7, 8. Nxf5 exf5, 9. Qxd5 Ne7, 10. Qb3 +2.14
+
+D1123)	6 …Nd7, 7. 0-0 Bg4, 8. c4 cxd4, 9. Bxd4 +.92
+
+D113)	5 …Ne7, 6. 0-0 and now:
+
+D1131)	6 …Nd7, 7. Nh4 transposes to D1111.
+
+D1132)	6 …c5, 7. dxc5 Nec6, 8. Be3 Nd7, 9. c4 +.30
+
+D1133)	6 …Bg4, 7. Nbd2 Nf5, 8. h3 Bxf3, 9. Nxf3 Be7, 10. Bd3 g6, 11. a4 a5, 12. Qd2 +.53
+
+D114)	5 …h6, 6. 0-0 Nd7, 7. Nbd2 Ne7, 8. Nb3 Bh7, (8 …Rc8, 9. a4 +.22) 9. Bd2 Ng6, 10. Rc1 +.42
+
+D115)	5 …Bb4+, 6. c3 Ba5, 7. 0-0 Ne7, 8. Nh4 Nd7, 9. Nxf5 Nxf5, 10. Nd2 0-0, 11. Bd3 +.35
+
+D116)	5 …Bg6, 6. 0-0 Ne7, 7. Nbd2 +.17
+
+D117)	5 …h5, 6. 0-0 Be7, (6 …h4, 7. h3 +.44) 7. c4 Nh6, 8. Nc3 Bg6, 9. Qb3 +.53
+
+D118)	5 …Nh6, 6. 0-0 Be7, 7. c4 +.49
+
+D119)	5 …f6, 6. 0-0 c5, 7. c4 +.91
+
+D12)	3 …c5, 4. Nf3 and now:
+
+D121)	4 …Nc6, 5. dxc5 Bg4, (5 …e6, 6. Be3 Nh6, 7. c3 Nf5, 8. Qd2 +.43) 6. c3 e6, (6 …Bxf3, 7. Qxf3 Nxe5, 8. Bb5+ Nc6, 9. 0-0 +.34) 7. Be3 Bxf3, (7 …Nge7, 8. Nbd2 Nf5, 9. Bd4 +.27) 8. Qxf3 Nxe5, 9. Bb5+ Nc6, 10. 0-0 Nf6, 11. Rd1 +.40
+
+D122)	4 …Bg4, 5. dxc5 e6, (5 …Nc6 transposes to D121.) 6. Be3 Nd7, (6 …Nc6 transposes to D121.) 7. Bb5 Ne7, (7 …Qa5+, 8. Nc3 0-0-0, 9. a3 Bxf3, 10. Qxf3 Nxe5, 11. Qe2 +.52) 8. c4 +.39
+
+D123)	4 …cxd4, 5. Qxd4 e6, (5 …Nc6, 6. Qf4 +.28) 6. Qf4 Nc6, 7. Bd3 +.18
+
+D13)	3 …e6, 4. Nf3 g6, (4 …Bd7, 5. c4 +.56) 5. Bd3 +.54
+
+D14)	3 …Qb6, 4. Be2 Bf5, 5. Nf3 e6, 6. 0-0 +.47
+
+D15)	3 …Be6, 4. Nf3 Qd7, 5. Bd3 +.67
+
+D2)	2 …g6, 3. Nc3 Bg7 transposes to G2.
+
+D3)	2 …Qc7, 3. Nc3 d6, 4. Nf3 e5, 5. Bc4 Be7, 6. dxe5 dxe5, 7. Ng5 Nh6, 8. a4 +.71
+
+E)	1 …d6, 2. d4 and now:
+
+E1)	Pirc Defense
+2 …Nf6, 3. Nc3 and now:
+
+E11)	3 …g6, 4. Nf3 Bg7, 5. Be2 0-0, (5 …Bg4, 6. h3 Bxf3, 7. Bxf3 +.34) 6. 0-0 and now:
+
+E111)	6 …c6, 7. h3 Nbd7, 8. Bf4 Qa5, 9. a3 e5, 10. dxe5 dxe5, 11. Be3 +.37
+
+E112)	6 …Bg4, 7. Be3 and now:
+
+E1121)	7 …Nc6, 8. d5 Nb8, (8 …Nb4, 9. a3 Na6, 10. Qd2 +.58) 9. h3 +.30
+
+E1122)	7 …Nbd7, 8. h3 Bxf3, 9. Bxf3 e5, 10. d5 a6, 11. a4 Ne8, 12. a5 +.63
+
+E1123)	7 …e5, 8. dxe5 Bxf3, 9. Bxf3 dxe5, 10. Qe2 +.56
+
+E113)	6 …Nc6, 7. d5 Ne5, 8. Nxe5 dxe5, 9. Bg5 +.25
+
+E114)	6 …Nbd7, 7. e5 Ng4, 8. e6 +.92
+
+E115)	6 …c5, 7. d5 +.35
+
+E116)	6 …a6, 7. Re1 and now:
+
+E1161)	7 …b5, 8. e5 Ne8, (8 …Nd7, 9. e6 fxe6, 10. Ng5 Nf6, 11. Bf3 d5, 12. Nxe6 Bxe6, 13. Rxe6 Qd7, 14. Rxf6 +4.97) 9. a4 b4, 10. Nd5 +.65
+
+E1162)	7 …Bg4, 8. h3 Bxf3, 9. Bxf3 Nc6, 10. e5 Nd7, (10 …dxe5, 11. dxe5 +.45) 11. exd6 cxd6, (11 …exd6, 12. Ne2 +.45) 12. Be3 Nb6, 13. b3 +.26
+
+E1163)	7 …Nc6, 8. d5 Ne5, (8 …Nb8, 9. a4 +.28) 9. Nxe5 dxe5, 10. a4 e6, (10 …Qd6, 11. Be3 +.27) 11. Bc4 exd5, (11 …Qe7, 12. b3 +.36) 12. Nxd5 Be6, (12 …Nxd5, 13. Qxd5 +.26) 13. a5 +.17
+
+E1164)	7 …Nbd7, 8. h3 +.30
+
+E117)	6 …b6, 7. Re1 Bb7, 8. e5 dxe5, 9. Nxe5 Nbd7, 10. Bf3 +.52
+
+E12)	3 …c6, 4. Nf3 Bg4, 5. h3 Bh5, (5 …Bxf3, 6. Qxf3 Nbd7, 7. Be3 +.62) 6. g4 Bg6, 7. Bd3 e6, (7 …d5, 8. e5 Ne4, 9. e6 +.65) 8. g5 Nfd7, (8 …Nh5, 9. Be3 +.59) 9. Be3 Be7, 10. h4 Bh5, 11. Be2 d5, 12. a3 b5, 13. Bf4 +.27
+
+E13)	3 …e5, 4. dxe5 dxe5, (4 …Nc6, 5. Nf3 +.49) 5. Qxd8+ Kxd8, 6. Nf3 and now:
+
+E131)	6 …Bd6, 7. Be3 Ke7, (7 …Ng4, 8. Bd2 Bc5, 9. h3 Nxf2, 10. Rh2 Nc6, 11. Bg5+ f6, 12. Bh4 Nb4, 13. Bxf2 Nxc2+, 14. Kd2 Bxf2, 15. Kxc2 +.99) 8. 0-0-0 Be6, 9. h3 a6, 10. Ba2 +.53
+
+E132)	6 …Nc6, 7. Bg5 +.67
+
+E133)	6 …Nbd7, 7. Ng5 Ke8, 8. Bc4 Bb4, 9. Nxf7 +.88
+
+E14)	3 …Nbd7, 4. Nf3 e5, 5. Bc4 Be7, 6. 0-0 0-0, (6 …h6, 7. Qe2 +.35) 7. a4 c6, 8. Re1 b6, 9. h3 a6, 10. Ba2 +.49
+
+E2)	2 …g6, 3. Nc3 Bg7, 4. Nf3 and now:
+
+E21)	4 …Nf6, 5. Be2 transposes to E11.
+
+E22)	4 …c6, 5. Be2 Bg4, (5 …Nd7, 6. Bc4 +.45) 6. 0-0 Nd7, 7. Be3 Ngf6, 8. h3 Bxf3, 9. Bxf3 0-0, 10. a4 e5, 11. d5 +.68
+
+E23)	4 …a6, 5. Be2 e6, 6. Bg5 Ne7, (6 …Nf6, 7. e5 dxe5, 8. Nxe5 +.43) 7. a4 +.35
+
+E24)	4 …Nd7, 5. Bc4 and now:
+
+E241)	5 …e6, 6. 0-0 Ne7, (6 …Ngf6, 7. e5 +.96) 7. Re1 +.39
+
+E242)	5 …Nb6, 6. Bb3 Nf6, 7. 0-0 +.43
+
+E243)	5 …Ngf6, 6. e5 Nh5, 7. Bxf7+ Kxf7, 8. Ng5+ Kg8, 9. Ne6 Qe8, 10. Nxc7 Qd8, 11. Nxa8 +1.96
+
+E244)	5 …c6, 6. Ng5 and now:
+
+E2441)	6 …e6, 7. Bxe6 fxe6, 8. Nxe6 Qb6, 9. Nxg7+ Kf7, 10. Nh5 gxh5, 11. Qxh5+ +.84
+
+E2442)	6 …d5, 7. exd5 Nb6, 8. Qf3 Nh6, 9. dxc6 Nxc4, 10. cxb7 Bxb7, 11. Qxb7 0-0, 12. 0-0 +.45
+
+E2443)	6 …Nh6, 7. Bxf7+ Nxf7, 8. Ne6 +1.14
+
+E25)	4 …Bg4, 5. Be3 Nc6, 6. Bb5 +.45
+
+E26)	4 …Nc6, 5. h3 Nf6, 6. d5 Ne5, 7. Nxe5 dxe5, 8. Be3 0-0, 9. Qd2 +.36
+
+E27)	4 …c5, 5. dxc5 Qa5, 6. cxd6 +2.27
+
+E3)	2 …e5, 3. dxe5 and now:
+
+E31)	3 …dxe5, 4. Qxd8+ Kxd8, 5. Bc4 +.34
+
+E32)	3 …Nc6, 4. Nf3 Nxe5, (4 …dxe5, 5. Qxd8+ Kxd8, 6. Nc3 transposes to E13) 5. Nxe5 dxe5, 6. Qxd8+ Kxd8, 7. Bc4 +.39
+
+E4)	2 …Nd7, 3. Nf3 e5, (3 …Nf6, 4. e5 Nd5, 5. c4 N5b6, 6. Nc3 +1.18) 4. Bc4 c6, 5. dxe5 dxe5, (5 …Nxe5, 6. Nxe5 Qa5+, 7. Nc3 Qxe5, 8. f4 +.41) 6. Ng5 Nh6, 7. 0-0 Be7, 8. Ne6 +1.15
+
+E5)	2 …c6, 3. f4 Nf6, (3 …Qc7, 4. Nf3 e5, 5. fxe5 dxe5, 6. Nxe5 Nf6, 7. Bc4 +1.66) 4. e5 Nd5, 5. c4 Nb6, 6. Nf3 dxe5, 7. fxe5 Bg4, 8. Be3 e6, 9. Nc3 Be7, 10. Be2 +.65
+
+F)	Scandinavian Defense
+1 …d5, 2. exd5 and now:
+
+F1)	2 …Qxd5, 3. Nc3 and now:
+
+F11)	3 …Qa5, 4. d4 and now:
+
+F111)	4 …Nf6, 5. Nf3 c6, (5 …Bg4, 6. h3 Bxf3, 7. Qxf3 c6, 8. Bd3 +.64) 6. Bd3 Bg4, 7. Be3 +.44
+
+F112)	4 …c6, 5. Nf3 Nf6, (5 …Bg4, 6. h3 Bh5, 7. g4 Bg6, 8. h4 +.50) 6. Bd3 transposes to F111.
+
+F12)	3 …Qd6, 4. d4 Nf6, (4 …a6, 5. Nf3 Bg4, 6. h3 +.66) 5. Nf3 c6, (5 …Bg4, 6. h3 Bh5, 7. g4 Bg6, 8. Ne5 Nbd7, 9. Nxg6 hxg6, 10. Bg2 c6, 11. 0-0 +.16) 6. h3 +.51
+
+F13)	3 …Qd8, 4. d4 Nf6, (4 …c6, 5. Nf3 Bg4, 6. Be2 e6, 7. 0-0 Nf6, 8. Re1 +.44) 5. Nf3 Bg4, (5 …Bf5, 6. Bd3 +.46) 6. h3 Bxf3, 7. Qxf3 c6, 8. Be3 e6, 9. Bd3 +.51
+
+F2)	2 …Nf6, 3. d4 and now:
+
+F21)	3 …Nxd5, 4. Nf3 g6, (4 …Bg4, 5. Be2 Qd6, 6. Na3 +.66) 5. c4 Nb6, 6. Nc3 Bg7, 7. c5 Nd5, 8. Bc4 c6, 9. 0-0 0-0, 10. Re1 Bg4, 11. Bg5 Nf6, 12. h3 +.88
+
+F22)	3 …Bg4, 4. f3 Bf5, 5. g4 Bg6, 6. c4 e6, 7. g5 Nh5, 8. Nc3 Bd6, 9. dxe6 fxe6, 10. Nge2 0-0, 11. Bh3 Nc6, (11 …Rxf3, 12. Bxe6+ Kh8, 13. Qb3 Be4, 14. Bg4 Rxc3, 15. Qxc3 Bxh1, 16. Bxh5 +.61) 12. Bxe6+ Kh8, 13. Bg4 Nf4, 14. 0-0 Nd3, 15. Kh1 Be7, 16. f4 +.29
+
+F23)	3 …e6, 4. Bb5+ c6, 5. dxc6 bxc6, 6. Be2 Bd6, 7. Nf3 +.80
+
+F3)	2 …c6, 3. dxc6 Nxc6, (3 …e5, 4. cxb7 Bxb7, 5. Nf3 +1.49) 4. Nf3 e5, 5. Nc3 Nf6, 6. Bc4 +.69
+
+G)	Modern Defense
+1 …g6, 2. d4 and now:
+
+G1)	2 …Bg7, 3. Nc3 and now:
+
+G11)	3 …d6, 4. Nf3 and now:
+
+G111)	4 …Nf6, 5. Be2 transposes to E11.
+
+G112)	4 …c6, 5. Be2 Nf6, 6. 0-0 0-0, 7. h3 Nbd7, 8. Bf4 Qa5, 9. a3 e5, 10. dxe5 dxe5, 11. Be3 +.45
+
+G113)	4 …Nd7, 5. Bc4 e6, 6. Bg5 Ne7, 7. Qd2 h6, 8. Be3 a6, 9. a4 b6, 10. 0-0 Bb7, 11. Rfe1 g5, 12. d5 +.36
+
+G12)	3 …c6, 4. Nf3 d5, 5. Bd3 Bg4, 6. Be3 +.40
+
+G13)	3 …c5, 4. dxc5 Qa5, (4 …Bxc3+, 5. bxc3 Qa5, 6. Qd4 Nf6, 7. Qb4 +.44) 5. Bd2 Qxc5, 6. Nd5 Na6, 7. Nf3 e6, 8. b4 Qf8, 9. Nc3 +.58
+
+G14)	3 …e6, 4. h4 h5, 5. Nf3 +.62
+
+G15)	3 …a5, 4. Nf3 Na6, 5. Bc4 +.74
+
+G2)	2 …d6, 3. Nc3 transposes to E2.
+
+G3)	2 …Nf6, 3. e5 Nh5, 4. Nf3 d6, 5. Bc4 +.58
+
+H)	Alekhine's Defense
+1 …Nf6, 2. e5 Nd5, (2 …Ng8, 3. d4 d6, 4. Nf3 Bg4, 5. h3 +.70) 3. d4 and now:
+
+H1)	3 …d6, 4. Nf3 and now:
+
+H11)	4 …Bg4, 5. Be2 and now:
+
+H111)	5 …Nc6, 6. 0-0 and now:
+
+H1111)	6 …e6, 7. c4 Nb6, 8. exd6 cxd6, 9. d5 exd5, 10. cxd5 Bxf3, 11. gxf3 +.52
+
+H1112)	6 …dxe5, 7. Nxe5 Nxe5, (7 …Bxe2, 8. Qxe2 Nxd4, 9. Qc4 f6, 10. Qxd4 fxe5, 11. Qxe5 +.52) 8. dxe5 Bf5, 9. c4 Nb6, 10. Qb3 +.57
+
+H112)	5 …e6, 6. 0-0 Be7, 7. c4 Nb6, 8. Nc3 0-0, 9. h3 Bh5, (9 …Bxf3, 10. Bxf3 Nc6, 11. Bxc6 bxc6, 12. b3 +.33) 10. exd6 cxd6, 11. Bf4 N8d7, 12. b3 Nf6, 13. Re1 and now:
+
+H1121)	13 …Rc8, 14. Bd3 Nbd5, 15. cxd5 Rxc3, 16. dxe6 +.59
+
+H1122)	13 …a6, 14. a4 +.53
+
+H1123)	13 …a5, 14. Bd3 +.76
+
+H113)	5 …c6, 6. c4 Nb6, 7. exd6 exd6, 8. 0-0 Be7, (8 …d5, 9. c5 N6d7, 10. Re1 Be7, 11. Nc3 0-0, 12. Bf4 +.68) 9. h3 Bf5, (9 …Bxf3, 10. Bxf3 Nxc4, 11. Re1 +.70) 10. Nc3 +.55
+
+H114)	5 …g6, 6. h3 Bf5, 7. 0-0 Bg7, 8. c4 Nb6, 9. Nc3 0-0, 10. Be3 +.59
+
+H12)	4 …g6, 5. c4 Nb6, 6. Nc3 and now:
+
+H121)	6 …Bg7, 7. Be3 0-0, (7 …dxe5, 8. Nxe5 transposes to H3.) 8. c5 and now:
+
+H1211)	8 …N6d7, 9. exd6 exd6, 10. cxd6 cxd6, 11. Be2 Nc6, 12. 0-0 Re8, 13. Rc1 Nf6, 14. h3 d5, 15. Re1 a6, 16. Bd3 +.21
+
+H1212)	8 …dxc5, 9. dxc5 N6d7, 10. e6 fxe6, 11. Qb3 +.55
+
+H1213)	8 …Qxd1+, 9. Rxd1 N6d7, 10. Nd5 +.88
+
+H122)	6 …dxe5, 7. Nxe5 Bg7, (7 …N8d7, 8. c5 Nxe5, 9. cxb6 +1.14) 8. Bf4 +.31
+
+H123)	6 …Bg4, 7. h3 Bxf3, 8. Qxf3 Nc6, 9. Be3 +.39
+
+H13)	4 …dxe5, 5. Nxe5 and now:
+
+H131)	5 …g6, 6. c4 Nb6, (6 …Nf6, 7. Nc3 Bg7, 8. Be2 0-0, 9. 0-0 +.50) 7. Nc3 Bg7, 8. Be3 and now:
+
+H1311)	8 …0-0, 9. Qb3 a5, 10. Be2 a4, 11. Qa3 Nc6, 12. Rd1 Be6, 13. d5 Nxe5, 14. dxe6 Qe8, 15. Qc5 +.31
+
+H1312)	8 …c5, 9. Be2 cxd4, 10. Bxd4 0-0, 11. 0-0 +.35
+
+H1313)	8 …Nc6, 9. Nxc6 bxc6, 10. Qf3 and now:
+
+H13131)	10 …0-0, 11. Rd1 +.48
+
+H13132)	10 …Bd4, 11. 0-0-0 Bxe3+, 12. fxe3 Bd7, 13. c5 +.70
+
+H13133)	10 …Bd7, 11. Be2 0-0, 12. 0-0 +.60
+
+H1314)	8 …N8d7, 9. c5 Nxe5, 10. dxe5 Qxd1+, (10 …Nd7, 11. f4 +.70) 11. Rxd1 Nd7, 12. f4 +.36
+
+H132)	5 …c6, 6. Be2 and now:
+
+H1321)	6 …Nd7, 7. Nf3 g6, 8. c4 Nc7, 9. Nc3 Bg7, 10. 0-0 +.49
+
+H1322)	6 …Bf5, 7. 0-0 Nd7, 8. Bd3 Bxd3, 9. Nxd3 e6, 10. c4 Ne7, 11. Nc3 Nb6, 12. c5 +.57
+
+H1323)	6 …g6, 7. 0-0 Bg7, 8. c4 Nb6, (8 …Nc7, 9. f4 +.51) 9. Nc3 +.53
+
+H133)	5 …Nd7, 6. Nf3 g6, (6 …N7f6, 7. c4 Nb6, 8. Nc3 +.72) 7. c4 N5f6, 8. Nc3 Bg7, 9. Be2 0-0, 10. 0-0 +.44
+
+H14)	4 …Nc6, 5. c4 Nb6, 6. exd6 exd6, 7. Be3 +.40
+
+H15)	4 …c6, 5. c4 Nb6, 6. exd6 exd6, 7. Bd3 +.58
+
+H2)	3 …e6, 4. Nf3 c5, 5. c4 Nb6, 6. Bg5 Qc7, 7. Nc3 cxd4, 8. Nb5 Qc5, 9. Qxd4 +2.16
+
+H3)	3 …c5, 4. a3 +.68
+
+I)	Nimzowitsch Defence
+1 …Nc6, 2. d4 and now:
+
+I1)	2 …d5, 3. Nc3 dxe4, 4. d5 Ne5, 5. Qd4 Ng6, 6. Qxe4 Nf6, 7. Qa4+ +.31
+
+I2)	2 …e5, 3. d5 Ne7, 4. Nf3 Ng6, (4 …d6, 5. c4 +.37) 5. h4 +.22
+
+J)	Owen's Defence
+1 …b6, 2. d4 Bb7, (2 …g6, 3. Nf3 Bg7, 4. Nc3 +.55) 3. Bd3 e6, (3 …Nf6, 4. Nc3 e6, 5. Nge2 +.35) 4. Nf3 c5, (4 …d5, 5. exd5 Bxd5, 6. 0-0 +.62) 5. 0-0 cxd4, 6. Nxd4 Nc6, 7. Nxc6 Bxc6, 8. Nc3 d6, 9. Qe2 Nf6, 10. Rd1 Be7, 11. Bf4 0-0, 12. e5 +.85
+
+K)	1 …Nh6, 2. d4 Na6, 3. Nf3 g6, 4. Bf4 +1.03
+
+L)	1 …f5, 2. exf5 Nf6, 3. d4 d5, 4. Bd3 c5, 5. c3 Nc6, 6. Nf3 Qc7, 7. 0-0 Bd7, 8. dxc5 +2.17

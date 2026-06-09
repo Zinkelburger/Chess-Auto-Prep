@@ -38,8 +38,11 @@ class InteractivePgnEditor extends StatefulWidget {
   /// Called to delete a subtree.
   final void Function(TreePath path)? onDelete;
 
-  /// Called to promote a variation.
+  /// Called to promote a variation one step.
   final void Function(TreePath path)? onPromote;
+
+  /// Called to recursively promote a variation to the main line.
+  final void Function(TreePath path)? onMakeMainLine;
 
   /// Called when the user clicks "Add to Repertoire".
   final void Function(List<String> moves, String title, String pgn)?
@@ -68,6 +71,7 @@ class InteractivePgnEditor extends StatefulWidget {
     this.onCommentChanged,
     this.onDelete,
     this.onPromote,
+    this.onMakeMainLine,
     this.onLineSaved,
     this.onLineEdited,
     this.isEditingExistingLine = false,
@@ -84,8 +88,7 @@ class InteractivePgnEditor extends StatefulWidget {
 class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   final TextEditingController _commentController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
-  bool _showingContextMenu = false;
-  Offset _contextMenuPosition = Offset.zero;
+  final FocusNode _commentFocusNode = FocusNode();
   TreePath? _contextMenuPath;
   Timer? _autoSaveTimer;
   static const _autoSaveDelay = Duration(seconds: 2);
@@ -113,6 +116,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   void dispose() {
     _commentController.dispose();
     _titleController.dispose();
+    _commentFocusNode.dispose();
     _autoSaveTimer?.cancel();
     super.dispose();
   }
@@ -142,22 +146,52 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   void _deleteFromHere() {
     if (_contextMenuPath == null) return;
     widget.onDelete?.call(_contextMenuPath!);
-    _hideContextMenu();
+  }
+
+  void _focusCommentField() {
+    if (_contextMenuPath != null) {
+      _jumpTo(_contextMenuPath!);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _commentController.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _commentController.text.length,
+      );
+      FocusScope.of(context).requestFocus(_commentFocusNode);
+    });
   }
 
   void _promoteVariation() {
     if (_contextMenuPath == null) return;
     widget.onPromote?.call(_contextMenuPath!);
-    _hideContextMenu();
+  }
+
+  void _makeMainLine() {
+    if (_contextMenuPath == null) return;
+    widget.onMakeMainLine?.call(_contextMenuPath!);
+  }
+
+  void _duplicateLine() {
+    if (_contextMenuPath == null) return;
+    final moves = widget.tree.sanSequenceAt(_contextMenuPath!);
+    if (moves.isEmpty) return;
+    final mainlineEnd = widget.tree.mainlineEndFrom(_contextMenuPath!);
+    final fullMoves = [
+      ...moves,
+      ...widget.tree.sanSequenceAt(mainlineEnd).skip(moves.length),
+    ];
+    final subtree = MoveTree.fromMoves(fullMoves,
+        startingFen: widget.tree.startingFen);
+    final text = subtree.toPgnMoveText();
+    Clipboard.setData(ClipboardData(text: text));
+    showAppSnackBar(context, 'Line copied to clipboard');
   }
 
   void _copyPgnFromHere() {
     if (_contextMenuPath == null) return;
     final node = widget.tree.nodeAt(_contextMenuPath!);
-    if (node == null) {
-      _hideContextMenu();
-      return;
-    }
+    if (node == null) return;
     final subtree = MoveTree(
       startingFen: widget.tree.fenAt(_contextMenuPath!.parent),
       roots: [node],
@@ -165,7 +199,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final text = subtree.toPgnMoveText();
     Clipboard.setData(ClipboardData(text: text));
     showAppSnackBar(context, AppMessages.pgnCopied);
-    _hideContextMenu();
   }
 
   void _scheduleAutoSave() {
@@ -265,17 +298,84 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   // ── Context menu ──────────────────────────────────────────────────
 
   void _showContextMenu(TreePath path, Offset globalPosition) {
-    setState(() {
-      _contextMenuPath = path;
-      _contextMenuPosition = globalPosition;
-      _showingContextMenu = true;
-    });
-  }
+    _contextMenuPath = path;
 
-  void _hideContextMenu() {
-    setState(() {
-      _showingContextMenu = false;
-      _contextMenuPath = null;
+    String moveName = 'Move';
+    final node = widget.tree.nodeAt(path);
+    if (node != null) moveName = node.san;
+    final isOnMainline = path.isMainline;
+
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+      Offset.zero & overlay.size,
+    );
+
+    showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        PopupMenuItem(
+          enabled: false,
+          height: 32,
+          child: Text(moveName,
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 13)),
+        ),
+        const PopupMenuDivider(height: 1),
+        const PopupMenuItem(
+          value: 'comment',
+          child: _PopupMenuRow(
+              icon: Icons.comment, text: 'Add Comment'),
+        ),
+        if (!isOnMainline)
+          const PopupMenuItem(
+            value: 'promote',
+            child: _PopupMenuRow(
+                icon: Icons.arrow_upward, text: 'Promote Variation'),
+          ),
+        if (!isOnMainline)
+          const PopupMenuItem(
+            value: 'mainline',
+            child: _PopupMenuRow(
+                icon: Icons.vertical_align_top, text: 'Make Main Line'),
+          ),
+        const PopupMenuItem(
+          value: 'duplicate',
+          child: _PopupMenuRow(
+              icon: Icons.copy_all, text: 'Duplicate Line'),
+        ),
+        const PopupMenuItem(
+          value: 'copy',
+          child: _PopupMenuRow(
+              icon: Icons.content_copy, text: 'Copy PGN from Here'),
+        ),
+        const PopupMenuDivider(height: 1),
+        PopupMenuItem(
+          value: 'delete',
+          child: _PopupMenuRow(
+              icon: Icons.delete_outline,
+              text: 'Delete from Here',
+              color: Colors.grey[400]),
+        ),
+      ],
+    ).then((value) {
+      if (value == null) return;
+      switch (value) {
+        case 'comment':
+          _focusCommentField();
+        case 'promote':
+          _promoteVariation();
+        case 'mainline':
+          _makeMainLine();
+        case 'duplicate':
+          _duplicateLine();
+        case 'copy':
+          _copyPgnFromHere();
+        case 'delete':
+          _deleteFromHere();
+      }
     });
   }
 
@@ -320,6 +420,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                     Divider(height: 1, color: Colors.grey[800]),
                     TextField(
                       controller: _commentController,
+                      focusNode: _commentFocusNode,
                       decoration: InputDecoration(
                         hintText: 'Add comment',
                         hintStyle:
@@ -338,39 +439,45 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(
+                Tooltip(
+                  message: 'Add to Repertoire',
                   child: ElevatedButton.icon(
                     onPressed:
                         widget.tree.isNotEmpty ? _addToRepertoire : null,
-                    icon: const Icon(Icons.add_box, size: 18),
-                    label: const Text('Add to Repertoire',
-                        style: TextStyle(fontSize: 13)),
+                    icon: const Icon(Icons.add_box, size: 14),
+                    label: const Text('Save',
+                        style: TextStyle(fontSize: 11)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.successSurface,
                       foregroundColor: Colors.grey[300],
                       disabledBackgroundColor: Colors.grey[850],
                       disabledForegroundColor: Colors.grey[600],
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Clear line',
                   child: ElevatedButton.icon(
                     onPressed: widget.tree.isNotEmpty
                         ? () => widget.onDelete?.call(TreePath.from([0]))
                         : null,
-                    icon: const Icon(Icons.clear, size: 18),
-                    label: const Text('Clear Line',
-                        style: TextStyle(fontSize: 13)),
+                    icon: const Icon(Icons.clear, size: 14),
+                    label: const Text('Clear',
+                        style: TextStyle(fontSize: 11)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.dangerSurface,
                       foregroundColor: Colors.grey[300],
                       disabledBackgroundColor: Colors.grey[850],
                       disabledForegroundColor: Colors.grey[600],
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
                 ),
@@ -378,17 +485,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             ),
           ],
         ),
-        if (_showingContextMenu) _buildContextMenu(),
       ],
     );
   }
 
   Widget _buildMovesDisplay() {
     if (widget.tree.isEmpty) {
-      return const Text(
-        'Make moves on the board to start building your line...',
-        style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-      );
+      return const SizedBox.shrink();
     }
 
     final (startMoveNumber, startIsWhite) =
@@ -615,108 +718,28 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     );
   }
 
-  Widget _buildContextMenu() {
-    String moveName = 'Move';
-    if (_contextMenuPath != null) {
-      final node = widget.tree.nodeAt(_contextMenuPath!);
-      if (node != null) moveName = node.san;
-    }
+}
 
-    return Positioned.fill(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _hideContextMenu,
-        onSecondaryTap: _hideContextMenu,
-        child: Stack(
-          children: [
-            Positioned(
-              left: _contextMenuPosition.dx,
-              top: _contextMenuPosition.dy,
-              child: Material(
-                elevation: 8,
-                borderRadius: BorderRadius.circular(8),
-                color: Colors.grey[850],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  constraints: const BoxConstraints(minWidth: 180),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(color: Colors.grey[700]!),
-                          ),
-                        ),
-                        child: Text(
-                          moveName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                      _buildContextMenuItem(
-                        icon: Icons.comment,
-                        text: 'Add Comment',
-                        onTap: () {
-                          _hideContextMenu();
-                          FocusScope.of(context).requestFocus();
-                        },
-                      ),
-                      _buildContextMenuItem(
-                        icon: Icons.arrow_upward,
-                        text: 'Promote to Mainline',
-                        onTap: _promoteVariation,
-                      ),
-                      _buildContextMenuItem(
-                        icon: Icons.content_copy,
-                        text: 'Copy PGN from Here',
-                        onTap: _copyPgnFromHere,
-                      ),
-                      const Divider(height: 1),
-                      _buildContextMenuItem(
-                        icon: Icons.delete_outline,
-                        text: 'Delete from Here',
-                        onTap: _deleteFromHere,
-                        color: Colors.grey[400],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+class _PopupMenuRow extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color? color;
 
-  Widget _buildContextMenuItem({
-    required IconData icon,
-    required String text,
-    required VoidCallback onTap,
-    Color? color,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color ?? Colors.white),
-            const SizedBox(width: 8),
-            Text(
-              text,
-              style: TextStyle(color: color ?? Colors.white, fontSize: 12),
-            ),
-          ],
-        ),
-      ),
+  const _PopupMenuRow({
+    required this.icon,
+    required this.text,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Text(text, style: TextStyle(fontSize: 12, color: color)),
+      ],
     );
   }
 }

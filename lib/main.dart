@@ -12,6 +12,7 @@ import 'theme/app_colors.dart';
 import 'services/browser_extension_server/browser_extension_server_factory.dart';
 import 'services/default_pgn_service.dart';
 import 'services/engine/engine_lifecycle.dart';
+import 'services/eval_cache.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,7 @@ void main() async {
   await EngineSettings().loadFromPrefs();
   await EvalDatabaseSettings.instance.load();
   await EngineLifecycle().loadPersistedState();
+  await EvalCache.instance.init();
 
   _startBrowserExtensionServer();
   DefaultPgnService.ensureExtracted();
