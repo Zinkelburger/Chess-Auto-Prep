@@ -272,6 +272,35 @@ String? detectProtagonistFrom(List<PgnGameEntry> games) {
   return null;
 }
 
+/// Returns both player names when every game in the sample is between the
+/// same two players (order: most-frequent-as-White first). Returns null if
+/// only one (or no) recurring player is found.
+({String player1, String player2})? detectBothPlayersFrom(
+    List<PgnGameEntry> games) {
+  if (games.length < 2) return null;
+  final sample = games.take(math.min(6, games.length)).toList();
+  final counts = <String, int>{};
+  for (final g in sample) {
+    final w = g.headers['White'];
+    final b = g.headers['Black'];
+    if (w != null && w.isNotEmpty && w != '?') {
+      counts[w] = (counts[w] ?? 0) + 1;
+    }
+    if (b != null && b.isNotEmpty && b != '?') {
+      counts[b] = (counts[b] ?? 0) + 1;
+    }
+  }
+  final sampleSize = sample.length;
+  final recurring =
+      counts.entries.where((e) => e.value >= sampleSize).map((e) => e.key).toList();
+  if (recurring.length < 2) return null;
+  // Return with the player who appears as White more often listed first.
+  int whiteCount(String name) =>
+      sample.where((g) => g.headers['White'] == name).length;
+  recurring.sort((a, b) => whiteCount(b).compareTo(whiteCount(a)));
+  return (player1: recurring[0], player2: recurring[1]);
+}
+
 /// Business logic and state for the PGN Viewer screen.
 class PgnViewerController extends ChangeNotifier {
   PgnViewerController({
@@ -563,6 +592,10 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   String? detectProtagonist() => detectProtagonistFrom(allGames);
+
+  /// Returns both player names when all games are between the same two players.
+  ({String player1, String player2})? detectBothPlayers() =>
+      detectBothPlayersFrom(allGames);
 
   Future<void> loadCurrentGame() async {
     if (filteredGames.isEmpty) return;
@@ -944,6 +977,8 @@ class PgnViewerController extends ChangeNotifier {
     notifyListeners();
     if (showOpeningTree && openingTree == null && filteredGames.isNotEmpty) {
       rebuildOpeningTree();
+    } else if (showOpeningTree && openingTree != null) {
+      _syncTreeToCurrentPosition();
     }
     onReclaimFocus?.call();
   }
@@ -983,7 +1018,7 @@ class PgnViewerController extends ChangeNotifier {
       openingTree = tree;
       buildingTree = false;
       treeBuildProcessed = treeBuildTotal;
-      treeCurrentMoveSequence = [];
+      _syncTreeToCurrentPosition();
       notifyListeners();
     } catch (e) {
       if (!isActive() || generation != treeBuildGeneration) return;
@@ -998,8 +1033,10 @@ class PgnViewerController extends ChangeNotifier {
 
   void onTreeMoveSelected(String move) {
     if (openingTree == null) return;
-    openingTree!.makeMove(move);
-    treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
+    if (openingTree!.makeMove(move)) {
+      treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
+      _updatePositionFromTree();
+    }
     notifyListeners();
   }
 
@@ -1007,6 +1044,7 @@ class PgnViewerController extends ChangeNotifier {
     if (openingTree == null) return;
     openingTree!.goBack();
     treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
+    _updatePositionFromTree();
     notifyListeners();
   }
 
@@ -1015,6 +1053,112 @@ class PgnViewerController extends ChangeNotifier {
     final children = openingTree!.currentNode.sortedChildren;
     if (children.isNotEmpty) {
       onTreeMoveSelected(children.first.move);
+    }
+  }
+
+  // ── Unified navigation (mode-aware) ──
+
+  void navigateBack() {
+    stopAutoPlay();
+    if (showOpeningTree) {
+      onTreeGoBack();
+    } else {
+      pgnWidgetController.goBack();
+    }
+  }
+
+  void navigateForward() {
+    stopAutoPlay();
+    if (showOpeningTree) {
+      onTreeGoForward();
+    } else {
+      pgnWidgetController.goForward();
+    }
+  }
+
+  void navigateToStart() {
+    stopAutoPlay();
+    if (showOpeningTree) {
+      openingTree?.reset();
+      treeCurrentMoveSequence = [];
+      _updatePositionFromTree();
+      notifyListeners();
+    } else {
+      pgnWidgetController.clearEphemeralMoves();
+      pgnWidgetController.jumpToMove(1, true);
+    }
+  }
+
+  void navigateToEnd() {
+    stopAutoPlay();
+    if (showOpeningTree) {
+      while (openingTree != null &&
+          openingTree!.currentNode.sortedChildren.isNotEmpty) {
+        openingTree!.makeMove(
+            openingTree!.currentNode.sortedChildren.first.move);
+      }
+      if (openingTree != null) {
+        treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
+        _updatePositionFromTree();
+        notifyListeners();
+      }
+    } else {
+      final len = pgnWidgetController.mainLineLength;
+      if (len > 0) {
+        final moveNum = (len + 1) ~/ 2;
+        final isWhite = len % 2 == 1;
+        pgnWidgetController.jumpToMove(moveNum, isWhite);
+      }
+    }
+  }
+
+  /// Handle a board move in the current mode context.
+  void onBoardMove(String san) {
+    if (showOpeningTree) {
+      onTreeMoveSelected(san);
+    } else {
+      stopAutoPlay();
+      pgnWidgetController.addEphemeralMove(san);
+    }
+  }
+
+  /// Sync the opening tree cursor to the current board position by replaying
+  /// the PGN widget's mainline moves through the tree.
+  void _syncTreeToCurrentPosition() {
+    if (openingTree == null) return;
+    final mainIdx = pgnWidgetController.mainLineIndex;
+    if (mainIdx <= 0) {
+      openingTree!.reset();
+      treeCurrentMoveSequence = [];
+      return;
+    }
+    // Walk the tree along the game's mainline moves up to mainIdx.
+    openingTree!.reset();
+    final state = pgnWidgetController;
+    // Use the mainline length to rebuild the move list.
+    final moveCount = state.mainLineLength;
+    if (moveCount == 0) {
+      treeCurrentMoveSequence = [];
+      return;
+    }
+    // Navigate to current position via FEN lookup as a fallback.
+    final fen = currentPosition.fen;
+    if (openingTree!.navigateToFen(fen)) {
+      treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
+    } else {
+      openingTree!.reset();
+      treeCurrentMoveSequence = [];
+    }
+  }
+
+  /// Update [currentPosition] from the tree's current node FEN.
+  void _updatePositionFromTree() {
+    if (openingTree == null) return;
+    final fen = openingTree!.currentNode.fen;
+    try {
+      currentPosition = Chess.fromSetup(Setup.parseFen(fen));
+    } catch (_) {
+      // FEN may be invalid in rare cases; ignore.
     }
   }
 

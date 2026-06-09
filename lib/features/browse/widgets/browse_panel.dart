@@ -168,7 +168,6 @@ class _BrowsePanelState extends State<BrowsePanel> {
       children: [
         CandidateRow(
           candidate: candidate,
-          isOurTurn: widget.isOurTurn,
           isHovered: !isRare && _hoveredIndex == index,
           trapCount: trapCount,
           isTrapExpanded: isExpanded,
@@ -209,21 +208,13 @@ class _BrowsePanelState extends State<BrowsePanel> {
 
   Widget _buildHeader(ThemeData theme) {
     return Padding(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          Icon(
-            widget.isOurTurn
-                ? Icons.person
-                : Icons.people,
-            size: 16,
-            color: theme.colorScheme.primary,
-          ),
+          Icon(Icons.explore, size: 16, color: theme.colorScheme.primary),
           const SizedBox(width: 8),
           Text(
-            widget.isOurTurn
-                ? 'YOUR RESPONSE'
-                : 'OPPONENT MOVES',
+            'CANDIDATE MOVES',
             style: theme.textTheme.labelLarge
                 ?.copyWith(fontWeight: FontWeight.bold),
           ),

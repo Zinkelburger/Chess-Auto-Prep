@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../theme/app_colors.dart';
-import '../chess_board_widget.dart';
+import '../chess_board_widget.dart' show BoardAnnotation, ChessBoardWidget, CompletedMove;
 
 /// Chess board with optional preview overlay and generation lock UI.
 class RepertoireBoardPane extends StatelessWidget {
@@ -19,6 +19,7 @@ class RepertoireBoardPane extends StatelessWidget {
     required this.onPause,
     required this.onResume,
     required this.onCancel,
+    this.annotations = const [],
   });
 
   final BoardPreviewController boardPreview;
@@ -31,6 +32,7 @@ class RepertoireBoardPane extends StatelessWidget {
   final VoidCallback onPause;
   final VoidCallback onResume;
   final VoidCallback onCancel;
+  final List<BoardAnnotation> annotations;
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +60,7 @@ class RepertoireBoardPane extends StatelessWidget {
                           key: ValueKey(displayFen),
                           position: position,
                           flipped: boardFlipped,
+                          annotations: isPreview ? const [] : annotations,
                           onPieceSelected: (square) {},
                           onMove: isPreview
                               ? null

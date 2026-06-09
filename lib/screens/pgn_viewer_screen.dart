@@ -231,73 +231,151 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   Future<void> _generateRepertoireFromGames() async {
     if (_controller.filteredGames.isEmpty) return;
 
-    final suggestedName = _suggestRepertoireName();
-    final result = await showDialog<({String name, String color})>(
-      context: context,
-      builder: (ctx) => _GenerateRepertoireDialog(suggestedName: suggestedName),
-    );
-    if (result == null || !mounted) {
-      _reclaimFocus();
-      return;
-    }
-
     final storage = StorageFactory.instance;
-    final safeName = result.name
-        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .trim();
-    if (safeName.isEmpty) {
-      showAppSnackBar(context, 'Invalid repertoire name.', isError: true);
-      _reclaimFocus();
-      return;
-    }
+    var suggestedName = _suggestRepertoireName();
 
-    try {
-      final repertoirePath = await storage.repertoireFilePath(safeName);
-      if (await storage.fileExists(repertoirePath)) {
-        if (mounted) {
-          showAppSnackBar(
-            context,
-            'A repertoire named "$safeName" already exists.',
-            isError: true,
-          );
-        }
+    // Loop: show name dialog → check collision → resolve or retry.
+    while (true) {
+      final result = await showDialog<({String name, String color})>(
+        context: context,
+        builder: (ctx) =>
+            _GenerateRepertoireDialog(suggestedName: suggestedName),
+      );
+      if (result == null || !mounted) {
         _reclaimFocus();
         return;
       }
 
-      // Write raw games PGN for the DB Explorer seed.
-      final rawGamesName = '${safeName}_raw_games';
-      final rawGamesPath = await storage.repertoireFilePath(rawGamesName);
-      await storage.writeFile(
-        rawGamesPath,
-        _controller.buildExportContent(),
-      );
+      final safeName = result.name
+          .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+          .replaceAll(RegExp(r'_+'), '_')
+          .trim();
+      if (safeName.isEmpty) {
+        showAppSnackBar(context, 'Invalid repertoire name.', isError: true);
+        _reclaimFocus();
+        return;
+      }
 
-      // Create the actual (empty) repertoire file.
-      final header = '// $safeName Repertoire\n'
-          '// Color: ${result.color}\n'
-          '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
-      await storage.writeFile(repertoirePath, header);
+      try {
+        final repertoirePath = await storage.repertoireFilePath(safeName);
 
-      if (!mounted) return;
-      final gameCount = _controller.filteredGames.length;
-      showAppSnackBar(
-        context,
-        'Created "$safeName" — switching to builder with $gameCount games.',
-      );
+        if (await storage.fileExists(repertoirePath)) {
+          if (!mounted) return;
+          final action = await _showDuplicateNameDialog(safeName);
+          if (!mounted) return;
 
-      context.read<AppState>().switchToBuilderWithGeneration(
-            repertoirePath: repertoirePath,
-            pgnPaths: [rawGamesPath],
-          );
-    } catch (e) {
-      debugPrint('Generate repertoire from games failed: $e');
-      if (mounted) {
-        showAppSnackBar(context, 'Failed to create repertoire.', isError: true);
+          switch (action) {
+            case _DuplicateNameAction.useExisting:
+              await _seedExistingRepertoire(
+                storage: storage,
+                safeName: safeName,
+                repertoirePath: repertoirePath,
+              );
+              _reclaimFocus();
+              return;
+            case _DuplicateNameAction.rename:
+              suggestedName = safeName;
+              continue; // re-show name dialog
+            case _DuplicateNameAction.cancel:
+            case null:
+              _reclaimFocus();
+              return;
+          }
+        }
+
+        // New repertoire — write files and switch.
+        final rawGamesName = '${safeName}_raw_games';
+        final rawGamesPath = await storage.repertoireFilePath(rawGamesName);
+        await storage.writeFile(
+          rawGamesPath,
+          _controller.buildExportContent(),
+        );
+
+        final header = '// $safeName Repertoire\n'
+            '// Color: ${result.color}\n'
+            '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
+        await storage.writeFile(repertoirePath, header);
+
+        if (!mounted) return;
+        final gameCount = _controller.filteredGames.length;
+        showAppSnackBar(
+          context,
+          'Created "$safeName" — switching to builder with $gameCount games.',
+        );
+
+        context.read<AppState>().switchToBuilderWithGeneration(
+              repertoirePath: repertoirePath,
+              pgnPaths: [rawGamesPath],
+            );
+        _reclaimFocus();
+        return;
+      } catch (e) {
+        debugPrint('Generate repertoire from games failed: $e');
+        if (mounted) {
+          showAppSnackBar(
+              context, 'Failed to create repertoire.', isError: true);
+        }
+        _reclaimFocus();
+        return;
       }
     }
-    _reclaimFocus();
+  }
+
+  /// Overwrite the raw-games sidecar and open the existing repertoire in
+  /// DB Explorer mode with auto-start.
+  Future<void> _seedExistingRepertoire({
+    required dynamic storage,
+    required String safeName,
+    required String repertoirePath,
+  }) async {
+    final rawGamesName = '${safeName}_raw_games';
+    final rawGamesPath = await storage.repertoireFilePath(rawGamesName);
+    await storage.writeFile(
+      rawGamesPath,
+      _controller.buildExportContent(),
+    );
+
+    if (!mounted) return;
+    final gameCount = _controller.filteredGames.length;
+    showAppSnackBar(
+      context,
+      'Updated seed for "$safeName" — switching to builder with $gameCount games.',
+    );
+
+    context.read<AppState>().switchToBuilderWithGeneration(
+          repertoirePath: repertoirePath,
+          pgnPaths: [rawGamesPath],
+        );
+  }
+
+  Future<_DuplicateNameAction?> _showDuplicateNameDialog(String name) {
+    return showDialog<_DuplicateNameAction>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Repertoire Already Exists'),
+        content: Text(
+          '"$name" already exists. You can update its game data '
+          'and re-run generation, or pick a different name.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(ctx, _DuplicateNameAction.cancel),
+            child: const Text('Cancel'),
+          ),
+          OutlinedButton(
+            onPressed: () =>
+                Navigator.pop(ctx, _DuplicateNameAction.rename),
+            child: const Text('Pick Different Name'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(ctx, _DuplicateNameAction.useExisting),
+            child: const Text('Use Existing & Re-seed'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _suggestRepertoireName() {
@@ -332,26 +410,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final key = event.logicalKey;
 
     if (key == LogicalKeyboardKey.arrowLeft) {
-      _controller.stopAutoPlay();
-      _pgnWidgetController.goBack();
+      _controller.navigateBack();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.arrowRight) {
-      _controller.stopAutoPlay();
-      _pgnWidgetController.goForward();
+      _controller.navigateForward();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.home) {
-      _controller.stopAutoPlay();
-      _pgnWidgetController.clearEphemeralMoves();
-      _pgnWidgetController.jumpToMove(1, true);
+      _controller.navigateToStart();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.end) {
-      _controller.stopAutoPlay();
-      final len = _pgnWidgetController.mainLineLength;
-      if (len > 0) {
-        final moveNum = (len + 1) ~/ 2;
-        final isWhite = len % 2 == 1;
-        _pgnWidgetController.jumpToMove(moveNum, isWhite);
-      }
+      _controller.navigateToEnd();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.keyN) {
       _controller.nextGame();
@@ -557,6 +625,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               tooltip: 'Export filtered games (Ctrl+E)',
             ),
             IconButton(
+              onPressed: _controller.toggleOpeningTree,
+              icon: Icon(
+                Icons.account_tree,
+                size: 20,
+                color: _controller.showOpeningTree
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
+              tooltip: 'Opening tree (T)',
+            ),
+            IconButton(
               onPressed: _controller.toggleBoardFlipped,
               icon: const Icon(Icons.swap_vert, size: 20),
               tooltip: 'Flip board (F)',
@@ -711,6 +790,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Widget _buildPerspectiveButton() {
     final protagonist = _controller.detectProtagonist();
+    final bothPlayers = _controller.detectBothPlayers();
     final isPlayerMode =
         _controller.perspective.mode == PerspectiveMode.player;
     final isWhiteMode =
@@ -728,7 +808,36 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       tooltip: 'Default view as',
       onSelected: _controller.setPerspective,
       itemBuilder: (ctx) => [
-        if (protagonist != null)
+        if (bothPlayers != null) ...[
+          PopupMenuItem(
+            value: Perspective(
+                mode: PerspectiveMode.player,
+                playerName: bothPlayers.player1),
+            child: Row(children: [
+              if (isPlayerMode &&
+                  _controller.perspective.playerName == bothPlayers.player1)
+                const Icon(Icons.check, size: 16)
+              else
+                const SizedBox(width: 16),
+              const SizedBox(width: 8),
+              Text(bothPlayers.player1),
+            ]),
+          ),
+          PopupMenuItem(
+            value: Perspective(
+                mode: PerspectiveMode.player,
+                playerName: bothPlayers.player2),
+            child: Row(children: [
+              if (isPlayerMode &&
+                  _controller.perspective.playerName == bothPlayers.player2)
+                const Icon(Icons.check, size: 16)
+              else
+                const SizedBox(width: 16),
+              const SizedBox(width: 8),
+              Text(bothPlayers.player2),
+            ]),
+          ),
+        ] else if (protagonist != null)
           PopupMenuItem(
             value: Perspective(
                 mode: PerspectiveMode.player, playerName: protagonist),
@@ -792,10 +901,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           child: ChessBoardWidget(
             position: _controller.currentPosition,
             flipped: _controller.boardFlipped,
-            onMove: (move) {
-              _controller.stopAutoPlay();
-              _pgnWidgetController.addEphemeralMove(move.san);
-            },
+            onMove: (move) => _controller.onBoardMove(move.san),
           ),
         ),
       ),
@@ -832,16 +938,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 ],
               ),
             ),
-            if (_controller.filteredGames.isNotEmpty)
-              Tooltip(
-                message: 'Opening tree (T)',
-                child: IconButton(
-                  icon: Icon(Icons.account_tree,
-                      size: 20, color: Colors.grey[400]),
-                  onPressed: _controller.toggleOpeningTree,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
           ],
         ),
         Expanded(
@@ -1197,6 +1293,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
   }
 }
+
+enum _DuplicateNameAction { useExisting, rename, cancel }
 
 class _GenerateRepertoireDialog extends StatefulWidget {
   final String suggestedName;
