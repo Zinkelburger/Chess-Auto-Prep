@@ -38,9 +38,11 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026). When you change co
 | **Models** | Immutable / serializable data | `models/` |
 | **Constants / utils / theme** | Shared helpers | `constants/`, `utils/`, `theme/` |
 
-**State management:** Provider (`ChangeNotifier`) — primarily `AppState`, `RepertoireController`, singletons (`EngineSettings`, `EngineLifecycle`, `EvalDatabaseSettings`).
+**State management:** Provider (`ChangeNotifier`) — primarily `AppState`, `RepertoireController`, domain session controllers (`GenerationSessionController`, `AuditSessionController`, `CoverageController`), singletons (`EngineSettings`, `EngineLifecycle`, `EvalDatabaseSettings`).
 
-**Repertoire navigation model:** `RepertoireController` owns a `MoveTree` (editable PGN tree) and a `TreePath` cursor. All navigation goes through `controller.jump(path)`. The PGN editor (`InteractivePgnEditor`) is a pure view that receives `tree` + `currentPath` as props and fires `onJump` / `onCommentChanged` / `onDelete` / `onPromote` callbacks. No secondary state, no `addPostFrameCallback` sync.
+**Repertoire navigation model:** `RepertoireController` owns a `MoveTree` (editable PGN tree) and a `TreePath` cursor. All navigation goes through `controller.jump(path)`. The PGN editor (`InteractivePgnEditor`) is a pure view that receives `tree` + `currentPath` as props and fires `onJump` / `onCommentChanged` / `onDelete` / `onPromote` / `onMakeMainLine` callbacks. No secondary state, no `addPostFrameCallback` sync.
+
+**PGN context menu (right-click):** Uses Flutter's built-in `showMenu` API (Overlay-based, avoids Stack/Positioned layout issues). Menu items: Add Comment (focuses comment TextField), Promote Variation (non-mainline only), Make Main Line (recursive promote to root, non-mainline only), Duplicate Line (copies full line to clipboard), Copy PGN from Here, Delete from Here.
 
 **Chess logic:** `dartchess` for rules/FEN; `flutter_chess_board` for display.
 
@@ -54,6 +56,7 @@ Last reviewed against `lib/` and `tree_builder/` (June 2026). When you change co
 main.dart
   ├─ EngineSettings.loadFromPrefs()
   ├─ EvalDatabaseSettings.instance.load()
+  ├─ EvalCache.instance.init()  // SQLite eval + Maia cache ready for interactive writes
   ├─ EngineLifecycle.loadPersistedState()  // marks engine idle (no process spawn); workers created lazily on first eval
   ├─ BrowserExtensionServerFactory.start()  (desktop IO only)
   ├─ DefaultPgnService.ensureExtracted()
@@ -62,7 +65,7 @@ main.dart
 
 | File | Purpose |
 |------|---------|
-| `lib/main.dart` | `WidgetsFlutterBinding`, window manager, settings init, `MaterialApp` dark theme, `AppState` provider |
+| `lib/main.dart` | `WidgetsFlutterBinding`, window manager, settings init, `EvalCache.instance.init()`, `MaterialApp` dark theme, `AppState` provider |
 | `lib/core/app_state.dart` | Global mode enum, usernames, loaded games, builder↔trainer pending path handoff |
 | `lib/screens/main_screen.dart` | `IndexedStack` of mode views; disposes engine when leaving repertoire |
 
@@ -78,54 +81,66 @@ main.dart
 
 Mode switcher: `widgets/app_mode_menu_button.dart`.
 
-### Repertoire screen layout (unified right pane, redesigned June 2026)
+### Repertoire screen layout (right pane + bottom pane, redesigned June 2026)
 
-Design principle: **Right pane** = everything about the current position (engine, expectimax, explorer, PGN). **Dialogs** = all configuration (generation, audit) and background output (jobs, findings). **No bottom panel** — the full screen height is available to the board + right pane.
+Design principles: **Right pane** = current-position analysis (engine, expectimax, PGN). **Bottom pane** = output workspace (findings, jobs, lines) — collapsed by default, VS Code-style resizable/collapsible with tabs. **Dialogs** = configuration only (generation, audit). Board and right pane stay spatially stable when the bottom pane opens.
 
 ```
-RepertoireScreen
+RepertoireScreen (composition root — wires controllers to widgets)
   ├─ RepertoireController (MoveTree + TreePath cursor, opening tree, lines)
+  ├─ GenerationSessionController (TreeBuildService, CoherenceService, tree/config/fenMap, job)
+  ├─ AuditSessionController (RepertoireAuditService, result/liveFindings/progress, persistence, job)
+  ├─ CoverageController (CoverageResult, progress)
   ├─ BoardPreviewController (hover preview FEN)
   ├─ JobManager (background generation/audit tracking)
-  ├─ CoherenceService, TrapIndexService, CoverageResult
-  ├─ AuditResult + liveFindings (screen-level state)
+  ├─ TrapIndexService
   │
   ├─ Wide (≥ kCompactBreakpoint):
-  │     Row: Board (square, annotated) | ToolsColumn (right pane)
-  │       ToolsColumn (unified, no tabs):
-  │         InlineEngineBar (toggleable, shortcut E)
-  │         InlineExpectimaxBar (toggleable, shortcut X)
-  │         ExplorerSection (collapsible: BrowsePanel + opening tree)
-  │         PgnWithAnalysisPane (expanded, always visible)
-  │         NavControls (|< < > >| + "Gen here" + Flip)
+  │     Column:
+  │       Expanded Row: Board (square, annotated) | ToolsColumn (right pane)
+  │         ToolsColumn (unified, no tabs):
+  │           InlineEngineBar (toggleable, shortcut E)
+  │           InlineExpectimaxBar (toggleable, shortcut X)
+  │           PgnWithAnalysisPane (expanded, always visible)
+  │           NavControls (|< < > >| + "+" gen-from-here + Flip)
+  │       BottomPane (collapsed by default, full width):
+  │         Tabs: Findings (auto-scaled, dismissable) | Jobs | Lines
+  │         Drag-resizable top edge, min 120px, max 60% screen
   │
   ├─ Compact (<960px):
-  │     Column: Board (flex 4) | ToolsColumn (flex 5)
+  │     Column: Board (flex 4) | ToolsColumn (flex 5) | BottomPane
   │
-  ├─ Dialogs (opened from toolbar/shortcuts/status bar):
+  ├─ Dialogs (opened from toolbar/shortcuts):
   │     GenerationConfigDialog (sparkles / G) — full generation config
   │     AuditConfigDialog (policy / A) — audit config + start
-  │     Jobs dialog (status bar / 1) — generation progress, pause/cancel
-  │     Findings dialog (status bar / 2) — audit results, sort/filter
   │
-  ├─ RepertoireStatusBar (clickable badges → open dialogs)
+  ├─ RepertoireStatusBar (clickable badges → toggle bottom pane tabs)
   └─ optional TrapWalkthrough overlay
 ```
 
 **Key files:**
+- `lib/core/generation_session_controller.dart` — owns `TreeBuildService` + `CoherenceService` + tree output; pause/resume/cancel survive dialog disposal
+- `lib/core/audit_session_controller.dart` — owns `RepertoireAuditService` + audit state + persistence; pause/resume/cancel from any widget
+- `lib/core/coverage_controller.dart` — owns coverage result + progress state
+- `lib/widgets/layout/bottom_pane.dart` — resizable, collapsible, tabbed bottom pane (Findings/Jobs/Lines)
 - `lib/widgets/engine/inline_expectimax_bar.dart` — compact toggleable expectimax PV display
-- `lib/widgets/explorer_section.dart` — collapsible explorer with BrowsePanel + opening tree
-- `lib/widgets/generation_config_dialog.dart` — modal dialog wrapping RepertoireGenerationTab
+- `lib/widgets/generation_config_dialog.dart` — modal dialog wrapping RepertoireGenerationTab; pops on generation start via controller listener
 - `lib/features/audit/widgets/audit_config_dialog.dart` — modal dialog wrapping AuditConfigPanel
-- `lib/widgets/layout/jobs_panel.dart` — jobs content for the Jobs dialog
-- `lib/features/audit/widgets/audit_findings_panel.dart` — audit results display
+- `lib/features/audit/widgets/audit_findings_panel.dart` — findings list with category filter chips, auto-scaled to ~20 findings, bulk dismiss, keyboard navigation, and interrupted-audit resume banner
+- `lib/features/audit/services/audit_persistence.dart` — centralized save/load for audit snapshots (result + config + resume state)
+- `lib/widgets/layout/jobs_panel.dart` — jobs content for the Jobs tab
+- `lib/widgets/repertoire_lines_browser.dart` — line search/filter/group browser for the Lines tab
 - `lib/widgets/layout/board_zone.dart` — board wrapper, passes annotations
 - `lib/widgets/chess_board_widget.dart` — board + annotation overlay (arrows, circles, labels)
-- `lib/services/jobs/repertoire_job.dart` — background job manager
+- `lib/services/jobs/repertoire_job.dart` — background job manager; `RepertoireJob` includes `configSnapshot` (serialized `AuditConfig.toMap()`) for audit jobs
 
-**All config and output in dialogs:** Generation config, audit config, jobs progress, and audit findings all open as modal dialogs. This maximizes board + right pane space. Status bar badges and keyboard shortcuts open the relevant dialog.
+**Bottom pane (VS Code-style):** Collapsed by default (zero height). Auto-opens to Findings tab when audit starts, Jobs tab when generation starts. Tabs show badge counts. Resizable by dragging the top edge (min 120px, max 60% of screen height). Collapse via close button, `Escape` key, or double-click the drag handle.
 
-**"Generate from here" button:** In the nav controls bar, a compact "Gen here" button opens the generation dialog pre-seeded with the current position FEN.
+**Findings tab UX:** Category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends) with counts — multi-select toggles. Auto-scales to show ~20 highest-probability findings at a time; as findings are dismissed, lower-probability ones surface. Bulk dismiss via right-click context menu: dismiss similar, dismiss at depth, dismiss all of type. Keyboard: N/P or arrows to cycle findings (board navigates within full repertoire tree), D to dismiss current. Selected finding is highlighted. "X of N" counter in the status bar. Status bar shows "20 of 150 findings" when auto-scaled. Timestamp shows when saved results were generated.
+
+**Lines tab:** Reconnects the existing `RepertoireLinesBrowser` with full search, filter, sort, group, rename, and coverage metrics.
+
+**"Generate from here" button:** In the nav controls bar, a `+` icon button opens the generation dialog pre-seeded with the current position FEN.
 
 **Board annotations:** `BoardAnnotation` model with `AnnotationBrush` (green/red/blue/yellow/purple). `_AnnotationPainter` renders arrows (shaft + arrowhead) and circles on a `CustomPaint` overlay above pieces.
 
@@ -133,9 +148,13 @@ RepertoireScreen
 - `E` — toggle engine bar
 - `X` — toggle expectimax bar
 - `G` — open generation config dialog
-- `A` — open audit config dialog
-- `1` — open Jobs dialog
-- `2` — open Findings dialog
+- `A` — smart audit: opens findings (if running/results exist) or config dialog (if fresh)
+- `1` — toggle bottom pane → Jobs tab
+- `2` — toggle bottom pane → Findings tab
+- `3` — toggle bottom pane → Lines tab
+- `Escape` — collapse bottom pane
+- `N`/`P` — next/prev finding (when findings tab focused)
+- `D` — dismiss current finding (when findings tab focused)
 - `F` — flip board, arrows — navigate moves
 
 Breakpoints: `constants/ui_breakpoints.dart` (`kCompactBreakpoint=960`, `kWideBreakpoint=1100`).
@@ -160,16 +179,22 @@ RepertoireSelectionScreen
 ### Tree generation (expectimax pipeline)
 
 ```
-RepertoireGenerationTab
+GenerationSessionController (owns TreeBuildService + CoherenceService)
+  ← RepertoireGenerationTab reports lifecycle (markGenerating, onTreeBuilt, onTreeReset)
+  ← Screen/JobsPanel/BoardZone call pauseBuild/resumeBuild/cancelBuild directly
+  ← Dialog pops via controller listener (controller survives dialog disposal)
+
+RepertoireGenerationTab (config UI + build orchestration)
+  → cancelGeneration() → _savePartialTree() before cleanup (partial trees survive cancel)
   → EngineLifecycle.enterGeneration(threads)
-  → TreeBuildService.build(TreeBuildConfig)     [Phase 1 BFS — Stockfish/Maia modes]
+  → controller.buildService.build(TreeBuildConfig)    [Phase 1 BFS — Stockfish/Maia modes]
     OR
-  → TreeBuildService.buildFromPgnFreqMap(…)     [Phase 1 DB Explorer mode]
+  → controller.buildService.buildFromPgnFreqMap(…)    [Phase 1 DB Explorer mode]
       → parsePgnFiles (isolate) → PgnFreqMap
       → BFS expand from freq map
       → _enrichEvals (cache → external chain → Stockfish batch)
-  → calculateTreeEase + EcaCalculator           [Phase 2]
-  → calculateMyEase                               [myEase on our moves]
+  → calculateTreeEase + EcaCalculator                 [Phase 2]
+  → calculateMyEase                                     [myEase on our moves]
   → RepertoireSelector + LineExtractor
   → TrapExtractor → *_traps.json
   → tree.json persisted beside repertoire PGN
@@ -177,7 +202,7 @@ RepertoireGenerationTab
 ```
 
 **Build modes** (enum `BuildMode` in `generation_config.dart`):
-- `stockfishExpectimax` — default; Stockfish MultiPV + Maia/Lichess opponent
+- `stockfishExpectimax` — default; Stockfish MultiPV + Maia opponent (Lichess Explorer mothballed)
 - `maiaDbExplore` — Maia moves, DB evals only, no engine at build time
 - `dbExplorer` — PGN file parsing → frequency map → BFS tree → eval enrichment
 - `trapFinder` — not yet implemented
@@ -188,7 +213,7 @@ See `docs/ALGORITHM.md` for algorithm detail.
 
 ```
 BrowsePanel
-  → CandidateService.getCandidates(fen, tree + Lichess Explorer)
+  → CandidateService.getCandidates(fen, tree + BuildTree)  // Lichess Explorer mothballed
        → inRepertoire via OpeningTree.hasMoveOnPath(pathFromRoot, san)
   → tap in repertoire → RepertoireController.playMove(san) (jump to existing child)
   → tap unexplored → RepertoireWriter.addMoveAtPosition()
@@ -202,38 +227,52 @@ BrowsePanel
 
 ```
 CoverageCalculatorWidget / CoverageService
-  → CoverageResult (gaps, unaccounted moves, covered %)
+  → CoverageService.getPositionData() mothballed (returns null; no Lichess API)
+  → CoverageResult (gaps, unaccounted moves, covered %) from in-tree data where available
   → CoverageSuggestionService.generateSuggestions()
   → SuggestionPanel → RepertoireWriter.acceptSuggestion()
 ```
 
 ### Audit
 
-Config and results are split into a dialog and a bottom-pane tab:
+Config in dialog, results in bottom pane:
 
 ```
+AuditSessionController (owns RepertoireAuditService + all audit state)
+  ← Screen delegates pause/resume/cancel via controller methods
+  ← tryRestore() on repertoire load; launchResume() for interrupted audits
+  ← Persistence: saveProgress/saveComplete/onResultChanged via AuditPersistence
+
 AuditConfigDialog (toolbar button or shortcut A)
   → Wraps AuditConfigPanel in a modal dialog
-  → Config: source toggles (Stockfish/Lichess/Maia), thresholds, scope
+  → Config: source toggles (Stockfish/Maia; Lichess DB mothballed, `useLichessDb` defaults false), thresholds, scope
   → Start button closes dialog, task runs in background
+  → Bottom pane auto-opens to Findings tab
   → RepertoireAuditService.audit(openingTree, config)
        BFS: our moves → StockfishPool.discoverMoves (eval loss check)
-       BFS: opponent turns → ProbabilityService + MaiaFactory (gap check)
+       BFS: opponent turns → MaiaFactory (gap check); ProbabilityService mothballed (no Lichess API)
        BFS: leaves → dead-end detection
        Cumulative probability: product of opponent move frequencies from root
-  → Callbacks: onAuditingChanged, onResultReady, onLiveFinding
+  → Callbacks: controller.onAuditingChanged, .onResultReady, .onLiveFinding
 
 AuditFindingsPanel (bottom pane Findings tab, shortcut 2)
-  → Receives AuditResult from screen state
+  → Receives AuditResult from controller; `interruptedSnapshot` + resume banner when incomplete audit detected
+  → onResumeAudit / onStartFreshAudit → controller.launchResume / startFresh
+  → FindingsDisplayFilter: auto-scales when >100 findings (drops info → raises reach floor)
   → Summary card: soundness %, coverage %, clickable type badges
-  → Findings list: sort (severity/reach/ply), filter by type, dismiss/restore
+  → Filter bar: severity chips (Critical/Warning/Info), "X of N" counter
+  → Findings list: sort (severity/reach/ply), filter by type
+  → Bulk dismiss: right-click → dismiss similar / at depth / all of type
+  → Keyboard: N/P cycle findings (board navigates), D dismiss + advance
+  → Selected finding highlighted, board arrows shown
+  → Dismissed section: count + "Restore all" at bottom
   → Finding tap → RepertoireController.loadMoveSequence()
 
-Shared state (screen level):
-  → AuditResult + liveFindings
-  → Board annotations: arrows for mistakes (red), inaccuracies (yellow),
-       missing responses (blue) at the current position
-  → JSON persistence: *_audit.json beside repertoire PGN
+Controller state:
+  → AuditResult + liveFindings + interruptedSnapshot + progress
+  → Board annotations: screen reads controller.result for arrows (mistakes=red, inaccuracies=yellow, missing=blue)
+  → JSON persistence: *_audit.json beside repertoire PGN; partial progress saved on cancel/dispose via controller.saveProgress()
+  → Interrupted audits: controller.tryRestore() sets interruptedSnapshot; controller.launchResume() passes skipFens + priorFindings
   → Shared eval via EvalCache (SQLite-backed, FEN → white-normalized CP + depth)
   → Coverage %: only missingResponse FENs in denominator (dead-ends excluded)
 ```
@@ -262,8 +301,10 @@ Settings → Enable engine analysis → EngineLifecycle.toggleOn/Off
 UnifiedEnginePane (when lifecycle ≠ off)
   → post-frame _runAnalysis on FEN / lifecycle changes (not during parent build)
   → AnalysisService.ensureWorkers() (lazy spawn on first use) → StockfishPool / EvalWorker
-  → Eval chain: session cache → CdbDirect → Lichess API → Stockfish
+  → Eval chain: session cache → CdbDirect → Stockfish (Lichess Explorer mothballed; DB column hidden, _fetchDbData never called)
+  → Best-line eval persisted to EvalCache via _persistBestEvalToCache()
   → Hover on MOVE or PV line → BoardPreviewController (floating) → FloatingBoardPreview overlay
+InlineEngineBar — Stockfish discovery writes best eval to EvalCache on completion
 ExpectimaxLinesPane — same floating preview on line hover
 OnTheFlyExpectimaxService (expectimax dock)
 ```
@@ -315,6 +356,35 @@ PgnViewerScreen._generateRepertoireFromGames
   → build starts automatically in DB Explorer mode
 ```
 
+### PGN import UX (multi-source panel)
+
+The `PgnSourcesPanel` replaces the monolithic `pgn_import_dialog.dart` bottom sheet
+for contexts that manage multiple PGN sources (generation, batch import). Architecture:
+
+```
+PgnSourcesPanel (lib/widgets/pgn_sources_panel.dart)
+  ├─ List<PgnSource> — each with name, filePath/paste, color, sliceConfig
+  ├─ "+ Add PGN" popover → file picker (multi) or compact paste dialog
+  └─ Per-source row:
+       ├─ Color badge, name, filename, game count
+       ├─ Slice chip → expands InlineSliceEditor
+       │    ├─ Radio: "All Lines" / "Slice"
+       │    ├─ PositionFilter (lib/widgets/slice/position_filter.dart)
+       │    ├─ SequenceFilter (lib/widgets/slice/sequence_filter.dart)
+       │    ├─ HeaderFilters (lib/widgets/slice/header_filters.dart)
+       │    ├─ Isolate-based slice compute → matchedIndices
+       │    └─ "Preview lines" → LinesPreviewPanel
+       │         ├─ Fuzzy search bar
+       │         ├─ Virtualized game line list
+       │         └─ HoverableMoveChips per row → BoardPreviewController → FloatingBoardPreview
+       └─ Remove button
+```
+
+Used by:
+- `RepertoireGenerationTab` (DB Explorer mode) — replaces `_buildPgnFilePickerSection()`
+- `PgnSliceDialog._buildResultsPreview()` — now embeds `LinesPreviewPanel` with hover board
+- `LineItemRow._MovesPreview` — upgraded to `HoverableMoveChips` for hover board on lines browser
+
 ---
 
 ## Directory reference
@@ -332,10 +402,13 @@ PgnViewerScreen._generateRepertoireFromGames
 | File | Purpose | Public API / state |
 |------|---------|-------------------|
 | `app_state.dart` | Global app mode, usernames, games list | `setMode`, `switchToBuilder/Trainer`, `notifyListeners` |
+| `generation_session_controller.dart` | **Generation session state** — owns `TreeBuildService` + `CoherenceService`; pause/resume/cancel survive dialog disposal; holds generated tree, config, fenMap, job reference | `pauseBuild`, `resumeBuild`, `cancelBuild`, `markGenerating`, `onTreeBuilt`, `onTreeReset`, `clearTree` |
+| `audit_session_controller.dart` | **Audit session state** — owns `RepertoireAuditService` + result, live findings, progress, config, interrupted snapshot; handles persistence via `AuditPersistence` | `pause`, `resume`, `cancel`, `saveProgress`, `tryRestore`, `launchResume`, `startFresh`, `onAuditingChanged`, `onResultReady`, `onLiveFinding`, `onProgress` |
+| `coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
 | `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `detectProtagonist`, `detectBothPlayers` (two-player matchup detection); `loadCurrentGame` resets board to game start (`currentPosition`, engine-line highlight); `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); used by `PgnViewerScreen` |
-| `repertoire_controller.dart` | **Central repertoire session state**: owns `MoveTree` + `TreePath` cursor, lines, opening tree. Single navigation entry point `jump(path)`. | `jump`, `playMove`, `playMoveAtTreePath`, `goBack`/`goForward`/`goToStart`/`goToEnd`, `loadMoveSequence`, `deleteAtPath`, `promoteVariation`, `setCommentAtPath`, backward-compat wrappers `userPlayedMove`/`userSelectedTreeMove` |
+| `repertoire_controller.dart` | **Central repertoire session state**: owns `MoveTree` + `TreePath` cursor, lines, opening tree. Single navigation entry point `jump(path)`. | `jump`, `playMove`, `playMoveAtTreePath`, `goBack`/`goForward`/`goToStart`/`goToEnd`, `loadMoveSequence`, `navigateToLineMove`, `deleteAtPath`, `promoteVariation`, `makeMainLine`, `setCommentAtPath`, backward-compat wrappers `userPlayedMove`/`userSelectedTreeMove` |
 | `repertoire_writer.dart` | Serialised PGN mutations + undo stack | `addMoveAtPosition`, `acceptSuggestion`, `undo`, `canUndo` |
 
 ### `lib/models/`
@@ -353,9 +426,10 @@ PgnViewerScreen._generateRepertoireFromGames
 | `engine_weakness_result.dart` | Weak square / position analysis output |
 | `eval_database_settings.dart` | CdbDirect path, enable flags (persisted) |
 | `explorer_response.dart` | Lichess opening explorer API shape |
-| `move_tree.dart` | Editable PGN move tree (`MoveNode`, `TreePath`, `MoveTree`). FEN cached per node. PGN round-trip via `fromPgn`/`toPgn`. Used by `RepertoireController` as the single source of truth for the move cursor. |
+| `move_tree.dart` | Editable PGN move tree (`MoveNode`, `TreePath`, `MoveTree`). FEN cached per node. PGN round-trip via `fromPgn`/`toPgn`. `collectFenPrefixes()` for transposition detection. Used by `RepertoireController` as the single source of truth for the move cursor. |
 | `opening_tree.dart` | In-memory repertoire statistics tree indexed by FEN; `hasMove`, `appendLine` (read-only reference, separate from `MoveTree`) |
 | `pgn_filter_models.dart` | PGN import filter types |
+| `pgn_source.dart` | **PGN source model** — represents one attached PGN file or paste blob with optional slice config; used by `PgnSourcesPanel` for multi-source import |
 | `position_analysis.dart` | Position analysis aggregate |
 | `repertoire_line.dart` | Trainable line extracted from PGN (moves, title, probability) |
 | `repertoire_metadata.dart` | Side, starting FEN, headers |
@@ -371,7 +445,7 @@ PgnViewerScreen._generateRepertoireFromGames
 
 | File | Purpose |
 |------|---------|
-| **services/candidate_service.dart** | Merges `BuildTree` + Lichess DB + coverage delta into `CandidateMove` list |
+| **services/candidate_service.dart** | Merges `BuildTree` + coverage delta into `CandidateMove` list (Lichess Explorer mothballed) |
 | **widgets/browse_panel.dart** | Candidate list, rare-move collapse, back/root/undo nav |
 | **widgets/candidate_row.dart** | Per-move row: eval, ease, traps, DB stats, coherence hint |
 | **widgets/expanded_trap_list.dart** | Trap sub-list when expanding trappy candidate |
@@ -380,7 +454,7 @@ PgnViewerScreen._generateRepertoireFromGames
 
 | File | Purpose |
 |------|---------|
-| **services/coverage_service.dart** | Lichess explorer queries, gap detection, `CoverageResult` (`findNextGap`, `findBiggestGap`) |
+| **services/coverage_service.dart** | Gap detection, `CoverageResult` (`findNextGap`, `findBiggestGap`); `getPositionData()` mothballed (returns null, no Lichess API) |
 | **services/coverage_suggestion_service.dart** | Gap → line resolution, scoring, greedy set cover → `SuggestedLine` |
 | **widgets/suggestion_panel.dart** | Target coverage UI, accept/skip suggestions with hover preview |
 
@@ -421,43 +495,57 @@ PgnViewerScreen._generateRepertoireFromGames
 
 Repertoire quality audit — BFS over the existing `OpeningTree` to detect mistakes, inaccuracies, missing opponent responses, weak positions, and dead ends.
 
-**Shares the same caching infrastructure as generation:** Stockfish evals are read from and written to `EvalCache` (SQLite), so running an audit populates the cache for future generation runs and vice-versa. Lichess Explorer data flows through the `ProbabilityService` singleton cache. The audit is effectively "generation-shaped" — same engines, same data sources, same persistent cache.
+**Shares the same caching infrastructure as generation:** Stockfish evals are read from and written to `EvalCache` (SQLite), so running an audit populates the cache for future generation runs and vice-versa. Maia policy/win-prob cached in `EvalCache.maia_cache`. Lichess Explorer mothballed (`ProbabilityService._fetchInternal()` returns null; `useLichessDb` defaults false). The audit is effectively "generation-shaped" — same engines, same persistent cache.
 
 | File | Purpose |
 |------|---------|
-| **models/audit_finding.dart** | `AuditFinding` — JSON-serializable, with cumulative probability, dismissal state |
+| **models/audit_finding.dart** | `AuditFinding` — JSON-serializable, with cumulative probability, dismissal state, `transposesIntoRepertoire` flag for missing moves |
 | **models/audit_result.dart** | `AuditResult` — JSON-serializable aggregate: findings, stats, soundness/coverage %, cache hit rate |
-| **services/audit_config.dart** | `AuditConfig` thresholds (mistake/inaccuracy cp, min games, Maia prob, depth) |
-| **services/repertoire_audit_service.dart** | BFS walker: Stockfish MultiPV for our moves, Lichess + Maia for opponent gaps; reads/writes `EvalCache`; computes cumulative reach probability per finding |
-| **widgets/audit_config_panel.dart** | Audit configuration: sources, thresholds, scope, start/cancel |
-| **widgets/audit_config_dialog.dart** | Modal dialog wrapping AuditConfigPanel |
-| **widgets/audit_findings_panel.dart** | Results display: summary, sortable/filterable/dismissable findings |
+| **services/audit_config.dart** | `AuditConfig` thresholds (mistake/inaccuracy cp, min games, Maia prob, depth); `useLichessDb` defaults `false`; `toMap()`/`fromMap()` serialization; `summaryLabel` compact display |
+| **services/repertoire_audit_service.dart** | BFS walker: Stockfish MultiPV for our moves, Maia for opponent gaps (Lichess mothballed); reads/writes `EvalCache`; computes cumulative reach probability per finding; transposition detection for missing moves (checks if resulting FEN exists in tree's `fenToNodes`); `pause()`/`resume()`/`cancel()`; exposes `checkedFens` for resume support; accepts `skipFens`/`priorFindings` to resume interrupted audits |
+| **services/audit_persistence.dart** | `AuditPersistence` singleton: centralized save/load for audit snapshots (`AuditSnapshot` = result + config + checked FENs + completion state). Auto-loads on repertoire open, auto-saves on dismiss changes. Handles v1 (legacy) and v2 (envelope) JSON formats |
+| **widgets/audit_config_panel.dart** | Audit configuration: sources (Lichess DB chip hidden), thresholds, scope, start/cancel; `useLichessDb` defaults false; accepts external `RepertoireAuditService` for pause/resume from Jobs tab |
+| **widgets/audit_config_dialog.dart** | Modal dialog wrapping AuditConfigPanel; forwards `auditService` and `onConfigChanged` |
+| **widgets/audit_findings_panel.dart** | Results display: category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends), auto-scaled to ~20 highest-probability findings (more surface as dismissed), sorted by reach probability, bulk dismiss context menu, keyboard navigation (N/P/D), selected state, timestamp display, "Re-run audit" button; resume banner when `interruptedSnapshot` set (`onResumeAudit`, `onStartFreshAudit`) |
 
-**Entry points:** Toolbar "Audit" button (shortcut **A**) → `AuditConfigDialog` (modal). Results appear in bottom pane Findings tab.
+**Entry points:** Toolbar "Audit" button (shortcut **A**) is context-aware: opens bottom pane Findings tab if audit running or results exist; opens config dialog otherwise. Force-open config via "Re-run audit" button in findings panel. Results appear in bottom pane Findings tab.
 
-**Persistence:** Audit results are saved to `<repertoire>_audit.json` (same pattern as `_tree.json`). Reopening the audit tab loads the last result. Dismissals are saved in the same file.
+**Persistence:** Audit results are saved to `<repertoire>_audit.json` via `AuditPersistence`. Results auto-load when a repertoire is opened (`AuditSessionController.tryRestore()` in `_onRepertoireChanged`), so findings survive app restarts. Dismissal changes auto-save via `controller.onResultChanged`. Cancel/dispose call `controller.saveProgress()` → `AuditPersistence.saveProgress()`. `tryRestore()` checks `isComplete` and sets `interruptedSnapshot` for incomplete audits; `controller.launchResume()` resumes with `skipFens`/`priorFindings`. The snapshot envelope (v2) stores the `AuditConfig`, checked FEN set, and completion state.
 
 **Data flow:**
 ```
-RepertoireAuditTab._startAudit()
-  ├─ EngineLifecycle.enterGeneration(1)
-  ├─ EvalCache.init()  ← shared SQLite eval store
-  ├─ RepertoireAuditService.audit(openingTree, config, ...)
-  │    ├─ BFS over OpeningTree nodes (tracks cumulative reach probability)
-  │    ├─ Our turn: StockfishPool.discoverMoves → cache best-line eval
-  │    │    └─ Per-move: EvalCache hit? → skip Stockfish : evaluateFen → cache
-  │    ├─ Opponent turn: ProbabilityService (cached) + MaiaFactory → check coverage
-  │    └─ Leaves: check for uncovered opponent continuations
-  ├─ AuditResult persisted to <repertoire>_audit.json
-  ├─ UI: summary card + sortable/dismissable findings list
-  └─ EngineLifecycle.exitGeneration()
+AuditSessionController._launchAuditConfig() (via screen)
+  ├─ AuditConfigDialog → AuditConfigPanel._startAudit()
+  │    ├─ onConfigChanged → controller.lastConfig (stored on controller + job.configSnapshot)
+  │    ├─ EngineLifecycle.enterGeneration(1)
+  │    ├─ EvalCache.init()  ← shared SQLite eval store
+  │    ├─ controller.service.audit(openingTree, config, ...)
+  │    │    ├─ BFS over OpeningTree nodes (tracks cumulative reach probability)
+  │    │    ├─ Our turn: StockfishPool.discoverMoves → cache best-line eval
+  │    │    │    └─ Per-move: EvalCache hit? → skip Stockfish : evaluateFen → cache
+  │    │    ├─ Opponent turn: MaiaFactory → check coverage (ProbabilityService mothballed)
+  │    │    └─ Leaves: check for uncovered opponent continuations
+  │    ├─ onProgress → controller.nodesChecked/totalNodes + currentJob.updateProgress()
+  │    ├─ onLiveFinding → controller.liveFindings
+  │    └─ onResultReady → controller.result + persisted to <repertoire>_audit.json
+  ├─ RepertoireAuditService owned by controller → pause/resume/cancel from Jobs tab
+  └─ EngineLifecycle.exitGeneration() on cancel
 ```
 
 **Finding UX:**
-- Clicking a missing-response finding navigates to the position **after** the missing move (not before).
-- Sort by severity (default), reach probability, or ply depth.
-- Dismiss irrelevant findings with the X button; toggle visibility of dismissed items.
-- Each finding shows cumulative reach probability from the root.
+- Clicking a finding navigates within the existing repertoire tree (via `navigateToLineMove`) — the full tree with all variations is preserved.
+- **Missing-move ephemeral preview:** Clicking a missing-move finding navigates to the parent position AND shows the missing move played ephemerally on the board (position after the missing move). A blue "New line from here" bar appears below the board with the missing move name; clicking it creates a new line in the tree with those moves. Close button dismisses the ephemeral preview. Ephemeral state auto-clears when the user navigates normally.
+- **Transposition detection:** Missing-move findings check if the resulting FEN (after playing the missing move) already exists in the repertoire tree. If so, the finding is tagged "transposes" in the summary — indicating the gap is less critical because the position is already covered elsewhere.
+- Category filter chips: Blunders, Inaccuracies, Missing, Weak, Dead Ends — click to toggle (multi-select). Counts shown per chip.
+- **Auto-scaling:** At most ~20 findings shown at a time (sorted by reach probability, highest first). As findings are dismissed, lower-probability ones surface. Status bar shows "20 of 150 findings" when capped.
+- **Probability display:** Missing moves show Maia probability (e.g. "p=0.003 Maia" for small values). Uses adaptive formatting: ≥10% → integer, ≥1% → 1 decimal, ≥0.001 → 3 decimals, smaller → scientific notation.
+- Move numbers in summaries: "Missing: 3...Nd2" instead of "Missing: Nd2". Also for mistakes/inaccuracies.
+- Dismiss button: 16px icon with 32px hit target and hover feedback.
+- Bulk dismiss via right-click context menu: dismiss similar (same type + FEN), dismiss at depth (all of same type at ply N or earlier), dismiss all of type.
+- Keyboard navigation: N/P or arrows cycle through findings (board auto-navigates), D dismisses and advances.
+- Selected finding gets a highlighted background in the list, with "X of N" counter in status bar.
+- Timestamp display: "2h ago", "3d ago", etc. when viewing saved results.
+- Dismissed findings shown in a collapsed section at the bottom with "Restore all".
 
 Implements principles from `docs/tree-display-architecture.md` (focused window, flat index, pre-sorted children).
 
@@ -466,13 +554,13 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | File | Purpose |
 |------|---------|
 | `main_screen.dart` | Mode `IndexedStack`, engine lifecycle on mode exit |
-| `repertoire_screen.dart` | **Primary builder UI** — board + PGN + multi-panel context zone, generate mode, traps, coverage |
+| `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; ~15 fields (down from 40) |
 | `repertoire_selection_screen.dart` | Pick/create repertoire |
 | `repertoire_training_screen.dart` | Training mode shell |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games" |
 | `player_selection_screen.dart` | Lichess player pick for analysis |
-| `settings_screen.dart` | Global engine, opponent, **on-the-fly expectimax** (live dock; separate from Generation tab Engine Depth), DB settings |
+| `settings_screen.dart` | Global engine, opponent model (Maia only; Lichess DB selector hidden), **on-the-fly expectimax** (live dock; separate from Generation tab Engine Depth), CdbDirect settings |
 
 ### `lib/services/` (grouped)
 
@@ -502,14 +590,14 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `eval/sqlite_eval_provider.dart` | Local SQLite cache |
 | `eval/in_memory_eval_provider.dart` | Session hash |
 | `eval/external_eval_provider.dart` | Remote eval abstraction |
-| `eval_cache.dart` | Eval cache facade — shared by generation and audit |
+| `eval_cache.dart` | Eval cache facade (SQLite v2): Stockfish evals + `maia_cache` table keyed by `(fen, elo)` (policy JSON, win prob); `MaiaCache` get/put with L1 in-memory mirror; shared by generation, audit, and interactive engine panes |
 | `eval/eval_canonicalize.dart` | FEN normalization for lookup |
 
 #### Generation pipeline
 
 | File | Purpose |
 |------|---------|
-| `tree_build_service.dart` | BFS tree build; MultiPV line-0 PV reply stash + opponent-node injection when Maia/Lichess omit it; `buildFromPgnFreqMap()` for DB Explorer mode |
+| `tree_build_service.dart` | BFS tree build; MultiPV line-0 PV reply stash + opponent-node injection when Maia omits it; `buildFromPgnFreqMap()` for DB Explorer mode |
 | `generation/pgn_freq_map.dart` | PGN frequency map (Dart port of C `pgn_freq.c`): isolate-based PGN parsing, per-position move frequencies, min-elo filtering, move probability filtering |
 | `generation/line_extractor.dart` | Extract lines from tree; PGN `{engine-injected}` on injected opponent moves |
 | `generation/pgn_export.dart` | Export generated lines to PGN (includes `{engine-injected}` annotation) |
@@ -544,13 +632,13 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `line_metrics_helpers.dart` | Line-level quality/trap/coherence metrics for UI |
 | `coherence_service.dart` | FP-Growth coherence + browse hints |
 | `fp_growth.dart` | FP-Growth algorithm |
-| `probability_service.dart` | Move probability helpers |
+| `probability_service.dart` | Move probability helpers; `_fetchInternal()` mothballed (returns null immediately, no Lichess Explorer API) |
 
 #### Maia & Lichess
 
 | File | Purpose |
 |------|---------|
-| `maia_service.dart`, `maia_native.dart`, `maia_stub.dart`, `maia_factory.dart`, `maia_tensor.dart` | Human move prediction |
+| `maia_service.dart`, `maia_native.dart`, `maia_stub.dart`, `maia_factory.dart`, `maia_tensor.dart` | Human move prediction; `evaluate()` checks `MaiaCache` before ONNX inference, writes results back after |
 | `lichess_api_client.dart` | Authenticated API |
 | `lichess_auth_service.dart` | OAuth/PAT token storage |
 | `ease_calculator.dart` | Standalone ease helpers |
@@ -605,7 +693,8 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `layout/analyze_context_zone.dart` | Detail pane (eval graph, trap card) |
 | `layout/repertoire_mode.dart` | `RepertoireMode`, `EditContextView` enums |
 | `layout/repertoire_mode_switcher.dart` | Edit/Analyze toggle |
-| `layout/repertoire_status_bar.dart` | Bottom metrics bar |
+| `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs/Lines); collapsed by default, auto-opens on audit/generation start, drag-resizable, badge counts |
+| `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
 | `layout/empty_state_placeholder.dart` | Shared empty states |
 | `layout/responsive_split_layout.dart` | Generic split helper |
 
@@ -619,10 +708,10 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `repertoire/repertoire_analyze_pane.dart` | Wires analyze zones (lines, coverage, traps) |
 | `repertoire/repertoire_analyze_props.dart` | Prop bag for analyze pane |
 | `repertoire/repertoire_lines_with_traps.dart` | Lines tab with trap + coherence panels |
-| `repertoire_generation_tab.dart` | Full generation UI + config; **Engine Depth (tree build)** default 14 |
+| `repertoire_generation_tab.dart` | Generation config UI; receives `GenerationSessionController` (build service + observable state); **Engine Depth (tree build)** default 14; `cancelGeneration()` calls `_savePartialTree()` before cleanup |
 | `repertoire_analysis_dock.dart` | Resizable Engine/Expectimax dock above PGN |
 | `repertoire_lines_browser.dart` | Filter/sort/group lines |
-| `interactive_pgn_editor.dart` | Tree-structured PGN editor, trap dots, hover preview hooks |
+| `interactive_pgn_editor.dart` | Tree-structured PGN editor with Overlay-based context menu (promote, make main line, duplicate line, copy PGN, delete), trap dots, hover preview hooks |
 | `opening_tree_widget.dart` | Compact tree navigator |
 | `opening_tree/opening_tree_move_row.dart` | Tree row |
 | `opening_tree/coverage_annotation.dart` | Coverage badges on tree |
@@ -633,10 +722,10 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `engine/unified_engine_pane.dart` | MultiPV table, hoverable PV via `ClickableMoveLineWidget`; FEN changes schedule analysis post-frame (avoids setState-during-build) |
+| `engine/unified_engine_pane.dart` | MultiPV table, hoverable PV via `ClickableMoveLineWidget`; FEN changes schedule analysis post-frame (avoids setState-during-build); DB column hidden; best eval persisted to `EvalCache` via `_persistBestEvalToCache()` |
 | `engine/expectimax_lines_pane.dart` | Precomputed + on-the-fly expectimax lines; floating hover preview |
 | `engine/expectimax_panel_host.dart` | Owns [OnTheFlyExpectimaxService] (or accepts external); auto-computes when [hasPrecomputedExpectimaxAtPly] is false at FEN (`onTheFlyMaxDepth`); used by [EditContextZone] and [RepertoireAnalysisDock] |
-| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only) |
+| `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
 | `engine/inline_expectimax_bar.dart` | Compact toggleable expectimax bar for right pane; wraps `ExpectimaxPanelHost(compact: true)` with toggle switch (shortcut X) and settings gear |
 | `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |
 | `engine/engine_pane_footer.dart` | Engine pane footer controls |
@@ -659,11 +748,10 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `chess_board_widget.dart` | Board rendering, move input |
 | `clickable_move_line.dart` | SAN line with tap + hover callbacks |
 | `navigation_trail.dart` | Breadcrumb trail widget (used by repertoire tab bar) |
-| `analysis_tab.dart` | Legacy browse/analysis tab wrapper (replaced by ExplorerSection in right pane) |
-| `explorer_section.dart` | Collapsible explorer section: BrowsePanel + opening tree toggle, for unified right pane |
-| `generation_config_dialog.dart` | Modal dialog wrapping RepertoireGenerationTab; opened by sparkles button / G shortcut |
-| `layout/jobs_panel.dart` | Jobs panel for bottom pane: active/completed generation and audit jobs with progress |
-| `analysis/analysis_settings_sheet.dart` | Context-aware analysis/engine settings dialog. Accepts `AnalysisSettingsContext` (`full` or `tacticsEngine`) to gate which sections are shown: engine depth + multiPv always; panel visibility + Lichess DB filters only in `full` mode. |
+| `analysis_tab.dart` | Legacy browse/analysis tab wrapper (not used in current repertoire screen) |
+| `generation_config_dialog.dart` | Modal dialog wrapping RepertoireGenerationTab; pops on generation start via controller listener; opened by sparkles button / G shortcut |
+| `layout/jobs_panel.dart` | Jobs tab content for bottom pane: active/completed generation and audit jobs with progress, config summary, pause/resume/cancel controls |
+| `analysis/analysis_settings_sheet.dart` | Context-aware analysis/engine settings dialog. Accepts `AnalysisSettingsContext` (`full` or `tacticsEngine`) to gate which sections are shown: engine depth + multiPv always; panel visibility in `full` mode ("Show DB % column" toggle and Lichess DB filter section hidden — Explorer mothballed). |
 | `analysis_download_dialog.dart` | Download games for analysis |
 | `game_analysis_tab.dart` | PGN viewer Analysis tab: chart, classified move list, best-line / Maia taps; each tap adds an **ephemeral RAV** at that ply (accumulates; does not clear prior lines); move list scrolls only when the nearest classified row changes (instant `ensureVisible`, no per-ply jump+animate) |
 | `game_analysis_chart.dart` | Eval chart for game review |
@@ -676,8 +764,15 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
 | `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); PGN tab renders each root as `( … )` |
-| `pgn_import_dialog.dart` | PGN file import dialog; live preview counts **lines** via `countPgnGames` (matches Lines list) |
-| `pgn_slice_dialog.dart` | Slice dataset dialog (position, sequence, header filters) | Default header row starts as Date ≥ (changeable field/mode like other rows); live preview via isolate; skips recompute when effective filters unchanged, on empty filter rows, or 300ms-debounced header typing |
+| `pgn_import_dialog.dart` | PGN file import dialog; live preview counts **lines** via `countPgnGames` (matches Lines list). **Deprecated** — replaced by `PgnSourcesPanel` for multi-source contexts |
+| `pgn_sources_panel.dart` | **Compact multi-source PGN attachment panel** — replaces the oversized import dialog; supports multiple PGN files/pastes, per-source slicing via `InlineSliceEditor`, embedded `LinesPreviewPanel` |
+| `pgn_inline_slice_editor.dart` | **Inline slice editor** — "All Lines" / "Slice" radio + position/header/sequence filters + isolate-computed match count + preview panel; used inside `PgnSourcesPanel` per source |
+| `lines_preview_panel.dart` | **Browseable line list** — fuzzy search, virtualized scrolling, `HoverableMoveChips` per row with `FloatingBoardPreview` on hover; used in slice dialog and inline slice editor |
+| `hoverable_move_chips.dart` | **Inline move chips with hover board preview** — renders SAN moves as compact chips, computes FEN on hover, triggers `BoardPreviewController.setPreview`; shared by `LinesPreviewPanel`, `LineItemRow`, PGN Viewer |
+| `slice/position_filter.dart` | Shared position filter widget (FEN/SAN input + Apply/Clear + "Board position" chip) |
+| `slice/header_filters.dart` | Shared header filters widget (dynamic field/mode/value rows) |
+| `slice/sequence_filter.dart` | Shared move sequence filter widget ([gap]-separated groups) |
+| `pgn_slice_dialog.dart` | Slice dataset dialog (position, sequence, header filters) | Default header row starts as Date ≥ (changeable field/mode like other rows); live preview via `LinesPreviewPanel` with hover board; skips recompute when effective filters unchanged, on empty filter rows, or 300ms-debounced header typing |
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Weakness detail dialog |
 | `lichess_db_info_icon.dart` | Lichess DB info + OAuth entry point |
@@ -690,7 +785,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **J** toggles learn auto-advance (`learnRequiresClick`) on training screen + settings tooltip |
 | `settings/settings_widgets.dart` | Reusable settings tiles |
 | `eval_database_settings_panel.dart` | CdbDirect configuration |
-| `lichess_db_selector.dart` | Explorer DB/speed/rating filters |
+| `lichess_db_selector.dart` | Explorer DB/speed/rating filters (widget retained; hidden from settings while Explorer mothballed) |
 | `generation/build_progress_display.dart` | Generation progress UI |
 | `generation/eval_sources_section.dart` | Eval source picker in generation |
 
@@ -784,7 +879,7 @@ Areas where behavior could not be fully determined without runtime testing:
 
 1. **Browser extension server** — exact API surface and sync semantics with repertoire.
 2. **Maia native availability** — platform matrix for real vs stub inference.
-3. **Generation cancel/pause** — edge cases when pool threads are mid-eval.
+3. **Generation cancel/pause** — `GenerationSessionController` now survives dialog disposal (fixes broken GlobalKey); edge cases when pool threads are mid-eval remain untested.
 4. **Cross-platform Stockfish** — bundled vs system binary resolution per OS.
 5. **Lichess OAuth** — full flow on all desktop platforms (callback server binding).
 6. **Compact vs wide layout** — all breakpoint transitions and state preservation paths in `RepertoireScreen` (complex conditional tree).
