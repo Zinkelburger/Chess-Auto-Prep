@@ -46,6 +46,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   late final TabController _tabController;
   final FocusNode _focusNode = FocusNode(debugLabel: 'PgnViewerScreen');
 
+  bool _editMode = false;
+  bool _protectOriginal = true;
+
   @override
   void initState() {
     super.initState();
@@ -170,6 +173,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         initialConfig: _controller.activeSliceConfig.isEmpty
             ? null
             : _controller.activeSliceConfig,
+        fenIndex: _controller.fenIndex,
         onApply: (indices, config) {
           _controller.applySlice(indices, config);
         },
@@ -396,6 +400,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     return parts.isEmpty ? 'My Repertoire' : parts.join(' ');
   }
 
+  void _toggleEditMode() {
+    setState(() {
+      _editMode = !_editMode;
+      if (_editMode) {
+        _protectOriginal = true; // always reset on activation
+      }
+    });
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -448,15 +461,37 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     } else if (key == LogicalKeyboardKey.keyW) {
       _controller.setAutoNextGame(!_controller.autoNextGame);
       return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyA) {
+      _toggleEditMode();
+      return KeyEventResult.handled;
     } else if (digitKeys.containsKey(key)) {
-      final star = digitKeys[key]!;
+      final digit = digitKeys[key]!;
+      if (_editMode && digit >= 1 && digit <= 6) {
+        // In edit mode, 1-6 toggle NAGs on current move (mainline only)
+        if (_pgnWidgetController.variationDepth > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Annotations only apply to mainline moves.'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+          return KeyEventResult.handled;
+        }
+        final currentIdx = _pgnWidgetController.currentMainLineIndex - 1;
+        if (currentIdx >= 0) {
+          _pgnWidgetController.toggleNagOnMove(currentIdx, digit);
+        }
+        return KeyEventResult.handled;
+      }
       final current = _controller.filteredGames.isNotEmpty
           ? _controller.filteredGames[_controller.currentGameIndex].studyRating
           : 0;
-      _controller.setRating(current == star ? 0 : star);
+      _controller.setRating(current == digit ? 0 : digit);
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.escape) {
-      if (_controller.isFullScreen) {
+      if (_editMode) {
+        _toggleEditMode();
+      } else if (_controller.isFullScreen) {
         _controller.exitFullScreen();
       } else {
         _pgnWidgetController.clearEphemeralMoves();
@@ -997,6 +1032,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               setState(() {});
               _reclaimFocus();
             },
+            onToggleEditMode: _toggleEditMode,
+            isEditMode: _editMode,
           ),
       ],
     );
@@ -1279,6 +1316,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               : null,
         ),
         const Divider(height: 1),
+        if (_editMode)
+          _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
             key: ValueKey('game_${_controller.currentGameIndex}'),
@@ -1287,9 +1326,79 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             onPositionChanged: _controller.onPositionChanged,
             onAnalysisNodeAction: _showAnalysisNodeMenu,
             onCommentsChanged: _controller.persistMoveComments,
+            editMode: _editMode,
+            protectOriginal: _protectOriginal,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildEditModeBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.08),
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.amber.withValues(alpha: 0.3),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.edit, size: 14, color: Colors.amber[600]),
+          const SizedBox(width: 6),
+          Text(
+            'Edit Mode',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.amber[600],
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            height: 20,
+            child: Checkbox(
+              value: _protectOriginal,
+              onChanged: (v) {
+                if (v == false) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                          'Changes to the original PGN will be saved to the file.'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                }
+                setState(() => _protectOriginal = v ?? true);
+              },
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          Text(
+            'Protect original',
+            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          ),
+          const Spacer(),
+          TextButton.icon(
+            onPressed: _toggleEditMode,
+            icon: Icon(Icons.close, size: 14, color: Colors.grey[500]),
+            label: Text(
+              'Exit',
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

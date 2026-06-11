@@ -38,6 +38,8 @@ class GameNavBar extends StatelessWidget {
   final bool hasEphemeralAnnotations;
   final ValueChanged<double>? onSetSpeed;
   final ValueChanged<bool>? onSetAutoNext;
+  final VoidCallback? onToggleEditMode;
+  final bool isEditMode;
 
   const GameNavBar({
     super.key,
@@ -60,6 +62,8 @@ class GameNavBar extends StatelessWidget {
     this.hasEphemeralAnnotations = false,
     this.onSetSpeed,
     this.onSetAutoNext,
+    this.onToggleEditMode,
+    this.isEditMode = false,
   });
 
   @override
@@ -106,7 +110,27 @@ class GameNavBar extends StatelessWidget {
                   label: const Text('Prev'),
                 ),
               ),
-              const SizedBox(width: 24),
+              const SizedBox(width: 16),
+              ShortcutTooltip(
+                description: 'Annotate',
+                shortcut: 'A',
+                child: IconButton(
+                  onPressed: onToggleEditMode,
+                  icon: Icon(
+                    Icons.edit_note,
+                    size: 22,
+                    color: isEditMode ? Colors.amber[600] : null,
+                  ),
+                  style: isEditMode
+                      ? IconButton.styleFrom(
+                          backgroundColor:
+                              Colors.amber.withValues(alpha: 0.12),
+                        )
+                      : null,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 16),
               ShortcutTooltip(
                 description: 'Next game',
                 shortcut: 'N',

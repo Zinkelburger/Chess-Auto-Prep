@@ -4,7 +4,47 @@
 /// [PgnViewerWidget], and [InteractivePgnEditor].
 library;
 
+import 'dart:ui' show Color;
+
 import 'package:dartchess/dartchess.dart';
+
+// ---------------------------------------------------------------------------
+// NAG (Numeric Annotation Glyph) constants and helpers
+// ---------------------------------------------------------------------------
+
+/// Standard move-quality NAG definitions following PGN spec.
+/// Order: best-to-worst (toolbar display order).
+class NagInfo {
+  final int id;
+  final String symbol;
+  final String name;
+  final Color color;
+  const NagInfo(this.id, this.symbol, this.name, this.color);
+}
+
+/// The 6 standard move-quality NAGs with Lichess-inspired colors.
+const kMoveNags = [
+  NagInfo(3, '!!', 'Brilliant', Color(0xFF168226)),
+  NagInfo(1, '!', 'Good move', Color(0xFF4CAF50)),
+  NagInfo(5, '!?', 'Interesting', Color(0xFFEA45D8)),
+  NagInfo(6, '?!', 'Dubious', Color(0xFF56B4E9)),
+  NagInfo(2, '?', 'Mistake', Color(0xFFE69F00)),
+  NagInfo(4, '??', 'Blunder', Color(0xFFDF5353)),
+];
+
+/// Lookup NAG info by ID. Returns null for unknown NAGs.
+NagInfo? nagInfoById(int id) {
+  for (final nag in kMoveNags) {
+    if (nag.id == id) return nag;
+  }
+  return null;
+}
+
+/// Get the display symbol for a NAG ID. Returns `\$N` for unknown NAGs.
+String nagSymbol(int id) => nagInfoById(id)?.symbol ?? '\$$id';
+
+/// Get the color for a NAG ID. Returns a neutral grey for unknown NAGs.
+Color nagColor(int id) => nagInfoById(id)?.color ?? const Color(0xFF9E9E9E);
 
 // ---------------------------------------------------------------------------
 // PGN comment-token regexes
@@ -214,7 +254,7 @@ List<String> formatProseComment(String comment) {
 // ---------------------------------------------------------------------------
 
 /// Serialize a flat list of [PgnNodeData] moves into PGN movetext with
-/// move numbers and inline `{comment}` braces.
+/// move numbers, NAGs, and inline `{comment}` braces.
 ///
 /// Appends [result] (e.g. `1-0`) unless it is null or `*`.
 String buildMovetext(List<PgnNodeData> moves, {String? result}) {
@@ -224,6 +264,11 @@ String buildMovetext(List<PgnNodeData> moves, {String? result}) {
   for (final move in moves) {
     if (isWhite) buf.write('$moveNum. ');
     buf.write('${move.san} ');
+    if (move.nags != null && move.nags!.isNotEmpty) {
+      for (final nag in move.nags!) {
+        buf.write('\$$nag ');
+      }
+    }
     if (move.comments != null && move.comments!.isNotEmpty) {
       for (final c in move.comments!) {
         if (c.isNotEmpty) buf.write('{$c} ');
