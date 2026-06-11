@@ -4,7 +4,14 @@ import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
-    show filterDisplayComment, buildMovetext, formatProseComment;
+    show
+        filterDisplayComment,
+        buildMovetext,
+        formatProseComment,
+        NagInfo,
+        kMoveNags,
+        nagSymbol,
+        nagColor;
 import 'package:chess_auto_prep/models/analysis_node.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 
@@ -78,10 +85,17 @@ class PgnViewerWidgetController {
 
   int get mainLineIndex => _state?._mainLineIndex ?? 0;
 
+  int get currentMainLineIndex => mainLineIndex;
+
   int get mainLineLength => _state?._moveHistory.length ?? 0;
 
   /// Number of moves deep into the current variation (0 if on mainline).
   int get variationDepth => _state?._analysisPath.length ?? 0;
+
+  /// Toggle a NAG on a specific move (used by keyboard shortcuts).
+  void toggleNagOnMove(int moveIndex, int nagId) {
+    _state?._toggleNag(moveIndex, nagId);
+  }
 }
 
 class PgnViewerWidget extends StatefulWidget {
@@ -95,6 +109,8 @@ class PgnViewerWidget extends StatefulWidget {
   final bool showStartEndButtons;
   final Function(int nodeId, Offset globalPosition)? onAnalysisNodeAction;
   final ValueChanged<String>? onCommentsChanged;
+  final bool editMode;
+  final bool protectOriginal;
 
   const PgnViewerWidget({
     super.key,
@@ -108,6 +124,8 @@ class PgnViewerWidget extends StatefulWidget {
     this.showStartEndButtons = true,
     this.onAnalysisNodeAction,
     this.onCommentsChanged,
+    this.editMode = false,
+    this.protectOriginal = true,
   });
 
   @override
@@ -660,6 +678,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   // ── Move comment editing ──
 
   int? _editingCommentIndex;
+  int? _selectedMoveIndex; // for annotation toolbar in edit mode
 
   void _startEditingComment(int moveIndex) {
     setState(() => _editingCommentIndex = moveIndex);
@@ -686,6 +705,111 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   void _cancelEditingComment() {
     setState(() => _editingCommentIndex = null);
+  }
+
+  void _toggleNag(int moveIndex, int nagId) {
+    if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
+    final moveData = _moveHistory[moveIndex];
+    setState(() {
+      final nags = moveData.nags ?? [];
+      if (nags.contains(nagId)) {
+        nags.remove(nagId);
+      } else {
+        // Remove other move-quality NAGs (1-6) before adding
+        nags.removeWhere((n) => n >= 1 && n <= 6);
+        nags.add(nagId);
+      }
+      moveData.nags = nags.isEmpty ? null : nags;
+    });
+    _notifyCommentsChanged();
+  }
+
+  void _selectMoveForAnnotation(int moveIndex) {
+    setState(() {
+      if (_selectedMoveIndex == moveIndex) {
+        _selectedMoveIndex = null;
+      } else {
+        _selectedMoveIndex = moveIndex;
+      }
+    });
+  }
+
+  void _showMoveContextMenu(int moveIndex, Offset globalPosition) {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
+      Offset.zero & overlay.size,
+    );
+    final protectOriginal = widget.protectOriginal;
+    final hasBranch = _variationsByPly.containsKey(moveIndex + 1);
+
+    showMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        const PopupMenuItem(
+          value: 'comment',
+          child: Row(
+            children: [
+              Icon(Icons.comment_outlined, size: 18),
+              SizedBox(width: 8),
+              Text('Comment'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'annotate',
+          child: Row(
+            children: [
+              Icon(Icons.edit_note, size: 18),
+              SizedBox(width: 8),
+              Text('Annotate'),
+            ],
+          ),
+        ),
+        if (hasBranch) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: 'promote',
+            enabled: !protectOriginal,
+            child: Row(
+              children: [
+                Icon(Icons.arrow_upward, size: 18,
+                    color: protectOriginal ? Colors.grey[700] : null),
+                const SizedBox(width: 8),
+                Text('Promote variation',
+                    style: protectOriginal
+                        ? TextStyle(color: Colors.grey[700])
+                        : null),
+              ],
+            ),
+          ),
+        ],
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'delete',
+          enabled: !protectOriginal,
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline, size: 18,
+                  color: protectOriginal ? Colors.grey[700] : Colors.red),
+              const SizedBox(width: 8),
+              Text('Delete move',
+                  style: TextStyle(
+                      color: protectOriginal ? Colors.grey[700] : Colors.red)),
+            ],
+          ),
+        ),
+      ],
+    ).then((action) {
+      if (action == 'comment') {
+        _startEditingComment(moveIndex);
+      } else if (action == 'annotate') {
+        _selectMoveForAnnotation(moveIndex);
+      }
+      // promote and delete require tree manipulation (future)
+    });
   }
 
   void _notifyCommentsChanged() {
@@ -874,6 +998,26 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       final hasBranch = _variationsByPly.containsKey(i + 1);
 
       final canEditComments = widget.onCommentsChanged != null;
+      final inEditMode = widget.editMode;
+      final isSelected = inEditMode && _selectedMoveIndex == i;
+
+      // Determine move color: in edit mode, NAG color takes priority
+      final moveNag = (inEditMode && moveData.nags != null && moveData.nags!.isNotEmpty)
+          ? moveData.nags!.firstWhere((n) => n >= 1 && n <= 6, orElse: () => 0)
+          : 0;
+      final nagMoveColor = moveNag > 0 ? nagColor(moveNag) : null;
+
+      final moveColor = isCurrentMove
+          ? AppColors.pgnMoveCurrent
+          : (nagMoveColor ?? (hasBranch ? AppColors.lichessDb : AppColors.info));
+
+      // Build SAN + NAG text
+      final nagSuffix = (inEditMode && moveData.nags != null && moveData.nags!.isNotEmpty)
+          ? moveData.nags!
+              .where((n) => n >= 1 && n <= 6)
+              .map(nagSymbol)
+              .join()
+          : '';
 
       spans.add(
         WidgetSpan(
@@ -881,31 +1025,52 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           baseline: TextBaseline.alphabetic,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () => _onMainLineMoveClicked(i),
-            onSecondaryTapDown:
-                canEditComments ? (_) => _startEditingComment(i) : null,
+            onTap: () {
+              _onMainLineMoveClicked(i);
+              if (inEditMode) _selectMoveForAnnotation(i);
+            },
+            onSecondaryTapDown: inEditMode
+                ? (details) => _showMoveContextMenu(i, details.globalPosition)
+                : (canEditComments ? (_) => _startEditingComment(i) : null),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-              decoration: isCurrentMove
-                  ? BoxDecoration(
-                      color: AppColors.pgnMoveCurrentBg,
-                      borderRadius: BorderRadius.circular(3),
-                    )
-                  : null,
-              child: Text(
-                san,
-                style: TextStyle(
-                  fontFamily: 'monospace',
-                  fontSize: 14,
-                  color: isCurrentMove
-                      ? AppColors.pgnMoveCurrent
-                      : (hasBranch ? AppColors.lichessDb : AppColors.info),
-                  fontWeight: isCurrentMove ? FontWeight.w500 : FontWeight.normal,
-                  decoration: isCurrentMove ? null : TextDecoration.underline,
-                  decorationColor:
-                      AppColors.onSurfaceDim.withValues(alpha: 0.45),
-                  decorationStyle: TextDecorationStyle.dotted,
-                ),
+              decoration: BoxDecoration(
+                color: isCurrentMove
+                    ? AppColors.pgnMoveCurrentBg
+                    : (isSelected
+                        ? AppColors.pgnMoveCurrentBg.withValues(alpha: 0.5)
+                        : null),
+                borderRadius: BorderRadius.circular(3),
+                border: isSelected
+                    ? Border.all(color: moveColor.withValues(alpha: 0.6), width: 1)
+                    : null,
+              ),
+              child: Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                    text: san,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 14,
+                      color: moveColor,
+                      fontWeight: isCurrentMove ? FontWeight.w500 : FontWeight.normal,
+                      decoration: isCurrentMove ? null : TextDecoration.underline,
+                      decorationColor:
+                          AppColors.onSurfaceDim.withValues(alpha: 0.45),
+                      decorationStyle: TextDecorationStyle.dotted,
+                    ),
+                  ),
+                  if (nagSuffix.isNotEmpty)
+                    TextSpan(
+                      text: nagSuffix,
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: nagMoveColor ?? AppColors.pgnMove,
+                      ),
+                    ),
+                ]),
               ),
             ),
           ),
@@ -913,6 +1078,18 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       );
 
       spans.add(const TextSpan(text: ' '));
+
+      // Annotation toolbar (edit mode only)
+      if (isSelected && _editingCommentIndex != i) {
+        flushSpans();
+        children.add(_AnnotationToolbar(
+          moveIndex: i,
+          currentNags: moveData.nags ?? [],
+          onToggleNag: (nagId) => _toggleNag(i, nagId),
+          onComment: () => _startEditingComment(i),
+          onDismiss: () => setState(() => _selectedMoveIndex = null),
+        ));
+      }
 
       // Inline comment editor
       if (_editingCommentIndex == i) {
@@ -1200,6 +1377,144 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     }
 
     return spans;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Annotation toolbar widget (edit mode)
+// ---------------------------------------------------------------------------
+class _AnnotationToolbar extends StatelessWidget {
+  final int moveIndex;
+  final List<int> currentNags;
+  final ValueChanged<int> onToggleNag;
+  final VoidCallback onComment;
+  final VoidCallback onDismiss;
+
+  const _AnnotationToolbar({
+    required this.moveIndex,
+    required this.currentNags,
+    required this.onToggleNag,
+    required this.onComment,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.grey.withValues(alpha: 0.25),
+          width: 0.5,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final nag in kMoveNags)
+            _NagButton(
+              nag: nag,
+              isActive: currentNags.contains(nag.id),
+              onTap: () => onToggleNag(nag.id),
+            ),
+          const SizedBox(width: 4),
+          Container(
+            width: 1,
+            height: 22,
+            color: Colors.grey.withValues(alpha: 0.3),
+          ),
+          const SizedBox(width: 4),
+          _ToolbarIconButton(
+            icon: Icons.comment_outlined,
+            tooltip: 'Comment',
+            onTap: onComment,
+          ),
+          const SizedBox(width: 2),
+          _ToolbarIconButton(
+            icon: Icons.close,
+            tooltip: 'Dismiss',
+            onTap: onDismiss,
+            color: Colors.grey[600],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NagButton extends StatelessWidget {
+  final NagInfo nag;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _NagButton({
+    required this.nag,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: nag.name,
+      waitDuration: const Duration(milliseconds: 400),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: isActive ? nag.color.withValues(alpha: 0.2) : null,
+            borderRadius: BorderRadius.circular(4),
+            border: isActive
+                ? Border.all(color: nag.color.withValues(alpha: 0.6), width: 1)
+                : null,
+          ),
+          child: Text(
+            nag.symbol,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'monospace',
+              color: isActive ? nag.color : Colors.grey[400],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ToolbarIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _ToolbarIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(icon, size: 18, color: color ?? Colors.grey[400]),
+        ),
+      ),
+    );
   }
 }
 
