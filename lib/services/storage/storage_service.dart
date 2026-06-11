@@ -24,6 +24,10 @@ abstract class StorageService {
   /// Delete the file at [path].  No-op if it does not exist.
   Future<void> deleteFile(String path);
 
+  /// Return the file size (bytes) and last-modified time for [path].
+  /// Returns `null` if the file does not exist or cannot be stat'd.
+  Future<({int size, DateTime modified})?> fileStat(String path);
+
   /// Rename / move a file from [oldPath] to [newPath].
   Future<void> renameFile(String oldPath, String newPath);
 

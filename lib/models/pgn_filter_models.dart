@@ -10,17 +10,21 @@ import 'dart:convert';
 
 enum MatchMode { contains, notContains, exact, regex, after, before }
 
-String matchModeLabel(MatchMode m) => switch (m) {
+String matchModeLabel(MatchMode m, {bool numeric = false}) => switch (m) {
       MatchMode.contains => 'contains',
       MatchMode.notContains => 'not contains',
       MatchMode.exact => 'exact',
       MatchMode.regex => 'regex',
-      MatchMode.after => '≥ (after)',
-      MatchMode.before => '≤ (before)',
+      MatchMode.after => numeric ? '≥ (min)' : '≥ (after)',
+      MatchMode.before => numeric ? '≤ (max)' : '≤ (before)',
     };
 
 MatchMode matchModeFromName(String name) => MatchMode.values
     .firstWhere((m) => m.name == name, orElse: () => MatchMode.contains);
+
+/// Fields where ≥/≤ represent numeric comparison, not temporal.
+bool isNumericField(String field) =>
+    field == 'WhiteElo' || field == 'BlackElo' || field == 'StudyRating';
 
 // ── Header filter ────────────────────────────────────────────────────────────
 
@@ -47,8 +51,9 @@ class HeaderFilterConfig {
       );
 
   String get chipLabel {
-    final modeStr =
-        mode == MatchMode.contains ? '' : ' (${matchModeLabel(mode)})';
+    final modeStr = mode == MatchMode.contains
+        ? ''
+        : ' (${matchModeLabel(mode, numeric: isNumericField(field))})';
     return '$field$modeStr: $value';
   }
 }
