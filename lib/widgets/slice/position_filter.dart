@@ -8,6 +8,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
 
 import '../../utils/fen_utils.dart';
+import '../position_preview_icon.dart';
 
 /// Result of attempting to parse a position input string.
 class PositionParseResult {
@@ -178,6 +179,8 @@ class PositionFilterState extends State<PositionFilter> {
                 child: const Text('Apply', style: TextStyle(fontSize: 12)),
               ),
             ),
+            if (_controller.text.isNotEmpty)
+              PositionPreviewIcon(inputGetter: () => _controller.text),
             if (hasFilter || _controller.text.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 4),
