@@ -332,6 +332,19 @@ Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetCon
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
 ```
 
+#### Edit Mode (Annotation)
+
+Toggled via pencil icon in `GameNavBar` or keyboard shortcut `A`. When active:
+
+- **NAG display**: Move-quality NAGs ($1–$6) render inline after the SAN with Lichess-style colors (brilliant=green, good=green, interesting=pink, dubious=blue, mistake=orange, blunder=red). Hidden when edit mode is off.
+- **Annotation toolbar**: Tapping a move in edit mode shows an `_AnnotationToolbar` below it with 6 NAG toggle buttons + comment button. Toggling a NAG replaces any existing move-quality NAG.
+- **Context menu**: Right-click in edit mode shows Comment, Annotate, Promote (variation), Delete — with promote/delete gated by `protectOriginal`.
+- **Protect original PGN**: Checkbox in the edit mode bar (always resets to checked on activation). When checked, destructive operations on the original game moves are disabled.
+- **Keyboard**: `1`–`6` toggle NAGs on current move (overrides star-rating shortcuts while in edit mode). `Escape` exits edit mode.
+- **Persistence**: NAGs saved via `buildMovetext()` → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
+
+Key files: `pgn_comment_utils.dart` (NAG constants, `kMoveNags`, `nagColor`, `buildMovetext` with NAG serialization), `pgn_viewer_widget.dart` (`editMode`/`protectOriginal` props, `_AnnotationToolbar`, `_NagButton`), `pgn_viewer_screen.dart` (`_editMode`, `_protectOriginal`, `_buildEditModeBar`), `game_nav_bar.dart` (`onToggleEditMode`, `isEditMode`).
+
 ### Generate repertoire from PGN viewer games
 
 Toolbar ⋮ menu → "Generate repertoire from games":
@@ -407,7 +420,7 @@ Used by:
 | `coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
-| `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `detectProtagonist`, `detectBothPlayers` (two-player matchup detection); `loadCurrentGame` resets board to game start (`currentPosition`, engine-line highlight); `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); used by `PgnViewerScreen` |
+| `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `detectProtagonist`, `detectBothPlayers` (two-player matchup detection); `loadCurrentGame` resets board to game start (`currentPosition`, engine-line highlight); `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); loads persisted `.fenidx` companion file on open (validated against PGN file size + mtime + game count), or builds `fenIndex` in background, for instant position-filter and tree-position lookups; re-persists `.fenidx` after PGN metadata writes to keep stat values fresh; used by `PgnViewerScreen` |
 | `repertoire_controller.dart` | **Central repertoire session state**: owns `MoveTree` + `TreePath` cursor, lines, opening tree. Single navigation entry point `jump(path)`. | `jump`, `playMove`, `playMoveAtTreePath`, `goBack`/`goForward`/`goToStart`/`goToEnd`, `loadMoveSequence`, `navigateToLineMove`, `deleteAtPath`, `promoteVariation`, `makeMainLine`, `setCommentAtPath`, backward-compat wrappers `userPlayedMove`/`userSelectedTreeMove` |
 | `repertoire_writer.dart` | Serialised PGN mutations + undo stack | `addMoveAtPosition`, `acceptSuggestion`, `undo`, `canUndo` |
 
@@ -619,7 +632,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `repertoire_service.dart` | Load/save repertoire, parse lines, append moves |
 | `repertoire_review_service.dart` | Review scheduling |
 | `pgn_service.dart` | General PGN load/save |
-| `pgn_parsing_service.dart` | Multi-game split/count (`splitPgnIntoGames`, `countPgnGames`); `[Event]`-delimited chunks, including back-to-back games without blank lines (tree_builder exports) |
+| `pgn_parsing_service.dart` | Multi-game split/count (`splitPgnIntoGames`, `countPgnGames`); `[Event]`-delimited chunks, including back-to-back games without blank lines (tree_builder exports); `buildFenIndex` builds an inverted FEN→game-indices map in an isolate for O(1) position lookups; `computeSliceMatches` is the shared entry point for position+header+sequence filtering (fast path with FEN index, slow path without); `serializeFenIndex`/`deserializeFenIndex` persist the index as a FENIDX1-format companion `.fenidx` file (header stores game count, PGN file size, and mtime for staleness detection); `parseTargetFen` resolves FEN/SAN input to a normalized 4-field FEN |
 | `opening_tree_builder.dart` | Build opening tree from PGN |
 | `default_pgn_service.dart` | Bundled default PGN extraction (`rootBundle.load` + `decodeTextBytes` for Latin-1/Windows-1252 names in legacy PGNs) |
 
@@ -663,7 +676,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | File | Purpose |
 |------|---------|
 | `storage/storage_service.dart` | Abstract file I/O |
-| `storage/io_storage_service.dart` | Desktop/mobile IO; `_resolveFile` maps relative paths to app documents; `readFile` / PGN reads use UTF-8 with Latin-1 fallback via `utils/file_text_reader.dart`; `listRepertoireFiles` filters out `*_raw_games.pgn` companion files |
+| `storage/io_storage_service.dart` | Desktop/mobile IO; `_resolveFile` maps relative paths to app documents; `readFile` / PGN reads use UTF-8 with Latin-1 fallback via `utils/file_text_reader.dart`; `listRepertoireFiles` filters out `*_raw_games.pgn` companion files; `fileStat` returns file size + modification time for index staleness checks |
 | `storage/storage_factory.dart` | Platform factory |
 | `storage/app_paths.dart` | App data directories |
 | `browser_extension_server/*` | Local HTTP server for browser extension (IO/stub) |
@@ -756,23 +769,24 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `game_analysis_tab.dart` | PGN viewer Analysis tab: chart, classified move list, best-line / Maia taps; each tap adds an **ephemeral RAV** at that ply (accumulates; does not clear prior lines); move list scrolls only when the nearest classified row changes (instant `ensureVisible`, no per-ply jump+animate) |
 | `game_analysis_chart.dart` | Eval chart for game review |
 | `game_nav_item.dart` | `GameNavItem` — label, study rating/summary, PGN `headers` for nav bar and search dialog |
-| `game_nav_bar.dart` | Game navigation controls; **Game N / Total** opens `GameSearchDialog` (replaces ±25-game popup); **Copy PGN** (`onCopyPgn`) and **Clear analysis annotations** (`onClearAnnotations`, `Icons.layers_clear_outlined`, enabled when `hasEphemeralAnnotations`) in auto-play row |
+| `game_nav_bar.dart` | Game navigation controls; **Game N / Total** opens `GameSearchDialog` (replaces ±25-game popup); **Copy PGN** (`onCopyPgn`) and **Clear analysis annotations** (`onClearAnnotations`, `Icons.layers_clear_outlined`, enabled when `hasEphemeralAnnotations`) in auto-play row; **Edit mode toggle** (`onToggleEditMode`, `isEditMode`) pencil icon with amber highlight when active |
 | `game_search_dialog.dart` | Compact jump-to-game search (`GameNavItem.headers` + study fields); up to 5 matches, pure-integer query → “Go to game N”, Enter selects first, Escape dismisses |
 | `games_list_widget.dart` | Selectable games list |
 | `fullscreen_game_view.dart` | Fullscreen game + board view |
 | `fen_list_widget.dart` | FEN list display helper |
 | `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
-| `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); PGN tab renders each root as `( … )` |
+| `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); PGN tab renders each root as `( … )`; **Edit mode** (`editMode` prop): NAG inline display, `_AnnotationToolbar` with 6 glyph buttons + comment, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildMovetext` |
 | `pgn_import_dialog.dart` | PGN file import dialog; live preview counts **lines** via `countPgnGames` (matches Lines list). **Deprecated** — replaced by `PgnSourcesPanel` for multi-source contexts |
 | `pgn_sources_panel.dart` | **Compact multi-source PGN attachment panel** — replaces the oversized import dialog; supports multiple PGN files/pastes, per-source slicing via `InlineSliceEditor`, embedded `LinesPreviewPanel` |
-| `pgn_inline_slice_editor.dart` | **Inline slice editor** — "All Lines" / "Slice" radio + position/header/sequence filters + isolate-computed match count + preview panel; used inside `PgnSourcesPanel` per source |
-| `lines_preview_panel.dart` | **Browseable line list** — fuzzy search, virtualized scrolling, `HoverableMoveChips` per row with `FloatingBoardPreview` on hover; used in slice dialog and inline slice editor |
+| `pgn_inline_slice_editor.dart` | **Inline slice editor** — "All Lines" / "Slice" radio + position/header/sequence filters + match count via `computeSliceMatches` + preview panel; accepts optional `fenIndex` for instant position lookups; used inside `PgnSourcesPanel` per source |
+| `lines_preview_panel.dart` | **Browseable line list** — fuzzy search, virtualized scrolling, `HoverableMoveChips` per row with `FloatingBoardPreview` on hover; shows full-panel loading spinner while `computing` (replaces stale count + list); used in slice dialog and inline slice editor |
 | `hoverable_move_chips.dart` | **Inline move chips with hover board preview** — renders SAN moves as compact chips, computes FEN on hover, triggers `BoardPreviewController.setPreview`; shared by `LinesPreviewPanel`, `LineItemRow`, PGN Viewer |
-| `slice/position_filter.dart` | Shared position filter widget (FEN/SAN input + Apply/Clear + "Board position" chip) |
+| `slice/position_filter.dart` | Shared position filter widget (FEN/SAN input + Apply/Clear + "Board position" chip); uses `PositionPreviewIcon` for hover board preview |
 | `slice/header_filters.dart` | Shared header filters widget (dynamic field/mode/value rows) |
 | `slice/sequence_filter.dart` | Shared move sequence filter widget ([gap]-separated groups) |
-| `pgn_slice_dialog.dart` | Slice dataset dialog (position, sequence, header filters) | Default header row starts as Date ≥ (changeable field/mode like other rows); live preview via `LinesPreviewPanel` with hover board; skips recompute when effective filters unchanged, on empty filter rows, or 300ms-debounced header typing |
+| `pgn_slice_dialog.dart` | Slice dataset dialog (position, sequence, header filters) | Default header row starts as Date ≥ (changeable field/mode like other rows); live preview via `LinesPreviewPanel` with hover board; skips recompute when effective filters unchanged, on empty filter rows, or 300ms-debounced header typing; accepts optional `fenIndex` for O(1) position filtering |
+| `position_preview_icon.dart` | **Shared hover-preview widget** — eye icon that shows a floating 200×200 board overlay on hover via `bestEffortPositionFromInput`; supports FEN, SAN, and `[gap]`-separated sequences; used by `PositionFilter` and `PgnSliceDialog` |
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Weakness detail dialog |
 | `lichess_db_info_icon.dart` | Lichess DB info + OAuth entry point |
@@ -795,6 +809,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 |------|---------|
 | `chess_utils.dart` | UCI/SAN helpers |
 | `fen_utils.dart` | FEN manipulation |
+| `best_effort_position.dart` | Best-effort board builder from FEN, SAN, or `[gap]`-separated move sequences; handles castling (O-O/O-O-O) by manually repositioning king+rook; produces a renderable `Position` even for illegal placements (used by `PositionPreviewIcon`) |
 | `pgn_utils.dart` | PGN formatting, event title extraction |
 | `pgn_comment_utils.dart` | Comment filtering |
 | `coverage_helpers.dart` | Coverage UI helpers |
