@@ -121,88 +121,22 @@ List<PgnGameEntry> parseMultiGamePgn(String content) {
 }
 
 Future<List<int>> applySliceConfig(
-    SliceConfig config, List<GameRecord> games) {
-  final posInput = config.positionInput;
-  final filters = config.headerFilters
-      .map((f) => (field: f.field, value: f.value, mode: f.mode))
-      .toList();
-  final gameData = games
-      .map((g) =>
-          (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText))
-      .toList();
-
+    SliceConfig config, List<GameRecord> games, {
+    Map<String, List<int>>? fenIndex,
+}) {
   final seqPattern = config.sequencePattern;
-  final seqGroups = (seqPattern != null && seqPattern.isNotEmpty)
-      ? pgn.parseSequenceGroups(seqPattern)
-      : const <List<String>>[];
-  final seqGap = config.sequenceGap;
-  final seqGroupsCopy = seqGroups.map((g) => List<String>.from(g)).toList();
-
-  return Isolate.run(() {
-    String? targetFen;
-    if (posInput != null && posInput.isNotEmpty) {
-      final input = posInput.trim();
-      if (input.contains('/')) {
-        try {
-          final full = expandFen(input);
-          Chess.fromSetup(Setup.parseFen(full));
-          targetFen = normalizeFen(full);
-        } catch (_) {
-          /* invalid FEN input */
-        }
-      } else {
-        final tokens = input
-            .replaceAll(RegExp(r'\d+\.+'), '')
-            .replaceAll(RegExp(r'(1-0|0-1|1/2-1/2|\*)'), '')
-            .split(RegExp(r'\s+'))
-            .where((t) => t.isNotEmpty)
-            .toList();
-        if (tokens.isNotEmpty) {
-          Position pos = Chess.initial;
-          bool valid = true;
-          for (final t in tokens) {
-            final move = pos.parseSan(t);
-            if (move == null) {
-              valid = false;
-              break;
-            }
-            pos = pos.play(move);
-          }
-          if (valid) targetFen = normalizeFen(pos.fen);
-        }
-      }
-    }
-
-    final indices = <int>[];
-    for (int i = 0; i < gameData.length; i++) {
-      final game = gameData[i];
-      bool matches = true;
-
-      if (targetFen != null) {
-        matches =
-            pgn.gamePassesThroughFen(game.headers, game.pgnText, targetFen);
-      }
-
-      if (matches && seqGroupsCopy.isNotEmpty) {
-        matches =
-            pgn.gameMatchesSequence(game.pgnText, seqGroupsCopy, seqGap);
-      }
-
-      if (matches) {
-        for (final f in filters) {
-          if (f.value.isEmpty) continue;
-          final headerVal = game.headers[f.field] ?? '';
-          if (!pgn.matchesField(headerVal, f.value, f.mode)) {
-            matches = false;
-            break;
-          }
-        }
-      }
-
-      if (matches) indices.add(i);
-    }
-    return indices;
-  });
+  return pgn.computeSliceMatches(
+    games: games,
+    targetFen: pgn.parseTargetFen(config.positionInput),
+    filters: config.headerFilters
+        .map((f) => (field: f.field, mode: f.mode, value: f.value))
+        .toList(),
+    seqGroups: (seqPattern != null && seqPattern.isNotEmpty)
+        ? pgn.parseSequenceGroups(seqPattern)
+        : const [],
+    seqGap: config.sequenceGap,
+    fenIndex: fenIndex,
+  );
 }
 
 final studyRatingRe = RegExp(r'\[StudyRating\s+"[^"]*"\]');
@@ -343,6 +277,13 @@ class PgnViewerController extends ChangeNotifier {
   int treeBuildGeneration = 0;
   final Map<String, List<int>> treePositionGameCache = {};
   List<String> treeCurrentMoveSequence = [];
+
+  Map<String, List<int>>? _fenIndex;
+  int _fenIndexGeneration = 0;
+
+  /// Read-only access to the precomputed FEN → game-indices map.
+  /// Returns null while the index is being built.
+  Map<String, List<int>>? get fenIndex => _fenIndex;
 
   bool isLoading = false;
 
@@ -497,8 +438,69 @@ class PgnViewerController extends ChangeNotifier {
     notifyListeners();
 
     await addToRecentFiles(path);
+    await _tryLoadPersistedFenIndex(path, entries.length);
     await tryRestoreSavedSlice(path, entries);
     await loadCurrentGame();
+    if (_fenIndex == null) _buildFenIndex();
+  }
+
+  Future<void> _tryLoadPersistedFenIndex(
+      String pgnPath, int gameCount) async {
+    try {
+      final storage = StorageFactory.instance;
+      final stat = await storage.fileStat(pgnPath);
+      if (stat == null) return;
+
+      final idxPath = '$pgnPath.fenidx';
+      if (!await storage.fileExists(idxPath)) return;
+      final data = await storage.readFile(idxPath);
+      if (data == null || data.isEmpty) return;
+      final index = pgn.deserializeFenIndex(data,
+        expectedGameCount: gameCount,
+        expectedFileSize: stat.size,
+        expectedModifiedMs: stat.modified.millisecondsSinceEpoch,
+      );
+      if (index == null) return;
+      _fenIndex = index;
+    } catch (_) {
+      // Corrupt or unreadable — fall through to building from scratch.
+    }
+  }
+
+  Future<void> _buildFenIndex() async {
+    final generation = ++_fenIndexGeneration;
+    _fenIndex = null;
+
+    final gameData = allGames
+        .map((g) => (
+              headers: Map<String, String>.from(g.headers),
+              pgnText: g.pgnText,
+            ))
+        .toList();
+
+    final index = await Isolate.run(() => pgn.buildFenIndex(gameData));
+    if (!isActive() || generation != _fenIndexGeneration) return;
+
+    _fenIndex = index;
+    notifyListeners();
+    _persistFenIndex();
+  }
+
+  Future<void> _persistFenIndex() async {
+    if (filePath == null || _fenIndex == null) return;
+    try {
+      final storage = StorageFactory.instance;
+      final stat = await storage.fileStat(filePath!);
+      if (stat == null) return;
+      final data = pgn.serializeFenIndex(_fenIndex!,
+        gameCount: allGames.length,
+        fileSize: stat.size,
+        modifiedMs: stat.modified.millisecondsSinceEpoch,
+      );
+      await storage.writeFile('$filePath.fenidx', data);
+    } catch (e) {
+      debugPrint('Failed to persist FEN index: $e');
+    }
   }
 
   Future<void> tryRestoreSavedSlice(
@@ -514,7 +516,8 @@ class PgnViewerController extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
 
-    final indices = await applySliceConfig(config, allRecords);
+    final indices = await applySliceConfig(config, allRecords,
+        fenIndex: fenIndex);
     if (!isActive()) return;
 
     isLoading = false;
@@ -791,6 +794,7 @@ class PgnViewerController extends ChangeNotifier {
     try {
       await StorageFactory.instance
           .writeFile(filePath!, '${result.join('\n\n')}\n');
+      _persistFenIndex();
     } catch (e) {
       debugPrint('Failed to persist metadata: $e');
     }
@@ -895,7 +899,8 @@ class PgnViewerController extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
 
-    final indices = await applySliceConfig(newConfig, allRecords);
+    final indices = await applySliceConfig(newConfig, allRecords,
+        fenIndex: fenIndex);
     if (!isActive()) return;
 
     isLoading = false;
@@ -1174,6 +1179,23 @@ class PgnViewerController extends ChangeNotifier {
           treePositionGameCache.remove(k);
         }
       }
+
+      // Fast path: map FEN-index (allGames indices) → filteredGames indices
+      if (_fenIndex != null) {
+        final allIndices = _fenIndex![fen] ?? const [];
+        if (allIndices.isEmpty) return <int>[];
+        final entryToFiltered = <PgnGameEntry, int>{};
+        for (int fi = 0; fi < filteredGames.length; fi++) {
+          entryToFiltered[filteredGames[fi]] = fi;
+        }
+        final results = <int>[];
+        for (final ai in allIndices) {
+          final fi = entryToFiltered[allGames[ai]];
+          if (fi != null) results.add(fi);
+        }
+        return results;
+      }
+
       final results = <int>[];
       for (int i = 0; i < filteredGames.length; i++) {
         if (pgn.gamePassesThroughFen(

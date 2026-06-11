@@ -92,6 +92,18 @@ class IOStorageService implements StorageService {
   }
 
   @override
+  Future<({int size, DateTime modified})?> fileStat(String path) async {
+    try {
+      final file = await _resolveFile(path);
+      final stat = await file.stat();
+      if (stat.type == FileSystemEntityType.notFound) return null;
+      return (size: stat.size, modified: stat.modified);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
   Future<void> renameFile(String oldPath, String newPath) async {
     await (await _resolveFile(oldPath)).rename(newPath);
   }

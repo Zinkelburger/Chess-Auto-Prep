@@ -89,6 +89,37 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+
+    if (widget.computing) {
+      return Container(
+        constraints: widget.maxHeight != null
+            ? BoxConstraints(maxHeight: widget.maxHeight!)
+            : const BoxConstraints(),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Computing matches\u2026',
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final indices = _effectiveIndices;
     final total = widget.allGames.length;
     final matchCount = widget.matchedIndices?.length ?? total;
@@ -106,28 +137,15 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
           ),
           child: Row(
             children: [
-              if (widget.computing)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                Icon(Icons.format_list_numbered,
-                    size: 16, color: cs.onSurfaceVariant),
+              Icon(Icons.format_list_numbered,
+                  size: 16, color: cs.onSurfaceVariant),
               const SizedBox(width: 8),
               Text(
-                widget.computing
-                    ? 'Computing...'
-                    : '$matchCount / $total games',
+                '$matchCount / $total games',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: widget.computing
-                      ? cs.onSurfaceVariant
-                      : matchCount == 0
-                          ? cs.error
-                          : cs.primary,
+                  color: matchCount == 0 ? cs.error : cs.primary,
                 ),
               ),
               if (_searchQuery.isNotEmpty) ...[

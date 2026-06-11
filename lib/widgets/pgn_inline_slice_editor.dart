@@ -6,7 +6,6 @@
 library;
 
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 
@@ -36,6 +35,9 @@ class InlineSliceEditor extends StatefulWidget {
   /// Called when the user applies or clears the slice.
   final SliceResultCallback onResult;
 
+  /// Precomputed FEN → game-index map for instant position lookups.
+  final Map<String, List<int>>? fenIndex;
+
   /// Board preview controller for the lines preview hover.
   final BoardPreviewController? boardPreview;
 
@@ -48,6 +50,7 @@ class InlineSliceEditor extends StatefulWidget {
     this.initialConfig,
     this.currentFen,
     required this.onResult,
+    this.fenIndex,
     this.boardPreview,
     this.ownerTag,
   });
@@ -106,52 +109,16 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
     final seqGroups = seqState?.groups ?? const [];
     final seqGap = seqState?.gap ?? 4;
 
-    final games = widget.allGames;
-    final filterData = headerFilters
-        .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
-        .toList();
-    final gameData = games
-        .map((g) => (
-              headers: Map<String, String>.from(g.headers),
-              pgnText: g.pgnText
-            ))
-        .toList();
-    final seqGroupsCopy = seqGroups.map((g) => List<String>.from(g)).toList();
-
-    Isolate.run(() {
-      final indices = <int>[];
-      for (int i = 0; i < gameData.length; i++) {
-        final game = gameData[i];
-        bool matches = true;
-
-        if (positionFen != null) {
-          matches = pgn.gamePassesThroughFen(
-              game.headers, game.pgnText, positionFen);
-        }
-
-        if (matches && seqGroupsCopy.isNotEmpty) {
-          matches =
-              pgn.gameMatchesSequence(game.pgnText, seqGroupsCopy, seqGap);
-        }
-
-        if (matches) {
-          for (final f in filterData) {
-            if (f.value.isEmpty) continue;
-            final headerVal = game.headers[f.field] ?? '';
-            final mode = MatchMode.values.firstWhere(
-                (m) => m.name == f.modeName,
-                orElse: () => MatchMode.contains);
-            if (!pgn.matchesField(headerVal, f.value, mode)) {
-              matches = false;
-              break;
-            }
-          }
-        }
-
-        if (matches) indices.add(i);
-      }
-      return indices;
-    }).then((indices) {
+    pgn
+        .computeSliceMatches(
+          games: widget.allGames,
+          targetFen: positionFen,
+          filters: headerFilters,
+          seqGroups: seqGroups,
+          seqGap: seqGap,
+          fenIndex: widget.fenIndex,
+        )
+        .then((indices) {
       if (!mounted || generation != _computeGeneration) return;
       setState(() {
         _matchedIndices = indices;

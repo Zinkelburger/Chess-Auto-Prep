@@ -210,7 +210,12 @@ class HeaderFiltersState extends State<HeaderFilters> {
                     setState(() {
                       f.field = v!;
                       final modes = modesForField(f.field);
-                      if (!modes.contains(f.mode)) f.mode = modes.first;
+                      if (!modes.contains(f.mode)) {
+                        f.mode = modes.first;
+                      } else if (isNumericField(f.field) &&
+                          f.mode == MatchMode.contains) {
+                        f.mode = MatchMode.after;
+                      }
                     });
                     if (f.value.isNotEmpty) widget.onChanged();
                   },
@@ -232,7 +237,9 @@ class HeaderFiltersState extends State<HeaderFilters> {
                   items: availableModes
                       .map((m) => DropdownMenuItem(
                             value: m,
-                            child: Text(matchModeLabel(m),
+                            child: Text(
+                                matchModeLabel(m,
+                                    numeric: isNumericField(f.field)),
                                 style: const TextStyle(fontSize: 12)),
                           ))
                       .toList(),
