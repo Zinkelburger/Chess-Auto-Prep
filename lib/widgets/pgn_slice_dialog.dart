@@ -6,7 +6,6 @@
 library;
 
 import 'dart:async';
-import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +14,7 @@ import '../models/pgn_filter_models.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../utils/fen_utils.dart';
 import 'lines_preview_panel.dart';
+import 'position_preview_icon.dart';
 
 export '../models/pgn_filter_models.dart';
 
@@ -118,55 +118,8 @@ typedef SliceApplyCallback = void Function(
 // Isolate-safe slice compute — delegates to centralized helpers.
 // ---------------------------------------------------------------------------
 
-Future<List<int>> _runSliceCompute(
-  List<GameRecord> games,
-  String? targetFen,
-  List<({String field, MatchMode mode, String value})> filters,
-  List<List<String>> seqGroups,
-  int seqGap,
-) {
-  final filterData = filters
-      .map((f) => (field: f.field, modeName: f.mode.name, value: f.value))
-      .toList();
-  final gameData = games
-      .map((g) =>
-          (headers: Map<String, String>.from(g.headers), pgnText: g.pgnText))
-      .toList();
-  final seqGroupsCopy = seqGroups.map((g) => List<String>.from(g)).toList();
-
-  return Isolate.run(() {
-    final indices = <int>[];
-    for (int i = 0; i < gameData.length; i++) {
-      final game = gameData[i];
-      bool matches = true;
-
-      if (targetFen != null) {
-        matches = pgn.gamePassesThroughFen(
-            game.headers, game.pgnText, targetFen);
-      }
-
-      if (matches && seqGroupsCopy.isNotEmpty) {
-        matches = pgn.gameMatchesSequence(game.pgnText, seqGroupsCopy, seqGap);
-      }
-
-      if (matches) {
-        for (final f in filterData) {
-          if (f.value.isEmpty) continue;
-          final headerVal = game.headers[f.field] ?? '';
-          final mode = MatchMode.values.firstWhere((m) => m.name == f.modeName,
-              orElse: () => MatchMode.contains);
-          if (!pgn.matchesField(headerVal, f.value, mode)) {
-            matches = false;
-            break;
-          }
-        }
-      }
-
-      if (matches) indices.add(i);
-    }
-    return indices;
-  });
-}
+// Slice compute is delegated to pgn.computeSliceMatches (shared with
+// InlineSliceEditor and applySliceConfig).
 
 // ---------------------------------------------------------------------------
 // PgnSliceDialog
@@ -180,12 +133,16 @@ class PgnSliceDialog extends StatefulWidget {
   /// Pre‑populate the dialog from a previously saved config.
   final SliceConfig? initialConfig;
 
+  /// Precomputed FEN → game-index map for instant position lookups.
+  final Map<String, List<int>>? fenIndex;
+
   const PgnSliceDialog({
     super.key,
     required this.allGames,
     required this.currentFen,
     required this.onApply,
     this.initialConfig,
+    this.fenIndex,
   });
 
   @override
@@ -373,7 +330,15 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
         : const <List<String>>[];
     final seqGap = int.tryParse(_gapController.text) ?? 4;
 
-    _runSliceCompute(games, targetFen, filters, seqGroups, seqGap)
+    pgn
+        .computeSliceMatches(
+          games: games,
+          targetFen: targetFen,
+          filters: filters,
+          seqGroups: seqGroups,
+          seqGap: seqGap,
+          fenIndex: widget.fenIndex,
+        )
         .then((indices) {
       if (!mounted || generation != _computeGeneration) return;
       setState(() {
@@ -518,6 +483,8 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                 child: const Text('Apply', style: TextStyle(fontSize: 12)),
               ),
             ),
+            if (_positionController.text.isNotEmpty)
+              PositionPreviewIcon(inputGetter: () => _positionController.text),
             if (_hasPositionFilter || _positionController.text.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(left: 4),
@@ -824,7 +791,12 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                     setState(() {
                       f.field = v!;
                       final modes = _modesForField(f.field);
-                      if (!modes.contains(f.mode)) f.mode = modes.first;
+                      if (!modes.contains(f.mode)) {
+                        f.mode = modes.first;
+                      } else if (isNumericField(f.field) &&
+                          f.mode == MatchMode.contains) {
+                        f.mode = MatchMode.after;
+                      }
                     });
                     if (f.value.isNotEmpty) {
                       _recompute();
@@ -849,7 +821,9 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
                   items: availableModes
                       .map((m) => DropdownMenuItem(
                             value: m,
-                            child: Text(matchModeLabel(m),
+                            child: Text(
+                                matchModeLabel(m,
+                                    numeric: isNumericField(f.field)),
                                 style: const TextStyle(fontSize: 12)),
                           ))
                       .toList(),
