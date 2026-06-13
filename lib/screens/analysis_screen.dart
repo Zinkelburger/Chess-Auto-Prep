@@ -77,23 +77,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _buildToolbar(context),
-        if (_isAnalyzing)
-          LinearProgressIndicator(
-            minHeight: 2,
-            value:
-                _analysisTotal > 0 ? _analysisCurrent / _analysisTotal : null,
-          )
-        else
-          const Divider(height: 2, thickness: 2),
-        Expanded(child: _buildBody(context)),
-      ],
-    );
-  }
-
-  Widget _buildToolbar(BuildContext context) {
     final theme = Theme.of(context);
     final titleBlock = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,22 +84,56 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       children: [
         Text('Player Analysis', style: theme.textTheme.titleMedium),
         if (_currentPlayer != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Text(
-              _metadataSubtitle,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+          Text(
+            _metadataSubtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
       ],
     );
 
-    final controls = <Widget>[
-      if (_evalRunning) _buildEvalProgress(theme),
-      if (_currentPlayer != null)
-        SegmentedButton<bool>(
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 16,
+        title: titleBlock,
+        actions: [
+          if (_evalRunning) _buildEvalProgress(theme),
+          if (_currentPlayer != null) ..._buildColorControls(),
+          if (_openingTree != null && !_isAnalyzing && !_evalRunning)
+            TextButton.icon(
+              icon: const Icon(Icons.psychology, size: 18),
+              label: Text(_hasEvals ? 'Re-analyze' : 'Weaknesses'),
+              onPressed: _showWeaknessConfig,
+            ),
+          IconButton(
+            icon: const Icon(Icons.person_search),
+            tooltip: 'Select Player',
+            onPressed: _showPlayerSelection,
+          ),
+          const AppModeMenuButton(),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (_isAnalyzing)
+            LinearProgressIndicator(
+              minHeight: 2,
+              value: _analysisTotal > 0
+                  ? _analysisCurrent / _analysisTotal
+                  : null,
+            ),
+          Expanded(child: _buildBody(context)),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildColorControls() {
+    return [
+      Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: SegmentedButton<bool>(
           segments: const [
             ButtonSegment(
               value: true,
@@ -138,73 +155,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               _loadColorAnalysis();
             }
           },
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
         ),
-      if (_openingTree != null && !_isAnalyzing && !_evalRunning)
-        TextButton.icon(
-          icon: const Icon(Icons.psychology, size: 18),
-          label: Text(_hasEvals ? 'Re-analyze' : 'Weaknesses'),
-          onPressed: _showWeaknessConfig,
-        ),
+      ),
     ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        border: Border(bottom: BorderSide(color: theme.dividerColor)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isCompact = constraints.maxWidth < 1000;
-
-          if (!isCompact) {
-            return Row(
-              children: [
-                Expanded(child: titleBlock),
-                for (final control in controls) ...[
-                  control,
-                  const SizedBox(width: 12),
-                ],
-                IconButton(
-                  icon: const Icon(Icons.person_search),
-                  tooltip: 'Select Player',
-                  onPressed: _showPlayerSelection,
-                ),
-                const SizedBox(width: 4),
-                const AppModeMenuButton(),
-              ],
-            );
-          }
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: titleBlock),
-                  IconButton(
-                    icon: const Icon(Icons.person_search),
-                    tooltip: 'Select Player',
-                    onPressed: _showPlayerSelection,
-                  ),
-                  const SizedBox(width: 4),
-                  const AppModeMenuButton(),
-                ],
-              ),
-              if (controls.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: controls,
-                ),
-              ],
-            ],
-          );
-        },
-      ),
-    );
   }
 
   Widget _buildEvalProgress(ThemeData theme) {
@@ -444,11 +401,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         minOccurrences: config.minGames,
         depth: config.depth,
         onProgress: (c, t) {
-          if (mounted)
+          if (mounted) {
             setState(() {
               _evalCompleted = c;
               _evalTotal = t;
             });
+          }
         },
       );
 

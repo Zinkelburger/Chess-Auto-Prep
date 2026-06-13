@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';
@@ -42,8 +43,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       _appState = appState;
       _lastMode = appState.currentMode;
       appState.addListener(_onAppStateChanged);
-      appState.loadUsernames();
-      appState.loadSavedGames();
     });
   }
 
@@ -98,15 +97,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   Widget _createModeView(AppMode mode) {
     switch (mode) {
       case AppMode.tactics:
-        return const SafeArea(
-          bottom: false,
-          child: _TacticsModeView(),
-        );
+        return const _TacticsModeView();
       case AppMode.positionAnalysis:
-        return const SafeArea(
-          bottom: false,
-          child: AnalysisScreen(),
-        );
+        return const AnalysisScreen();
       case AppMode.repertoire:
         return const RepertoireScreen();
       case AppMode.repertoireTrainer:
@@ -123,72 +116,57 @@ class _TacticsModeView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
-    final theme = Theme.of(context);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 960;
+    return Scaffold(
+      appBar: AppBar(
+        titleSpacing: 16,
+        title: const Text('Tactics'),
+        actions: const [
+          AppModeMenuButton(),
+        ],
+      ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < kCompactBreakpoint;
 
-        return Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerLow,
-                border: Border(
-                  bottom: BorderSide(color: theme.dividerColor),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text('Tactics', style: theme.textTheme.titleMedium),
-                  ),
-                  const AppModeMenuButton(),
-                ],
-              ),
-            ),
-            Expanded(
-              child: isCompact
-                  ? Column(
-                      children: [
-                        Expanded(
-                          flex: 4,
-                          child: _TacticsBoardPane(appState: appState),
-                        ),
-                        const Divider(height: 1, thickness: 1),
-                        const Expanded(
-                          flex: 6,
-                          child: Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: TacticsControlPanel(),
-                          ),
-                        ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        Expanded(
-                          flex: 5,
-                          child: _TacticsBoardPane(appState: appState),
-                        ),
-                        Container(
-                          width: 1,
-                          color: Colors.grey[700],
-                        ),
-                        const Expanded(
-                          flex: 5,
-                          child: Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: TacticsControlPanel(),
-                          ),
-                        ),
-                      ],
+          return isCompact
+              ? Column(
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: _TacticsBoardPane(appState: appState),
                     ),
-            ),
-          ],
-        );
-      },
+                    const Divider(height: 1, thickness: 1),
+                    const Expanded(
+                      flex: 6,
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: TacticsControlPanel(),
+                      ),
+                    ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: _TacticsBoardPane(appState: appState),
+                    ),
+                    Container(
+                      width: 1,
+                      color: Colors.grey[700],
+                    ),
+                    const Expanded(
+                      flex: 5,
+                      child: Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: TacticsControlPanel(),
+                      ),
+                    ),
+                  ],
+                );
+        },
+      ),
     );
   }
 }

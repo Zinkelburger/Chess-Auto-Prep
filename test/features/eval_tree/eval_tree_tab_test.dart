@@ -4,8 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/eval_tree/controllers/eval_tree_controller.dart';
 import 'package:chess_auto_prep/features/eval_tree/widgets/eval_tree_tab.dart';
 import 'package:chess_auto_prep/models/build_tree_node.dart';
+import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 
 import 'eval_tree_test_helpers.dart';
+
+final _testRepertoire = RepertoireMetadata(
+  filePath: '/tmp/test-repertoire.pgn',
+  name: 'test',
+  lastModified: DateTime(2026, 1, 1),
+);
 
 void main() {
   Widget buildHarness({
@@ -31,7 +38,7 @@ void main() {
     await tester.pumpWidget(
       buildHarness(
         child: EvalTreeTab(
-          currentRepertoire: const {'filePath': '/tmp/test-repertoire.pgn'},
+          currentRepertoire: _testRepertoire,
           isWhiteRepertoire: true,
           generatedTree: tree,
           treeResetCounter: 0,
@@ -60,7 +67,7 @@ void main() {
     await tester.pumpWidget(
       buildHarness(
         child: EvalTreeTab(
-          currentRepertoire: const {'filePath': '/tmp/test-repertoire.pgn'},
+          currentRepertoire: _testRepertoire,
           isWhiteRepertoire: true,
           generatedTree: tree,
           treeResetCounter: 0,
@@ -109,9 +116,7 @@ void main() {
             body: TabBarView(
               children: [
                 EvalTreeTab(
-                  currentRepertoire: const {
-                    'filePath': '/tmp/test-repertoire.pgn'
-                  },
+                  currentRepertoire: _testRepertoire,
                   isWhiteRepertoire: true,
                   generatedTree: tree,
                   treeResetCounter: 0,
@@ -154,7 +159,7 @@ void main() {
       buildHarness(
         width: 320,
         child: EvalTreeTab(
-          currentRepertoire: const {'filePath': '/tmp/test-repertoire.pgn'},
+          currentRepertoire: _testRepertoire,
           isWhiteRepertoire: true,
           generatedTree: tree,
           treeResetCounter: 0,
@@ -235,7 +240,7 @@ class _EvalTreeReloadHarnessState extends State<_EvalTreeReloadHarness> {
   @override
   Widget build(BuildContext context) {
     return EvalTreeTab(
-      currentRepertoire: const {'filePath': '/tmp/test-repertoire.pgn'},
+      currentRepertoire: _testRepertoire,
       isWhiteRepertoire: true,
       generatedTree: _tree,
       treeResetCounter: 0,

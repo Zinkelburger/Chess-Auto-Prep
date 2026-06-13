@@ -329,7 +329,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       onMoveSelected: (uciMove) {
         final san = uciToSan(widget.controller.fen, uciMove);
         if (san != uciMove) {
-          widget.controller.userPlayedMove(san);
+          widget.controller.playMove(san);
         }
       },
       onLineMoveTapped: (sanMoves, index) {
@@ -370,7 +370,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       compact: true,
       onOpenSettings: () => showAnalysisSettingsSheet(context),
       autoComputeEnabled: false,
-      onMoveSelected: (san) => widget.controller.userPlayedMove(san),
+      onMoveSelected: (san) => widget.controller.playMove(san),
       onLineMoveClicked: (sanMoves, index) {
         widget.controller.applyLineFromCurrent(sanMoves, index);
         widget.boardPreview.clearPreview();

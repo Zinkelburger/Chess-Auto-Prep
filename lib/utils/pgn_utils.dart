@@ -63,21 +63,7 @@ int getPositionMatchDepth(RepertoireLine line, List<String> currentMoves) {
   return depth;
 }
 
-/// Format a move list with move numbers, e.g. `1.e4 e5 2.Nf3`.
-String formatMoves(List<String> moves) {
-  final buffer = StringBuffer();
-  for (int i = 0; i < moves.length; i++) {
-    if (i % 2 == 0) {
-      if (i > 0) buffer.write(' ');
-      buffer.write('${(i ~/ 2) + 1}.');
-    }
-    buffer.write(moves[i]);
-    if (i < moves.length - 1 && i % 2 == 1) buffer.write(' ');
-  }
-  return buffer.toString();
-}
-
-/// Like [formatMoves] but optimised for substring search (no trailing trim).
+/// Format a move list with move numbers optimised for substring search.
 String formatMovesForSearch(List<String> moves) {
   final buffer = StringBuffer();
   for (int i = 0; i < moves.length; i++) {

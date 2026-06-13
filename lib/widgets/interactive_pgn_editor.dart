@@ -9,11 +9,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
-import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
-import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show filterDisplayComment;
@@ -51,6 +49,20 @@ class InteractivePgnEditor extends StatefulWidget {
   /// Called when the user edits an existing line.
   final void Function(String updatedPgn)? onLineEdited;
 
+  /// Called after debounced edits while [isEditingExistingLine] is true.
+  /// Falls back to [onLineEdited] when null.
+  final ValueChanged<String>? onAutoSave;
+
+  /// Called when comment edits mark the line dirty.
+  final VoidCallback? onDirty;
+
+  /// Persists a newly saved line to repertoire storage.
+  final Future<void> Function(String repertoireName, String pgn)?
+      onPersistNewLine;
+
+  /// Copies PGN text to the clipboard and shows [successMessage] on success.
+  final void Function(String text, String successMessage)? onCopyToClipboard;
+
   /// Whether the editor is showing an existing line being edited in-place.
   final bool isEditingExistingLine;
 
@@ -74,6 +86,10 @@ class InteractivePgnEditor extends StatefulWidget {
     this.onMakeMainLine,
     this.onLineSaved,
     this.onLineEdited,
+    this.onAutoSave,
+    this.onDirty,
+    this.onPersistNewLine,
+    this.onCopyToClipboard,
     this.isEditingExistingLine = false,
     this.currentRepertoireName,
     this.repertoireColor,
@@ -92,13 +108,15 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   TreePath? _contextMenuPath;
   Timer? _autoSaveTimer;
   static const _autoSaveDelay = Duration(seconds: 2);
-  String? _lastLoadedPgnSignature;
+
+  List<Widget>? _cachedMoveWidgets;
+  MoveTree? _cachedTree;
+  TreePath? _cachedPath;
 
   @override
   void initState() {
     super.initState();
     _syncComment();
-    _tryLoadTitle();
   }
 
   @override
@@ -106,9 +124,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     super.didUpdateWidget(oldWidget);
     if (widget.currentPath != oldWidget.currentPath) {
       _syncComment();
-    }
-    if (!identical(widget.tree, oldWidget.tree)) {
-      _tryLoadTitle();
     }
   }
 
@@ -126,12 +141,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     _commentController.text = node?.comment ?? '';
   }
 
-  void _tryLoadTitle() {
-    final sig = '${widget.tree.startingFen}_${widget.tree.roots.length}';
-    if (sig == _lastLoadedPgnSignature) return;
-    _lastLoadedPgnSignature = sig;
-  }
-
   // ── Callbacks into controller ─────────────────────────────────────
 
   void _jumpTo(TreePath path) => widget.onJump?.call(path);
@@ -140,6 +149,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (widget.currentPath.isEmpty) return;
     final trimmed = comment.isEmpty ? null : comment;
     widget.onCommentChanged?.call(widget.currentPath, trimmed);
+    widget.onDirty?.call();
     _scheduleAutoSave();
   }
 
@@ -184,8 +194,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final subtree = MoveTree.fromMoves(fullMoves,
         startingFen: widget.tree.startingFen);
     final text = subtree.toPgnMoveText();
-    Clipboard.setData(ClipboardData(text: text));
-    showAppSnackBar(context, 'Line copied to clipboard');
+    widget.onCopyToClipboard?.call(text, 'Line copied to clipboard');
   }
 
   void _copyPgnFromHere() {
@@ -197,8 +206,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       roots: [node],
     );
     final text = subtree.toPgnMoveText();
-    Clipboard.setData(ClipboardData(text: text));
-    showAppSnackBar(context, AppMessages.pgnCopied);
+    widget.onCopyToClipboard?.call(text, AppMessages.pgnCopied);
   }
 
   void _scheduleAutoSave() {
@@ -207,7 +215,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     _autoSaveTimer = Timer(_autoSaveDelay, () {
       if (!mounted) return;
       final pgn = _buildFullPgnForSave();
-      widget.onLineEdited?.call(pgn);
+      final onSave = widget.onAutoSave ?? widget.onLineEdited;
+      onSave?.call(pgn);
     });
   }
 
@@ -244,7 +253,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     try {
       final fullPgn = _buildFullPgnForSave();
-      await _saveToRepertoireFile(repertoireName, fullPgn);
+      await widget.onPersistNewLine?.call(repertoireName, fullPgn);
       final moves = widget.tree.sanSequenceAt(
           widget.tree.mainlineEndFrom(TreePath.empty));
       final title = _titleController.text.trim();
@@ -281,18 +290,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     } finally {
       controller.dispose();
     }
-  }
-
-  Future<void> _saveToRepertoireFile(String repertoireName, String pgn) async {
-    final filename = 'repertoires/$repertoireName.pgn';
-    final currentContent =
-        await StorageFactory.instance.readRepertoirePgn(filename) ?? '';
-
-    final separator = currentContent.trimRight().isEmpty ? '' : '\n\n';
-    final entry = '$separator$pgn\n';
-
-    await StorageFactory.instance
-        .saveRepertoirePgn(filename, currentContent + entry);
   }
 
   // ── Context menu ──────────────────────────────────────────────────
@@ -365,16 +362,22 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       switch (value) {
         case 'comment':
           _focusCommentField();
+          break;
         case 'promote':
           _promoteVariation();
+          break;
         case 'mainline':
           _makeMainLine();
+          break;
         case 'duplicate':
           _duplicateLine();
+          break;
         case 'copy':
           _copyPgnFromHere();
+          break;
         case 'delete':
           _deleteFromHere();
+          break;
       }
     });
   }
@@ -529,6 +532,14 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     required TreePath parentPath,
     required Position positionBefore,
   }) {
+    if (parentPath.isEmpty && isFirstMove) {
+      if (_cachedMoveWidgets != null &&
+          identical(widget.tree, _cachedTree) &&
+          widget.currentPath == _cachedPath) {
+        return _cachedMoveWidgets!;
+      }
+    }
+
     final widgets = <Widget>[];
     if (siblings.isEmpty) return widgets;
 
@@ -639,6 +650,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       parentPath: mainPath,
       positionBefore: positionAfterMain,
     ));
+
+    if (parentPath.isEmpty && isFirstMove) {
+      _cachedMoveWidgets = widgets;
+      _cachedTree = widget.tree;
+      _cachedPath = widget.currentPath;
+    }
 
     return widgets;
   }

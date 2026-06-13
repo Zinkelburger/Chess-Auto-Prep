@@ -32,6 +32,7 @@ class AuditFindingsPanel extends StatefulWidget {
   final AuditSnapshot? interruptedSnapshot;
   final VoidCallback? onResumeAudit;
   final VoidCallback? onStartFreshAudit;
+  final VoidCallback? onStartAudit;
 
   const AuditFindingsPanel({
     super.key,
@@ -46,6 +47,7 @@ class AuditFindingsPanel extends StatefulWidget {
     this.interruptedSnapshot,
     this.onResumeAudit,
     this.onStartFreshAudit,
+    this.onStartAudit,
   });
 
   @override
@@ -634,9 +636,34 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
               style: TextStyle(color: Colors.grey[500], fontSize: 12)),
         );
       }
-      return const Center(
-        child: Text('No findings',
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.verified_outlined,
+                size: 40, color: Colors.grey[700]),
+            const SizedBox(height: 12),
+            Text('No audit findings',
+                style: TextStyle(
+                    color: Colors.grey[400],
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Text(
+              'Run an audit to check your repertoire for gaps, '
+              'weak moves, and missing responses.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            if (widget.onStartAudit != null)
+              OutlinedButton.icon(
+                onPressed: widget.onStartAudit,
+                icon: const Icon(Icons.policy_outlined, size: 16),
+                label: const Text('Start Audit'),
+              ),
+          ],
+        ),
       );
     }
 

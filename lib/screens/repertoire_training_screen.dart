@@ -3,9 +3,11 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
+import '../models/repertoire_metadata.dart';
 import '../models/repertoire_review_entry.dart';
 import '../services/training/training_phase.dart';
 import '../services/training/training_session_controller.dart';
@@ -16,7 +18,6 @@ import '../widgets/training/repertoire_selector_panel.dart';
 import '../widgets/training/training_board_controls.dart';
 import '../widgets/training/training_progress_panel.dart';
 import '../widgets/training/training_results_panel.dart';
-import '../widgets/shortcut_tooltip.dart';
 import '../widgets/training/training_settings_panel.dart';
 import 'repertoire_selection_screen.dart';
 
@@ -25,7 +26,7 @@ import 'repertoire_selection_screen.dart';
 // ---------------------------------------------------------------------------
 
 class RepertoireTrainingScreen extends StatefulWidget {
-  final Map<String, dynamic>? repertoire;
+  final RepertoireMetadata? repertoire;
   final String? startLineId;
 
   const RepertoireTrainingScreen({
@@ -87,13 +88,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     final appState = context.read<AppState>();
     if (appState.pendingRepertoirePath != null &&
         appState.currentMode == AppMode.repertoireTrainer) {
-      _training.setRepertoire({
-        'filePath': appState.pendingRepertoirePath,
-        'name': appState.pendingRepertoirePath!
-            .split('/')
-            .last
-            .replaceAll('.pgn', ''),
-      });
+      _training.setRepertoire(RepertoireMetadata(
+        filePath: appState.pendingRepertoirePath!,
+        name: p.basenameWithoutExtension(appState.pendingRepertoirePath!),
+        lastModified: DateTime.now(),
+      ));
       final lineId = appState.pendingLineId;
       appState.pendingRepertoirePath = null;
       appState.pendingLineId = null;
@@ -106,7 +105,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   }
 
   Future<void> _selectRepertoire() async {
-    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+    final result = await Navigator.of(context).push<RepertoireMetadata>(
       MaterialPageRoute(builder: (_) => const RepertoireSelectionScreen()),
     );
     if (result != null) {
@@ -120,7 +119,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   void _openInBuilder() {
     if (_training.repertoire == null) return;
     context.read<AppState>().switchToBuilder(
-          repertoirePath: _training.repertoire!['filePath'] as String,
+          repertoirePath: _training.repertoire!.filePath,
           lineId: _training.currentLine?.id,
         );
   }
@@ -202,7 +201,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
           Text('Repertoire Trainer', style: theme.textTheme.titleMedium),
           if (repertoire != null)
             Text(
-              repertoire['name'] as String? ?? '',
+              repertoire.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall,
@@ -222,12 +221,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
             icon: const Icon(Icons.construction),
             onPressed: _openInBuilder,
           ),
-        const AppModeMenuButton(),
         IconButton(
           tooltip: 'Select repertoire',
           icon: const Icon(Icons.library_books),
           onPressed: _selectRepertoire,
         ),
+        const AppModeMenuButton(),
         const SizedBox(width: 8),
       ],
     );

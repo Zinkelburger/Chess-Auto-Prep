@@ -18,17 +18,44 @@ abstract final class AppColors {
 
   static const divider = Color(0x24FFFFFF);
 
+  // ── Canonical semantic colors (one name per distinct value) ─────────────
+
+  static const success = Color(0xFF66BB6A);
+  static const danger = Color(0xFFEF5350);
+  static const warning = Color(0xFFFFCA28);
+
   // ── Chess eval (centipawns) ─────────────────────────────────────────────
 
-  static const evalPositive = Color(0xFF66BB6A);
-  static const evalNegative = Color(0xFFEF5350);
+  static const evalPositive = success;
+  static const evalNegative = danger;
   static const evalNeutral = Color(0xFFB0B0B0);
 
   static const evalPositiveMuted = Color(0xFF7A9E82);
   static const evalNegativeMuted = Color(0xFF9E7A7A);
   static const evalNeutralMuted = Color(0xFF8A8A8A);
 
-  static Color cpEval(int cp, {bool muted = false, int threshold = 50}) {
+  static const cpEvalThreshold = 50;
+  static const cpEvalBgStrongCp = 100;
+  static const cpEvalBgMildCp = 30;
+
+  static const coherenceHighThreshold = 0.7;
+  static const coherenceMidThreshold = 0.4;
+
+  static const trapScoreHighThreshold = 0.5;
+  static const trapScoreMidThreshold = 0.2;
+
+  static const winProbStrongThreshold = 0.65;
+  static const winProbMidThreshold = 0.55;
+  static const winProbNeutralThreshold = 0.45;
+
+  static const easeHighThreshold = 0.8;
+  static const easeMidThreshold = 0.6;
+
+  static const cplExcellentThreshold = 5;
+  static const cplGoodThreshold = 15;
+  static const cplFairThreshold = 30;
+
+  static Color cpEval(int cp, {bool muted = false, int threshold = cpEvalThreshold}) {
     if (cp > threshold) {
       return muted ? evalPositiveMuted : evalPositive;
     }
@@ -40,16 +67,16 @@ abstract final class AppColors {
 
   static Color cpEvalBg(int cp, {bool muted = false}) {
     if (muted) {
-      if (cp > 100) return const Color(0xFF2A3530);
-      if (cp > 30) return const Color(0xFF252E2A);
-      if (cp > -30) return const Color(0xFF2C2C2C);
-      if (cp > -100) return const Color(0xFF302825);
+      if (cp > cpEvalBgStrongCp) return const Color(0xFF2A3530);
+      if (cp > cpEvalBgMildCp) return const Color(0xFF252E2A);
+      if (cp > -cpEvalBgMildCp) return const Color(0xFF2C2C2C);
+      if (cp > -cpEvalBgStrongCp) return const Color(0xFF302825);
       return const Color(0xFF302525);
     }
-    if (cp > 100) return const Color(0xFF1B3D1F);
-    if (cp > 30) return const Color(0xFF1E3320);
-    if (cp > -30) return const Color(0xFF2C2C2C);
-    if (cp > -100) return const Color(0xFF3D2525);
+    if (cp > cpEvalBgStrongCp) return const Color(0xFF1B3D1F);
+    if (cp > cpEvalBgMildCp) return const Color(0xFF1E3320);
+    if (cp > -cpEvalBgMildCp) return const Color(0xFF2C2C2C);
+    if (cp > -cpEvalBgStrongCp) return const Color(0xFF3D2525);
     return const Color(0xFF4A2020);
   }
 
@@ -59,7 +86,7 @@ abstract final class AppColors {
   static const expectimax = Color(0xFF4DB6AC);
   static const maia = Color(0xFFCE93D8);
   static const lichessDb = Color(0xFF4DD0E1);
-  static const difficulty = Color(0xFFFFCA28);
+  static const difficulty = warning;
 
   static const stockfishMuted = Color(0xFFB8A67A);
   static const expectimaxMuted = Color(0xFF7A9E9A);
@@ -77,11 +104,8 @@ abstract final class AppColors {
 
   // ── Semantic actions ────────────────────────────────────────────────────
 
-  static const success = Color(0xFF66BB6A);
   static const successSurface = Color(0xFF2E7D32);
-  static const danger = Color(0xFFEF5350);
   static const dangerSurface = Color(0xFFC62828);
-  static const warning = Color(0xFFFFCA28);
   static const warningSurface = Color(0xFFF57F17);
 
   static const info = Color(0xFF42A5F5);
@@ -133,38 +157,58 @@ abstract final class AppColors {
   static const coherenceLowMuted = Color(0xFF9E7A7A);
 
   static Color coherence(double c, {bool muted = false}) {
-    if (c >= 0.7) return muted ? coherenceHighMuted : coherenceHigh;
-    if (c >= 0.4) return muted ? coherenceMidMuted : coherenceMid;
+    if (c >= coherenceHighThreshold) {
+      return muted ? coherenceHighMuted : coherenceHigh;
+    }
+    if (c >= coherenceMidThreshold) {
+      return muted ? coherenceMidMuted : coherenceMid;
+    }
     return muted ? coherenceLowMuted : coherenceLow;
   }
 
   static Color trapScore(double score, {bool muted = false}) {
-    if (score >= 0.5) return muted ? danger.withValues(alpha: 0.7) : danger;
-    if (score >= 0.2) return muted ? warningMuted : warning;
+    if (score >= trapScoreHighThreshold) {
+      return muted ? danger.withValues(alpha: 0.7) : danger;
+    }
+    if (score >= trapScoreMidThreshold) {
+      return muted ? warningMuted : warning;
+    }
     return muted ? coherenceMidMuted : coherenceMid;
   }
 
   static Color winProbability(double v, {bool muted = false}) {
-    if (v > 0.65) return muted ? evalPositiveMuted : evalPositive;
-    if (v > 0.55) {
+    if (v > winProbStrongThreshold) {
+      return muted ? evalPositiveMuted : evalPositive;
+    }
+    if (v > winProbMidThreshold) {
       return muted ? const Color(0xFF8FAF92) : const Color(0xFF81C784);
     }
-    if (v > 0.45) return muted ? evalNeutralMuted : evalNeutral;
+    if (v > winProbNeutralThreshold) {
+      return muted ? evalNeutralMuted : evalNeutral;
+    }
     return muted ? warningMuted : warning;
   }
 
   static Color ease(double ease, {bool muted = false}) {
-    if (ease > 0.8) return muted ? evalPositiveMuted : evalPositive;
-    if (ease > 0.6) return muted ? coherenceMidMuted : coherenceMid;
+    if (ease > easeHighThreshold) {
+      return muted ? evalPositiveMuted : evalPositive;
+    }
+    if (ease > easeMidThreshold) {
+      return muted ? coherenceMidMuted : coherenceMid;
+    }
     return muted ? warningMuted : warning;
   }
 
   static Color cpl(double cpl, {bool muted = false}) {
-    if (cpl < 5) return muted ? evalPositiveMuted : evalPositive;
-    if (cpl < 15) {
+    if (cpl < cplExcellentThreshold) {
+      return muted ? evalPositiveMuted : evalPositive;
+    }
+    if (cpl < cplGoodThreshold) {
       return muted ? const Color(0xFF8FAF92) : const Color(0xFF81C784);
     }
-    if (cpl < 30) return muted ? coherenceMidMuted : coherenceMid;
+    if (cpl < cplFairThreshold) {
+      return muted ? coherenceMidMuted : coherenceMid;
+    }
     return muted ? warningMuted : warning;
   }
 
