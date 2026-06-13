@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../constants/ui_breakpoints.dart';
 import '../../screens/settings_screen.dart';
 import '../../theme/app_colors.dart';
 import '../app_mode_menu_button.dart';
 import '../shortcut_tooltip.dart';
 import '../layout/board_zone.dart';
-import '../layout/repertoire_mode.dart';
-import '../layout/repertoire_mode_switcher.dart';
 
 /// App bar for the repertoire screen: title, generation status, and actions.
 class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
@@ -19,13 +18,12 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.showSelectRepertoireAction = false,
     this.generationLocked = false,
     this.trapNavigation,
-    this.mode,
-    this.onModeChanged,
     required this.onOpenSettings,
     this.onSelectRepertoire,
     this.onTrainRepertoire,
     this.onOpenGeneration,
     this.onOpenAudit,
+    this.onImportPgn,
     this.isWhiteRepertoire,
     this.onSwitchColor,
   });
@@ -37,13 +35,12 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final bool showSelectRepertoireAction;
   final bool generationLocked;
   final Widget? trapNavigation;
-  final RepertoireMode? mode;
-  final ValueChanged<RepertoireMode>? onModeChanged;
   final VoidCallback onOpenSettings;
   final VoidCallback? onSelectRepertoire;
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
   final VoidCallback? onOpenAudit;
+  final VoidCallback? onImportPgn;
   final bool? isWhiteRepertoire;
   final VoidCallback? onSwitchColor;
 
@@ -56,12 +53,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
       titleSpacing: 16,
       title: title,
       actions: [
-        if (mode != null && onModeChanged != null)
-          RepertoireModeSwitcher(
-            mode: mode!,
-            onModeChanged: onModeChanged!,
-            enabled: !generationLocked,
-          ),
         BoardZoneControls(trapNavigation: trapNavigation),
         if (onOpenGeneration != null)
           RepertoireGenerateButton(onPressed: onOpenGeneration),
@@ -77,10 +68,12 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             onPressed: generationLocked ? null : onTrainRepertoire,
           ),
         PopupMenuButton<String>(
-          icon: const Icon(Icons.settings, size: 20),
-          tooltip: 'Settings',
+          icon: const Icon(Icons.more_vert, size: 20),
+          tooltip: 'More actions',
           onSelected: (value) {
             switch (value) {
+              case 'import_pgn':
+                onImportPgn?.call();
               case 'switch_color':
                 onSwitchColor?.call();
               case 'settings':
@@ -88,6 +81,18 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             }
           },
           itemBuilder: (_) => [
+            if (onImportPgn != null)
+              const PopupMenuItem(
+                value: 'import_pgn',
+                child: ListTile(
+                  leading: Icon(Icons.upload_file, size: 20),
+                  title: Text('Import PGN'),
+                  trailing: Text('I',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
             if (isWhiteRepertoire != null && onSwitchColor != null)
               PopupMenuItem(
                 value: 'switch_color',
@@ -115,11 +120,11 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
         ),
-        const AppModeMenuButton(),
         if (showSelectRepertoireAction && onSelectRepertoire != null)
           RepertoireSelectButton(
             onPressed: generationLocked ? null : onSelectRepertoire,
           ),
+        const AppModeMenuButton(),
       ],
     );
   }
@@ -225,9 +230,10 @@ class RepertoireGenerateButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 900;
+    final compact =
+        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
     return Padding(
-      padding: const EdgeInsets.only(right: 4),
+      padding: const EdgeInsets.only(right: 8),
       child: Center(
         child: compact
             ? ShortcutIconButton(
@@ -260,7 +266,8 @@ class RepertoireSelectButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 760;
+    final compact =
+        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -291,7 +298,8 @@ class RepertoireTrainButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 900;
+    final compact =
+        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Center(
@@ -321,9 +329,10 @@ class RepertoireAuditButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 900;
+    final compact =
+        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
     return Padding(
-      padding: const EdgeInsets.only(right: 4),
+      padding: const EdgeInsets.only(right: 8),
       child: Center(
         child: compact
             ? ShortcutIconButton(

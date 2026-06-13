@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../core/generation_session_controller.dart';
+import '../models/repertoire_metadata.dart';
 import 'repertoire_generation_tab.dart';
 
 /// Shows the generation config dialog and returns true if generation was started.
@@ -14,7 +15,7 @@ Future<bool?> showGenerationConfigDialog(
   BuildContext context, {
   required String fen,
   required bool isWhiteRepertoire,
-  required Map<String, dynamic>? currentRepertoire,
+  required RepertoireMetadata? currentRepertoire,
   required List<String> currentMoveSequence,
   required void Function(List<String>, String, String) onLineSaved,
   required GenerationSessionController generationController,
@@ -38,7 +39,7 @@ Future<bool?> showGenerationConfigDialog(
 class _GenerationConfigDialog extends StatefulWidget {
   final String fen;
   final bool isWhiteRepertoire;
-  final Map<String, dynamic>? currentRepertoire;
+  final RepertoireMetadata? currentRepertoire;
   final List<String> currentMoveSequence;
   final void Function(List<String>, String, String) onLineSaved;
   final GenerationSessionController generationController;
