@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -14,8 +16,28 @@ import 'services/default_pgn_service.dart';
 import 'services/engine/engine_lifecycle.dart';
 import 'services/eval_cache.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint('FlutterError: ${details.exceptionAsString()}');
+  };
+
+  runZonedGuarded(() async {
+    try {
+      await _initializeApp();
+      runApp(const ChessAutoPrepApp());
+    } catch (error, stackTrace) {
+      debugPrint('Startup failed: $error\n$stackTrace');
+      runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
+    }
+  }, (error, stackTrace) {
+    debugPrint('Uncaught async error: $error\n$stackTrace');
+  });
+}
+
+Future<void> _initializeApp() async {
   await windowManager.ensureInitialized();
 
   await EngineSettings().loadFromPrefs();
@@ -25,8 +47,6 @@ void main() async {
 
   _startBrowserExtensionServer();
   DefaultPgnService.ensureExtracted();
-
-  runApp(const ChessAutoPrepApp());
 }
 
 void _startBrowserExtensionServer() async {
@@ -43,6 +63,64 @@ void _startBrowserExtensionServer() async {
   }
 }
 
+/// Shown when startup initialization fails before [ChessAutoPrepApp] can run.
+class StartupErrorApp extends StatelessWidget {
+  const StartupErrorApp({
+    super.key,
+    required this.error,
+    this.stackTrace,
+  });
+
+  final Object error;
+  final StackTrace? stackTrace;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      theme: ThemeData(
+        colorScheme: const ColorScheme.dark(
+          surface: AppColors.surface,
+          onSurface: Colors.white,
+          error: AppColors.danger,
+        ),
+        scaffoldBackgroundColor: AppColors.surface,
+        useMaterial3: true,
+      ),
+      home: Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.error_outline, color: AppColors.danger, size: 48),
+                const SizedBox(height: 16),
+                Text(
+                  'Chess Auto Prep failed to start',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 12),
+                Text('$error'),
+                if (stackTrace != null) ...[
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Text(
+                        '$stackTrace',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ChessAutoPrepApp extends StatelessWidget {
   const ChessAutoPrepApp({super.key});
 
@@ -53,7 +131,7 @@ class ChessAutoPrepApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) {
             final appState = AppState();
-            appState.loadUsernames(); // Load saved usernames
+            appState.loadUsernames();
             return appState;
           },
         ),

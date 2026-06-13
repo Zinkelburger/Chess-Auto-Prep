@@ -152,10 +152,14 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                       ..._internalHighlights
                     },
                     flipped: widget.flipped,
+                    lightColor: lightSquareColor,
+                    darkColor: darkSquareColor,
+                    selectColor: selectedSquareColor,
+                    highlightColor: highlightColor,
                   ),
                   size: Size(boardSize, boardSize),
                 ),
-                ..._buildPieceWidgets(boardSize, squareSize),
+                ..._buildPieceWidgets(squareSize),
                 if (widget.annotations.isNotEmpty)
                   CustomPaint(
                     painter: _AnnotationPainter(
@@ -176,7 +180,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     );
   }
 
-  List<Widget> _buildPieceWidgets(double boardSize, double squareSize) {
+  List<Widget> _buildPieceWidgets(double squareSize) {
     final pieces = <Widget>[];
 
     for (String file in ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
@@ -451,6 +455,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
         uci: uci,
       ));
     } catch (e) {
+      debugPrint('[ChessBoardWidget] Move failed: $e');
       _clearSelection();
     }
   }
@@ -495,11 +500,19 @@ class _BoardPainter extends CustomPainter {
   final String? selectedSquare;
   final Set<String> highlightedSquares;
   final bool flipped;
+  final Color lightColor;
+  final Color darkColor;
+  final Color selectColor;
+  final Color highlightColor;
 
   _BoardPainter({
     required this.selectedSquare,
     required this.highlightedSquares,
     required this.flipped,
+    required this.lightColor,
+    required this.darkColor,
+    required this.selectColor,
+    required this.highlightColor,
   });
 
   @override
@@ -520,11 +533,9 @@ class _BoardPainter extends CustomPainter {
 
         final Color color;
         if (square == selectedSquare) {
-          color = _ChessBoardWidgetState.selectedSquareColor;
+          color = selectColor;
         } else {
-          color = isLightSquare
-              ? _ChessBoardWidgetState.lightSquareColor
-              : _ChessBoardWidgetState.darkSquareColor;
+          color = isLightSquare ? lightColor : darkColor;
         }
 
         final rect = Rect.fromLTWH(x, y, squareSize, squareSize);
@@ -534,7 +545,7 @@ class _BoardPainter extends CustomPainter {
           canvas.drawRect(
               rect,
               Paint()
-                ..color = _ChessBoardWidgetState.highlightColor
+                ..color = highlightColor
                 ..blendMode = BlendMode.multiply);
         }
       }
@@ -560,7 +571,17 @@ class _BoardPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _BoardPainter old) =>
+      selectedSquare != old.selectedSquare ||
+      flipped != old.flipped ||
+      !_setEquals(highlightedSquares, old.highlightedSquares) ||
+      lightColor != old.lightColor ||
+      darkColor != old.darkColor ||
+      selectColor != old.selectColor ||
+      highlightColor != old.highlightColor;
+
+  static bool _setEquals(Set<String> a, Set<String> b) =>
+      a.length == b.length && a.containsAll(b);
 }
 
 /// Paints arrows, circles, and labels on top of the board and pieces.

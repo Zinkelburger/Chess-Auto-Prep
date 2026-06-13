@@ -130,7 +130,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
 
   Future<void> _onCandidateTap(CandidateMove move) async {
     if (move.inRepertoire) {
-      widget.controller.userPlayedMoveOnCurrentPath(move.san);
+      widget.controller.playMove(move.san);
       return;
     }
     try {
@@ -139,7 +139,7 @@ class _ExplorerSectionState extends State<ExplorerSection> {
         san: move.san,
         pathFromRoot: widget.controller.currentMoveSequence,
       );
-      widget.controller.userPlayedMoveOnCurrentPath(move.san);
+      widget.controller.playMove(move.san);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

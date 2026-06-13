@@ -562,21 +562,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         onTap: _reclaimFocus,
         child: _controller.isFullScreen
             ? _buildFullScreenView(theme)
-            : SafeArea(
-                bottom: false,
-                child: Stack(
+            : Scaffold(
+                appBar: _buildAppBar(theme),
+                body: Stack(
                   children: [
-                    Column(
-                      children: [
-                        _buildTopBar(theme),
-                        Expanded(
-                          child: ResponsiveSplitLayout(
-                            breakpoint: kCompactBreakpoint,
-                            primary: _buildBoardPane(),
-                            secondary: _buildSidePanel(),
-                          ),
-                        ),
-                      ],
+                    ResponsiveSplitLayout(
+                      breakpoint: kCompactBreakpoint,
+                      primary: _buildBoardPane(),
+                      secondary: _buildSidePanel(),
                     ),
                     if (_controller.isLoading)
                       Positioned.fill(
@@ -629,77 +622,79 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
   }
 
-  Widget _buildTopBar(ThemeData theme) {
+  PreferredSizeWidget _buildAppBar(ThemeData theme) {
     final fileName = _controller.filePath != null
         ? p.basename(_controller.filePath!)
         : '';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLow,
-        border: Border(bottom: BorderSide(color: theme.dividerColor)),
-      ),
-      child: Row(
+    return AppBar(
+      titleSpacing: 16,
+      title: Row(
         children: [
-          Text('PGN Viewer', style: theme.textTheme.titleMedium),
+          const Text('PGN Viewer'),
           const SizedBox(width: 12),
-          OutlinedButton.icon(
-            onPressed: _pickFile,
-            icon: const Icon(Icons.folder_open, size: 18),
-            label: Text(fileName.isEmpty ? 'Open PGN' : fileName),
+          Flexible(
+            child: OutlinedButton.icon(
+              onPressed: _pickFile,
+              icon: const Icon(Icons.folder_open, size: 18),
+              label: Text(
+                fileName.isEmpty ? 'Open PGN' : fileName,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
           if (_controller.allGames.isNotEmpty) ...[
             const SizedBox(width: 8),
             Expanded(child: _buildSliceChips()),
-          ] else
-            const Spacer(),
-          if (_controller.filteredGames.isNotEmpty) ...[
-            IconButton(
-              onPressed: _exportSlice,
-              icon: const Icon(Icons.file_upload_outlined, size: 20),
-              tooltip: 'Export filtered games (Ctrl+E)',
-            ),
-            IconButton(
-              onPressed: _controller.toggleOpeningTree,
-              icon: Icon(
-                Icons.account_tree,
-                size: 20,
-                color: _controller.showOpeningTree
-                    ? Theme.of(context).colorScheme.primary
-                    : null,
-              ),
-              tooltip: 'Opening tree (T)',
-            ),
-            IconButton(
-              onPressed: _controller.toggleBoardFlipped,
-              icon: const Icon(Icons.swap_vert, size: 20),
-              tooltip: 'Flip board (F)',
-            ),
-            _buildPerspectiveButton(),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, size: 20),
-              tooltip: 'More actions',
-              onSelected: (value) {
-                if (value == 'generate_repertoire') {
-                  _generateRepertoireFromGames();
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'generate_repertoire',
-                  child: ListTile(
-                    leading: Icon(Icons.auto_fix_high, size: 20),
-                    title: Text('Generate repertoire from games'),
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                ),
-              ],
-            ),
           ],
-          const AppModeMenuButton(),
         ],
       ),
+      actions: [
+        if (_controller.filteredGames.isNotEmpty) ...[
+          IconButton(
+            onPressed: _exportSlice,
+            icon: const Icon(Icons.file_upload_outlined, size: 20),
+            tooltip: 'Export filtered games (Ctrl+E)',
+          ),
+          IconButton(
+            onPressed: _controller.toggleOpeningTree,
+            icon: Icon(
+              Icons.account_tree,
+              size: 20,
+              color: _controller.showOpeningTree
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            tooltip: 'Opening tree (T)',
+          ),
+          IconButton(
+            onPressed: _controller.toggleBoardFlipped,
+            icon: const Icon(Icons.swap_vert, size: 20),
+            tooltip: 'Flip board (F)',
+          ),
+          _buildPerspectiveButton(),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 20),
+            tooltip: 'More actions',
+            onSelected: (value) {
+              if (value == 'generate_repertoire') {
+                _generateRepertoireFromGames();
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'generate_repertoire',
+                child: ListTile(
+                  leading: Icon(Icons.auto_fix_high, size: 20),
+                  title: Text('Generate repertoire from games'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ),
+        ],
+        const AppModeMenuButton(),
+      ],
     );
   }
 

@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../constants/chess_constants.dart';
 import '../../../models/build_tree_node.dart';
+import '../../../models/repertoire_metadata.dart';
 import '../services/eval_tree_file_loader.dart';
 import '../../../services/generation/tree_serialization.dart';
 import '../tree_colors.dart';
@@ -42,7 +43,7 @@ class EvalTreePositionSelection {
 }
 
 class EvalTreeTab extends StatefulWidget {
-  final Map<String, dynamic>? currentRepertoire;
+  final RepertoireMetadata? currentRepertoire;
   final bool isWhiteRepertoire;
   final BuildTree? generatedTree;
   final int treeResetCounter;
@@ -94,8 +95,8 @@ class _EvalTreeTabState extends State<EvalTreeTab>
       widget.onControllerReady?.call(_controller);
     }
 
-    final oldPath = oldWidget.currentRepertoire?['filePath'] as String?;
-    final newPath = widget.currentRepertoire?['filePath'] as String?;
+    final oldPath = oldWidget.currentRepertoire?.filePath;
+    final newPath = widget.currentRepertoire?.filePath;
     if (oldPath != newPath) {
       _dismissed = false;
       _clearTreeState();
@@ -408,7 +409,7 @@ class _EvalTreeTabState extends State<EvalTreeTab>
   }
 
   String? _treePath() {
-    final filePath = widget.currentRepertoire?['filePath'] as String?;
+    final filePath = widget.currentRepertoire?.filePath;
     if (filePath == null || filePath.isEmpty) {
       return null;
     }

@@ -549,7 +549,7 @@ class _EditContextZoneState extends State<EditContextZone> {
       onMoveSelected: (uciMove) {
         final san = uciToSan(controller.fen, uciMove);
         if (san != uciMove) {
-          controller.userPlayedMove(san);
+          controller.playMove(san);
         }
       },
       onLineMoveTapped: (sanMoves, index) {
@@ -573,7 +573,7 @@ class _EditContextZoneState extends State<EditContextZone> {
       isGenerating: widget.isGenerating,
       isGenerationPaused: widget.isGenerationPaused,
       autoComputeEnabled: true,
-      onMoveSelected: controller.userPlayedMove,
+      onMoveSelected: controller.playMove,
       onLineMoveClicked: (sanMoves, index) {
         controller.applyLineFromCurrent(sanMoves, index);
         preview.clearPreview();
