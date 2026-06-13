@@ -27,6 +27,7 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | Default 1 worker for interactive analysis | **Deferred** | Still uses full `EngineSettings.workers` for interactive |
 | Inline PGN viewer engine unified with lifecycle | **Deferred** | Spec recommends keeping separate; still a separate worker path |
 | Integration perf tests (toggle ON/OFF timing, process count) | **Not started** | Unit tests exist; no automated process/RSS checks |
+| `enterGeneration` / `exitGeneration` race safety | **Done** | Wrapped in `EngineLifecycle._serialExec` (June 2026 remediation) |
 
 ### Layout & navigation
 
@@ -36,7 +37,9 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | Draggable zone dividers | **Not started** | Fixed flex ratios only (`RepertoireLayout`) |
 | Eval bar docked on board (Lichess-style) | **Not started** | Engine output lives in context panel / analysis dock, not under board |
 | Dedicated **Expectimax toggle** on board toolbar | **Partial** | `EngineToggleButton` only; expectimax visibility via dock settings (`showExpectimaxDock`) |
-| Full unified keyboard shortcuts | **Partial** | `Ctrl+Z` undo exists; missing `E`, `X`, `G`, `1`/`2`, `Tab`, `Shift+←/→` trap nav as global shortcuts |
+| Repertoire keyboard shortcuts (`RepertoireShortcuts`) | **Done** | Extracted from `RepertoireScreen`; E/X/G/A/I/F, bottom-pane 1/2/3, Ctrl+Z, Ctrl+Shift+V — see COMPONENT_MAP |
+| Typed `RepertoireMetadata` (replace repertoire maps) | **Done** | `Map<String, dynamic>` replaced across selection, controller, storage, generation, training |
+| Full unified keyboard shortcuts (all modes) | **Partial** | Repertoire screen complete; other modes differ; still missing global Tab, Shift+←/→ trap nav |
 | Remove legacy tab hybrid in Edit wide mode | **Partial** | Wide Edit still uses `RepertoireTabBar` (Browse + PGN tabs) while context is a separate zone |
 | Status bar expectimax / coherence metrics | **Partial** | `RepertoireStatusBar` shows coverage, traps, lines, engine, tree nodes — not V% or coherence |
 
@@ -70,8 +73,26 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | `RepertoireTreeExplorer` DB frequency columns | **Not started** | Explorer shows engine metrics, not Lichess W/D/B |
 | Entry: **Build manually** (empty repertoire, DB-only) | **Partial** | DB fallback in `CandidateService` works; no dedicated entry CTA |
 | Entry: **Browse Result** after generation | **Partial** | Tree loads; no explicit post-gen browse button |
-| PGN editor writes exclusively through `RepertoireWriter` | **Partial** | Browse/suggestions use writer; editor may still write directly |
+| PGN editor writes exclusively through `RepertoireWriter` | **Partial** | Clipboard/persist I/O extracted to `EditMainZone` callbacks (`onAutoSave`, `onCopyToClipboard`, `onDirty`); structural edits still via controller/service |
 | Tree-path navigation (single source of truth) | **Done** | `MoveTree` + `TreePath` cursor in `RepertoireController`; PGN editor is a pure view; no `addPostFrameCallback` sync; arrow keys always go through controller |
+
+### Generation & bottom pane UX
+
+| Item | Status | Notes |
+|------|--------|-------|
+| **Simplified generation config** | **Done** | Only Max Depth + Engine Depth visible by default; selection mode, thresholds, opponent model, PGN export under "Advanced settings" |
+| **Friendlier mode names** | **Done** | "Expectimax (recommended)", "Quick Build (no engine)", "From Your Games (PGN database)" |
+| **Trap detection info banner** | **Done** | Amber banner below build mode: "Traps are automatically detected after building" |
+| **Inline config in Jobs tab** | **Done** | Generation and audit config show inline in Jobs tab (bottom pane), replacing floating dialogs |
+| **Rich progress display** | **Done** | C-like stats: depth, nodes, rate (n/min), elapsed, ETA — monospace row in Jobs panel |
+| **Finish Now button** | **Done** | Stops Phase 1 BFS, proceeds to Phase 2 on partial tree; controller `finishNow()`/`clearFinishNow()` |
+| **Enriched job tiles** | **Done** | Status labels, type labels, subtree indicator, differentiated icons for completed/failed/cancelled |
+| **Findings empty state** | **Done** | Descriptive text + "Start Audit" button |
+| **Auto-switch to Lines tab** | **Done** | Tools column switches to Lines tab after generation completes |
+| **Line probability display** | **Done** | Reach probability badge on each `LineItemRow` when `importance > 0` |
+| Extract `GenerationConfigForm` from generation tab | **Done** | `lib/widgets/generation/generation_config_form.dart`; tab owns build orchestration only |
+| Lines browser performance (debounce, lazy list) | **Done** | 300 ms search debounce, single `setState` filter reset, grouped `ListView.builder` in `LinesListPanel` |
+| PGN editor move-widget memoization | **Done** | `_buildMoveWidgets` cached when tree + path unchanged |
 
 ### Expectimax lines & hover
 
@@ -83,7 +104,7 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | **Merge on-the-fly subtree** into main `BuildTree` | **Not started** | `OnTheFlyExpectimaxService` caches per-FEN only |
 | Inline move **annotations** on lines (prob %, ★ repertoire, ⚠ trap) | **Not started** | `MoveAnnotation` model not on `ClickableMoveLineWidget` |
 | Side-by-side Engine + Expectimax panels | **Partial** | `RepertoireAnalysisDock` tabs; not simultaneous split |
-| Hover preview on **all** move surfaces | **Partial** | Engine, expectimax, browse, traps, suggestions, PGN trap dots — **not** eval-tree explorer rows, lines browser move text, all PGN moves |
+| Hover preview on **all** move surfaces | **Partial** | Engine, expectimax, browse, traps, suggestions, PGN trap dots, lines browser — **not** eval-tree explorer rows, all PGN moves |
 | Auto on-the-fly when entering unexplored FEN | **Not started** | Manual compute only |
 | Persist on-the-fly results to disk | **Not started** | Session cache only |
 | Independent persist of expectimax panel toggle | **Partial** | `showExpectimaxDock` persisted; not spec’s toolbar toggle semantics |
@@ -92,9 +113,11 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 
 | Item | Status | Notes |
 |------|--------|-------|
+| **TrapsBrowser in tools column** | **Done** | Lines tab → Traps segmented view; rich rows with mini board, per-reply stats, classification badges, sort by Eval Drop/Most Common/Trap%/Surplus |
+| **Enriched trap tooltips in PGN** | **Done** | Multi-line tooltip: mistake description, popularity, reach probability, score |
+| **Traps empty state** | **Done** | Prompts "Generate Repertoire" with button when no traps detected |
 | Trap detail when **current position is a trap** (browse context) | **Partial** | Expanded trap list under candidates; not full card in context zone |
 | Eval bar → tap trap indicator → detail | **Not started** | |
-| **`T`** keyboard shortcut for trap detail | **Not started** | |
 | Detail card actions: **Show Refutation**, **Train This Line** | **Not started** | Buttons stubbed or absent |
 | Sort lines by **ETV** (expected trap value) | **Partial** | Trap count sort exists; ETV sort not exposed |
 
@@ -128,6 +151,7 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | **Tradeoff sliders** (eval / ease / coherence) in generation | **Not started** | |
 | Coherence-aware **generation selection** modifier | **Not started** | |
 | Prominent **risk-line** warnings in lines list | **Partial** | `CoherencePanel` shows risk; not inline on every line row |
+| FP-Growth off UI thread | **Done** | `CoherenceService.compute` runs mining in `Isolate.run` |
 | **v2**: PrefixSpan sequence mining, FEN collapse, pawn-structure tags | **Deferred** | Explicitly future in spec |
 
 ---
@@ -157,6 +181,7 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 |------|--------|-------|
 | README reflects repertoire builder scope | **Partial** | Updated to point at `docs/COMPONENT_MAP.md`; expand feature list over time |
 | `docs/ALGORITHM.md` file paths | **Partial** | Flutter-side paths; top-level doc links to `tree_builder/ALGORITHM.md` for C CLI |
+| `docs/COMPONENT_MAP.md` reflects June 2026 remediation | **Done** | Typed metadata, API removals, new widgets, performance fixes documented |
 
 ---
 
