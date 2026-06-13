@@ -3,8 +3,11 @@
 /// grouping, detailed previews, and optional coverage annotations
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/repertoire_line.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
@@ -44,6 +47,7 @@ class RepertoireLinesBrowser extends StatefulWidget {
   final List<TrapLineInfo> traps;
   final CoherenceResult? coherenceResult;
   final NavigationStack? navigationStack;
+  final BoardPreviewController? boardPreview;
 
   const RepertoireLinesBrowser({
     super.key,
@@ -64,6 +68,7 @@ class RepertoireLinesBrowser extends StatefulWidget {
     this.traps = const [],
     this.coherenceResult,
     this.navigationStack,
+    this.boardPreview,
   });
 
   @override
@@ -73,15 +78,16 @@ class RepertoireLinesBrowser extends StatefulWidget {
 class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  Timer? _searchDebounce;
 
   List<RepertoireLine> _filteredLines = [];
   Map<String, List<RepertoireLine>> _groupedLines = {};
   final Set<String> _expandedGroups = {};
 
   bool _showOnlyMatchingPosition = true;
-  String _sortBy = 'name';
+  LineSortBy _sortBy = LineSortBy.name;
   CoverageFilter _coverageFilter = CoverageFilter.all;
-  String _metricsFilter = 'all';
+  LineMetricsFilter _metricsFilter = LineMetricsFilter.all;
 
   Map<String, LineCoverageInfo> _lineCoverage = {};
   Map<String, LineQualityInfo> _lineMetrics = {};
@@ -101,27 +107,34 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     if (oldWidget.coverageResult != widget.coverageResult) {
       _computeLineCoverage();
     }
-    if (oldWidget.tree != widget.tree ||
+    final metricsChanged = oldWidget.tree != widget.tree ||
         oldWidget.traps != widget.traps ||
-        oldWidget.coherenceResult != widget.coherenceResult) {
+        oldWidget.coherenceResult != widget.coherenceResult;
+    if (metricsChanged) {
       _computeLineMetrics();
     }
     if (oldWidget.lines != widget.lines ||
         oldWidget.currentMoveSequence != widget.currentMoveSequence ||
-        oldWidget.coverageResult != widget.coverageResult) {
+        oldWidget.coverageResult != widget.coverageResult ||
+        metricsChanged) {
       _filterAndGroupLines();
     }
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
   void _onSearchChanged() {
-    _filterAndGroupLines();
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      _filterAndGroupLines();
+    });
   }
 
   void _computeLineCoverage() {
@@ -143,7 +156,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     );
   }
 
-  void _filterAndGroupLines() {
+  void _filterAndGroupLines({bool rebuild = true}) {
     final result = filterSortAndGroupLines(
       allLines: widget.lines,
       searchTerm: _searchController.text,
@@ -157,27 +170,34 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
       coverageResult: widget.coverageResult,
     );
 
-    setState(() {
+    void apply() {
       _filteredLines = result.filtered;
       _groupedLines = result.grouped;
       _expandedGroups.addAll(result.groupsToExpand);
-    });
+    }
+
+    if (rebuild) {
+      setState(apply);
+    } else {
+      apply();
+    }
   }
 
   bool get _hasActiveFilters =>
       _searchController.text.isNotEmpty ||
       _showOnlyMatchingPosition ||
       _coverageFilter != CoverageFilter.all ||
-      _metricsFilter != 'all';
+      _metricsFilter != LineMetricsFilter.all;
 
   void _resetAllFilters() {
+    _searchDebounce?.cancel();
     setState(() {
       _searchController.clear();
       _showOnlyMatchingPosition = false;
       _coverageFilter = CoverageFilter.all;
-      _metricsFilter = 'all';
+      _metricsFilter = LineMetricsFilter.all;
+      _filterAndGroupLines(rebuild: false);
     });
-    _filterAndGroupLines();
   }
 
   void _toggleGroup(String groupName) {
@@ -249,6 +269,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
             onLineRenamed: widget.onLineRenamed,
             onNavigateToPosition: widget.onNavigateToPosition,
             navigationStack: widget.navigationStack,
+            boardPreview: widget.boardPreview,
             hasActiveFilters: _hasActiveFilters,
             onResetFilters: _resetAllFilters,
           ),

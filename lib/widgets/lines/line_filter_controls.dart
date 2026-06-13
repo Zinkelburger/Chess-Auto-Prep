@@ -14,11 +14,11 @@ class LineFilterControls extends StatelessWidget {
   final VoidCallback? onCoveragePressed;
   final bool isCoverageRunning;
 
-  final String sortBy;
-  final ValueChanged<String> onSortByChanged;
+  final LineSortBy sortBy;
+  final ValueChanged<LineSortBy> onSortByChanged;
 
-  final String metricsFilter;
-  final ValueChanged<String> onMetricsFilterChanged;
+  final LineMetricsFilter metricsFilter;
+  final ValueChanged<LineMetricsFilter> onMetricsFilterChanged;
 
   final CoverageResult? coverageResult;
   final CoverageFilter coverageFilter;
@@ -78,10 +78,10 @@ class _HeaderSection extends StatelessWidget {
   final ValueChanged<bool> onShowOnlyMatchingPositionChanged;
   final VoidCallback? onCoveragePressed;
   final bool isCoverageRunning;
-  final String sortBy;
-  final ValueChanged<String> onSortByChanged;
-  final String metricsFilter;
-  final ValueChanged<String> onMetricsFilterChanged;
+  final LineSortBy sortBy;
+  final ValueChanged<LineSortBy> onSortByChanged;
+  final LineMetricsFilter metricsFilter;
+  final ValueChanged<LineMetricsFilter> onMetricsFilterChanged;
 
   const _HeaderSection({
     required this.searchController,
@@ -200,35 +200,35 @@ class _HeaderSection extends StatelessWidget {
               Text('Sort: ',
                   style: TextStyle(fontSize: 11, color: Colors.grey[400])),
               _SortChip(
-                  label: 'Name', value: 'name', sortBy: sortBy, onChanged: onSortByChanged),
+                  label: 'Name', value: LineSortBy.name, sortBy: sortBy, onChanged: onSortByChanged),
               const SizedBox(width: 4),
               _SortChip(
                   label: 'Quality',
-                  value: 'quality',
+                  value: LineSortBy.quality,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
               const SizedBox(width: 4),
               _SortChip(
                   label: 'Playability',
-                  value: 'playability',
+                  value: LineSortBy.playability,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
               const SizedBox(width: 4),
               _SortChip(
                   label: 'Traps',
-                  value: 'traps',
+                  value: LineSortBy.traps,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
               const SizedBox(width: 4),
               _SortChip(
                   label: 'Coherence',
-                  value: 'coherence',
+                  value: LineSortBy.coherence,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
               const SizedBox(width: 4),
               _SortChip(
                   label: 'Length',
-                  value: 'length',
+                  value: LineSortBy.length,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
             ],
@@ -239,23 +239,23 @@ class _HeaderSection extends StatelessWidget {
               Text('Filter: ',
                   style: TextStyle(fontSize: 11, color: Colors.grey[400])),
               _MetricsFilterChip(
-                  label: 'All', value: 'all', metricsFilter: metricsFilter, onChanged: onMetricsFilterChanged),
+                  label: 'All', value: LineMetricsFilter.all, metricsFilter: metricsFilter, onChanged: onMetricsFilterChanged),
               const SizedBox(width: 4),
               _MetricsFilterChip(
                   label: 'Hard moves',
-                  value: 'hard_moves',
+                  value: LineMetricsFilter.hardMoves,
                   metricsFilter: metricsFilter,
                   onChanged: onMetricsFilterChanged),
               const SizedBox(width: 4),
               _MetricsFilterChip(
                   label: 'Trappy',
-                  value: 'trappy',
+                  value: LineMetricsFilter.trappy,
                   metricsFilter: metricsFilter,
                   onChanged: onMetricsFilterChanged),
               const SizedBox(width: 4),
               _MetricsFilterChip(
                   label: 'Low coherence',
-                  value: 'low_coherence',
+                  value: LineMetricsFilter.lowCoherence,
                   metricsFilter: metricsFilter,
                   onChanged: onMetricsFilterChanged),
             ],
@@ -268,9 +268,9 @@ class _HeaderSection extends StatelessWidget {
 
 class _SortChip extends StatelessWidget {
   final String label;
-  final String value;
-  final String sortBy;
-  final ValueChanged<String> onChanged;
+  final LineSortBy value;
+  final LineSortBy sortBy;
+  final ValueChanged<LineSortBy> onChanged;
 
   const _SortChip({
     required this.label,
@@ -305,9 +305,9 @@ class _SortChip extends StatelessWidget {
 
 class _MetricsFilterChip extends StatelessWidget {
   final String label;
-  final String value;
-  final String metricsFilter;
-  final ValueChanged<String> onChanged;
+  final LineMetricsFilter value;
+  final LineMetricsFilter metricsFilter;
+  final ValueChanged<LineMetricsFilter> onChanged;
 
   const _MetricsFilterChip({
     required this.label,
@@ -321,8 +321,8 @@ class _MetricsFilterChip extends StatelessWidget {
     final isSelected = metricsFilter == value;
     return GestureDetector(
       onTap: () {
-        if (isSelected && value != 'all') {
-          onChanged('all');
+        if (isSelected && value != LineMetricsFilter.all) {
+          onChanged(LineMetricsFilter.all);
         } else {
           onChanged(value);
         }

@@ -10,10 +10,12 @@
 library;
 
 import 'package:flutter/material.dart';
-
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
+import 'package:chess_auto_prep/features/traps/models/trap_reply.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
+import '../../../utils/chess_utils.dart';
+import '../../../widgets/chess_board_widget.dart';
 import '../../../theme/app_colors.dart';
 import 'trap_detail_card.dart';
 import 'trap_summary_header.dart';
@@ -41,7 +43,7 @@ class TrapsBrowser extends StatefulWidget {
 }
 
 class _TrapsBrowserState extends State<TrapsBrowser> {
-  String _sortBy = 'surplus'; // 'surplus', 'trap', 'reach', 'eval'
+  String _sortBy = 'eval'; // 'eval', 'reach', 'surplus', 'trap'
   int? _expandedIndex;
 
   List<TrapLineInfo> get _sortedTraps {
@@ -114,13 +116,13 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
             ),
           ],
           const Spacer(),
-          _buildSortChip('Surplus', 'surplus'),
+          _buildSortChip('Eval Drop', 'eval'),
+          const SizedBox(width: 4),
+          _buildSortChip('Most Common', 'reach'),
           const SizedBox(width: 4),
           _buildSortChip('Trap %', 'trap'),
           const SizedBox(width: 4),
-          _buildSortChip('Reach', 'reach'),
-          const SizedBox(width: 4),
-          _buildSortChip('Eval', 'eval'),
+          _buildSortChip('Surplus', 'surplus'),
         ],
       ),
     );
@@ -154,6 +156,9 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
     final matchDepth = _getMatchDepth(trap.movesSan, currentMoves);
     final isPositionMatch =
         matchDepth == currentMoves.length && currentMoves.isNotEmpty;
+    final position = trap.fen != null ? tryParseFen(trap.fen!) : null;
+    final replies = trap.allReplies ?? const [];
+    final topReplies = replies.take(4).toList();
 
     return InkWell(
       onTap: () => widget.onTrapSelected?.call(trap),
@@ -173,54 +178,38 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top row: rank + key stats
+            // Header: rank + opening + reach + expand
             Row(
               children: [
-                // Rank number
-                SizedBox(
-                  width: 28,
-                  child: Text(
-                    '${index + 1}.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[500],
-                    ),
+                Text(
+                  '#${index + 1}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey[500],
                   ),
                 ),
-
-                // Trick surplus badge
+                if (trap.openingName != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      trap.openingName!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey[300],
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ] else
+                  const Spacer(),
                 _buildStatBadge(
-                  '${trap.trickSurplus >= 0 ? "+" : ""}${(trap.trickSurplus * 100).toStringAsFixed(1)}%',
-                  AppColors.warning,
-                  tooltip: 'Trick surplus',
+                  '${(trap.cumulativeProb * 100).toStringAsFixed(1)}% reach',
+                  Colors.blueGrey,
+                  tooltip: 'Probability of reaching this position',
                 ),
-                const SizedBox(width: 6),
-
-                // Trap score
-                _buildStatBadge(
-                  '${(trap.trapScore * 100).toStringAsFixed(0)}%',
-                  _trapScoreColor(trap.trapScore),
-                  tooltip: 'Trap score',
-                ),
-                const SizedBox(width: 6),
-
-                // Eval diff
-                _buildStatBadge(
-                  '+${trap.evalDiffCp}cp',
-                  AppColors.evalPositive,
-                  tooltip: 'Centipawn gain',
-                ),
-
-                const Spacer(),
-
-                // Reach probability
-                Text(
-                  '${(trap.cumulativeProb * 100).toStringAsFixed(2)}% reach',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                ),
-
-                // Expand/collapse
+                const SizedBox(width: 4),
                 IconButton(
                   icon: Icon(
                     isExpanded ? Icons.expand_less : Icons.expand_more,
@@ -240,38 +229,90 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
             ),
             const SizedBox(height: 6),
 
-            // Move sequence with highlighting
+            // Move sequence
             _buildMovesPreview(trap, matchDepth),
+            const SizedBox(height: 8),
 
-            const SizedBox(height: 6),
-
-            // Mistake summary line
-            RichText(
-              text: TextSpan(
-                style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-                children: [
-                  TextSpan(
-                    text: trap.popularMove,
-                    style: TextStyle(
-                      color: AppColors.danger,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
+            // Main content: mini board + reply stats
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (position != null)
+                  Container(
+                    width: 120,
+                    height: 120,
+                    margin: const EdgeInsets.only(right: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: Colors.grey[700]!,
+                        width: 0.5,
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: IgnorePointer(
+                      child: ChessBoardWidget(
+                        position: position,
+                        enableUserMoves: false,
+                      ),
                     ),
                   ),
-                  TextSpan(
-                    text:
-                        ' (${(trap.popularProb * 100).toStringAsFixed(0)}%) loses ${trap.evalDiffCp}cp vs best ',
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Opponent replies:',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[500],
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      for (final reply in topReplies)
+                        _buildReplyRow(reply, trap),
+                      if (replies.length > 4)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            '+${replies.length - 4} more',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[600],
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  TextSpan(
-                    text: trap.bestMove,
-                    style: TextStyle(
-                      color: AppColors.evalPositive,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Bottom stat badges
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                _buildStatBadge(
+                  '+${trap.evalDiffCp}cp gain',
+                  AppColors.evalPositive,
+                  tooltip: 'Centipawn advantage when opponent blunders',
+                ),
+                _buildStatBadge(
+                  '${(trap.trapScore * 100).toStringAsFixed(0)}% trap',
+                  _trapScoreColor(trap.trapScore),
+                  tooltip: 'Trap score: likelihood × severity',
+                ),
+                _buildStatBadge(
+                  '+${(trap.trickSurplus * 100).toStringAsFixed(1)}% surplus',
+                  AppColors.warning,
+                  tooltip: 'Practical advantage beyond raw eval',
+                ),
+              ],
             ),
 
             // Expanded detail panel
@@ -285,6 +326,90 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReplyRow(TrapReply reply, TrapLineInfo trap) {
+    final evalDrop = (trap.positionEvalCp ?? 0) - reply.evalAfterCp;
+    final isGood = reply.classification == TrapReplyClass.good;
+    final isBad = reply.classification == TrapReplyClass.blunder ||
+        reply.classification == TrapReplyClass.mistake;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 42,
+            child: Text(
+              reply.san,
+              style: TextStyle(
+                fontSize: 12,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.bold,
+                color: isGood
+                    ? AppColors.evalPositive
+                    : isBad
+                        ? AppColors.danger
+                        : Colors.orange[300],
+              ),
+            ),
+          ),
+          if (!isGood && evalDrop > 0)
+            Text(
+              'drops ${evalDrop}cp',
+              style: TextStyle(
+                fontSize: 10,
+                color: isBad ? AppColors.danger : Colors.orange[300],
+              ),
+            )
+          else if (isGood)
+            Text(
+              'best move',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.evalPositive,
+              ),
+            ),
+          const Spacer(),
+          Text(
+            '${(reply.probability * 100).toStringAsFixed(0)}%',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[400],
+            ),
+          ),
+          const SizedBox(width: 6),
+          _buildClassBadge(reply.classification),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassBadge(TrapReplyClass cls) {
+    final (label, color) = switch (cls) {
+      TrapReplyClass.blunder => ('BLUNDER', AppColors.danger),
+      TrapReplyClass.mistake => ('MISTAKE', Colors.orange),
+      TrapReplyClass.inaccuracy => ('INACCURACY', Colors.amber),
+      TrapReplyClass.acceptable => ('OK', Colors.grey),
+      TrapReplyClass.good => ('BEST', AppColors.evalPositive),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          color: color,
+          letterSpacing: 0.3,
         ),
       ),
     );

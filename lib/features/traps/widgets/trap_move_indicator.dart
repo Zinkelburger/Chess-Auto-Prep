@@ -26,8 +26,18 @@ class TrapMoveIndicator extends StatelessWidget {
   final Object? ownerTag;
   final double size;
 
-  String get _tooltip =>
-      'Trap: ${trap.mistakeDescription} (+${trap.evalDiffCp}cp)';
+  String get _tooltip {
+    final parts = <String>[
+      'Trap: ${trap.mistakeDescription} (+${trap.evalDiffCp}cp)',
+      '${(trap.popularProb * 100).toStringAsFixed(0)}% play ${trap.popularMove}',
+      'Reach: ${(trap.cumulativeProb * 100).toStringAsFixed(1)}%',
+    ];
+    if (trap.trapScore > 0) {
+      parts.add(
+          'Score: ${(trap.trapScore * 100).toStringAsFixed(0)}%');
+    }
+    return parts.join('\n');
+  }
 
   void _onEnter(PointerEvent event) {
     final preview = boardPreview;

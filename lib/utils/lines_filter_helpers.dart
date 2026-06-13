@@ -13,6 +13,25 @@ enum CoverageFilter {
   unaccounted,
 }
 
+/// Sort order for the lines browser.
+enum LineSortBy {
+  name,
+  length,
+  position,
+  quality,
+  playability,
+  traps,
+  coherence,
+}
+
+/// Quality/metrics filter for the lines browser.
+enum LineMetricsFilter {
+  all,
+  hardMoves,
+  trappy,
+  lowCoherence,
+}
+
 bool isPlaceholderLineTitle(String title) =>
     title.isEmpty ||
     title == '?' ||
@@ -47,9 +66,9 @@ String getLineGroupName(RepertoireLine line) {
   required String searchTerm,
   required bool showOnlyMatchingPosition,
   required List<String> currentMoves,
-  required String sortBy,
+  required LineSortBy sortBy,
   required CoverageFilter coverageFilter,
-  required String metricsFilter,
+  required LineMetricsFilter metricsFilter,
   required Map<String, LineCoverageInfo> lineCoverage,
   required Map<String, LineQualityInfo> lineMetrics,
   CoverageResult? coverageResult,
@@ -100,65 +119,56 @@ String getLineGroupName(RepertoireLine line) {
     return true;
   }).toList();
 
-  if (metricsFilter != 'all') {
+  if (metricsFilter != LineMetricsFilter.all) {
     filtered = filtered.where((line) {
       final m = lineMetrics[line.id];
       if (m == null) return false;
-      switch (metricsFilter) {
-        case 'hard_moves':
-          return m.bottleneckQuality != null && m.bottleneckQuality! < 0.3;
-        case 'trappy':
-          return m.trapCount > 0;
-        case 'low_coherence':
-          return m.coherence != null && m.coherence! < 0.4;
-        default:
-          return true;
-      }
+      return switch (metricsFilter) {
+        LineMetricsFilter.all => true,
+        LineMetricsFilter.hardMoves =>
+          m.bottleneckQuality != null && m.bottleneckQuality! < 0.3,
+        LineMetricsFilter.trappy => m.trapCount > 0,
+        LineMetricsFilter.lowCoherence =>
+          m.coherence != null && m.coherence! < 0.4,
+      };
     }).toList();
   }
 
   switch (sortBy) {
-    case 'length':
+    case LineSortBy.length:
       filtered.sort((a, b) => b.moves.length.compareTo(a.moves.length));
-      break;
-    case 'position':
+    case LineSortBy.position:
       filtered.sort((a, b) {
         final aMatch = pgn_utils.getPositionMatchDepth(a, currentMoves);
         final bMatch = pgn_utils.getPositionMatchDepth(b, currentMoves);
         if (aMatch != bMatch) return bMatch.compareTo(aMatch);
         return a.name.compareTo(b.name);
       });
-      break;
-    case 'quality':
+    case LineSortBy.quality:
       filtered.sort((a, b) {
         final aq = lineMetrics[a.id]?.quality ?? 0.5;
         final bq = lineMetrics[b.id]?.quality ?? 0.5;
         return aq.compareTo(bq);
       });
-      break;
-    case 'playability':
+    case LineSortBy.playability:
       filtered.sort((a, b) {
         final ap = lineMetrics[a.id]?.playability ?? 0.5;
         final bp = lineMetrics[b.id]?.playability ?? 0.5;
         return bp.compareTo(ap);
       });
-      break;
-    case 'traps':
+    case LineSortBy.traps:
       filtered.sort((a, b) {
         final at = lineMetrics[a.id]?.trapCount ?? 0;
         final bt = lineMetrics[b.id]?.trapCount ?? 0;
         return bt.compareTo(at);
       });
-      break;
-    case 'coherence':
+    case LineSortBy.coherence:
       filtered.sort((a, b) {
         final ac = lineMetrics[a.id]?.coherence ?? 0.5;
         final bc = lineMetrics[b.id]?.coherence ?? 0.5;
         return bc.compareTo(ac);
       });
-      break;
-    case 'name':
-    default:
+    case LineSortBy.name:
       filtered.sort((a, b) => a.name.compareTo(b.name));
   }
 

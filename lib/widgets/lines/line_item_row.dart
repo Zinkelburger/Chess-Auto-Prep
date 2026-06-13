@@ -13,6 +13,11 @@ import '../hoverable_move_chips.dart';
 
 /// A single repertoire line row with stats, coverage, and move preview.
 class LineItemRow extends StatelessWidget {
+  static const int linesTabIndex = 2;
+  static const int maxUnaccountedGroupsPreview = 2;
+  static const int maxUnaccountedMovesPreview = 4;
+  static const double bottleneckQualityThreshold = 0.3;
+
   final RepertoireLine line;
   final int index;
   final bool indented;
@@ -197,6 +202,30 @@ class LineItemRow extends StatelessWidget {
                     color: Colors.grey[500],
                   ),
                 ),
+                if (line.importance != null && line.importance! > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.blueGrey.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: Colors.blueGrey.withValues(alpha: 0.4),
+                        width: 0.5,
+                      ),
+                    ),
+                    child: Text(
+                      '${(line.importance! * 100).toStringAsFixed(1)}%',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 6),
@@ -328,19 +357,21 @@ class _UnaccountedAnnotation extends StatelessWidget {
     final groups = info!.groupedUnaccounted.entries.toList();
     if (groups.isEmpty) return const SizedBox.shrink();
 
-    final displayGroups = groups.take(2).toList();
+    final displayGroups =
+        groups.take(LineItemRow.maxUnaccountedGroupsPreview).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: displayGroups.map((group) {
-        final moves = group.value
+        final moves = [...group.value]
           ..sort((a, b) {
             if (a.gameCount != b.gameCount) {
               return b.gameCount.compareTo(a.gameCount);
             }
             return b.probability.compareTo(a.probability);
           });
-        final displayMoves = moves.take(4).toList();
+        final displayMoves =
+            moves.take(LineItemRow.maxUnaccountedMovesPreview).toList();
 
         return Padding(
           padding: const EdgeInsets.only(top: 4),
@@ -395,9 +426,9 @@ class _UnaccountedAnnotation extends StatelessWidget {
                         ),
                       );
                     }),
-                    if (moves.length > 4)
+                    if (moves.length > LineItemRow.maxUnaccountedMovesPreview)
                       Text(
-                        '+${moves.length - 4} more',
+                        '+${moves.length - LineItemRow.maxUnaccountedMovesPreview} more',
                         style: TextStyle(
                           fontSize: 10,
                           color:
@@ -480,7 +511,7 @@ class _HardMoveWarning extends StatelessWidget {
     final m = metrics;
     if (m == null ||
         m.bottleneckQuality == null ||
-        m.bottleneckQuality! >= 0.3) {
+        m.bottleneckQuality! >= LineItemRow.bottleneckQualityThreshold) {
       return const SizedBox.shrink();
     }
 
@@ -514,7 +545,7 @@ class _HardMoveWarning extends StatelessWidget {
               onTap: () {
                 if (navigationStack != null) {
                   navigationStack!.push(const NavigationEntry(
-                    tabIndex: 2,
+                    tabIndex: LineItemRow.linesTabIndex,
                     fen: '',
                     label: 'Lines',
                     reason: 'hard_move',
