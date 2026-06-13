@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dartchess/dartchess.dart';
-import '../models/chess_game.dart';
-import '../services/pgn_service.dart';
 import '../services/lichess_auth_service.dart';
 
 enum AppMode {
@@ -15,15 +13,12 @@ enum AppMode {
 
 class AppState extends ChangeNotifier {
   AppMode _currentMode = AppMode.tactics;
-  List<ChessGameModel> _loadedGames = [];
   Position _currentPosition = Chess.initial;
   String? _lichessUsername;
   String? _chesscomUsername;
-  bool _isLoading = false;
   bool _isAnalysisMode = false;
   bool _isRepertoireGenerating = false;
   bool? _initialBoardFlipped;
-  final PgnService _pgnService = PgnService();
 
   /// Pending repertoire path for builder<->trainer seamless switching.
   /// Set before switching modes; consumed by the target screen on activation.
@@ -35,11 +30,9 @@ class AppState extends ChangeNotifier {
   List<String>? pendingGenerationPgnPaths;
 
   AppMode get currentMode => _currentMode;
-  List<ChessGameModel> get loadedGames => _loadedGames;
   Position get currentPosition => _currentPosition;
   String? get lichessUsername => _lichessUsername;
   String? get chesscomUsername => _chesscomUsername;
-  bool get isLoading => _isLoading;
   bool get isAnalysisMode => _isAnalysisMode;
   bool get isRepertoireGenerating => _isRepertoireGenerating;
   bool get boardFlipped {
@@ -108,16 +101,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadSavedGames() async {
-    try {
-      final games = await _pgnService.loadImportedGames();
-      _loadedGames = games;
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Failed to load saved games: $e');
-    }
-  }
-
   Future<void> _saveLichessUsername(String? username) async {
     final prefs = await SharedPreferences.getInstance();
     if (username != null) {
@@ -136,25 +119,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  void setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
-  }
-
   void setRepertoireGenerating(bool generating) {
     _isRepertoireGenerating = generating;
     notifyListeners();
-  }
-
-  void setLoadedGames(List<ChessGameModel> games) {
-    _loadedGames = games;
-    notifyListeners();
-  }
-
-  Future<void> saveGames() async {
-    if (_loadedGames.isNotEmpty) {
-      await _pgnService.saveImportedGames(_loadedGames);
-    }
   }
 
   void setCurrentPosition(Position position) {

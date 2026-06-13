@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/core/repertoire_writer.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_suggestion_service.dart';
+import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 
 void main() {
   group('RepertoireWriter undo', () {
@@ -28,7 +29,11 @@ void main() {
 ''');
 
       controller = RepertoireController();
-      await controller.setRepertoire({'name': 'Test', 'filePath': filePath});
+      await controller.setRepertoire(RepertoireMetadata(
+        name: 'Test',
+        filePath: filePath,
+        lastModified: DateTime(2026, 1, 1),
+      ));
       writer = controller.writer;
     });
 
@@ -47,7 +52,7 @@ void main() {
         san: 'Nf3',
         pathFromRoot: ['e4', 'e5'],
       );
-      controller.userPlayedMove('Nf3');
+      controller.playMove('Nf3');
 
       expect(writer.canUndo, isTrue);
       expect(await File(filePath).readAsString(), contains('Nf3'));
@@ -112,7 +117,7 @@ void main() {
           san: san,
           pathFromRoot: controller.currentMoveSequence,
         );
-        controller.userPlayedMove(san);
+        controller.playMove(san);
       }
 
       for (var i = 0; i < 20; i++) {

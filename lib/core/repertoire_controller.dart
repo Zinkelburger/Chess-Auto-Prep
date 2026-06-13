@@ -14,6 +14,7 @@ import '../models/move_tree.dart';
 import '../models/opening_tree.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../models/repertoire_line.dart';
+import '../models/repertoire_metadata.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
@@ -34,8 +35,8 @@ List<RepertoireLine> _parseRepertoireInIsolate(
 class RepertoireController with ChangeNotifier {
   late final RepertoireWriter writer = RepertoireWriter(this);
 
-  Map<String, dynamic>? _currentRepertoire;
-  Map<String, dynamic>? get currentRepertoire => _currentRepertoire;
+  RepertoireMetadata? _currentRepertoire;
+  RepertoireMetadata? get currentRepertoire => _currentRepertoire;
 
   String? _repertoirePgn;
   String? get repertoirePgn => _repertoirePgn;
@@ -48,6 +49,9 @@ class RepertoireController with ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+
+  String? _loadError;
+  String? get loadError => _loadError;
 
   bool _isRepertoireWhite = true;
   bool get isRepertoireWhite => _isRepertoireWhite;
@@ -98,10 +102,6 @@ class RepertoireController with ChangeNotifier {
     return f == kStandardStartFen ? null : f;
   }
 
-  // Flag to prevent update loops between board and PGN editor.
-  final bool _isInternalUpdate = false;
-  bool get isInternalUpdate => _isInternalUpdate;
-
   // ── Navigation (single entry point) ──────────────────────────────
 
   /// Jump the cursor to [target].  All navigation funnels here.
@@ -137,7 +137,7 @@ class RepertoireController with ChangeNotifier {
   ///
   /// If the SAN already exists as a child, jumps to it (no duplicate).
   /// Otherwise adds a new node and jumps.  Replaces the old
-  /// `userPlayedMove`, `userPlayedMoveOnCurrentPath`, and most uses of
+  /// the old `userPlayedMove*` wrappers and most uses of
   /// `userSelectedTreeMove`.
   void playMove(String sanMove) {
     final newPath = _tree.addMove(_path, sanMove);
@@ -151,14 +151,6 @@ class RepertoireController with ChangeNotifier {
     final newPath = _tree.addMove(basePath, sanMove);
     if (newPath != null) jump(newPath);
   }
-
-  // ── Backward-compatible entry points (thin wrappers) ─────────────
-
-  /// Called when user makes a move on the board.
-  void userPlayedMove(String sanMove) => playMove(sanMove);
-
-  /// Advance along current line without the "next SAN matches" shortcut.
-  void userPlayedMoveOnCurrentPath(String sanMove) => playMove(sanMove);
 
   /// Called when user selects a move in the opening tree.
   void userSelectedTreeMove(String sanMove) {
@@ -282,7 +274,6 @@ class RepertoireController with ChangeNotifier {
 
   /// Syncs the game state from the PGN editor (still needed during transition).
   void syncFromMoveIndex(int moveIndex, List<String> moves) {
-    if (_isInternalUpdate) return;
     _ensureMovesInTree(moves);
     final tp = _pathForMoveSequence(moves);
     final target = moveIndex < 0
@@ -427,7 +418,7 @@ class RepertoireController with ChangeNotifier {
   // ── Repertoire lifecycle ─────────────────────────────────────────
 
   /// Sets a new repertoire and triggers loading.
-  Future<void> setRepertoire(Map<String, dynamic> repertoire) async {
+  Future<void> setRepertoire(RepertoireMetadata repertoire) async {
     _currentRepertoire = repertoire;
     await loadRepertoire();
   }
@@ -435,7 +426,7 @@ class RepertoireController with ChangeNotifier {
   /// Writes the color header to the PGN file and reloads.
   Future<void> setRepertoireColor(bool isWhite) async {
     if (_currentRepertoire == null) return;
-    final filePath = _currentRepertoire!['filePath'] as String;
+    final filePath = _currentRepertoire!.filePath;
     final storage = StorageFactory.instance;
     if (!await storage.fileExists(filePath)) return;
 
@@ -451,7 +442,7 @@ class RepertoireController with ChangeNotifier {
   /// Sets the current move sequence as the root position and persists it.
   Future<void> setRootPosition() async {
     if (_currentRepertoire == null) return;
-    final filePath = _currentRepertoire!['filePath'] as String;
+    final filePath = _currentRepertoire!.filePath;
     final storage = StorageFactory.instance;
     if (!await storage.fileExists(filePath)) return;
 
@@ -485,10 +476,11 @@ class RepertoireController with ChangeNotifier {
   Future<void> loadRepertoire() async {
     if (_currentRepertoire == null) return;
     writer.clearUndoStack();
+    _loadError = null;
     _setLoading(true);
 
     try {
-      final filePath = _currentRepertoire!['filePath'] as String;
+      final filePath = _currentRepertoire!.filePath;
       final storage = StorageFactory.instance;
 
       if (await storage.fileExists(filePath)) {
@@ -508,7 +500,8 @@ class RepertoireController with ChangeNotifier {
         _path = TreePath.empty;
       }
     } catch (e) {
-      debugPrint('Failed to load repertoire: $e');
+      _loadError = 'Failed to load repertoire: $e';
+      debugPrint(_loadError);
       _repertoirePgn = null;
       _openingTree = null;
       _repertoireLines = [];
@@ -628,8 +621,8 @@ class RepertoireController with ChangeNotifier {
   /// Persist edits made to the currently selected line.
   Future<bool> updateSelectedLineContent(String newPgn) async {
     if (_selectedPgnLine == null || _currentRepertoire == null) return false;
-    final filePath = _currentRepertoire!['filePath'] as String?;
-    if (filePath == null || filePath.isEmpty) return false;
+    final filePath = _currentRepertoire!.filePath;
+    if (filePath.isEmpty) return false;
 
     final lineId = _selectedPgnLine!.id;
     final service = RepertoireService();
@@ -812,7 +805,7 @@ class RepertoireController with ChangeNotifier {
   Future<int> importPgnContent(String pgnContent) async {
     if (_currentRepertoire == null) return 0;
 
-    final filePath = _currentRepertoire!['filePath'] as String;
+    final filePath = _currentRepertoire!.filePath;
     final storage = StorageFactory.instance;
     if (!await storage.fileExists(filePath)) return 0;
 
