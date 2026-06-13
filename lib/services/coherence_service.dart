@@ -4,6 +4,7 @@
 /// into clusters by shared structural moves.
 library;
 
+import 'dart:isolate';
 import 'dart:math' show pow;
 
 import 'package:dartchess/dartchess.dart';
@@ -11,6 +12,27 @@ import 'package:flutter/foundation.dart';
 
 import '../models/repertoire_line.dart';
 import 'fp_growth.dart';
+
+/// Serializable input for FP-Growth mining in a background isolate.
+class FpGrowthInput {
+  final List<Set<String>> transactions;
+  final double minSupport;
+
+  const FpGrowthInput({
+    required this.transactions,
+    required this.minSupport,
+  });
+}
+
+/// Top-level entry point for [Isolate.run] / background FP-Growth.
+List<FrequentItemset> runFpGrowthMining(FpGrowthInput input) {
+  final miner = FPGrowthMiner(
+    minSupport: input.minSupport,
+    transactions: input.transactions,
+  );
+  final allItemsets = miner.mine();
+  return miner.maximalItemsets(allItemsets);
+}
 
 /// Browse-mode coherence hint for a candidate move.
 class CoherenceCandidateHint {
@@ -166,12 +188,14 @@ class CoherenceService extends ChangeNotifier {
     final transactions =
         lines.map((l) => extractItemset(l, playAsWhite)).toList();
 
-    final miner = FPGrowthMiner(
-      minSupport: minSupport,
-      transactions: transactions,
+    final maximal = await Isolate.run(
+      () => runFpGrowthMining(
+        FpGrowthInput(
+          transactions: transactions,
+          minSupport: minSupport,
+        ),
+      ),
     );
-    final allItemsets = miner.mine();
-    final maximal = miner.maximalItemsets(allItemsets);
 
     final lineScores = <String, double>{};
     for (var i = 0; i < lines.length; i++) {

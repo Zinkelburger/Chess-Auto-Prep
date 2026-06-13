@@ -17,11 +17,12 @@ import 'engine/stockfish_pool.dart';
 import 'engine/eval_worker.dart';
 import '../models/analysis/move_analysis_result.dart';
 import '../utils/chess_utils.dart' show playUciMove;
+import '../utils/fen_utils.dart';
 
 export '../models/analysis/discovery_result.dart';
 export '../models/analysis/move_analysis_result.dart';
 export '../utils/ease_utils.dart'
-    show scoreToQ, kEaseAlpha, kEaseBeta, kEaseDisplayScale;
+    show scoreToQ, kEaseAlpha, kEaseBeta;
 export 'engine/eval_worker.dart' show EvalResult;
 
 class AnalysisService {
@@ -164,8 +165,7 @@ class AnalysisService {
       return const DiscoveryResult();
     }
 
-    final fenParts = fen.split(' ');
-    final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
+    final whiteToMove = isWhiteToMove(fen);
 
     _publishUi(() {
       poolStatus.value = PoolStatus(
@@ -188,7 +188,7 @@ class AnalysisService {
         fen: fen,
         depth: depth,
         multiPv: multiPv,
-        isWhiteToMove: isWhiteToMove,
+        isWhiteToMove: whiteToMove,
         onProgress: (intermediate) {
           if (_generation != myGen) return;
           _publishUi(() {
@@ -353,8 +353,7 @@ class AnalysisService {
     final baseFen = _currentBaseFen;
     if (baseFen == null) return;
 
-    final fenParts = baseFen.split(' ');
-    final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
+    final whiteToMove = isWhiteToMove(baseFen);
 
     while (_generation == generation) {
       final uci = _getNextMove();
@@ -376,10 +375,10 @@ class AnalysisService {
         if (_generation != generation) return;
 
         final whiteCp = eval.scoreCp != null
-            ? (isWhiteToMove ? -eval.scoreCp! : eval.scoreCp!)
+            ? (whiteToMove ? -eval.scoreCp! : eval.scoreCp!)
             : null;
         final whiteMate = eval.scoreMate != null
-            ? (isWhiteToMove ? -eval.scoreMate! : eval.scoreMate!)
+            ? (whiteToMove ? -eval.scoreMate! : eval.scoreMate!)
             : null;
         final fullPv = [uci, ...eval.pv];
 

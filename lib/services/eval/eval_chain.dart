@@ -2,6 +2,7 @@
 library;
 
 import '../../models/build_tree_node.dart';
+import '../../utils/fen_utils.dart';
 import '../eval_cache.dart';
 import '../generation/generation_config.dart';
 import 'chessdb_api_provider.dart';
@@ -61,7 +62,7 @@ Future<EvalChainOutcome> resolveEvalChain({
 
   if (canonicalNode != null && canonicalNode.hasEngineEval) {
     stats.transpositionEvalHits++;
-    final isWhiteStm = fen.split(' ')[1] == 'w';
+    final isWhiteStm = isWhiteToMove(fen);
     final whiteCp =
         isWhiteStm ? canonicalNode.engineEvalCp! : -canonicalNode.engineEvalCp!;
     return EvalChainOutcome(
@@ -179,7 +180,7 @@ Future<EvalChainOutcome> resolveEvalChain({
 
   final sf = await stockfishEval(fen, config.evalDepth);
   stats.sfSingleCalls++;
-  final isWhiteStm = fen.split(' ')[1] == 'w';
+  final isWhiteStm = isWhiteToMove(fen);
   final whiteCp = isWhiteStm ? sf.stmCp : -sf.stmCp;
   await cacheWrite?.call(fen, whiteCp, sf.depth);
 

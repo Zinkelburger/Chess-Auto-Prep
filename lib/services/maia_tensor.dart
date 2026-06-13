@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 
+import '../utils/fen_utils.dart';
+
 /// Maia-3 tensor preprocessing.
 ///
 /// Board encoding: (64, 12) per-square one-hot piece channels.
@@ -89,7 +91,7 @@ class MaiaTensor {
     } catch (_) {
       throw Exception('Invalid FEN: $fen');
     }
-    bool isBlack = fen.split(' ')[1] == 'b';
+    bool isBlack = !isWhiteToMove(fen);
 
     String processedFen = fen;
     if (isBlack) {

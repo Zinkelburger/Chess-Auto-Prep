@@ -109,7 +109,7 @@ List<BuildTreeNode> followExpectimaxLine(
   var node = start;
 
   for (var i = 0; i < maxPlies && node.children.isNotEmpty; i++) {
-    final resolved = _resolveTransposition(node, fenMap);
+    final resolved = resolveTransposition(node, fenMap);
     if (resolved.children.isEmpty) break;
 
     final isOurMove = resolved.isWhiteToMove == config.playAsWhite;
@@ -266,11 +266,3 @@ BuildTreeNode? findNodeByFen(BuildTree tree, String fen) {
   return null;
 }
 
-BuildTreeNode _resolveTransposition(BuildTreeNode node, FenMap? fenMap) {
-  if (node.children.isNotEmpty || fenMap == null) return node;
-  final canonical = fenMap.getCanonical(node.fen);
-  if (canonical != null && canonical != node && canonical.children.isNotEmpty) {
-    return canonical;
-  }
-  return node;
-}

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
@@ -7,6 +8,7 @@ const _startFen =
     'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   late EngineLifecycle lifecycle;
   late int notificationCount;
   late VoidCallback countNotifications;

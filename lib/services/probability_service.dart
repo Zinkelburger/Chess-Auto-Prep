@@ -6,18 +6,16 @@ import 'package:flutter/foundation.dart';
 import 'package:dartchess/dartchess.dart';
 
 import '../models/explorer_response.dart';
-import 'lichess_api_client.dart';
 
 // Re-export so existing `import 'probability_service.dart'` callers can
 // still resolve these types without an extra import.
 export '../models/explorer_response.dart' show ExplorerMove, ExplorerResponse;
 
-/// Tracks a single move's probability in a line (for display breakdown).
 class MoveInLineProbability {
   final int moveNumber;
   final String san;
   final bool isOpponentMove;
-  final double? probability; // null when database data is unavailable
+  final double? probability;
   final double cumulativeAfter;
 
   MoveInLineProbability({
@@ -259,46 +257,4 @@ class ProbabilityService {
     return null;
   }
 
-  /// Get probability for a specific move from the current position.
-  double? getMoveProbability(String san) {
-    final pos = currentPosition.value;
-    if (pos == null) return null;
-    for (final move in pos.moves) {
-      if (move.san == san) return move.playRate;
-    }
-    return null;
-  }
-
-  /// Format a PGN with probability comments.
-  String formatPgnWithProbabilities(
-    String pgn,
-    Map<String, double> moveProbabilities,
-    Map<String, double> cumulativeProbabilities,
-  ) {
-    final lines = pgn.split('\n');
-    final result = <String>[];
-
-    for (final line in lines) {
-      if (line.startsWith('[')) {
-        result.add(line);
-        continue;
-      }
-
-      var processedLine = line;
-      for (final entry in moveProbabilities.entries) {
-        final move = entry.key;
-        final prob = entry.value;
-        final cumulative = cumulativeProbabilities[move] ?? 100.0;
-        final comment = '{MoveProb: ${prob.toStringAsFixed(1)}% '
-            'Cumulative: ${cumulative.toStringAsFixed(1)}%}';
-        processedLine = processedLine.replaceFirst(move, '$move $comment');
-      }
-
-      result.add(processedLine);
-    }
-
-    return result.join('\n');
-  }
-
-  void clearCache() => _cache.clear();
 }

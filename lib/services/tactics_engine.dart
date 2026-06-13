@@ -1,4 +1,6 @@
 import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart';
+
 import '../models/tactics_position.dart';
 import 'engine/eval_worker.dart';
 import 'maia_factory.dart';
@@ -66,7 +68,8 @@ class TacticsEngine {
     Position pos;
     try {
       pos = Chess.fromSetup(Setup.parseFen(startFen));
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[TacticsEngine] Invalid start FEN "$startFen": $e');
       return _buildTrainableLineFallback(pvSan, maxUserMoves: maxUserMoves);
     }
 
@@ -82,13 +85,17 @@ class TacticsEngine {
       final MaiaResult maiaResult;
       try {
         maiaResult = await maia.evaluate(pos.fen, maiaElo);
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[TacticsEngine] Maia evaluation failed: $e');
         break;
       }
 
       if (maiaResult.policy.isEmpty) break;
-      final topMoveUci = maiaResult.policy.keys.first;
-      final topProb = maiaResult.policy.values.first;
+      final topEntry = maiaResult.policy.entries.reduce(
+        (a, b) => a.value >= b.value ? a : b,
+      );
+      final topMoveUci = topEntry.key;
+      final topProb = topEntry.value;
 
       if (topProb < maiaMinExtendProb) break;
 
@@ -120,7 +127,8 @@ class TacticsEngine {
           final (newPos, san) = pos.makeSan(maiaOppMove);
           maiaSan = san;
           pos = newPos;
-        } catch (_) {
+        } catch (e) {
+          debugPrint('[TacticsEngine] Failed to format Maia move: $e');
           break;
         }
         line.add(maiaSan);
@@ -137,13 +145,13 @@ class TacticsEngine {
               try {
                 final (_, san) = pos.makeSan(bestMove);
                 line.add(san);
-              } catch (_) {
-                // Could not format — skip
+              } catch (e) {
+                debugPrint('[TacticsEngine] Failed to format SF best move: $e');
               }
             }
           }
-        } catch (_) {
-          // SF eval failed — keep the line as-is
+        } catch (e) {
+          debugPrint('[TacticsEngine] Stockfish eval failed: $e');
         }
         break; // Always stop after a disagreement branch
       }
@@ -211,7 +219,8 @@ class TacticsEngine {
       try {
         final (_, san) = pos.makeSan(move);
         playedSan = san;
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[TacticsEngine] Illegal move in checkMoveAtIndex: $e');
         return TacticsResult.incorrect; // illegal move
       }
 
@@ -299,13 +308,15 @@ class TacticsEngine {
           final (newPos, san) = pos.makeSan(move);
           result.add(san);
           pos = newPos;
-        } catch (_) {
+        } catch (e) {
+          debugPrint('[TacticsEngine] Failed to format move "$token": $e');
           break;
         }
       }
 
       return result;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[TacticsEngine] lineToSan failed for FEN "$fen": $e');
       return const [];
     }
   }

@@ -21,6 +21,7 @@ import '../../services/engine/stockfish_connection_factory.dart';
 import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart' show formatEvalDisplay, formatNodes, uciPvToSan;
+import '../../utils/fen_utils.dart';
 import '../clickable_move_line.dart';
 import '../analysis/analysis_settings_sheet.dart';
 
@@ -177,8 +178,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     setState(() => _isSearching = true);
     AnalysisService().beginEnginePaneAnalysis(fen);
 
-    final fenParts = fen.split(' ');
-    final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
+    final whiteToMove = isWhiteToMove(fen);
 
     try {
       final worker = await _ensureWorker();
@@ -196,7 +196,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         fen,
         _settings.depth,
         _settings.multiPv,
-        isWhiteToMove,
+        whiteToMove,
         onProgress: (intermediate) {
           if (!mounted || _generation != myGen) return;
           setState(() => _discovery = intermediate);
@@ -409,12 +409,12 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     if (sanMoves.length <= 1) return const SizedBox.shrink();
 
     final fenParts = widget.fen.split(' ');
-    final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
+    final whiteToMove = isWhiteToMove(widget.fen);
     final fullMoveNum = fenParts.length >= 6
         ? (int.tryParse(fenParts[5]) ?? 1)
         : 1;
     // Ply of the first move in the PV (index 0)
-    final firstMovePly = (fullMoveNum - 1) * 2 + (isWhiteToMove ? 0 : 1);
+    final firstMovePly = (fullMoveNum - 1) * 2 + (whiteToMove ? 0 : 1);
 
     return ClickableMoveLineWidget(
       sanMoves: sanMoves,
