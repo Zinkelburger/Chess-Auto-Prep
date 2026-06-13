@@ -7,5 +7,5 @@ library;
 /// Below this width, switch to a single-column (compact) layout.
 const double kCompactBreakpoint = 960;
 
-/// At or above this width, use the three-zone repertoire layout (board / main / context).
-const double kWideBreakpoint = 1100;
+/// Below this width, toolbar action buttons collapse from text+icon to icon-only.
+const double kToolbarCompactBreakpoint = 900;

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/repertoire_writer.dart';
 import '../../models/build_tree_node.dart';
 import '../../models/repertoire_line.dart';
+import '../../models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../services/coherence_service.dart';
@@ -61,7 +62,7 @@ class RepertoireAnalyzeProps {
   final NavigationStack? navigationStack;
   final BoardPreviewController? boardPreview;
   final RepertoireWriter writer;
-  final Map<String, dynamic>? currentRepertoire;
+  final RepertoireMetadata? currentRepertoire;
   final int treeResetCounter;
   final ValueChanged<EvalTreePositionSelection>? onEvalTreePositionSelected;
   final VoidCallback? onStartTrapTour;
