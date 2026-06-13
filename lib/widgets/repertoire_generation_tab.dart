@@ -5,11 +5,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
-import '../constants/engine_defaults.dart';
 import '../models/build_tree_node.dart';
-import '../models/eval_database_settings.dart';
+import '../models/repertoire_metadata.dart';
 import '../services/storage/storage_factory.dart';
-import '../services/eval/cdbdirect_eval_provider.dart';
 import '../services/generation/eca_calculator.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
@@ -21,23 +19,17 @@ import '../services/generation/tree_my_ease.dart';
 import '../services/generation/tree_serialization.dart';
 import '../services/generation/tree_build_progress.dart';
 import '../services/generation/pgn_export.dart';
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../services/engine/engine_lifecycle.dart';
 import '../services/tree_build_service.dart';
 import '../core/generation_session_controller.dart';
-import '../utils/system_info.dart';
-import 'lichess_db_info_icon.dart';
 import '../theme/app_colors.dart';
 import 'generation/build_progress_display.dart';
-import 'lichess_db_selector.dart';
-import 'generation/eval_sources_section.dart';
-import 'pgn_sources_panel.dart';
-import '../models/pgn_source.dart';
+import 'generation/generation_config_form.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
   final bool isWhiteRepertoire;
-  final Map<String, dynamic>? currentRepertoire;
+  final RepertoireMetadata? currentRepertoire;
   final List<String> currentMoveSequence;
   final void Function(List<String> moves, String title, String pgn) onLineSaved;
   final GenerationSessionController generationController;
@@ -59,69 +51,18 @@ class RepertoireGenerationTab extends StatefulWidget {
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   TreeBuildService get _buildService => widget.generationController.buildService;
-  final GlobalKey<EvalSourcesSectionState> _evalSourcesKey =
-      GlobalKey<EvalSourcesSectionState>();
-  bool _cdbDirectAvailable = false;
+  final GlobalKey<GenerationConfigFormState> _configFormKey =
+      GlobalKey<GenerationConfigFormState>();
 
   static const int _pgnFlushEveryLines = 10;
 
-  // ── Controllers ────────────────────────────────────────────────────────
-
-  final TextEditingController _cutoffCtrl = TextEditingController(text: '0.01');
-  final TextEditingController _maxPlyCtrl = TextEditingController(text: '20');
-  final TextEditingController _engineDepthCtrl = TextEditingController(
-    text: '$kDefaultGenerationEvalDepth',
-  );
-  late final TextEditingController _engineThreadsCtrl;
-  final TextEditingController _evalGuardCtrl =
-      TextEditingController(text: '30');
-  late final TextEditingController _minEvalCtrl;
-  late final TextEditingController _maxEvalCtrl;
-  final TextEditingController _maiaEloCtrl =
-      TextEditingController(text: '2200');
-
-  // Advanced
-  final TextEditingController _multipvCtrl = TextEditingController(text: '4');
-  final TextEditingController _oppMaxChildrenCtrl =
-      TextEditingController(text: '4');
-  final TextEditingController _oppMassTargetCtrl =
-      TextEditingController(text: '0.80');
-  final TextEditingController _leafConfidenceCtrl =
-      TextEditingController(text: '1.0');
-
-  // ── DB Explorer state ──
-  final GlobalKey<PgnSourcesPanelState> _pgnSourcesKey =
-      GlobalKey<PgnSourcesPanelState>();
-  final List<String> _pgnFilePaths = [];
-  final TextEditingController _dbMinGamesCtrl =
-      TextEditingController(text: '5');
-  final TextEditingController _dbMinProbCtrl =
-      TextEditingController(text: '0.05');
-  final TextEditingController _minEloCtrl =
-      TextEditingController(text: '0');
-
-  // null = Maia only; non-null = override with that Lichess DB
-  LichessDatabase? _lichessDbOverride;
-  bool _relativeEval = true;
-  bool _preferNovelties = false;
-
-  // PGN export options
-  bool _rankLinesByImportance = true;
-  bool _annotateMoveProbabilities = true;
-  bool _annotateMaiaOnly = true;
-
-  // Lichess Players sub-options (shown when opponent source is lichessPlayers)
-  final TextEditingController _lichessMinGamesCtrl =
-      TextEditingController(text: '10');
-  final Set<String> _lichessSpeeds = {'blitz', 'rapid', 'classical'};
-  final Set<String> _lichessRatings = {'2000', '2200', '2500'};
-
-  SelectionMode _selectionMode = SelectionMode.expectimax;
-  BuildMode _buildMode = BuildMode.stockfishExpectimax;
-  bool _showAdvanced = false;
   bool _isGenerating = false;
   bool _cancelRequested = false;
   bool _isPaused = false;
+
+  /// Unified cancel signal: internal cancel OR external controller cancel.
+  bool get _shouldStop =>
+      _cancelRequested || !widget.generationController.isGenerating;
   int _buildGeneration = 0;
   String _status = 'Idle';
   int _nodes = 0;
@@ -141,20 +82,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   @override
   void initState() {
     super.initState();
-    _engineThreadsCtrl = TextEditingController(
-      text: defaultEngineThreads().toString(),
-    );
-    _minEvalCtrl = TextEditingController(
-      text: widget.isWhiteRepertoire ? '0' : '-100',
-    );
-    _maxEvalCtrl = TextEditingController(
-      text: widget.isWhiteRepertoire ? '200' : '100',
-    );
     _checkForPartialTree();
-    CdbDirectEvalProvider.probeAvailability().then((available) {
-      if (!mounted) return;
-      setState(() => _cdbDirectAvailable = available);
-    });
   }
 
   /// Pre-configure DB Explorer mode with the given PGN file paths and
@@ -168,48 +96,17 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     int minGames = 1,
     bool autoStart = false,
   }) {
-    setState(() {
-      _buildMode = BuildMode.dbExplorer;
-      _pgnFilePaths
-        ..clear()
-        ..addAll(pgnPaths);
-      _dbMinGamesCtrl.text = minGames.toString();
-    });
-    // Also seed the PgnSourcesPanel if mounted
+    _configFormKey.currentState?.seedDbExplorer(
+      pgnPaths: pgnPaths,
+      minGames: minGames,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final panelState = _pgnSourcesKey.currentState;
-      if (panelState != null) {
-        final sources = pgnPaths
-            .map((path) => PgnSource(
-                  id: PgnSource.generateId(),
-                  name: p.basenameWithoutExtension(path),
-                  filePath: path,
-                ))
-            .toList();
-        panelState.seedSources(sources);
-      }
       if (autoStart && mounted && !_isGenerating) _startTreeBuild();
     });
   }
 
   @override
   void dispose() {
-    _cutoffCtrl.dispose();
-    _maxPlyCtrl.dispose();
-    _engineDepthCtrl.dispose();
-    _engineThreadsCtrl.dispose();
-    _evalGuardCtrl.dispose();
-    _minEvalCtrl.dispose();
-    _maxEvalCtrl.dispose();
-    _maiaEloCtrl.dispose();
-    _lichessMinGamesCtrl.dispose();
-    _dbMinGamesCtrl.dispose();
-    _dbMinProbCtrl.dispose();
-    _minEloCtrl.dispose();
-    _multipvCtrl.dispose();
-    _oppMaxChildrenCtrl.dispose();
-    _oppMassTargetCtrl.dispose();
-    _leafConfidenceCtrl.dispose();
     _stopUiPulse();
     super.dispose();
   }
@@ -242,7 +139,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         _elapsedMs = _buildService.buildElapsedMs;
         final api = _buildService.chessDbApiProvider;
         if (api != null) {
-          _evalSourcesKey.currentState?.updateChessDbApiUsage(
+          _configFormKey.currentState?.updateChessDbApiUsage(
             api.usedToday,
             api.quotaLimit,
           );
@@ -254,8 +151,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   @override
   void didUpdateWidget(covariant RepertoireGenerationTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldPath = oldWidget.currentRepertoire?['filePath'] as String?;
-    final newPath = widget.currentRepertoire?['filePath'] as String?;
+    final oldPath = oldWidget.currentRepertoire?.filePath;
+    final newPath = widget.currentRepertoire?.filePath;
     if (oldPath != newPath) {
       _savedPartialTree = null;
       _checkForPartialTree();
@@ -263,7 +160,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   }
 
   String? _partialTreePath() {
-    final filePath = widget.currentRepertoire?['filePath'] as String?;
+    final filePath = widget.currentRepertoire?.filePath;
     if (filePath == null || filePath.isEmpty) return null;
     final base = p.withoutExtension(filePath);
     return '${base}_partial_tree.json';
@@ -282,7 +179,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           setState(() {
             final md = tree.configSnapshot['max_depth'];
             if (md is num) {
-              _maxPlyCtrl.text = md.toInt().toString();
+              _configFormKey.currentState?.setMaxPly(md.toInt());
             }
             _savedPartialTree = tree;
           });
@@ -357,8 +254,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     }
   }
 
-  // ── Tree build generation ─────────────────────────────────────────────
-
   void _handleBuildProgress(BuildProgress p) {
     if (!mounted) return;
     _nodes = p.totalNodes;
@@ -370,6 +265,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _totalAtDepth = p.totalAtDepth;
     _etaDepthSec = p.etaDepthSeconds;
 
+    final ctrl = widget.generationController;
+    ctrl.progressNodes = _nodes;
+    ctrl.progressDepth = _currentDepth;
+    ctrl.progressNodesPerMinute = _nodesPerMinute;
+    ctrl.progressEtaSec = _etaDepthSec?.toDouble();
+    ctrl.progressElapsedMs = _elapsedMs;
+    ctrl.progressStatus = _status;
+
     final now = DateTime.now();
     if (now.difference(_lastProgressUpdate).inMilliseconds < 150) {
       return;
@@ -378,105 +281,19 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     setState(() {});
   }
 
-  /// Current form values as a [TreeBuildConfig] (used for new builds and
-  /// for [maxPly] when resuming a partial tree).
-  TreeBuildConfig _treeBuildConfigFromControls() {
-    final evalDepth =
-        int.tryParse(_engineDepthCtrl.text.trim()) ??
-            kDefaultGenerationEvalDepth;
-    final rawThreads = int.tryParse(_engineThreadsCtrl.text.trim());
-    final engineThreads = rawThreads != null
-        ? clampEngineThreads(rawThreads)
-        : defaultEngineThreads();
-    final eval = _evalSourcesKey.currentState;
-    final minAcceptableRaw = eval?.minAcceptableEvalDepthRaw ?? '';
-    final minAcceptableDepth = minAcceptableRaw.isEmpty
-        ? 0
-        : (int.tryParse(minAcceptableRaw) ?? evalDepth);
-
-    final dbSettings = EvalDatabaseSettings.instance;
-
-    return TreeBuildConfig(
-      startFen: widget.fen,
-      playAsWhite: widget.isWhiteRepertoire,
-      minProbability: _parsePercentToFraction(
-        _cutoffCtrl.text,
-        fallbackPercent: 0.01,
-      ),
-      maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 20,
-      buildMode: _buildMode,
-      pgnFilePaths: List.unmodifiable(_pgnFilePaths),
-      dbMinGames: int.tryParse(_dbMinGamesCtrl.text.trim()) ?? 5,
-      dbMinProb: double.tryParse(_dbMinProbCtrl.text.trim()) ?? 0.05,
-      minElo: int.tryParse(_minEloCtrl.text.trim()) ?? 0,
-      evalDepth: evalDepth,
-      engineThreads: engineThreads,
-      maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
-      minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
-          (widget.isWhiteRepertoire ? 0 : -100),
-      maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ??
-          (widget.isWhiteRepertoire ? 200 : 100),
-      maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
-      maiaOnly: _lichessDbOverride == null,
-      rankLinesByImportance: _rankLinesByImportance,
-      annotateMoveProbabilities: _annotateMoveProbabilities,
-      annotateMaiaOnly: _annotateMaiaOnly,
-      ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
-      oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
-      oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
-      useLichessDb: _lichessDbOverride != null,
-      useMasters: _lichessDbOverride == LichessDatabase.masters,
-      speeds: _lichessSpeeds.join(','),
-      ratingRange: (_lichessRatings.toList()..sort()).join(','),
-      minGames: int.tryParse(_lichessMinGamesCtrl.text.trim()) ?? 10,
-      relativeEval: _relativeEval,
-      selectionMode: _selectionMode,
-      noveltyWeight: _preferNovelties ? 60 : 0,
-      leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
-      enableCdbDirect:
-          _cdbDirectAvailable && dbSettings.enableCdbDirect,
-      cdbDirectPath:
-          _cdbDirectAvailable ? dbSettings.cdbDirectPath : '',
-      cdbDirectReadAhead:
-          _cdbDirectAvailable && dbSettings.cdbDirectReadAhead,
-      batchEvalLookups:
-          _cdbDirectAvailable && (eval?.batchEvalLookups ?? false),
-      enableLocalChessDb: eval?.enableLocalChessDb ?? false,
-      localChessDbPath: eval?.localChessDbPath ?? '',
-      enableChessDbApi: eval?.enableChessDbApi ?? false,
-      chessDbApiDailyQuota: eval?.chessDbApiDailyQuota ?? 5000,
-      chessDbApiConcurrency: eval?.chessDbApiConcurrency ?? 2,
-      enableExtEvalSubtreeSkip: eval?.enableExtEvalSubtreeSkip ?? true,
-      minAcceptableEvalDepth: minAcceptableDepth,
-    );
-  }
-
   Future<void> _startTreeBuild({BuildTree? existingTree}) async {
     if (_isGenerating) return;
-    if (_buildMode == BuildMode.trapFinder) {
-      setState(() => _status =
-          '${_buildModeLabel(_buildMode)} is not yet available in the app.');
+    final form = _configFormKey.currentState;
+    if (form == null) return;
+
+    final validationError = form.validateBeforeStart();
+    if (validationError != null) {
+      setState(() => _status = validationError);
       return;
     }
-    if (_buildMode == BuildMode.dbExplorer && _pgnFilePaths.isEmpty) {
-      final sources = _pgnSourcesKey.currentState?.sources ?? [];
-      if (sources.isEmpty) {
-        setState(() => _status = 'Add at least one PGN file for DB Explorer.');
-        return;
-      }
-    }
-    final evalSources = _evalSourcesKey.currentState;
-    if (_buildMode == BuildMode.maiaDbExplore &&
-        !(evalSources?.enableLocalChessDb ?? false) &&
-        !(evalSources?.enableChessDbApi ?? false) &&
-        !EvalDatabaseSettings.instance.enableCdbDirect) {
-      setState(() => _status =
-          'Maia + DB mode needs at least one eval source enabled '
-          '(local ChessDB, cdbdirect, or ChessDB API).');
-      return;
-    }
+
     final gen = ++_buildGeneration;
-    final filePath = widget.currentRepertoire?['filePath'] as String?;
+    final filePath = widget.currentRepertoire?.filePath;
     if (filePath == null || filePath.isEmpty) {
       setState(() => _status = 'Select a repertoire first.');
       return;
@@ -488,11 +305,17 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         existingTree.configSnapshot,
         startFen: existingTree.root.fen,
       );
-      final ui = _treeBuildConfigFromControls();
+      final ui = form.toConfig(
+        startFen: widget.fen,
+        playAsWhite: widget.isWhiteRepertoire,
+      );
       config = saved.copyWith(maxPly: ui.maxPly);
       existingTree.configSnapshot = Map<String, dynamic>.from(config.toJson());
     } else {
-      config = _treeBuildConfigFromControls();
+      config = form.toConfig(
+        startFen: widget.fen,
+        playAsWhite: widget.isWhiteRepertoire,
+      );
     }
 
     if (existingTree == null) {
@@ -515,8 +338,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       _unexploredAtDepth = 0;
       _totalAtDepth = 0;
       _etaDepthSec = null;
-      _evalSourcesKey.currentState
-          ?.resetChessDbApiUsageForBuild(config.chessDbApiDailyQuota);
+      form.resetChessDbApiUsageForBuild(config.chessDbApiDailyQuota);
 
       // Seed depth-layer counters so resume doesn't show "0 / 0 explored"
       // while BFS replays existing nodes toward the frontier.
@@ -555,17 +377,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       final BuildTree tree;
 
       if (config.buildMode == BuildMode.dbExplorer) {
-        // DB Explorer: PGN parse → freq map → BFS → eval enrichment
         tree = await _buildService.buildFromPgnFreqMap(
           config: config,
-          isCancelled: () => _cancelRequested,
+          isCancelled: () =>
+              _shouldStop || widget.generationController.finishNowRequested,
           onStatusChanged: (status) {
             if (mounted) setState(() => _status = status);
           },
           onProgress: _handleBuildProgress,
         );
 
-        if (_cancelRequested) {
+        if (_shouldStop &&
+            !widget.generationController.finishNowRequested) {
           if (mounted) {
             setState(
                 () => _status = 'Build cancelled. ${tree.totalNodes} nodes.');
@@ -573,7 +396,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           return;
         }
       } else {
-        // Standard build modes (Stockfish/Maia)
         final bool skipBuild =
             existingTree != null && existingTree.maxPlyReached >= config.maxPly;
 
@@ -587,12 +409,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         } else {
           tree = await _buildService.build(
             config: config,
-            isCancelled: () => _cancelRequested,
+            isCancelled: () =>
+                _shouldStop || widget.generationController.finishNowRequested,
             existingTree: existingTree,
             onProgress: _handleBuildProgress,
           );
 
-          if (_cancelRequested) {
+          final finishingEarly =
+              widget.generationController.finishNowRequested;
+          if (finishingEarly) {
+            widget.generationController.clearFinishNow();
+            if (mounted) {
+              setState(() => _status =
+                  'Finishing early with ${tree.totalNodes} nodes...');
+            }
+          } else if (_shouldStop) {
             if (mounted) {
               setState(
                   () => _status = 'Build cancelled. ${tree.totalNodes} nodes.');
@@ -602,23 +433,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         }
       }
 
-      // Phase 2a: Ease
       if (mounted) setState(() => _status = 'Phase 2: Computing ease...');
       final easeCount = calculateTreeEase(tree);
 
-      // Phase 2b: Expectimax
       if (mounted) setState(() => _status = 'Phase 2: Computing expectimax...');
       final fenMap = FenMap()..populate(tree.root);
       final ecaCalc = ExpectimaxCalculator(config: config, fenMap: fenMap);
       final ecaCount = ecaCalc.calculate(tree);
 
-      // Phase 2b.2: Trap scores
       ecaCalc.computeTrapScores(tree.root);
 
-      // Phase 2b.3: My Ease (how natural our moves are)
       calculateMyEase(tree, playAsWhite: config.playAsWhite);
 
-      // Phase 2c: Select repertoire moves
       if (mounted) {
         setState(() => _status = 'Phase 2: Selecting repertoire...');
       }
@@ -634,7 +460,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       tree.computeMetadata();
       _applyKnownRootMoves(tree);
 
-      // Phase 3: Extract lines
       if (mounted) setState(() => _status = 'Phase 3: Extracting lines...');
       final extractor = LineExtractor(config: config, fenMap: fenMap);
       var extractedLines = extractor.extract(tree);
@@ -645,7 +470,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
       widget.generationController.onTreeBuilt(tree);
 
-      // Save lines to PGN file
       final rootFen = _rootFen();
       final rootWhiteToMove = _rootWhiteToMove(rootFen);
       for (int i = 0; i < extractedLines.length; i++) {
@@ -677,7 +501,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       }
       await _pgnWriter.flush(filePath);
 
-      // Save tree JSON alongside PGN
       try {
         final treeJson = serializeTree(tree);
         final base = p.withoutExtension(filePath);
@@ -712,7 +535,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         });
       }
     } catch (e) {
-      final fp = widget.currentRepertoire?['filePath'] as String?;
+      final fp = widget.currentRepertoire?.filePath;
       if (fp != null && fp.isNotEmpty) {
         await _pgnWriter.flush(fp);
       }
@@ -723,16 +546,15 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       if (engineGenerationEntered) {
         await EngineLifecycle().exitGeneration();
       }
-      if (mounted && gen == _buildGeneration) {
-        setState(() => _isGenerating = false);
+      if (gen == _buildGeneration) {
+        _isGenerating = false;
         widget.generationController.markGenerating(false);
+        if (mounted) setState(() {});
       }
       _stopUiPulse();
       _checkForPartialTree();
     }
   }
-
-  // ── PGN helpers ───────────────────────────────────────────────────────
 
   String _rootFen() {
     // The `[...currentMoveSequence, ...line.movesSan]` path is relative to
@@ -747,8 +569,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     return parts.length < 2 || parts[1] == 'w';
   }
 
-  // ── UI ─────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -756,7 +576,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Auto Repertoire Generation',
+          Text('Generate Repertoire',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
@@ -764,385 +584,13 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             style: const TextStyle(color: Colors.grey, fontSize: 12),
           ),
           const SizedBox(height: 8),
-
-          // Build algorithm mode
-          DropdownButtonFormField<BuildMode>(
-            value: _buildMode,
-            decoration: const InputDecoration(
-              labelText: 'Build Algorithm',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: BuildMode.stockfishExpectimax,
-                child: Text('Stockfish + Expectimax (default)'),
-              ),
-              DropdownMenuItem(
-                value: BuildMode.maiaDbExplore,
-                child: Text('Maia + DB (fast, no engine)'),
-              ),
-              DropdownMenuItem(
-                value: BuildMode.dbExplorer,
-                child: Text('DB Explorer (PGN database)'),
-              ),
-              DropdownMenuItem(
-                value: BuildMode.trapFinder,
-                child: Text('Trap / Interest Finder (coming soon)'),
-              ),
-            ],
-            onChanged: _isGenerating
-                ? null
-                : (v) {
-                    if (v != null) setState(() => _buildMode = v);
-                  },
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _buildModeDescription(),
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          GenerationConfigForm(
+            key: _configFormKey,
+            isGenerating: _isGenerating,
+            playAsWhite: widget.isWhiteRepertoire,
           ),
           const SizedBox(height: 8),
 
-          // DB Explorer: PGN sources panel
-          if (_buildMode == BuildMode.dbExplorer) ...[
-            PgnSourcesPanel(
-              key: _pgnSourcesKey,
-              initialSources: null,
-              onSourcesChanged: (sources) {
-                // Keep _pgnFilePaths in sync for TreeBuildConfig compatibility
-                _pgnFilePaths
-                  ..clear()
-                  ..addAll(sources
-                      .where((s) => s.filePath != null)
-                      .map((s) => s.filePath!));
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
-
-          // Main config fields
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _numField(_cutoffCtrl, 'Cum Prob Cutoff (%)'),
-              _numField(_maxPlyCtrl, 'Max Ply'),
-              if (_buildMode == BuildMode.stockfishExpectimax) ...[
-                _numField(
-                  _engineDepthCtrl,
-                  'Engine Depth (tree build)',
-                  tooltip:
-                      'Stockfish search depth during repertoire tree '
-                      'generation (Phase 1). Separate from on-the-fly '
-                      'expectimax in Settings → On-the-fly Expectimax.',
-                ),
-                _numField(
-                  _engineThreadsCtrl,
-                  'Engine Threads',
-                  tooltip:
-                      'Stockfish UCI threads per worker during tree build '
-                      '(1–${getLogicalCores()}). MultiPV is much faster '
-                      'with multiple threads.',
-                ),
-              ],
-              _numField(_evalGuardCtrl, 'Max Eval Loss (cp)'),
-              _numField(_minEvalCtrl, 'Min Eval For Us (cp)'),
-              _numField(_maxEvalCtrl, 'Max Eval For Us (cp)'),
-              _numField(_maiaEloCtrl, 'Maia Elo'),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // PGN export options
-          Text('PGN export',
-              style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            title: const Text('Rank lines by cumulative probability',
-                style: TextStyle(fontSize: 13)),
-            subtitle: const Text(
-              'Sort lines by cumulative probability (most likely first).',
-              style: TextStyle(fontSize: 12),
-            ),
-            value: _rankLinesByImportance,
-            onChanged: _isGenerating
-                ? null
-                : (v) => setState(() => _rankLinesByImportance = v),
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            title: const Text('Annotate move probabilities',
-                style: TextStyle(fontSize: 13)),
-            subtitle: const Text(
-              'Add [%maiaProbability] / [%humanFrequency] on opponent moves.',
-              style: TextStyle(fontSize: 12),
-            ),
-            value: _annotateMoveProbabilities,
-            onChanged: _isGenerating
-                ? null
-                : (v) => setState(() => _annotateMoveProbabilities = v),
-          ),
-          if (_annotateMoveProbabilities)
-            Padding(
-              padding: const EdgeInsets.only(left: 8, bottom: 8),
-              child: DropdownButtonFormField<bool>(
-                value: _annotateMaiaOnly,
-                decoration: const InputDecoration(
-                  labelText: 'Probability source',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: true,
-                    child: Text('Maia only'),
-                  ),
-                  DropdownMenuItem(
-                    value: false,
-                    child: Text('Lichess DB + Maia fallback'),
-                  ),
-                ],
-                onChanged: _isGenerating
-                    ? null
-                    : (v) {
-                        if (v != null) setState(() => _annotateMaiaOnly = v);
-                      },
-              ),
-            ),
-
-          // Opponent move source
-          Row(
-            children: [
-              const Text('Opponent moves: Maia',
-                  style: TextStyle(fontSize: 13)),
-              const SizedBox(width: 4),
-              Tooltip(
-                message: 'Maia neural network is the default opponent model.\n'
-                    'You can override this with a Lichess database\n'
-                    '(Players or Masters) in the Advanced section below.\n'
-                    'When a Lichess DB is selected, Maia is still used\n'
-                    'as a fallback for positions with no DB data.',
-                child:
-                    Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
-              ),
-              if (_lichessDbOverride != null) ...[
-                const SizedBox(width: 8),
-                Chip(
-                  label: Text(
-                    _lichessDbOverride == LichessDatabase.masters
-                        ? 'Overridden: Lichess Masters'
-                        : 'Overridden: Lichess Players',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  deleteIcon: const Icon(Icons.close, size: 14),
-                  onDeleted: _isGenerating
-                      ? null
-                      : () => setState(() => _lichessDbOverride = null),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 4),
-
-          // Prefer novelties
-          Row(
-            children: [
-              Checkbox(
-                value: _preferNovelties,
-                onChanged: _isGenerating
-                    ? null
-                    : (v) => setState(() => _preferNovelties = v ?? false),
-              ),
-              GestureDetector(
-                onTap: _isGenerating
-                    ? null
-                    : () =>
-                        setState(() => _preferNovelties = !_preferNovelties),
-                child: const Text(
-                  'Prefer novelties',
-                  style: TextStyle(fontSize: 13),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Tooltip(
-                message: 'Favor less-played moves that are still sound.\n'
-                    'Uses Maia/Lichess frequency data to boost unusual lines.',
-                child:
-                    Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Selection mode
-          DropdownButtonFormField<SelectionMode>(
-            value: _selectionMode,
-            decoration: const InputDecoration(
-              labelText: 'Selection Mode',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: const [
-              DropdownMenuItem(
-                value: SelectionMode.expectimax,
-                child: Text('Expectimax (Stockfish + Maia)'),
-              ),
-              DropdownMenuItem(
-                value: SelectionMode.engineOnly,
-                child: Text('Engine only (best Stockfish eval)'),
-              ),
-              DropdownMenuItem(
-                value: SelectionMode.dbWinRateOnly,
-                child: Text('DB win rate only (no engine selection)'),
-              ),
-              DropdownMenuItem(
-                value: SelectionMode.playable,
-                child: Text('Playable (expectimax + ease)'),
-              ),
-            ],
-            onChanged: _isGenerating
-                ? null
-                : (v) {
-                    if (v != null) setState(() => _selectionMode = v);
-                  },
-          ),
-          const SizedBox(height: 4),
-
-          // Advanced section
-          InkWell(
-            onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-            child: Row(
-              children: [
-                Icon(
-                  _showAdvanced ? Icons.expand_less : Icons.expand_more,
-                  size: 20,
-                ),
-                const SizedBox(width: 4),
-                const Text('Advanced', style: TextStyle(fontSize: 13)),
-              ],
-            ),
-          ),
-          Visibility(
-            visible: _showAdvanced,
-            maintainState: true,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _numField(_multipvCtrl, 'MultiPV',
-                    tooltip: 'Candidate moves evaluated per our-move node'),
-                _numField(_oppMaxChildrenCtrl, 'Opp Max Children',
-                    tooltip: 'Maximum opponent replies explored per position'),
-                _numField(_oppMassTargetCtrl, 'Opp Mass Target',
-                    tooltip:
-                        'Stop adding opponent moves after this probability mass is covered'),
-                _numField(_leafConfidenceCtrl, 'Leaf Confidence (0-1)',
-                    tooltip:
-                        'Trust in engine eval at leaves; lower blends toward 0.5'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _toggleSwitch('Relative Eval', _relativeEval, (v) {
-                  setState(() => _relativeEval = v);
-                },
-                    tooltip:
-                        'Thresholds are relative to the root eval (default).\n'
-                        'Turn off to use absolute centipawn limits from Min/Max Eval.'),
-                const LichessDbInfoIcon(size: 14),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Lichess DB override
-            Row(
-              children: [
-                const Text('Opponent DB override',
-                    style: TextStyle(fontSize: 13)),
-                const SizedBox(width: 4),
-                Tooltip(
-                  message:
-                      'Override Maia with a Lichess database for opponent\n'
-                      'move frequencies. Maia remains the fallback for\n'
-                      'positions with no database data.',
-                  child: Icon(Icons.info_outline,
-                      size: 16, color: Colors.grey[500]),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('None (Maia only)'),
-                  selected: _lichessDbOverride == null,
-                  onSelected: _isGenerating
-                      ? null
-                      : (_) => setState(() => _lichessDbOverride = null),
-                ),
-                const SizedBox(width: 4),
-                ChoiceChip(
-                  label: const Text('Lichess DB'),
-                  selected: _lichessDbOverride != null,
-                  onSelected: _isGenerating
-                      ? null
-                      : (_) => setState(
-                          () => _lichessDbOverride ??= LichessDatabase.lichess),
-                ),
-              ],
-            ),
-            if (_lichessDbOverride != null) ...[
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.only(left: 16),
-                child: LichessDbSelector(
-                  database: _lichessDbOverride!,
-                  onDatabaseChanged: (db) => setState(() {
-                    final wasMasters =
-                        _lichessDbOverride == LichessDatabase.masters;
-                    final isMasters = db == LichessDatabase.masters;
-                    _lichessDbOverride = db;
-                    if (wasMasters != isMasters) {
-                      _lichessMinGamesCtrl.text = isMasters ? '4' : '10';
-                    }
-                  }),
-                  selectedSpeeds: _lichessSpeeds,
-                  onSpeedsChanged: (s) => setState(() {
-                    _lichessSpeeds
-                      ..clear()
-                      ..addAll(s);
-                  }),
-                  selectedRatings: _lichessRatings,
-                  onRatingsChanged: (r) => setState(() {
-                    _lichessRatings
-                      ..clear()
-                      ..addAll(r);
-                  }),
-                  minGamesController: _lichessMinGamesCtrl,
-                  enabled: !_isGenerating,
-                  compact: true,
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            EvalSourcesSection(
-              key: _evalSourcesKey,
-              isGenerating: _isGenerating,
-              cdbDirectAvailable: _cdbDirectAvailable,
-            ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Saved partial tree banner
           if (_savedPartialTree != null && !_isGenerating) ...[
             Container(
               padding: const EdgeInsets.all(12),
@@ -1181,8 +629,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                     children: [
                       FilledButton.icon(
                         onPressed: () {
-                          _maxPlyCtrl.text =
-                              _savedPartialTree!.maxPlyReached.toString();
+                          _configFormKey.currentState?.setMaxPly(
+                            _savedPartialTree!.maxPlyReached,
+                          );
                           _startTreeBuild(existingTree: _savedPartialTree!);
                         },
                         icon: const Icon(Icons.check),
@@ -1210,7 +659,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             const SizedBox(height: 8),
           ],
 
-          // Action buttons
           Row(
             children: [
               FilledButton.icon(
@@ -1288,116 +736,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           Text(_status, style: const TextStyle(color: Colors.grey)),
           const SizedBox(height: 8),
           Text(
-            _selectionModeDescription(),
+            _configFormKey.currentState?.selectionModeDescription() ?? '',
             style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
         ],
       ),
     );
-  }
-
-  Widget _numField(
-    TextEditingController controller,
-    String label, {
-    String? tooltip,
-    bool enabled = true,
-  }) {
-    final field = SizedBox(
-      width: 170,
-      child: TextField(
-        controller: controller,
-        enabled: enabled && !_isGenerating,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-        ),
-      ),
-    );
-    if (tooltip == null) return field;
-    return Tooltip(message: tooltip, child: field);
-  }
-
-  Widget _toggleSwitch(String label, bool value, ValueChanged<bool> onChanged,
-      {String? tooltip}) {
-    final row = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 13)),
-        const SizedBox(width: 4),
-        Switch(
-          value: value,
-          onChanged: _isGenerating ? null : onChanged,
-        ),
-      ],
-    );
-    if (tooltip == null) return row;
-    return Tooltip(message: tooltip, child: row);
-  }
-
-  // ── DB Explorer file picker (legacy — now uses PgnSourcesPanel) ─────
-
-  String _buildModeLabel(BuildMode mode) {
-    switch (mode) {
-      case BuildMode.stockfishExpectimax:
-        return 'Stockfish + Expectimax';
-      case BuildMode.maiaDbExplore:
-        return 'Maia + DB';
-      case BuildMode.dbExplorer:
-        return 'DB Explorer';
-      case BuildMode.trapFinder:
-        return 'Trap / Interest Finder';
-    }
-  }
-
-  String _buildModeDescription() {
-    switch (_buildMode) {
-      case BuildMode.stockfishExpectimax:
-        return 'Full repertoire build: Stockfish MultiPV for our moves, '
-            'Maia/Lichess for opponent replies, expectimax selection. '
-            'Most thorough; needs a capable CPU.';
-      case BuildMode.maiaDbExplore:
-        return 'Fast exploration without Stockfish: top Maia moves for our '
-            'side, database evals only. Branches stop when a position is '
-            'missing from the database — natural pruning by DB coverage.';
-      case BuildMode.dbExplorer:
-        return 'Build a tree from PGN game databases: parse files into a '
-            'frequency map, then BFS-expand using actual game statistics. '
-            'Evals are enriched from DB sources + Stockfish after the tree '
-            'is built.';
-      case BuildMode.trapFinder:
-        return 'Surface positions where human-likely moves (Maia) lead to '
-            'bad database evals — a highlights reel of tactical moments, '
-            'not a full repertoire.';
-    }
-  }
-
-  String _selectionModeDescription() {
-    switch (_selectionMode) {
-      case SelectionMode.expectimax:
-        return 'Two-phase: builds the full tree with constant MultiPV at each ply'
-            ' + single-source opponent moves, then computes expectimax'
-            ' and selects repertoire lines.';
-      case SelectionMode.engineOnly:
-        return 'Builds the full tree, then selects moves purely by engine eval.'
-            ' Ignores opponent frequency / win-rate data for selection.';
-      case SelectionMode.dbWinRateOnly:
-        return 'Builds the full tree, then selects moves by database win rate.'
-            ' Falls back to engine eval when no DB data is available.';
-      case SelectionMode.playable:
-        return 'Blends expectimax value (60%) with my-ease (40%) to prefer'
-            ' moves that are both strong and natural for a human to find.';
-    }
-  }
-
-  double _parsePercentToFraction(
-    String raw, {
-    required double fallbackPercent,
-  }) {
-    final parsed = double.tryParse(raw.replaceAll('%', '').trim());
-    final safePercent = (parsed ?? fallbackPercent).clamp(0.0, 100.0);
-    return safePercent / 100.0;
   }
 
   void _applyKnownRootMoves(BuildTree tree) {

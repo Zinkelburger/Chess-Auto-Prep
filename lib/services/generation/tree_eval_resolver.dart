@@ -5,6 +5,7 @@ library;
 import 'dart:async';
 
 import '../../models/build_tree_node.dart';
+import '../../utils/fen_utils.dart';
 import '../engine/stockfish_pool.dart';
 import '../eval/cdbdirect_eval_provider.dart';
 import '../eval/chessdb_api_provider.dart';
@@ -166,7 +167,7 @@ class TreeEvalResolver {
     }
 
     if (outcome.whiteCp != null) {
-      final isWhiteStm = node.fen.split(' ')[1] == 'w';
+      final isWhiteStm = isWhiteToMove(node.fen);
       node.engineEvalCp =
           isWhiteStm ? outcome.whiteCp! : -outcome.whiteCp!;
       return true;
