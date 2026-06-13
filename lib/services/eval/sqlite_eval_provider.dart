@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import '../../utils/fen_utils.dart';
 import 'eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
@@ -84,7 +85,7 @@ class SqliteEvalProvider implements ExternalEvalProvider {
     if (db == null) return const EvalLookupResult.miss();
 
     final key = canonicalizeFen4(fen);
-    final isWhiteStm = key.split(' ').length >= 2 && key.split(' ')[1] == 'w';
+    final isWhiteStm = isWhiteToMove(key);
 
     try {
       final rows = await db.query(

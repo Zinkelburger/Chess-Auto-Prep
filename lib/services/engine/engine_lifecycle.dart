@@ -104,7 +104,10 @@ class EngineLifecycle extends ChangeNotifier {
   }
 
   /// Called before generation starts.
-  Future<void> enterGeneration(int threads) async {
+  Future<void> enterGeneration(int threads) =>
+      _serialExec(() => _doEnterGeneration(threads));
+
+  Future<void> _doEnterGeneration(int threads) async {
     _toggleStateBeforeGeneration = _state != EngineState.off;
     _analysis.cancel();
     if (!testMode) {
@@ -115,7 +118,9 @@ class EngineLifecycle extends ChangeNotifier {
   }
 
   /// Called when generation finishes or is cancelled.
-  Future<void> exitGeneration() async {
+  Future<void> exitGeneration() => _serialExec(_doExitGeneration);
+
+  Future<void> _doExitGeneration() async {
     if (_toggleStateBeforeGeneration) {
       if (!testMode && _pool.workerCount > 0) {
         await _pool.reconfigureAllWorkers(1);

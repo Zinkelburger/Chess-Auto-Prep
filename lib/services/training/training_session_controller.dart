@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/repertoire_controller.dart';
 import '../../models/repertoire_line.dart';
+import '../../models/repertoire_metadata.dart';
 import '../../models/repertoire_move_progress.dart';
 import '../../models/repertoire_review_entry.dart'
     show RepertoireReviewEntry, ReviewRating;
@@ -32,7 +33,7 @@ class TrainingSessionController extends ChangeNotifier {
   final RepertoireController session = RepertoireController();
 
   // -- Data --
-  Map<String, dynamic>? repertoire;
+  RepertoireMetadata? repertoire;
   List<RepertoireLine> lines = [];
   List<RepertoireReviewEntry> _otherRepertoireEntries = [];
   Map<String, RepertoireReviewEntry> reviewMap = {};
@@ -70,7 +71,7 @@ class TrainingSessionController extends ChangeNotifier {
 
   bool get isWhiteLine => currentLine?.color.toLowerCase() != 'black';
   bool get boardFlipped => !isWhiteLine;
-  String get repertoireId => (repertoire?['filePath'] ?? '').toString();
+  String get repertoireId => repertoire?.filePath ?? '';
   int get effectiveLineLength => currentLineLength;
 
   void _onSessionChanged() => notifyListeners();
@@ -88,7 +89,7 @@ class TrainingSessionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setRepertoire(Map<String, dynamic>? value) {
+  void setRepertoire(RepertoireMetadata? value) {
     repertoire = value;
     notifyListeners();
   }
@@ -105,7 +106,7 @@ class TrainingSessionController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final filePath = repertoire!['filePath'] as String;
+      final filePath = repertoire!.filePath;
       final parsedLines = await repertoireService.parseRepertoireFile(filePath);
       if (parsedLines.isEmpty) {
         error = 'No trainable lines found.';
@@ -250,7 +251,7 @@ class TrainingSessionController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    session.userPlayedMove(san);
+    session.playMove(san);
 
     final annotation = currentLine!.comments[currentMoveIndex.toString()];
 
@@ -297,7 +298,7 @@ class TrainingSessionController extends ChangeNotifier {
     final isCorrect = isCorrectUserMove(move, expectedSan);
 
     if (isCorrect) {
-      session.userPlayedMove(expectedSan);
+      session.playMove(expectedSan);
       learnQuizzing = false;
       waitingForUser = false;
       feedback = 'Correct!';
@@ -309,7 +310,7 @@ class TrainingSessionController extends ChangeNotifier {
       feedback = 'Wrong — the move is $expectedSan';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 1200));
-      session.userPlayedMove(expectedSan);
+      session.playMove(expectedSan);
       await Future.delayed(const Duration(milliseconds: 800));
       session.goBack();
       feedback = 'Try again';
@@ -355,7 +356,7 @@ class TrainingSessionController extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    session.userPlayedMove(san);
+    session.playMove(san);
     await Future.delayed(const Duration(milliseconds: 400));
   }
 
@@ -385,7 +386,7 @@ class TrainingSessionController extends ChangeNotifier {
 
     if (isCorrect) {
       updateMoveProgress(currentLine!, currentMoveIndex, wasCorrect: true);
-      session.userPlayedMove(expectedSan);
+      session.playMove(expectedSan);
       waitingForUser = false;
       feedback = 'Correct!';
       currentAnnotation = null;
@@ -402,7 +403,7 @@ class TrainingSessionController extends ChangeNotifier {
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 1200));
 
-      session.userPlayedMove(expectedSan);
+      session.playMove(expectedSan);
       waitingForUser = false;
       currentAnnotation = null;
       notifyListeners();
@@ -460,7 +461,7 @@ class TrainingSessionController extends ChangeNotifier {
       session.clearMoveHistory();
     }
     for (int i = 0; i < targetMoveIndex; i++) {
-      session.userPlayedMove(currentLine!.moves[i]);
+      session.playMove(currentLine!.moves[i]);
     }
 
     waitingForUser = true;
@@ -476,7 +477,7 @@ class TrainingSessionController extends ChangeNotifier {
 
     if (isCorrect) {
       updateMoveProgress(currentLine!, targetMoveIndex, wasCorrect: true);
-      session.userPlayedMove(expectedSan);
+      session.playMove(expectedSan);
       feedback = 'Correct!';
       waitingForUser = false;
       notifyListeners();

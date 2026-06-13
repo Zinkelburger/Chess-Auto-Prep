@@ -11,6 +11,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../utils/eval_constants.dart';
+import '../../utils/fen_utils.dart';
 import 'eval_canonicalize.dart';
 import 'external_eval_provider.dart';
 
@@ -34,9 +35,7 @@ EvalHit? parseChessDbQueryScoreBody(String body, String fen) {
     return null;
   }
 
-  final isWhiteStm =
-      canonicalizeFen4(fen).split(' ').length >= 2 &&
-          canonicalizeFen4(fen).split(' ')[1] == 'w';
+  final isWhiteStm = isWhiteToMove(canonicalizeFen4(fen));
 
   // Plain-text: eval:123
   final evalMatch = RegExp(r'eval:\s*(-?\d+)', caseSensitive: false)

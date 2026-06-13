@@ -89,18 +89,17 @@ class EngineWeaknessService {
         final eval = await _pool.evaluateFen(fullFen, depth);
         if (_cancelled) return;
 
-        final fenParts = fullFen.split(' ');
-        final isWhiteToMove = fenParts.length >= 2 && fenParts[1] == 'w';
+        final whiteToMove = isWhiteToMove(fullFen);
 
         int evalWhiteCp;
         int? evalWhiteMate;
 
         if (eval.scoreMate != null) {
-          evalWhiteMate = isWhiteToMove ? eval.scoreMate! : -eval.scoreMate!;
+          evalWhiteMate = whiteToMove ? eval.scoreMate! : -eval.scoreMate!;
           evalWhiteCp = evalWhiteMate > 0 ? kMateCpBase : -kMateCpBase;
         } else {
           evalWhiteCp =
-              isWhiteToMove ? (eval.scoreCp ?? 0) : -(eval.scoreCp ?? 0);
+              whiteToMove ? (eval.scoreCp ?? 0) : -(eval.scoreCp ?? 0);
         }
 
         final result = EngineWeaknessResult(

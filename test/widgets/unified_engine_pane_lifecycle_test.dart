@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -75,6 +76,8 @@ class _EnginePaneLifecycleHarness {
 }
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
   late EngineLifecycle lifecycle;
   late int notificationCount;
   late VoidCallback countNotifications;

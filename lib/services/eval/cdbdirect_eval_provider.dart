@@ -13,6 +13,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../utils/fen_utils.dart';
 import 'cdbdirect_parse.dart';
 import 'eval_canonicalize.dart';
 import 'external_eval_provider.dart';
@@ -251,7 +252,7 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
     if (!isReady) return const EvalLookupResult.miss();
 
     final key = canonicalizeFen4(fen);
-    final isWhiteStm = key.split(' ').length >= 2 && key.split(' ')[1] == 'w';
+    final isWhiteStm = isWhiteToMove(key);
 
     try {
       final response = _nativeLookup(key);

@@ -14,6 +14,7 @@ import '../../services/probability_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart';
+import '../../utils/fen_utils.dart';
 import '../../utils/eval_constants.dart';
 import 'engine_pane_footer.dart';
 import '../analysis/analysis_settings_sheet.dart';
@@ -994,12 +995,13 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     if (afterFirstMove == null) return const SizedBox.shrink();
 
     final continuationUci = move.fullPv.sublist(1);
-    final sanMoves = pvToSanList(afterFirstMove, continuationUci);
+    final sanMoves = uciPvToSan(afterFirstMove, continuationUci,
+        maxMoves: continuationUci.length);
     if (sanMoves.isEmpty) return const SizedBox.shrink();
 
     final fenParts = afterFirstMove.split(' ');
     final fullMoveNumber = int.tryParse(fenParts.length >= 6 ? fenParts[5] : '1') ?? 1;
-    final isBlack = fenParts.length >= 2 && fenParts[1] == 'b';
+    final isBlack = !isWhiteToMove(afterFirstMove);
     final startPly = (fullMoveNumber - 1) * 2 + (isBlack ? 1 : 0);
 
     return ClickableMoveLineWidget(
