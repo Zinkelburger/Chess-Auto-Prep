@@ -75,7 +75,7 @@ class RepertoireWriter {
       final previousPgn = _controller.repertoirePgn ?? '';
       final newPath = [...pathFromRoot, san];
       final filePath =
-          _controller.currentRepertoire?['filePath'] as String?;
+          _controller.currentRepertoire?.filePath;
 
       String? updatedPgn;
       if (filePath != null && filePath.isNotEmpty) {
@@ -119,7 +119,7 @@ class RepertoireWriter {
 
       final op = _undoStack.removeLast();
       final filePath =
-          _controller.currentRepertoire?['filePath'] as String?;
+          _controller.currentRepertoire?.filePath;
       if (filePath != null && filePath.isNotEmpty) {
         await StorageFactory.instance.writeFile(filePath, op.previousPgn);
       }

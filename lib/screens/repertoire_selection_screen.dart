@@ -242,7 +242,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
   }
 
   void _selectRepertoire(RepertoireMetadata repertoire) {
-    Navigator.of(context).pop(repertoire.toMap());
+    Navigator.of(context).pop(repertoire);
   }
 
   Future<void> _showCreateDialog() async {

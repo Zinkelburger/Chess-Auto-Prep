@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
+import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 
 /// Replay [moves] from [startingFen] (or standard start) and return the FEN.
 String fenAfterMoves(
@@ -154,11 +155,11 @@ void main() {
       assertNavigationInvariants(controller);
     });
 
-    test('goBack after userPlayedMove restores previous FEN exactly', () {
-      controller.userPlayedMove('e4');
+    test('goBack after playMove restores previous FEN exactly', () {
+      controller.playMove('e4');
       final afterE4 = navigationSnapshot(controller);
 
-      controller.userPlayedMove('e5');
+      controller.playMove('e5');
       expect(controller.fen, isNot(equals(afterE4.fen)));
 
       controller.goBack();
@@ -201,7 +202,7 @@ void main() {
     test('goBack and goForward are inverses for every move in a sequence', () {
       const moves = ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5'];
       for (final san in moves) {
-        controller.userPlayedMove(san);
+        controller.playMove(san);
         assertNavigationInvariants(controller);
       }
       final endSnapshot = navigationSnapshot(controller);
@@ -250,11 +251,11 @@ void main() {
       controller = RepertoireController();
     });
 
-    test('userPlayedMove advances FEN, increments moveIndex, extends history by exactly one',
+    test('playMove advances FEN, increments moveIndex, extends history by exactly one',
         () {
       final before = navigationSnapshot(controller);
 
-      controller.userPlayedMove('e4');
+      controller.playMove('e4');
 
       expect(controller.moveHistory.length, before.history.length + 1);
       expect(controller.currentMoveIndex, before.moveIndex + 1);
@@ -264,13 +265,13 @@ void main() {
       assertNavigationInvariants(controller);
     });
 
-    test('userPlayedMove after goBack creates variation', () {
+    test('playMove after goBack creates variation', () {
       controller.loadMoveHistory(['e4', 'e5', 'Nf3']);
       controller.goBack();
       controller.goBack();
       expect(controller.currentMoveIndex, 0);
 
-      controller.userPlayedMove('c5');
+      controller.playMove('c5');
 
       // c5 is a new variation; cursor is now on the e4 → c5 line.
       expect(controller.currentMoveSequence, ['e4', 'c5']);
@@ -313,13 +314,13 @@ void main() {
       assertNavigationInvariants(controller);
     });
 
-    test('consecutive userPlayedMove calls produce monotonically increasing move indices',
+    test('consecutive playMove calls produce monotonically increasing move indices',
         () {
       const moves = ['e4', 'e5', 'Nf3', 'Nc6'];
       var previousIndex = controller.currentMoveIndex;
 
       for (final san in moves) {
-        controller.userPlayedMove(san);
+        controller.playMove(san);
         expect(controller.currentMoveIndex, greaterThan(previousIndex));
         previousIndex = controller.currentMoveIndex;
         assertNavigationInvariants(controller);
@@ -428,7 +429,11 @@ void main() {
 
     test('setRepertoireColor flips side and resets navigation state', () async {
       final controller = RepertoireController();
-      await controller.setRepertoire({'name': 'Test', 'filePath': filePath});
+      await controller.setRepertoire(RepertoireMetadata(
+        name: 'Test',
+        filePath: filePath,
+        lastModified: DateTime(2026, 1, 1),
+      ));
       controller.loadMoveHistory(['e4', 'e5', 'Nf3']);
       expect(controller.currentMoveIndex, 2);
 
@@ -487,7 +492,7 @@ void main() {
         () {
       const moves = ['e4', 'e5', 'Nf3'];
       for (final san in moves) {
-        controller.userPlayedMove(san);
+        controller.playMove(san);
         assertNavigationInvariants(controller);
       }
 

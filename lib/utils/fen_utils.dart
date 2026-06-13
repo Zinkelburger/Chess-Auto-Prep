@@ -19,6 +19,14 @@ String normalizeFen(String fen) {
   return fen;
 }
 
+/// Whether the side to move in [fen] is white.
+///
+/// Returns `false` if the FEN is malformed or has fewer than two fields.
+bool isWhiteToMove(String fen) {
+  final parts = fen.split(' ');
+  return parts.length >= 2 && parts[1] == 'w';
+}
+
 /// Expand a possibly-short (4-field) FEN into a full 6-field FEN by appending
 /// default half-move clock 0 and full-move number 1.  Needed by libraries that
 /// require a complete FEN string (e.g. `chess.Chess.fromFEN`).

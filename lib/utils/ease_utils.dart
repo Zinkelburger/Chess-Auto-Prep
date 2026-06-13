@@ -13,9 +13,6 @@ import 'eval_constants.dart';
 const double kEaseAlpha = 1 / 3;
 const double kEaseBeta = 1.5;
 
-/// Display multiplier so the 0–1 difficulty value maps to a 0–5 scale.
-const double kEaseDisplayScale = 5.0;
-
 /// Convert a centipawn score to a Q value in the range [-1, 1].
 ///
 /// Maps large scores (mate) to +/-1 and uses a logistic curve for normal

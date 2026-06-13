@@ -70,10 +70,8 @@ class RepertoireService {
       final gameText = games[gameIndex];
 
       try {
-        // Parse the PGN game
         final game = PgnGame.parsePgn(gameText);
 
-        // Extract mainline moves (this excludes variations in parentheses)
         final mainlineMoves =
             game.moves.mainline().map((node) => node.san).toList();
 
@@ -81,7 +79,6 @@ class RepertoireService {
 
         final color = resolvedColor;
 
-        // Extract comments from the parsed game
         final comments = <String, String>{};
         final moveNodes = game.moves.mainline().toList();
         for (int i = 0; i < moveNodes.length; i++) {
@@ -94,11 +91,9 @@ class RepertoireService {
           }
         }
 
-        // Extract variation main lines for reference.
         final variations = <String>[];
         _extractVariations(game.moves, variations);
 
-        // Create the repertoire line
         final lineName = _generateLineName(game, gameIndex);
         final lineId = _extractLineId(game, mainlineMoves, gameIndex);
         final startPosition = extractStartPosition(game);
@@ -199,7 +194,6 @@ class RepertoireService {
         event != 'Edited Line') {
       return event;
     } else {
-      // Generate name from first few moves
       final moves =
           game.moves.mainline().take(3).map((node) => node.san).toList();
       if (moves.isNotEmpty) {
@@ -304,6 +298,30 @@ class RepertoireService {
   String generateLineId(List<String> moves, int index) =>
       _generateStableLineId(moves, index);
 
+  /// Find the index of the game matching [lineId] within [games].
+  int? _findGameIndexByLineId(List<String> games, String lineId) {
+    for (int i = 0; i < games.length; i++) {
+      try {
+        final game = PgnGame.parsePgn(games[i]);
+        final moves = game.moves.mainline().map((n) => n.san).toList();
+        final id = _extractLineId(game, moves, i);
+        if (id == lineId) return i;
+      } catch (_) {
+        continue;
+      }
+    }
+    return null;
+  }
+
+  /// Reassemble a PGN document from preamble + game list.
+  String _reassembleDocument(String preamble, List<String> games) {
+    final sections = <String>[
+      if (preamble.isNotEmpty) preamble,
+      ...games,
+    ];
+    return '${sections.join('\n\n').trimRight()}\n';
+  }
+
   String _generateStableLineId(List<String> moves, int index) {
     final raw = base64Url.encode(utf8.encode('${moves.join(' ')}|$index'));
     final trimmed = raw.replaceAll('=', '');
@@ -318,14 +336,11 @@ class RepertoireService {
     final questions = <TrainingQuestion>[];
 
     for (final line in lines) {
-      // Filter by color if specified
       if (colorFilter != null && line.color != colorFilter) {
         continue;
       }
 
-      // Create questions for moves where the training color plays
       for (int moveIndex = 0; moveIndex < line.moves.length; moveIndex++) {
-        // Check if this move is played by the training color
         final isWhiteMove = moveIndex % 2 == 0;
         final shouldIncludeMove = (line.color == 'white' && isWhiteMove) ||
             (line.color == 'black' && !isWhiteMove);
@@ -389,25 +404,9 @@ class RepertoireService {
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
-    // Find the game that matches this lineId
-    int? matchIndex;
-    for (int i = 0; i < games.length; i++) {
-      try {
-        final game = PgnGame.parsePgn(games[i]);
-        final moves = game.moves.mainline().map((n) => n.san).toList();
-        final id = _extractLineId(game, moves, i);
-        if (id == lineId) {
-          matchIndex = i;
-          break;
-        }
-      } catch (_) {
-        continue;
-      }
-    }
-
+    final matchIndex = _findGameIndexByLineId(games, lineId);
     if (matchIndex == null) return false;
 
-    // Replace or insert the [Event] header in the matched game text
     final gameText = games[matchIndex];
     final eventRegex = RegExp(r'\[Event\s+"[^"]*"\]');
 
@@ -415,20 +414,13 @@ class RepertoireService {
     if (eventRegex.hasMatch(gameText)) {
       updatedGame = gameText.replaceFirst(eventRegex, '[Event "$newTitle"]');
     } else {
-      // No Event header — prepend one
       updatedGame = '[Event "$newTitle"]\n$gameText';
     }
 
     games[matchIndex] = updatedGame;
 
-    // Reassemble and write back without dropping top-level metadata.
-    final sections = <String>[];
-    if (document.preamble.isNotEmpty) {
-      sections.add(document.preamble);
-    }
-    sections.addAll(games);
-
-    await _writeAtomically(file, '${sections.join('\n\n').trimRight()}\n');
+    await _writeAtomically(
+        file, _reassembleDocument(document.preamble, games));
     return true;
   }
 
@@ -449,32 +441,13 @@ class RepertoireService {
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
-    int? matchIndex;
-    for (int i = 0; i < games.length; i++) {
-      try {
-        final game = PgnGame.parsePgn(games[i]);
-        final moves = game.moves.mainline().map((n) => n.san).toList();
-        final id = _extractLineId(game, moves, i);
-        if (id == lineId) {
-          matchIndex = i;
-          break;
-        }
-      } catch (_) {
-        continue;
-      }
-    }
-
+    final matchIndex = _findGameIndexByLineId(games, lineId);
     if (matchIndex == null) return false;
 
     games[matchIndex] = newGamePgn.trimRight();
 
-    final sections = <String>[];
-    if (document.preamble.isNotEmpty) {
-      sections.add(document.preamble);
-    }
-    sections.addAll(games);
-
-    await _writeAtomically(file, '${sections.join('\n\n').trimRight()}\n');
+    await _writeAtomically(
+        file, _reassembleDocument(document.preamble, games));
     return true;
   }
 
@@ -499,31 +472,15 @@ class RepertoireService {
     final document = _splitPgnDocumentPreservingPreamble(content);
     final games = List<String>.from(document.games);
 
-    int? matchIndex;
-    for (int i = 0; i < games.length; i++) {
-      try {
-        final game = PgnGame.parsePgn(games[i]);
-        final moves = game.moves.mainline().map((n) => n.san).toList();
-        final id = _extractLineId(game, moves, i);
-        if (id == lineId) {
-          matchIndex = i;
-          break;
-        }
-      } catch (_) {
-        continue;
-      }
-    }
-
+    final matchIndex = _findGameIndexByLineId(games, lineId);
     if (matchIndex == null) return false;
 
-    // Parse existing headers + move text
     final gameText = games[matchIndex];
     final headerPattern = RegExp(r'^\[(\w+)\s+"([^"]*)"\]', multiLine: true);
     final headers = <String, String>{};
     String moveText = '';
 
     final lines = gameText.split('\n');
-    final headerLines = <String>[];
     bool pastHeaders = false;
     final moveLines = <String>[];
 
@@ -532,7 +489,6 @@ class RepertoireService {
       if (!pastHeaders && headerPattern.hasMatch(trimmed)) {
         final match = headerPattern.firstMatch(trimmed)!;
         headers[match.group(1)!] = match.group(2)!;
-        headerLines.add(trimmed);
       } else {
         pastHeaders = true;
         moveLines.add(line);
@@ -540,7 +496,6 @@ class RepertoireService {
     }
     moveText = moveLines.join('\n').trim();
 
-    // Update review headers
     String fmtDate(DateTime? d) =>
         d == null ? '' : d.toUtc().toIso8601String();
     headers['LastReview'] = fmtDate(lastReview);
@@ -550,9 +505,7 @@ class RepertoireService {
     headers['PassCount'] = passCount.toString();
     headers['FailCount'] = failCount.toString();
 
-    // Rebuild game text with updated headers
     final buffer = StringBuffer();
-    // Standard headers first (Event, Site, etc), then custom
     const standardOrder = [
       'Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result',
       'FEN', 'SetUp', 'ECO', 'Opening',
@@ -565,7 +518,6 @@ class RepertoireService {
         written.add(key);
       }
     }
-    // Custom/review headers
     for (final entry in headers.entries) {
       if (!written.contains(entry.key)) {
         buffer.writeln('[${entry.key} "${entry.value}"]');
@@ -576,13 +528,8 @@ class RepertoireService {
 
     games[matchIndex] = buffer.toString().trimRight();
 
-    final sections = <String>[];
-    if (document.preamble.isNotEmpty) {
-      sections.add(document.preamble);
-    }
-    sections.addAll(games);
-
-    await _writeAtomically(file, '${sections.join('\n\n').trimRight()}\n');
+    await _writeAtomically(
+        file, _reassembleDocument(document.preamble, games));
     return true;
   }
 

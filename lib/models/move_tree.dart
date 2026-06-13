@@ -120,21 +120,6 @@ class MoveNode {
     List<MoveNode>? children,
   }) : children = children ?? [];
 
-  MoveNode copyWith({
-    String? san,
-    String? fen,
-    String? comment,
-    List<int>? nags,
-    List<MoveNode>? children,
-  }) =>
-      MoveNode(
-        san: san ?? this.san,
-        fen: fen ?? this.fen,
-        comment: comment ?? this.comment,
-        nags: nags ?? this.nags,
-        children: children ?? this.children,
-      );
-
   @override
   String toString() =>
       'MoveNode($san, children=${children.length})';

@@ -21,32 +21,6 @@ String uciToSan(String fen, String uci) {
   }
 }
 
-/// Convert a UCI PV list to SAN moves, playing from [fen].
-///
-/// Returns at most [maxMoves] SAN strings. The first move in [fullPv] IS
-/// included (unlike [formatContinuation] which skips it).
-List<String> pvToSanList(String fen, List<String> fullPv, {int maxMoves = 10}) {
-  if (fullPv.isEmpty) return const [];
-  try {
-    Position pos = Chess.fromSetup(Setup.parseFen(fen));
-    final result = <String>[];
-    for (int i = 0; i < fullPv.length && result.length < maxMoves; i++) {
-      final move = Move.parse(fullPv[i]);
-      if (move == null) break;
-      try {
-        final (newPos, san) = pos.makeSan(move);
-        result.add(san);
-        pos = newPos;
-      } catch (_) {
-        break;
-      }
-    }
-    return result;
-  } catch (_) {
-    return const [];
-  }
-}
-
 /// Format a PV continuation (skip the first move) as SAN text.
 ///
 /// Returns at most [maxMoves] SAN tokens joined by spaces.
@@ -118,17 +92,6 @@ String roleChar(Role role) => switch (role) {
       Role.king => 'K',
     };
 
-/// Parse a promotion character ('q','r','b','n') into a [Role].
-Role? parsePromotionRole(String char) => switch (char.toLowerCase()) {
-      'q' => Role.queen,
-      'r' => Role.rook,
-      'b' => Role.bishop,
-      'n' => Role.knight,
-      _ => null,
-    };
-
-// ── Eval formatting ──────────────────────────────────────────────────────
-
 /// Format a centipawn / mate score for display (e.g. `+1.3`, `-0.5`, `#3`).
 ///
 /// Uses one decimal place for centipawns and `#N` for mate scores.
@@ -141,8 +104,6 @@ String formatEvalDisplay({int? scoreCp, int? scoreMate}) {
   }
   return '--';
 }
-
-// ── UCI PV conversion ────────────────────────────────────────────────────
 
 /// Convert a UCI principal-variation list to SAN move strings.
 ///
@@ -167,8 +128,6 @@ List<String> uciPvToSan(String fen, List<String> uciMoves,
   }
 }
 
-// ── Number formatting helpers ────────────────────────────────────────────
-
 /// Format a large integer with k/M suffixes.
 String formatCount(int count) {
   if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
@@ -188,12 +147,6 @@ String formatNps(int nps) {
   if (nps >= 1000000) return '${(nps / 1000000).toStringAsFixed(1)}M';
   if (nps >= 1000) return '${(nps / 1000).toStringAsFixed(0)}k';
   return nps.toString();
-}
-
-/// Format megabytes with GB conversion for large values.
-String formatRam(int mb) {
-  if (mb >= 1024) return '${(mb / 1024).toStringAsFixed(1)} GB';
-  return '$mb MB';
 }
 
 /// Compute the FEN after playing [sanMoves] from [startFen] up to [upToIndex].
