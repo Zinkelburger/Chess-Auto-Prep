@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart';
 import '../models/build_tree_node.dart';
 import '../models/explorer_response.dart';
 import '../utils/chess_utils.dart' show playUciMove, uciToSan;
+import '../utils/fen_utils.dart';
 import 'engine/stockfish_pool.dart';
 import 'engine/engine_lifecycle.dart';
 import 'eval/chessdb_api_provider.dart';
@@ -33,6 +34,9 @@ class TreeBuildService {
   final TreeEvalResolver _evalResolver = TreeEvalResolver();
 
   static const double _pvInjectEpsilon = 0.01;
+  static const int _frontierMinPlySentinel = 1 << 30;
+  static const int _externalEvalProgressInterval = 50;
+  static const int _stockfishEvalProgressInterval = 10;
 
   bool _isBuilding = false;
   bool _isPaused = false;
@@ -120,13 +124,13 @@ class TreeBuildService {
       _evalResolver.reset();
       _nextNodeId = 1;
       final rootFen = cfg.startFen;
-      final isWhiteToMove = rootFen.split(' ')[1] == 'w';
+      final whiteToMove = isWhiteToMove(rootFen);
       final root = BuildTreeNode(
         fen: rootFen,
         moveSan: '',
         moveUci: '',
         ply: 0,
-        isWhiteToMove: isWhiteToMove,
+        isWhiteToMove: whiteToMove,
         nodeId: _nextNodeId++,
       );
       tree = BuildTree(
@@ -272,13 +276,13 @@ class TreeBuildService {
 
     _nextNodeId = 1;
     final rootFen = config.startFen;
-    final isWhiteToMove = rootFen.split(' ')[1] == 'w';
+    final whiteToMove = isWhiteToMove(rootFen);
     final root = BuildTreeNode(
       fen: rootFen,
       moveSan: '',
       moveUci: '',
       ply: 0,
-      isWhiteToMove: isWhiteToMove,
+      isWhiteToMove: whiteToMove,
       nodeId: _nextNodeId++,
     );
     final tree = BuildTree(
@@ -514,7 +518,7 @@ class TreeBuildService {
       );
       if (gotEval) enriched++;
 
-      if (enriched % 50 == 0) {
+      if (enriched % _externalEvalProgressInterval == 0) {
         _progress.emitProgress(
           tree,
           node.ply,
@@ -562,7 +566,7 @@ class TreeBuildService {
           }
         }
 
-        if (i % 10 == 0) {
+        if (i % _stockfishEvalProgressInterval == 0) {
           _progress.emitProgress(
             tree,
             node.ply,
@@ -586,7 +590,7 @@ class TreeBuildService {
     BuildTreeNode root,
   ) {
     final frontier = <BuildTreeNode>[];
-    var minPly = 1 << 30;
+    var minPly = _frontierMinPlySentinel;
     void walk(BuildTreeNode node) {
       if (node.children.isNotEmpty) {
         if (!node.explored) {
@@ -613,7 +617,7 @@ class TreeBuildService {
   /// Shallowest ply among nodes that still need expansion (for progress UI).
   static int? minFrontierPly(BuildTreeNode root) {
     final (_, minPly) = prepareResumeFrontier(root);
-    return minPly > 0 && minPly < (1 << 30) ? minPly : null;
+    return minPly > 0 && minPly < _frontierMinPlySentinel ? minPly : null;
   }
 
   Future<void> _buildBfsLoop({
@@ -864,7 +868,7 @@ class TreeBuildService {
       final childEval = await _evalResolver.lookupDbEvalWhite(childFen, config);
       if (childEval == null) continue;
 
-      final childIsWhite = childFen.split(' ')[1] == 'w';
+      final childIsWhite = isWhiteToMove(childFen);
       final childCpWhite = childEval.$1;
 
       if (bestCpWhite != null) {
@@ -918,14 +922,14 @@ class TreeBuildService {
     required Queue<BuildTreeNode> queue,
   }) async {
     final mpvCount = config.ourMultipv;
-    final isWhiteToMove = node.fen.split(' ')[1] == 'w';
+    final whiteToMove = isWhiteToMove(node.fen);
 
     final sw = Stopwatch()..start();
     final discovery = await _pool.discoverMoves(
       fen: node.fen,
       depth: config.evalDepth,
       multiPv: mpvCount,
-      isWhiteToMove: isWhiteToMove,
+      isWhiteToMove: whiteToMove,
     );
     _stats.sfMultipvCalls++;
     _stats.sfMultipvMs += sw.elapsedMilliseconds;
@@ -935,7 +939,7 @@ class TreeBuildService {
     // Set node eval from top line
     if (!node.hasEngineEval) {
       final topCp = discovery.lines.first.effectiveCp;
-      final stmCp = isWhiteToMove ? topCp : -topCp;
+      final stmCp = whiteToMove ? topCp : -topCp;
       node.engineEvalCp = stmCp;
       _evalResolver.cacheEvalWhite(node.fen, topCp, config.evalDepth);
     }
@@ -977,7 +981,7 @@ class TreeBuildService {
     for (final line in discovery.lines) {
       if (line.moveUci.isEmpty) continue;
       final evalLoss =
-          isWhiteToMove ? bestCp - line.effectiveCp : line.effectiveCp - bestCp;
+          whiteToMove ? bestCp - line.effectiveCp : line.effectiveCp - bestCp;
       if (evalLoss > config.maxEvalLossCp) continue;
 
       final childFen = playUciMove(node.fen, line.moveUci);
@@ -999,8 +1003,8 @@ class TreeBuildService {
         san = uciToSan(node.fen, line.moveUci);
       }
 
-      final childIsWhite = childFen.split(' ')[1] == 'w';
-      final childEvalStm = isWhiteToMove ? -line.effectiveCp : line.effectiveCp;
+      final childIsWhite = isWhiteToMove(childFen);
+      final childEvalStm = whiteToMove ? -line.effectiveCp : line.effectiveCp;
 
       final child = _makeChild(
         parent: node,
@@ -1383,13 +1387,13 @@ class TreeBuildService {
     // Dedup by FEN among siblings
     if (parent.children.any((c) => c.fen == fen)) return null;
 
-    final isWhiteToMove = fen.split(' ')[1] == 'w';
+    final whiteToMove = isWhiteToMove(fen);
     final child = BuildTreeNode(
       fen: fen,
       moveSan: san,
       moveUci: uci,
       ply: parent.ply + 1,
-      isWhiteToMove: isWhiteToMove,
+      isWhiteToMove: whiteToMove,
       nodeId: _nextNodeId++,
       parent: parent,
     );

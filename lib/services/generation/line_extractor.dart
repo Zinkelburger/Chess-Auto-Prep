@@ -6,6 +6,7 @@
 library;
 
 import '../../models/build_tree_node.dart';
+import '../../utils/fen_utils.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 
@@ -192,7 +193,7 @@ class LineExtractor {
   }) {
     if (lines.length >= maxLines) return;
 
-    final resolved = _resolveTransposition(node);
+    final resolved = resolveTransposition(node, fenMap);
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     bool pushedAny = false;
@@ -256,17 +257,6 @@ class LineExtractor {
     ));
   }
 
-  BuildTreeNode _resolveTransposition(BuildTreeNode node) {
-    if (node.children.isNotEmpty || fenMap == null) return node;
-    final canonical = fenMap!.getCanonical(node.fen);
-    if (canonical != null &&
-        canonical != node &&
-        canonical.children.isNotEmpty) {
-      return canonical;
-    }
-    return node;
-  }
-
   /// Export all extracted lines as a single PGN string.
   String exportPgn(List<ExtractedLine> lines, {String? repertoireName}) {
     final sorted = List<ExtractedLine>.from(lines);
@@ -274,7 +264,7 @@ class LineExtractor {
       sorted.sort((a, b) => b.probability.compareTo(a.probability));
     }
 
-    final rootWhiteToMove = config.startFen.split(' ')[1] == 'w';
+    final rootWhiteToMove = isWhiteToMove(config.startFen);
     return sorted.asMap().entries.map((e) {
       final idx = e.key + 1;
       final eventName = repertoireName != null

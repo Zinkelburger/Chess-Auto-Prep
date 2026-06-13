@@ -34,7 +34,7 @@ class RepertoireSelector {
     // Transposition resolution: if this node is a childless transposition
     // leaf, redirect to the canonical node that has the real subtree
     // (matches C `resolve_transposition`).
-    final resolved = _resolveTransposition(node);
+    final resolved = resolveTransposition(node, fenMap);
     if (resolved.children.isEmpty) return 0;
 
     // Eval-window guard (skip root)
@@ -151,17 +151,4 @@ class RepertoireSelector {
     );
   }
 
-  /// If [node] is a childless transposition leaf, find the canonical node
-  /// (which has children) via the FenMap.  Returns [node] itself if it
-  /// already has children or no canonical is found.
-  BuildTreeNode _resolveTransposition(BuildTreeNode node) {
-    if (node.children.isNotEmpty || fenMap == null) return node;
-    final canonical = fenMap!.getCanonical(node.fen);
-    if (canonical != null &&
-        canonical != node &&
-        canonical.children.isNotEmpty) {
-      return canonical;
-    }
-    return node;
-  }
 }

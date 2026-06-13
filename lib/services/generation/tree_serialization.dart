@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../models/build_tree_node.dart';
+import '../../utils/fen_utils.dart' as fen_utils;
 import 'fen_map.dart';
 
 // ── Serialization ────────────────────────────────────────────────────────
@@ -167,7 +168,7 @@ BuildTreeNode _nodeFromJson(
   final nodeId = (obj['id'] as num?)?.toInt() ?? 0;
   final fen = obj['fen'] as String? ?? '';
   final isWhiteToMove = obj['is_white_to_move'] as bool? ??
-      (fen.isNotEmpty ? fen.split(' ')[1] == 'w' : true);
+      (fen.isNotEmpty ? fen_utils.isWhiteToMove(fen) : true);
 
   final node = BuildTreeNode(
     fen: fen,

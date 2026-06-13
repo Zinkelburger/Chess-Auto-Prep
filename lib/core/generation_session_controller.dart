@@ -21,14 +21,24 @@ class GenerationSessionController extends ChangeNotifier {
 
   bool _isGenerating = false;
   bool _isPaused = false;
+  bool _finishNowRequested = false;
   BuildTree? _generatedTree;
   TreeBuildConfig? _generatedTreeConfig;
   FenMap? _generatedTreeFenMap;
 
   RepertoireJob? currentJob;
 
+  // Progress stats (updated by RepertoireGenerationTab)
+  String progressStatus = '';
+  int progressNodes = 0;
+  int progressDepth = 0;
+  double? progressNodesPerMinute;
+  double? progressEtaSec;
+  int progressElapsedMs = 0;
+
   bool get isGenerating => _isGenerating;
   bool get isPaused => _isPaused;
+  bool get finishNowRequested => _finishNowRequested;
   BuildTree? get generatedTree => _generatedTree;
   TreeBuildConfig? get generatedTreeConfig => _generatedTreeConfig;
   FenMap? get generatedTreeFenMap => _generatedTreeFenMap;
@@ -56,9 +66,23 @@ class GenerationSessionController extends ChangeNotifier {
     buildService.stopBuild();
     _isPaused = false;
     _isGenerating = false;
+    _finishNowRequested = false;
     currentJob?.updateStatus(JobStatus.cancelled);
     currentJob = null;
     notifyListeners();
+  }
+
+  /// Stop Phase 1 BFS and proceed directly to Phase 2 (line selection)
+  /// on whatever tree is built so far.
+  void finishNow() {
+    if (!_isGenerating) return;
+    _finishNowRequested = true;
+    buildService.stopBuild();
+    notifyListeners();
+  }
+
+  void clearFinishNow() {
+    _finishNowRequested = false;
   }
 
   // ── State updates (called by RepertoireGenerationTab) ───────────────
@@ -113,6 +137,7 @@ class GenerationSessionController extends ChangeNotifier {
 
   @override
   void dispose() {
+    buildService.stopBuild();
     coherenceService.dispose();
     super.dispose();
   }
