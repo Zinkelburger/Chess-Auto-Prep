@@ -368,12 +368,24 @@ def count_user_subscriptions(db: sqlite3.Connection, user_id: int) -> int:
 # ── Subscription management ──────────────────────────────────────────
 
 
+def parse_fen_list(fen_field: str | None) -> list[str]:
+    """Split a stored FEN field into individual FEN strings.
+
+    The DB stores multiple FENs newline-separated.  A single FEN (legacy)
+    has no newline and is returned as a one-element list.
+    """
+    if not fen_field:
+        return []
+    return [f.strip() for f in fen_field.strip().split("\n") if f.strip()]
+
+
 def _compute_sub_zobrist(fen: str | None) -> int | None:
-    """Compute signed Zobrist hash for a FEN, or None if no FEN."""
-    if not fen:
+    """Compute signed Zobrist hash for the first FEN, or None if no FEN."""
+    fens = parse_fen_list(fen)
+    if not fens:
         return None
     import chess
-    board = chess.Board(fen)
+    board = chess.Board(fens[0])
     return signed_zobrist(board)
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from models import (
     get_db, get_all_active_subscriptions, record_notification,
     already_notified_batch, build_game_filters, create_email_token,
-    cleanup_expired_email_tokens,
+    cleanup_expired_email_tokens, parse_fen_list,
 )
 from query import find_games
 from ingest import ingest_latest
@@ -30,9 +30,16 @@ def match_subscription(db, sub: dict, twic_number: int) -> list[dict]:
         if sub.get(key):
             filter_kwargs[key] = sub[key]
 
-    if sub.get("fen"):
-        games = find_games(db, sub["fen"], twic_number=twic_number,
-                           limit=200, **filter_kwargs)
+    fens = parse_fen_list(sub.get("fen"))
+    if fens:
+        seen_ids: set[int] = set()
+        games: list[dict] = []
+        for fen in fens:
+            for g in find_games(db, fen, twic_number=twic_number,
+                                limit=200, **filter_kwargs):
+                if g["id"] not in seen_ids:
+                    seen_ids.add(g["id"])
+                    games.append(g)
     elif filter_kwargs:
         clauses, params = build_game_filters(twic_number=twic_number, **filter_kwargs)
         sql = "SELECT g.*, NULL AS match_ply, NULL AS match_fen FROM games g"

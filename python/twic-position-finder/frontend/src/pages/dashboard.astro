@@ -82,13 +82,14 @@ import Base from '../layouts/Base.astro';
     inputMode?: string;
     pattern?: string;
     mono?: boolean;
+    repeatable?: boolean;
     hasBoardPreview?: boolean;
     hasEcoPicker?: boolean;
     tooltip?: string;
   }
 
   const FILTER_DEFS: FilterDef[] = [
-    { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true },
+    { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true, repeatable: true },
     { key: 'player', label: 'Player name', inputType: 'text' },
     { key: 'eco', label: 'ECO Code', inputType: 'text', hasEcoPicker: true },
     { key: 'min_elo', label: 'Minimum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*', tooltip: 'At least one player must be at or above this rating' },
@@ -97,20 +98,23 @@ import Base from '../layouts/Base.astro';
   ];
 
   const dashActiveFilters: Set<string> = new Set();
+  let dashFenCounter = 0;
   const dashContainer = document.getElementById('dash-filters-container')!;
   const dashAddBtn = document.getElementById('dash-add-filter-btn')!;
   const dashFilterMenu = document.getElementById('dash-filter-menu')!;
 
-  function dashBuildFilterRow(def: FilterDef): HTMLElement {
+  function dashBuildFilterRow(def: FilterDef, instanceId?: string): HTMLElement {
+    const rowKey = instanceId || def.key;
     const row = document.createElement('div');
     row.className = 'filter-row';
-    row.dataset.filterKey = def.key;
+    row.dataset.filterKey = rowKey;
 
     const body = document.createElement('div');
     body.className = 'filter-body';
 
+    const inputSuffix = instanceId ? instanceId.replace('_', '-') : def.key.replace('_', '-');
     const lbl = document.createElement('label');
-    lbl.setAttribute('for', `dash-sub-${def.key.replace('_', '-')}`);
+    lbl.setAttribute('for', `dash-sub-${inputSuffix}`);
     if (def.tooltip) {
       lbl.innerHTML = `${def.label} <span class="tooltip-trigger" title="${def.tooltip}">?</span>`;
     } else {
@@ -120,20 +124,21 @@ import Base from '../layouts/Base.astro';
 
     const input = document.createElement('input');
     input.type = def.inputType;
-    input.id = `dash-sub-${def.key.replace('_', '-')}`;
+    input.id = `dash-sub-${inputSuffix}`;
     if (def.mono) input.className = 'mono';
     if (def.inputMode) input.inputMode = def.inputMode;
     if (def.pattern) input.pattern = def.pattern;
     input.autocomplete = 'off';
+    if (def.repeatable) input.dataset.filterType = def.key;
     body.appendChild(input);
 
     if (def.hasBoardPreview) {
       const board = document.createElement('div');
-      board.id = 'dash-fen-board';
+      board.id = `dash-fen-board-${inputSuffix}`;
       board.className = 'board-preview';
       body.appendChild(board);
       const err = document.createElement('div');
-      err.id = 'dash-fen-error';
+      err.id = `dash-fen-error-${inputSuffix}`;
       err.className = 'board-invalid';
       body.appendChild(err);
     }
@@ -154,35 +159,52 @@ import Base from '../layouts/Base.astro';
     removeBtn.className = 'filter-remove';
     removeBtn.innerHTML = '&times;';
     removeBtn.title = 'Remove filter';
-    removeBtn.addEventListener('click', () => dashRemoveFilter(def.key));
+    removeBtn.addEventListener('click', () => dashRemoveFilter(rowKey));
     row.appendChild(removeBtn);
 
     return row;
   }
 
-  function dashAddFilter(key: string) {
-    if (dashActiveFilters.has(key)) return;
+  function dashAddFilter(key: string, prefillValue?: string): string {
     const def = FILTER_DEFS.find(d => d.key === key);
-    if (!def) return;
+    if (!def) return '';
 
-    dashActiveFilters.add(key);
-    const row = dashBuildFilterRow(def);
+    let instanceId: string | undefined;
+    if (def.repeatable) {
+      instanceId = `${key}-${dashFenCounter++}`;
+    } else {
+      if (dashActiveFilters.has(key)) return key;
+    }
+    const rowKey = instanceId || key;
+    dashActiveFilters.add(rowKey);
+
+    const row = dashBuildFilterRow(def, instanceId);
     dashContainer.appendChild(row);
 
-    if (def.hasBoardPreview) {
-      const fenInput = document.getElementById('dash-sub-fen') as HTMLInputElement;
-      const fenBoard = document.getElementById('dash-fen-board')!;
-      const fenError = document.getElementById('dash-fen-error')!;
+    if (def.hasBoardPreview && instanceId) {
+      const inputSuffix = instanceId.replace('_', '-');
+      const fenInput = document.getElementById(`dash-sub-${inputSuffix}`) as HTMLInputElement;
+      const fenBoard = document.getElementById(`dash-fen-board-${inputSuffix}`)!;
+      const fenError = document.getElementById(`dash-fen-error-${inputSuffix}`)!;
       fenInput.addEventListener('input', () => (window as any).renderBoardPreview(fenInput.value, fenBoard, fenError));
+      if (prefillValue) {
+        fenInput.value = prefillValue;
+        (window as any).renderBoardPreview(prefillValue, fenBoard, fenError);
+      }
+    } else if (prefillValue) {
+      const inputSuffix = instanceId ? instanceId.replace('_', '-') : key.replace('_', '-');
+      const input = document.getElementById(`dash-sub-${inputSuffix}`) as HTMLInputElement | null;
+      if (input) input.value = prefillValue;
     }
 
     dashUpdateMenuState();
     dashHideMenu();
+    return rowKey;
   }
 
-  function dashRemoveFilter(key: string) {
-    dashActiveFilters.delete(key);
-    const row = dashContainer.querySelector(`[data-filter-key="${key}"]`);
+  function dashRemoveFilter(rowKey: string) {
+    dashActiveFilters.delete(rowKey);
+    const row = dashContainer.querySelector(`[data-filter-key="${rowKey}"]`);
     if (row) row.remove();
     dashUpdateMenuState();
   }
@@ -195,7 +217,7 @@ import Base from '../layouts/Base.astro';
       btn.type = 'button';
       btn.className = 'filter-menu-item';
       btn.textContent = def.label;
-      if (dashActiveFilters.has(def.key)) {
+      if (!def.repeatable && dashActiveFilters.has(def.key)) {
         btn.disabled = true;
       } else {
         anyAvailable = true;
@@ -327,7 +349,14 @@ import Base from '../layouts/Base.astro';
       const tagsDiv = document.createElement('div');
       tagsDiv.style.cssText = 'display:flex; flex-direction:column; gap:4px; margin-bottom:12px;';
       const tagEntries: [string, string][] = [];
-      if (sub.fen) tagEntries.push(['FEN', sub.fen]);
+      const fens: string[] = sub.fens || (sub.fen ? [sub.fen] : []);
+      if (fens.length === 1) {
+        tagEntries.push(['FEN', fens[0]]);
+      } else if (fens.length > 1) {
+        for (let i = 0; i < fens.length; i++) {
+          tagEntries.push([`FEN ${i + 1}`, fens[i]]);
+        }
+      }
       if (sub.player) tagEntries.push(['Player', sub.player]);
       if (sub.white) tagEntries.push(['White', sub.white]);
       if (sub.black) tagEntries.push(['Black', sub.black]);
@@ -418,17 +447,19 @@ import Base from '../layouts/Base.astro';
     // Pre-fill exclude checkbox
     (document.getElementById('dash-sub-exclude-chess-com') as HTMLInputElement).checked = !!sub.exclude_site;
 
-    // Reset filters and add the ones from the subscription
     dashActiveFilters.clear();
+    dashFenCounter = 0;
     dashContainer.innerHTML = '';
 
-    const filterKeys = ['fen', 'player', 'eco', 'min_elo', 'max_elo', 'event'];
-    for (const key of filterKeys) {
+    const fens: string[] = sub.fens || (sub.fen ? [sub.fen] : []);
+    for (const fen of fens) {
+      dashAddFilter('fen', fen);
+    }
+
+    const otherFilterKeys = ['player', 'eco', 'min_elo', 'max_elo', 'event'];
+    for (const key of otherFilterKeys) {
       if (sub[key]) {
-        dashAddFilter(key);
-        const inputId = `dash-sub-${key.replace('_', '-')}`;
-        const input = document.getElementById(inputId) as HTMLInputElement | null;
-        if (input) input.value = String(sub[key]);
+        dashAddFilter(key, String(sub[key]));
       }
     }
   }
@@ -442,6 +473,7 @@ import Base from '../layouts/Base.astro';
     submitBtn.textContent = 'Create Subscription';
     (document.getElementById('sub-form') as HTMLFormElement).reset();
     dashActiveFilters.clear();
+    dashFenCounter = 0;
     dashContainer.innerHTML = '';
     dashAddFilter('fen');
   }
@@ -513,9 +545,12 @@ import Base from '../layouts/Base.astro';
 
     const excludeChessCom = (document.getElementById('dash-sub-exclude-chess-com') as HTMLInputElement).checked;
 
+    const fenInputs = dashContainer.querySelectorAll<HTMLInputElement>('input[data-filter-type="fen"]');
+    const fenValues = Array.from(fenInputs).map(el => el.value.trim()).filter(Boolean);
+
     const body: any = {
       label: safeVal('dash-sub-label') || '',
-      fen: safeVal('dash-sub-fen'),
+      fen: fenValues.length > 0 ? fenValues : undefined,
       player: safeVal('dash-sub-player'),
       eco: safeVal('dash-sub-eco'),
       min_elo: safeNumVal('dash-sub-min-elo'),
