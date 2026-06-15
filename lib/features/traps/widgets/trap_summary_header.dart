@@ -20,14 +20,12 @@ class TrapSummaryHeader extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _Stat(
-                    value: '${metrics.totalTraps}', label: 'Total traps'),
+                _Stat(value: '${metrics.totalTraps}', label: 'Total traps'),
                 _Stat(
                     value: '${metrics.highQualityCount}',
                     label: 'High quality'),
                 _Stat(
-                    value:
-                        '${(metrics.avgReach * 100).toStringAsFixed(2)}%',
+                    value: '${(metrics.avgReach * 100).toStringAsFixed(2)}%',
                     label: 'Avg reach'),
                 _Stat(
                     value: '+${metrics.avgEvalGain.round()}cp',
@@ -46,8 +44,7 @@ class TrapSummaryHeader extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Tooltip(
-                  message:
-                      'Average centipawns gained per game from opponent\n'
+                  message: 'Average centipawns gained per game from opponent\n'
                       'blunders at trap positions',
                   child: Icon(Icons.info_outline,
                       size: 14, color: Colors.grey.shade600),
@@ -72,10 +69,8 @@ class _Stat extends StatelessWidget {
     return Column(
       children: [
         Text(value,
-            style: const TextStyle(
-                fontSize: 18, fontWeight: FontWeight.bold)),
-        Text(label,
-            style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );
   }

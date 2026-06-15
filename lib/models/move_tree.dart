@@ -50,8 +50,7 @@ class TreePath {
   TreePath child(int index) => TreePath([..._indices, index]);
 
   /// Path truncated to [n] elements.
-  TreePath take(int n) =>
-      n >= length ? this : TreePath(_indices.sublist(0, n));
+  TreePath take(int n) => n >= length ? this : TreePath(_indices.sublist(0, n));
 
   /// Last element.
   int get last => _indices.last;
@@ -121,8 +120,7 @@ class MoveNode {
   }) : children = children ?? [];
 
   @override
-  String toString() =>
-      'MoveNode($san, children=${children.length})';
+  String toString() => 'MoveNode($san, children=${children.length})';
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +219,7 @@ class MoveTree {
         walk(node.children);
       }
     }
+
     walk(roots);
     return fens;
   }
@@ -246,9 +245,7 @@ class MoveTree {
     if (move == null) return null;
     final newPos = pos.play(move);
 
-    final siblings = parentPath.isEmpty
-        ? roots
-        : nodeAt(parentPath)?.children;
+    final siblings = parentPath.isEmpty ? roots : nodeAt(parentPath)?.children;
     if (siblings == null) return null;
 
     // Check for existing child with same SAN.
@@ -268,9 +265,8 @@ class MoveTree {
       roots.clear();
       return;
     }
-    final parentSiblings = path.length == 1
-        ? roots
-        : nodeAt(path.parent)?.children;
+    final parentSiblings =
+        path.length == 1 ? roots : nodeAt(path.parent)?.children;
     if (parentSiblings == null) return;
     if (path.last >= 0 && path.last < parentSiblings.length) {
       parentSiblings.removeAt(path.last);
@@ -280,9 +276,7 @@ class MoveTree {
   /// Promote the variation at [path] to mainline (index 0) among its siblings.
   void promoteVariation(TreePath path) {
     if (path.isEmpty) return;
-    final siblings = path.length == 1
-        ? roots
-        : nodeAt(path.parent)?.children;
+    final siblings = path.length == 1 ? roots : nodeAt(path.parent)?.children;
     if (siblings == null || path.last <= 0 || path.last >= siblings.length) {
       return;
     }
@@ -358,8 +352,8 @@ class MoveTree {
   }) {
     final headers = <String>[];
     headers.add('[Event "${event ?? "?"}"]');
-    headers.add(
-        '[Date "${DateTime.now().toIso8601String().split('T').first}"]');
+    headers
+        .add('[Date "${DateTime.now().toIso8601String().split('T').first}"]');
     headers.add('[White "${white ?? "?"}"]');
     headers.add('[Black "${black ?? "?"}"]');
     headers.add('[Result "${result ?? "*"}"]');
@@ -411,8 +405,7 @@ class MoveTree {
   static (int moveNumber, bool isWhite) moveNumberFromFen(String fen) {
     final parts = fen.split(' ');
     final isWhite = parts.length >= 2 ? parts[1] == 'w' : true;
-    final moveNumber =
-        parts.length >= 6 ? (int.tryParse(parts[5]) ?? 1) : 1;
+    final moveNumber = parts.length >= 6 ? (int.tryParse(parts[5]) ?? 1) : 1;
     return (moveNumber, isWhite);
   }
 

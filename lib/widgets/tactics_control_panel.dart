@@ -65,7 +65,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   Timer? _coresErrorTimer;
 
   // PGN Viewer controller for analysis tab
-  final PgnViewerWidgetController _pgnViewerController = PgnViewerWidgetController();
+  final PgnViewerWidgetController _pgnViewerController =
+      PgnViewerWidgetController();
 
   /// Current arrow-key position in the solution line (-1 = at tactic start).
   int _solutionNavIndex = -1;
@@ -406,9 +407,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   solutionStartPly: solutionStartPly,
                   activeSolutionMoveIndex:
                       _solutionNavIndex >= 0 ? _solutionNavIndex : null,
-                  onSolutionMoveTapped: solutionSan.isNotEmpty
-                      ? _onSolutionLineMoveTapped
-                      : null,
+                  onSolutionMoveTapped:
+                      solutionSan.isNotEmpty ? _onSolutionLineMoveTapped : null,
                 )
               else
                 TacticsImportPanel(
@@ -780,7 +780,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   bool get _importFieldsValid => _depthValid && _coresValid;
 
-  Future<void> _importLichess() => _runImport(TacticsImportSource.lichess, 'Lichess');
+  Future<void> _importLichess() =>
+      _runImport(TacticsImportSource.lichess, 'Lichess');
 
   Future<void> _importChessCom() =>
       _runImport(TacticsImportSource.chessCom, 'Chess.com');
@@ -802,8 +803,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         params: TacticsImportParams(
           username: username,
           maxGames: count,
-          depth: (int.tryParse(_stockfishDepthController.text) ?? 15)
-              .clamp(1, 25),
+          depth:
+              (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25),
           cores: (int.tryParse(_coresController.text) ?? 1)
               .clamp(1, TacticsImportService.availableCores),
         ),
@@ -1048,4 +1049,3 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
   }
 }
-

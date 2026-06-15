@@ -35,7 +35,6 @@ class EngineSettings with ChangeNotifier {
     }
   }
 
-
   int _multiPv = kDefaultMultiPv;
   int get multiPv => _multiPv;
   set multiPv(int value) {
@@ -314,7 +313,9 @@ class EngineSettings with ChangeNotifier {
     if (v != _expectimaxOurMultipv &&
         v >= kMinExpOurMultipv &&
         v <= kMaxExpOurMultipv) {
-      _expectimaxOurMultipv = v; _persist(); notifyListeners();
+      _expectimaxOurMultipv = v;
+      _persist();
+      notifyListeners();
     }
   }
 
@@ -324,7 +325,9 @@ class EngineSettings with ChangeNotifier {
     if (v != _expectimaxOppMaxChildren &&
         v >= kMinExpOppMaxChildren &&
         v <= kMaxExpOppMaxChildren) {
-      _expectimaxOppMaxChildren = v; _persist(); notifyListeners();
+      _expectimaxOppMaxChildren = v;
+      _persist();
+      notifyListeners();
     }
   }
 
@@ -334,17 +337,19 @@ class EngineSettings with ChangeNotifier {
     if (v != _expectimaxOppMassTarget &&
         v >= kMinExpOppMassTarget &&
         v <= kMaxExpOppMassTarget) {
-      _expectimaxOppMassTarget = v; _persist(); notifyListeners();
+      _expectimaxOppMassTarget = v;
+      _persist();
+      notifyListeners();
     }
   }
 
   double _expectimaxMinProb = kDefaultExpMinProb;
   double get expectimaxMinProb => _expectimaxMinProb;
   set expectimaxMinProb(double v) {
-    if (v != _expectimaxMinProb &&
-        v >= kMinExpMinProb &&
-        v <= kMaxExpMinProb) {
-      _expectimaxMinProb = v; _persist(); notifyListeners();
+    if (v != _expectimaxMinProb && v >= kMinExpMinProb && v <= kMaxExpMinProb) {
+      _expectimaxMinProb = v;
+      _persist();
+      notifyListeners();
     }
   }
 
@@ -354,7 +359,9 @@ class EngineSettings with ChangeNotifier {
     if (v != _expectimaxMaxEvalLoss &&
         v >= kMinExpMaxEvalLoss &&
         v <= kMaxExpMaxEvalLoss) {
-      _expectimaxMaxEvalLoss = v; _persist(); notifyListeners();
+      _expectimaxMaxEvalLoss = v;
+      _persist();
+      notifyListeners();
     }
   }
 
@@ -364,7 +371,9 @@ class EngineSettings with ChangeNotifier {
     if (v != _expectimaxEvalDepth &&
         v >= kMinExpEvalDepth &&
         v <= kMaxExpEvalDepth) {
-      _expectimaxEvalDepth = v; _persist(); notifyListeners();
+      _expectimaxEvalDepth = v;
+      _persist();
+      notifyListeners();
     }
   }
 
@@ -410,13 +419,12 @@ class EngineSettings with ChangeNotifier {
       _showStockfish =
           prefs.getBool('${_prefix}show_stockfish') ?? kDefaultShowStockfish;
       _showMaia = prefs.getBool('${_prefix}show_maia') ?? kDefaultShowMaia;
-      _showProbability =
-          prefs.getBool('${_prefix}show_probability') ?? kDefaultShowProbability;
+      _showProbability = prefs.getBool('${_prefix}show_probability') ??
+          kDefaultShowProbability;
       _showEngineDock =
           prefs.getBool('${_prefix}show_engine_dock') ?? kDefaultShowEngineDock;
-      _showExpectimaxDock =
-          prefs.getBool('${_prefix}show_expectimax_dock') ??
-              kDefaultShowExpectimaxDock;
+      _showExpectimaxDock = prefs.getBool('${_prefix}show_expectimax_dock') ??
+          kDefaultShowExpectimaxDock;
       _opponentProbabilityMode = OpponentProbabilityMode.fromStorageKey(
           prefs.getString('${_prefix}opponent_prob_mode') ??
               'maia_lichess_fallback');
@@ -476,10 +484,10 @@ class EngineSettings with ChangeNotifier {
       await prefs.setBool('${_prefix}show_maia', _showMaia);
       await prefs.setBool('${_prefix}show_probability', _showProbability);
       await prefs.setBool('${_prefix}show_engine_dock', _showEngineDock);
-      await prefs.setBool('${_prefix}show_expectimax_dock', _showExpectimaxDock);
+      await prefs.setBool(
+          '${_prefix}show_expectimax_dock', _showExpectimaxDock);
       await prefs.setString(
-          '${_prefix}opponent_prob_mode',
-          _opponentProbabilityMode.storageKey);
+          '${_prefix}opponent_prob_mode', _opponentProbabilityMode.storageKey);
       await prefs.setString('${_prefix}explorer_database', _explorerDatabase);
       await prefs.setString('${_prefix}explorer_speeds', _explorerSpeeds);
       await prefs.setString('${_prefix}explorer_ratings', _explorerRatings);

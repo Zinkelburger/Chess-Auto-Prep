@@ -4,8 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 
-const _startFen =
-    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,7 +44,8 @@ void main() {
   });
 
   test('loadPersistedState keeps engine off when pref is false', () async {
-    SharedPreferences.setMockInitialValues({'engine_lifecycle.toggle_on': false});
+    SharedPreferences.setMockInitialValues(
+        {'engine_lifecycle.toggle_on': false});
     await lifecycle.loadPersistedState();
     expect(lifecycle.state, EngineState.off);
   });

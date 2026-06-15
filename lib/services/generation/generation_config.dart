@@ -186,8 +186,8 @@ class TreeBuildConfig {
       maxPly: (json['max_depth'] as num?)?.toInt() ?? 20,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
       buildMode: _parseBuildMode(json['build_mode'] as String?),
-      evalDepth: (json['eval_depth'] as num?)?.toInt() ??
-          kDefaultGenerationEvalDepth,
+      evalDepth:
+          (json['eval_depth'] as num?)?.toInt() ?? kDefaultGenerationEvalDepth,
       engineThreads: (json['engine_threads'] as num?)?.toInt() ?? 0,
       ourMultipv: (json['our_multipv'] as num?)?.toInt() ?? 4,
       maxEvalLossCp: (json['max_eval_loss_cp'] as num?)?.toInt() ?? 50,
@@ -204,17 +204,16 @@ class TreeBuildConfig {
       maiaElo: (json['maia_elo'] as num?)?.toInt() ?? 2200,
       maiaMinProb: (json['maia_min_prob'] as num?)?.toDouble() ?? 0.05,
       maiaOnly: json['maia_only'] as bool? ?? true,
-      rankLinesByImportance:
-          json['rank_lines_by_importance'] as bool? ?? true,
+      rankLinesByImportance: json['rank_lines_by_importance'] as bool? ?? true,
       annotateMoveProbabilities:
           json['annotate_move_probabilities'] as bool? ?? true,
       annotateMaiaOnly: json['annotate_maia_only'] as bool? ?? true,
       selectionMode: _parseSelectionMode(json['selection_mode'] as String?),
       leafConfidence: (json['leaf_confidence'] as num?)?.toDouble() ?? 1.0,
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
-      pgnFilePaths: (json['pgn_file_paths'] as List<dynamic>?)
-              ?.cast<String>() ??
-          const [],
+      pgnFilePaths:
+          (json['pgn_file_paths'] as List<dynamic>?)?.cast<String>() ??
+              const [],
       dbMinGames: (json['db_min_games'] as num?)?.toInt() ?? 5,
       dbMinProb: (json['db_min_prob'] as num?)?.toDouble() ?? 0.05,
       minElo: (json['min_elo'] as num?)?.toInt() ?? 0,
@@ -238,8 +237,7 @@ class TreeBuildConfig {
 
   /// Whether this build uses Stockfish during BFS tree construction.
   /// DB Explorer defers engine startup to the eval enrichment phase.
-  bool get usesStockfish =>
-      buildMode == BuildMode.stockfishExpectimax;
+  bool get usesStockfish => buildMode == BuildMode.stockfishExpectimax;
 
   /// Whether the build needs Stockfish at any phase (build or enrichment).
   bool get needsStockfish =>
@@ -394,8 +392,7 @@ class TreeBuildConfig {
       enableLocalChessDb: enableLocalChessDb ?? this.enableLocalChessDb,
       localChessDbPath: localChessDbPath ?? this.localChessDbPath,
       enableChessDbApi: enableChessDbApi ?? this.enableChessDbApi,
-      chessDbApiDailyQuota:
-          chessDbApiDailyQuota ?? this.chessDbApiDailyQuota,
+      chessDbApiDailyQuota: chessDbApiDailyQuota ?? this.chessDbApiDailyQuota,
       chessDbApiConcurrency:
           chessDbApiConcurrency ?? this.chessDbApiConcurrency,
       enableExtEvalSubtreeSkip:

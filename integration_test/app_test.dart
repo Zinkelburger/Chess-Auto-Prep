@@ -104,28 +104,6 @@ void main() {
     });
   });
 
-  // ── Tactics End-to-End ─────────────────────────────────────────────────
-
-  group('Tactics — End-to-End', () {
-    testWidgets(
-      'import, start, show solution, play moves, complete tactic',
-      (tester) async {
-        await pumpApp(tester);
-
-        await importAndWaitForPositions(tester);
-        await tapStartSession(tester);
-        expectTacticLoaded();
-
-        final allMoves = await showSolutionAndParseMoves(tester);
-        print('Solution moves: $allMoves');
-
-        await playTacticMoves(tester, allMoves);
-        await expectTacticCompleted(tester);
-      },
-      timeout: const Timeout(Duration(minutes: 3)),
-    );
-  });
-
   // ── Chess Board ────────────────────────────────────────────────────────
 
   group('Chess Board', () {

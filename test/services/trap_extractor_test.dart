@@ -4,8 +4,7 @@ import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/trap_extractor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const _trapFen =
-    'rnbqkbnr/pp1ppppp/2p5/3P4/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 3';
+const _trapFen = 'rnbqkbnr/pp1ppppp/2p5/3P4/8/8/PPP1PPPP/RNBQKBNR b KQkq - 0 3';
 
 BuildTree _trapFixtureTree() {
   final root = BuildTreeNode(

@@ -7,8 +7,7 @@ library;
 import 'dart:ffi';
 import 'dart:io';
 
-import 'package:cdbdirect_flutter_libs/cdbdirect_flutter_libs.dart'
-    as cdb_libs;
+import 'package:cdbdirect_flutter_libs/cdbdirect_flutter_libs.dart' as cdb_libs;
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -21,8 +20,10 @@ import 'external_eval_provider.dart';
 typedef _InitializeNative = Pointer<Void> Function(Pointer<Utf8> path);
 typedef _InitializeDart = Pointer<Void> Function(Pointer<Utf8> path);
 
-typedef _GetNative = Pointer<Utf8> Function(Pointer<Void> handle, Pointer<Utf8> fen);
-typedef _GetDart = Pointer<Utf8> Function(Pointer<Void> handle, Pointer<Utf8> fen);
+typedef _GetNative = Pointer<Utf8> Function(
+    Pointer<Void> handle, Pointer<Utf8> fen);
+typedef _GetDart = Pointer<Utf8> Function(
+    Pointer<Void> handle, Pointer<Utf8> fen);
 
 typedef _SizeNative = IntPtr Function(Pointer<Void> handle);
 typedef _SizeDart = int Function(Pointer<Void> handle);
@@ -158,14 +159,15 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
       Directory.current.path,
     };
     for (final root in projectRoots) {
-      yield p.join(root, 'tree_builder', 'deps', 'install', 'lib', 'libcdbdirect.so');
+      yield p.join(
+          root, 'tree_builder', 'deps', 'install', 'lib', 'libcdbdirect.so');
     }
 
     try {
       final exeDir = p.dirname(Platform.resolvedExecutable);
       yield p.join(exeDir, 'lib', 'libcdbdirect.so');
       yield p.join(exeDir, '..', 'lib', 'libcdbdirect.so');
-    } catch (_) { /* resolvedExecutable may throw on some platforms */ }
+    } catch (_) {/* resolvedExecutable may throw on some platforms */}
   }
 
   static Future<DynamicLibrary?> _tryLoadDevLibrary() async {
@@ -198,14 +200,15 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
     if (_lib == null) return false;
 
     try {
-      _initialize = _lib!
-          .lookupFunction<_InitializeNative, _InitializeDart>('cdbdirect_initialize');
+      _initialize = _lib!.lookupFunction<_InitializeNative, _InitializeDart>(
+          'cdbdirect_initialize');
       _get = _lib!.lookupFunction<_GetNative, _GetDart>('cdbdirect_get');
       _size = _lib!.lookupFunction<_SizeNative, _SizeDart>('cdbdirect_size');
-      _finalize =
-          _lib!.lookupFunction<_FinalizeNative, _FinalizeDart>('cdbdirect_finalize');
+      _finalize = _lib!
+          .lookupFunction<_FinalizeNative, _FinalizeDart>('cdbdirect_finalize');
     } catch (e) {
-      if (kDebugMode) debugPrint('[CdbDirectEvalProvider] symbol load failed: $e');
+      if (kDebugMode)
+        debugPrint('[CdbDirectEvalProvider] symbol load failed: $e');
       _lib = null;
       return false;
     }

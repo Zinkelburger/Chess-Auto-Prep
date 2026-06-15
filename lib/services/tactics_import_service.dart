@@ -362,6 +362,7 @@ class TacticsImportService {
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound, {
     int? maxCores,
+
     /// When true, PGN [WhiteElo]/[BlackElo] are Chess.com blitz and converted
     /// via [chessComBlitzToLichessBlitz] before Maia line extension.
     bool mapChessComEloForMaia = false,
@@ -629,9 +630,8 @@ class TacticsImportService {
             tempPos = newPos;
           }
 
-          final solutionPv = allPvSan
-              .take(TacticsEngine.maxSolutionPvPlies)
-              .toList();
+          final solutionPv =
+              allPvSan.take(TacticsEngine.maxSolutionPvPlies).toList();
           final correctLine = await TacticsEngine.buildTrainableLine(
             allPvSan,
             maia: maia,
@@ -647,8 +647,16 @@ class TacticsImportService {
 
           final wpBefore = _winPercent(cpA);
           final wpAfter = _winPercent(cpB);
-          final mistakeType = isBlunder ? '??' : isMistake ? '?' : '?!';
-          final label = isBlunder ? 'Blunder' : isMistake ? 'Mistake' : 'Inaccuracy';
+          final mistakeType = isBlunder
+              ? '??'
+              : isMistake
+                  ? '?'
+                  : '?!';
+          final label = isBlunder
+              ? 'Blunder'
+              : isMistake
+                  ? 'Mistake'
+                  : 'Inaccuracy';
           final analysis = '$label. Win chance dropped from '
               '${wpBefore.toStringAsFixed(1)}% to '
               '${wpAfter.toStringAsFixed(1)}% '

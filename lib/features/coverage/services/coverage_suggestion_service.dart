@@ -120,9 +120,8 @@ class CoverageSuggestionService {
         fen: '',
         type: GapType.unaccounted,
         gameCount: gameCount,
-        coverageImpact: coverage.rootGameCount > 0
-            ? gameCount / coverage.rootGameCount
-            : 0,
+        coverageImpact:
+            coverage.rootGameCount > 0 ? gameCount / coverage.rootGameCount : 0,
         opponentMove: um.move,
       ));
     }
@@ -143,8 +142,7 @@ class CoverageSuggestionService {
     return gaps;
   }
 
-  List<SuggestedLine> _resolveLines(
-      List<GapCandidate> gaps, bool playAsWhite) {
+  List<SuggestedLine> _resolveLines(List<GapCandidate> gaps, bool playAsWhite) {
     final results = <SuggestedLine>[];
     final maxGaps = gaps.length > 50 ? 50 : gaps.length;
 
@@ -176,13 +174,12 @@ class CoverageSuggestionService {
     int trapCount = 0;
 
     for (var depth = 0; depth < 12 && current.children.isNotEmpty; depth++) {
-      final repertoireChild = current.children
-          .where((c) => c.isRepertoireMove)
-          .toList();
+      final repertoireChild =
+          current.children.where((c) => c.isRepertoireMove).toList();
       final next = repertoireChild.isNotEmpty
           ? repertoireChild.first
-          : current.children.reduce((a, b) =>
-              a.expectimaxValue >= b.expectimaxValue ? a : b);
+          : current.children
+              .reduce((a, b) => a.expectimaxValue >= b.expectimaxValue ? a : b);
 
       path.add(next.moveSan);
       if (next.trapScore > 0) trapCount++;
@@ -201,11 +198,8 @@ class CoverageSuggestionService {
       coverageGain: gap.coverageImpact * 100,
       score: 0,
       source: 'tree',
-      leafEvalCp: current.hasEngineEval
-          ? current.evalForUs(playAsWhite)
-          : null,
-      linePlayability:
-          current.myEase >= 0 ? current.myEase : null,
+      leafEvalCp: current.hasEngineEval ? current.evalForUs(playAsWhite) : null,
+      linePlayability: current.myEase >= 0 ? current.myEase : null,
       trapCount: trapCount,
       coherenceBonus: coherenceBonus,
     );
@@ -213,8 +207,7 @@ class CoverageSuggestionService {
 
   double? _coherenceBonusForPath(List<String> moves, bool playAsWhite) {
     final coherenceResult = coherence;
-    if (coherenceResult == null ||
-        coherenceResult.maximalItemsets.isEmpty) {
+    if (coherenceResult == null || coherenceResult.maximalItemsets.isEmpty) {
       return null;
     }
 
@@ -235,9 +228,7 @@ class CoverageSuggestionService {
   BuildTreeNode? _walkTree(BuildTreeNode root, List<String> moves) {
     var current = root;
     for (final move in moves) {
-      final child = current.children
-          .where((c) => c.moveSan == move)
-          .toList();
+      final child = current.children.where((c) => c.moveSan == move).toList();
       if (child.isEmpty) return null;
       current = child.first;
     }
@@ -266,9 +257,8 @@ class CoverageSuggestionService {
 
   double _scoreLine(SuggestedLine line, SuggestionWeights w) {
     final impact = line.coverageGain / 100.0;
-    final eval = line.leafEvalCp != null
-        ? winProbability(line.leafEvalCp!)
-        : 0.5;
+    final eval =
+        line.leafEvalCp != null ? winProbability(line.leafEvalCp!) : 0.5;
     final ease = line.linePlayability ?? 0.5;
     final traps = line.trapCount > 0
         ? 0.7 + 0.3 * (line.trapCount / 5).clamp(0.0, 1.0)
@@ -296,8 +286,7 @@ class CoverageSuggestionService {
     var currentCoverage = coverage.coveragePercent;
     final used = <int>{};
 
-    while (currentCoverage < targetCoverage &&
-        selected.length < maxCount) {
+    while (currentCoverage < targetCoverage && selected.length < maxCount) {
       double bestScore = 0;
       int bestIdx = -1;
 

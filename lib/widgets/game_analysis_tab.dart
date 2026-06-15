@@ -75,12 +75,10 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       _lastAlignedNearestIdx = null;
     }
     if (widget.currentPly != oldWidget.currentPly) {
-      final branchPly = _activeBestLinePly != null
-          ? _activeBestLinePly! - 1
-          : null;
-      final expectedBranchPly = _activeExpectedMovePly != null
-          ? _activeExpectedMovePly! - 1
-          : null;
+      final branchPly =
+          _activeBestLinePly != null ? _activeBestLinePly! - 1 : null;
+      final expectedBranchPly =
+          _activeExpectedMovePly != null ? _activeExpectedMovePly! - 1 : null;
       if (widget.currentPly != branchPly &&
           widget.currentPly != expectedBranchPly) {
         _activeBestLinePly = null;
@@ -308,8 +306,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('Depth:',
-            style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+        Text('Depth:', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
         const SizedBox(width: 4),
         PopupMenuButton<int>(
           tooltip: 'Analysis depth',
@@ -339,8 +336,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
             ),
             child: Text(
               '${widget.analysisController.depth}',
-              style:
-                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
         ),
@@ -368,8 +364,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       );
     }
 
-    final nearestIdx =
-        _nearestInterestingIndex(interesting, widget.currentPly);
+    final nearestIdx = _nearestInterestingIndex(interesting, widget.currentPly);
 
     return ListView(
       controller: _moveListScroll,
@@ -509,8 +504,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     );
   }
 
-  Widget _buildInterestingMoveInfo(
-      MoveEval e, Map<int, MoveEval> evalByPly) {
+  Widget _buildInterestingMoveInfo(MoveEval e, Map<int, MoveEval> evalByPly) {
     final prevEval = evalByPly[e.ply - 1];
     final playedEval = _formatEval(e);
     final bestEval = prevEval != null ? _formatEval(prevEval) : null;
@@ -539,8 +533,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       final isExpectedActive = _activeExpectedMovePly == e.ply;
       spans.addAll([
         TextSpan(
-            text: '  ·  ',
-            style: monoStyle.copyWith(color: Colors.grey[600])),
+            text: '  ·  ', style: monoStyle.copyWith(color: Colors.grey[600])),
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
@@ -562,10 +555,10 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                     color:
                         isExpectedActive ? Colors.white : AppColors.pgnMainLine,
                     fontWeight: FontWeight.bold,
-                    decoration: isExpectedActive
-                        ? null
-                        : TextDecoration.underline,
-                    decorationColor: AppColors.pgnMainLine.withValues(alpha: 0.31),
+                    decoration:
+                        isExpectedActive ? null : TextDecoration.underline,
+                    decorationColor:
+                        AppColors.pgnMainLine.withValues(alpha: 0.31),
                     decorationStyle: TextDecorationStyle.dotted,
                   ),
                 ),

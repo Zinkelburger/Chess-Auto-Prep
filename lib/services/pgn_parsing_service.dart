@@ -166,8 +166,7 @@ String? extractRepertoireColor(String content) {
 }
 
 /// Strips a leading UTF-8 BOM if present.
-String stripBom(String s) =>
-    s.startsWith('\uFEFF') ? s.substring(1) : s;
+String stripBom(String s) => s.startsWith('\uFEFF') ? s.substring(1) : s;
 
 // ── Field matching (isolate-safe) ────────────────────────────────────────────
 
@@ -386,8 +385,7 @@ Future<List<int>> computeSliceMatches({
       bool matches = true;
 
       if (targetFen != null) {
-        matches =
-            gamePassesThroughFen(game.headers, game.pgnText, targetFen);
+        matches = gamePassesThroughFen(game.headers, game.pgnText, targetFen);
       }
 
       if (matches &&
@@ -410,7 +408,8 @@ bool _passesNonPositionFilters(
   List<List<String>> seqGroups,
   int seqGap,
 ) {
-  if (seqGroups.isNotEmpty && !gameMatchesSequence(pgnText, seqGroups, seqGap)) {
+  if (seqGroups.isNotEmpty &&
+      !gameMatchesSequence(pgnText, seqGroups, seqGap)) {
     return false;
   }
   for (final f in filterData) {

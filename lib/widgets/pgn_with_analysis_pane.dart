@@ -135,8 +135,8 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
                 return _buildPgnEditor();
               }
               final total = constraints.maxHeight;
-              final dockHeight = (total * _analysisFraction)
-                  .clamp(120.0, total - 100);
+              final dockHeight =
+                  (total * _analysisFraction).clamp(120.0, total - 100);
               final pgnHeight = total - dockHeight - 8;
 
               return Column(
@@ -159,8 +159,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
                     onDrag: (dy) {
                       setState(() {
                         final next = dockHeight + dy;
-                        _analysisFraction =
-                            (next / total).clamp(0.22, 0.65);
+                        _analysisFraction = (next / total).clamp(0.22, 0.65);
                       });
                       _savePrefs();
                     },

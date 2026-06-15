@@ -28,8 +28,7 @@ class RepertoireTreeExplorer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isOurTurn =
-        currentNode.sideToMoveIsWhite == snapshot.playAsWhite;
+    final isOurTurn = currentNode.sideToMoveIsWhite == snapshot.playAsWhite;
     final candidates = buildCandidateRows(
       snapshot: snapshot,
       metricsCache: metricsCache,
@@ -367,8 +366,8 @@ class _CandidateRow extends StatelessWidget {
                     if (isRepertoire)
                       Padding(
                         padding: const EdgeInsets.only(right: 2),
-                        child:
-                            Icon(Icons.star, size: 12, color: Colors.amber[400]),
+                        child: Icon(Icons.star,
+                            size: 12, color: Colors.amber[400]),
                       ),
                     Flexible(
                       child: Text(

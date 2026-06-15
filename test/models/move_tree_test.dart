@@ -223,8 +223,7 @@ void main() {
 
   group('MoveTree PGN round-trip', () {
     test('fromPgn parses simple mainline', () {
-      final tree = MoveTree.fromPgn(
-          '[Event "Test"]\n\n1. e4 e5 2. Nf3 Nc6');
+      final tree = MoveTree.fromPgn('[Event "Test"]\n\n1. e4 e5 2. Nf3 Nc6');
       expect(tree.sanSequenceAt(tree.mainlineEndFrom(TreePath.empty)),
           ['e4', 'e5', 'Nf3', 'Nc6']);
     });
@@ -241,15 +240,13 @@ void main() {
     });
 
     test('fromPgn preserves comments', () {
-      final tree = MoveTree.fromPgn(
-          '[Event "Test"]\n\n1. e4 {Best move} e5');
+      final tree = MoveTree.fromPgn('[Event "Test"]\n\n1. e4 {Best move} e5');
       expect(tree.roots[0].comment, 'Best move');
     });
 
     test('fromPgn with FEN header', () {
       const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1';
-      final tree = MoveTree.fromPgn(
-          '[FEN "$fen"]\n[SetUp "1"]\n\n1... e5');
+      final tree = MoveTree.fromPgn('[FEN "$fen"]\n[SetUp "1"]\n\n1... e5');
       expect(tree.startingFen, fen);
       expect(tree.roots[0].san, 'e5');
     });

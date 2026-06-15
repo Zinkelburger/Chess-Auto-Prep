@@ -105,8 +105,7 @@ class LinesListPanel extends StatelessWidget {
       itemBuilder: (context, index) {
         final entry = flatEntries[index];
         return switch (entry) {
-          _GroupHeaderEntry(:final groupName, :final lineCount) =>
-            _GroupHeader(
+          _GroupHeaderEntry(:final groupName, :final lineCount) => _GroupHeader(
               groupName: groupName,
               lineCount: lineCount,
               isExpanded: expandedGroups.contains(groupName),

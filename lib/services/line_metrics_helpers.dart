@@ -88,8 +88,7 @@ List<BuildTreeNode> walkTreeForLine(
   final path = <BuildTreeNode>[root];
   var current = root;
   for (final move in moves) {
-    final child =
-        current.children.where((c) => c.moveSan == move).toList();
+    final child = current.children.where((c) => c.moveSan == move).toList();
     if (child.isEmpty) break;
     current = child.first;
     path.add(current);

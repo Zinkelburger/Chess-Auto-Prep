@@ -87,33 +87,27 @@ class CoherencePanel extends StatelessWidget {
         trailing: isUnclustered
             ? null
             : Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _coherenceColor(
-                          cluster.signature.support)
-                      .withAlpha(30),
+                  color:
+                      _coherenceColor(cluster.signature.support).withAlpha(30),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                    '${(cluster.signature.support * 100).round()}%',
+                child: Text('${(cluster.signature.support * 100).round()}%',
                     style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: _coherenceColor(
-                            cluster.signature.support))),
+                        color: _coherenceColor(cluster.signature.support))),
               ),
         children: [
           if (cluster.signature.items.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Wrap(
                 spacing: 4,
                 children: cluster.signature.items
                     .map((m) => Chip(
-                          label: Text(m,
-                              style: const TextStyle(fontSize: 10)),
+                          label: Text(m, style: const TextStyle(fontSize: 10)),
                           visualDensity: VisualDensity.compact,
                           materialTapTargetSize:
                               MaterialTapTargetSize.shrinkWrap,
@@ -125,16 +119,14 @@ class CoherencePanel extends StatelessWidget {
             ListTile(
               dense: true,
               visualDensity: VisualDensity.compact,
-              title: Text(
-                  lineNames[lineId] ?? lineId,
+              title: Text(lineNames[lineId] ?? lineId,
                   style: const TextStyle(fontSize: 12)),
               trailing: _lineCoherenceBadge(lineId),
             ),
           if (cluster.lineIds.length > 5)
             Padding(
               padding: const EdgeInsets.all(8),
-              child: Text(
-                  '+ ${cluster.lineIds.length - 5} more lines',
+              child: Text('+ ${cluster.lineIds.length - 5} more lines',
                   style: theme.textTheme.bodySmall),
             ),
         ],
@@ -145,8 +137,7 @@ class CoherencePanel extends StatelessWidget {
   Widget _lineCoherenceBadge(String lineId) {
     final score = result.lineCoherenceById[lineId] ?? 0;
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: _coherenceColor(score).withAlpha(30),
         borderRadius: BorderRadius.circular(8),
@@ -230,11 +221,8 @@ class _SummaryItem extends StatelessWidget {
       children: [
         Text(value,
             style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: color)),
-        Text(label,
-            style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );
   }

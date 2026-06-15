@@ -236,8 +236,10 @@ void _parseIsolateEntry(_ParseRequest req) {
         if (req.config.minElo > 0) {
           final wElo = _parseEloTag(game.headers, 'WhiteElo');
           final bElo = _parseEloTag(game.headers, 'BlackElo');
-          if (wElo > 0 && bElo > 0 &&
-              wElo < req.config.minElo && bElo < req.config.minElo) {
+          if (wElo > 0 &&
+              bElo > 0 &&
+              wElo < req.config.minElo &&
+              bElo < req.config.minElo) {
             skippedElo++;
             continue;
           }
@@ -422,7 +424,9 @@ List<String> _tokenizeMovetext(String movetext) {
 
     if (ch == '\$') {
       i++;
-      while (i < len && movetext.codeUnitAt(i) >= 48 && movetext.codeUnitAt(i) <= 57) {
+      while (i < len &&
+          movetext.codeUnitAt(i) >= 48 &&
+          movetext.codeUnitAt(i) <= 57) {
         i++;
       }
       continue;

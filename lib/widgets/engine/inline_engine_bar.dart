@@ -20,7 +20,8 @@ import '../../services/engine/eval_worker.dart';
 import '../../services/engine/stockfish_connection_factory.dart';
 import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
 import '../../theme/app_colors.dart';
-import '../../utils/chess_utils.dart' show formatEvalDisplay, formatNodes, uciPvToSan;
+import '../../utils/chess_utils.dart'
+    show formatEvalDisplay, formatNodes, uciPvToSan;
 import '../../utils/fen_utils.dart';
 import '../clickable_move_line.dart';
 import '../analysis/analysis_settings_sheet.dart';
@@ -31,7 +32,8 @@ class InlineEngineBar extends StatefulWidget {
 
   /// Called when the user clicks a move in an engine line.
   /// Provides the full PV as SAN moves and the 0-based index of the clicked move.
-  final void Function(List<String> sanMoves, int clickedIndex)? onLineMoveTapped;
+  final void Function(List<String> sanMoves, int clickedIndex)?
+      onLineMoveTapped;
 
   /// Which move index (0-based) in the engine line is currently active/highlighted.
   final int? activeLineMoveIndex;
@@ -347,8 +349,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                 ? MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: GestureDetector(
-                      onTap: () =>
-                          widget.onLineMoveTapped!(sanMoves, 0),
+                      onTap: () => widget.onLineMoveTapped!(sanMoves, 0),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 2),
                         decoration: isFirstActive
@@ -410,9 +411,8 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
 
     final fenParts = widget.fen.split(' ');
     final whiteToMove = isWhiteToMove(widget.fen);
-    final fullMoveNum = fenParts.length >= 6
-        ? (int.tryParse(fenParts[5]) ?? 1)
-        : 1;
+    final fullMoveNum =
+        fenParts.length >= 6 ? (int.tryParse(fenParts[5]) ?? 1) : 1;
     // Ply of the first move in the PV (index 0)
     final firstMovePly = (fullMoveNum - 1) * 2 + (whiteToMove ? 0 : 1);
 

@@ -55,7 +55,8 @@ abstract final class AppColors {
   static const cplGoodThreshold = 15;
   static const cplFairThreshold = 30;
 
-  static Color cpEval(int cp, {bool muted = false, int threshold = cpEvalThreshold}) {
+  static Color cpEval(int cp,
+      {bool muted = false, int threshold = cpEvalThreshold}) {
     if (cp > threshold) {
       return muted ? evalPositiveMuted : evalPositive;
     }

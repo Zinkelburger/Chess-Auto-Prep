@@ -120,7 +120,9 @@ class StockfishPool {
       await Future.wait([
         for (final w in _workers) w.evaluateFen(startpos, 10),
       ]);
-    } catch (e) { debugPrint('[StockfishPool] Warmup eval failed: $e'); }
+    } catch (e) {
+      debugPrint('[StockfishPool] Warmup eval failed: $e');
+    }
   }
 
   // ── Acquire / release ───────────────────────────────────────────────────

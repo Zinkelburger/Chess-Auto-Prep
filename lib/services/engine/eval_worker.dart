@@ -306,7 +306,7 @@ class EvalWorker {
     _sub.cancel();
     try {
       engine.sendCommand('quit');
-    } catch (_) { /* engine may already be closed */ }
+    } catch (_) {/* engine may already be closed */}
     engine.dispose();
   }
 }

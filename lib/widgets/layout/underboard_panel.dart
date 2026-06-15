@@ -75,8 +75,7 @@ class UnderboardPanelState extends State<UnderboardPanel>
   }
 
   void _onTabChanged() {
-    widget.onTabChanged
-        ?.call(UnderboardTab.values[_tabController.index]);
+    widget.onTabChanged?.call(UnderboardTab.values[_tabController.index]);
   }
 
   @override
@@ -173,8 +172,8 @@ class UnderboardPanelState extends State<UnderboardPanel>
                     const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                 unselectedLabelStyle: const TextStyle(fontSize: 12),
                 tabs: [
-                  _tabWithStatus('Jobs', widget.jobsStatus,
-                      theme.colorScheme.primary),
+                  _tabWithStatus(
+                      'Jobs', widget.jobsStatus, theme.colorScheme.primary),
                   _tabWithBadge('Findings', widget.findingsCount,
                       theme.colorScheme.error),
                 ],
@@ -194,8 +193,8 @@ class UnderboardPanelState extends State<UnderboardPanel>
               onPressed: toggle,
               tooltip: _collapsed ? 'Expand (`)' : 'Collapse (`)',
               padding: EdgeInsets.zero,
-              constraints:
-                  const BoxConstraints(minWidth: 28, minHeight: kDragHandleHeight),
+              constraints: const BoxConstraints(
+                  minWidth: 28, minHeight: kDragHandleHeight),
             ),
           ],
         ),

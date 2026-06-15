@@ -93,8 +93,7 @@ class JobManager extends ChangeNotifier {
   final List<RepertoireJob> _jobs = [];
 
   List<RepertoireJob> get jobs => List.unmodifiable(_jobs);
-  List<RepertoireJob> get activeJobs =>
-      _jobs.where((j) => j.isActive).toList();
+  List<RepertoireJob> get activeJobs => _jobs.where((j) => j.isActive).toList();
   List<RepertoireJob> get completedJobs =>
       _jobs.where((j) => !j.isActive && j.status != JobStatus.queued).toList();
 
@@ -147,15 +146,11 @@ class JobManager extends ChangeNotifier {
     final gen = currentGenerationJob;
     if (gen != null) {
       final pct = (gen.progress.fraction * 100).toStringAsFixed(0);
-      return gen.status == JobStatus.paused
-          ? 'Gen: paused'
-          : 'Gen: $pct%';
+      return gen.status == JobStatus.paused ? 'Gen: paused' : 'Gen: $pct%';
     }
     final audit = currentAuditJob;
     if (audit != null) {
-      return audit.status == JobStatus.paused
-          ? 'Audit: paused'
-          : 'Auditing...';
+      return audit.status == JobStatus.paused ? 'Audit: paused' : 'Auditing...';
     }
     return null;
   }

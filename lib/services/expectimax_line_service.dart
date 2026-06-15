@@ -48,10 +48,9 @@ class ExpectimaxLine {
       rank: rank,
       expectimaxValue: v,
       expectedEvalCp: expectedCpFromWinProb(v),
-      evalCp:
-          path.isNotEmpty && path.first.hasEngineEval
-              ? path.first.evalForUs(config.playAsWhite)
-              : null,
+      evalCp: path.isNotEmpty && path.first.hasEngineEval
+          ? path.first.evalForUs(config.playAsWhite)
+          : null,
       depth: path.length,
       movesSan: path.map((n) => n.moveSan).toList(),
       movesUci: path.map((n) => n.moveUci).toList(),
@@ -60,13 +59,11 @@ class ExpectimaxLine {
                 moveProbability: n.moveProbability,
                 isOurMove: n.isWhiteToMove != config.playAsWhite,
                 isRepertoireMove: n.isRepertoireMove,
-                evalCp: n.hasEngineEval
-                    ? n.evalForUs(config.playAsWhite)
-                    : null,
+                evalCp:
+                    n.hasEngineEval ? n.evalForUs(config.playAsWhite) : null,
                 ease: n.ease,
                 trapScore: n.trapScore >= 0 ? n.trapScore : null,
-                expectimaxValue:
-                    n.hasExpectimax ? n.expectimaxValue : null,
+                expectimaxValue: n.hasExpectimax ? n.expectimaxValue : null,
               ))
           .toList(),
     );
@@ -265,4 +262,3 @@ BuildTreeNode? findNodeByFen(BuildTree tree, String fen) {
   }
   return null;
 }
-

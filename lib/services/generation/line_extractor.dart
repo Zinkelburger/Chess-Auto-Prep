@@ -76,8 +76,7 @@ class ExtractedLine {
     sb.writeln('[Round "-"]');
     sb.writeln('[Result "*"]');
     if (rankByImportance) {
-      sb.writeln(
-          '[CumProb "${(probability * 100).toStringAsFixed(3)}%"]');
+      sb.writeln('[CumProb "${(probability * 100).toStringAsFixed(3)}%"]');
     }
     const standardStartpos =
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -90,8 +89,7 @@ class ExtractedLine {
     sb.writeln();
 
     if (rankByImportance) {
-      sb.write(
-          '{[%cumProb ${(probability * 100).toStringAsFixed(3)}%]} ');
+      sb.write('{[%cumProb ${(probability * 100).toStringAsFixed(3)}%]} ');
     }
 
     for (int j = 0; j < movesSan.length; j++) {

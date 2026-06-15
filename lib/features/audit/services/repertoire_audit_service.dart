@@ -34,8 +34,7 @@ class AuditProgress {
     this.currentFen,
   });
 
-  double get percent =>
-      totalNodes > 0 ? (nodesChecked / totalNodes) * 100 : 0;
+  double get percent => totalNodes > 0 ? (nodesChecked / totalNodes) * 100 : 0;
 }
 
 class RepertoireAuditService {
@@ -107,7 +106,10 @@ class RepertoireAuditService {
     final queue = Queue<_AuditQueueEntry>();
     final startPath = startNode.getMovePath();
     queue.add(_AuditQueueEntry(
-      node: startNode, movePath: startPath, ply: 0, cumProb: 1.0,
+      node: startNode,
+      movePath: startPath,
+      ply: 0,
+      cumProb: 1.0,
     ));
 
     int checked = 0;
@@ -199,8 +201,8 @@ class RepertoireAuditService {
 
       // Enqueue children with updated cumulative probability.
       // Opponent moves attenuate probability; our moves don't (we always play them).
-      final parentTotal = node.children.values
-          .fold<int>(0, (sum, c) => sum + c.gamesPlayed);
+      final parentTotal =
+          node.children.values.fold<int>(0, (sum, c) => sum + c.gamesPlayed);
       for (final childEntry in node.children.entries) {
         final child = childEntry.value;
         double childProb = entry.cumProb;
@@ -291,7 +293,9 @@ class RepertoireAuditService {
         // If the move wasn't in MultiPV, try the cache, then evaluate.
         if (repCp == null) {
           final (cp, hit, miss) = await _evalAfterMove(
-            node.fen, repMoveUci, config.evalDepth,
+            node.fen,
+            repMoveUci,
+            config.evalDepth,
           );
           repCp = cp;
           cacheHits += hit;
@@ -308,9 +312,8 @@ class RepertoireAuditService {
 
         // Compute eval loss from our perspective.
         // Positive = our move is worse than best.
-        final evalLoss = isWhiteRepertoire
-            ? (bestCp - repCp)
-            : (repCp - bestCp);
+        final evalLoss =
+            isWhiteRepertoire ? (bestCp - repCp) : (repCp - bestCp);
 
         if (evalLoss >= config.mistakeThresholdCp) {
           findings.add(AuditFinding(
@@ -341,8 +344,7 @@ class RepertoireAuditService {
         }
 
         // Check for weak resulting position.
-        final ourPerspectiveCp =
-            isWhiteRepertoire ? repCp : -repCp;
+        final ourPerspectiveCp = isWhiteRepertoire ? repCp : -repCp;
         if (ourPerspectiveCp < config.weakPositionThresholdCp) {
           findings.add(AuditFinding(
             type: AuditFindingType.weakPosition,
@@ -440,8 +442,7 @@ class RepertoireAuditService {
             probability: entry.value,
             source: MissingResponseSource.maia,
             cumulativeProbability: cumulativeProbability * entry.value,
-            transposesIntoRepertoire:
-                _doesMoveTranspose(node.fen, san, tree),
+            transposesIntoRepertoire: _doesMoveTranspose(node.fen, san, tree),
           ));
         }
       } catch (e) {
@@ -515,9 +516,8 @@ class RepertoireAuditService {
       return [
         AuditFinding(
           type: AuditFindingType.deadEnd,
-          severity: moveSet.length >= 4
-              ? AuditSeverity.warning
-              : AuditSeverity.info,
+          severity:
+              moveSet.length >= 4 ? AuditSeverity.warning : AuditSeverity.info,
           movePath: movePath,
           fen: node.fen,
           continuationCount: moveSet.length,
@@ -585,7 +585,9 @@ class RepertoireAuditService {
 
   /// Returns (whiteCp, cacheHits, cacheMisses).
   Future<(int?, int, int)> _evalAfterMove(
-    String fen, String moveUci, int depth,
+    String fen,
+    String moveUci,
+    int depth,
   ) async {
     try {
       final pos = Chess.fromSetup(Setup.parseFen(fen));
@@ -600,9 +602,8 @@ class RepertoireAuditService {
 
       final result = await _pool.evaluateFen(newFen, depth);
       final isWhiteAfter = newPos.turn == Side.white;
-      final whiteCp = isWhiteAfter
-          ? (result.scoreCp ?? 0)
-          : -(result.scoreCp ?? 0);
+      final whiteCp =
+          isWhiteAfter ? (result.scoreCp ?? 0) : -(result.scoreCp ?? 0);
 
       // Write back so generation (and future audits) can reuse.
       _evalCache.putEvalCpWhite(newFen, whiteCp, depth);

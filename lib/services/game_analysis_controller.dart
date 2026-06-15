@@ -109,7 +109,6 @@ MoveClassification classifyMove(double delta) {
   return MoveClassification.normal;
 }
 
-
 // ---------------------------------------------------------------------------
 // Isolate-safe top-level parser for cached evals (used by compute())
 // ---------------------------------------------------------------------------
@@ -515,7 +514,8 @@ class GameAnalysisController extends ChangeNotifier {
         comment = setPvInComment(comment, eval.bestLine);
       }
       if (eval.maiaTopMove != null && eval.maiaTopProb != null) {
-        comment = setMaiaTopInComment(comment, eval.maiaTopMove!, eval.maiaTopProb!);
+        comment =
+            setMaiaTopInComment(comment, eval.maiaTopMove!, eval.maiaTopProb!);
       }
       moveData.comments![0] = comment;
     } else {
@@ -524,7 +524,8 @@ class GameAnalysisController extends ChangeNotifier {
         comment = '$comment [%pv ${eval.bestLine.join(',')}]';
       }
       if (eval.maiaTopMove != null && eval.maiaTopProb != null) {
-        comment = setMaiaTopInComment(comment, eval.maiaTopMove!, eval.maiaTopProb!);
+        comment =
+            setMaiaTopInComment(comment, eval.maiaTopMove!, eval.maiaTopProb!);
       }
       moveData.comments = [comment];
     }

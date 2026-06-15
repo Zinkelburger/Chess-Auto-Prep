@@ -133,8 +133,7 @@ class TacticsTrainingPanel extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: shortcutTooltip(
-                description:
-                    _useNextLabel ? 'Next position' : 'Skip position',
+                description: _useNextLabel ? 'Next position' : 'Skip position',
                 shortcut: 'N',
                 child: SizedBox(
                   width: double.infinity,

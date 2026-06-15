@@ -143,8 +143,8 @@ class TrainingSettingsPanel extends StatelessWidget {
           const SizedBox(height: 24),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: Text('Replay missed moves',
-                style: theme.textTheme.titleSmall),
+            title:
+                Text('Replay missed moves', style: theme.textTheme.titleSmall),
             subtitle: const Text(
               'After a line, replay every move you got wrong '
               'before rating.',
@@ -181,8 +181,7 @@ class TrainingSettingsPanel extends StatelessWidget {
             preferDelayed: true,
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title:
-                  Text('Manual advance', style: theme.textTheme.titleSmall),
+              title: Text('Manual advance', style: theme.textTheme.titleSmall),
               subtitle: const Text(
                 'Press Next (or Space) to see the next move when '
                 'learning. Turn off to auto-advance after a delay.',

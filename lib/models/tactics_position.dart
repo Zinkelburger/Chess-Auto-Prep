@@ -153,11 +153,7 @@ class TacticsPosition {
       rating: row.length > 18 ? (int.tryParse(row[18].toString()) ?? 0) : 0,
       // Column 19 — full PV for display; tolerate pre-PV files.
       solutionPv: row.length > 19
-          ? row[19]
-              .toString()
-              .split('|')
-              .where((s) => s.isNotEmpty)
-              .toList()
+          ? row[19].toString().split('|').where((s) => s.isNotEmpty).toList()
           : const [],
     );
   }

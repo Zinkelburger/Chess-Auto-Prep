@@ -84,8 +84,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
     this.startIndex = 0,
     this.maxMoves = 8,
     this.fontSize = 11,
-    this.movePadding =
-        const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+    this.movePadding = const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
     this.singleLine = true,
   });
 
@@ -117,8 +116,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
     }
 
     final hasCallback = onMoveTapped != null;
-    final end =
-        (startIndex + maxMoves).clamp(startIndex, sanMoves.length);
+    final end = (startIndex + maxMoves).clamp(startIndex, sanMoves.length);
 
     for (int i = startIndex; i < end; i++) {
       final isFirst = i == startIndex;
@@ -145,8 +143,9 @@ class ClickableMoveLineWidget extends StatelessWidget {
 
       if (hasCallback) {
         final idx = i;
-        final annotation =
-            annotations != null && i < annotations!.length ? annotations![i] : null;
+        final annotation = annotations != null && i < annotations!.length
+            ? annotations![i]
+            : null;
 
         if (annotation?.prefixIcon != null) {
           spans.add(WidgetSpan(
@@ -195,8 +194,7 @@ class ClickableMoveLineWidget extends StatelessWidget {
                         fontFamily: 'monospace',
                         fontWeight:
                             isActive ? FontWeight.bold : FontWeight.normal,
-                        decoration:
-                            isActive ? null : TextDecoration.underline,
+                        decoration: isActive ? null : TextDecoration.underline,
                         decorationColor:
                             AppColors.expectimax.withValues(alpha: 0.5),
                         decorationStyle: TextDecorationStyle.dotted,

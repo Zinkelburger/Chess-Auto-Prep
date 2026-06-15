@@ -78,8 +78,8 @@ class FullscreenGameView extends StatelessWidget {
             right: 0,
             child: _OverlayBar(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
@@ -127,8 +127,8 @@ class FullscreenGameView extends StatelessWidget {
             right: 0,
             child: _OverlayBar(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
@@ -178,9 +178,7 @@ class FullscreenGameView extends StatelessWidget {
                       tooltip: 'Forward (→)',
                     ),
                     IconButton(
-                      onPressed: currentIndex < totalGames - 1
-                          ? onNext
-                          : null,
+                      onPressed: currentIndex < totalGames - 1 ? onNext : null,
                       icon: Icon(Icons.skip_next,
                           color: Colors.white.withAlpha(180)),
                       tooltip: 'Next game (N)',
@@ -189,8 +187,7 @@ class FullscreenGameView extends StatelessWidget {
                     PopupMenuButton<double>(
                       tooltip: 'Auto-play speed',
                       icon: Icon(Icons.speed,
-                          size: 20,
-                          color: Colors.white.withAlpha(160)),
+                          size: 20, color: Colors.white.withAlpha(160)),
                       color: Colors.grey[900],
                       onSelected: onSetSpeed,
                       itemBuilder: (ctx) => [
@@ -207,8 +204,7 @@ class FullscreenGameView extends StatelessWidget {
                                 const SizedBox(width: 8),
                                 Text('${s}s / move',
                                     style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13)),
+                                        color: Colors.white, fontSize: 13)),
                               ],
                             ),
                           ),
@@ -217,8 +213,7 @@ class FullscreenGameView extends StatelessWidget {
                     Tooltip(
                       message: 'Auto next game (W)',
                       child: GestureDetector(
-                        onTap: () =>
-                            onSetAutoNext?.call(!autoNextGame),
+                        onTap: () => onSetAutoNext?.call(!autoNextGame),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),

@@ -85,8 +85,8 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
                 onPressed: widget.onClearAll,
                 icon: const Icon(Icons.delete_outline,
                     size: 16, color: Colors.red),
-                label:
-                    const Text('Clear All', style: TextStyle(color: Colors.red)),
+                label: const Text('Clear All',
+                    style: TextStyle(color: Colors.red)),
               ),
             ],
           ),
@@ -103,8 +103,8 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
               return TacticsBrowseRow(
                 position: pos,
                 index: realIndex,
-                isSelected: widget.selectedFen != null &&
-                    widget.selectedFen == pos.fen,
+                isSelected:
+                    widget.selectedFen != null && widget.selectedFen == pos.fen,
                 onTap: () => widget.onSelectTactic(realIndex),
                 onDelete: () => widget.onDeleteTactic(realIndex),
                 onEdit: () => widget.onEditTactic(realIndex),
@@ -148,8 +148,8 @@ class TacticsBrowseHeader extends StatelessWidget {
           SizedBox(width: 8),
           SizedBox(
               width: 60,
-              child:
-                  Text('Stats', style: _headerStyle, textAlign: TextAlign.right)),
+              child: Text('Stats',
+                  style: _headerStyle, textAlign: TextAlign.right)),
         ],
       ),
     );
@@ -196,83 +196,83 @@ class TacticsBrowseRow extends StatelessWidget {
                 : (index.isEven
                     ? Colors.transparent
                     : Colors.white.withValues(alpha: 0.02)),
-          border: Border(
-            bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
+            border: Border(
+              bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
+            ),
           ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        child: Row(
-          children: [
-            IconButton(
-              onPressed: onDelete,
-              icon: Icon(Icons.close,
-                  size: 16, color: Colors.red.withValues(alpha: 0.6)),
-              tooltip: 'Delete tactic',
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              padding: EdgeInsets.zero,
-            ),
-            IconButton(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit, size: 16),
-              tooltip: 'Edit tactic',
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              padding: EdgeInsets.zero,
-            ),
-            const SizedBox(width: 4),
-            SizedBox(
-              width: 32,
-              child: Text(
-                pos.mistakeType,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: switch (pos.mistakeType) {
-                    '??' => Colors.red,
-                    '?!' => Colors.yellow,
-                    _ => Colors.orange,
-                  },
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: onDelete,
+                icon: Icon(Icons.close,
+                    size: 16, color: Colors.red.withValues(alpha: 0.6)),
+                tooltip: 'Delete tactic',
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+              IconButton(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit, size: 16),
+                tooltip: 'Edit tactic',
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+              const SizedBox(width: 4),
+              SizedBox(
+                width: 32,
+                child: Text(
+                  pos.mistakeType,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: switch (pos.mistakeType) {
+                      '??' => Colors.red,
+                      '?!' => Colors.yellow,
+                      _ => Colors.orange,
+                    },
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 80,
-              child: _BrowseStarRating(
-                rating: pos.rating,
-                onSetRating: onSetRating,
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 80,
+                child: _BrowseStarRating(
+                  rating: pos.rating,
+                  onSetRating: onSetRating,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 3,
-              child: Text(
-                '${pos.gameWhite} vs ${pos.gameBlack}',
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  '${pos.gameWhite} vs ${pos.gameBlack}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 2,
-              child: Text(
-                pos.positionContext,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  pos.positionContext,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 2,
-              child: Text(
-                '${pos.userMove} → ${pos.bestMove}',
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  '${pos.userMove} → ${pos.bestMove}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, fontFamily: 'monospace'),
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            PuzzleStatsDisplay(position: pos),
-          ],
-        ),
+              const SizedBox(width: 8),
+              PuzzleStatsDisplay(position: pos),
+            ],
+          ),
         ),
       ),
     );

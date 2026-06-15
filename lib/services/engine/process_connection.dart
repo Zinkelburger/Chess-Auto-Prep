@@ -144,7 +144,7 @@ class ProcessConnection implements EngineConnection {
     if (proc != null) {
       try {
         proc.stdin.writeln('quit');
-      } catch (_) { /* stdin may be closed */ }
+      } catch (_) {/* stdin may be closed */}
       proc.kill(); // SIGTERM on POSIX, TerminateProcess on Windows
       if (!Platform.isWindows) {
         // On POSIX, the initial kill() sends SIGTERM which the process may
@@ -154,7 +154,7 @@ class ProcessConnection implements EngineConnection {
         Future.delayed(const Duration(seconds: 2), () {
           try {
             proc.kill(ProcessSignal.sigkill);
-          } catch (_) { /* process may have already exited */ }
+          } catch (_) {/* process may have already exited */}
         });
       }
     }

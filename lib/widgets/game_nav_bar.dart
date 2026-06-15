@@ -123,8 +123,7 @@ class GameNavBar extends StatelessWidget {
                   ),
                   style: isEditMode
                       ? IconButton.styleFrom(
-                          backgroundColor:
-                              Colors.amber.withValues(alpha: 0.12),
+                          backgroundColor: Colors.amber.withValues(alpha: 0.12),
                         )
                       : null,
                   visualDensity: VisualDensity.compact,
@@ -135,8 +134,7 @@ class GameNavBar extends StatelessWidget {
                 description: 'Next game',
                 shortcut: 'N',
                 child: TextButton.icon(
-                  onPressed:
-                      currentIndex < games.length - 1 ? onNext : null,
+                  onPressed: currentIndex < games.length - 1 ? onNext : null,
                   icon: const Icon(Icons.skip_next, size: 20),
                   label: const Text('Next'),
                 ),
@@ -239,8 +237,7 @@ class GameNavBar extends StatelessWidget {
           ),
           child: Text(
             'Game ${currentIndex + 1} / ${games.length}',
-            style:
-                const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
           ),
         ),
       ),

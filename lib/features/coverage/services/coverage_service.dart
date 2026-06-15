@@ -3,7 +3,6 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 import 'package:dartchess/dartchess.dart';
 import '../../../models/opening_tree.dart';
 import '../../../utils/fen_utils.dart';
@@ -175,10 +174,6 @@ typedef CoverageProgressCallback = void Function(
 
 /// Coverage Calculator Service
 class CoverageService {
-  static const _lichessBaseUrl = 'https://explorer.lichess.ovh/lichess';
-  static const _mastersBaseUrl = 'https://explorer.lichess.ovh/masters';
-  static const _playerBaseUrl = 'https://explorer.lichess.ovh/player';
-
   /// Leaves extending this many ply past the first sub-threshold node
   /// are classified as "too deep".
   static const tooDeepThresholdPly = 4;
@@ -207,32 +202,11 @@ class CoverageService {
     this.maiaElo = 2200,
   });
 
-  String get _baseUrl {
-    switch (database) {
-      case LichessDatabase.lichess:
-        return _lichessBaseUrl;
-      case LichessDatabase.masters:
-        return _mastersBaseUrl;
-      case LichessDatabase.player:
-        return _playerBaseUrl;
-    }
-  }
-
   /// MOTHBALLED: Lichess Explorer API calls are disabled. Returns null
   /// immediately. Remove the early return to re-enable.
   Future<Map<String, dynamic>?> getPositionData(String fen) async {
     // Mothballed: no Lichess Explorer API calls.
     return null;
-  }
-
-  static Map<String, dynamic>? _parseJson(String body) {
-    try {
-      return Map<String, dynamic>.from(
-        const JsonDecoder().convert(body) as Map,
-      );
-    } catch (_) {
-      return null;
-    }
   }
 
   Future<int> getGameCount(String fen) async {

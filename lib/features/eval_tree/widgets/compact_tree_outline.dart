@@ -188,9 +188,8 @@ class _CompactTreeOutlineState extends State<CompactTreeOutline> {
           playAsWhite: widget.playAsWhite,
           startPlyOffset: _startPlyOffset,
           isHighlighted: isHighlighted,
-          onChevronTap: row.hasChildren
-              ? () => _toggleExpanded(row.node)
-              : null,
+          onChevronTap:
+              row.hasChildren ? () => _toggleExpanded(row.node) : null,
           onRowTap: () => widget.onNodeTapped?.call(row.node),
         );
       },

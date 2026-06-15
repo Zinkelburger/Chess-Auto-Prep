@@ -371,7 +371,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     if (targets == null) return null;
 
     for (final legalTo in targets.squares) {
-      if (_castlingKingDest(from, legalTo) == clickedTo && legalTo != clickedTo) {
+      if (_castlingKingDest(from, legalTo) == clickedTo &&
+          legalTo != clickedTo) {
         return legalTo;
       }
     }
@@ -641,10 +642,10 @@ class _AnnotationPainter extends CustomPainter {
     // Arrowhead (filled triangle)
     final headPath = Path()
       ..moveTo(to.dx, to.dy)
-      ..lineTo(shaftEnd.dx + perp.dx * headHalfW,
-          shaftEnd.dy + perp.dy * headHalfW)
-      ..lineTo(shaftEnd.dx - perp.dx * headHalfW,
-          shaftEnd.dy - perp.dy * headHalfW)
+      ..lineTo(
+          shaftEnd.dx + perp.dx * headHalfW, shaftEnd.dy + perp.dy * headHalfW)
+      ..lineTo(
+          shaftEnd.dx - perp.dx * headHalfW, shaftEnd.dy - perp.dy * headHalfW)
       ..close();
 
     canvas.drawPath(

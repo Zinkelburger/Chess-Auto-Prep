@@ -38,10 +38,11 @@ class LineMetricsPanel extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (showCoverageProgress) _CoverageProgressBar(
-          progress: coverageProgress,
-          message: coverageProgressMessage,
-        ),
+        if (showCoverageProgress)
+          _CoverageProgressBar(
+            progress: coverageProgress,
+            message: coverageProgressMessage,
+          ),
         if (coverageResult != null)
           _CoverageSummaryBar(
             lineCoverage: lineCoverage,
@@ -135,7 +136,9 @@ class _CoverageSummaryBar extends StatelessWidget {
           Row(
             children: [
               _CoverageStat(
-                  label: 'Covered', percent: pct(covered), color: const Color(0xFF4CAF50)),
+                  label: 'Covered',
+                  percent: pct(covered),
+                  color: const Color(0xFF4CAF50)),
               const SizedBox(width: 4),
               Text('|',
                   style: TextStyle(fontSize: 10, color: Colors.grey[600])),

@@ -56,8 +56,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         BoardZoneControls(trapNavigation: trapNavigation),
         if (onOpenGeneration != null)
           RepertoireGenerateButton(onPressed: onOpenGeneration),
-        if (onOpenAudit != null)
-          RepertoireAuditButton(onPressed: onOpenAudit),
+        if (onOpenAudit != null) RepertoireAuditButton(onPressed: onOpenAudit),
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
@@ -88,7 +87,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
                   leading: Icon(Icons.upload_file, size: 20),
                   title: Text('Import PGN'),
                   trailing: Text('I',
-                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                 ),

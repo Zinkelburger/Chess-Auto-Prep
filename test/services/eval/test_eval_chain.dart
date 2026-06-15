@@ -12,8 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'eval_test_helpers.dart';
 
 void main() {
-  const fen =
-      'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+  const fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
 
   setUpAll(() async {
     await initEvalTestSqlite();

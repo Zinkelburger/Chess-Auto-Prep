@@ -175,8 +175,7 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
       onTheFlyMode: !useMain,
       compact: widget.compact,
       onOpenSettings: widget.onOpenSettings,
-      onMoveSelected: widget.onMoveSelected ??
-          widget.controller.playMove,
+      onMoveSelected: widget.onMoveSelected ?? widget.controller.playMove,
       onLineMoveClicked: widget.onLineMoveClicked ??
           (sanMoves, index) {
             widget.controller.applyLineFromCurrent(sanMoves, index);

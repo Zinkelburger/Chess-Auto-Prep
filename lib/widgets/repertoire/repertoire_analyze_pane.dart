@@ -78,9 +78,8 @@ class RepertoireAnalyzePane {
               onPositionSelected: props.onEvalTreePositionSelected,
             )
           : null,
-      metricsContent: props.hasMetricsContent
-          ? _AnalyzeMetricsView(props: props)
-          : null,
+      metricsContent:
+          props.hasMetricsContent ? _AnalyzeMetricsView(props: props) : null,
     );
   }
 }
@@ -144,8 +143,7 @@ class _AnalyzeMetricsView extends StatelessWidget {
                 coherence: props.coherenceResult,
               ),
               playAsWhite: props.isWhiteRepertoire,
-              boardPreview:
-                  props.boardPreview ?? BoardPreviewController(),
+              boardPreview: props.boardPreview ?? BoardPreviewController(),
               currentCoverage: props.coverageResult!.coveragePercent,
               onAccept: (suggestion) => _acceptSuggestion(context, suggestion),
             ),
@@ -196,9 +194,8 @@ class _CoverageDetailView extends StatelessWidget {
           _CoverageSection(
             title: 'Too shallow (${result.tooShallowLeaves.length})',
             color: AppColors.warning,
-            items: result.tooShallowLeaves
-                .map((leaf) => leaf.moveString)
-                .toList(),
+            items:
+                result.tooShallowLeaves.map((leaf) => leaf.moveString).toList(),
             onItemTap: onNavigateToPosition == null
                 ? null
                 : (index) => onNavigateToPosition!(
@@ -210,9 +207,7 @@ class _CoverageDetailView extends StatelessWidget {
           _CoverageSection(
             title: 'Too deep (${result.tooDeepLeaves.length})',
             color: AppColors.info,
-            items: result.tooDeepLeaves
-                .map((leaf) => leaf.moveString)
-                .toList(),
+            items: result.tooDeepLeaves.map((leaf) => leaf.moveString).toList(),
             onItemTap: onNavigateToPosition == null
                 ? null
                 : (index) => onNavigateToPosition!(
@@ -226,8 +221,7 @@ class _CoverageDetailView extends StatelessWidget {
             title: 'Unaccounted (${result.unaccountedMoves.length})',
             color: AppColors.danger,
             items: result.unaccountedMoves
-                .map((um) =>
-                    '${um.parentMoves.join(' ')} ${um.move}'.trim())
+                .map((um) => '${um.parentMoves.join(' ')} ${um.move}'.trim())
                 .toList(),
             onItemTap: onNavigateToPosition == null
                 ? null

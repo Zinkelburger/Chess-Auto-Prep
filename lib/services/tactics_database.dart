@@ -199,7 +199,8 @@ class TacticsDatabase {
   }
 
   /// Start a new review session with the given [settings].
-  void startSession([TacticsSessionSettings settings = const TacticsSessionSettings()]) {
+  void startSession(
+      [TacticsSessionSettings settings = const TacticsSessionSettings()]) {
     currentSession = ReviewSession();
     _sessionSettings = settings;
 
@@ -212,8 +213,8 @@ class TacticsDatabase {
     // Sort / shuffle per ordering preference.
     switch (settings.order) {
       case TacticsSessionOrder.newestFirst:
-        _sessionQueue.sort((a, b) =>
-            positions[b].gameDate.compareTo(positions[a].gameDate));
+        _sessionQueue.sort(
+            (a, b) => positions[b].gameDate.compareTo(positions[a].gameDate));
       case TacticsSessionOrder.leastReviewed:
         _sessionQueue.sort((a, b) =>
             positions[a].reviewCount.compareTo(positions[b].reviewCount));
@@ -225,8 +226,7 @@ class TacticsDatabase {
     }
 
     _sessionQueueIndex = 0;
-    sessionPositionIndex =
-        _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
+    sessionPositionIndex = _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
   }
 
   /// Number of positions in the current session queue.
@@ -240,7 +240,8 @@ class TacticsDatabase {
     final queueIdx = _sessionQueue.indexOf(positionIndex);
     if (queueIdx == -1) return;
     _sessionQueue.removeAt(queueIdx);
-    if (_sessionQueueIndex >= _sessionQueue.length && _sessionQueue.isNotEmpty) {
+    if (_sessionQueueIndex >= _sessionQueue.length &&
+        _sessionQueue.isNotEmpty) {
       _sessionQueueIndex = 0;
     }
   }

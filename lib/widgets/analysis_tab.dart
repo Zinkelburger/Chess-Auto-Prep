@@ -254,8 +254,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
         widget.tree != null || _candidateService?.coverageService != null;
     final hasSuggestionPanel =
         widget.coverageResult != null && widget.tree != null;
-    final hasContent =
-        hasBrowseSource || hasSuggestionPanel || _showTree;
+    final hasContent = hasBrowseSource || hasSuggestionPanel || _showTree;
 
     if (!hasContent) {
       return Center(
@@ -328,8 +327,7 @@ class _AnalysisTabState extends State<AnalysisTab> {
               onCandidateTap: _onCandidateTap,
               onExpandTraps: (idx) {
                 setState(() {
-                  _expandedTrapIndex =
-                      _expandedTrapIndex == idx ? null : idx;
+                  _expandedTrapIndex = _expandedTrapIndex == idx ? null : idx;
                 });
               },
               onTrapGo: (trap) {

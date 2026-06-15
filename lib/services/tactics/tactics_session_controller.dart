@@ -199,8 +199,8 @@ class TacticsSessionController extends ChangeNotifier {
 
   void refreshCurrentPosition() {
     if (currentPosition == null) return;
-    final index = database.positions
-        .indexWhere((p) => p.fen == currentPosition!.fen);
+    final index =
+        database.positions.indexWhere((p) => p.fen == currentPosition!.fen);
     if (index != -1) {
       currentPosition = database.positions[index];
       notifyListeners();
@@ -287,8 +287,7 @@ class TacticsSessionController extends ChangeNotifier {
       schedule(const Duration(milliseconds: 500), () {
         if (!isMounted() || currentPosition == null) return;
 
-        final opponentToken =
-            currentPosition!.correctLine[currentMoveIndex];
+        final opponentToken = currentPosition!.correctLine[currentMoveIndex];
         try {
           final pos = Chess.fromSetup(
             Setup.parseFen(currentTacticFen ?? currentPosition!.fen),
@@ -384,6 +383,5 @@ class TacticsSessionController extends ChangeNotifier {
   }
 
   /// FEN to restore after a wrong answer (may differ from initial on multi-move).
-  String? fenAfterIncorrect() =>
-      currentTacticFen ?? currentPosition?.fen;
+  String? fenAfterIncorrect() => currentTacticFen ?? currentPosition?.fen;
 }

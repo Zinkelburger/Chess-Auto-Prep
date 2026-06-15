@@ -116,9 +116,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   void _reclaimFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
-          _focusNode.canRequestFocus &&
-          !isTextInputFocused()) {
+      if (mounted && _focusNode.canRequestFocus && !isTextInputFocused()) {
         _focusNode.requestFocus();
       }
     });
@@ -311,16 +309,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         );
 
         context.read<AppState>().switchToBuilderWithGeneration(
-              repertoirePath: repertoirePath,
-              pgnPaths: [rawGamesPath],
-            );
+          repertoirePath: repertoirePath,
+          pgnPaths: [rawGamesPath],
+        );
         _reclaimFocus();
         return;
       } catch (e) {
         debugPrint('Generate repertoire from games failed: $e');
         if (mounted) {
-          showAppSnackBar(
-              context, 'Failed to create repertoire.', isError: true);
+          showAppSnackBar(context, 'Failed to create repertoire.',
+              isError: true);
         }
         _reclaimFocus();
         return;
@@ -350,9 +348,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
 
     context.read<AppState>().switchToBuilderWithGeneration(
-          repertoirePath: repertoirePath,
-          pgnPaths: [rawGamesPath],
-        );
+      repertoirePath: repertoirePath,
+      pgnPaths: [rawGamesPath],
+    );
   }
 
   Future<_DuplicateNameAction?> _showDuplicateNameDialog(String name) {
@@ -366,13 +364,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () =>
-                Navigator.pop(ctx, _DuplicateNameAction.cancel),
+            onPressed: () => Navigator.pop(ctx, _DuplicateNameAction.cancel),
             child: const Text('Cancel'),
           ),
           OutlinedButton(
-            onPressed: () =>
-                Navigator.pop(ctx, _DuplicateNameAction.rename),
+            onPressed: () => Navigator.pop(ctx, _DuplicateNameAction.rename),
             child: const Text('Pick Different Name'),
           ),
           FilledButton(
@@ -598,9 +594,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
-    final fileName = _controller.filePath != null
-        ? p.basename(_controller.filePath!)
-        : '';
+    final fileName =
+        _controller.filePath != null ? p.basename(_controller.filePath!) : '';
     return AppBar(
       titleSpacing: 16,
       title: Row(
@@ -796,12 +791,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   Widget _buildPerspectiveButton() {
     final protagonist = _controller.detectProtagonist();
     final bothPlayers = _controller.detectBothPlayers();
-    final isPlayerMode =
-        _controller.perspective.mode == PerspectiveMode.player;
-    final isWhiteMode =
-        _controller.perspective.mode == PerspectiveMode.white;
-    final isBlackMode =
-        _controller.perspective.mode == PerspectiveMode.black;
+    final isPlayerMode = _controller.perspective.mode == PerspectiveMode.player;
+    final isWhiteMode = _controller.perspective.mode == PerspectiveMode.white;
+    final isBlackMode = _controller.perspective.mode == PerspectiveMode.black;
 
     final label = switch (_controller.perspective.mode) {
       PerspectiveMode.white => 'White',
@@ -816,8 +808,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         if (bothPlayers != null) ...[
           PopupMenuItem(
             value: Perspective(
-                mode: PerspectiveMode.player,
-                playerName: bothPlayers.player1),
+                mode: PerspectiveMode.player, playerName: bothPlayers.player1),
             child: Row(children: [
               if (isPlayerMode &&
                   _controller.perspective.playerName == bothPlayers.player1)
@@ -830,8 +821,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           ),
           PopupMenuItem(
             value: Perspective(
-                mode: PerspectiveMode.player,
-                playerName: bothPlayers.player2),
+                mode: PerspectiveMode.player, playerName: bothPlayers.player2),
             child: Row(children: [
               if (isPlayerMode &&
                   _controller.perspective.playerName == bothPlayers.player2)
@@ -1286,8 +1276,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               : null,
         ),
         const Divider(height: 1),
-        if (_editMode)
-          _buildEditModeBar(),
+        if (_editMode) _buildEditModeBar(),
         Expanded(
           child: PgnViewerWidget(
             key: ValueKey('game_${_controller.currentGameIndex}'),

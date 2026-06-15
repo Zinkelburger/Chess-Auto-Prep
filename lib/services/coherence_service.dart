@@ -113,9 +113,8 @@ double lineCoherence(
       score += mfi.support;
     }
   }
-  final maxPossible = maximalItemsets
-      .map((m) => m.support)
-      .reduce((a, b) => a + b);
+  final maxPossible =
+      maximalItemsets.map((m) => m.support).reduce((a, b) => a + b);
   return maxPossible > 0 ? (score / maxPossible).clamp(0.0, 1.0) : 0.0;
 }
 
@@ -243,8 +242,8 @@ class CoherenceService extends ChangeNotifier {
     bool playAsWhite,
   ) {
     final ranked = maximal.toList()
-      ..sort((a, b) => (b.support * b.items.length)
-          .compareTo(a.support * a.items.length));
+      ..sort((a, b) =>
+          (b.support * b.items.length).compareTo(a.support * a.items.length));
 
     final assigned = <String>{};
     final clusters = <CoherenceCluster>[];
@@ -269,19 +268,16 @@ class CoherenceService extends ChangeNotifier {
         signature: mfi,
         autoName: _generateClusterName(mfi),
         lineIds: members.map((l) => l.id).toList(),
-        probabilityMass: members
-            .map((l) => l.importance ?? 0.01)
-            .fold(0.0, (a, b) => a + b),
+        probabilityMass:
+            members.map((l) => l.importance ?? 0.01).fold(0.0, (a, b) => a + b),
       ));
     }
 
-    final unclustered =
-        lines.where((l) => !assigned.contains(l.id)).toList();
+    final unclustered = lines.where((l) => !assigned.contains(l.id)).toList();
     if (unclustered.isNotEmpty) {
       clusters.add(CoherenceCluster(
         id: 'unclustered',
-        signature:
-            const FrequentItemset(items: {}, support: 0, count: 0),
+        signature: const FrequentItemset(items: {}, support: 0, count: 0),
         autoName: 'Unclustered',
         lineIds: unclustered.map((l) => l.id).toList(),
         probabilityMass: unclustered

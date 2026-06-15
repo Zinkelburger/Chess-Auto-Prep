@@ -107,8 +107,8 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       return true;
     }).toList();
 
-    filtered.sort((a, b) => (b.cumulativeProbability ?? 0)
-        .compareTo(a.cumulativeProbability ?? 0));
+    filtered.sort((a, b) =>
+        (b.cumulativeProbability ?? 0).compareTo(a.cumulativeProbability ?? 0));
 
     // Auto-scale: cap at _maxVisible so the list never overwhelms.
     // As the user dismisses items, lower-probability findings surface.
@@ -239,7 +239,8 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     final finding = _visibleFindings[_selectedIndex];
     _dismissFinding(finding);
     _recomputeVisible();
-    if (_selectedIndex >= _visibleFindings.length && _visibleFindings.isNotEmpty) {
+    if (_selectedIndex >= _visibleFindings.length &&
+        _visibleFindings.isNotEmpty) {
       _selectedIndex = _visibleFindings.length - 1;
     }
     if (_visibleFindings.isNotEmpty && _selectedIndex >= 0) {
@@ -527,7 +528,8 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
             children: [
               if (widget.isAuditing) ...[
                 SizedBox(
-                  width: 10, height: 10,
+                  width: 10,
+                  height: 10,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.5,
                     color: Colors.grey[500],
@@ -560,18 +562,18 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                             horizontal: 4, vertical: 2),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(
-                              color: Colors.grey[700]!, width: 0.5),
+                          borderSide:
+                              BorderSide(color: Colors.grey[700]!, width: 0.5),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(
-                              color: Colors.grey[700]!, width: 0.5),
+                          borderSide:
+                              BorderSide(color: Colors.grey[700]!, width: 0.5),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(4),
-                          borderSide: BorderSide(
-                              color: Colors.grey[500]!, width: 1),
+                          borderSide:
+                              BorderSide(color: Colors.grey[500]!, width: 1),
                         ),
                       ),
                       onSubmitted: (_) => _applyCapFromField(),
@@ -587,8 +589,8 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                   if (_reachThreshold != null) ...[
                     const SizedBox(width: 4),
                     Text('· ≥ $_reachThreshold reach',
-                        style:
-                            TextStyle(fontSize: 11, color: Colors.blueGrey[300])),
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.blueGrey[300])),
                   ],
                 ] else ...[
                   Text('${_visibleFindings.length} findings',
@@ -614,16 +616,17 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                 Tooltip(
                   message: 'New audit with different settings',
                   child: IconButton(
-                    icon: const Icon(Icons.refresh, size: 14, color: Colors.grey),
+                    icon:
+                        const Icon(Icons.refresh, size: 14, color: Colors.grey),
                     onPressed: widget.onRerunAudit,
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                    constraints:
+                        const BoxConstraints(minWidth: 24, minHeight: 24),
                   ),
                 ),
               Tooltip(
-                message:
-                    _hideDismissed ? 'Show dismissed' : 'Hide dismissed',
+                message: _hideDismissed ? 'Show dismissed' : 'Hide dismissed',
                 child: IconButton(
                   icon: Icon(
                     _hideDismissed
@@ -640,7 +643,8 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                   },
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  constraints:
+                      const BoxConstraints(minWidth: 24, minHeight: 24),
                 ),
               ),
             ],
@@ -664,8 +668,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.verified_outlined,
-                size: 40, color: Colors.grey[700]),
+            Icon(Icons.verified_outlined, size: 40, color: Colors.grey[700]),
             const SizedBox(height: 12),
             Text('No audit findings',
                 style: TextStyle(
@@ -721,8 +724,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
             final box = context.findRenderObject() as RenderBox?;
             if (box != null) {
               final pos = box.localToGlobal(Offset.zero);
-              _showDismissMenu(
-                  context, Offset(pos.dx + 100, pos.dy), finding);
+              _showDismissMenu(context, Offset(pos.dx + 100, pos.dy), finding);
             }
           },
           child: Padding(
@@ -757,17 +759,15 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                         finding.summary,
                         style: TextStyle(
                           fontSize: 12,
-                          color: finding.dismissed
-                              ? Colors.grey
-                              : null,
+                          color: finding.dismissed ? Colors.grey : null,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
                         finding.movePathString,
-                        style: const TextStyle(
-                            fontSize: 11, color: Colors.grey),
+                        style:
+                            const TextStyle(fontSize: 11, color: Colors.grey),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -778,9 +778,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                   icon: Icon(
                     finding.dismissed ? Icons.undo : Icons.close,
                     size: 16,
-                    color: finding.dismissed
-                        ? Colors.grey
-                        : Colors.grey[400],
+                    color: finding.dismissed ? Colors.grey : Colors.grey[400],
                   ),
                   tooltip: finding.dismissed ? 'Restore' : 'Dismiss (D)',
                   onPressed: () {
@@ -828,7 +826,8 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
         ),
         PopupMenuItem(
           value: 'depth',
-          child: Text('Dismiss all ${finding.type.name} at $plyLabel or earlier',
+          child: Text(
+              'Dismiss all ${finding.type.name} at $plyLabel or earlier',
               style: const TextStyle(fontSize: 12)),
         ),
         PopupMenuItem(

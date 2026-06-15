@@ -168,8 +168,7 @@ class TreeEvalResolver {
 
     if (outcome.whiteCp != null) {
       final isWhiteStm = isWhiteToMove(node.fen);
-      node.engineEvalCp =
-          isWhiteStm ? outcome.whiteCp! : -outcome.whiteCp!;
+      node.engineEvalCp = isWhiteStm ? outcome.whiteCp! : -outcome.whiteCp!;
       return true;
     }
     return false;

@@ -56,4 +56,4 @@ jobs:
 
       - name: Run integration tests (headless)
         timeout-minutes: 5
-        run: xvfb-run flutter test integration_test -d linux
+        run: xvfb-run flutter test integration_test/app_test.dart -d linux

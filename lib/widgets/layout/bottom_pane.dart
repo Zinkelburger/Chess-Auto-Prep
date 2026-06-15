@@ -182,8 +182,8 @@ class BottomPaneState extends State<BottomPane>
               labelPadding: const EdgeInsets.symmetric(horizontal: 12),
               indicatorSize: TabBarIndicatorSize.label,
               dividerHeight: 0,
-              labelStyle: const TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w600),
+              labelStyle:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
               unselectedLabelStyle: const TextStyle(fontSize: 11),
               tabs: [
                 _buildTab('Findings', widget.findingsBadge, Colors.orange),

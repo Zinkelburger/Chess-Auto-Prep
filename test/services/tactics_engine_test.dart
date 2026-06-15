@@ -13,8 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 const _scholarsMateFen =
     'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4';
 
-const _startFen =
-    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 const _afterE4E5Nf3Nc6 =
     'r1bqkb1r/pppp1ppp/2n2n2/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 4';
@@ -272,7 +271,8 @@ void main() {
       );
     });
 
-    test('getSolution returns full line after user has finished the puzzle', () {
+    test('getSolution returns full line after user has finished the puzzle',
+        () {
       final position = _position(
         fen: _scholarsMateFen,
         correctLine: const ['Qxf7#'],

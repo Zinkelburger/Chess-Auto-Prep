@@ -63,8 +63,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       TextEditingController(text: '5');
   final TextEditingController _dbMinProbCtrl =
       TextEditingController(text: '0.05');
-  final TextEditingController _minEloCtrl =
-      TextEditingController(text: '0');
+  final TextEditingController _minEloCtrl = TextEditingController(text: '0');
 
   LichessDatabase? _lichessDbOverride;
   bool _relativeEval = true;
@@ -245,9 +244,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     required String startFen,
     required bool playAsWhite,
   }) {
-    final evalDepth =
-        int.tryParse(_engineDepthCtrl.text.trim()) ??
-            kDefaultGenerationEvalDepth;
+    final evalDepth = int.tryParse(_engineDepthCtrl.text.trim()) ??
+        kDefaultGenerationEvalDepth;
     final rawThreads = int.tryParse(_engineThreadsCtrl.text.trim());
     final engineThreads = rawThreads != null
         ? clampEngineThreads(rawThreads)
@@ -276,10 +274,10 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       evalDepth: evalDepth,
       engineThreads: engineThreads,
       maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
-      minEvalCp: int.tryParse(_minEvalCtrl.text.trim()) ??
-          (playAsWhite ? 0 : -100),
-      maxEvalCp: int.tryParse(_maxEvalCtrl.text.trim()) ??
-          (playAsWhite ? 200 : 100),
+      minEvalCp:
+          int.tryParse(_minEvalCtrl.text.trim()) ?? (playAsWhite ? 0 : -100),
+      maxEvalCp:
+          int.tryParse(_maxEvalCtrl.text.trim()) ?? (playAsWhite ? 200 : 100),
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
       maiaOnly: _lichessDbOverride == null,
       rankLinesByImportance: _rankLinesByImportance,
@@ -297,12 +295,9 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       selectionMode: _selectionMode,
       noveltyWeight: _preferNovelties ? 60 : 0,
       leafConfidence: double.tryParse(_leafConfidenceCtrl.text.trim()) ?? 1.0,
-      enableCdbDirect:
-          _cdbDirectAvailable && dbSettings.enableCdbDirect,
-      cdbDirectPath:
-          _cdbDirectAvailable ? dbSettings.cdbDirectPath : '',
-      cdbDirectReadAhead:
-          _cdbDirectAvailable && dbSettings.cdbDirectReadAhead,
+      enableCdbDirect: _cdbDirectAvailable && dbSettings.enableCdbDirect,
+      cdbDirectPath: _cdbDirectAvailable ? dbSettings.cdbDirectPath : '',
+      cdbDirectReadAhead: _cdbDirectAvailable && dbSettings.cdbDirectReadAhead,
       batchEvalLookups:
           _cdbDirectAvailable && (eval?.batchEvalLookups ?? false),
       enableLocalChessDb: eval?.enableLocalChessDb ?? false,
@@ -359,8 +354,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
             decoration: BoxDecoration(
               color: Colors.amber.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                  color: Colors.amber.withValues(alpha: 0.25)),
+              border: Border.all(color: Colors.amber.withValues(alpha: 0.25)),
             ),
             child: Row(
               children: [
@@ -371,8 +365,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                   child: Text(
                     'Traps are automatically detected after building. '
                     'Browse them in the Lines tab.',
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.amber[200]),
+                    style: TextStyle(fontSize: 11, color: Colors.amber[200]),
                   ),
                 ),
               ],
@@ -427,8 +420,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
               _numField(
                 _engineDepthCtrl,
                 'Engine Depth',
-                tooltip:
-                    'Stockfish search depth per position. '
+                tooltip: 'Stockfish search depth per position. '
                     'Higher is more accurate but slower. '
                     'Default 14 is a good balance.',
               ),
@@ -494,8 +486,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                 style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),
               const SizedBox(height: 12),
-              Text('Thresholds',
-                  style: Theme.of(context).textTheme.titleSmall),
+              Text('Thresholds', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 4),
               Wrap(
                 spacing: 8,
@@ -524,11 +515,12 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                       style: TextStyle(fontSize: 13)),
                   const SizedBox(width: 4),
                   Tooltip(
-                    message: 'Maia neural network is the default opponent model.\n'
+                    message:
+                        'Maia neural network is the default opponent model.\n'
                         'You can override this with a Lichess database\n'
                         'in the settings below.',
-                    child:
-                        Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
+                    child: Icon(Icons.info_outline,
+                        size: 16, color: Colors.grey[500]),
                   ),
                   if (_lichessDbOverride != null) ...[
                     const SizedBox(width: 8),
@@ -561,8 +553,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                   GestureDetector(
                     onTap: widget.isGenerating
                         ? null
-                        : () =>
-                            setState(() => _preferNovelties = !_preferNovelties),
+                        : () => setState(
+                            () => _preferNovelties = !_preferNovelties),
                     child: const Text(
                       'Prefer novelties',
                       style: TextStyle(fontSize: 13),
@@ -572,14 +564,13 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                   Tooltip(
                     message: 'Favor less-played moves that are still sound.\n'
                         'Uses Maia/Lichess frequency data to boost unusual lines.',
-                    child:
-                        Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
+                    child: Icon(Icons.info_outline,
+                        size: 16, color: Colors.grey[500]),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              Text('PGN export',
-                  style: Theme.of(context).textTheme.titleSmall),
+              Text('PGN export', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 4),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -624,7 +615,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                     onChanged: widget.isGenerating
                         ? null
                         : (v) {
-                            if (v != null) setState(() => _annotateMaiaOnly = v);
+                            if (v != null)
+                              setState(() => _annotateMaiaOnly = v);
                           },
                   ),
                 ),
@@ -637,7 +629,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                   _numField(_multipvCtrl, 'MultiPV',
                       tooltip: 'Candidate moves evaluated per our-move node'),
                   _numField(_oppMaxChildrenCtrl, 'Opp Max Children',
-                      tooltip: 'Maximum opponent replies explored per position'),
+                      tooltip:
+                          'Maximum opponent replies explored per position'),
                   _numField(_oppMassTargetCtrl, 'Opp Mass Target',
                       tooltip:
                           'Stop adding opponent moves after this probability mass is covered'),
@@ -686,8 +679,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                     selected: _lichessDbOverride != null,
                     onSelected: widget.isGenerating
                         ? null
-                        : (_) => setState(
-                            () => _lichessDbOverride ??= LichessDatabase.lichess),
+                        : (_) => setState(() =>
+                            _lichessDbOverride ??= LichessDatabase.lichess),
                   ),
                 ],
               ),

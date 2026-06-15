@@ -223,8 +223,7 @@ class AuditFinding {
             : null,
         continuationCount: j['continuationCount'] as int?,
         uncoveredMoves: (j['uncoveredMoves'] as List?)?.cast<String>(),
-        cumulativeProbability:
-            (j['cumulativeProbability'] as num?)?.toDouble(),
+        cumulativeProbability: (j['cumulativeProbability'] as num?)?.toDouble(),
         transposesIntoRepertoire:
             j['transposesIntoRepertoire'] as bool? ?? false,
         dismissed: j['dismissed'] as bool? ?? false,

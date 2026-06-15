@@ -109,8 +109,7 @@ String formatEvalDisplay({int? scoreCp, int? scoreMate}) {
 ///
 /// Walks the position forward from [fen], converting up to [maxMoves]
 /// UCI tokens to SAN. Returns an empty list on any parse error.
-List<String> uciPvToSan(String fen, List<String> uciMoves,
-    {int maxMoves = 8}) {
+List<String> uciPvToSan(String fen, List<String> uciMoves, {int maxMoves = 8}) {
   if (uciMoves.isEmpty) return const [];
   try {
     Position pos = Chess.fromSetup(Setup.parseFen(fen));

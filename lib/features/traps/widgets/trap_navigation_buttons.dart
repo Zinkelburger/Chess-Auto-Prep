@@ -154,8 +154,7 @@ class TrapNavigationButtons extends StatelessWidget {
           );
         }
 
-        final displayIdx =
-            currentTrapIdx >= 0 ? currentTrapIdx + 1 : 0;
+        final displayIdx = currentTrapIdx >= 0 ? currentTrapIdx + 1 : 0;
         final canGoPrev = currentTrapIdx > 0;
         final canGoNext = currentTrapIdx < traps.length - 1;
 

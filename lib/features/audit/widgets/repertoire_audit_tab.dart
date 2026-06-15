@@ -51,18 +51,15 @@ class RepertoireAuditTabState extends State<RepertoireAuditTab> {
   final RepertoireAuditService _service = RepertoireAuditService();
 
   // Config controllers
-  final TextEditingController _mistakeCtrl =
-      TextEditingController(text: '100');
+  final TextEditingController _mistakeCtrl = TextEditingController(text: '100');
   final TextEditingController _inaccuracyCtrl =
       TextEditingController(text: '40');
-  final TextEditingController _minGamesCtrl =
-      TextEditingController(text: '50');
+  final TextEditingController _minGamesCtrl = TextEditingController(text: '50');
   final TextEditingController _minMaiaProbCtrl =
       TextEditingController(text: '0.10');
   final TextEditingController _evalDepthCtrl =
       TextEditingController(text: '14');
-  final TextEditingController _maxPlyCtrl =
-      TextEditingController(text: '30');
+  final TextEditingController _maxPlyCtrl = TextEditingController(text: '30');
   final TextEditingController _maiaEloCtrl =
       TextEditingController(text: '2200');
 
@@ -246,8 +243,9 @@ class RepertoireAuditTabState extends State<RepertoireAuditTab> {
             title: const Text('Audit from current position only',
                 style: TextStyle(fontSize: 13)),
             value: _auditSubtreeOnly,
-            onChanged:
-                _isAuditing ? null : (v) => setState(() => _auditSubtreeOnly = v),
+            onChanged: _isAuditing
+                ? null
+                : (v) => setState(() => _auditSubtreeOnly = v),
           ),
           const SizedBox(height: 8),
 
@@ -260,14 +258,16 @@ class RepertoireAuditTabState extends State<RepertoireAuditTab> {
               FilterChip(
                 label: const Text('Stockfish'),
                 selected: _useStockfish,
-                onSelected:
-                    _isAuditing ? null : (v) => setState(() => _useStockfish = v),
+                onSelected: _isAuditing
+                    ? null
+                    : (v) => setState(() => _useStockfish = v),
               ),
               FilterChip(
                 label: const Text('Lichess DB'),
                 selected: _useLichessDb,
-                onSelected:
-                    _isAuditing ? null : (v) => setState(() => _useLichessDb = v),
+                onSelected: _isAuditing
+                    ? null
+                    : (v) => setState(() => _useLichessDb = v),
               ),
               FilterChip(
                 label: const Text('Maia'),
@@ -353,9 +353,7 @@ class RepertoireAuditTabState extends State<RepertoireAuditTab> {
 
   Widget _buildSummaryCard(AuditResult result) {
     final ts = result.timestamp;
-    final when = _loadedFromDisk && ts != null
-        ? _relativeTime(ts)
-        : null;
+    final when = _loadedFromDisk && ts != null ? _relativeTime(ts) : null;
 
     return Card(
       color: AppColors.surfaceElevated,
@@ -371,8 +369,7 @@ class RepertoireAuditTabState extends State<RepertoireAuditTab> {
                 if (when != null) ...[
                   const SizedBox(width: 8),
                   Text('($when)',
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.grey)),
+                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 ],
               ],
             ),
@@ -533,7 +530,8 @@ class RepertoireAuditTabState extends State<RepertoireAuditTab> {
             const PopupMenuItem(
                 value: AuditFindingType.mistake, child: Text('Mistakes')),
             const PopupMenuItem(
-                value: AuditFindingType.inaccuracy, child: Text('Inaccuracies')),
+                value: AuditFindingType.inaccuracy,
+                child: Text('Inaccuracies')),
             const PopupMenuItem(
                 value: AuditFindingType.missingResponse,
                 child: Text('Missing responses')),

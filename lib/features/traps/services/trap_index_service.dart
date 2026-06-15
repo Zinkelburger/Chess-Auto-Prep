@@ -29,8 +29,7 @@ class TrapIndexService {
             t.movesSan.length <= lineMoves.length &&
             _isPrefix(t.movesSan, lineMoves))
         .toList()
-      ..sort(
-          (a, b) => a.movesSan.length.compareTo(b.movesSan.length));
+      ..sort((a, b) => a.movesSan.length.compareTo(b.movesSan.length));
   }
 
   TrapLineMetrics metricsForLine(List<String> lineMoves) {
@@ -39,12 +38,9 @@ class TrapIndexService {
     return TrapLineMetrics(
       count: traps.length,
       bestEvalDiff: traps.map((t) => t.evalDiffCp).reduce(max),
-      totalReach: traps
-          .map((t) => t.cumulativeProb)
-          .reduce((a, b) => a + b),
+      totalReach: traps.map((t) => t.cumulativeProb).reduce((a, b) => a + b),
       expectedTrapValue: traps
-          .map(
-              (t) => t.cumulativeProb * t.popularProb * t.evalDiffCp)
+          .map((t) => t.cumulativeProb * t.popularProb * t.evalDiffCp)
           .reduce((a, b) => a + b),
     );
   }
@@ -65,19 +61,14 @@ class TrapIndexService {
     }
     metrics = TrapRepertoireMetrics(
       totalTraps: _traps.length,
-      highQualityCount:
-          _traps.where((t) => t.trickSurplus > 0.10).length,
-      avgReach: _traps
-              .map((t) => t.cumulativeProb)
-              .reduce((a, b) => a + b) /
+      highQualityCount: _traps.where((t) => t.trickSurplus > 0.10).length,
+      avgReach: _traps.map((t) => t.cumulativeProb).reduce((a, b) => a + b) /
           _traps.length,
-      avgEvalGain: _traps
-              .map((t) => t.evalDiffCp.toDouble())
-              .reduce((a, b) => a + b) /
-          _traps.length,
+      avgEvalGain:
+          _traps.map((t) => t.evalDiffCp.toDouble()).reduce((a, b) => a + b) /
+              _traps.length,
       expectedTrapValue: _traps
-          .map(
-              (t) => t.cumulativeProb * t.popularProb * t.evalDiffCp)
+          .map((t) => t.cumulativeProb * t.popularProb * t.evalDiffCp)
           .reduce((a, b) => a + b),
     );
   }

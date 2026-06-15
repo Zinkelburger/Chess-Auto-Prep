@@ -91,16 +91,17 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
     const double defaultCap = 200;
     final spots = <FlSpot>[
       const FlSpot(0, 0),
-      for (final e in evals)
-        FlSpot(e.ply.toDouble(), _clampCp(e).toDouble()),
+      for (final e in evals) FlSpot(e.ply.toDouble(), _clampCp(e).toDouble()),
     ];
 
     final whiteColor = isDark ? Colors.white70 : Colors.white;
     final blackColor = isDark ? Colors.grey[850]! : Colors.black87;
 
-    final maxAbs = spots.fold<double>(
-        0.0, (m, s) => s.y.abs() > m ? s.y.abs() : m);
-    final yBound = maxAbs <= defaultCap ? defaultCap : (maxAbs * 1.1).clamp(defaultCap, 800.0);
+    final maxAbs =
+        spots.fold<double>(0.0, (m, s) => s.y.abs() > m ? s.y.abs() : m);
+    final yBound = maxAbs <= defaultCap
+        ? defaultCap
+        : (maxAbs * 1.1).clamp(defaultCap, 800.0);
 
     const double minPxPerPly = 12.0;
     final plyCount = evals.isEmpty ? 1.0 : evals.last.ply.toDouble();
@@ -112,7 +113,8 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             _availableWidth = constraints.maxWidth;
-            _chartWidth = (plyCount * minPxPerPly).clamp(_availableWidth, double.infinity);
+            _chartWidth = (plyCount * minPxPerPly)
+                .clamp(_availableWidth, double.infinity);
 
             final chart = LineChart(
               LineChartData(
@@ -121,158 +123,173 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                 minX: 0,
                 maxX: plyCount,
                 clipData: const FlClipData.all(),
-            gridData: FlGridData(
-              show: true,
-              drawVerticalLine: false,
-              horizontalInterval: 100,
-              getDrawingHorizontalLine: (value) {
-                if (value.abs() < 1) {
-                  // Zero line
-                  return FlLine(
-                    color: isDark ? Colors.grey[600]! : Colors.grey[400]!,
-                    strokeWidth: 1,
-                  );
-                }
-                if ((value - 100).abs() < 1 || (value + 100).abs() < 1) {
-                  // ±1 pawn reference line
-                  return FlLine(
-                    color: isDark ? Colors.grey[600]! : Colors.grey[400]!,
-                    strokeWidth: 0.5,
-                    dashArray: [4, 4],
-                  );
-                }
-                return const FlLine(color: Colors.transparent, strokeWidth: 0);
-              },
-            ),
-            titlesData: const FlTitlesData(show: false),
-            borderData: FlBorderData(show: false),
-            lineTouchData: LineTouchData(
-              touchCallback: (event, response) {
-                if (onPlySelected != null &&
-                    response?.lineBarSpots != null &&
-                    response!.lineBarSpots!.isNotEmpty &&
-                    (event is FlTapUpEvent || event is FlPanUpdateEvent)) {
-                  final x = response.lineBarSpots!.first.x;
-                  final ply = x.round().clamp(0, evals.length);
-                  if (ply > 0) onPlySelected!(ply);
-                }
-              },
-              touchTooltipData: LineTouchTooltipData(
-                getTooltipColor: (_) => theme.colorScheme.surfaceContainerHighest.withAlpha(230),
-                fitInsideHorizontally: true,
-                fitInsideVertically: true,
-                getTooltipItems: (touchedSpots) {
-                  return touchedSpots.map((spot) {
-                    final ply = spot.x.round();
-                    if (ply == 0) {
-                      return LineTooltipItem(
-                        'Start',
-                        TextStyle(fontSize: 11, color: theme.textTheme.bodySmall?.color),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  horizontalInterval: 100,
+                  getDrawingHorizontalLine: (value) {
+                    if (value.abs() < 1) {
+                      // Zero line
+                      return FlLine(
+                        color: isDark ? Colors.grey[600]! : Colors.grey[400]!,
+                        strokeWidth: 1,
                       );
                     }
-                    final idx = ply - 1;
-                    if (idx < 0 || idx >= evals.length) return null;
-                    final e = evals[idx];
-                    final moveNum = (ply + 1) ~/ 2;
-                    final dots = ply % 2 == 1 ? '.' : '...';
-                    final evalStr = _formatEval(e);
-                    final classStr = _classSymbol(e.classification);
-                    return LineTooltipItem(
-                      '$moveNum$dots ${e.san}$classStr  $evalStr',
-                      TextStyle(
-                        fontSize: 11,
-                        color: _classColor(e.classification) ?? theme.textTheme.bodySmall?.color,
-                        fontWeight: e.classification != MoveClassification.normal
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
-                    );
-                  }).toList();
-                },
-              ),
-            ),
-            extraLinesData: ExtraLinesData(
-              verticalLines: [
-                if (currentPly != null && currentPly! >= 0 && currentPly! <= evals.length)
-                  VerticalLine(
-                    x: currentPly!.toDouble(),
-                    color: theme.colorScheme.primary.withAlpha(180),
-                    strokeWidth: 2,
-                    dashArray: [4, 3],
-                  ),
-              ],
-            ),
-            lineBarsData: [
-              // White advantage area (above zero)
-              LineChartBarData(
-                spots: spots,
-                isCurved: true,
-                curveSmoothness: 0.2,
-                preventCurveOverShooting: true,
-                color: Colors.transparent,
-                barWidth: 0,
-                dotData: const FlDotData(show: false),
-                belowBarData: BarAreaData(show: false),
-                aboveBarData: BarAreaData(show: false),
-              ),
-              // Main eval line with area fill
-              LineChartBarData(
-                spots: spots,
-                isCurved: true,
-                curveSmoothness: 0.2,
-                preventCurveOverShooting: true,
-                color: isDark ? const Color(0xFFD08030) : const Color(0xFFD85000),
-                barWidth: 2,
-                isStrokeCapRound: true,
-                dotData: FlDotData(
-                  show: true,
-                  getDotPainter: (spot, percent, barData, index) {
-                    final ply = spot.x.round();
-                    if (ply == 0) {
-                      return FlDotCirclePainter(radius: 0, color: Colors.transparent);
+                    if ((value - 100).abs() < 1 || (value + 100).abs() < 1) {
+                      // ±1 pawn reference line
+                      return FlLine(
+                        color: isDark ? Colors.grey[600]! : Colors.grey[400]!,
+                        strokeWidth: 0.5,
+                        dashArray: [4, 4],
+                      );
                     }
-                    final idx = ply - 1;
-                    if (idx < 0 || idx >= evals.length) {
-                      return FlDotCirclePainter(radius: 0, color: Colors.transparent);
-                    }
-                    final e = evals[idx];
-                    final cls = e.classification;
-                    if (cls == MoveClassification.normal) {
-                      if (currentPly == ply) {
-                        return FlDotCirclePainter(
-                          radius: 4,
-                          color: theme.colorScheme.primary,
-                          strokeWidth: 1.5,
-                          strokeColor: Colors.white,
-                        );
-                      }
-                      return FlDotCirclePainter(radius: 0, color: Colors.transparent);
-                    }
-                    final color = _classColor(cls) ?? Colors.grey;
-                    final radius = cls == MoveClassification.blunder ? 5.0 : 4.0;
-                    return FlDotCirclePainter(
-                      radius: radius,
-                      color: color,
-                      strokeWidth: 1.5,
-                      strokeColor: isDark ? Colors.black : Colors.white,
-                    );
+                    return const FlLine(
+                        color: Colors.transparent, strokeWidth: 0);
                   },
                 ),
-                belowBarData: BarAreaData(
-                  show: true,
-                  color: whiteColor.withAlpha(isDark ? 30 : 50),
-                  cutOffY: 0,
-                  applyCutOffY: true,
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                lineTouchData: LineTouchData(
+                  touchCallback: (event, response) {
+                    if (onPlySelected != null &&
+                        response?.lineBarSpots != null &&
+                        response!.lineBarSpots!.isNotEmpty &&
+                        (event is FlTapUpEvent || event is FlPanUpdateEvent)) {
+                      final x = response.lineBarSpots!.first.x;
+                      final ply = x.round().clamp(0, evals.length);
+                      if (ply > 0) onPlySelected!(ply);
+                    }
+                  },
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipColor: (_) => theme
+                        .colorScheme.surfaceContainerHighest
+                        .withAlpha(230),
+                    fitInsideHorizontally: true,
+                    fitInsideVertically: true,
+                    getTooltipItems: (touchedSpots) {
+                      return touchedSpots.map((spot) {
+                        final ply = spot.x.round();
+                        if (ply == 0) {
+                          return LineTooltipItem(
+                            'Start',
+                            TextStyle(
+                                fontSize: 11,
+                                color: theme.textTheme.bodySmall?.color),
+                          );
+                        }
+                        final idx = ply - 1;
+                        if (idx < 0 || idx >= evals.length) return null;
+                        final e = evals[idx];
+                        final moveNum = (ply + 1) ~/ 2;
+                        final dots = ply % 2 == 1 ? '.' : '...';
+                        final evalStr = _formatEval(e);
+                        final classStr = _classSymbol(e.classification);
+                        return LineTooltipItem(
+                          '$moveNum$dots ${e.san}$classStr  $evalStr',
+                          TextStyle(
+                            fontSize: 11,
+                            color: _classColor(e.classification) ??
+                                theme.textTheme.bodySmall?.color,
+                            fontWeight:
+                                e.classification != MoveClassification.normal
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                          ),
+                        );
+                      }).toList();
+                    },
+                  ),
                 ),
-                aboveBarData: BarAreaData(
-                  show: true,
-                  color: blackColor.withAlpha(isDark ? 40 : 30),
-                  cutOffY: 0,
-                  applyCutOffY: true,
+                extraLinesData: ExtraLinesData(
+                  verticalLines: [
+                    if (currentPly != null &&
+                        currentPly! >= 0 &&
+                        currentPly! <= evals.length)
+                      VerticalLine(
+                        x: currentPly!.toDouble(),
+                        color: theme.colorScheme.primary.withAlpha(180),
+                        strokeWidth: 2,
+                        dashArray: [4, 3],
+                      ),
+                  ],
                 ),
+                lineBarsData: [
+                  // White advantage area (above zero)
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    curveSmoothness: 0.2,
+                    preventCurveOverShooting: true,
+                    color: Colors.transparent,
+                    barWidth: 0,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(show: false),
+                    aboveBarData: BarAreaData(show: false),
+                  ),
+                  // Main eval line with area fill
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    curveSmoothness: 0.2,
+                    preventCurveOverShooting: true,
+                    color: isDark
+                        ? const Color(0xFFD08030)
+                        : const Color(0xFFD85000),
+                    barWidth: 2,
+                    isStrokeCapRound: true,
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, barData, index) {
+                        final ply = spot.x.round();
+                        if (ply == 0) {
+                          return FlDotCirclePainter(
+                              radius: 0, color: Colors.transparent);
+                        }
+                        final idx = ply - 1;
+                        if (idx < 0 || idx >= evals.length) {
+                          return FlDotCirclePainter(
+                              radius: 0, color: Colors.transparent);
+                        }
+                        final e = evals[idx];
+                        final cls = e.classification;
+                        if (cls == MoveClassification.normal) {
+                          if (currentPly == ply) {
+                            return FlDotCirclePainter(
+                              radius: 4,
+                              color: theme.colorScheme.primary,
+                              strokeWidth: 1.5,
+                              strokeColor: Colors.white,
+                            );
+                          }
+                          return FlDotCirclePainter(
+                              radius: 0, color: Colors.transparent);
+                        }
+                        final color = _classColor(cls) ?? Colors.grey;
+                        final radius =
+                            cls == MoveClassification.blunder ? 5.0 : 4.0;
+                        return FlDotCirclePainter(
+                          radius: radius,
+                          color: color,
+                          strokeWidth: 1.5,
+                          strokeColor: isDark ? Colors.black : Colors.white,
+                        );
+                      },
+                    ),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: whiteColor.withAlpha(isDark ? 30 : 50),
+                      cutOffY: 0,
+                      applyCutOffY: true,
+                    ),
+                    aboveBarData: BarAreaData(
+                      show: true,
+                      color: blackColor.withAlpha(isDark ? 40 : 30),
+                      cutOffY: 0,
+                      applyCutOffY: true,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
               duration: const Duration(milliseconds: 150),
             );
 
@@ -339,22 +356,32 @@ class GameAnalysisSummary extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          Expanded(child: _buildSideStats(context, 'White', whiteEvals, Colors.white)),
+          Expanded(
+              child:
+                  _buildSideStats(context, 'White', whiteEvals, Colors.white)),
           const SizedBox(width: 12),
-          Expanded(child: _buildSideStats(context, 'Black', blackEvals, Colors.grey[700]!)),
+          Expanded(
+              child: _buildSideStats(
+                  context, 'Black', blackEvals, Colors.grey[700]!)),
         ],
       ),
     );
   }
 
-  Widget _buildSideStats(
-      BuildContext context, String label, List<MoveEval> sideEvals, Color accent) {
-    final blunders = sideEvals.where((e) => e.classification == MoveClassification.blunder).length;
-    final mistakes = sideEvals.where((e) => e.classification == MoveClassification.mistake).length;
-    final inaccuracies =
-        sideEvals.where((e) => e.classification == MoveClassification.inaccuracy).length;
-    final interesting =
-        sideEvals.where((e) => e.classification == MoveClassification.interesting).length;
+  Widget _buildSideStats(BuildContext context, String label,
+      List<MoveEval> sideEvals, Color accent) {
+    final blunders = sideEvals
+        .where((e) => e.classification == MoveClassification.blunder)
+        .length;
+    final mistakes = sideEvals
+        .where((e) => e.classification == MoveClassification.mistake)
+        .length;
+    final inaccuracies = sideEvals
+        .where((e) => e.classification == MoveClassification.inaccuracy)
+        .length;
+    final interesting = sideEvals
+        .where((e) => e.classification == MoveClassification.interesting)
+        .length;
     final acpl = _computeAcpl(sideEvals);
 
     final theme = Theme.of(context);
@@ -380,7 +407,8 @@ class GameAnalysisSummary extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(label,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 13)),
               const Spacer(),
               if (acpl != null)
                 Text('ACPL: $acpl',
@@ -389,9 +417,15 @@ class GameAnalysisSummary extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           _StatRow(
-              icon: '??', color: const Color(0xFFDB3B21), label: 'Blunder', count: blunders),
+              icon: '??',
+              color: const Color(0xFFDB3B21),
+              label: 'Blunder',
+              count: blunders),
           _StatRow(
-              icon: '?', color: const Color(0xFFE69F00), label: 'Mistake', count: mistakes),
+              icon: '?',
+              color: const Color(0xFFE69F00),
+              label: 'Mistake',
+              count: mistakes),
           _StatRow(
               icon: '?!',
               color: const Color(0xFF56B4E9),

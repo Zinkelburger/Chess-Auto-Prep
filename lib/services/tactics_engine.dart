@@ -136,8 +136,7 @@ class TacticsEngine {
         if (worker == null || line.length >= maxMaiaLinePly) break;
 
         try {
-          final sfResult =
-              await worker.evaluateFen(pos.fen, maiaDisagreeDepth);
+          final sfResult = await worker.evaluateFen(pos.fen, maiaDisagreeDepth);
           if (sfResult.pv.isNotEmpty) {
             final bestUci = sfResult.pv.first;
             final bestMove = Move.parse(bestUci);
@@ -185,6 +184,7 @@ class TacticsEngine {
 
     return correctLine;
   }
+
   /// Check if a move (in UCI format) is correct for the given position.
   ///
   /// Legacy single-move check — delegates to [checkMoveAtIndex] with index 0.

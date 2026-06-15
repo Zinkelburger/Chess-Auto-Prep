@@ -26,7 +26,8 @@ class RepertoireReviewService {
     if (lines.isEmpty) return [];
 
     final firstLine = lines.first.trim();
-    final rows = firstLine.startsWith('repertoire_id,') ? lines.sublist(1) : lines;
+    final rows =
+        firstLine.startsWith('repertoire_id,') ? lines.sublist(1) : lines;
     return rows.map((row) => RepertoireReviewEntry.fromCsvRow(row)).toList();
   }
 

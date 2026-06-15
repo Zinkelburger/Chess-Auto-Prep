@@ -197,8 +197,8 @@ List<EvalTreeCandidateRow> buildCandidateRows({
         return 1;
       }
 
-      final trapCmp =
-          b.lineMetrics.subtreeTrapCount.compareTo(a.lineMetrics.subtreeTrapCount);
+      final trapCmp = b.lineMetrics.subtreeTrapCount
+          .compareTo(a.lineMetrics.subtreeTrapCount);
       if (trapCmp != 0) return trapCmp;
     } else {
       final aEase = a.node.ease;

@@ -33,8 +33,7 @@ class TrapMoveIndicator extends StatelessWidget {
       'Reach: ${(trap.cumulativeProb * 100).toStringAsFixed(1)}%',
     ];
     if (trap.trapScore > 0) {
-      parts.add(
-          'Score: ${(trap.trapScore * 100).toStringAsFixed(0)}%');
+      parts.add('Score: ${(trap.trapScore * 100).toStringAsFixed(0)}%');
     }
     return parts.join('\n');
   }

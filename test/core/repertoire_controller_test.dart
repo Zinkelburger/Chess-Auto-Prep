@@ -251,7 +251,8 @@ void main() {
       controller = RepertoireController();
     });
 
-    test('playMove advances FEN, increments moveIndex, extends history by exactly one',
+    test(
+        'playMove advances FEN, increments moveIndex, extends history by exactly one',
         () {
       final before = navigationSnapshot(controller);
 
@@ -280,7 +281,8 @@ void main() {
       assertNavigationInvariants(controller);
     });
 
-    test('userSelectedTreeMove maintains consistency between history and tree cursor',
+    test(
+        'userSelectedTreeMove maintains consistency between history and tree cursor',
         () async {
       const pgn = '''
 // Color: White
@@ -314,7 +316,8 @@ void main() {
       assertNavigationInvariants(controller);
     });
 
-    test('consecutive playMove calls produce monotonically increasing move indices',
+    test(
+        'consecutive playMove calls produce monotonically increasing move indices',
         () {
       const moves = ['e4', 'e5', 'Nf3', 'Nc6'];
       var previousIndex = controller.currentMoveIndex;
@@ -333,7 +336,8 @@ void main() {
     late String filePath;
 
     setUp(() async {
-      tempDir = await io.Directory.systemTemp.createTemp('repertoire_ctrl_test');
+      tempDir =
+          await io.Directory.systemTemp.createTemp('repertoire_ctrl_test');
       filePath = '${tempDir.path}/test.pgn';
       await io.File(filePath).writeAsString('''
 // Color: White
@@ -354,7 +358,8 @@ void main() {
       }
     });
 
-    test('restoreRepertoireFromPgn rebuilds parsed lines from PGN snapshot', () async {
+    test('restoreRepertoireFromPgn rebuilds parsed lines from PGN snapshot',
+        () async {
       final controller = RepertoireController();
 
       const newPgn = '''
@@ -376,7 +381,8 @@ void main() {
       expect(controller.openingTree, isNotNull);
     });
 
-    test('restoreRepertoireFromPgn without Root comment resets navigation to start',
+    test(
+        'restoreRepertoireFromPgn without Root comment resets navigation to start',
         () async {
       final controller = RepertoireController();
       controller.loadMoveHistory(['d4', 'd5', 'c4']);
@@ -401,7 +407,8 @@ void main() {
         skip:
             'BUG: restoreRepertoireFromPgn without // Root: leaves stale moveHistory/currentMoveIndex');
 
-    test('restoreRepertoireFromPgn with empty syncPath resets navigation to start',
+    test(
+        'restoreRepertoireFromPgn with empty syncPath resets navigation to start',
         () async {
       final controller = RepertoireController();
       controller.loadMoveHistory(['d4', 'd5', 'c4']);
@@ -488,7 +495,8 @@ void main() {
       assertNavigationInvariants(controller);
     });
 
-    test('currentMoveSequence length equals moveIndex plus one after play and navigate',
+    test(
+        'currentMoveSequence length equals moveIndex plus one after play and navigate',
         () {
       const moves = ['e4', 'e5', 'Nf3'];
       for (final san in moves) {

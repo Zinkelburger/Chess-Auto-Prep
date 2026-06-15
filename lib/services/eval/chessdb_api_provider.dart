@@ -38,8 +38,8 @@ EvalHit? parseChessDbQueryScoreBody(String body, String fen) {
   final isWhiteStm = isWhiteToMove(canonicalizeFen4(fen));
 
   // Plain-text: eval:123
-  final evalMatch = RegExp(r'eval:\s*(-?\d+)', caseSensitive: false)
-      .firstMatch(trimmed);
+  final evalMatch =
+      RegExp(r'eval:\s*(-?\d+)', caseSensitive: false).firstMatch(trimmed);
   if (evalMatch != null) {
     final raw = int.parse(evalMatch.group(1)!);
     final mapped = mapChessDbApiScore(raw, isWhiteToMove: isWhiteStm);
@@ -73,7 +73,8 @@ EvalHit? parseChessDbQueryScoreBody(String body, String fen) {
 }
 
 /// Map ChessDB raw score (STM) to white-normalized (cp, mate?).
-(int cp, int? mate)? mapChessDbApiScore(int raw, {required bool isWhiteToMove}) {
+(int cp, int? mate)? mapChessDbApiScore(int raw,
+    {required bool isWhiteToMove}) {
   int stmCp;
   int? mate;
 

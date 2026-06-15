@@ -111,8 +111,7 @@ class FPGrowthMiner {
           count: support,
         ));
 
-        final conditionalPatterns =
-            _conditionalPatternBase(headerTable[item]!);
+        final conditionalPatterns = _conditionalPatternBase(headerTable[item]!);
         if (conditionalPatterns.isNotEmpty) {
           final subMiner = FPGrowthMiner(
             minSupport: minSupport,
@@ -138,8 +137,8 @@ class FPGrowthMiner {
     all.sort((a, b) => b.items.length.compareTo(a.items.length));
     final maximal = <FrequentItemset>[];
     for (final candidate in all) {
-      final isSubset = maximal.any((m) =>
-          candidate.items.every((item) => m.items.contains(item)));
+      final isSubset = maximal
+          .any((m) => candidate.items.every((item) => m.items.contains(item)));
       if (!isSubset) maximal.add(candidate);
     }
     return maximal;

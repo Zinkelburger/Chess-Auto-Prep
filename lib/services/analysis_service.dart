@@ -21,8 +21,7 @@ import '../utils/fen_utils.dart';
 
 export '../models/analysis/discovery_result.dart';
 export '../models/analysis/move_analysis_result.dart';
-export '../utils/ease_utils.dart'
-    show scoreToQ, kEaseAlpha, kEaseBeta;
+export '../utils/ease_utils.dart' show scoreToQ, kEaseAlpha, kEaseBeta;
 export 'engine/eval_worker.dart' show EvalResult;
 
 class AnalysisService {
@@ -87,9 +86,7 @@ class AnalysisService {
   }
 
   void endEnginePaneAnalysis([String? fen]) {
-    if (fen != null &&
-        _enginePaneFen != null &&
-        _enginePaneFen != fen) {
+    if (fen != null && _enginePaneFen != null && _enginePaneFen != fen) {
       return;
     }
     final blockedFen = _enginePaneFen;
@@ -206,7 +203,8 @@ class AnalysisService {
               intermediate.depth > lastLoggedDiscoveryDepth &&
               intermediate.lines.isNotEmpty) {
             lastLoggedDiscoveryDepth = intermediate.depth;
-            debugPrint('[Analysis] Discovery depth ${intermediate.depth}/$depth '
+            debugPrint(
+                '[Analysis] Discovery depth ${intermediate.depth}/$depth '
                 '— ${intermediate.lines.length} lines, '
                 '${intermediate.nodes} nodes');
           }

@@ -112,8 +112,9 @@ List<PgnGameEntry> parseMultiGamePgn(String content) {
 }
 
 Future<List<int>> applySliceConfig(
-    SliceConfig config, List<GameRecord> games, {
-    Map<String, List<int>>? fenIndex,
+  SliceConfig config,
+  List<GameRecord> games, {
+  Map<String, List<int>>? fenIndex,
 }) {
   final seqPattern = config.sequencePattern;
   return pgn.computeSliceMatches(
@@ -143,8 +144,7 @@ List<String> buildMetadataOutput(
 
     if (game.rating > 0) {
       if (studyRatingRe.hasMatch(pgn)) {
-        pgn =
-            pgn.replaceFirst(studyRatingRe, '[StudyRating "${game.rating}"]');
+        pgn = pgn.replaceFirst(studyRatingRe, '[StudyRating "${game.rating}"]');
       } else {
         final firstNewline = pgn.indexOf('\n');
         if (firstNewline != -1) {
@@ -216,8 +216,10 @@ String? detectProtagonistFrom(List<PgnGameEntry> games) {
     }
   }
   final sampleSize = sample.length;
-  final recurring =
-      counts.entries.where((e) => e.value >= sampleSize).map((e) => e.key).toList();
+  final recurring = counts.entries
+      .where((e) => e.value >= sampleSize)
+      .map((e) => e.key)
+      .toList();
   if (recurring.length < 2) return null;
   // Return with the player who appears as White more often listed first.
   int whiteCount(String name) =>
@@ -435,8 +437,7 @@ class PgnViewerController extends ChangeNotifier {
     if (_fenIndex == null) _buildFenIndex();
   }
 
-  Future<void> _tryLoadPersistedFenIndex(
-      String pgnPath, int gameCount) async {
+  Future<void> _tryLoadPersistedFenIndex(String pgnPath, int gameCount) async {
     try {
       final storage = StorageFactory.instance;
       final stat = await storage.fileStat(pgnPath);
@@ -446,7 +447,8 @@ class PgnViewerController extends ChangeNotifier {
       if (!await storage.fileExists(idxPath)) return;
       final data = await storage.readFile(idxPath);
       if (data == null || data.isEmpty) return;
-      final index = pgn.deserializeFenIndex(data,
+      final index = pgn.deserializeFenIndex(
+        data,
         expectedGameCount: gameCount,
         expectedFileSize: stat.size,
         expectedModifiedMs: stat.modified.millisecondsSinceEpoch,
@@ -483,7 +485,8 @@ class PgnViewerController extends ChangeNotifier {
       final storage = StorageFactory.instance;
       final stat = await storage.fileStat(filePath!);
       if (stat == null) return;
-      final data = pgn.serializeFenIndex(_fenIndex!,
+      final data = pgn.serializeFenIndex(
+        _fenIndex!,
         gameCount: allGames.length,
         fileSize: stat.size,
         modifiedMs: stat.modified.millisecondsSinceEpoch,
@@ -507,8 +510,8 @@ class PgnViewerController extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
 
-    final indices = await applySliceConfig(config, allRecords,
-        fenIndex: fenIndex);
+    final indices =
+        await applySliceConfig(config, allRecords, fenIndex: fenIndex);
     if (!isActive()) return;
 
     isLoading = false;
@@ -706,8 +709,7 @@ class PgnViewerController extends ChangeNotifier {
     if (remainingMs <= 0) {
       autoPlayStep();
     } else {
-      autoPlayTimer =
-          Timer(Duration(milliseconds: remainingMs), autoPlayStep);
+      autoPlayTimer = Timer(Duration(milliseconds: remainingMs), autoPlayStep);
     }
   }
 
@@ -890,8 +892,8 @@ class PgnViewerController extends ChangeNotifier {
     isLoading = true;
     notifyListeners();
 
-    final indices = await applySliceConfig(newConfig, allRecords,
-        fenIndex: fenIndex);
+    final indices =
+        await applySliceConfig(newConfig, allRecords, fenIndex: fenIndex);
     if (!isActive()) return;
 
     isLoading = false;
@@ -1090,8 +1092,8 @@ class PgnViewerController extends ChangeNotifier {
     if (showOpeningTree) {
       while (openingTree != null &&
           openingTree!.currentNode.sortedChildren.isNotEmpty) {
-        openingTree!.makeMove(
-            openingTree!.currentNode.sortedChildren.first.move);
+        openingTree!
+            .makeMove(openingTree!.currentNode.sortedChildren.first.move);
       }
       if (openingTree != null) {
         treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
@@ -1163,9 +1165,8 @@ class PgnViewerController extends ChangeNotifier {
     final fen = normalizeFen(openingTree!.currentNode.fen);
     return treePositionGameCache.putIfAbsent(fen, () {
       if (treePositionGameCache.length >= maxTreeCacheEntries) {
-        final keysToRemove = treePositionGameCache.keys
-            .take(maxTreeCacheEntries ~/ 4)
-            .toList();
+        final keysToRemove =
+            treePositionGameCache.keys.take(maxTreeCacheEntries ~/ 4).toList();
         for (final k in keysToRemove) {
           treePositionGameCache.remove(k);
         }
@@ -1218,8 +1219,7 @@ class PgnViewerController extends ChangeNotifier {
     if (filteredGames.isEmpty || filePath == null) return null;
     final savePath = outPath.endsWith('.pgn') ? outPath : '$outPath.pgn';
     try {
-      await StorageFactory.instance
-          .writeFile(savePath, buildExportContent());
+      await StorageFactory.instance.writeFile(savePath, buildExportContent());
       return savePath;
     } catch (e) {
       debugPrint('Export failed: $e');

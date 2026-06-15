@@ -51,7 +51,8 @@ class RepertoireAnalyzeProps {
   final double? coverageProgress;
   final String? coverageProgressMessage;
   final void Function(RepertoireLine line) onLineSelected;
-  final Future<void> Function(RepertoireLine line, String newTitle) onLineRenamed;
+  final Future<void> Function(RepertoireLine line, String newTitle)
+      onLineRenamed;
   final void Function(List<String> moveSequence)? onNavigateToPosition;
   final List<TrapLineInfo> traps;
   final void Function(TrapLineInfo trap) onTrapSelected;
@@ -73,11 +74,9 @@ class RepertoireAnalyzeProps {
 
   bool get hasCoverageView => coverageResult != null;
 
-  bool get hasSuggestionMetrics =>
-      coverageResult != null && tree != null;
+  bool get hasSuggestionMetrics => coverageResult != null && tree != null;
 
   bool get hasCoherenceMetrics => coherenceResult != null;
 
-  bool get hasMetricsContent =>
-      hasCoherenceMetrics || hasSuggestionMetrics;
+  bool get hasMetricsContent => hasCoherenceMetrics || hasSuggestionMetrics;
 }

@@ -42,8 +42,7 @@ class RepertoireTabBar extends StatelessWidget {
             child: TabBarView(
               controller: tabController,
               children: [
-                for (final child in tabChildren)
-                  _KeepAliveTab(child: child),
+                for (final child in tabChildren) _KeepAliveTab(child: child),
               ],
             ),
           ),

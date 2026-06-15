@@ -256,5 +256,4 @@ class ProbabilityService {
     // Mothballed: no Lichess Explorer API calls.
     return null;
   }
-
 }

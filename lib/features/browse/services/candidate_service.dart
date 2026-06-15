@@ -137,13 +137,10 @@ class CandidateService {
       candidates.add(CandidateMove(
         san: child.moveSan,
         uci: child.moveUci,
-        evalCp: child.hasEngineEval
-            ? child.evalForUs(playAsWhite)
-            : null,
+        evalCp: child.hasEngineEval ? child.evalForUs(playAsWhite) : null,
         ease: child.ease,
         myEase: child.myEase >= 0 ? child.myEase : null,
-        expectimax:
-            child.hasExpectimax ? child.expectimaxValue : null,
+        expectimax: child.hasExpectimax ? child.expectimaxValue : null,
         subtreeTrapCount: trapCount,
         isRepertoireMove: child.isRepertoireMove,
         inRepertoire: openingTree?.hasMoveOnPath(
@@ -160,9 +157,7 @@ class CandidateService {
         treeNode: child,
         ply: child.ply,
         dbGames: child.totalGames > 0 ? child.totalGames : null,
-        dbFrequency: child.moveProbability > 0
-            ? child.moveProbability
-            : null,
+        dbFrequency: child.moveProbability > 0 ? child.moveProbability : null,
       ));
     }
 
@@ -205,9 +200,7 @@ class CandidateService {
       seenSans.add(treeMove.san);
       final dbMove = explorerBySan[treeMove.san];
       merged.add(
-        dbMove != null
-            ? _enrichWithExplorer(treeMove, dbMove)
-            : treeMove,
+        dbMove != null ? _enrichWithExplorer(treeMove, dbMove) : treeMove,
       );
     }
 
@@ -280,8 +273,7 @@ class CandidateService {
       subtreeTrapCount: treeMove.subtreeTrapCount,
       isRepertoireMove: treeMove.isRepertoireMove,
       dbGames: total > 0 ? total : treeMove.dbGames,
-      dbFrequency:
-          total > 0 ? dbMove.playFraction : treeMove.dbFrequency,
+      dbFrequency: total > 0 ? dbMove.playFraction : treeMove.dbFrequency,
       dbWhiteWin: whiteWin ?? treeMove.dbWhiteWin,
       dbDraw: draw ?? treeMove.dbDraw,
       dbBlackWin: blackWin ?? treeMove.dbBlackWin,
@@ -310,8 +302,7 @@ class CandidateService {
       dbWhiteWin: whiteWin,
       dbDraw: draw,
       dbBlackWin: blackWin,
-      inRepertoire: openingTree?.hasMoveOnPath(pathFromRoot, move.san) ??
-          false,
+      inRepertoire: openingTree?.hasMoveOnPath(pathFromRoot, move.san) ?? false,
       coverageDelta: coverageDeltaForMove(coverage, pathFromRoot, move.san),
       evalSource: 'db',
     );

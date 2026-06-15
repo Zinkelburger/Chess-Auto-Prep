@@ -35,8 +35,8 @@ class TrapReply {
         san: json['san'] as String,
         probability: (json['probability'] as num).toDouble(),
         evalAfterCp: json['eval_after_cp'] as int,
-        classification: TrapReplyClass.values.byName(
-            json['classification'] as String? ?? 'good'),
+        classification: TrapReplyClass.values
+            .byName(json['classification'] as String? ?? 'good'),
       );
 
   static TrapReplyClass classify(int diffFromBest) {

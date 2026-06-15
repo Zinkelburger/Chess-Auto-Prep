@@ -160,7 +160,6 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           ),
         ],
         const SizedBox(height: 16),
-
         ExpansionTile(
           initiallyExpanded: _setupExpanded,
           onExpansionChanged: (v) => setState(() => _setupExpanded = v),
@@ -183,9 +182,11 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                     spacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      const Text('Or Hugging Face:', style: TextStyle(fontSize: 12)),
+                      const Text('Or Hugging Face:',
+                          style: TextStyle(fontSize: 12)),
                       TextButton.icon(
-                        onPressed: () => launchUrl(Uri.parse(_huggingFaceDatasetUrl)),
+                        onPressed: () =>
+                            launchUrl(Uri.parse(_huggingFaceDatasetUrl)),
                         icon: const Icon(Icons.open_in_new, size: 14),
                         label: const Text('robertnurnberg/chessdbcn'),
                       ),
@@ -215,7 +216,6 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           ],
         ),
         const SizedBox(height: 12),
-
         Row(
           children: [
             Switch(
@@ -242,7 +242,6 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             ),
           ],
         ),
-
         Text(
           'Point this at the data/ directory containing .sst files',
           style: TextStyle(fontSize: 11, color: Colors.grey[500]),
@@ -283,7 +282,6 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
               ),
           ],
         ),
-
         if (_dirValidation != null && !_dirValidation!.isValid) ...[
           const SizedBox(height: 4),
           Text(
@@ -291,7 +289,6 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             style: TextStyle(fontSize: 11, color: AppColors.danger),
           ),
         ],
-
         const SizedBox(height: 8),
         FilterChip(
           label: const Text('HDD read-ahead hint'),
@@ -332,7 +329,8 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
                 child,
               ],
@@ -385,7 +383,8 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
                 'the app.',
               ),
               const SizedBox(height: 12),
-              const Text('Download:', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text('Download:',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
               _commandRow(kChessDbRsyncCommand),
               const SizedBox(height: 8),

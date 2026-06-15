@@ -169,16 +169,15 @@ class _AnalyzeMainZoneState extends State<AnalyzeMainZone> {
     return switch (_view) {
       AnalyzeMainView.lines =>
         widget.linesContent ?? widget.linesBuilder!(context),
-      AnalyzeMainView.coverage =>
-        widget.coverageContent ??
-            widget.coverageBuilder?.call(context) ??
-            const EmptyStatePlaceholder(
-              icon: Icons.pie_chart_outline,
-              title: 'No coverage view',
-              subtitle:
-                  'Provide coverageContent or coverageBuilder for this tab.',
-              iconSize: 36,
-            ),
+      AnalyzeMainView.coverage => widget.coverageContent ??
+          widget.coverageBuilder?.call(context) ??
+          const EmptyStatePlaceholder(
+            icon: Icons.pie_chart_outline,
+            title: 'No coverage view',
+            subtitle:
+                'Provide coverageContent or coverageBuilder for this tab.',
+            iconSize: 36,
+          ),
     };
   }
 }

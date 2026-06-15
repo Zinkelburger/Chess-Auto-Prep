@@ -89,8 +89,7 @@ class PgnSourcesPanelState extends State<PgnSourcesPanel> {
         if (_sources.any((s) => s.filePath == path)) continue;
 
         final content = await StorageFactory.instance.readFile(path);
-        final gameCount =
-            content != null ? pgn.countPgnGames(content) : 0;
+        final gameCount = content != null ? pgn.countPgnGames(content) : 0;
 
         final source = PgnSource(
           id: PgnSource.generateId(),
@@ -311,8 +310,8 @@ class _SourceRow extends StatelessWidget {
               borderRadius: isExpanded
                   ? const BorderRadius.vertical(top: Radius.circular(8))
                   : BorderRadius.circular(8),
-              border: Border.all(
-                  color: cs.outlineVariant.withValues(alpha: 0.3)),
+              border:
+                  Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
@@ -409,9 +408,7 @@ class _SourceRow extends StatelessWidget {
                         ),
                         const SizedBox(width: 2),
                         Icon(
-                          isExpanded
-                              ? Icons.expand_less
-                              : Icons.expand_more,
+                          isExpanded ? Icons.expand_less : Icons.expand_more,
                           size: 12,
                           color: cs.onSurfaceVariant,
                         ),
@@ -646,8 +643,7 @@ class _CompactPasteDialogState extends State<_CompactPasteDialog> {
             else if (_gameCount > 0)
               Row(
                 children: [
-                  Icon(Icons.check_circle_outline,
-                      size: 14, color: cs.primary),
+                  Icon(Icons.check_circle_outline, size: 14, color: cs.primary),
                   const SizedBox(width: 6),
                   Text(
                     '$_gameCount line${_gameCount == 1 ? '' : 's'} found',

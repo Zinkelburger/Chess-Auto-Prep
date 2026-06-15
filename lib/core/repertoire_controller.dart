@@ -295,7 +295,8 @@ class RepertoireController with ChangeNotifier {
     final movePath = _tree.sanSequenceAt(target);
     writer.pushUndo(UndoOperation(
       previousPgn: previousPgn,
-      treePathBeforeAdd: movePath.isEmpty ? [] : movePath.sublist(0, movePath.length - 1),
+      treePathBeforeAdd:
+          movePath.isEmpty ? [] : movePath.sublist(0, movePath.length - 1),
       moveAdded: movePath.isNotEmpty ? movePath.last : '',
     ));
 

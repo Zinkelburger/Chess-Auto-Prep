@@ -63,8 +63,7 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
         _buildPresets(theme),
         const Divider(height: 1),
         if (_isLoading)
-          const Expanded(
-              child: Center(child: CircularProgressIndicator()))
+          const Expanded(child: Center(child: CircularProgressIndicator()))
         else if (_suggestions.isEmpty)
           Expanded(
             child: Center(
@@ -89,8 +88,7 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
                 index: i,
                 onAccept: () {
                   widget.onAccept?.call(_suggestions[i]);
-                  setState(
-                      () => _suggestions.removeAt(i));
+                  setState(() => _suggestions.removeAt(i));
                 },
                 boardPreview: widget.boardPreview,
               ),
@@ -109,15 +107,12 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
         children: [
           Row(
             children: [
-              Text('Coverage: ',
-                  style: theme.textTheme.bodyMedium),
-              Text(
-                  '${widget.currentCoverage.toStringAsFixed(1)}%',
+              Text('Coverage: ', style: theme.textTheme.bodyMedium),
+              Text('${widget.currentCoverage.toStringAsFixed(1)}%',
                   style: theme.textTheme.titleMedium
                       ?.copyWith(fontWeight: FontWeight.bold)),
               const Spacer(),
-              Text('Target: ',
-                  style: theme.textTheme.bodyMedium),
+              Text('Target: ', style: theme.textTheme.bodyMedium),
               Text('${_targetCoverage.round()}%',
                   style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -177,8 +172,7 @@ class _SuggestionPanelState extends State<SuggestionPanel> {
   }
 
   Widget _buildFooter(ThemeData theme) {
-    final totalGain =
-        _suggestions.fold(0.0, (sum, s) => sum + s.coverageGain);
+    final totalGain = _suggestions.fold(0.0, (sum, s) => sum + s.coverageGain);
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Row(
@@ -230,16 +224,15 @@ class _SuggestionRow extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text('#${index + 1}',
                         style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold)),
+                            fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -250,8 +243,8 @@ class _SuggestionRow extends StatelessWidget {
                           color: Colors.green)),
                   const Spacer(),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade200,
                       borderRadius: BorderRadius.circular(4),
@@ -269,8 +262,8 @@ class _SuggestionRow extends StatelessWidget {
                 onMoveHovered: (idx, _) {
                   const startFen =
                       'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-                  final fen = fenAfterMoves(
-                      startFen, suggestion.fullMoves, idx);
+                  final fen =
+                      fenAfterMoves(startFen, suggestion.fullMoves, idx);
                   boardPreview.setPreview(fen);
                 },
                 onHoverExit: () => boardPreview.clearPreview(),
@@ -293,8 +286,7 @@ class _SuggestionRow extends StatelessWidget {
                   ],
                   if (suggestion.trapCount > 0)
                     _MetricChip(
-                        label: 'Traps',
-                        value: '${suggestion.trapCount}'),
+                        label: 'Traps', value: '${suggestion.trapCount}'),
                   const Spacer(),
                   FilledButton(
                     onPressed: onAccept,
@@ -337,8 +329,7 @@ class _MetricChip extends StatelessWidget {
         color: Colors.grey.shade100,
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text('$label: $value',
-          style: const TextStyle(fontSize: 10)),
+      child: Text('$label: $value', style: const TextStyle(fontSize: 10)),
     );
   }
 }

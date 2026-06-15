@@ -146,8 +146,8 @@ void main() {
       );
 
       await writer.acceptSuggestion(suggestion);
-      expect(controller.repertoireLines.first.moves,
-          ['e4', 'e5', 'Nf3', 'Nc6']);
+      expect(
+          controller.repertoireLines.first.moves, ['e4', 'e5', 'Nf3', 'Nc6']);
       expect(writer.canUndo, isTrue);
 
       expect(await writer.undo(), isTrue);

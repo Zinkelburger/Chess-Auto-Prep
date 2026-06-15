@@ -11,10 +11,8 @@ import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
 import '../models/settings_enums.dart';
 import '../services/engine/engine_lifecycle.dart';
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
-import '../widgets/lichess_db_selector.dart';
 import '../widgets/settings/settings_widgets.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -155,8 +153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         SettingsSliderTile(
           label: 'Max analysis moves',
-          tooltip:
-              'Maximum total moves displayed in the analysis table.',
+          tooltip: 'Maximum total moves displayed in the analysis table.',
           value: _engine.maxAnalysisMoves,
           min: 3,
           max: 20,
@@ -164,8 +161,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         SettingsSliderTile(
           label: 'Inline threads (PGN viewer)',
-          tooltip:
-              'Threads for the single-process inline engine bar.',
+          tooltip: 'Threads for the single-process inline engine bar.',
           value: _engine.inlineThreads,
           min: 1,
           max: cores,
@@ -196,12 +192,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── Opponent model section ─────────────────────────────────────────────────
 
   Widget _buildOpponentModelSection() {
-    final database = _engine.explorerUseMasters
-        ? LichessDatabase.masters
-        : LichessDatabase.lichess;
-    final speeds = _engine.explorerSpeedSet;
-    final ratings = _engine.explorerRatingSet;
-
     return SettingsGroup(
       title: 'Opponent Model',
       icon: Icons.people,
@@ -257,8 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         SettingsSliderTile(
           label: 'On-the-fly eval depth',
-          tooltip:
-              'Stockfish search depth for leaf evaluations during live '
+          tooltip: 'Stockfish search depth for leaf evaluations during live '
               'expectimax (default 12). Separate from Engine Depth on the '
               'Generation tab.',
           value: _engine.expectimaxEvalDepth,
@@ -298,8 +287,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: SettingsTextFieldRow(
             label: 'Starting position (moves)',
-            tooltip:
-                'Enter opening moves (e.g. "1. e4 e5 2. Nf3") so the '
+            tooltip: 'Enter opening moves (e.g. "1. e4 e5 2. Nf3") so the '
                 'cumulative % starts at 100% from that position.',
             controller: _probStartCtrl,
             onSubmitted: (v) => _engine.probabilityStartMoves = v.trim(),
