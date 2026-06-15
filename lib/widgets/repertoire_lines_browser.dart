@@ -29,6 +29,7 @@ class RepertoireLinesBrowser extends StatefulWidget {
   final List<String> currentMoveSequence;
   final Function(RepertoireLine line)? onLineSelected;
   final Function(RepertoireLine line, String newTitle)? onLineRenamed;
+  final Function(RepertoireLine line)? onLineDeleted;
   final VoidCallback? onCoveragePressed;
   final bool isCoverageRunning;
   final bool isExpanded;
@@ -55,6 +56,7 @@ class RepertoireLinesBrowser extends StatefulWidget {
     this.currentMoveSequence = const [],
     this.onLineSelected,
     this.onLineRenamed,
+    this.onLineDeleted,
     this.onCoveragePressed,
     this.isCoverageRunning = false,
     this.isExpanded = false,
@@ -267,6 +269,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
             lineMetrics: _lineMetrics,
             onLineSelected: widget.onLineSelected,
             onLineRenamed: widget.onLineRenamed,
+            onLineDeleted: widget.onLineDeleted,
             onNavigateToPosition: widget.onNavigateToPosition,
             navigationStack: widget.navigationStack,
             boardPreview: widget.boardPreview,

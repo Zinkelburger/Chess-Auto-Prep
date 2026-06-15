@@ -29,6 +29,9 @@ class RepertoireShortcuts extends StatelessWidget {
     required this.onGoForward,
     required this.onGoToPreviousTrap,
     required this.onGoToNextTrap,
+    this.onNextFinding,
+    this.onPrevFinding,
+    this.onDismissFinding,
     this.autofocus = true,
     required this.child,
   });
@@ -66,6 +69,15 @@ class RepertoireShortcuts extends StatelessWidget {
 
   /// Called on Shift+Right before [onGoForward]. Return true if trap nav handled.
   final bool Function() onGoToNextTrap;
+
+  /// N — next finding in the audit findings panel.
+  final bool Function()? onNextFinding;
+
+  /// P — previous finding in the audit findings panel.
+  final bool Function()? onPrevFinding;
+
+  /// D — dismiss current finding in the audit findings panel.
+  final bool Function()? onDismissFinding;
 
   final Widget child;
 
@@ -177,6 +189,27 @@ class RepertoireShortcuts extends StatelessWidget {
     if (event.logicalKey == LogicalKeyboardKey.keyE && hasNoLetterModifiers) {
       onToggleEngine();
       return KeyEventResult.handled;
+    }
+
+    // 'N' key — next finding (findings panel)
+    if (event.logicalKey == LogicalKeyboardKey.keyN && hasNoLetterModifiers) {
+      if (onNextFinding != null && onNextFinding!()) {
+        return KeyEventResult.handled;
+      }
+    }
+
+    // 'P' key — previous finding (findings panel)
+    if (event.logicalKey == LogicalKeyboardKey.keyP && hasNoLetterModifiers) {
+      if (onPrevFinding != null && onPrevFinding!()) {
+        return KeyEventResult.handled;
+      }
+    }
+
+    // 'D' key — dismiss current finding (findings panel)
+    if (event.logicalKey == LogicalKeyboardKey.keyD && hasNoLetterModifiers) {
+      if (onDismissFinding != null && onDismissFinding!()) {
+        return KeyEventResult.handled;
+      }
     }
 
     // Arrow keys — always through controller (single source of truth).

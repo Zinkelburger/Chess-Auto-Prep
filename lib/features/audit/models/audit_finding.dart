@@ -62,6 +62,9 @@ class AuditFinding {
   /// For DeadEnd: how many opponent continuations exist beyond the leaf.
   final int? continuationCount;
 
+  /// For DeadEnd: the specific opponent moves not covered (SAN).
+  final List<String>? uncoveredMoves;
+
   /// Probability of reaching this position from the repertoire root (0..1).
   /// Product of opponent move frequencies along the path.
   final double? cumulativeProbability;
@@ -88,6 +91,7 @@ class AuditFinding {
     this.probability,
     this.source,
     this.continuationCount,
+    this.uncoveredMoves,
     this.cumulativeProbability,
     this.transposesIntoRepertoire = false,
     this.dismissed = false,
@@ -115,7 +119,8 @@ class AuditFinding {
     final pct = cumulativeProbability! * 100;
     if (pct >= 10) return '${pct.toStringAsFixed(0)}%';
     if (pct >= 1) return '${pct.toStringAsFixed(1)}%';
-    return '<1%';
+    if (pct >= 0.1) return '${pct.toStringAsFixed(2)}%';
+    return '${pct.toStringAsFixed(3)}%';
   }
 
   /// Format a SAN with its move number, e.g. "3. Nf3" or "3...Nd2".
@@ -149,7 +154,12 @@ class AuditFinding {
       case AuditFindingType.weakPosition:
         return 'Weak position: eval ${positionEvalCp}cp';
       case AuditFindingType.deadEnd:
-        return 'Dead end: ${continuationCount ?? 0} opponent continuations uncovered';
+        final count = continuationCount ?? 0;
+        final moves = uncoveredMoves;
+        if (moves != null && moves.isNotEmpty) {
+          return 'Dead end: $count uncovered (${moves.join(", ")})';
+        }
+        return 'Dead end: $count opponent continuations uncovered';
     }
   }
 
@@ -187,6 +197,8 @@ class AuditFinding {
         if (probability != null) 'probability': probability,
         if (source != null) 'source': source!.name,
         if (continuationCount != null) 'continuationCount': continuationCount,
+        if (uncoveredMoves != null && uncoveredMoves!.isNotEmpty)
+          'uncoveredMoves': uncoveredMoves,
         if (cumulativeProbability != null)
           'cumulativeProbability': cumulativeProbability,
         if (transposesIntoRepertoire) 'transposesIntoRepertoire': true,
@@ -210,6 +222,7 @@ class AuditFinding {
             ? MissingResponseSource.values.byName(j['source'] as String)
             : null,
         continuationCount: j['continuationCount'] as int?,
+        uncoveredMoves: (j['uncoveredMoves'] as List?)?.cast<String>(),
         cumulativeProbability:
             (j['cumulativeProbability'] as num?)?.toDouble(),
         transposesIntoRepertoire:

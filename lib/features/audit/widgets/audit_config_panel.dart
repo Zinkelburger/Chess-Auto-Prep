@@ -69,10 +69,8 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   final TextEditingController _maiaEloCtrl =
       TextEditingController(text: '2200');
 
-  bool _useStockfish = true;
   // Mothballed: Lichess Explorer disabled.
-  bool _useLichessDb = false;
-  bool _useMaia = true;
+  final bool _useLichessDb = false;
   bool _auditSubtreeOnly = false;
 
   bool _isAuditing = false;
@@ -116,9 +114,9 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       evalDepth: int.tryParse(_evalDepthCtrl.text) ?? 14,
       maxPly: int.tryParse(_maxPlyCtrl.text) ?? 30,
       maiaElo: int.tryParse(_maiaEloCtrl.text) ?? 2200,
-      useStockfish: _useStockfish,
+      useStockfish: true,
       useLichessDb: _useLichessDb,
-      useMaia: _useMaia,
+      useMaia: true,
     );
   }
 
@@ -144,10 +142,8 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     });
     onAuditingChangedCb(true);
 
-    if (config.useStockfish) {
-      await EngineLifecycle().enterGeneration(1);
-      await StockfishPool().ensureWorkers(1);
-    }
+    await EngineLifecycle().enterGeneration(1);
+    await StockfishPool().ensureWorkers(1);
 
     try {
       final result = await _service.audit(
@@ -171,114 +167,156 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       if (mounted) setState(() => _isAuditing = false);
     } finally {
       onAuditingChangedCb(false);
-      if (config.useStockfish) {
-        EngineLifecycle().exitGeneration();
-      }
+      EngineLifecycle().exitGeneration();
     }
   }
 
   // ── Build ────────────────────────────────────────────────────────────
 
+  bool _showAdvanced = false;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final scopeLabel = _auditSubtreeOnly &&
+            widget.currentMoveSequence.isNotEmpty
+        ? 'Subtree from ${_moveSequenceLabel(widget.currentMoveSequence)}'
+        : 'Full repertoire';
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Repertoire Audit', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            _auditSubtreeOnly && widget.currentMoveSequence.isNotEmpty
-                ? 'From: ${_moveSequenceLabel(widget.currentMoveSequence)}'
-                : 'Full repertoire from root',
-            style: const TextStyle(color: Colors.grey, fontSize: 12),
-          ),
-          const SizedBox(height: 12),
-
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Audit from current position only',
-                style: TextStyle(fontSize: 13)),
-            value: _auditSubtreeOnly,
-            onChanged:
-                _isAuditing ? null : (v) => setState(() => _auditSubtreeOnly = v),
-          ),
-          const SizedBox(height: 8),
-
-          Text('Sources', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 8,
+          // Scope toggle + label
+          Row(
             children: [
-              FilterChip(
-                label: const Text('Stockfish'),
-                selected: _useStockfish,
-                onSelected:
-                    _isAuditing ? null : (v) => setState(() => _useStockfish = v),
-              ),
-              // Mothballed: Lichess Explorer chip hidden.
-              FilterChip(
-                label: const Text('Maia'),
-                selected: _useMaia,
-                onSelected:
-                    _isAuditing ? null : (v) => setState(() => _useMaia = v),
+              Icon(Icons.account_tree_outlined,
+                  size: 14, color: Colors.grey[500]),
+              const SizedBox(width: 6),
+              Text(scopeLabel,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              const Spacer(),
+              SizedBox(
+                height: 28,
+                child: FilterChip(
+                  label: const Text('Subtree only',
+                      style: TextStyle(fontSize: 11)),
+                  selected: _auditSubtreeOnly,
+                  onSelected: _isAuditing
+                      ? null
+                      : (v) => setState(() => _auditSubtreeOnly = v),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
-          Text('Thresholds', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 4),
+          // Uses Stockfish + Maia (always on)
+          Row(
+            children: [
+              Icon(Icons.memory, size: 13, color: Colors.grey[500]),
+              const SizedBox(width: 4),
+              Text('Stockfish + Maia',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Key thresholds
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              _numField(_mistakeCtrl, 'Mistake (cp)'),
-              _numField(_inaccuracyCtrl, 'Inaccuracy (cp)'),
-              _numField(_minGamesCtrl, 'Min games'),
-              _numField(_minMaiaProbCtrl, 'Min Maia prob'),
-              _numField(_evalDepthCtrl, 'Eval depth'),
-              _numField(_maxPlyCtrl, 'Max ply'),
-              _numField(_maiaEloCtrl, 'Maia ELO'),
+              _numField(_evalDepthCtrl, 'Eval Depth'),
+              _numField(_maxPlyCtrl, 'Max Ply'),
+              _numField(_maiaEloCtrl, 'Maia Elo'),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
+          // More thresholds (collapsed by default)
+          InkWell(
+            onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+            child: Row(
+              children: [
+                Icon(
+                  _showAdvanced ? Icons.expand_less : Icons.expand_more,
+                  size: 16,
+                  color: Colors.grey[500],
+                ),
+                const SizedBox(width: 4),
+                Text('More thresholds',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              ],
+            ),
+          ),
+          if (_showAdvanced) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _numField(_mistakeCtrl, 'Mistake (cp)'),
+                _numField(_inaccuracyCtrl, 'Inaccuracy (cp)'),
+                _numField(_minMaiaProbCtrl, 'Min Maia Prob'),
+              ],
+            ),
+          ],
+          const SizedBox(height: 10),
+
+          // Start / Cancel + progress
           Row(
             children: [
               if (!_isAuditing)
                 FilledButton.icon(
                   onPressed: widget.openingTree == null ? null : _startAudit,
-                  icon: const Icon(Icons.policy_outlined, size: 18),
-                  label: const Text('Start Audit'),
+                  icon: const Icon(Icons.play_arrow, size: 16),
+                  label: const Text('Start', style: TextStyle(fontSize: 13)),
+                  style: FilledButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: Size.zero,
+                  ),
                 )
               else
                 FilledButton.tonalIcon(
                   onPressed: cancelAudit,
-                  icon: const Icon(Icons.stop, size: 18),
-                  label: const Text('Cancel'),
+                  icon: const Icon(Icons.stop, size: 16),
+                  label: const Text('Cancel', style: TextStyle(fontSize: 13)),
+                  style: FilledButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: Size.zero,
+                  ),
                 ),
+              if (_isAuditing && _progress != null) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      LinearProgressIndicator(
+                        value: _progress!.totalNodes > 0
+                            ? _progress!.nodesChecked / _progress!.totalNodes
+                            : null,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_progress!.nodesChecked}/${_progress!.totalNodes} · '
+                        '$_liveFindingCount findings',
+                        style:
+                            const TextStyle(fontSize: 10, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
-          const SizedBox(height: 12),
-
-          if (_isAuditing && _progress != null) ...[
-            LinearProgressIndicator(
-              value: _progress!.totalNodes > 0
-                  ? _progress!.nodesChecked / _progress!.totalNodes
-                  : null,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${_progress!.nodesChecked} / ${_progress!.totalNodes} nodes  '
-              '· $_liveFindingCount findings',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
         ],
       ),
     );
@@ -286,7 +324,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
 
   Widget _numField(TextEditingController ctrl, String label) {
     return SizedBox(
-      width: 120,
+      width: 170,
       child: TextField(
         controller: ctrl,
         enabled: !_isAuditing,
@@ -296,7 +334,6 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
           isDense: true,
         ),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        style: const TextStyle(fontSize: 13),
       ),
     );
   }

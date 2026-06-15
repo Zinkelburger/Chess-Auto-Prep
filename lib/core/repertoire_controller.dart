@@ -287,8 +287,18 @@ class RepertoireController with ChangeNotifier {
   // ── Tree mutation (for PGN editor actions) ───────────────────────
 
   /// Delete the subtree at [path] and adjust cursor.
+  /// Pushes an undo snapshot so the deletion can be reverted with Ctrl+Z.
   void deleteAtPath(TreePath target) {
     if (!_tree.isValidPath(target)) return;
+
+    final previousPgn = _repertoirePgn ?? '';
+    final movePath = _tree.sanSequenceAt(target);
+    writer.pushUndo(UndoOperation(
+      previousPgn: previousPgn,
+      treePathBeforeAdd: movePath.isEmpty ? [] : movePath.sublist(0, movePath.length - 1),
+      moveAdded: movePath.isNotEmpty ? movePath.last : '',
+    ));
+
     final newCursor = target.parent;
     _tree.deleteAt(target);
     _path = _tree.isValidPath(newCursor) ? newCursor : TreePath.empty;
@@ -616,6 +626,26 @@ class RepertoireController with ChangeNotifier {
   void clearSelectedPgnLine() {
     _selectedPgnLine = null;
     notifyListeners();
+  }
+
+  /// Deletes a line from the repertoire file and reloads.
+  Future<bool> deleteLine(RepertoireLine line) async {
+    if (_currentRepertoire == null) return false;
+    final filePath = _currentRepertoire!.filePath;
+    if (filePath.isEmpty) return false;
+
+    final service = RepertoireService();
+    final success = await service.deleteLine(filePath, line.id);
+    if (!success) return false;
+
+    if (_selectedPgnLine?.id == line.id) {
+      _selectedPgnLine = null;
+      _tree = MoveTree(startingFen: _tree.startingFen);
+      _path = TreePath.empty;
+    }
+
+    await loadRepertoire();
+    return true;
   }
 
   /// Persist edits made to the currently selected line.

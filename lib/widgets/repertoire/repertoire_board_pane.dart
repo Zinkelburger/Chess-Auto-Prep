@@ -139,7 +139,7 @@ class RepertoireBoardPane extends StatelessWidget {
                       Text(
                         isGenerationPaused
                             ? 'Resume to continue building, or switch tabs to inspect the current position.'
-                            : 'All other features are locked.\nPlease leave this running.',
+                            : 'Board is locked during generation.\nOther tabs remain usable.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 13,

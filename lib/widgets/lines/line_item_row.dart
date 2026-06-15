@@ -28,6 +28,7 @@ class LineItemRow extends StatelessWidget {
   final LineQualityInfo? metrics;
   final void Function(RepertoireLine line)? onLineSelected;
   final void Function(RepertoireLine line, String newTitle)? onLineRenamed;
+  final void Function(RepertoireLine line)? onLineDeleted;
   final void Function(List<String> moveSequence)? onNavigateToPosition;
   final NavigationStack? navigationStack;
   final BoardPreviewController? boardPreview;
@@ -44,10 +45,34 @@ class LineItemRow extends StatelessWidget {
     this.metrics,
     this.onLineSelected,
     this.onLineRenamed,
+    this.onLineDeleted,
     this.onNavigateToPosition,
     this.navigationStack,
     this.boardPreview,
   });
+
+  void _confirmDelete(BuildContext context) {
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Line'),
+        content: Text('Delete "${line.name}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red[300]),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    ).then((confirmed) {
+      if (confirmed == true) onLineDeleted?.call(line);
+    });
+  }
 
   static void showRenameDialog(
     BuildContext context, {
@@ -162,6 +187,18 @@ class LineItemRow extends StatelessWidget {
                         line: line,
                         onRenamed: onLineRenamed!,
                       ),
+                    ),
+                  ),
+                if (onLineDeleted != null)
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: IconButton(
+                      icon: Icon(Icons.delete_outline,
+                          size: 14, color: Colors.grey[600]),
+                      padding: EdgeInsets.zero,
+                      tooltip: 'Delete line',
+                      onPressed: () => _confirmDelete(context),
                     ),
                   ),
                 if (coverageBadge != null) ...[

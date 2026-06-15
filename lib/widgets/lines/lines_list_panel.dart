@@ -22,6 +22,7 @@ class LinesListPanel extends StatelessWidget {
   final Map<String, LineQualityInfo> lineMetrics;
   final void Function(RepertoireLine line)? onLineSelected;
   final void Function(RepertoireLine line, String newTitle)? onLineRenamed;
+  final void Function(RepertoireLine line)? onLineDeleted;
   final void Function(List<String> moveSequence)? onNavigateToPosition;
   final NavigationStack? navigationStack;
   final BoardPreviewController? boardPreview;
@@ -42,6 +43,7 @@ class LinesListPanel extends StatelessWidget {
     required this.lineMetrics,
     this.onLineSelected,
     this.onLineRenamed,
+    this.onLineDeleted,
     this.onNavigateToPosition,
     this.navigationStack,
     this.boardPreview,
@@ -83,6 +85,7 @@ class LinesListPanel extends StatelessWidget {
             metrics: lineMetrics[line.id],
             onLineSelected: onLineSelected,
             onLineRenamed: onLineRenamed,
+            onLineDeleted: onLineDeleted,
             onNavigateToPosition: onNavigateToPosition,
             navigationStack: navigationStack,
             boardPreview: boardPreview,
@@ -120,6 +123,7 @@ class LinesListPanel extends StatelessWidget {
               metrics: lineMetrics[line.id],
               onLineSelected: onLineSelected,
               onLineRenamed: onLineRenamed,
+              onLineDeleted: onLineDeleted,
               onNavigateToPosition: onNavigateToPosition,
               navigationStack: navigationStack,
               boardPreview: boardPreview,

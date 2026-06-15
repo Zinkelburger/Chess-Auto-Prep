@@ -7,12 +7,15 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../models/build_tree_node.dart';
 import '../services/coherence_service.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
+import '../services/generation/tree_serialization.dart';
 import '../services/jobs/repertoire_job.dart';
+import '../services/storage/storage_factory.dart';
 import '../services/tree_build_service.dart';
 
 class GenerationSessionController extends ChangeNotifier {
@@ -25,6 +28,13 @@ class GenerationSessionController extends ChangeNotifier {
   BuildTree? _generatedTree;
   TreeBuildConfig? _generatedTreeConfig;
   FenMap? _generatedTreeFenMap;
+
+  /// Context for saving partial tree state — set by the generation tab at
+  /// build start so that pause/cancel from any source (Jobs panel, board
+  /// overlay) can persist the in-progress tree to disk.
+  String? _repertoireFilePath;
+  List<String> _startMoveSequence = const [];
+  String _startFen = '';
 
   RepertoireJob? currentJob;
 
@@ -43,6 +53,42 @@ class GenerationSessionController extends ChangeNotifier {
   TreeBuildConfig? get generatedTreeConfig => _generatedTreeConfig;
   FenMap? get generatedTreeFenMap => _generatedTreeFenMap;
 
+  // ── Partial tree save context ────────────────────────────────────────
+
+  /// Set the context needed to persist partial trees to disk. Call this
+  /// before starting a build so that pause/cancel from any entry point
+  /// (Jobs panel, board overlay) can write the tree.
+  void setPartialSaveContext({
+    required String? repertoireFilePath,
+    required List<String> moveSequence,
+    required String fen,
+  }) {
+    _repertoireFilePath = repertoireFilePath;
+    _startMoveSequence = List.unmodifiable(moveSequence);
+    _startFen = fen;
+  }
+
+  /// Persist the in-progress tree to `{repertoire}_partial_tree.json`.
+  Future<void> savePartialTree() async {
+    final tree = buildService.currentTree;
+    if (tree == null) return;
+    final filePath = _repertoireFilePath;
+    if (filePath == null || filePath.isEmpty) return;
+    final base = p.withoutExtension(filePath);
+    final path = '${base}_partial_tree.json';
+    try {
+      if (tree.startMoves.isEmpty &&
+          _startMoveSequence.isNotEmpty &&
+          tree.root.fen == _startFen) {
+        tree.startMoves = _startMoveSequence.join(' ');
+      }
+      final treeJson = serializeTree(tree);
+      await StorageFactory.instance.writeFile(path, treeJson);
+    } catch (e) {
+      debugPrint('[GenerationController] Failed to save partial tree: $e');
+    }
+  }
+
   // ── Control methods (callable from anywhere) ────────────────────────
 
   void pauseBuild() {
@@ -50,6 +96,7 @@ class GenerationSessionController extends ChangeNotifier {
     buildService.pauseBuild();
     _isPaused = true;
     currentJob?.updateStatus(JobStatus.paused);
+    savePartialTree();
     notifyListeners();
   }
 
@@ -63,6 +110,7 @@ class GenerationSessionController extends ChangeNotifier {
 
   void cancelBuild() {
     if (!_isGenerating) return;
+    savePartialTree();
     buildService.stopBuild();
     _isPaused = false;
     _isGenerating = false;
@@ -84,6 +132,10 @@ class GenerationSessionController extends ChangeNotifier {
   void clearFinishNow() {
     _finishNowRequested = false;
   }
+
+  /// Notify listeners that progress stats have changed (called by the
+  /// generation tab after updating progress fields).
+  void notifyProgressChanged() => notifyListeners();
 
   // ── State updates (called by RepertoireGenerationTab) ───────────────
 

@@ -18,6 +18,11 @@ class BottomPane extends StatefulWidget {
   final int jobsBadge;
   final int linesBadge;
 
+  /// Called when the pane is closed via the X button or drag-handle double-tap.
+  /// Not called for programmatic [BottomPaneState.close] — callers of that
+  /// method handle their own cleanup.
+  final VoidCallback? onClose;
+
   const BottomPane({
     super.key,
     required this.findingsContent,
@@ -26,6 +31,7 @@ class BottomPane extends StatefulWidget {
     this.findingsBadge = 0,
     this.jobsBadge = 0,
     this.linesBadge = 0,
+    this.onClose,
   });
 
   @override
@@ -36,14 +42,17 @@ class BottomPaneState extends State<BottomPane>
     with SingleTickerProviderStateMixin {
   static const double _minHeight = 120.0;
   static const double _maxFraction = 0.60;
-  static const double _defaultFraction = 0.45;
+  static const double _defaultFraction = 0.60;
   static const double _dragHandleHeight = 6.0;
   static const double _tabBarHeight = 32.0;
 
   late final TabController _tabController;
 
   bool _collapsed = true;
-  double? _height;
+
+  /// Height stored as a fraction of screen height so it scales with
+  /// window resize (e.g. minimized -> fullscreen).
+  double _heightFraction = _defaultFraction;
 
   bool get isCollapsed => _collapsed;
   BottomPaneTab get activeTab => BottomPaneTab.values[_tabController.index];
@@ -87,8 +96,8 @@ class BottomPaneState extends State<BottomPane>
 
     final screenHeight = MediaQuery.of(context).size.height;
     final maxHeight = screenHeight * _maxFraction;
-    _height ??= screenHeight * _defaultFraction;
-    final clampedHeight = _height!.clamp(_minHeight, maxHeight);
+    final desiredHeight = screenHeight * _heightFraction;
+    final clampedHeight = desiredHeight.clamp(_minHeight, maxHeight);
 
     return SizedBox(
       height: clampedHeight,
@@ -113,14 +122,21 @@ class BottomPaneState extends State<BottomPane>
   }
 
   Widget _buildDragHandle(BuildContext context, double maxHeight) {
+    final screenHeight = MediaQuery.of(context).size.height;
     return GestureDetector(
       onVerticalDragUpdate: (details) {
         setState(() {
-          _height = ((_height ?? maxHeight * 0.5) - details.delta.dy)
-              .clamp(_minHeight, maxHeight);
+          final currentPx = screenHeight * _heightFraction;
+          final newPx =
+              (currentPx - details.delta.dy).clamp(_minHeight, maxHeight);
+          _heightFraction =
+              screenHeight > 0 ? newPx / screenHeight : _defaultFraction;
         });
       },
-      onDoubleTap: close,
+      onDoubleTap: () {
+        close();
+        widget.onClose?.call();
+      },
       child: MouseRegion(
         cursor: SystemMouseCursors.resizeRow,
         child: Container(
@@ -178,7 +194,10 @@ class BottomPaneState extends State<BottomPane>
           ),
           IconButton(
             icon: const Icon(Icons.close, size: 14),
-            onPressed: close,
+            onPressed: () {
+              close();
+              widget.onClose?.call();
+            },
             tooltip: 'Collapse (Esc)',
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,

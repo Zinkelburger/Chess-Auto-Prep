@@ -478,7 +478,7 @@ class RepertoireAuditService {
     required AuditConfig config,
     required double cumulativeProbability,
   }) async {
-    int continuations = 0;
+    final moveSet = <String>{};
 
     if (config.useLichessDb) {
       try {
@@ -488,36 +488,40 @@ class RepertoireAuditService {
           ratings: config.explorerRatings,
         );
         if (response != null) {
-          continuations =
-              response.moves.where((m) => m.total >= config.minGames).length;
+          for (final m in response.moves) {
+            if (m.total >= config.minGames) moveSet.add(m.san);
+          }
         }
       } catch (_) {}
     }
 
-    if (continuations < config.deadEndMinContinuations) {
-      // Also check Maia if Lichess didn't find enough.
+    if (moveSet.length < config.deadEndMinContinuations) {
       if (config.useMaia && MaiaFactory.isAvailable) {
         try {
           final result =
               await MaiaFactory.instance!.evaluate(node.fen, config.maiaElo);
-          final significantMoves =
-              result.policy.values.where((p) => p >= config.minMaiaProb).length;
-          continuations =
-              continuations > significantMoves ? continuations : significantMoves;
+          for (final entry in result.policy.entries) {
+            if (entry.value >= config.minMaiaProb) {
+              final san = _uciToSan(node.fen, entry.key);
+              if (san != null) moveSet.add(san);
+            }
+          }
         } catch (_) {}
       }
     }
 
-    if (continuations >= config.deadEndMinContinuations) {
+    if (moveSet.length >= config.deadEndMinContinuations) {
+      final sortedMoves = moveSet.toList()..sort();
       return [
         AuditFinding(
           type: AuditFindingType.deadEnd,
-          severity: continuations >= 4
+          severity: moveSet.length >= 4
               ? AuditSeverity.warning
               : AuditSeverity.info,
           movePath: movePath,
           fen: node.fen,
-          continuationCount: continuations,
+          continuationCount: moveSet.length,
+          uncoveredMoves: sortedMoves,
           cumulativeProbability: cumulativeProbability,
         ),
       ];

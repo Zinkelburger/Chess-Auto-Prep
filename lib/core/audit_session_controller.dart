@@ -21,7 +21,7 @@ class AuditSessionController extends ChangeNotifier {
   final RepertoireAuditService _service = RepertoireAuditService();
 
   AuditResult? _result;
-  final List<AuditFinding> _liveFindings = [];
+  List<AuditFinding> _liveFindings = [];
   int _nodesChecked = 0;
   int _totalNodes = 0;
   AuditConfig? _lastConfig;
@@ -107,7 +107,7 @@ class AuditSessionController extends ChangeNotifier {
     if (snapshot == null) return;
     _result = snapshot.result;
     _lastConfig = snapshot.config;
-    _liveFindings.clear();
+    _liveFindings = [];
     _nodesChecked = snapshot.result.nodesChecked;
     _totalNodes = snapshot.result.nodesChecked;
     _interruptedSnapshot = snapshot.isComplete ? null : snapshot;
@@ -131,7 +131,7 @@ class AuditSessionController extends ChangeNotifier {
       );
       currentJob!.configSnapshot = _lastConfig?.toMap();
       currentJob!.updateStatus(JobStatus.running);
-      _liveFindings.clear();
+      _liveFindings = [];
       _result = null;
       _nodesChecked = 0;
       _totalNodes = 0;
@@ -146,7 +146,7 @@ class AuditSessionController extends ChangeNotifier {
 
   void onResultReady(AuditResult auditResult, String? repertoireFilePath) {
     _result = auditResult;
-    _liveFindings.clear();
+    _liveFindings = [];
     if (_lastConfig != null) {
       AuditPersistence.instance.saveComplete(
         repertoireFilePath,
@@ -168,7 +168,7 @@ class AuditSessionController extends ChangeNotifier {
   }
 
   void onLiveFinding(AuditFinding finding) {
-    _liveFindings.add(finding);
+    _liveFindings = [..._liveFindings, finding];
     notifyListeners();
   }
 
@@ -194,7 +194,7 @@ class AuditSessionController extends ChangeNotifier {
   void startFresh() {
     _interruptedSnapshot = null;
     _result = null;
-    _liveFindings.clear();
+    _liveFindings = [];
     _nodesChecked = 0;
     _totalNodes = 0;
     notifyListeners();
@@ -210,7 +210,7 @@ class AuditSessionController extends ChangeNotifier {
   }) async {
     final config = snapshot.config;
     _lastConfig = config;
-    _liveFindings.clear();
+    _liveFindings = [];
     _result = null;
     _nodesChecked = 0;
     _totalNodes = 0;
@@ -242,13 +242,13 @@ class AuditSessionController extends ChangeNotifier {
           notifyListeners();
         },
         onFinding: (f) {
-          _liveFindings.add(f);
+          _liveFindings = [..._liveFindings, f];
           notifyListeners();
         },
       );
 
       _result = auditResult;
-      _liveFindings.clear();
+      _liveFindings = [];
       _isAuditing = false;
       currentJob?.updateStatus(JobStatus.completed);
       currentJob = null;
@@ -267,7 +267,7 @@ class AuditSessionController extends ChangeNotifier {
 
   void clearAll() {
     _result = null;
-    _liveFindings.clear();
+    _liveFindings = [];
     _nodesChecked = 0;
     _totalNodes = 0;
     _lastConfig = null;

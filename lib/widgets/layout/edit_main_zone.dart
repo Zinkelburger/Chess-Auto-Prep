@@ -10,21 +10,8 @@ import 'package:flutter/services.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
-import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import '../interactive_pgn_editor.dart';
-
-Future<void> _persistNewLineToRepertoire(String repertoireName, String pgn) async {
-  final filename = 'repertoires/$repertoireName.pgn';
-  final currentContent =
-      await StorageFactory.instance.readRepertoirePgn(filename) ?? '';
-
-  final separator = currentContent.trimRight().isEmpty ? '' : '\n\n';
-  final entry = '$separator$pgn\n';
-
-  await StorageFactory.instance
-      .saveRepertoirePgn(filename, currentContent + entry);
-}
 
 void _copyToClipboard(BuildContext context, String text, String message) {
   Clipboard.setData(ClipboardData(text: text));
@@ -47,9 +34,8 @@ class EditMainZone extends StatelessWidget {
     this.onLineEdited,
     this.onAutoSave,
     this.onDirty,
-    this.onLineSaved,
-    this.onPersistNewLine,
     this.onCopyToClipboard,
+    this.onViewInLines,
     this.trapIndex,
     this.boardPreview,
   });
@@ -67,10 +53,8 @@ class EditMainZone extends StatelessWidget {
   final void Function(String updatedPgn)? onLineEdited;
   final ValueChanged<String>? onAutoSave;
   final VoidCallback? onDirty;
-  final void Function(List<String> moves, String title, String pgn)? onLineSaved;
-  final Future<void> Function(String repertoireName, String pgn)?
-      onPersistNewLine;
   final void Function(String text, String successMessage)? onCopyToClipboard;
+  final VoidCallback? onViewInLines;
   final TrapIndexService? trapIndex;
   final BoardPreviewController? boardPreview;
 
@@ -90,10 +74,9 @@ class EditMainZone extends StatelessWidget {
       onLineEdited: onLineEdited,
       onAutoSave: onAutoSave,
       onDirty: onDirty,
-      onLineSaved: onLineSaved,
-      onPersistNewLine: onPersistNewLine ?? _persistNewLineToRepertoire,
       onCopyToClipboard: onCopyToClipboard ??
           (text, message) => _copyToClipboard(context, text, message),
+      onViewInLines: onViewInLines,
       trapIndex: trapIndex,
       boardPreview: boardPreview,
     );

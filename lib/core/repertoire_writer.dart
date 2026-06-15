@@ -45,7 +45,8 @@ class RepertoireWriter {
 
   void clearUndoStack() => _undoStack.clear();
 
-  void _pushUndo(UndoOperation operation) {
+  /// Push an undo snapshot (used internally and by controller for delete ops).
+  void pushUndo(UndoOperation operation) {
     _undoStack.add(operation);
     if (_undoStack.length > _maxUndoOperations) {
       _undoStack.removeAt(0);
@@ -98,7 +99,7 @@ class RepertoireWriter {
         updatedPgnContent: updatedPgn,
       );
 
-      _pushUndo(
+      pushUndo(
         UndoOperation(
           previousPgn: previousPgn,
           treePathBeforeAdd: List<String>.from(pathFromRoot),

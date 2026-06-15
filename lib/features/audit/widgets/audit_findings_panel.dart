@@ -2,9 +2,10 @@
 /// keyboard navigation, and selected-state highlighting.
 ///
 /// Lives in the bottom pane Findings tab. Receives results from the screen
-/// state; does not own the audit service. No complex filters — just show
-/// all findings sorted by reach probability. User dismisses what they
-/// don't care about.
+/// state; does not own the audit service. Findings are sorted by reach
+/// probability (cumulative likelihood of the line occurring) and capped at
+/// a user-configurable limit (default 20). As the user dismisses findings,
+/// lower-probability ones surface automatically.
 library;
 
 import 'package:flutter/material.dart';
@@ -61,8 +62,9 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   /// Active type filters. Empty set = show all types.
   final Set<AuditFindingType> _activeFilters = {};
 
-  /// Max visible findings at once; auto-scales to show meaningful alerts.
-  static const int _maxVisible = 20;
+  /// Max visible findings at once (user-configurable).
+  int _maxVisible = 20;
+  late final TextEditingController _capController;
 
   final ScrollController _scrollController = ScrollController();
   final FocusNode _listFocusNode = FocusNode();
@@ -72,6 +74,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   @override
   void initState() {
     super.initState();
+    _capController = TextEditingController(text: '$_maxVisible');
     _recomputeVisible();
   }
 
@@ -86,6 +89,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
 
   @override
   void dispose() {
+    _capController.dispose();
     _scrollController.dispose();
     _listFocusNode.dispose();
     super.dispose();
@@ -130,6 +134,30 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     }).length;
   }
 
+  void _applyCapFromField() {
+    final parsed = int.tryParse(_capController.text.trim());
+    if (parsed == null || parsed < 1) {
+      _capController.text = '$_maxVisible';
+      return;
+    }
+    final clamped = parsed.clamp(1, 999);
+    if (clamped != _maxVisible) {
+      setState(() {
+        _maxVisible = clamped;
+        _capController.text = '$clamped';
+        _recomputeVisible();
+      });
+    } else {
+      _capController.text = '$clamped';
+    }
+  }
+
+  /// Reach-probability threshold: the lowest probability in the visible batch.
+  String? get _reachThreshold {
+    if (_visibleFindings.isEmpty) return null;
+    return _visibleFindings.last.reachProbLabel;
+  }
+
   void setFilterType(AuditFindingType? type) {
     setState(() {
       _activeFilters.clear();
@@ -151,6 +179,33 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     });
   }
 
+  /// Select next finding. Returns true if handled (findings are available).
+  bool selectNext() {
+    if (_visibleFindings.isEmpty) return false;
+    if (_selectedIndex < _visibleFindings.length - 1) {
+      _selectFinding(_selectedIndex + 1);
+    }
+    return true;
+  }
+
+  /// Select previous finding. Returns true if handled (findings are available).
+  bool selectPrevious() {
+    if (_visibleFindings.isEmpty) return false;
+    if (_selectedIndex > 0) {
+      _selectFinding(_selectedIndex - 1);
+    }
+    return true;
+  }
+
+  /// Dismiss current finding. Returns true if handled (a finding was selected).
+  bool dismissSelected() {
+    if (_selectedIndex < 0 || _selectedIndex >= _visibleFindings.length) {
+      return false;
+    }
+    _dismissCurrent();
+    return true;
+  }
+
   void _selectFinding(int index) {
     if (index < 0 || index >= _visibleFindings.length) return;
     setState(() => _selectedIndex = index);
@@ -164,7 +219,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
 
   void _ensureVisible(int index) {
     if (!_scrollController.hasClients) return;
-    const itemHeight = 52.0;
+    const itemHeight = 56.0;
     final offset = index * itemHeight;
     final viewStart = _scrollController.offset;
     final viewEnd = viewStart + _scrollController.position.viewportDimension;
@@ -300,10 +355,6 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
         children: [
           if (widget.interruptedSnapshot != null && !widget.isAuditing)
             _buildResumeBanner(widget.interruptedSnapshot!),
-          if (widget.result != null) ...[
-            _buildSummaryCard(widget.result!),
-            const Divider(height: 1),
-          ],
           _buildFilterBar(),
           _buildStatusRow(),
           const Divider(height: 1),
@@ -430,7 +481,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       label: Text(
         count > 0 ? '$label ($count)' : label,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 12,
           color: isActive ? Colors.white : color,
         ),
       ),
@@ -446,85 +497,6 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       showCheckmark: false,
       onSelected: count > 0 ? (_) => _toggleFilter(type) : null,
-    );
-  }
-
-  // ── Summary card ──────────────────────────────────────────────────────
-
-  Widget _buildSummaryCard(AuditResult result) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        children: [
-          _metricChip(
-            '${result.soundnessPercent.toStringAsFixed(0)}%',
-            'Sound',
-            result.soundnessPercent >= 90
-                ? AppColors.evalPositive
-                : result.soundnessPercent >= 70
-                    ? Colors.orange
-                    : AppColors.evalNegative,
-          ),
-          const SizedBox(width: 12),
-          _metricChip(
-            '${result.coveragePercent.toStringAsFixed(0)}%',
-            'Coverage',
-            result.coveragePercent >= 90
-                ? AppColors.evalPositive
-                : result.coveragePercent >= 70
-                    ? Colors.orange
-                    : AppColors.evalNegative,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Wrap(
-              spacing: 4,
-              runSpacing: 2,
-              children: [
-                if (result.mistakeCount > 0)
-                  _countBadge(result.mistakeCount, 'mistakes',
-                      AppColors.evalNegative),
-                if (result.inaccuracyCount > 0)
-                  _countBadge(result.inaccuracyCount, 'inaccuracies',
-                      Colors.orange),
-                if (result.missingResponseCount > 0)
-                  _countBadge(result.missingResponseCount, 'missing',
-                      Colors.blue),
-                if (result.weakPositionCount > 0)
-                  _countBadge(result.weakPositionCount, 'weak',
-                      Colors.deepOrange),
-                if (result.deadEndCount > 0)
-                  _countBadge(result.deadEndCount, 'dead ends',
-                      AppColors.onSurfaceMuted),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _metricChip(String value, String label, Color color) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(value,
-            style: TextStyle(
-                fontSize: 14, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-      ],
-    );
-  }
-
-  Widget _countBadge(int count, String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(
-        border: Border.all(color: color.withAlpha(100)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text('$count $label',
-          style: TextStyle(fontSize: 10, color: color)),
     );
   }
 
@@ -561,28 +533,75 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                   total > 0
                       ? '$checked / $total positions · ${_visibleFindings.length} findings'
                       : 'Starting audit...',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                 ),
               ] else ...[
-                Text(
-                  _totalMatchingFindings > _visibleFindings.length
-                      ? '${_visibleFindings.length} of $_totalMatchingFindings findings'
-                      : '${_visibleFindings.length} findings',
-                  style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-                ),
-                if (widget.result?.timestamp != null) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    '· ${_formatTimestamp(widget.result!.timestamp!)}',
-                    style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+                if (_totalMatchingFindings > _visibleFindings.length) ...[
+                  Text('Top',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  const SizedBox(width: 3),
+                  SizedBox(
+                    width: 34,
+                    height: 20,
+                    child: TextField(
+                      controller: _capController,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                      textAlign: TextAlign.center,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(
+                              color: Colors.grey[700]!, width: 0.5),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(
+                              color: Colors.grey[700]!, width: 0.5),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(
+                              color: Colors.grey[500]!, width: 1),
+                        ),
+                      ),
+                      onSubmitted: (_) => _applyCapFromField(),
+                      onTapOutside: (_) {
+                        _applyCapFromField();
+                        FocusScope.of(context).unfocus();
+                      },
+                    ),
                   ),
+                  const SizedBox(width: 3),
+                  Text('of $_totalMatchingFindings',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  if (_reachThreshold != null) ...[
+                    const SizedBox(width: 4),
+                    Text('· ≥ $_reachThreshold reach',
+                        style:
+                            TextStyle(fontSize: 11, color: Colors.blueGrey[300])),
+                  ],
+                ] else ...[
+                  Text('${_visibleFindings.length} findings',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                  if (widget.result?.timestamp != null) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '· ${_formatTimestamp(widget.result!.timestamp!)}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                  ],
                 ],
               ],
               if (_selectedIndex >= 0 && _visibleFindings.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Text(
                   '${_selectedIndex + 1} of ${_visibleFindings.length}',
-                  style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
                 ),
               ],
               const Spacer(),
@@ -670,7 +689,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     return ListView.builder(
       controller: _scrollController,
       itemCount: _visibleFindings.length,
-      itemExtent: 52,
+      itemExtent: 56,
       itemBuilder: (context, index) {
         final finding = _visibleFindings[index];
         final isSelected = index == _selectedIndex;
@@ -705,8 +724,25 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             child: Row(
               children: [
-                Icon(icon, color: color, size: 14),
+                Icon(icon, color: color, size: 16),
                 const SizedBox(width: 6),
+                if (finding.reachProbLabel != null) ...[
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      finding.reachProbLabel!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                        color: finding.dismissed
+                            ? Colors.grey[700]
+                            : Colors.blueGrey[300],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -715,7 +751,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                       Text(
                         finding.summary,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           color: finding.dismissed
                               ? Colors.grey
                               : null,
@@ -726,7 +762,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
                       Text(
                         finding.movePathString,
                         style: const TextStyle(
-                            fontSize: 10, color: Colors.grey),
+                            fontSize: 11, color: Colors.grey),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -840,11 +876,11 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       ),
       child: Row(
         children: [
-          Icon(Icons.archive_outlined, size: 12, color: Colors.grey[500]),
+          Icon(Icons.archive_outlined, size: 14, color: Colors.grey[500]),
           const SizedBox(width: 4),
           Text(
             '$dismissedCount dismissed',
-            style: TextStyle(fontSize: 10, color: Colors.grey[500]),
+            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
           ),
           const Spacer(),
           TextButton(
@@ -852,7 +888,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 6),
               minimumSize: const Size(0, 20),
-              textStyle: const TextStyle(fontSize: 10),
+              textStyle: const TextStyle(fontSize: 11),
             ),
             child: const Text('Restore all'),
           ),
