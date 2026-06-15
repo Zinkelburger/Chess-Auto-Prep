@@ -31,8 +31,8 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final String repertoireColor;
   final bool isEditingExistingLine;
   final void Function(String updatedPgn)? onLineEdited;
-  final void Function(List<String> moves, String title, String pgn)? onLineSaved;
   final VoidCallback onImportPgn;
+  final VoidCallback? onViewInLines;
   final VoidCallback onReload;
   final BuildTree? generatedTree;
   final TreeBuildConfig? treeConfig;
@@ -59,8 +59,8 @@ class PgnWithAnalysisPane extends StatefulWidget {
     required this.repertoireColor,
     required this.isEditingExistingLine,
     this.onLineEdited,
-    this.onLineSaved,
     required this.onImportPgn,
+    this.onViewInLines,
     required this.onReload,
     this.generatedTree,
     this.treeConfig,
@@ -239,7 +239,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       repertoireColor: widget.repertoireColor,
       isEditingExistingLine: widget.isEditingExistingLine,
       onLineEdited: widget.onLineEdited,
-      onLineSaved: widget.onLineSaved,
+      onViewInLines: widget.onViewInLines,
       trapIndex: widget.trapIndex,
       boardPreview: widget.boardPreview,
     );

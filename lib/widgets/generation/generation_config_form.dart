@@ -227,7 +227,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     if (_buildMode == BuildMode.dbExplorer && _pgnFilePaths.isEmpty) {
       final sources = _pgnSourcesKey.currentState?.sources ?? [];
       if (sources.isEmpty) {
-        return 'Add at least one PGN file for DB Explorer.';
+        return 'Add at least one PGN file to build from.';
       }
     }
     final evalSources = _evalSourcesKey.currentState;
@@ -235,7 +235,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
         !(evalSources?.enableLocalChessDb ?? false) &&
         !(evalSources?.enableChessDbApi ?? false) &&
         !EvalDatabaseSettings.instance.enableCdbDirect) {
-      return 'Maia + DB mode needs at least one eval source enabled '
+      return 'DB Win Rate mode needs at least one eval source enabled '
           '(local ChessDB, cdbdirect, or ChessDB API).';
     }
     return null;
@@ -330,15 +330,15 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
           items: const [
             DropdownMenuItem(
               value: BuildMode.stockfishExpectimax,
-              child: Text('Expectimax (recommended)'),
+              child: Text('Stockfish Expectimax (recommended)'),
             ),
             DropdownMenuItem(
               value: BuildMode.maiaDbExplore,
-              child: Text('Quick Build (no engine)'),
+              child: Text('DB Win Rate Only (no Stockfish)'),
             ),
             DropdownMenuItem(
               value: BuildMode.dbExplorer,
-              child: Text('From Your Games (PGN database)'),
+              child: Text('From Loaded PGN Files'),
             ),
           ],
           onChanged: widget.isGenerating
@@ -391,6 +391,22 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                     .where((s) => s.filePath != null)
                     .map((s) => s.filePath!));
             },
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _numField(_dbMinGamesCtrl, 'Min Games per Move',
+                  tooltip: 'Opponent moves need at least this many games '
+                      'in your PGN database to be explored'),
+              _numField(_dbMinProbCtrl, 'Min Move Probability',
+                  tooltip: 'Minimum move frequency (0–1) to include '
+                      'an opponent reply'),
+              _numField(_minEloCtrl, 'Min Elo Filter',
+                  tooltip: 'Skip games where both players are below '
+                      'this Elo (0 = no filter)'),
+            ],
           ),
           const SizedBox(height: 8),
         ],
@@ -758,11 +774,11 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
   String _buildModeLabel(BuildMode mode) {
     switch (mode) {
       case BuildMode.stockfishExpectimax:
-        return 'Expectimax';
+        return 'Stockfish Expectimax';
       case BuildMode.maiaDbExplore:
-        return 'Quick Build';
+        return 'DB Win Rate Only';
       case BuildMode.dbExplorer:
-        return 'From Your Games';
+        return 'From Loaded PGN Files';
       case BuildMode.trapFinder:
         return 'Trap Finder';
     }
@@ -771,15 +787,14 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
   String _buildModeDescription() {
     switch (_buildMode) {
       case BuildMode.stockfishExpectimax:
-        return 'Analyzes positions with Stockfish and selects the best lines '
-            'using probability-weighted evaluation. Thorough but slower. '
-            'Traps are automatically detected.';
+        return 'Stockfish evaluates every position; Maia predicts opponent '
+            'moves. Thorough but slower.';
       case BuildMode.maiaDbExplore:
-        return 'Fast build using neural network moves and database evals — '
-            'no engine needed. Good for a quick first pass or weaker hardware.';
+        return 'Uses Maia neural-net moves + database win rates only — '
+            'fast, no engine needed.';
       case BuildMode.dbExplorer:
-        return 'Builds your repertoire from PGN game files, using actual game '
-            'statistics. Engine evals are added after the tree is built.';
+        return 'Builds from your loaded PGN game files using move '
+            'frequencies. Engine evals added after.';
       case BuildMode.trapFinder:
         return 'Not yet available.';
     }

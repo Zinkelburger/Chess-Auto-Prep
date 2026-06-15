@@ -42,6 +42,7 @@ import '../features/audit/widgets/audit_findings_panel.dart';
 import '../features/traps/widgets/trap_navigation_buttons.dart';
 import '../features/traps/widgets/trap_walkthrough.dart';
 import '../features/traps/widgets/traps_browser.dart';
+import '../widgets/engine/floating_board_preview.dart';
 import '../features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import '../services/generation/trap_extractor.dart';
@@ -65,6 +66,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   final AuditSessionController _auditController = AuditSessionController();
   final GlobalKey<BottomPaneState> _bottomPaneKey =
       GlobalKey<BottomPaneState>();
+  final GlobalKey<AuditFindingsPanelState> _findingsPanelKey =
+      GlobalKey<AuditFindingsPanelState>();
   bool _isCompactLayout = false;
   bool _showInlineGenConfig = false;
   bool _showInlineAuditConfig = false;
@@ -75,6 +78,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   final NavigationStack _navigationStack = NavigationStack();
 
   bool _boardFlipped = false;
+  bool _wasGenerating = false;
 
   /// Currently previewed missing-move finding (ephemeral board state).
   AuditFinding? _ephemeralFinding;
@@ -96,6 +100,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   String? _lastRepertoireId;
 
   final FocusNode _focusNode = FocusNode();
+  final GlobalKey _linesPreviewStackKey = GlobalKey();
+  final GlobalKey _bottomLinesPreviewStackKey = GlobalKey();
 
   @override
   void initState() {
@@ -137,6 +143,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _closeBottomPane() {
     _bottomPaneKey.currentState?.close();
+    _clearInlineConfigFlags();
+  }
+
+  void _clearInlineConfigFlags() {
+    if (_showInlineGenConfig || _showInlineAuditConfig) {
+      setState(() {
+        _showInlineGenConfig = false;
+        _showInlineAuditConfig = false;
+      });
+    }
   }
 
   void _openGenerationDialog() {
@@ -528,6 +544,27 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             trapIndex: _trapIndex,
             controller: _controller,
           ),
+          onNextFinding: () {
+            final pane = _bottomPaneKey.currentState;
+            if (pane == null || pane.isCollapsed || pane.activeTab != BottomPaneTab.findings) {
+              return false;
+            }
+            return _findingsPanelKey.currentState?.selectNext() ?? false;
+          },
+          onPrevFinding: () {
+            final pane = _bottomPaneKey.currentState;
+            if (pane == null || pane.isCollapsed || pane.activeTab != BottomPaneTab.findings) {
+              return false;
+            }
+            return _findingsPanelKey.currentState?.selectPrevious() ?? false;
+          },
+          onDismissFinding: () {
+            final pane = _bottomPaneKey.currentState;
+            if (pane == null || pane.isCollapsed || pane.activeTab != BottomPaneTab.findings) {
+              return false;
+            }
+            return _findingsPanelKey.currentState?.dismissSelected() ?? false;
+          },
           child: Column(
             children: [
               Expanded(
@@ -561,7 +598,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 jobsStatus: _generationController.isGenerating
                     ? (_generationController.isPaused ? 'Paused' : 'Generating...')
                     : _auditController.isAuditing
-                        ? 'Auditing...'
+                        ? (_auditController.isPaused ? 'Audit paused' : 'Auditing...')
                         : null,
                 onFindingsTap: () =>
                     _toggleBottomPane(BottomPaneTab.findings),
@@ -647,8 +684,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           ),
           TextButton.icon(
             onPressed: _createNewLineFromEphemeral,
-            icon: const Icon(Icons.add, size: 14),
-            label: const Text('New line from here',
+            icon: const Icon(Icons.open_in_new, size: 14),
+            label: const Text('Go to position',
                 style: TextStyle(fontSize: 11)),
             style: TextButton.styleFrom(
               foregroundColor: Colors.blue,
@@ -1011,7 +1048,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     final gc = _generationController;
     return ListenableBuilder(
-      listenable: _jobManager,
+      listenable: Listenable.merge([_jobManager, gc]),
       builder: (context, _) => JobsPanel(
         jobManager: _jobManager,
         isGenerating: gc.isGenerating,
@@ -1043,6 +1080,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   Widget _buildFindingsContent() {
     final ac = _auditController;
     return AuditFindingsPanel(
+      key: _findingsPanelKey,
       result: ac.result,
       liveFindings: ac.liveFindings,
       isAuditing: ac.isAuditing,
@@ -1147,6 +1185,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       boardPreview: _boardPreview,
       onLineSelected: _selectLine,
       onLineRenamed: _renameLine,
+      onLineDeleted: _deleteLine,
       onCoveragePressed: _showCoverageCalculator,
       onNavigateToPosition: (moves) {
         _controller.loadMoveSequence(moves);
@@ -1161,10 +1200,21 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         key: _bottomPaneKey,
         findingsContent: _buildFindingsContent(),
         jobsContent: _buildJobsContent(),
-        linesContent: _buildLinesContent(),
+        linesContent: Stack(
+          key: _bottomLinesPreviewStackKey,
+          children: [
+            _buildLinesContent(),
+            FloatingBoardPreview(
+              stackKey: _bottomLinesPreviewStackKey,
+              controller: _boardPreview,
+              flipped: _boardFlipped,
+            ),
+          ],
+        ),
         findingsBadge: _auditController.activeFindingCount,
         jobsBadge: _jobManager.activeJobs.length,
         linesBadge: _controller.repertoireLines.length,
+        onClose: _clearInlineConfigFlags,
       ),
     );
   }
@@ -1228,10 +1278,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       onLineEdited: (updatedPgn) {
         _controller.updateSelectedLineContent(updatedPgn);
       },
-      onLineSaved: (moves, title, pgn) {
-        _controller.appendNewLine(moves, title, pgn);
-      },
       onImportPgn: _importPgn,
+      onViewInLines: () => _toolsTabController.animateTo(1),
       onReload: _reloadRepertoire,
       generatedTree: _generationController.generatedTree,
       treeConfig: _generationController.generatedTreeConfig,
@@ -1247,51 +1295,61 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildLinesTabContent() {
-    return Column(
+    return Stack(
+      key: _linesPreviewStackKey,
       children: [
-        if (_traps.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SegmentedButton<bool>(
-                    segments: [
-                      ButtonSegment<bool>(
-                        value: false,
-                        label: Text(
-                          'Lines (${_controller.repertoireLines.length})',
-                          style: const TextStyle(fontSize: 11),
+        Column(
+          children: [
+            if (_traps.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SegmentedButton<bool>(
+                        segments: [
+                          ButtonSegment<bool>(
+                            value: false,
+                            label: Text(
+                              'Lines (${_controller.repertoireLines.length})',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            icon: const Icon(Icons.list, size: 14),
+                          ),
+                          ButtonSegment<bool>(
+                            value: true,
+                            label: Text(
+                              'Traps (${_traps.length})',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            icon: Icon(Icons.warning_amber_rounded,
+                                size: 14, color: _showTrapsInLinesTab ? null : Colors.grey),
+                          ),
+                        ],
+                        selected: {_showTrapsInLinesTab},
+                        onSelectionChanged: (v) =>
+                            setState(() => _showTrapsInLinesTab = v.first),
+                        showSelectedIcon: false,
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        icon: const Icon(Icons.list, size: 14),
                       ),
-                      ButtonSegment<bool>(
-                        value: true,
-                        label: Text(
-                          'Traps (${_traps.length})',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        icon: Icon(Icons.warning_amber_rounded,
-                            size: 14, color: _showTrapsInLinesTab ? null : Colors.grey),
-                      ),
-                    ],
-                    selected: {_showTrapsInLinesTab},
-                    onSelectionChanged: (v) =>
-                        setState(() => _showTrapsInLinesTab = v.first),
-                    showSelectedIcon: false,
-                    style: const ButtonStyle(
-                      visualDensity: VisualDensity.compact,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
+            Expanded(
+              child: _showTrapsInLinesTab && _traps.isNotEmpty
+                  ? _buildTrapsContent()
+                  : _buildLinesContent(),
             ),
-          ),
-        Expanded(
-          child: _showTrapsInLinesTab && _traps.isNotEmpty
-              ? _buildTrapsContent()
-              : _buildLinesContent(),
+          ],
+        ),
+        FloatingBoardPreview(
+          stackKey: _linesPreviewStackKey,
+          controller: _boardPreview,
+          flipped: _boardFlipped,
         ),
       ],
     );
@@ -1367,10 +1425,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       _runCoherence();
     }
 
+    final justFinished = !ctrl.isGenerating && _wasGenerating;
+    _wasGenerating = ctrl.isGenerating;
+
     if (!ctrl.isGenerating) {
       final fp = _controller.currentRepertoire?.filePath;
       if (fp != null) _loadTraps(fp);
-      if (_toolsTabController.index != 1) {
+      if (justFinished && _toolsTabController.index != 1) {
         _toolsTabController.animateTo(1);
       }
     }
@@ -1394,6 +1455,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _selectLine(RepertoireLine line) {
     _controller.loadPgnLine(line);
+    _toolsTabController.animateTo(0);
   }
 
   Future<void> _renameLine(RepertoireLine line, String newTitle) async {
@@ -1409,6 +1471,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       if (mounted) {
         showAppSnackBar(context, AppMessages.renameLineFailed, isError: true);
       }
+    }
+  }
+
+  Future<void> _deleteLine(RepertoireLine line) async {
+    final success = await _controller.deleteLine(line);
+    if (!success && mounted) {
+      showAppSnackBar(context, 'Failed to delete line', isError: true);
     }
   }
 

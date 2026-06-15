@@ -451,6 +451,25 @@ class RepertoireService {
     return true;
   }
 
+  /// Removes a game identified by [lineId] from the PGN file on disk.
+  Future<bool> deleteLine(String filePath, String lineId) async {
+    final file = io.File(filePath);
+    if (!await file.exists()) return false;
+
+    final content = await readTextFile(file);
+    final document = _splitPgnDocumentPreservingPreamble(content);
+    final games = List<String>.from(document.games);
+
+    final matchIndex = _findGameIndexByLineId(games, lineId);
+    if (matchIndex == null) return false;
+
+    games.removeAt(matchIndex);
+
+    await _writeAtomically(
+        file, _reassembleDocument(document.preamble, games));
+    return true;
+  }
+
   /// Writes spaced-repetition metadata into PGN headers for a specific line.
   /// Headers used: [LastReview], [Difficulty], [Interval], [DueDate],
   /// [PassCount], [FailCount]. Unknown headers are ignored by standard PGN

@@ -246,7 +246,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       });
     } else {
       ctrl.pauseBuild();
-      _savePartialTree();
       setState(() {
         _isPaused = true;
         _status = 'Paused ($_nodes nodes)';
@@ -272,6 +271,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     ctrl.progressEtaSec = _etaDepthSec?.toDouble();
     ctrl.progressElapsedMs = _elapsedMs;
     ctrl.progressStatus = _status;
+    ctrl.notifyProgressChanged();
 
     final now = DateTime.now();
     if (now.difference(_lastProgressUpdate).inMilliseconds < 150) {
@@ -363,6 +363,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       }
     });
     _pgnWriter.clear();
+    widget.generationController.setPartialSaveContext(
+      repertoireFilePath: filePath,
+      moveSequence: widget.currentMoveSequence,
+      fen: widget.fen,
+    );
     widget.generationController.onTreeReset();
     widget.generationController.markGenerating(true);
     _startUiPulse();

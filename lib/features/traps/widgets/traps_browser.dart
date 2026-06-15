@@ -44,7 +44,10 @@ class TrapsBrowser extends StatefulWidget {
 
 class _TrapsBrowserState extends State<TrapsBrowser> {
   String _sortBy = 'eval'; // 'eval', 'reach', 'surplus', 'trap'
-  int? _expandedIndex;
+  String? _expandedTrapKey;
+
+  static String _trapKey(TrapLineInfo trap) =>
+      trap.fen ?? trap.movesSan.join('/');
 
   List<TrapLineInfo> get _sortedTraps {
     final sorted = List<TrapLineInfo>.from(widget.traps);
@@ -151,7 +154,8 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
   }
 
   Widget _buildTrapItem(TrapLineInfo trap, int index) {
-    final isExpanded = _expandedIndex == index;
+    final key = _trapKey(trap);
+    final isExpanded = _expandedTrapKey == key;
     final currentMoves = widget.currentMoveSequence;
     final matchDepth = _getMatchDepth(trap.movesSan, currentMoves);
     final isPositionMatch =
@@ -221,7 +225,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                       const BoxConstraints(minWidth: 28, minHeight: 28),
                   onPressed: () {
                     setState(() {
-                      _expandedIndex = isExpanded ? null : index;
+                      _expandedTrapKey = isExpanded ? null : key;
                     });
                   },
                 ),

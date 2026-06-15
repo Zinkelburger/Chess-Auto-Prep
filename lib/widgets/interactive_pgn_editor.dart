@@ -42,10 +42,6 @@ class InteractivePgnEditor extends StatefulWidget {
   /// Called to recursively promote a variation to the main line.
   final void Function(TreePath path)? onMakeMainLine;
 
-  /// Called when the user clicks "Add to Repertoire".
-  final void Function(List<String> moves, String title, String pgn)?
-      onLineSaved;
-
   /// Called when the user edits an existing line.
   final void Function(String updatedPgn)? onLineEdited;
 
@@ -56,12 +52,11 @@ class InteractivePgnEditor extends StatefulWidget {
   /// Called when comment edits mark the line dirty.
   final VoidCallback? onDirty;
 
-  /// Persists a newly saved line to repertoire storage.
-  final Future<void> Function(String repertoireName, String pgn)?
-      onPersistNewLine;
-
   /// Copies PGN text to the clipboard and shows [successMessage] on success.
   final void Function(String text, String successMessage)? onCopyToClipboard;
+
+  /// Called when the user chooses "View in Lines" from the context menu.
+  final VoidCallback? onViewInLines;
 
   /// Whether the editor is showing an existing line being edited in-place.
   final bool isEditingExistingLine;
@@ -84,12 +79,11 @@ class InteractivePgnEditor extends StatefulWidget {
     this.onDelete,
     this.onPromote,
     this.onMakeMainLine,
-    this.onLineSaved,
     this.onLineEdited,
     this.onAutoSave,
     this.onDirty,
-    this.onPersistNewLine,
     this.onCopyToClipboard,
+    this.onViewInLines,
     this.isEditingExistingLine = false,
     this.currentRepertoireName,
     this.repertoireColor,
@@ -106,6 +100,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   final TextEditingController _titleController = TextEditingController();
   final FocusNode _commentFocusNode = FocusNode();
   TreePath? _contextMenuPath;
+  bool _contextMenuOpen = false;
   Timer? _autoSaveTimer;
   static const _autoSaveDelay = Duration(seconds: 2);
 
@@ -242,60 +237,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     return c == 'black' ? 'Me' : 'Training';
   }
 
-  Future<void> _addToRepertoire() async {
-    final moveText = widget.tree.toPgnMoveText();
-    if (moveText.isEmpty) return;
-    String? repertoireName = widget.currentRepertoireName;
-    if (repertoireName == null || repertoireName.isEmpty) {
-      repertoireName = await _showAddToRepertoireDialog();
-      if (repertoireName == null) return;
-    }
-
-    try {
-      final fullPgn = _buildFullPgnForSave();
-      await widget.onPersistNewLine?.call(repertoireName, fullPgn);
-      final moves = widget.tree.sanSequenceAt(
-          widget.tree.mainlineEndFrom(TreePath.empty));
-      final title = _titleController.text.trim();
-      widget.onLineSaved?.call(moves, title, fullPgn);
-    } catch (e) {
-      debugPrint('Save to repertoire failed: $e');
-      if (mounted) {
-        showAppSnackBar(context, AppMessages.saveToRepertoireFailed,
-            isError: true);
-      }
-    }
-  }
-
-  Future<String?> _showAddToRepertoireDialog() async {
-    final controller = TextEditingController();
-    try {
-      return await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Add to Repertoire'),
-          content: TextField(controller: controller),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('Add'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      controller.dispose();
-    }
-  }
-
   // ── Context menu ──────────────────────────────────────────────────
 
   void _showContextMenu(TreePath path, Offset globalPosition) {
     _contextMenuPath = path;
+    setState(() => _contextMenuOpen = true);
 
     String moveName = 'Move';
     final node = widget.tree.nodeAt(path);
@@ -348,6 +294,12 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           child: _PopupMenuRow(
               icon: Icons.content_copy, text: 'Copy PGN from Here'),
         ),
+        if (widget.isEditingExistingLine && widget.onViewInLines != null)
+          const PopupMenuItem(
+            value: 'viewlines',
+            child: _PopupMenuRow(
+                icon: Icons.list_alt, text: 'View in Lines'),
+          ),
         const PopupMenuDivider(height: 1),
         PopupMenuItem(
           value: 'delete',
@@ -358,6 +310,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         ),
       ],
     ).then((value) {
+      setState(() => _contextMenuOpen = false);
       if (value == null) return;
       switch (value) {
         case 'comment':
@@ -374,6 +327,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           break;
         case 'copy':
           _copyPgnFromHere();
+          break;
+        case 'viewlines':
+          widget.onViewInLines?.call();
           break;
         case 'delete':
           _deleteFromHere();
@@ -439,53 +395,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Tooltip(
-                  message: 'Add to Repertoire',
-                  child: ElevatedButton.icon(
-                    onPressed:
-                        widget.tree.isNotEmpty ? _addToRepertoire : null,
-                    icon: const Icon(Icons.add_box, size: 14),
-                    label: const Text('Save',
-                        style: TextStyle(fontSize: 11)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.successSurface,
-                      foregroundColor: Colors.grey[300],
-                      disabledBackgroundColor: Colors.grey[850],
-                      disabledForegroundColor: Colors.grey[600],
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: 'Clear line',
-                  child: ElevatedButton.icon(
-                    onPressed: widget.tree.isNotEmpty
-                        ? () => widget.onDelete?.call(TreePath.from([0]))
-                        : null,
-                    icon: const Icon(Icons.clear, size: 14),
-                    label: const Text('Clear',
-                        style: TextStyle(fontSize: 11)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.dangerSurface,
-                      foregroundColor: Colors.grey[300],
-                      disabledBackgroundColor: Colors.grey[850],
-                      disabledForegroundColor: Colors.grey[600],
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ],
@@ -532,7 +441,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     required TreePath parentPath,
     required Position positionBefore,
   }) {
-    if (parentPath.isEmpty && isFirstMove) {
+    if (parentPath.isEmpty && isFirstMove && !_contextMenuOpen) {
       if (_cachedMoveWidgets != null &&
           identical(widget.tree, _cachedTree) &&
           widget.currentPath == _cachedPath) {
@@ -651,7 +560,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       positionBefore: positionAfterMain,
     ));
 
-    if (parentPath.isEmpty && isFirstMove) {
+    if (parentPath.isEmpty && isFirstMove && !_contextMenuOpen) {
       _cachedMoveWidgets = widgets;
       _cachedTree = widget.tree;
       _cachedPath = widget.currentPath;
@@ -677,12 +586,26 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     );
   }
 
+  /// Whether [nodePath] is on the path from root to [_contextMenuPath].
+  bool _isOnContextPath(TreePath nodePath) {
+    if (!_contextMenuOpen || _contextMenuPath == null) return false;
+    final ctx = _contextMenuPath!;
+    if (nodePath.length > ctx.length) return false;
+    final nodeList = nodePath.toList();
+    final ctxList = ctx.toList();
+    for (int i = 0; i < nodeList.length; i++) {
+      if (nodeList[i] != ctxList[i]) return false;
+    }
+    return true;
+  }
+
   Widget _buildSingleMoveWidget(
     MoveNode node,
     TreePath nodePath, {
     TrapLineInfo? trap,
   }) {
     final isSelected = widget.currentPath == nodePath;
+    final isOnCtxPath = _isOnContextPath(nodePath);
 
     late final Color textColor;
     Color? bgColor;
@@ -692,6 +615,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (isSelected) {
       textColor = Colors.white;
       bgColor = AppColors.pgnMoveSelectedBg;
+      fontWeight = FontWeight.w500;
+    } else if (isOnCtxPath) {
+      textColor = Colors.white70;
+      bgColor = Colors.blueGrey.withAlpha(60);
       fontWeight = FontWeight.w500;
     } else {
       textColor = AppColors.pgnMove;

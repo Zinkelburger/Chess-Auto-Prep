@@ -39,7 +39,7 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | Dedicated **Expectimax toggle** on board toolbar | **Partial** | `EngineToggleButton` only; expectimax visibility via dock settings (`showExpectimaxDock`) |
 | Repertoire keyboard shortcuts (`RepertoireShortcuts`) | **Done** | Extracted from `RepertoireScreen`; E/X/G/A/I/F, bottom-pane 1/2/3, Ctrl+Z, Ctrl+Shift+V — see COMPONENT_MAP |
 | Typed `RepertoireMetadata` (replace repertoire maps) | **Done** | `Map<String, dynamic>` replaced across selection, controller, storage, generation, training |
-| Full unified keyboard shortcuts (all modes) | **Partial** | Repertoire screen complete; other modes differ; still missing global Tab, Shift+←/→ trap nav |
+| Full unified keyboard shortcuts (all modes) | **Partial** | Repertoire screen complete (N/P/D routed through `RepertoireShortcuts` to findings panel); other modes differ; still missing global Tab |
 | Remove legacy tab hybrid in Edit wide mode | **Partial** | Wide Edit still uses `RepertoireTabBar` (Browse + PGN tabs) while context is a separate zone |
 | Status bar expectimax / coherence metrics | **Partial** | `RepertoireStatusBar` shows coverage, traps, lines, engine, tree nodes — not V% or coherence |
 
