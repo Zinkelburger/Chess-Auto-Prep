@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../shortcut_tooltip.dart';
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
 import '../../models/training_settings.dart';
 import '../../services/repertoire_review_service.dart';
+import '../shortcut_tooltip.dart';
 
 /// Settings tab for repertoire training (depth, review order, learn mode).
 class TrainingSettingsPanel extends StatelessWidget {
@@ -177,7 +177,7 @@ class TrainingSettingsPanel extends StatelessWidget {
           const SizedBox(height: 12),
           ShortcutTooltip(
             description: 'Toggle auto-advance when learning new lines',
-            shortcut: AppShortcuts.autoAdvanceToggle,
+            shortcut: 'J',
             preferDelayed: true,
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,

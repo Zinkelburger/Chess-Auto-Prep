@@ -32,6 +32,7 @@ import '../widgets/layout/jobs_panel.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';
 import '../widgets/repertoire/repertoire_toolbar.dart';
+import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/repertoire/repertoire_shortcuts.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/engine/inline_expectimax_bar.dart';
@@ -350,7 +351,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _reclaimFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _focusNode.canRequestFocus) {
+      if (mounted &&
+          _focusNode.canRequestFocus &&
+          !isTextInputFocused()) {
         _focusNode.requestFocus();
       }
     });
@@ -505,10 +508,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               _toolsTabController.index == 1 ? 0 : 1,
             );
           },
-          onToggleJobsPane: () => _toggleBottomPane(BottomPaneTab.jobs),
-          onToggleFindingsPane: () =>
-              _toggleBottomPane(BottomPaneTab.findings),
-          onToggleLinesPane: () => _toggleBottomPane(BottomPaneTab.lines),
           onCollapseBottomPane: () {
             final pane = _bottomPaneKey.currentState;
             if (pane != null && !pane.isCollapsed) {
@@ -546,21 +545,27 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           ),
           onNextFinding: () {
             final pane = _bottomPaneKey.currentState;
-            if (pane == null || pane.isCollapsed || pane.activeTab != BottomPaneTab.findings) {
+            if (pane == null ||
+                pane.isCollapsed ||
+                pane.activeTab != BottomPaneTab.findings) {
               return false;
             }
             return _findingsPanelKey.currentState?.selectNext() ?? false;
           },
           onPrevFinding: () {
             final pane = _bottomPaneKey.currentState;
-            if (pane == null || pane.isCollapsed || pane.activeTab != BottomPaneTab.findings) {
+            if (pane == null ||
+                pane.isCollapsed ||
+                pane.activeTab != BottomPaneTab.findings) {
               return false;
             }
             return _findingsPanelKey.currentState?.selectPrevious() ?? false;
           },
           onDismissFinding: () {
             final pane = _bottomPaneKey.currentState;
-            if (pane == null || pane.isCollapsed || pane.activeTab != BottomPaneTab.findings) {
+            if (pane == null ||
+                pane.isCollapsed ||
+                pane.activeTab != BottomPaneTab.findings) {
               return false;
             }
             return _findingsPanelKey.currentState?.dismissSelected() ?? false;

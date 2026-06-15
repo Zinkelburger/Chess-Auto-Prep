@@ -20,6 +20,7 @@ import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
+import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/layout/responsive_split_layout.dart';
 import '../widgets/chess_board_widget.dart';
@@ -115,7 +116,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   void _reclaimFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _focusNode.canRequestFocus) {
+      if (mounted &&
+          _focusNode.canRequestFocus &&
+          !isTextInputFocused()) {
         _focusNode.requestFocus();
       }
     });
@@ -414,11 +417,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       return KeyEventResult.ignored;
     }
 
-    final primaryFocus = FocusManager.instance.primaryFocus;
-    if (primaryFocus != null && primaryFocus.context != null) {
-      final widget = primaryFocus.context!.widget;
-      if (widget is EditableText) return KeyEventResult.ignored;
-    }
+    if (isTextInputFocused()) return KeyEventResult.ignored;
 
     final key = event.logicalKey;
 
@@ -434,10 +433,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     } else if (key == LogicalKeyboardKey.end) {
       _controller.navigateToEnd();
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyN) {
+    } else if (key == LogicalKeyboardKey.keyN && hasNoLetterModifiers) {
       _controller.nextGame();
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyP) {
+    } else if (key == LogicalKeyboardKey.keyP && hasNoLetterModifiers) {
       _controller.prevGame();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.f11 ||
@@ -445,48 +444,24 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             HardwareKeyboard.instance.isControlPressed)) {
       _controller.toggleFullScreen();
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyF) {
+    } else if (key == LogicalKeyboardKey.keyF && hasNoLetterModifiers) {
       _controller.toggleBoardFlipped();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.keyE &&
         HardwareKeyboard.instance.isControlPressed) {
       _exportSlice();
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyE) {
+    } else if (key == LogicalKeyboardKey.keyE && hasNoLetterModifiers) {
       InlineEngineBar.toggleEngine();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.space) {
       _controller.toggleAutoPlay();
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyW) {
+    } else if (key == LogicalKeyboardKey.keyW && hasNoLetterModifiers) {
       _controller.setAutoNextGame(!_controller.autoNextGame);
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyA) {
+    } else if (key == LogicalKeyboardKey.keyA && hasNoLetterModifiers) {
       _toggleEditMode();
-      return KeyEventResult.handled;
-    } else if (digitKeys.containsKey(key)) {
-      final digit = digitKeys[key]!;
-      if (_editMode && digit >= 1 && digit <= 6) {
-        // In edit mode, 1-6 toggle NAGs on current move (mainline only)
-        if (_pgnWidgetController.variationDepth > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Annotations only apply to mainline moves.'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-          return KeyEventResult.handled;
-        }
-        final currentIdx = _pgnWidgetController.currentMainLineIndex - 1;
-        if (currentIdx >= 0) {
-          _pgnWidgetController.toggleNagOnMove(currentIdx, digit);
-        }
-        return KeyEventResult.handled;
-      }
-      final current = _controller.filteredGames.isNotEmpty
-          ? _controller.filteredGames[_controller.currentGameIndex].studyRating
-          : 0;
-      _controller.setRating(current == digit ? 0 : digit);
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.escape) {
       if (_editMode) {
@@ -501,7 +476,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _tabController
           .animateTo((_tabController.index + 1) % _tabController.length);
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyT) {
+    } else if (key == LogicalKeyboardKey.keyT && hasNoLetterModifiers) {
       _controller.toggleOpeningTree();
       return KeyEventResult.handled;
     }

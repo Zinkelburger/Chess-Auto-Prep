@@ -227,7 +227,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     if (_buildMode == BuildMode.dbExplorer && _pgnFilePaths.isEmpty) {
       final sources = _pgnSourcesKey.currentState?.sources ?? [];
       if (sources.isEmpty) {
-        return 'Add at least one PGN file to build from.';
+        return 'Add at least one PGN file below (repertoire lines are not used).';
       }
     }
     final evalSources = _evalSourcesKey.currentState;
@@ -338,7 +338,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
             ),
             DropdownMenuItem(
               value: BuildMode.dbExplorer,
-              child: Text('From Loaded PGN Files'),
+              child: Text('From Added PGN Files'),
             ),
           ],
           onChanged: widget.isGenerating
@@ -381,6 +381,12 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
         ],
         const SizedBox(height: 8),
         if (_buildMode == BuildMode.dbExplorer) ...[
+          Text(
+            'Add PGN files with the picker below. Lines already in your '
+            'repertoire are not used for this build mode.',
+            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          ),
+          const SizedBox(height: 6),
           PgnSourcesPanel(
             key: _pgnSourcesKey,
             initialSources: null,
@@ -778,7 +784,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       case BuildMode.maiaDbExplore:
         return 'DB Win Rate Only';
       case BuildMode.dbExplorer:
-        return 'From Loaded PGN Files';
+        return 'From Added PGN Files';
       case BuildMode.trapFinder:
         return 'Trap Finder';
     }
@@ -793,8 +799,9 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
         return 'Uses Maia neural-net moves + database win rates only — '
             'fast, no engine needed.';
       case BuildMode.dbExplorer:
-        return 'Builds from your loaded PGN game files using move '
-            'frequencies. Engine evals added after.';
+        return 'Builds from PGN files you add below—not from lines already '
+            'in your repertoire. Uses move frequencies from those games; '
+            'engine evals added after.';
       case BuildMode.trapFinder:
         return 'Not yet available.';
     }

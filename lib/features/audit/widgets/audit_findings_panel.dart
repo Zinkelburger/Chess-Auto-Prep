@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../utils/keyboard_shortcut_utils.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
 import '../services/audit_persistence.dart';
@@ -252,6 +253,10 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       return KeyEventResult.ignored;
     }
 
+    if (isTextInputFocused()) {
+      return KeyEventResult.ignored;
+    }
+
     if (event.logicalKey == LogicalKeyboardKey.keyN ||
         event.logicalKey == LogicalKeyboardKey.arrowDown) {
       if (_selectedIndex < _visibleFindings.length - 1) {
@@ -266,7 +271,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       }
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.keyD) {
+    if (event.logicalKey == LogicalKeyboardKey.keyD && hasNoLetterModifiers) {
       _dismissCurrent();
       return KeyEventResult.handled;
     }

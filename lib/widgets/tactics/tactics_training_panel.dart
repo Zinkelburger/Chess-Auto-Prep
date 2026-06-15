@@ -150,7 +150,7 @@ class TacticsTrainingPanel extends StatelessWidget {
         const SizedBox(height: 16),
         ShortcutTooltip(
           description: 'Toggle auto-advance to next position',
-          shortcut: AppShortcuts.autoAdvanceToggle,
+          shortcut: 'J',
           preferDelayed: true,
           child: CheckboxListTile(
             value: autoAdvance,
@@ -277,9 +277,8 @@ class _TacticsStarRating extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         for (int star = 1; star <= 5; star++)
-          ShortcutTooltip(
-            description: 'Rate $star star${star > 1 ? 's' : ''}',
-            shortcut: '$star',
+          Tooltip(
+            message: 'Rate $star star${star > 1 ? 's' : ''}',
             child: GestureDetector(
               onTap: () => onSetRating(rating == star ? 0 : star),
               child: Padding(
