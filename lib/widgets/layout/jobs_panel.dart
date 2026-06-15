@@ -207,8 +207,8 @@ class JobsPanel extends StatelessWidget {
                   child: TextButton(
                     onPressed: onFinishNowGeneration,
                     child: Text('Finish Now',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.orange[300])),
+                        style:
+                            TextStyle(fontSize: 11, color: Colors.orange[300])),
                   ),
                 ),
               TextButton(
@@ -262,9 +262,8 @@ class JobsPanel extends StatelessWidget {
   }
 
   Widget _buildAuditStatus(BuildContext context) {
-    final fraction = auditTotalNodes > 0
-        ? auditNodesChecked / auditTotalNodes
-        : 0.0;
+    final fraction =
+        auditTotalNodes > 0 ? auditNodesChecked / auditTotalNodes : 0.0;
     final progressText = auditTotalNodes > 0
         ? '$auditNodesChecked / $auditTotalNodes positions'
         : 'Starting audit...';
@@ -361,9 +360,7 @@ class JobsPanel extends StatelessWidget {
       JobStatus.cancelled => 'Cancelled',
       JobStatus.queued => 'Queued',
     };
-    final typeLabel = job.type == JobType.generation
-        ? 'Generation'
-        : 'Audit';
+    final typeLabel = job.type == JobType.generation ? 'Generation' : 'Audit';
 
     final subtitleParts = <String>[typeLabel, statusLabel];
     if (job.type == JobType.audit && job.configSnapshot != null) {
@@ -372,7 +369,9 @@ class JobsPanel extends StatelessWidget {
         subtitleParts.add(cfg.summaryLabel);
       } catch (_) {}
     }
-    if (job.subtreeFen != null && job.subtreeFen != 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
+    if (job.subtreeFen != null &&
+        job.subtreeFen !=
+            'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1') {
       subtitleParts.add('from subtree');
     }
 

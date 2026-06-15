@@ -185,7 +185,12 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
         field == 'BlackElo') {
       return MatchMode.values;
     }
-    return [MatchMode.contains, MatchMode.notContains, MatchMode.exact, MatchMode.regex];
+    return [
+      MatchMode.contains,
+      MatchMode.notContains,
+      MatchMode.exact,
+      MatchMode.regex
+    ];
   }
 
   @override
@@ -332,13 +337,13 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
 
     pgn
         .computeSliceMatches(
-          games: games,
-          targetFen: targetFen,
-          filters: filters,
-          seqGroups: seqGroups,
-          seqGap: seqGap,
-          fenIndex: widget.fenIndex,
-        )
+      games: games,
+      targetFen: targetFen,
+      filters: filters,
+      seqGroups: seqGroups,
+      seqGap: seqGap,
+      fenIndex: widget.fenIndex,
+    )
         .then((indices) {
       if (!mounted || generation != _computeGeneration) return;
       setState(() {

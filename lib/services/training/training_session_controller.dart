@@ -435,8 +435,7 @@ class TrainingSessionController extends ChangeNotifier {
     wrongMoveIndices = wrongMoveIndices.toSet().toList()..sort();
     replayIndex = 0;
     phase = TrainingPhase.replaying;
-    feedback =
-        'Replay missed moves (${wrongMoveIndices.length} remaining)';
+    feedback = 'Replay missed moves (${wrongMoveIndices.length} remaining)';
     currentAnnotation = null;
     notifyListeners();
     setupReplayPosition();

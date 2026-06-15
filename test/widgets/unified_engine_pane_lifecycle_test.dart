@@ -5,10 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chess_auto_prep/services/engine/engine_lifecycle.dart';
 
-const _startFen =
-    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-const _e4Fen =
-    'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
+const _startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+const _e4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
 
 /// Mirrors [UnifiedEnginePane]'s lifecycle ↔ analysis coupling.
 ///
@@ -103,7 +101,8 @@ void main() {
       'runAnalysis during analyzing does not cause extra lifecycle notifications',
       () async {
         await lifecycle.toggleOn();
-        final harness = _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
+        final harness =
+            _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
 
         harness.runAnalysis();
         expect(lifecycle.state, EngineState.analyzing);
@@ -122,7 +121,8 @@ void main() {
       'idle → analyzing listener transition does not re-schedule analysis',
       () async {
         await lifecycle.toggleOn();
-        final harness = _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
+        final harness =
+            _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
 
         harness.runAnalysis();
         expect(harness.scheduleAnalysisCount, 0);
@@ -135,7 +135,8 @@ void main() {
       'analyzing → idle completion does not re-schedule analysis',
       () async {
         await lifecycle.toggleOn();
-        final harness = _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
+        final harness =
+            _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
 
         harness.runAnalysis();
         lifecycle.onAnalysisComplete();
@@ -148,7 +149,8 @@ void main() {
     test(
       'off → idle toggle re-schedules analysis once (engine became usable)',
       () async {
-        final harness = _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
+        final harness =
+            _EnginePaneLifecycleHarness(fenProvider: () => _startFen);
 
         await lifecycle.toggleOn();
         expect(harness.scheduleAnalysisCount, 1);
@@ -182,8 +184,7 @@ void main() {
       'FEN change schedules analysis post-frame instead of running synchronously',
       () async {
         await lifecycle.toggleOn();
-        final harness =
-            _EnginePaneLifecycleHarness(fenProvider: () => _e4Fen);
+        final harness = _EnginePaneLifecycleHarness(fenProvider: () => _e4Fen);
 
         harness.onFenChanged();
         expect(harness.runAnalysisCount, 0);
@@ -200,8 +201,7 @@ void main() {
       'FEN change plus flush does not amplify lifecycle notifications',
       () async {
         await lifecycle.toggleOn();
-        final harness =
-            _EnginePaneLifecycleHarness(fenProvider: () => _e4Fen);
+        final harness = _EnginePaneLifecycleHarness(fenProvider: () => _e4Fen);
         notificationCount = 0;
 
         harness.onFenChanged();

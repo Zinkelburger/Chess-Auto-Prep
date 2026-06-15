@@ -6,7 +6,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 /// Returns STM-perspective centipawns and optional best move, or null on miss.
-({int cp, int depth, String? bestMove})? parseCdbDirectResponse(String? response) {
+({int cp, int depth, String? bestMove})? parseCdbDirectResponse(
+    String? response) {
   if (response == null || response.isEmpty) return null;
   final lower = response.toLowerCase();
   if (lower == 'unknown' ||

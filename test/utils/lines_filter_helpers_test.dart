@@ -1,7 +1,5 @@
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import 'package:chess_auto_prep/models/repertoire_line.dart';
 import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
-import 'package:chess_auto_prep/utils/coverage_helpers.dart';
 import 'package:chess_auto_prep/utils/lines_filter_helpers.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter_test/flutter_test.dart';

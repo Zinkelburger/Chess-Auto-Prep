@@ -149,8 +149,7 @@ class OpeningTree {
       {OpeningTreeNode? root, Map<String, List<OpeningTreeNode>>? fenToNodes})
       : fenToNodes = fenToNodes ?? {} {
     // Ensure root and currentNode point to the same object
-    final rootNode = root ??
-        OpeningTreeNode(move: '', fen: kStandardStartFen);
+    final rootNode = root ?? OpeningTreeNode(move: '', fen: kStandardStartFen);
     this.root = rootNode;
     currentNode = rootNode;
   }

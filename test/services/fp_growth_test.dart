@@ -103,8 +103,8 @@ void main() {
 
       expect(maximal, isNotEmpty);
 
-      final fianchetto = maximal.where(
-          (m) => m.items.contains('g3') && m.items.contains('Bg2'));
+      final fianchetto = maximal
+          .where((m) => m.items.contains('g3') && m.items.contains('Bg2'));
       expect(fianchetto, isNotEmpty);
     });
   });

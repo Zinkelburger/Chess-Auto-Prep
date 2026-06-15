@@ -80,8 +80,7 @@ class LineItemRow extends StatelessWidget {
     required void Function(RepertoireLine line, String newTitle) onRenamed,
   }) {
     final eventTitle = pgn_utils.extractEventTitle(line.fullPgn);
-    final currentTitle =
-        !isPlaceholderLineTitle(eventTitle) ? eventTitle : '';
+    final currentTitle = !isPlaceholderLineTitle(eventTitle) ? eventTitle : '';
     final controller = TextEditingController(text: currentTitle);
 
     final renameDialog = showDialog<void>(
@@ -242,8 +241,8 @@ class LineItemRow extends StatelessWidget {
                 if (line.importance != null && line.importance! > 0) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
                       color: Colors.blueGrey.withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(4),
@@ -326,8 +325,7 @@ class _TrapLineBadges extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             '+${metrics.bestTrapEvalDiff}cp',
-            style:
-                const TextStyle(fontSize: 11, color: AppColors.evalPositive),
+            style: const TextStyle(fontSize: 11, color: AppColors.evalPositive),
           ),
         ],
       ],
@@ -400,8 +398,7 @@ class _UnaccountedAnnotation extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: displayGroups.map((group) {
-        final moves = [...group.value]
-          ..sort((a, b) {
+        final moves = [...group.value]..sort((a, b) {
             if (a.gameCount != b.gameCount) {
               return b.gameCount.compareTo(a.gameCount);
             }
@@ -436,8 +433,7 @@ class _UnaccountedAnnotation extends StatelessWidget {
                       if (onNavigateToPosition != null) {
                         return GestureDetector(
                           onTap: () {
-                            onNavigateToPosition!(
-                                [...m.parentMoves, m.move]);
+                            onNavigateToPosition!([...m.parentMoves, m.move]);
                           },
                           child: Text(
                             label,
@@ -458,8 +454,7 @@ class _UnaccountedAnnotation extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 10,
                           fontFamily: 'monospace',
-                          color:
-                              const Color(0xFFEF5350).withValues(alpha: 0.7),
+                          color: const Color(0xFFEF5350).withValues(alpha: 0.7),
                         ),
                       );
                     }),
@@ -468,8 +463,7 @@ class _UnaccountedAnnotation extends StatelessWidget {
                         '+${moves.length - LineItemRow.maxUnaccountedMovesPreview} more',
                         style: TextStyle(
                           fontSize: 10,
-                          color:
-                              const Color(0xFFEF5350).withValues(alpha: 0.5),
+                          color: const Color(0xFFEF5350).withValues(alpha: 0.5),
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -554,8 +548,7 @@ class _HardMoveWarning extends StatelessWidget {
 
     final ply = m.bottleneckPly ?? 0;
     final moveNum = (ply ~/ 2) + 1;
-    final moveSan =
-        ply < line.moves.length ? line.moves[ply] : 'move $moveNum';
+    final moveSan = ply < line.moves.length ? line.moves[ply] : 'move $moveNum';
 
     return Padding(
       padding: const EdgeInsets.only(top: 4),
@@ -592,8 +585,7 @@ class _HardMoveWarning extends StatelessWidget {
               },
               borderRadius: BorderRadius.circular(4),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(color: Colors.grey.withAlpha(80)),

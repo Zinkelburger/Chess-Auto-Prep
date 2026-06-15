@@ -45,15 +45,11 @@ class CandidateRow extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: isHovered
-                ? theme.colorScheme.surfaceContainerHighest
-                : null,
+            color: isHovered ? theme.colorScheme.surfaceContainerHighest : null,
             border: Border(
               left: BorderSide(
                 width: 3,
-                color: _trapCount > 0
-                    ? AppColors.warning
-                    : Colors.transparent,
+                color: _trapCount > 0 ? AppColors.warning : Colors.transparent,
               ),
             ),
           ),

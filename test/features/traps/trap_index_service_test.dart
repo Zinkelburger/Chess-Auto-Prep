@@ -60,8 +60,7 @@ void main() {
       ];
 
       final index = TrapIndexService(traps);
-      final found =
-          index.trapsInLine(['e4', 'c6', 'd4', 'd5', 'e5', 'Bf5']);
+      final found = index.trapsInLine(['e4', 'c6', 'd4', 'd5', 'e5', 'Bf5']);
 
       expect(found.length, 2);
       expect(found.first.movesSan.length, 3);
@@ -92,8 +91,7 @@ void main() {
       ];
 
       final index = TrapIndexService(traps);
-      final metrics =
-          index.metricsForLine(['e4', 'c6', 'd4', 'd5', 'e5']);
+      final metrics = index.metricsForLine(['e4', 'c6', 'd4', 'd5', 'e5']);
 
       expect(metrics.count, 2);
       expect(metrics.bestEvalDiff, 250);

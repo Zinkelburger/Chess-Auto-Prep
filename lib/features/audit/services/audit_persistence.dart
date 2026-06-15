@@ -95,9 +95,10 @@ class AuditPersistence {
         debugPrint('[AuditPersistence] load: file empty at $path');
         return null;
       }
-      final snapshot = AuditSnapshot.fromJson(
-          jsonDecode(json) as Map<String, dynamic>);
-      debugPrint('[AuditPersistence] load: restored ${snapshot.result.findings.length} '
+      final snapshot =
+          AuditSnapshot.fromJson(jsonDecode(json) as Map<String, dynamic>);
+      debugPrint(
+          '[AuditPersistence] load: restored ${snapshot.result.findings.length} '
           'findings, isComplete=${snapshot.isComplete} from $path');
       return snapshot;
     } catch (e) {
@@ -161,10 +162,12 @@ class AuditPersistence {
     await _write(repertoireFilePath, snapshot);
   }
 
-  Future<void> _write(String? repertoireFilePath, AuditSnapshot snapshot) async {
+  Future<void> _write(
+      String? repertoireFilePath, AuditSnapshot snapshot) async {
     final path = auditPath(repertoireFilePath);
     if (path == null) {
-      debugPrint('[AuditPersistence] _write: no path for "$repertoireFilePath"');
+      debugPrint(
+          '[AuditPersistence] _write: no path for "$repertoireFilePath"');
       return;
     }
     try {

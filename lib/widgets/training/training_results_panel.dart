@@ -82,17 +82,14 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
         _autoRateScheduled = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted || widget.phase != TrainingPhase.finished) return;
-          final autoRating = widget.lineHadMistake
-              ? ReviewRating.again
-              : ReviewRating.good;
+          final autoRating =
+              widget.lineHadMistake ? ReviewRating.again : ReviewRating.good;
           widget.onRateLine(autoRating);
         });
       }
       return Center(
         child: Text(
-          widget.lineHadMistake
-              ? 'Scheduling for review...'
-              : 'Line complete!',
+          widget.lineHadMistake ? 'Scheduling for review...' : 'Line complete!',
           style: theme.textTheme.bodyMedium,
         ),
       );
@@ -176,8 +173,7 @@ class AllCaughtUpPanel extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle_outline,
-              size: 56, color: Colors.green[400]),
+          Icon(Icons.check_circle_outline, size: 56, color: Colors.green[400]),
           const SizedBox(height: 16),
           Text('All caught up!', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
@@ -216,8 +212,7 @@ class TrainingRatingButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entry =
-        currentLine != null ? reviewMap[currentLine!.id] : null;
+    final entry = currentLine != null ? reviewMap[currentLine!.id] : null;
     final previewEntry = entry ??
         RepertoireReviewEntry(
           repertoireId: repertoireId,

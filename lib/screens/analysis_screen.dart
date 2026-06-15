@@ -119,9 +119,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           if (_isAnalyzing)
             LinearProgressIndicator(
               minHeight: 2,
-              value: _analysisTotal > 0
-                  ? _analysisCurrent / _analysisTotal
-                  : null,
+              value:
+                  _analysisTotal > 0 ? _analysisCurrent / _analysisTotal : null,
             ),
           Expanded(child: _buildBody(context)),
         ],

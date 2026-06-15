@@ -351,9 +351,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _reclaimFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted &&
-          _focusNode.canRequestFocus &&
-          !isTextInputFocused()) {
+      if (mounted && _focusNode.canRequestFocus && !isTextInputFocused()) {
         _focusNode.requestFocus();
       }
     });
@@ -488,8 +486,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         trapNavigation: _buildTrapNavigation(),
         isWhiteRepertoire: _controller.isRepertoireWhite,
         onSwitchColor: () async {
-          await _controller
-              .setRepertoireColor(!_controller.isRepertoireWhite);
+          await _controller.setRepertoireColor(!_controller.isRepertoireWhite);
         },
       ),
       body: GestureDetector(
@@ -601,14 +598,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               RepertoireStatusBar(
                 findingsCount: _auditController.activeFindingCount,
                 jobsStatus: _generationController.isGenerating
-                    ? (_generationController.isPaused ? 'Paused' : 'Generating...')
+                    ? (_generationController.isPaused
+                        ? 'Paused'
+                        : 'Generating...')
                     : _auditController.isAuditing
-                        ? (_auditController.isPaused ? 'Audit paused' : 'Auditing...')
+                        ? (_auditController.isPaused
+                            ? 'Audit paused'
+                            : 'Auditing...')
                         : null,
-                onFindingsTap: () =>
-                    _toggleBottomPane(BottomPaneTab.findings),
-                onJobsTap: () =>
-                    _toggleBottomPane(BottomPaneTab.jobs),
+                onFindingsTap: () => _toggleBottomPane(BottomPaneTab.findings),
+                onJobsTap: () => _toggleBottomPane(BottomPaneTab.jobs),
               ),
             ],
           ),
@@ -678,8 +677,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       ),
       child: Row(
         children: [
-          const Icon(Icons.visibility_off_outlined, size: 14,
-              color: Colors.blue),
+          const Icon(Icons.visibility_off_outlined,
+              size: 14, color: Colors.blue),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
@@ -690,12 +689,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           TextButton.icon(
             onPressed: _createNewLineFromEphemeral,
             icon: const Icon(Icons.open_in_new, size: 14),
-            label: const Text('Go to position',
-                style: TextStyle(fontSize: 11)),
+            label: const Text('Go to position', style: TextStyle(fontSize: 11)),
             style: TextButton.styleFrom(
               foregroundColor: Colors.blue,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
@@ -754,7 +751,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       final (brush, san) = switch (f.type) {
         AuditFindingType.mistake => (AnnotationBrush.red, f.ourMove),
         AuditFindingType.inaccuracy => (AnnotationBrush.yellow, f.ourMove),
-        AuditFindingType.missingResponse => (AnnotationBrush.blue, f.missingMove),
+        AuditFindingType.missingResponse => (
+            AnnotationBrush.blue,
+            f.missingMove
+          ),
         _ => (AnnotationBrush.green, null as String?),
       };
 
@@ -825,7 +825,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   isActive: true,
                 ),
               ),
-              VerticalDivider(width: 1, thickness: 1, color: Theme.of(context).dividerColor),
+              VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: Theme.of(context).dividerColor),
               Expanded(
                 child: InlineExpectimaxBar(
                   controller: _controller,
@@ -833,7 +836,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   treeConfig: _generationController.generatedTreeConfig,
                   fenMap: _generationController.generatedTreeFenMap,
                   boardPreview: _boardPreview,
-                  coherenceResult: _generationController.coherenceService.result,
+                  coherenceResult:
+                      _generationController.coherenceService.result,
                   isGenerating: _generationController.isGenerating,
                   isGenerationPaused: _generationController.isPaused,
                 ),
@@ -1019,8 +1023,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 ac.onAuditingChanged(
                   auditing,
                   _jobManager,
-                  _controller.currentRepertoire?.name ??
-                      'Audit',
+                  _controller.currentRepertoire?.name ?? 'Audit',
                 );
                 if (auditing) {
                   setState(() => _showInlineAuditConfig = false);
@@ -1097,8 +1100,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       },
       onRerunAudit: () => _openAuditDialog(forceConfig: true),
       interruptedSnapshot: ac.interruptedSnapshot,
-      onResumeAudit: ac.interruptedSnapshot != null ? _resumeInterruptedAudit : null,
-      onStartFreshAudit: ac.interruptedSnapshot != null ? _startFreshAudit : null,
+      onResumeAudit:
+          ac.interruptedSnapshot != null ? _resumeInterruptedAudit : null,
+      onStartFreshAudit:
+          ac.interruptedSnapshot != null ? _startFreshAudit : null,
       onStartAudit: () => _openAuditDialog(forceConfig: true),
     );
   }
@@ -1250,8 +1255,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     if (mounted) {
       setState(() {
         _traps = traps ?? [];
-        _trapIndex =
-            _traps.isEmpty ? null : TrapIndexService(_traps);
+        _trapIndex = _traps.isEmpty ? null : TrapIndexService(_traps);
       });
     }
   }
@@ -1264,7 +1268,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       controller: _controller,
     );
   }
-
 
   Widget _buildPgnTab() {
     return PgnWithAnalysisPane(
@@ -1328,7 +1331,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                               style: const TextStyle(fontSize: 11),
                             ),
                             icon: Icon(Icons.warning_amber_rounded,
-                                size: 14, color: _showTrapsInLinesTab ? null : Colors.grey),
+                                size: 14,
+                                color:
+                                    _showTrapsInLinesTab ? null : Colors.grey),
                           ),
                         ],
                         selected: {_showTrapsInLinesTab},
@@ -1416,8 +1421,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     if (ctrl.isGenerating && ctrl.currentJob == null) {
       ctrl.currentJob = _jobManager.createJob(
         type: JobType.generation,
-        label: _controller.currentRepertoire?.name ??
-            'Generation',
+        label: _controller.currentRepertoire?.name ?? 'Generation',
         subtreeFen: _controller.fen,
       );
       ctrl.currentJob!.updateStatus(JobStatus.running);
@@ -1621,4 +1625,3 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     );
   }
 }
-

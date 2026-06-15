@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../theme/app_colors.dart';
-import '../chess_board_widget.dart' show BoardAnnotation, ChessBoardWidget, CompletedMove;
+import '../chess_board_widget.dart'
+    show BoardAnnotation, ChessBoardWidget, CompletedMove;
 
 /// Chess board with optional preview overlay and generation lock UI.
 class RepertoireBoardPane extends StatelessWidget {
@@ -43,8 +44,7 @@ class RepertoireBoardPane extends StatelessWidget {
           builder: (context, _) {
             final isPreview = boardPreview.isPreview &&
                 boardPreview.target == BoardPreviewTarget.mainBoard;
-            final displayFen =
-                isPreview ? boardPreview.previewFen! : fen;
+            final displayFen = isPreview ? boardPreview.previewFen! : fen;
             final position = positionFromFen(displayFen);
 
             return Container(

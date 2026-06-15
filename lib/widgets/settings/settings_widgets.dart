@@ -365,8 +365,7 @@ class _CompactIntFieldState extends State<_CompactIntField> {
             child: TextField(
               controller: _ctrl,
               textAlign: TextAlign.center,
-              style:
-                  const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: const InputDecoration(
@@ -428,8 +427,7 @@ class SettingsDropdown<T> extends StatelessWidget {
         labelStyle: const TextStyle(fontSize: 12),
         border: const OutlineInputBorder(),
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       ),
       items: items
           .map((e) => DropdownMenuItem(value: e.$1, child: Text(e.$2)))

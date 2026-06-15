@@ -1,12 +1,10 @@
 import 'package:chess_auto_prep/services/eval/chessdb_api_provider.dart';
-import 'package:chess_auto_prep/services/eval/external_eval_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  const fen =
-      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});

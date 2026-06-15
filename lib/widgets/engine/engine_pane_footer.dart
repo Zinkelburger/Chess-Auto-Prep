@@ -6,9 +6,6 @@ import 'package:flutter/material.dart';
 import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/probability_service.dart';
-import '../../theme/app_colors.dart';
-import '../../utils/chess_utils.dart' show formatCount;
-import '../lichess_db_info_icon.dart';
 
 class EnginePaneFooter extends StatelessWidget {
   final EngineSettings settings;
@@ -36,37 +33,36 @@ class EnginePaneFooter extends StatelessWidget {
       listenable: settings,
       builder: (context, _) {
         return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Colors.grey[800]!, width: 0.5),
-        ),
-      ),
-      // Mothballed: Lichess Explorer stats hidden.
-      // Keep "Set as root" button if available.
-      child: Row(
-        children: [
-          if (onSetRoot != null)
-            SizedBox(
-              height: 26,
-              child: TextButton.icon(
-                onPressed: onSetRoot,
-                icon: const Icon(Icons.my_location, size: 14),
-                label:
-                    const Text('Set as root', style: TextStyle(fontSize: 11)),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: Colors.grey[800]!, width: 0.5),
             ),
-          const Spacer(),
-        ],
-      ),
-    );
+          ),
+          // Mothballed: Lichess Explorer stats hidden.
+          // Keep "Set as root" button if available.
+          child: Row(
+            children: [
+              if (onSetRoot != null)
+                SizedBox(
+                  height: 26,
+                  child: TextButton.icon(
+                    onPressed: onSetRoot,
+                    icon: const Icon(Icons.my_location, size: 14),
+                    label: const Text('Set as root',
+                        style: TextStyle(fontSize: 11)),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ),
+              const Spacer(),
+            ],
+          ),
+        );
       },
     );
   }
-
 }

@@ -1,5 +1,4 @@
 import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
-import 'package:chess_auto_prep/services/eval/external_eval_provider.dart';
 import 'package:chess_auto_prep/services/eval/sqlite_eval_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -36,11 +35,41 @@ void main() {
     ''');
 
     final rows = <Map<String, Object?>>[
-      {'fen': canonicalizeFen4(fens[0]), 'cp': 30, 'mate': null, 'depth': 22, 'move': 'e2e4'},
-      {'fen': canonicalizeFen4(fens[1]), 'cp': -15, 'mate': null, 'depth': 20, 'move': 'e7e5'},
-      {'fen': canonicalizeFen4(fens[2]), 'cp': null, 'mate': 3, 'depth': 24, 'move': 'g1f3'},
-      {'fen': canonicalizeFen4(fens[3]), 'cp': 10, 'mate': null, 'depth': 12, 'move': 'b1c3'},
-      {'fen': canonicalizeFen4(fens[4]), 'cp': null, 'mate': null, 'depth': 0, 'move': null},
+      {
+        'fen': canonicalizeFen4(fens[0]),
+        'cp': 30,
+        'mate': null,
+        'depth': 22,
+        'move': 'e2e4'
+      },
+      {
+        'fen': canonicalizeFen4(fens[1]),
+        'cp': -15,
+        'mate': null,
+        'depth': 20,
+        'move': 'e7e5'
+      },
+      {
+        'fen': canonicalizeFen4(fens[2]),
+        'cp': null,
+        'mate': 3,
+        'depth': 24,
+        'move': 'g1f3'
+      },
+      {
+        'fen': canonicalizeFen4(fens[3]),
+        'cp': 10,
+        'mate': null,
+        'depth': 12,
+        'move': 'b1c3'
+      },
+      {
+        'fen': canonicalizeFen4(fens[4]),
+        'cp': null,
+        'mate': null,
+        'depth': 0,
+        'move': null
+      },
     ];
     for (final row in rows) {
       await db.insert('chessdb_evals', row);

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/core/repertoire_writer.dart';
-import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 import 'package:chess_auto_prep/services/repertoire_service.dart';
 
@@ -44,7 +43,8 @@ void main() {
       }
     });
 
-    test('addMoveAtPosition extends matching line on disk and in memory', () async {
+    test('addMoveAtPosition extends matching line on disk and in memory',
+        () async {
       controller.loadMoveHistory(['e4', 'e5']);
 
       final path = await writer.addMoveAtPosition(
@@ -61,7 +61,8 @@ void main() {
       expect(disk, contains('Nf3'));
     });
 
-    test('addMoveAtPosition is no-op when move already in repertoire', () async {
+    test('addMoveAtPosition is no-op when move already in repertoire',
+        () async {
       controller.loadMoveHistory(['e4']);
 
       final before = await File(filePath).readAsString();

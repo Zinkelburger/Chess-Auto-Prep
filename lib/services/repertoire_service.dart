@@ -158,8 +158,7 @@ class RepertoireService {
       if (parsed != null) return parsed;
     }
 
-    final cumProbMatch =
-        RegExp(r'CumProb\s+([\d.]+)%').firstMatch(gameText);
+    final cumProbMatch = RegExp(r'CumProb\s+([\d.]+)%').firstMatch(gameText);
     if (cumProbMatch != null) {
       final pct = double.tryParse(cumProbMatch.group(1)!);
       if (pct != null) return pct / 100.0;
@@ -328,8 +327,6 @@ class RepertoireService {
     return 'line_${trimmed.length > 22 ? trimmed.substring(0, 22) : trimmed}';
   }
 
-
-
   /// Creates training questions from repertoire lines for a specific color
   List<TrainingQuestion> createTrainingQuestions(List<RepertoireLine> lines,
       {String? colorFilter}) {
@@ -419,8 +416,7 @@ class RepertoireService {
 
     games[matchIndex] = updatedGame;
 
-    await _writeAtomically(
-        file, _reassembleDocument(document.preamble, games));
+    await _writeAtomically(file, _reassembleDocument(document.preamble, games));
     return true;
   }
 
@@ -446,8 +442,7 @@ class RepertoireService {
 
     games[matchIndex] = newGamePgn.trimRight();
 
-    await _writeAtomically(
-        file, _reassembleDocument(document.preamble, games));
+    await _writeAtomically(file, _reassembleDocument(document.preamble, games));
     return true;
   }
 
@@ -465,8 +460,7 @@ class RepertoireService {
 
     games.removeAt(matchIndex);
 
-    await _writeAtomically(
-        file, _reassembleDocument(document.preamble, games));
+    await _writeAtomically(file, _reassembleDocument(document.preamble, games));
     return true;
   }
 
@@ -515,8 +509,7 @@ class RepertoireService {
     }
     moveText = moveLines.join('\n').trim();
 
-    String fmtDate(DateTime? d) =>
-        d == null ? '' : d.toUtc().toIso8601String();
+    String fmtDate(DateTime? d) => d == null ? '' : d.toUtc().toIso8601String();
     headers['LastReview'] = fmtDate(lastReview);
     headers['Difficulty'] = difficulty.toStringAsFixed(2);
     headers['Interval'] = intervalDays.toStringAsFixed(2);
@@ -526,9 +519,22 @@ class RepertoireService {
 
     final buffer = StringBuffer();
     const standardOrder = [
-      'Event', 'Site', 'Date', 'Round', 'White', 'Black', 'Result',
-      'FEN', 'SetUp', 'ECO', 'Opening',
-      'LineID', 'LineId', 'Id', 'Line', 'Guid',
+      'Event',
+      'Site',
+      'Date',
+      'Round',
+      'White',
+      'Black',
+      'Result',
+      'FEN',
+      'SetUp',
+      'ECO',
+      'Opening',
+      'LineID',
+      'LineId',
+      'Id',
+      'Line',
+      'Guid',
     ];
     final written = <String>{};
     for (final key in standardOrder) {
@@ -547,8 +553,7 @@ class RepertoireService {
 
     games[matchIndex] = buffer.toString().trimRight();
 
-    await _writeAtomically(
-        file, _reassembleDocument(document.preamble, games));
+    await _writeAtomically(file, _reassembleDocument(document.preamble, games));
     return true;
   }
 
@@ -647,8 +652,7 @@ class RepertoireService {
 
     final moveText = moveLines.join(' ').trim();
     final suffix = _formatNextSan(existingMoves, san);
-    final updatedMoveText =
-        moveText.isEmpty ? suffix : '$moveText $suffix';
+    final updatedMoveText = moveText.isEmpty ? suffix : '$moveText $suffix';
 
     return [...headerLines, '', updatedMoveText].join('\n');
   }

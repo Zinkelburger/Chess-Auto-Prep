@@ -72,8 +72,8 @@ String buildRepertoirePgnEntry({
         ', Already winning (${pruneEvalCp >= 0 ? "+" : ""}${(pruneEvalCp / 100).toStringAsFixed(1)})');
   }
   if (rankByImportance) {
-    annotation.write(
-        ', [%cumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%]');
+    annotation
+        .write(', [%cumProb ${(cumulativeProb * 100).toStringAsFixed(3)}%]');
   }
   annotation.write('}');
 

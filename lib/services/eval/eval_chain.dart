@@ -98,7 +98,8 @@ Future<EvalChainOutcome> resolveEvalChain({
       stats.cdbDirectHits++;
       localHit = true;
       final hit = cdb.hit!;
-      await cacheWrite?.call(fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
+      await cacheWrite?.call(
+          fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
       return EvalChainOutcome(
         source: EvalChainSource.cdbDirect,
         whiteCp: hit.cp,
@@ -125,7 +126,8 @@ Future<EvalChainOutcome> resolveEvalChain({
       stats.localChessDbHits++;
       localHit = true;
       final hit = local.hit!;
-      await cacheWrite?.call(fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
+      await cacheWrite?.call(
+          fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
       return EvalChainOutcome(
         source: EvalChainSource.localChessDb,
         whiteCp: hit.cp,
@@ -158,7 +160,8 @@ Future<EvalChainOutcome> resolveEvalChain({
       if (api.isHit) {
         stats.chessDbApiHits++;
         final hit = api.hit!;
-        await cacheWrite?.call(fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
+        await cacheWrite?.call(
+            fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
         return EvalChainOutcome(
           source: EvalChainSource.chessDbApi,
           whiteCp: hit.cp,

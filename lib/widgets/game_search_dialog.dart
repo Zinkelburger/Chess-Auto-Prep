@@ -233,8 +233,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       ? _buildEmptyHint(context, current)
                       : results.isEmpty
                           ? Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 8),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               child: Text(
                                 'No matches',
                                 style: TextStyle(
@@ -292,10 +291,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
         ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.6)
         : Colors.grey[700]!;
     final bgColor = isCurrent
-        ? Theme.of(context)
-            .colorScheme
-            .primaryContainer
-            .withValues(alpha: 0.25)
+        ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.25)
         : Colors.transparent;
 
     final content = Padding(

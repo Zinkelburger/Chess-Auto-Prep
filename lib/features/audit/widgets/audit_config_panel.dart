@@ -54,18 +54,15 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   RepertoireAuditService get _service =>
       widget.auditService ?? (_ownedService ??= RepertoireAuditService());
 
-  final TextEditingController _mistakeCtrl =
-      TextEditingController(text: '100');
+  final TextEditingController _mistakeCtrl = TextEditingController(text: '100');
   final TextEditingController _inaccuracyCtrl =
       TextEditingController(text: '40');
-  final TextEditingController _minGamesCtrl =
-      TextEditingController(text: '50');
+  final TextEditingController _minGamesCtrl = TextEditingController(text: '50');
   final TextEditingController _minMaiaProbCtrl =
       TextEditingController(text: '0.10');
   final TextEditingController _evalDepthCtrl =
       TextEditingController(text: '14');
-  final TextEditingController _maxPlyCtrl =
-      TextEditingController(text: '30');
+  final TextEditingController _maxPlyCtrl = TextEditingController(text: '30');
   final TextEditingController _maiaEloCtrl =
       TextEditingController(text: '2200');
 
@@ -177,10 +174,10 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final scopeLabel = _auditSubtreeOnly &&
-            widget.currentMoveSequence.isNotEmpty
-        ? 'Subtree from ${_moveSequenceLabel(widget.currentMoveSequence)}'
-        : 'Full repertoire';
+    final scopeLabel =
+        _auditSubtreeOnly && widget.currentMoveSequence.isNotEmpty
+            ? 'Subtree from ${_moveSequenceLabel(widget.currentMoveSequence)}'
+            : 'Full repertoire';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

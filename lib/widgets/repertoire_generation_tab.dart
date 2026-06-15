@@ -50,7 +50,8 @@ class RepertoireGenerationTab extends StatefulWidget {
 }
 
 class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
-  TreeBuildService get _buildService => widget.generationController.buildService;
+  TreeBuildService get _buildService =>
+      widget.generationController.buildService;
   final GlobalKey<GenerationConfigFormState> _configFormKey =
       GlobalKey<GenerationConfigFormState>();
 
@@ -392,8 +393,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           onProgress: _handleBuildProgress,
         );
 
-        if (_shouldStop &&
-            !widget.generationController.finishNowRequested) {
+        if (_shouldStop && !widget.generationController.finishNowRequested) {
           if (mounted) {
             setState(
                 () => _status = 'Build cancelled. ${tree.totalNodes} nodes.');
@@ -407,8 +407,8 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         if (skipBuild) {
           tree = existingTree;
           if (mounted) {
-            setState(() =>
-                _status = 'Tree already at depth ${existingTree.maxPlyReached}, '
+            setState(() => _status =
+                'Tree already at depth ${existingTree.maxPlyReached}, '
                     'skipping build...');
           }
         } else {
@@ -420,13 +420,12 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             onProgress: _handleBuildProgress,
           );
 
-          final finishingEarly =
-              widget.generationController.finishNowRequested;
+          final finishingEarly = widget.generationController.finishNowRequested;
           if (finishingEarly) {
             widget.generationController.clearFinishNow();
             if (mounted) {
-              setState(() => _status =
-                  'Finishing early with ${tree.totalNodes} nodes...');
+              setState(() =>
+                  _status = 'Finishing early with ${tree.totalNodes} nodes...');
             }
           } else if (_shouldStop) {
             if (mounted) {
@@ -509,8 +508,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       try {
         final treeJson = serializeTree(tree);
         final base = p.withoutExtension(filePath);
-        await StorageFactory.instance
-            .writeFile('${base}_tree.json', treeJson);
+        await StorageFactory.instance.writeFile('${base}_tree.json', treeJson);
       } catch (_) {
         // Tree JSON save is best-effort
       }
@@ -595,7 +593,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             playAsWhite: widget.isWhiteRepertoire,
           ),
           const SizedBox(height: 8),
-
           if (_savedPartialTree != null && !_isGenerating) ...[
             Container(
               padding: const EdgeInsets.all(12),
@@ -663,7 +660,6 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
             ),
             const SizedBox(height: 8),
           ],
-
           Row(
             children: [
               FilledButton.icon(

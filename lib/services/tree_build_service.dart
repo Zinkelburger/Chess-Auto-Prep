@@ -49,7 +49,8 @@ class TreeBuildService {
   final TreeBuildProgressTracker _progress = TreeBuildProgressTracker();
 
   BuildStats get buildStats => _stats;
-  ChessDbApiProvider? get chessDbApiProvider => _evalResolver.chessDbApiProvider;
+  ChessDbApiProvider? get chessDbApiProvider =>
+      _evalResolver.chessDbApiProvider;
 
   /// True while Phase 1 BFS is running ([build] in progress).
   bool get isBuilding => _isBuilding;
@@ -498,6 +499,7 @@ class TreeBuildService {
         collectNoEval(child);
       }
     }
+
     collectNoEval(tree.root);
 
     if (noEval.isEmpty) return;
@@ -629,8 +631,7 @@ class TreeBuildService {
   }) async {
     final queue = Queue<BuildTreeNode>();
 
-    final fastResume =
-        tree.totalNodes > 1 && tree.root.children.isNotEmpty;
+    final fastResume = tree.totalNodes > 1 && tree.root.children.isNotEmpty;
     if (fastResume) {
       final (frontier, minPly) = prepareResumeFrontier(tree.root);
       if (frontier.isEmpty) {
@@ -849,9 +850,7 @@ class TreeBuildService {
 
     final maxCandidates = config.ourMultipv.clamp(1, 16);
     final bestCpWhite = node.hasEngineEval
-        ? (node.isWhiteToMove
-            ? node.engineEvalCp!
-            : -node.engineEvalCp!)
+        ? (node.isWhiteToMove ? node.engineEvalCp! : -node.engineEvalCp!)
         : null;
 
     int added = 0;
@@ -889,8 +888,7 @@ class TreeBuildService {
       child.moveProbability = 1.0;
       child.cumulativeProbability = node.cumulativeProbability;
       child.maiaFrequency = prob;
-      child.engineEvalCp =
-          childIsWhite ? childCpWhite : -childCpWhite;
+      child.engineEvalCp = childIsWhite ? childCpWhite : -childCpWhite;
       _evalResolver.cacheEvalWhite(childFen, childCpWhite, childEval.$2);
 
       added++;
@@ -1018,8 +1016,8 @@ class TreeBuildService {
       child.moveProbability = 1.0;
       child.cumulativeProbability = node.cumulativeProbability;
       child.engineEvalCp = childEvalStm;
-      _evalResolver.cacheEvalWhite(childFen, childIsWhite ? childEvalStm : -childEvalStm,
-          config.evalDepth);
+      _evalResolver.cacheEvalWhite(childFen,
+          childIsWhite ? childEvalStm : -childEvalStm, config.evalDepth);
 
       // Enrich with Lichess stats
       if (lichess != null) {
@@ -1312,9 +1310,7 @@ class TreeBuildService {
     if (child == null) return;
 
     double prob = maiaPolicy?[pvUci] ?? -1.0;
-    if (prob < 0 &&
-        MaiaFactory.isAvailable &&
-        MaiaFactory.instance != null) {
+    if (prob < 0 && MaiaFactory.isAvailable && MaiaFactory.instance != null) {
       try {
         final maiaResult = await MaiaFactory.instance!.evaluate(
           node.fen,

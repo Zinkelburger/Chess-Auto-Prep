@@ -143,8 +143,8 @@ class TrapDetailCard extends StatelessWidget {
 
   String _bestMoveProb() {
     if (trap.allReplies == null) return '?';
-    final best = trap.allReplies!
-        .where((r) => r.classification == TrapReplyClass.good);
+    final best =
+        trap.allReplies!.where((r) => r.classification == TrapReplyClass.good);
     if (best.isEmpty) return '?';
     return '${(best.first.probability * 100).toStringAsFixed(0)}%';
   }
@@ -165,8 +165,7 @@ class TrapDetailCard extends StatelessWidget {
         ),
         _StatChip(
           label: 'SURPLUS',
-          value:
-              '${(trap.trickSurplus * 100).toStringAsFixed(1)}%',
+          value: '${(trap.trickSurplus * 100).toStringAsFixed(1)}%',
           color: Colors.orange,
         ),
       ],
@@ -211,8 +210,7 @@ class TrapDetailCard extends StatelessWidget {
         MouseRegion(
           onEnter: (_) {
             if (trap.fen != null) {
-              final fen = fenAfterMoves(
-                  trap.fen!, [reply.san], 0);
+              final fen = fenAfterMoves(trap.fen!, [reply.san], 0);
               boardPreview.setPreview(fen);
             }
           },
@@ -225,8 +223,7 @@ class TrapDetailCard extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Text(
-              '${(reply.probability * 100).toStringAsFixed(0)}%'),
+          child: Text('${(reply.probability * 100).toStringAsFixed(0)}%'),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -253,35 +250,32 @@ class TrapDetailCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Text(text,
           style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey)),
+              fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
     );
   }
 
   (String, IconData, Color) _classInfo(TrapReplyClass c) {
     return switch (c) {
       TrapReplyClass.blunder => ('BLUNDER', Icons.close, Colors.red),
-      TrapReplyClass.mistake =>
-        ('MISTAKE', Icons.error_outline, Colors.orange),
-      TrapReplyClass.inaccuracy =>
-        ('INACCURACY', Icons.warning_amber, Colors.amber),
-      TrapReplyClass.acceptable =>
-        ('ACCEPTABLE', Icons.remove, Colors.grey),
+      TrapReplyClass.mistake => ('MISTAKE', Icons.error_outline, Colors.orange),
+      TrapReplyClass.inaccuracy => (
+          'INACCURACY',
+          Icons.warning_amber,
+          Colors.amber
+        ),
+      TrapReplyClass.acceptable => ('ACCEPTABLE', Icons.remove, Colors.grey),
       TrapReplyClass.good => ('GOOD', Icons.check, Colors.green),
     };
   }
 
   Widget _buildWinProbLine(ThemeData theme) {
-    final practicalPct =
-        (trap.expectimaxValue * 100).toStringAsFixed(1);
+    final practicalPct = (trap.expectimaxValue * 100).toStringAsFixed(1);
     final rawPct = (trap.wpEval * 100).toStringAsFixed(1);
     final surplus = (trap.trickSurplus * 100).toStringAsFixed(1);
     return Text(
       'Practical win prob: $practicalPct%  vs  Raw eval: $rawPct%\n'
       '"This position performs $surplus% better in practice than eval shows"',
-      style: theme.textTheme.bodySmall
-          ?.copyWith(fontStyle: FontStyle.italic),
+      style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
     );
   }
 
@@ -352,8 +346,7 @@ class _ComparisonBox extends StatelessWidget {
               style:
                   const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           Text('Eval: $evalText', style: const TextStyle(fontSize: 12)),
-          Text('Probability: $probText',
-              style: const TextStyle(fontSize: 12)),
+          Text('Probability: $probText', style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 4),
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -391,8 +384,7 @@ class _StatChip extends StatelessWidget {
         Text(value,
             style: TextStyle(
                 fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-        Text(label,
-            style: const TextStyle(fontSize: 10, color: Colors.grey)),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );
   }

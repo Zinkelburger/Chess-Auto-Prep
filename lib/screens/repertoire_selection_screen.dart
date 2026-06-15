@@ -37,8 +37,7 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
 
     try {
       final repertoires = await StorageFactory.instance.listRepertoireFiles();
-      repertoires.sort(
-          (a, b) => b.lastModified.compareTo(a.lastModified));
+      repertoires.sort((a, b) => b.lastModified.compareTo(a.lastModified));
 
       if (!mounted) return;
       setState(() {

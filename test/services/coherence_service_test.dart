@@ -70,8 +70,8 @@ void main() {
         'l2': 0.01,
       };
 
-      final rwc = computeRiskWeightedCoherence(
-          lineCoherences, lineProbabilities);
+      final rwc =
+          computeRiskWeightedCoherence(lineCoherences, lineProbabilities);
       expect(rwc, greaterThan(0));
       expect(rwc, lessThan(1));
     });

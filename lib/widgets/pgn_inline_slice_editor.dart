@@ -111,13 +111,13 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
 
     pgn
         .computeSliceMatches(
-          games: widget.allGames,
-          targetFen: positionFen,
-          filters: headerFilters,
-          seqGroups: seqGroups,
-          seqGap: seqGap,
-          fenIndex: widget.fenIndex,
-        )
+      games: widget.allGames,
+      targetFen: positionFen,
+      filters: headerFilters,
+      seqGroups: seqGroups,
+      seqGap: seqGap,
+      fenIndex: widget.fenIndex,
+    )
         .then((indices) {
       if (!mounted || generation != _computeGeneration) return;
       setState(() {
@@ -131,12 +131,11 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
     final config = SliceConfig(
       positionInput: _positionKey.currentState?.parsedFen,
       headerFilters: _headerKey.currentState?.configs ?? [],
-      sequencePattern:
-          _sequenceKey.currentState?.hasFilter == true
-              ? _sequenceKey.currentState!.groups
-                  .map((g) => g.join(' '))
-                  .join(' [gap] ')
-              : null,
+      sequencePattern: _sequenceKey.currentState?.hasFilter == true
+          ? _sequenceKey.currentState!.groups
+              .map((g) => g.join(' '))
+              .join(' [gap] ')
+          : null,
       sequenceGap: _sequenceKey.currentState?.gap ?? 4,
     );
     widget.onResult(_matchedIndices, config);
@@ -265,9 +264,7 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
                     onPressed: () =>
                         setState(() => _showPreview = !_showPreview),
                     icon: Icon(
-                      _showPreview
-                          ? Icons.expand_less
-                          : Icons.expand_more,
+                      _showPreview ? Icons.expand_less : Icons.expand_more,
                       size: 16,
                     ),
                     label: Text(

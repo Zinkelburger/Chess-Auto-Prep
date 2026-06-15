@@ -186,8 +186,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       ...moves,
       ...widget.tree.sanSequenceAt(mainlineEnd).skip(moves.length),
     ];
-    final subtree = MoveTree.fromMoves(fullMoves,
-        startingFen: widget.tree.startingFen);
+    final subtree =
+        MoveTree.fromMoves(fullMoves, startingFen: widget.tree.startingFen);
     final text = subtree.toPgnMoveText();
     widget.onCopyToClipboard?.call(text, 'Line copied to clipboard');
   }
@@ -248,8 +248,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     if (node != null) moveName = node.san;
     final isOnMainline = path.isMainline;
 
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final position = RelativeRect.fromRect(
       Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
       Offset.zero & overlay.size,
@@ -263,14 +262,13 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           enabled: false,
           height: 32,
           child: Text(moveName,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 13)),
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         ),
         const PopupMenuDivider(height: 1),
         const PopupMenuItem(
           value: 'comment',
-          child: _PopupMenuRow(
-              icon: Icons.comment, text: 'Add Comment'),
+          child: _PopupMenuRow(icon: Icons.comment, text: 'Add Comment'),
         ),
         if (!isOnMainline)
           const PopupMenuItem(
@@ -286,8 +284,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           ),
         const PopupMenuItem(
           value: 'duplicate',
-          child: _PopupMenuRow(
-              icon: Icons.copy_all, text: 'Duplicate Line'),
+          child: _PopupMenuRow(icon: Icons.copy_all, text: 'Duplicate Line'),
         ),
         const PopupMenuItem(
           value: 'copy',
@@ -297,8 +294,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         if (widget.isEditingExistingLine && widget.onViewInLines != null)
           const PopupMenuItem(
             value: 'viewlines',
-            child: _PopupMenuRow(
-                icon: Icons.list_alt, text: 'View in Lines'),
+            child: _PopupMenuRow(icon: Icons.list_alt, text: 'View in Lines'),
           ),
         const PopupMenuDivider(height: 1),
         PopupMenuItem(
@@ -454,7 +450,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     final main = siblings[0];
     final mainPath = parentPath.child(0);
-    final mainMove = main.san == '--' ? null : positionBefore.parseSan(main.san);
+    final mainMove =
+        main.san == '--' ? null : positionBefore.parseSan(main.san);
     Position positionAfterMain = positionBefore;
     TrapLineInfo? mainTrap;
     if (mainMove != null) {
@@ -505,8 +502,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         TrapLineInfo? variantTrap;
         if (variantMove != null) {
           positionAfterVariant = positionBefore.play(variantMove);
-          variantTrap =
-              widget.trapIndex?.trapAtFen(positionAfterVariant.fen);
+          variantTrap = widget.trapIndex?.trapAtFen(positionAfterVariant.fen);
         }
 
         if (isWhite) {
@@ -661,7 +657,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       ),
     );
   }
-
 }
 
 class _PopupMenuRow extends StatelessWidget {

@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
-import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
 /// Parse a move string (UCI or SAN) to a UCI string (e.g. "b8d7").
 /// Returns null if the move can't be parsed.

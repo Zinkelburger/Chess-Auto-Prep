@@ -66,7 +66,8 @@ class BuildProgressDisplay extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               if (isPaused)
-                const Icon(Icons.pause_circle, size: 14, color: AppColors.warning),
+                const Icon(Icons.pause_circle,
+                    size: 14, color: AppColors.warning),
               const SizedBox(width: 6),
               Text(
                 '$nodes nodes',

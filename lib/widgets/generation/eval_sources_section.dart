@@ -192,8 +192,7 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
       children: [
         Row(
           children: [
-            Text('Eval Sources',
-                style: Theme.of(context).textTheme.titleSmall),
+            Text('Eval Sources', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(width: 4),
             Tooltip(
               message: widget.cdbDirectAvailable
@@ -208,7 +207,6 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           ],
         ),
         const SizedBox(height: 8),
-
         if (widget.cdbDirectAvailable)
           ListenableBuilder(
             listenable: EvalDatabaseSettings.instance,
@@ -253,13 +251,11 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
             ],
           ),
         if (widget.cdbDirectAvailable) const SizedBox(height: 12),
-
         _toggleSwitch(
           'Local ChessDB file',
           _enableLocalChessDb,
           (v) => _update(() => _enableLocalChessDb = v),
-          tooltip:
-              'Use a local ChessDB SQLite slice for eval lookups.\n'
+          tooltip: 'Use a local ChessDB SQLite slice for eval lookups.\n'
               'Positions missing from the file can trigger subtree skip.',
         ),
         const SizedBox(height: 6),
@@ -304,13 +300,11 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           ],
         ),
         const SizedBox(height: 12),
-
         _toggleSwitch(
           'ChessDB API',
           _enableChessDbApi,
           (v) => _update(() => _enableChessDbApi = v),
-          tooltip:
-              'Query chessdb.cn for positions not in local cache.\n'
+          tooltip: 'Query chessdb.cn for positions not in local cache.\n'
               'Subject to a configurable daily request quota.',
         ),
         const SizedBox(height: 6),
@@ -338,21 +332,18 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
           ],
         ),
         const SizedBox(height: 12),
-
         _toggleSwitch(
           'Skip external eval for off-book subtrees',
           _enableExtEvalSubtreeSkip,
           (v) => _update(() => _enableExtEvalSubtreeSkip = v),
-          tooltip:
-              'When a position is absent from the local ChessDB file,\n'
+          tooltip: 'When a position is absent from the local ChessDB file,\n'
               'skip further external lookups for that subtree and use Stockfish.',
         ),
         const SizedBox(height: 8),
         _numField(
           _minAcceptableEvalDepthCtrl,
           'Min eval depth (0 = engine depth)',
-          tooltip:
-              'Minimum search depth required from external sources.\n'
+          tooltip: 'Minimum search depth required from external sources.\n'
               'Shallower hits fall through to the next source.',
           enabled: !widget.isGenerating,
         ),

@@ -41,9 +41,8 @@ int _myEaseRecursive(BuildTreeNode node, bool playAsWhite) {
 /// Primary signal: [BuildTreeNode.maiaFrequency] — Maia's predicted
 /// probability that a human would play this move.
 double _computeMyEase(BuildTreeNode ourMoveChild, BuildTreeNode parent) {
-  double ease = ourMoveChild.maiaFrequency >= 0
-      ? ourMoveChild.maiaFrequency
-      : 0.5;
+  double ease =
+      ourMoveChild.maiaFrequency >= 0 ? ourMoveChild.maiaFrequency : 0.5;
 
   if (_isOnlyReasonableMove(ourMoveChild, parent)) {
     ease = 1.0;
@@ -59,13 +58,11 @@ double _computeMyEase(BuildTreeNode ourMoveChild, BuildTreeNode parent) {
 bool _isOnlyReasonableMove(BuildTreeNode child, BuildTreeNode parent) {
   if (parent.children.length < 2) return true;
 
-  final evaluated = parent.children
-      .where((c) => c.hasEngineEval)
-      .toList();
+  final evaluated = parent.children.where((c) => c.hasEngineEval).toList();
   if (evaluated.length < 2) return true;
 
-  evaluated.sort((a, b) =>
-      (b.engineEvalCp ?? 0).compareTo(a.engineEvalCp ?? 0));
+  evaluated
+      .sort((a, b) => (b.engineEvalCp ?? 0).compareTo(a.engineEvalCp ?? 0));
 
   final gap = (evaluated[0].engineEvalCp! - evaluated[1].engineEvalCp!).abs();
   return gap > 200;
@@ -95,9 +92,8 @@ double computePositionQuality(
   if (isOurMove) {
     final bestChild = node.children.isEmpty
         ? null
-        : node.children
-            .where((c) => c.isRepertoireMove)
-            .firstOrNull ?? node.children.first;
+        : node.children.where((c) => c.isRepertoireMove).firstOrNull ??
+            node.children.first;
     if (bestChild == null) return 0.5;
     return bestChild.myEase >= 0 ? bestChild.myEase : 0.5;
   } else {

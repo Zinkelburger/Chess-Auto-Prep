@@ -141,8 +141,7 @@ class _LearnContent extends StatelessWidget {
               ),
             ),
           ] else ...[
-            if (currentAnnotation != null &&
-                currentAnnotation!.isNotEmpty) ...[
+            if (currentAnnotation != null && currentAnnotation!.isNotEmpty) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -205,8 +204,7 @@ class _DrillContent extends StatelessWidget {
             TrainingFeedbackText(feedback: feedback!),
             const SizedBox(height: 12),
           ],
-          if (currentAnnotation != null &&
-              currentAnnotation!.isNotEmpty) ...[
+          if (currentAnnotation != null && currentAnnotation!.isNotEmpty) ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),

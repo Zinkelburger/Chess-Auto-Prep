@@ -123,8 +123,7 @@ class _HeaderSection extends StatelessWidget {
               const Spacer(),
               if (onCoveragePressed != null) ...[
                 FilledButton.icon(
-                  onPressed:
-                      isCoverageRunning ? null : onCoveragePressed,
+                  onPressed: isCoverageRunning ? null : onCoveragePressed,
                   icon: isCoverageRunning
                       ? const SizedBox(
                           width: 14,
@@ -163,8 +162,7 @@ class _HeaderSection extends StatelessWidget {
               hintText:
                   'Search by name, moves (e.g., "1.e4 e5" or "Sicilian")...',
               hintStyle: TextStyle(color: Colors.grey[500], fontSize: 12),
-              prefixIcon:
-                  Icon(Icons.search, size: 18, color: Colors.grey[500]),
+              prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey[500]),
               suffixIcon: searchController.text.isNotEmpty
                   ? IconButton(
                       icon:
@@ -200,7 +198,10 @@ class _HeaderSection extends StatelessWidget {
               Text('Sort: ',
                   style: TextStyle(fontSize: 11, color: Colors.grey[400])),
               _SortChip(
-                  label: 'Name', value: LineSortBy.name, sortBy: sortBy, onChanged: onSortByChanged),
+                  label: 'Name',
+                  value: LineSortBy.name,
+                  sortBy: sortBy,
+                  onChanged: onSortByChanged),
               const SizedBox(width: 4),
               _SortChip(
                   label: 'Quality',
@@ -239,7 +240,10 @@ class _HeaderSection extends StatelessWidget {
               Text('Filter: ',
                   style: TextStyle(fontSize: 11, color: Colors.grey[400])),
               _MetricsFilterChip(
-                  label: 'All', value: LineMetricsFilter.all, metricsFilter: metricsFilter, onChanged: onMetricsFilterChanged),
+                  label: 'All',
+                  value: LineMetricsFilter.all,
+                  metricsFilter: metricsFilter,
+                  onChanged: onMetricsFilterChanged),
               const SizedBox(width: 4),
               _MetricsFilterChip(
                   label: 'Hard moves',

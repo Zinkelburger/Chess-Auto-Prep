@@ -114,8 +114,7 @@ class TrapLineInfo {
         positionEvalCp: json['position_eval_cp'] as int?,
         allReplies: json['all_replies'] != null
             ? (json['all_replies'] as List)
-                .map((r) =>
-                    TrapReply.fromJson(r as Map<String, dynamic>))
+                .map((r) => TrapReply.fromJson(r as Map<String, dynamic>))
                 .toList()
             : null,
       );

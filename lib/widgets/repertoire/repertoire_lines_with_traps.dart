@@ -49,8 +49,7 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
         );
       }
     } catch (e) {
-      debugPrint(
-          '[RepertoireLinesWithTraps] Failed to accept suggestion: $e');
+      debugPrint('[RepertoireLinesWithTraps] Failed to accept suggestion: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -149,8 +148,8 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
             iconColor: AppColors.evalPositive,
             label: 'Coverage Suggestions',
             isExpanded: _suggestionsExpanded,
-            onTap: () => setState(
-                () => _suggestionsExpanded = !_suggestionsExpanded),
+            onTap: () =>
+                setState(() => _suggestionsExpanded = !_suggestionsExpanded),
           ),
           if (_suggestionsExpanded)
             Expanded(
@@ -163,8 +162,7 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
                   coherence: props.coherenceResult,
                 ),
                 playAsWhite: props.isWhiteRepertoire,
-                boardPreview:
-                    props.boardPreview ?? BoardPreviewController(),
+                boardPreview: props.boardPreview ?? BoardPreviewController(),
                 currentCoverage: props.coverageResult!.coveragePercent,
                 onAccept: _acceptSuggestion,
               ),

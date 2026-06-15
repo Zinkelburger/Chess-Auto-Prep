@@ -18,7 +18,6 @@ import '../../../widgets/layout/empty_state_placeholder.dart';
 import 'repertoire_tree_explorer.dart';
 
 class EvalTreePositionSelection {
-
   final String fen;
   final String rootFen;
   final List<String> movePathSan;

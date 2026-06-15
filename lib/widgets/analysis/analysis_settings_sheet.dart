@@ -11,9 +11,7 @@ import 'package:flutter/material.dart';
 import '../../constants/engine_defaults.dart';
 import '../../models/engine_settings.dart';
 import '../../screens/settings_screen.dart';
-import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../../theme/app_colors.dart';
-import '../lichess_db_selector.dart';
 import '../settings/settings_widgets.dart';
 
 /// Which surface opened the sheet — controls which sections are shown.
@@ -200,7 +198,8 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
             ),
             SettingsIntSpec(
               label: 'Our lines (MultiPV)',
-              tooltip: 'Number of top candidate moves to explore for your side.',
+              tooltip:
+                  'Number of top candidate moves to explore for your side.',
               value: _settings.expectimaxOurMultipv,
               min: kMinExpOurMultipv,
               max: kMaxExpOurMultipv,
@@ -244,8 +243,7 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
           children: [
             SettingsSwitchRow(
               label: 'Stockfish PV',
-              tooltip:
-                  'Show the Stockfish principal variation panel — '
+              tooltip: 'Show the Stockfish principal variation panel — '
                   'top engine moves, eval, and continuation for the '
                   'current board position.',
               value: _settings.showEngineDock,
@@ -253,8 +251,7 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
             ),
             SettingsSwitchRow(
               label: 'Expectimax PV',
-              tooltip:
-                  'Show the Expectimax panel — best practical lines '
+              tooltip: 'Show the Expectimax panel — best practical lines '
                   'that account for likely human opponent replies.',
               value: _settings.showExpectimaxDock,
               onChanged: (v) => _settings.showExpectimaxDock = v,
@@ -272,37 +269,6 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
             //   onChanged: (v) => _settings.showProbability = v,
             // ),
           ],
-        ),
-      ),
-    );
-  }
-
-  // ── Contextual Lichess DB filters (mode is on SettingsScreen) ─────────────
-
-  Widget _buildLichessDbFiltersSection() {
-    final database = _settings.explorerUseMasters
-        ? LichessDatabase.masters
-        : LichessDatabase.lichess;
-    final speeds = _settings.explorerSpeedSet;
-    final ratings = _settings.explorerRatingSet;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: SettingsSection(
-        icon: Icons.filter_list,
-        title: 'Lichess database filters',
-        subtitle:
-            'Speed and rating filters for the current opponent model. '
-            'Change the prediction source in Settings → Opponent Model.',
-        showDivider: false,
-        child: LichessDbSelector(
-          database: database,
-          onDatabaseChanged: (db) => _settings.explorerDatabase =
-              db == LichessDatabase.masters ? 'masters' : 'lichess',
-          selectedSpeeds: speeds,
-          onSpeedsChanged: _settings.setExplorerSpeedSet,
-          selectedRatings: ratings,
-          onRatingsChanged: _settings.setExplorerRatingSet,
         ),
       ),
     );

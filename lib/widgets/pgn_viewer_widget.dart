@@ -319,10 +319,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       }
     }
 
-    final comment = (pgnNode.data.comments != null &&
-            pgnNode.data.comments!.isNotEmpty)
-        ? pgnNode.data.comments!.first
-        : null;
+    final comment =
+        (pgnNode.data.comments != null && pgnNode.data.comments!.isNotEmpty)
+            ? pgnNode.data.comments!.first
+            : null;
 
     final node = AnalysisNode(
       san: san,
@@ -572,8 +572,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         if (existing != null) {
           _analysisPath = [existing];
         } else {
-          final newNode = AnalysisNode(
-              san: san, fenAfter: fenAfter, isEphemeral: true);
+          final newNode =
+              AnalysisNode(san: san, fenAfter: fenAfter, isEphemeral: true);
           roots.add(newNode);
           _analysisPath = [newNode];
         }
@@ -581,8 +581,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       } else {
         // Extending current variation
         final current = _analysisPath.last;
-        final (node, _) =
-            current.addChild(san, fenAfter, isEphemeral: true);
+        final (node, _) = current.addChild(san, fenAfter, isEphemeral: true);
         _analysisPath = [..._analysisPath, node];
       }
       _currentPosition = newPos;
@@ -735,8 +734,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   void _showMoveContextMenu(int moveIndex, Offset globalPosition) {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final position = RelativeRect.fromRect(
       Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
       Offset.zero & overlay.size,
@@ -775,8 +773,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
             enabled: !protectOriginal,
             child: Row(
               children: [
-                Icon(Icons.arrow_upward, size: 18,
-                    color: protectOriginal ? Colors.grey[700] : null),
+                Icon(Icons.arrow_upward,
+                    size: 18, color: protectOriginal ? Colors.grey[700] : null),
                 const SizedBox(width: 8),
                 Text('Promote variation',
                     style: protectOriginal
@@ -792,7 +790,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           enabled: !protectOriginal,
           child: Row(
             children: [
-              Icon(Icons.delete_outline, size: 18,
+              Icon(Icons.delete_outline,
+                  size: 18,
                   color: protectOriginal ? Colors.grey[700] : Colors.red),
               const SizedBox(width: 8),
               Text('Delete move',
@@ -908,7 +907,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   Widget _buildPgnDisplay() {
-    if (_moveHistory.isEmpty && _variationsByPly.isEmpty &&
+    if (_moveHistory.isEmpty &&
+        _variationsByPly.isEmpty &&
         (_game == null || _game!.comments.isEmpty)) {
       return const SizedBox();
     }
@@ -1002,21 +1002,23 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       final isSelected = inEditMode && _selectedMoveIndex == i;
 
       // Determine move color: in edit mode, NAG color takes priority
-      final moveNag = (inEditMode && moveData.nags != null && moveData.nags!.isNotEmpty)
+      final moveNag = (inEditMode &&
+              moveData.nags != null &&
+              moveData.nags!.isNotEmpty)
           ? moveData.nags!.firstWhere((n) => n >= 1 && n <= 6, orElse: () => 0)
           : 0;
       final nagMoveColor = moveNag > 0 ? nagColor(moveNag) : null;
 
       final moveColor = isCurrentMove
           ? AppColors.pgnMoveCurrent
-          : (nagMoveColor ?? (hasBranch ? AppColors.lichessDb : AppColors.info));
+          : (nagMoveColor ??
+              (hasBranch ? AppColors.lichessDb : AppColors.info));
 
       // Build SAN + NAG text
-      final nagSuffix = (inEditMode && moveData.nags != null && moveData.nags!.isNotEmpty)
-          ? moveData.nags!
-              .where((n) => n >= 1 && n <= 6)
-              .map(nagSymbol)
-              .join()
+      final nagSuffix = (inEditMode &&
+              moveData.nags != null &&
+              moveData.nags!.isNotEmpty)
+          ? moveData.nags!.where((n) => n >= 1 && n <= 6).map(nagSymbol).join()
           : '';
 
       spans.add(
@@ -1042,7 +1044,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                         : null),
                 borderRadius: BorderRadius.circular(3),
                 border: isSelected
-                    ? Border.all(color: moveColor.withValues(alpha: 0.6), width: 1)
+                    ? Border.all(
+                        color: moveColor.withValues(alpha: 0.6), width: 1)
                     : null,
               ),
               child: Text.rich(
@@ -1053,8 +1056,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                       fontFamily: 'monospace',
                       fontSize: 14,
                       color: moveColor,
-                      fontWeight: isCurrentMove ? FontWeight.w500 : FontWeight.normal,
-                      decoration: isCurrentMove ? null : TextDecoration.underline,
+                      fontWeight:
+                          isCurrentMove ? FontWeight.w500 : FontWeight.normal,
+                      decoration:
+                          isCurrentMove ? null : TextDecoration.underline,
                       decorationColor:
                           AppColors.onSurfaceDim.withValues(alpha: 0.45),
                       decorationStyle: TextDecorationStyle.dotted,
@@ -1201,8 +1206,9 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final isWhiteTurn = ply % 2 == 0;
 
     for (final root in roots) {
-      final bracketColor =
-          root.isEphemeral ? AppColors.pgnEphemeralMove : AppColors.pgnVariation;
+      final bracketColor = root.isEphemeral
+          ? AppColors.pgnEphemeralMove
+          : AppColors.pgnVariation;
 
       spans.add(TextSpan(
         text: '( ',
@@ -1287,8 +1293,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           onTap: () => _goToAnalysisNode(node, branchPly),
           onSecondaryTapDown: widget.onAnalysisNodeAction != null &&
                   node.isEphemeral
-              ? (details) => widget.onAnalysisNodeAction!(
-                  node.id, details.globalPosition)
+              ? (details) =>
+                  widget.onAnalysisNodeAction!(node.id, details.globalPosition)
               : null,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
@@ -1311,10 +1317,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                         : AppColors.pgnMainLine)
                     : moveColor,
                 fontWeight: isCurrentNode ? FontWeight.w500 : FontWeight.normal,
-                decoration:
-                    isCurrentNode ? null : TextDecoration.underline,
-                decorationColor:
-                    AppColors.onSurfaceDim.withValues(alpha: 0.45),
+                decoration: isCurrentNode ? null : TextDecoration.underline,
+                decorationColor: AppColors.onSurfaceDim.withValues(alpha: 0.45),
                 decorationStyle: TextDecorationStyle.dotted,
               ),
             ),

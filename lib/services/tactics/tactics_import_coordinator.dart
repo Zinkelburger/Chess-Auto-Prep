@@ -45,8 +45,7 @@ class TacticsImportCoordinator extends ChangeNotifier {
 
     final importService = activeImport = TacticsImportService();
     final depth = params.depth.clamp(1, 25);
-    final cores =
-        params.cores.clamp(1, TacticsImportService.availableCores);
+    final cores = params.cores.clamp(1, TacticsImportService.availableCores);
 
     importStatus = 'Initializing...';
     isImporting = true;

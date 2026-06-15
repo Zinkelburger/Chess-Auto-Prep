@@ -242,9 +242,8 @@ class _EditContextZoneState extends State<EditContextZone> {
   Widget _chip(BuildContext context, EditContextTabSpec spec) {
     final isSelected = _selectedViews.contains(spec.view);
     return GestureDetector(
-      onLongPress: widget.tabsLocked
-          ? null
-          : () => _showPlaceMenu(context, spec),
+      onLongPress:
+          widget.tabsLocked ? null : () => _showPlaceMenu(context, spec),
       child: FilterChip(
         key: ValueKey('edit_context_chip_${spec.view.name}'),
         label: Row(
@@ -369,8 +368,7 @@ class _EditContextZoneState extends State<EditContextZone> {
     final pairSum = left + right;
     final shift = deltaPx / totalWidth * pairSum * cols.length;
     final newLeft = (left + shift).clamp(pairSum * 0.12, pairSum * 0.88);
-    cols[leftIndex] =
-        cols[leftIndex].copyWith(horizontalFlex: newLeft);
+    cols[leftIndex] = cols[leftIndex].copyWith(horizontalFlex: newLeft);
     cols[leftIndex + 1] =
         cols[leftIndex + 1].copyWith(horizontalFlex: pairSum - newLeft);
     _setLayout(EditContextLayout(columns: cols));
@@ -404,8 +402,7 @@ class _EditContextZoneState extends State<EditContextZone> {
     required double maxHeight,
     required double maxWidth,
   }) {
-    final views =
-        col.views.where((v) => _selectedViews.contains(v)).toList();
+    final views = col.views.where((v) => _selectedViews.contains(v)).toList();
     if (views.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -441,10 +438,8 @@ class _EditContextZoneState extends State<EditContextZone> {
   }
 
   Widget _panelShell(EditContextView view, Widget child) {
-    final label = _tabs
-        .where((t) => t.view == view)
-        .map((t) => t.label)
-        .firstOrNull;
+    final label =
+        _tabs.where((t) => t.view == view).map((t) => t.label).firstOrNull;
     if (label == null) return child;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

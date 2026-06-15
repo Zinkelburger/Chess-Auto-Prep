@@ -1,5 +1,4 @@
-import 'maia_stub.dart'
-    if (dart.library.io) 'maia_native.dart' as platform;
+import 'maia_stub.dart' if (dart.library.io) 'maia_native.dart' as platform;
 
 import 'maia_service.dart';
 

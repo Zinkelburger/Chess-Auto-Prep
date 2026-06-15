@@ -51,8 +51,8 @@ Future<void> _initializeApp() async {
 
 void _startBrowserExtensionServer() async {
   if (BrowserExtensionServerFactory.isSupported) {
-    final started = await BrowserExtensionServerFactory.start(
-        port: kBrowserExtensionPort);
+    final started =
+        await BrowserExtensionServerFactory.start(port: kBrowserExtensionPort);
     if (started) {
       debugPrint('Browser extension server started successfully');
     } else {
@@ -93,7 +93,8 @@ class StartupErrorApp extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.error_outline, color: AppColors.danger, size: 48),
+                const Icon(Icons.error_outline,
+                    color: AppColors.danger, size: 48),
                 const SizedBox(height: 16),
                 Text(
                   'Chess Auto Prep failed to start',

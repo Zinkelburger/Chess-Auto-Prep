@@ -42,7 +42,9 @@ class AuditSessionController extends ChangeNotifier {
   RepertoireAuditService get service => _service;
 
   bool get hasResults =>
-      _result != null || _liveFindings.isNotEmpty || _interruptedSnapshot != null;
+      _result != null ||
+      _liveFindings.isNotEmpty ||
+      _interruptedSnapshot != null;
 
   int get activeFindingCount =>
       _result?.activeFindingCount ?? _liveFindings.length;
@@ -252,8 +254,8 @@ class AuditSessionController extends ChangeNotifier {
       _isAuditing = false;
       currentJob?.updateStatus(JobStatus.completed);
       currentJob = null;
-      AuditPersistence.instance.saveComplete(
-        repertoireFilePath, auditResult, config);
+      AuditPersistence.instance
+          .saveComplete(repertoireFilePath, auditResult, config);
       notifyListeners();
     } catch (e) {
       _isAuditing = false;

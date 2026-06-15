@@ -163,7 +163,10 @@ class EditContextLayout {
     if (columnIndex > cols.length) columnIndex = cols.length;
 
     if (columnIndex == cols.length) {
-      cols = [...cols, EditContextColumnLayout(views: [view])];
+      cols = [
+        ...cols,
+        EditContextColumnLayout(views: [view])
+      ];
       return EditContextLayout(columns: cols);
     }
 

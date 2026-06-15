@@ -82,8 +82,10 @@ class HeaderFiltersState extends State<HeaderFilters> {
   final List<HeaderFilterRow> _filters = [];
 
   /// Get current filter configs (non-empty values only).
-  List<HeaderFilterConfig> get configs =>
-      _filters.where((f) => f.value.isNotEmpty).map((f) => f.toConfig()).toList();
+  List<HeaderFilterConfig> get configs => _filters
+      .where((f) => f.value.isNotEmpty)
+      .map((f) => f.toConfig())
+      .toList();
 
   /// Get raw filter data for slice computation.
   List<({String field, MatchMode mode, String value})> get rawFilters =>
@@ -203,8 +205,7 @@ class HeaderFiltersState extends State<HeaderFilters> {
                   items: kHeaderFieldOptions
                       .map((s) => DropdownMenuItem(
                           value: s,
-                          child:
-                              Text(s, style: const TextStyle(fontSize: 12))))
+                          child: Text(s, style: const TextStyle(fontSize: 12))))
                       .toList(),
                   onChanged: (v) {
                     setState(() {
@@ -257,8 +258,8 @@ class HeaderFiltersState extends State<HeaderFilters> {
                     hintText: hintText,
                     hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 10),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                     border: const OutlineInputBorder(),
                     suffixIcon: showEcoWarn
                         ? Tooltip(

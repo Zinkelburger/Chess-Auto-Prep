@@ -210,12 +210,12 @@ class SessionStatsBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _StatItem(Icons.check_circle_outline, '$sessionCorrect',
-              Colors.green, theme),
-          _StatItem(Icons.cancel_outlined, '$sessionIncorrect',
-              Colors.red, theme),
-          _StatItem(Icons.percent, '$accuracy%',
-              theme.colorScheme.onSurface, theme),
+          _StatItem(Icons.check_circle_outline, '$sessionCorrect', Colors.green,
+              theme),
+          _StatItem(
+              Icons.cancel_outlined, '$sessionIncorrect', Colors.red, theme),
+          _StatItem(
+              Icons.percent, '$accuracy%', theme.colorScheme.onSurface, theme),
           _StatItem(Icons.local_fire_department, '$sessionStreak',
               Colors.orange, theme),
         ],

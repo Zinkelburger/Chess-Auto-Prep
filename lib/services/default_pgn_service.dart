@@ -45,8 +45,7 @@ class DefaultPgnService {
       if (await target.exists()) continue;
 
       try {
-        final byteData =
-            await rootBundle.load('assets/$_directoryName/$name');
+        final byteData = await rootBundle.load('assets/$_directoryName/$name');
         final data = decodeTextBytes(byteData.buffer.asUint8List(
           byteData.offsetInBytes,
           byteData.lengthInBytes,

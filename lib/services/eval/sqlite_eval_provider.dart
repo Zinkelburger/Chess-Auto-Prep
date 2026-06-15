@@ -6,7 +6,6 @@ library;
 import 'dart:io' show File, Platform;
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../utils/fen_utils.dart';
@@ -61,7 +60,8 @@ class SqliteEvalProvider implements ExternalEvalProvider {
   final String path;
   final SqliteEvalDatabaseFactory? _openOverride;
 
-  SqliteEvalProvider({required this.path, SqliteEvalDatabaseFactory? openOverride})
+  SqliteEvalProvider(
+      {required this.path, SqliteEvalDatabaseFactory? openOverride})
       : _openOverride = openOverride;
 
   /// Opens the database lazily. Safe to call multiple times.

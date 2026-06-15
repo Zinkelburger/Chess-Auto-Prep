@@ -98,8 +98,7 @@ class _BrowsePanelState extends State<BrowsePanel> {
     if (!mounted) return;
 
     if (!widget.isOurTurn) {
-      _candidates =
-          all.where((m) => (m.dbFrequency ?? 0.05) >= 0.01).toList();
+      _candidates = all.where((m) => (m.dbFrequency ?? 0.05) >= 0.01).toList();
       _rareCandidates =
           all.where((m) => (m.dbFrequency ?? 0.05) < 0.01).toList();
     } else {
@@ -140,12 +139,10 @@ class _BrowsePanelState extends State<BrowsePanel> {
                 if (i < _candidates.length) {
                   return _buildCandidateItem(i, _candidates[i]);
                 }
-                if (i == _candidates.length &&
-                    _rareCandidates.isNotEmpty) {
+                if (i == _candidates.length && _rareCandidates.isNotEmpty) {
                   return _buildRareToggle(theme);
                 }
-                final rareIdx =
-                    i - _candidates.length - 1;
+                final rareIdx = i - _candidates.length - 1;
                 return _buildCandidateItem(
                   _candidates.length + 1 + rareIdx,
                   _rareCandidates[rareIdx],
@@ -219,8 +216,7 @@ class _BrowsePanelState extends State<BrowsePanel> {
                 ?.copyWith(fontWeight: FontWeight.bold),
           ),
           const Spacer(),
-          Text('${_candidates.length} moves',
-              style: theme.textTheme.bodySmall),
+          Text('${_candidates.length} moves', style: theme.textTheme.bodySmall),
         ],
       ),
     );
@@ -245,9 +241,7 @@ class _BrowsePanelState extends State<BrowsePanel> {
         child: Row(
           children: [
             Icon(
-              _showRare
-                  ? Icons.expand_less
-                  : Icons.expand_more,
+              _showRare ? Icons.expand_less : Icons.expand_more,
               size: 16,
               color: Colors.grey,
             ),

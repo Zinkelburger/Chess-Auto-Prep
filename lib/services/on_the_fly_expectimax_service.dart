@@ -97,8 +97,7 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
 
   /// Whether cached or in-flight data exists for [fen].
   bool hasDataForFen(String fen) =>
-      _cache.containsKey(fen) ||
-      (_currentFen == fen && _moveLines.isNotEmpty);
+      _cache.containsKey(fen) || (_currentFen == fen && _moveLines.isNotEmpty);
 
   /// Start or continue auto computation for [fen].
   ///
@@ -179,11 +178,10 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
 
     // Use stockfishExpectimax by default — it works without an eval DB.
     // Only use maiaDbExplore when the user has a local DB configured.
-    final hasEvalDb = dbSettings.enableCdbDirect &&
-        dbSettings.cdbDirectPath.isNotEmpty;
-    final buildMode = hasEvalDb
-        ? BuildMode.maiaDbExplore
-        : BuildMode.stockfishExpectimax;
+    final hasEvalDb =
+        dbSettings.enableCdbDirect && dbSettings.cdbDirectPath.isNotEmpty;
+    final buildMode =
+        hasEvalDb ? BuildMode.maiaDbExplore : BuildMode.stockfishExpectimax;
     debugPrint('[OnTheFlyExpectimax] buildMode=$buildMode '
         'hasEvalDb=$hasEvalDb');
 
@@ -239,7 +237,8 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
                 generation: generation,
               );
             } catch (e, st) {
-              debugPrint('[OnTheFlyExpectimax] Partial refresh failed: $e\n$st');
+              debugPrint(
+                  '[OnTheFlyExpectimax] Partial refresh failed: $e\n$st');
             }
           },
           isCancelled: () =>
@@ -247,7 +246,8 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
         );
       } catch (e, st) {
         if (_runGeneration == generation && _state == OnTheFlyState.computing) {
-          debugPrint('[OnTheFlyExpectimax] Build FAILED at depth $depth: $e\n$st');
+          debugPrint(
+              '[OnTheFlyExpectimax] Build FAILED at depth $depth: $e\n$st');
           _lastError = 'Build failed at depth $depth ($buildMode): $e';
           _state =
               _moveLines.isEmpty ? OnTheFlyState.idle : OnTheFlyState.ready;
@@ -339,7 +339,8 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
     }
     _lastPartialNotify = now;
 
-    final map = fenMap ?? FenMap()..populate(tree.root);
+    final map = fenMap ?? FenMap()
+      ..populate(tree.root);
     final eca = ExpectimaxCalculator(config: config, fenMap: map);
     eca.calculate(tree);
     calculateMyEase(tree, playAsWhite: playAsWhite);
@@ -375,8 +376,7 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
 
     if (!forceAll) {
       if (isOurTurn) {
-        if (root.children.every(
-            (c) => !isBranchCompleteToPly(c, targetPly))) {
+        if (root.children.every((c) => !isBranchCompleteToPly(c, targetPly))) {
           return false;
         }
       } else if (!isBranchCompleteToPly(root, targetPly)) {
@@ -486,7 +486,8 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
   void cancel() {
     if (_state == OnTheFlyState.computing) {
       _runGeneration++;
-      _state = _moveLines.isEmpty ? OnTheFlyState.cancelled : OnTheFlyState.ready;
+      _state =
+          _moveLines.isEmpty ? OnTheFlyState.cancelled : OnTheFlyState.ready;
       _computingDepth = null;
       notifyListeners();
     }

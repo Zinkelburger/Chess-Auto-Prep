@@ -59,8 +59,8 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
   }
 
   List<int> get _effectiveIndices {
-    final base =
-        widget.matchedIndices ?? List.generate(widget.allGames.length, (i) => i);
+    final base = widget.matchedIndices ??
+        List.generate(widget.allGames.length, (i) => i);
     if (_searchQuery.isEmpty) return base;
 
     final query = _searchQuery.toLowerCase();
@@ -132,8 +132,7 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: cs.surfaceContainerHighest,
-            borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(8)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
           ),
           child: Row(
             children: [
@@ -165,8 +164,8 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
                     hintText: 'Search...',
                     hintStyle:
                         TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                    prefixIcon:
-                        Icon(Icons.search, size: 14, color: cs.onSurfaceVariant),
+                    prefixIcon: Icon(Icons.search,
+                        size: 14, color: cs.onSurfaceVariant),
                     prefixIconConstraints:
                         const BoxConstraints(minWidth: 28, minHeight: 28),
                     suffixIcon: _searchQuery.isNotEmpty
@@ -201,7 +200,8 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
                 ? BoxConstraints(maxHeight: widget.maxHeight!)
                 : const BoxConstraints(),
             decoration: BoxDecoration(
-              border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
+              border:
+                  Border.all(color: cs.outlineVariant.withValues(alpha: 0.3)),
               borderRadius:
                   const BorderRadius.vertical(bottom: Radius.circular(8)),
             ),
@@ -213,8 +213,8 @@ class _LinesPreviewPanelState extends State<LinesPreviewPanel> {
                         _searchQuery.isNotEmpty
                             ? 'No games match "$_searchQuery"'
                             : 'No games match the current filters',
-                        style: TextStyle(
-                            fontSize: 12, color: cs.onSurfaceVariant),
+                        style:
+                            TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                       ),
                     ),
                   )
@@ -279,8 +279,7 @@ class _GameLineRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           border: Border(
-            bottom:
-                BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
+            bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.2)),
           ),
           color: listIndex % 2 == 0
               ? Colors.transparent
@@ -295,8 +294,7 @@ class _GameLineRow extends StatelessWidget {
               children: [
                 Text(
                   '${listIndex + 1}.',
-                  style: TextStyle(
-                      fontSize: 10, color: cs.onSurfaceVariant),
+                  style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
                 ),
                 const SizedBox(width: 6),
                 Expanded(
@@ -318,8 +316,7 @@ class _GameLineRow extends StatelessWidget {
                     ),
                     child: Text(
                       result,
-                      style: TextStyle(
-                          fontSize: 9, color: cs.onSurfaceVariant),
+                      style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
                     ),
                   ),
               ],

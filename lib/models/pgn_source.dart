@@ -72,8 +72,7 @@ class PgnSource {
         sliceConfig: json['sliceConfig'] != null
             ? SliceConfig.fromJsonString(json['sliceConfig'] as String)
             : null,
-        matchedIndices: (json['matchedIndices'] as List<dynamic>?)
-            ?.cast<int>(),
+        matchedIndices: (json['matchedIndices'] as List<dynamic>?)?.cast<int>(),
       );
 
   String toJsonString() => jsonEncode(toJson());

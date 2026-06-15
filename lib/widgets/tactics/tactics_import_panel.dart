@@ -243,8 +243,7 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
                             width: 100,
                             child: TextField(
                               controller: widget.coresController,
-                              enabled:
-                                  TacticsImportService.isParallelAvailable,
+                              enabled: TacticsImportService.isParallelAvailable,
                               decoration: InputDecoration(
                                 labelText: 'Cores',
                                 border: const OutlineInputBorder(),
@@ -336,8 +335,7 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
             _conditionalTooltip(
               message: positionCount == 0 ? 'No tactics to browse' : null,
               child: TextButton.icon(
-                onPressed:
-                    positionCount > 0 ? widget.onBrowseTactics : null,
+                onPressed: positionCount > 0 ? widget.onBrowseTactics : null,
                 icon: const Icon(Icons.list_alt, size: 16),
                 label: const Text('Browse Tactics'),
               ),
@@ -390,7 +388,8 @@ class _SessionSettingsForm extends StatelessWidget {
       children: [
         Row(
           children: [
-            Text('Order:', style: TextStyle(fontSize: 13, color: Colors.grey[300])),
+            Text('Order:',
+                style: TextStyle(fontSize: 13, color: Colors.grey[300])),
             const SizedBox(width: 8),
             DropdownButton<TacticsSessionOrder>(
               value: settings.order,
@@ -411,7 +410,8 @@ class _SessionSettingsForm extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 12),
-        Text('Include:', style: TextStyle(fontSize: 13, color: Colors.grey[300])),
+        Text('Include:',
+            style: TextStyle(fontSize: 13, color: Colors.grey[300])),
         _MistakeTypeCheckbox(
           label: 'Blunders (??)',
           type: '??',
@@ -431,7 +431,8 @@ class _SessionSettingsForm extends StatelessWidget {
           onChanged: (v) => _toggleMistakeType('?!', v),
         ),
         const SizedBox(height: 8),
-        Text('Filter:', style: TextStyle(fontSize: 13, color: Colors.grey[300])),
+        Text('Filter:',
+            style: TextStyle(fontSize: 13, color: Colors.grey[300])),
         _MistakeTypeCheckbox(
           label: 'Unreviewed only',
           type: '',

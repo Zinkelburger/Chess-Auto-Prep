@@ -6,7 +6,10 @@ import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/features/browse/services/candidate_service.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 
-BuildTreeNode _makeNode(String fen, String san, String uci, {
+BuildTreeNode _makeNode(
+  String fen,
+  String san,
+  String uci, {
   double ease = 0.5,
   double myEase = -1,
   double expectimax = 0.5,
@@ -57,8 +60,8 @@ void main() {
       final root = _makeRoot('startpos');
       final child1 = _makeNode('fen1', 'e4', 'e2e4',
           expectimax: 0.6, isRepertoire: true, evalCp: 30);
-      final child2 = _makeNode('fen2', 'd4', 'd2d4',
-          expectimax: 0.55, evalCp: 25);
+      final child2 =
+          _makeNode('fen2', 'd4', 'd2d4', expectimax: 0.55, evalCp: 25);
 
       root.children.addAll([child1, child2]);
 
@@ -78,12 +81,12 @@ void main() {
 
     test('sorts by expectimax on our turn (repertoire first)', () {
       final root = _makeRoot('startpos');
-      final child1 = _makeNode('f1', 'Nf3', 'g1f3',
-          expectimax: 0.7, isRepertoire: false);
-      final child2 = _makeNode('f2', 'e4', 'e2e4',
-          expectimax: 0.65, isRepertoire: true);
-      final child3 = _makeNode('f3', 'd4', 'd2d4',
-          expectimax: 0.8, isRepertoire: false);
+      final child1 =
+          _makeNode('f1', 'Nf3', 'g1f3', expectimax: 0.7, isRepertoire: false);
+      final child2 =
+          _makeNode('f2', 'e4', 'e2e4', expectimax: 0.65, isRepertoire: true);
+      final child3 =
+          _makeNode('f3', 'd4', 'd2d4', expectimax: 0.8, isRepertoire: false);
 
       root.children.addAll([child1, child2, child3]);
 
@@ -102,12 +105,12 @@ void main() {
 
     test('sorts by frequency on opponent turn', () {
       final root = _makeRoot('startpos');
-      final child1 = _makeNode('f1', 'e5', 'e7e5',
-          moveProbability: 0.4, totalGames: 400);
-      final child2 = _makeNode('f2', 'd5', 'd7d5',
-          moveProbability: 0.3, totalGames: 300);
-      final child3 = _makeNode('f3', 'c5', 'c7c5',
-          moveProbability: 0.2, totalGames: 200);
+      final child1 =
+          _makeNode('f1', 'e5', 'e7e5', moveProbability: 0.4, totalGames: 400);
+      final child2 =
+          _makeNode('f2', 'd5', 'd7d5', moveProbability: 0.3, totalGames: 300);
+      final child3 =
+          _makeNode('f3', 'c5', 'c7c5', moveProbability: 0.2, totalGames: 200);
 
       root.children.addAll([child1, child2, child3]);
 
@@ -139,10 +142,8 @@ void main() {
     test('counts traps in subtree', () {
       final root = _makeRoot('startpos');
       final child = _makeNode('f1', 'e4', 'e2e4');
-      final grandchild1 = _makeNode('f2', 'e5', 'e7e5',
-          trapScore: 0.5, ply: 2);
-      final grandchild2 = _makeNode('f3', 'c5', 'c7c5',
-          trapScore: 0.3, ply: 2);
+      final grandchild1 = _makeNode('f2', 'e5', 'e7e5', trapScore: 0.5, ply: 2);
+      final grandchild2 = _makeNode('f3', 'c5', 'c7c5', trapScore: 0.3, ply: 2);
       child.children.addAll([grandchild1, grandchild2]);
       root.children.add(child);
 
@@ -365,8 +366,8 @@ void main() {
 
     test('skips explorer when tree has DB stats', () async {
       final root = _makeRoot(kStandardStartFen);
-      final child = _makeNode('f1', 'e4', 'e2e4',
-          totalGames: 800, moveProbability: 0.6);
+      final child =
+          _makeNode('f1', 'e4', 'e2e4', totalGames: 800, moveProbability: 0.6);
       root.children.add(child);
 
       final mockService = _MockCoverageService({
@@ -438,8 +439,7 @@ void main() {
 
       expect(mockService.fetchCount, 1);
       expect(candidates.length, 2);
-      expect(candidates.firstWhere((c) => c.san == 'e4').dbWhiteWin,
-          isNotNull);
+      expect(candidates.firstWhere((c) => c.san == 'e4').dbWhiteWin, isNotNull);
     });
   });
 }

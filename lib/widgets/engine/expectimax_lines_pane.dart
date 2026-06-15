@@ -281,7 +281,8 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                   color: AppColors.expectimax,
                 ),
                 if (done > 0)
-                  Text('$done', style: TextStyle(fontSize: 8, color: Colors.grey[400])),
+                  Text('$done',
+                      style: TextStyle(fontSize: 8, color: Colors.grey[400])),
               ],
             ),
           ),
@@ -424,9 +425,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
         final pct = (info.moveProbability * 100).round();
         annotations.add(MoveAnnotation(
           suffix: ' $pct%',
-          suffixColor: pct >= 50
-              ? AppColors.warning
-              : Colors.grey[500],
+          suffixColor: pct >= 50 ? AppColors.warning : Colors.grey[500],
           suffixFontWeight: FontWeight.w600,
         ));
       } else if (info.isOurMove && info.isRepertoireMove) {
@@ -473,8 +472,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                   '${(coherence * 100).round()}% structural patterns',
               child: Container(
                 width: 40,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                 child: Text(
                   'C:${(coherence * 100).round()}',
                   style: TextStyle(
@@ -523,8 +521,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           DropdownButton<int>(
             value: _settings.expectimaxOurMultipv,
             items: [1, 2, 3, 4, 5]
-                .map((v) =>
-                    DropdownMenuItem(value: v, child: Text('Top $v')))
+                .map((v) => DropdownMenuItem(value: v, child: Text('Top $v')))
                 .toList(),
             onChanged: (v) {
               if (v != null) {
@@ -539,8 +536,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
           DropdownButton<int>(
             value: _maxPlies,
             items: [4, 8, 12, 16, 20]
-                .map((v) =>
-                    DropdownMenuItem(value: v, child: Text('+$v')))
+                .map((v) => DropdownMenuItem(value: v, child: Text('+$v')))
                 .toList(),
             onChanged: (v) {
               if (v != null) {
@@ -564,8 +560,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
 
   void _onMoveHovered(ExpectimaxLine line, int index, Offset anchorGlobal) {
     final fen = fenAfterMoves(widget.fen, line.movesSan, index);
-    final uci =
-        index < line.movesUci.length ? line.movesUci[index] : null;
+    final uci = index < line.movesUci.length ? line.movesUci[index] : null;
     widget.boardPreview.setPreview(
       fen,
       moves: line.movesSan.sublist(0, index + 1),

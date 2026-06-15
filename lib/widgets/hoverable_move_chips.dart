@@ -171,8 +171,7 @@ class _MoveChip extends StatelessWidget {
           cursor: hasTap ? SystemMouseCursors.click : SystemMouseCursors.basic,
           onEnter: hasHover
               ? (_) {
-                  final box =
-                      anchorContext.findRenderObject() as RenderBox?;
+                  final box = anchorContext.findRenderObject() as RenderBox?;
                   if (box == null) return;
                   final anchor = box.localToGlobal(
                     Offset(box.size.width / 2, box.size.height),

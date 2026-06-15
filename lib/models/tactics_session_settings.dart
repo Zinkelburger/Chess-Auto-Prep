@@ -39,8 +39,7 @@ class TacticsSessionSettings {
   }
 
   /// Count how many positions in [all] pass the filter.
-  int countMatching(List<TacticsPosition> all) =>
-      all.where(accepts).length;
+  int countMatching(List<TacticsPosition> all) => all.where(accepts).length;
 
   TacticsSessionSettings copyWith({
     TacticsSessionOrder? order,

@@ -34,8 +34,7 @@ void main() {
   test('processMoveAttempt accepts correct single-move tactic', () {
     final db = TacticsDatabase();
     db.positions.add(_samplePosition());
-    final session = TacticsSessionController(database: db)
-      ..autoAdvance = false;
+    final session = TacticsSessionController(database: db)..autoAdvance = false;
     session.selectPosition(db.positions.first);
 
     final update = session.processMoveAttempt(
@@ -73,8 +72,7 @@ void main() {
     // then user plays Nf3. correctLine = ['e4', 'e5', 'Nf3'].
     final db = TacticsDatabase();
     db.positions.add(_samplePosition(line: ['e4', 'e5', 'Nf3']));
-    final session = TacticsSessionController(database: db)
-      ..autoAdvance = false;
+    final session = TacticsSessionController(database: db)..autoAdvance = false;
     session.selectPosition(db.positions.first);
 
     final boardUpdates = <TacticsBoardUpdate>[];
@@ -120,8 +118,7 @@ void main() {
     // 5-ply line: e4, e5, Nf3, Nc6, Bb5.
     final db = TacticsDatabase();
     db.positions.add(_samplePosition(line: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']));
-    final session = TacticsSessionController(database: db)
-      ..autoAdvance = false;
+    final session = TacticsSessionController(database: db)..autoAdvance = false;
     session.selectPosition(db.positions.first);
     session.onBoardUpdate = (_) {};
 

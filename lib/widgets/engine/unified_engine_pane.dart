@@ -20,7 +20,6 @@ import 'engine_pane_footer.dart';
 import '../analysis/analysis_settings_sheet.dart';
 import 'floating_board_preview.dart';
 import '../clickable_move_line.dart';
-import '../lichess_db_info_icon.dart';
 
 /// Lightweight stopwatch helper for timestamped performance logging.
 Stopwatch? _perfWatch;
@@ -62,7 +61,8 @@ class UnifiedEnginePane extends StatefulWidget {
   final bool isActive;
   final bool? isUserTurn;
   final Function(String uciMove)? onMoveSelected;
-  final void Function(List<String> sanMoves, int clickedIndex)? onLineMoveTapped;
+  final void Function(List<String> sanMoves, int clickedIndex)?
+      onLineMoveTapped;
   final List<String> currentMoveSequence;
   final bool isWhiteRepertoire;
   final VoidCallback? onSetRoot;
@@ -300,11 +300,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         _settings.fetchMaiaForOpponent &&
         MaiaFactory.isAvailable &&
         MaiaFactory.instance != null;
-    // Mothballed: Lichess Explorer API calls are disabled.
-    const useDb = false;
 
     _perfLog('Pipeline START — SF=${useStockfish ? "ON" : "OFF"}, '
-        'Maia=${useMaia ? "ON" : "OFF"}, DB=${useDb ? "ON" : "OFF"}');
+        'Maia=${useMaia ? "ON" : "OFF"}, DB=OFF');
 
     try {
       // ── Fire all sources in parallel ──
@@ -319,13 +317,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       final maiaFuture =
           useMaia ? _runMaiaAnalysis() : Future.value(<String, double>{});
 
-      final dbFuture = useDb ? _fetchDbData() : Future.value(null);
-
       // ── Await all ──
       final results = await Future.wait<Object?>([
         discoveryFuture,
         maiaFuture,
-        dbFuture,
       ]);
 
       if (!mounted || _analysisGeneration != myGen) {
@@ -351,9 +346,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       _perfLog('Filtered ${candidates.length} candidates '
           '(${sfUcis.length} SF + '
           '${candidates.length - sfUcis.length} Maia/DB)');
-
-      // ── Fire-and-forget: cumulative probability ──
-      if (useDb) _calculateCumulativeProbability();
 
       // ── Start evaluation phase ──
       _analysis.startEvaluation(
@@ -438,22 +430,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     } catch (e) {
       _perfLog('Maia FAILED — $e');
       return {};
-    }
-  }
-
-  Future<void> _fetchDbData() async {
-    _perfLog('DB fetch START');
-    try {
-      await _probabilityService.fetchProbabilities(
-        widget.fen,
-        speeds: _settings.explorerSpeeds,
-        ratings: _settings.explorerRatings,
-        useMasters: _settings.explorerUseMasters,
-      );
-      _perfLog('DB fetch DONE — '
-          '${_probabilityService.currentPosition.value?.moves.length ?? 0} moves');
-    } catch (e) {
-      if (kDebugMode) print('[Engine] DB FAILED — $e');
     }
   }
 
@@ -663,33 +639,34 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           clipBehavior: Clip.none,
           children: [
             ListView(
-          padding: const EdgeInsets.only(top: 4, bottom: 4),
-          children: [
-            _buildTableHeader(),
-            const Divider(height: 1),
-            if (moves.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 1.5),
+              padding: const EdgeInsets.only(top: 4, bottom: 4),
+              children: [
+                _buildTableHeader(),
+                const Divider(height: 1),
+                if (moves.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 1.5),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Analyzing...',
+                          style:
+                              TextStyle(color: Colors.grey[500], fontSize: 13),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Analyzing...',
-                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                    ),
-                  ],
-                ),
-              )
-            else
-              ...moves.map(_buildMoveRow),
-          ],
-        ),
+                  )
+                else
+                  ...moves.map(_buildMoveRow),
+              ],
+            ),
             if (widget.boardPreview != null)
               FloatingBoardPreview(
                 stackKey: _previewStackKey,
@@ -745,9 +722,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           ? '$tooltipExtra\n$_colHeaderTip'
           : _colHeaderTip,
       child: Material(
-        color: muted
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.transparent,
+        color:
+            muted ? Colors.white.withValues(alpha: 0.04) : Colors.transparent,
         borderRadius: BorderRadius.circular(4),
         child: InkWell(
           onTap: () {
@@ -777,8 +753,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final narrow = constraints.maxWidth < _narrowTableWidth;
-        // Mothballed: Lichess Explorer column always hidden.
-        const showDb = false;
         final showMaia =
             !narrow && _settings.showMaia && _settings.fetchMaiaForOpponent;
         final moveWidth = narrow ? 36.0 : 52.0;
@@ -816,15 +790,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                 textAlign: TextAlign.left,
                 tooltipExtra: 'Principal variation continuation',
               ),
-              if (showDb)
-                _buildColumnHeader(
-                  columnId: EngineSettings.colDb,
-                  label: 'DB',
-                  textAlign: TextAlign.right,
-                  width: 60,
-                  leading: const LichessDbInfoIcon(size: 12),
-                  tooltipExtra: 'Database probability',
-                ),
               if (showMaia)
                 _buildColumnHeader(
                   columnId: EngineSettings.colMaia,
@@ -841,11 +806,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   }
 
   Widget _buildMoveRow(_MergedMove move) {
-    final evalMuted =
-        _settings.isAnalysisColumnMuted(EngineSettings.colEval);
-    final lineMuted =
-        _settings.isAnalysisColumnMuted(EngineSettings.colLine);
-    final dbMuted = _settings.isAnalysisColumnMuted(EngineSettings.colDb);
+    final evalMuted = _settings.isAnalysisColumnMuted(EngineSettings.colEval);
+    final lineMuted = _settings.isAnalysisColumnMuted(EngineSettings.colLine);
     final maiaMuted = _settings.isAnalysisColumnMuted(EngineSettings.colMaia);
 
     final evalColor = move.hasStockfish
@@ -855,8 +817,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final narrow = constraints.maxWidth < _narrowTableWidth;
-        // Mothballed: Lichess Explorer column always hidden.
-        const showDb = false;
         final showMaia =
             !narrow && _settings.showMaia && _settings.fetchMaiaForOpponent;
         final moveWidth = narrow ? 36.0 : 52.0;
@@ -928,26 +888,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                 Expanded(
                   child: _buildContinuationWidget(move, muted: lineMuted),
                 ),
-                if (showDb) ...[
-                  if (!narrow) const SizedBox(width: 6),
-                  SizedBox(
-                    width: narrow ? 40 : 46,
-                    child: Text(
-                      move.dbProb != null
-                          ? '${move.dbProb!.toStringAsFixed(0)}%'
-                          : '--',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: move.dbProb != null
-                            ? AppColors.lichessDbColor(muted: dbMuted)
-                            : AppColors.onSurfaceDim,
-                        fontFamily: 'monospace',
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
                 if (showMaia)
                   SizedBox(
                     width: narrow ? 40 : 46,
@@ -975,8 +915,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   }
 
   Widget _buildContinuationWidget(_MergedMove move, {bool muted = false}) {
-    final lineColor =
-        muted ? AppColors.onSurfaceDim : Colors.grey[500];
+    final lineColor = muted ? AppColors.onSurfaceDim : Colors.grey[500];
     if (move.fullPv.length <= 1 || widget.boardPreview == null) {
       final continuation = formatContinuation(widget.fen, move.fullPv);
       return Text(
@@ -1000,7 +939,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     if (sanMoves.isEmpty) return const SizedBox.shrink();
 
     final fenParts = afterFirstMove.split(' ');
-    final fullMoveNumber = int.tryParse(fenParts.length >= 6 ? fenParts[5] : '1') ?? 1;
+    final fullMoveNumber =
+        int.tryParse(fenParts.length >= 6 ? fenParts[5] : '1') ?? 1;
     final isBlack = !isWhiteToMove(afterFirstMove);
     final startPly = (fullMoveNumber - 1) * 2 + (isBlack ? 1 : 0);
 
@@ -1020,8 +960,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       },
       onMoveHovered: (idx, anchor) {
         final fen = fenAfterMoves(afterFirstMove, sanMoves, idx);
-        final uci =
-            idx < continuationUci.length ? continuationUci[idx] : null;
+        final uci = idx < continuationUci.length ? continuationUci[idx] : null;
         widget.boardPreview!.setPreview(
           fen,
           moves: sanMoves.sublist(0, idx + 1),

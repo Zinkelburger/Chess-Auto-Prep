@@ -68,8 +68,7 @@ class AuditResult {
   int get infoCount =>
       findings.where((f) => f.severity == AuditSeverity.info).length;
 
-  int get activeFindingCount =>
-      findings.where((f) => !f.dismissed).length;
+  int get activeFindingCount => findings.where((f) => !f.dismissed).length;
 
   double get soundnessPercent {
     if (ourMoveNodesChecked == 0) return 100.0;
@@ -98,8 +97,9 @@ class AuditResult {
   List<AuditFinding> get inaccuracies =>
       findings.where((f) => f.type == AuditFindingType.inaccuracy).toList();
 
-  List<AuditFinding> get missingResponses =>
-      findings.where((f) => f.type == AuditFindingType.missingResponse).toList();
+  List<AuditFinding> get missingResponses => findings
+      .where((f) => f.type == AuditFindingType.missingResponse)
+      .toList();
 
   List<AuditFinding> get weakPositions =>
       findings.where((f) => f.type == AuditFindingType.weakPosition).toList();

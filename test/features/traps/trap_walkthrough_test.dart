@@ -31,8 +31,7 @@ void main() {
       ];
 
       final sorted = TrapWalkthrough.sortedTraps(traps);
-      expect(sorted.map((t) => t.movesSan.first).toList(),
-          ['d4', 'c4', 'e4']);
+      expect(sorted.map((t) => t.movesSan.first).toList(), ['d4', 'c4', 'e4']);
     });
 
     test('indexOfTrap finds trap by moves', () {

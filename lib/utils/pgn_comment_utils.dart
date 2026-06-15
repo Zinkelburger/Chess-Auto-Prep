@@ -51,19 +51,16 @@ Color nagColor(int id) => nagInfoById(id)?.color ?? const Color(0xFF9E9E9E);
 // ---------------------------------------------------------------------------
 
 /// Matches `[%eval 1.23]`, `[%eval 1.23,18]`, `[%eval #3]`, `[%eval #3,20]`.
-final evalCommentRe =
-    RegExp(r'\[%eval\s+(#?[+-]?\d+\.?\d*)(?:,(\d+))?\]');
+final evalCommentRe = RegExp(r'\[%eval\s+(#?[+-]?\d+\.?\d*)(?:,(\d+))?\]');
 
 /// Matches `[%maia 0.03]`.
 final maiaCommentRe = RegExp(r'\[%maia\s+(\d+\.?\d*)\]');
 
 /// Matches `[%maiaProbability 0.42]` — per-move Maia likelihood.
-final maiaProbabilityCommentRe =
-    RegExp(r'\[%maiaProbability\s+(\d+\.?\d*)\]');
+final maiaProbabilityCommentRe = RegExp(r'\[%maiaProbability\s+(\d+\.?\d*)\]');
 
 /// Matches `[%humanFrequency 0.42]` — per-move Lichess human frequency.
-final humanFrequencyCommentRe =
-    RegExp(r'\[%humanFrequency\s+(\d+\.?\d*)\]');
+final humanFrequencyCommentRe = RegExp(r'\[%humanFrequency\s+(\d+\.?\d*)\]');
 
 /// Matches `[%cumProb 12.529%]` — cumulative line probability (percentage).
 final cumProbCommentRe = RegExp(r'\[%cumProb\s+([\d.]+)%?\]');
@@ -205,8 +202,7 @@ String setPvInComment(String comment, List<String> pv) {
 // ---------------------------------------------------------------------------
 
 final _clkRe = RegExp(r'\[%clk [^\]]+\]');
-final _scoreArrowRe =
-    RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)');
+final _scoreArrowRe = RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)');
 final _classificationRe = RegExp(
     r'(Inaccuracy|Mistake|Blunder|Good move|Excellent move|Best move)\.[^.]*\.');
 final _wasBestRe = RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?');

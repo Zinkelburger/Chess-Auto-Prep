@@ -150,5 +150,4 @@ class RepertoireSelector {
       expectimaxValue: bestChild.expectimaxValue,
     );
   }
-
 }

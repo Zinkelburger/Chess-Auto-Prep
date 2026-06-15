@@ -129,7 +129,8 @@ void main() {
       expect(service.parseRepertoirePgn(disk).single.moves, ['e4']);
     });
 
-    test('appendMoveAtPath extends existing game when prefix matches', () async {
+    test('appendMoveAtPath extends existing game when prefix matches',
+        () async {
       final filePath = '${tempDir.path}/existing.pgn';
       await File(filePath).writeAsString('''
 // Color: White
