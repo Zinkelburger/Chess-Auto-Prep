@@ -1,6 +1,6 @@
 /// Modal dialog wrapping [RepertoireGenerationTab] for full generation config.
 ///
-/// Opened from the toolbar sparkles button or the G shortcut key.
+/// Opened from the toolbar sparkles button.
 /// Contains the full generation config UI and starts generation on Build.
 library;
 

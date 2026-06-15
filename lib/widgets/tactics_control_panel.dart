@@ -17,6 +17,7 @@ import '../services/tactics_import_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
+import '../utils/keyboard_shortcut_utils.dart';
 import 'engine/inline_engine_bar.dart';
 import 'pgn_viewer_widget.dart';
 import 'pgn_with_engine.dart';
@@ -224,11 +225,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
-  bool _isTextInputFocused() {
-    final primaryFocus = FocusManager.instance.primaryFocus;
-    return primaryFocus?.context?.widget is EditableText;
-  }
-
   @override
   Widget build(BuildContext context) {
     return Shortcuts(
@@ -239,7 +235,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         actions: {
           _ToggleInlineEngineIntent: CallbackAction<_ToggleInlineEngineIntent>(
             onInvoke: (_) {
-              if (_session.currentPosition == null || _isTextInputFocused()) {
+              if (_session.currentPosition == null || isTextInputFocused()) {
                 return null;
               }
               InlineEngineBar.toggleEngine();
@@ -290,7 +286,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return KeyEventResult.ignored;
     }
 
-    if (_isTextInputFocused()) {
+    if (isTextInputFocused()) {
       return KeyEventResult.ignored;
     }
 
@@ -321,26 +317,22 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return KeyEventResult.handled;
     }
 
-    // p — Previous position
-    if (key == LogicalKeyboardKey.keyP) {
+    if (key == LogicalKeyboardKey.keyP && hasNoLetterModifiers) {
       _loadCurrentPosition(_session.previousPosition());
       return KeyEventResult.handled;
     }
 
-    // n — Next / Skip position
-    if (key == LogicalKeyboardKey.keyN) {
+    if (key == LogicalKeyboardKey.keyN && hasNoLetterModifiers) {
       _loadCurrentPosition(_session.skipPosition());
       return KeyEventResult.handled;
     }
 
-    // j — Toggle auto-advance to next position
-    if (key == LogicalKeyboardKey.keyJ) {
+    if (key == LogicalKeyboardKey.keyJ && hasNoLetterModifiers) {
       _session.setAutoAdvance(!_session.autoAdvance);
       return KeyEventResult.handled;
     }
 
-    // a — Analyze / Reset (same as the combined button)
-    if (key == LogicalKeyboardKey.keyA) {
+    if (key == LogicalKeyboardKey.keyA && hasNoLetterModifiers) {
       final appState = context.read<AppState>();
       final isAtStartingPosition =
           appState.currentPosition.fen == _session.currentPosition!.fen;
@@ -352,23 +344,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return KeyEventResult.handled;
     }
 
-    // 1-5 — Rate tactic (only after solve / show solution)
-    if (_session.positionSolved || _session.showSolution) {
-      int? star;
-      if (key == LogicalKeyboardKey.digit1) star = 1;
-      if (key == LogicalKeyboardKey.digit2) star = 2;
-      if (key == LogicalKeyboardKey.digit3) star = 3;
-      if (key == LogicalKeyboardKey.digit4) star = 4;
-      if (key == LogicalKeyboardKey.digit5) star = 5;
-      if (star != null) {
-        final current = _session.currentPosition?.rating ?? 0;
-        _session.setRating(current == star ? 0 : star);
-        setState(() {});
-        return KeyEventResult.handled;
-      }
-    }
-
-    // Escape — Return to Tactic tab from PGN analysis
     if (key == LogicalKeyboardKey.escape) {
       if (_tabController.index != 0) {
         _tabController.animateTo(0);

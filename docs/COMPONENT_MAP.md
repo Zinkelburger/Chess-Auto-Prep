@@ -155,7 +155,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Bottom pane (VS Code-style):** Collapsed by default (zero height). Auto-opens to Findings tab when audit starts, Jobs tab when generation starts. Tabs show badge counts. Resizable by dragging the top edge (min 120px, max 60% of screen height). Collapse via close button, `Escape` key, or double-click the drag handle. The `onClose` callback clears inline config flags so that reopening the pane does not show stale config forms. `Escape` both collapses the pane and resets inline gen/audit config state.
 
-**Findings tab UX:** Category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends) with counts — multi-select toggles. Findings are sorted by reach probability (cumulative likelihood of the line occurring). The visible count is capped (default 20) and user-configurable via an inline text field in the status row; as findings are dismissed, lower-probability ones surface automatically. Each finding tile shows its reach probability right-aligned (e.g. "12.3%"). When capped, the status row reads "Top [N] of M · X% – Y% reach". Bulk dismiss via right-click context menu: dismiss similar, dismiss at depth, dismiss all of type. Keyboard: N/P to cycle findings (board navigates within full repertoire tree), D to dismiss current — routed through `RepertoireShortcuts` at the screen level (active when the Findings tab is open in the bottom pane), delegating to `AuditFindingsPanelState.selectNext()` / `selectPrevious()` / `dismissSelected()` via `GlobalKey`. Selected finding is highlighted. Timestamp shows when saved results were generated.
+**Findings tab UX:** Category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends) with counts — multi-select toggles. Findings are sorted by reach probability (cumulative likelihood of the line occurring). The visible count is capped (default 20) and user-configurable via an inline text field in the status row; as findings are dismissed, lower-probability ones surface automatically. Each finding tile shows its reach probability right-aligned (e.g. "12.3%"). When capped, the status row reads "Top [N] of M · X% – Y% reach". Bulk dismiss via right-click context menu: dismiss similar, dismiss at depth, dismiss all of type. Keyboard: N/P to cycle findings (board navigates within full repertoire tree), D to dismiss current — routed through `RepertoireShortcuts` at the screen level (active when the Findings tab is open in the bottom pane), delegating to `AuditFindingsPanelState.selectNext()` / `selectPrevious()` / `dismissSelected()` via `GlobalKey`; ↑/↓ also work when the findings panel has focus. Selected finding is highlighted. Timestamp shows when saved results were generated.
 
 **Lines tab (tools column):** The PGN | Lines tab bar in the tools column provides a Lines tab with a segmented toggle between Lines and Traps views. Engine/expectimax bars are inside the PGN tab only — the Lines tab uses full height. The Lines view shows `RepertoireLinesBrowser` with reach probability badges on each line row; the Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges (BLUNDER/MISTAKE/INACCURACY/OK/BEST), and expandable detail cards. Expanded trap is tracked by identity (`fen` or `movesSan` key), stable across sort changes. Traps empty state prompts "Generate Repertoire". The tools tab auto-switches to Lines only when a generation run actually finishes (tracked via `_wasGenerating`), not on every repertoire switch. Clicking a line switches to the PGN tab for editing. `BoardPreviewController` is threaded through both browsers; a `FloatingBoardPreview` overlay is mounted in the Lines tab `Stack` (uses `_boardFlipped` for correct orientation) and also in the bottom pane Lines tab (separate `_bottomLinesPreviewStackKey`). Hover previews work in both locations.m both lines and traps move chips).
 
@@ -165,20 +165,23 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Board annotations:** `BoardAnnotation` model with `AnnotationBrush` (green/red/blue/yellow/purple). `_AnnotationPainter` renders arrows (shaft + arrowhead) and circles on a `CustomPaint` overlay above pieces.
 
-**Keyboard shortcuts:** Handled by `RepertoireShortcuts` (extracted from `RepertoireScreen`):
+**Keyboard shortcuts:** Handled by `RepertoireShortcuts` (letter keys suppressed while a text field has focus — see `lib/utils/keyboard_shortcut_utils.dart`):
 - `E` — toggle engine bar
 - `X` — toggle expectimax bar
 - `L` — toggle PGN / Lines tab in tools column
 - `G` — open generation config inline in Jobs tab (bottom pane)
 - `A` — smart audit: opens findings (if running/results exist) or config inline in Jobs tab (if fresh)
 - `I` — import PGN into repertoire (file or paste)
-- `1` — toggle bottom pane → Jobs tab
-- `2` — toggle bottom pane → Findings tab
-- `3` — toggle bottom pane → Lines tab
-- `Escape` — collapse bottom pane + clear inline config flags
+- `F` — flip board
+- `T` — toggle trap walkthrough at a trap position
 - `N`/`P` — next/prev finding (when Findings tab is open in bottom pane)
 - `D` — dismiss current finding (when Findings tab is open in bottom pane)
-- `F` — flip board, arrows — navigate moves
+- `Ctrl/Cmd+Z` — undo last repertoire add
+- `Ctrl/Cmd+Shift+V` — paste FEN from clipboard
+- `Escape` — collapse bottom pane + clear inline config flags
+- `←` / `→` — navigate moves; `Shift+←` / `Shift+→` — previous/next trap
+
+Digit shortcuts (bottom-pane tab toggles `1`/`2`/`3`, edit-mode NAG `1`–`6`, star ratings, etc.) are **not** bound.
 
 Breakpoints: `constants/ui_breakpoints.dart` (`kCompactBreakpoint=960`, `kWideBreakpoint=1100`).
 
@@ -229,7 +232,7 @@ RepertoireGenerationTab (config UI + build orchestration)
 **Build modes** (enum `BuildMode` in `generation_config.dart`, UI labels in parentheses):
 - `stockfishExpectimax` ("Stockfish Expectimax (recommended)") — default; Stockfish MultiPV + Maia opponent, traps auto-detected
 - `maiaDbExplore` ("DB Win Rate Only (no Stockfish)") — Maia moves, DB evals only, no engine at build time
-- `dbExplorer` ("From Loaded PGN Files") — PGN file parsing → frequency map → BFS tree → eval enrichment
+- `dbExplorer` ("From Added PGN Files") — requires PGN files added via `PgnSourcesPanel` (file picker or paste); does **not** use lines already in the repertoire PGN; parsing → frequency map → BFS tree → eval enrichment
 
 **Generation config simplification:** Only "Max Depth (ply)" and "Engine Depth" shown by default. Selection mode, thresholds, opponent model, novelties, PGN export options, and eval sources are under an "Advanced settings" section. A trap detection info banner appears below the build mode dropdown. "Finish Now" button stops Phase 1 BFS and proceeds to Phase 2 on the partial tree.
 - `trapFinder` — not yet implemented
@@ -270,7 +273,7 @@ AuditSessionController (owns RepertoireAuditService + all audit state)
   ← tryRestore() on repertoire load; launchResume() for interrupted audits
   ← Persistence: saveProgress/saveComplete/onResultChanged via AuditPersistence
 
-AuditConfigDialog (toolbar button or shortcut A)
+AuditConfigDialog (toolbar button)
   → Wraps AuditConfigPanel in a modal dialog
   → Config: source toggles (Stockfish/Maia; Lichess DB mothballed, `useLichessDb` defaults false), thresholds, scope
   → Start button closes dialog, task runs in background
@@ -282,7 +285,7 @@ AuditConfigDialog (toolbar button or shortcut A)
        Cumulative probability: product of opponent move frequencies from root
   → Callbacks: controller.onAuditingChanged, .onResultReady, .onLiveFinding
 
-AuditFindingsPanel (bottom pane Findings tab, shortcut 2)
+AuditFindingsPanel (bottom pane Findings tab)
   → Receives AuditResult from controller; `interruptedSnapshot` + resume banner when incomplete audit detected
   → onResumeAudit / onStartFreshAudit → controller.launchResume / startFresh
   → FindingsDisplayFilter: auto-scales when >100 findings (drops info → raises reach floor)
@@ -290,7 +293,7 @@ AuditFindingsPanel (bottom pane Findings tab, shortcut 2)
   → Filter bar: severity chips (Critical/Warning/Info), "X of N" counter
   → Findings list: sort (severity/reach/ply), filter by type
   → Bulk dismiss: right-click → dismiss similar / at depth / all of type
-  → Keyboard: N/P cycle findings (board navigates), D dismiss + advance
+  → Keyboard: N/P/D or ↑/↓ cycle/dismiss findings when panel focused (board navigates)
   → Selected finding highlighted, board arrows shown
   → Dismissed section: count + "Restore all" at bottom
   → Finding tap → RepertoireController.loadMoveSequence()
@@ -358,6 +361,7 @@ PgnViewerScreen._pickFile → `FilePicker.pickFiles` (Linux: **XDG Desktop Porta
 Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].pgnText` → `Clipboard.setData` + `AppMessages.pgnCopied` snackbar
 Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept)
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
+Keyboard: `N`/`P` prev/next game, `F` flip (`Ctrl+F`/F11 fullscreen), `E` engine (`Ctrl+E` export), `W` auto-next, `A` edit mode, `T` opening tree; plus `←`/`→` navigate, Home/End jump, Space auto-play, Tab cycle tabs, Escape exit edit/fullscreen/clear annotations. Letter keys suppressed while a text field has focus. Digit star-rating shortcuts removed.
 ```
 
 #### Edit Mode (Annotation)
@@ -368,7 +372,7 @@ Toggled via pencil icon in `GameNavBar` or keyboard shortcut `A`. When active:
 - **Annotation toolbar**: Tapping a move in edit mode shows an `_AnnotationToolbar` below it with 6 NAG toggle buttons + comment button. Toggling a NAG replaces any existing move-quality NAG.
 - **Context menu**: Right-click in edit mode shows Comment, Annotate, Promote (variation), Delete — with promote/delete gated by `protectOriginal`.
 - **Protect original PGN**: Checkbox in the edit mode bar (always resets to checked on activation). When checked, destructive operations on the original game moves are disabled.
-- **Keyboard**: `1`–`6` toggle NAGs on current move (overrides star-rating shortcuts while in edit mode). `Escape` exits edit mode.
+- **Keyboard**: `Escape` exits edit mode.
 - **Persistence**: NAGs saved via `buildMovetext()` → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
 
 Key files: `pgn_comment_utils.dart` (NAG constants, `kMoveNags`, `nagColor`, `buildMovetext` with NAG serialization), `pgn_viewer_widget.dart` (`editMode`/`protectOriginal` props, `_AnnotationToolbar`, `_NagButton`), `pgn_viewer_screen.dart` (`_editMode`, `_protectOriginal`, `_buildEditModeBar`), `game_nav_bar.dart` (`onToggleEditMode`, `isEditMode`).
@@ -547,9 +551,9 @@ Repertoire quality audit — BFS over the existing `OpeningTree` to detect mista
 | **services/audit_persistence.dart** | `AuditPersistence` singleton: centralized save/load for audit snapshots (`AuditSnapshot` = result + config + checked FENs + completion state). Auto-loads on repertoire open, auto-saves on dismiss changes. Handles v1 (legacy) and v2 (envelope) JSON formats |
 | **widgets/audit_config_panel.dart** | Compact audit configuration: always uses Stockfish + Maia (no source toggles), scope toggle (subtree-only chip), key thresholds (Eval Depth/Max Ply/Maia Elo) shown by default, detailed thresholds under "More thresholds" expander (Mistake cp, Inaccuracy cp, Min Maia Prob — minGames hidden since Lichess mothballed), compact start/cancel with inline progress; `useLichessDb` hardcoded false; accepts external `RepertoireAuditService` for pause/resume from Jobs tab |
 | **widgets/audit_config_dialog.dart** | Modal dialog wrapping AuditConfigPanel; forwards `auditService` and `onConfigChanged` |
-| **widgets/audit_findings_panel.dart** | Results display: category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends), sorted by reach probability with per-tile probability label, user-configurable visible cap (default 20, inline text field), reach range shown in status row, bulk dismiss context menu, keyboard navigation (N/P/D), selected state, timestamp display, "Re-run audit" button; resume banner when `interruptedSnapshot` set (`onResumeAudit`, `onStartFreshAudit`) |
+| **widgets/audit_findings_panel.dart** | Results display: category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends), sorted by reach probability with per-tile probability label, user-configurable visible cap (default 20, inline text field), reach range shown in status row, bulk dismiss context menu, keyboard navigation (N/P/D and ↑/↓ when panel focused; suppressed in text fields), selected state, timestamp display, "Re-run audit" button; resume banner when `interruptedSnapshot` set (`onResumeAudit`, `onStartFreshAudit`) |
 
-**Entry points:** Toolbar "Audit" button (shortcut **A**) is context-aware: opens bottom pane Findings tab if audit running or results exist; opens config dialog otherwise. Force-open config via "Re-run audit" button in findings panel. Results appear in bottom pane Findings tab.
+**Entry points:** Toolbar "Audit" button is context-aware: opens bottom pane Findings tab if audit running or results exist; opens config dialog otherwise. Force-open config via "Re-run audit" button in findings panel. Results appear in bottom pane Findings tab.
 
 **Persistence:** Audit results are saved to `<repertoire>_audit.json` via `AuditPersistence`. Results auto-load when a repertoire is opened (`AuditSessionController.tryRestore()` in `_onRepertoireChanged`), so findings survive app restarts. Dismissal changes auto-save via `controller.onResultChanged`. Cancel/dispose call `controller.saveProgress()` → `AuditPersistence.saveProgress()`. `tryRestore()` checks `isComplete` and sets `interruptedSnapshot` for incomplete audits; `controller.launchResume()` resumes with `skipFens`/`priorFindings`. The snapshot envelope (v2) stores the `AuditConfig`, checked FEN set, and completion state.
 
@@ -583,7 +587,7 @@ AuditSessionController._launchAuditConfig() (via screen)
 - Move numbers in summaries: "Missing: 3...Nd2" instead of "Missing: Nd2". Also for mistakes/inaccuracies.
 - Dismiss button: 16px icon with 32px hit target and hover feedback.
 - Bulk dismiss via right-click context menu: dismiss similar (same type + FEN), dismiss at depth (all of same type at ply N or earlier), dismiss all of type.
-- Keyboard navigation: N/P or arrows cycle through findings (board auto-navigates), D dismisses and advances.
+- Keyboard navigation: N/P or arrows cycle through findings (board auto-navigates), D dismisses and advances; suppressed while a text field has focus.
 - Selected finding gets a highlighted background in the list, with "X of N" counter in status bar.
 - Timestamp display: "2h ago", "3d ago", etc. when viewing saved results.
 - Dismissed findings shown in a collapsed section at the bottom with "Restore all".
@@ -597,9 +601,9 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `main_screen.dart` | Mode `IndexedStack`, engine lifecycle on mode exit |
 | `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
 | `repertoire_selection_screen.dart` | Pick/create repertoire; lists `RepertoireMetadata` from storage |
-| `repertoire_training_screen.dart` | Training mode shell |
+| `repertoire_training_screen.dart` | Training mode shell; keyboard: J toggles manual advance, Space acknowledges learn steps (letter keys suppressed in text fields) |
 | `analysis_screen.dart` | Game weakness / position analysis |
-| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games" |
+| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; keyboard: N/P/F/E/W/A/T letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen |
 | `player_selection_screen.dart` | Lichess player pick for analysis |
 | `settings_screen.dart` | Global engine, opponent model (Maia only; Lichess DB selector hidden), **on-the-fly expectimax** (live dock; separate from Generation tab Engine Depth), CdbDirect settings |
 
@@ -713,7 +717,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `shortcut_tooltip.dart` | **Shortcut hover tooltips** — `AppShortcuts` shared keys (e.g. **J** auto-advance); `actionTooltip()`, `ShortcutIconButton`, `ShortcutTooltip`, `shortcutTooltip()` (500ms hover delay); debug asserts if shortcut is empty. Cursor rule: `.cursor/rules/shortcut-tooltips.mdc`. Tests: `test/widgets/shortcut_tooltip_test.dart`. |
+| `shortcut_tooltip.dart` | **Shortcut hover tooltips** — `actionTooltip()`, `ShortcutIconButton`, `ShortcutTooltip`, `shortcutTooltip()` (500ms hover delay); debug asserts if shortcut is empty. Cursor rule: `.cursor/rules/shortcut-tooltips.mdc`. Tests: `test/widgets/shortcut_tooltip_test.dart`. |
 
 #### Layout (repertoire builder zones)
 
@@ -742,13 +746,13 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | File | Purpose |
 |------|---------|
 | `repertoire/repertoire_board_pane.dart` | Board + preview overlay + generation dim |
-| `repertoire/repertoire_shortcuts.dart` | `RepertoireShortcuts` — `CallbackShortcuts` (Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+V paste FEN) + `Focus.onKeyEvent` for letter/arrow bindings; suppresses most shortcuts while `EditableText` focused |
+| `repertoire/repertoire_shortcuts.dart` | `RepertoireShortcuts` — `CallbackShortcuts` (Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+V paste FEN) + `Focus.onKeyEvent` for letter/arrow bindings; suppresses shortcuts while a text field is focused (`isTextInputFocused()` in `lib/utils/keyboard_shortcut_utils.dart`) |
 | `repertoire/repertoire_toolbar.dart` | App bar actions: contextual buttons → select repertoire → overflow ⋮ → `AppModeMenuButton` (always rightmost). Convention: `AppModeMenuButton` is the last action in every screen's app bar. |
 | `repertoire/repertoire_tab_bar.dart` | Compact layout tab bar (PGN | Context) + navigation trail |
 | `repertoire/repertoire_analyze_pane.dart` | Wires analyze zones (lines, coverage, traps) |
 | `repertoire/repertoire_analyze_props.dart` | Prop bag for analyze pane |
 | `repertoire/repertoire_lines_with_traps.dart` | Lines tab with trap + coherence panels |
-| `generation/generation_config_form.dart` | `GenerationConfigForm` — settings form (controllers, build mode, advanced thresholds, eval sources); `toConfig({startFen, playAsWhite})`, `validateBeforeStart()`, `seedDbExplorer()`, optional `initialConfig`; DB Explorer mode shows PGN sources panel + tuning fields (Min Games, Min Move Prob, Min Elo) |
+| `generation/generation_config_form.dart` | `GenerationConfigForm` — settings form (controllers, build mode, advanced thresholds, eval sources); `toConfig({startFen, playAsWhite})`, `validateBeforeStart()`, `seedDbExplorer()`, optional `initialConfig`; DB Explorer mode ("From Added PGN Files") shows helper text + `PgnSourcesPanel` (repertoire lines not used) + tuning fields (Min Games, Min Move Prob, Min Elo) |
 | `repertoire_generation_tab.dart` | Build orchestration + progress UI; embeds `GenerationConfigForm` via `GlobalKey`; receives `GenerationSessionController`; sets `controller.setPartialSaveContext()` at build start so pause/cancel from any source saves partial tree |
 | `repertoire_analysis_dock.dart` | Resizable Engine/Expectimax dock above PGN |
 | `repertoire_lines_browser.dart` | Filter/sort/group lines; 300 ms search debounce; typed `LineSortBy`/`LineMetricsFilter`; filter reset uses single `setState` |
@@ -767,7 +771,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `engine/expectimax_lines_pane.dart` | Precomputed + on-the-fly expectimax lines; floating hover preview |
 | `engine/expectimax_panel_host.dart` | Owns [OnTheFlyExpectimaxService] (or accepts external); auto-computes when [hasPrecomputedExpectimaxAtPly] is false at FEN (`onTheFlyMaxDepth`); used by [EditContextZone] and [RepertoireAnalysisDock] |
 | `engine/inline_engine_bar.dart` | Compact engine for PGN viewer and tactics; settings button opens `AnalysisSettingsContext.tacticsEngine` (depth + multiPv only); writes Stockfish eval to `EvalCache` after discovery completes |
-| `engine/inline_expectimax_bar.dart` | Compact toggleable expectimax bar for right pane; wraps `ExpectimaxPanelHost(compact: true)` with toggle switch (shortcut X) and settings gear |
+| `engine/inline_expectimax_bar.dart` | Compact toggleable expectimax bar for right pane; wraps `ExpectimaxPanelHost(compact: true)` with toggle switch and settings gear |
 | `engine/engine_toggle_button.dart` | Legacy bolt toggle widget (unused; engine on/off is in Settings) |
 | `engine/engine_pane_footer.dart` | Engine pane footer controls |
 | `engine/floating_board_preview.dart` | Cursor-following mini board overlay on engine/expectimax line hover |
@@ -790,7 +794,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `clickable_move_line.dart` | SAN line with tap + hover callbacks |
 | `navigation_trail.dart` | Breadcrumb trail widget (used by repertoire tab bar) |
 | `analysis_tab.dart` | Legacy browse/analysis tab wrapper (not used in current repertoire screen) |
-| `generation_config_dialog.dart` | Modal dialog wrapping RepertoireGenerationTab; pops on generation start via controller listener; opened by sparkles button / G shortcut |
+| `generation_config_dialog.dart` | Modal dialog wrapping RepertoireGenerationTab; pops on generation start via controller listener; opened by sparkles button |
 | `layout/jobs_panel.dart` | Jobs tab content for bottom pane: active/completed generation and audit jobs with progress, config summary, pause/resume/cancel controls |
 | `analysis/analysis_settings_sheet.dart` | Context-aware analysis/engine settings dialog. Accepts `AnalysisSettingsContext` (`full` or `tacticsEngine`) to gate which sections are shown: engine depth + multiPv always; panel visibility in `full` mode ("Show DB % column" toggle and Lichess DB filter section hidden — Explorer mothballed). |
 | `analysis_download_dialog.dart` | Download games for analysis |
@@ -818,7 +822,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Weakness detail dialog |
 | `lichess_db_info_icon.dart` | Lichess DB info + OAuth entry point |
-| `tactics_control_panel.dart` | Tactics mode shell; **eagerly warms up** StockfishPool + Maia on page load (`_warmUpEngines` in `initState`) so imports start instantly; PGN tab uses [PgnWithEngine] — moves sync to PGN in real time (correct user moves and opponent replies are added via `addEphemeralMove` as they happen; no lazy replay on tab switch); `TacticsBoardUpdate.san` carries the SAN so `_applyBoardUpdate` pushes to PGN; FEN comparison in `onPositionChanged` prevents double-updates; shortcuts include **E** (inline engine), **J** (auto-advance), **1-5** (rate), arrows, Space/A/P/N/Esc |
+| `tactics_control_panel.dart` | Tactics mode shell; **eagerly warms up** StockfishPool + Maia on page load (`_warmUpEngines` in `initState`) so imports start instantly; PGN tab uses [PgnWithEngine] — moves sync to PGN in real time (correct user moves and opponent replies are added via `addEphemeralMove` as they happen; no lazy replay on tab switch); `TacticsBoardUpdate.san` carries the SAN so `_applyBoardUpdate` pushes to PGN; FEN comparison in `onPositionChanged` prevents double-updates; keyboard: **E** (inline engine), **J** (auto-advance), **A** (analyze/reset), **P**/**N** (prev/skip), Space, arrows, Escape (letter keys suppressed in text fields; digit star-rating shortcuts removed) |
 | `tactics/tactics_training_panel.dart` | Puzzle UI; **Show Solution** = numbered SAN line + highlight only; star rating after solve/reveal |
 | `tactics/tactics_browse_panel.dart` | Puzzle browser; per-row tappable star rating, 1-star rows dimmed, hide/show 1★ filter toggle |
 | `tactics/tactics_import_panel.dart` | Import tactics from Lichess/Chess.com; **Session Settings** dialog (order, mistake-type filter, 1-star toggle) opened from toolbar button beside Browse Tactics; live matching count on Start Session |
@@ -846,6 +850,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `eval_constants.dart` | Eval display thresholds |
 | `chesscom_lichess_elo.dart` | Chess.com blitz → Lichess blitz Elo table + `chessComBlitzToLichessBlitz()` for Maia (tactics Chess.com import) |
 | `app_messages.dart` | Snackbar helpers |
+| `keyboard_shortcut_utils.dart` | Shared `isTextInputFocused()`, `hasNoLetterModifiers`, `isPrimaryModifierPressed` for keyboard shortcut guards |
 | `file_text_reader.dart` | UTF-8 file read with Latin-1 fallback (PGN / text imports) |
 | `system_info.dart` | CPU core count (native/stub) |
 

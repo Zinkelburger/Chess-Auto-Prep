@@ -8,9 +8,9 @@ import 'package:provider/provider.dart';
 
 import '../core/app_state.dart';
 import '../models/repertoire_metadata.dart';
-import '../models/repertoire_review_entry.dart';
 import '../services/training/training_phase.dart';
 import '../services/training/training_session_controller.dart';
+import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/repertoire_lines_browser.dart';
@@ -147,12 +147,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    final primaryFocus = FocusManager.instance.primaryFocus;
-    if (primaryFocus?.context?.widget is EditableText) {
+    if (isTextInputFocused()) {
       return KeyEventResult.ignored;
     }
 
-    if (event.logicalKey == LogicalKeyboardKey.keyJ) {
+    if (event.logicalKey == LogicalKeyboardKey.keyJ && hasNoLetterModifiers) {
       final settings = _training.settings;
       settings.learnRequiresClick = !settings.learnRequiresClick;
       settings.save();
@@ -164,26 +163,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
         _training.learnWaitingForAck) {
       _training.learnAcknowledged();
       return KeyEventResult.handled;
-    }
-
-    if (_training.phase == TrainingPhase.finished &&
-        _training.settings.showRatingButtons) {
-      switch (event.logicalKey) {
-        case LogicalKeyboardKey.digit1:
-          _training.rateLine(ReviewRating.again);
-          return KeyEventResult.handled;
-        case LogicalKeyboardKey.digit2:
-          _training.rateLine(ReviewRating.hard);
-          return KeyEventResult.handled;
-        case LogicalKeyboardKey.digit3:
-          _training.rateLine(ReviewRating.good);
-          return KeyEventResult.handled;
-        case LogicalKeyboardKey.digit4:
-          _training.rateLine(ReviewRating.easy);
-          return KeyEventResult.handled;
-        default:
-          break;
-      }
     }
 
     return KeyEventResult.ignored;

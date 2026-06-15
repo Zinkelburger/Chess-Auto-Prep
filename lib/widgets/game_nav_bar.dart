@@ -200,9 +200,8 @@ class GameNavBar extends StatelessWidget {
   List<Widget> _buildStarRating(int current) {
     return List.generate(5, (i) {
       final star = i + 1;
-      return ShortcutTooltip(
-        description: 'Rate $star star${star > 1 ? 's' : ''}',
-        shortcut: '$star',
+      return Tooltip(
+        message: 'Rate $star star${star > 1 ? 's' : ''}',
         child: GestureDetector(
           onTap: () => onSetRating?.call(current == star ? 0 : star),
           child: Icon(

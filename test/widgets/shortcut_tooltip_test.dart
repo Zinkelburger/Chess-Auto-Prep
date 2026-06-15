@@ -4,12 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  group('AppShortcuts', () {
-    test('autoAdvanceToggle is documented single key', () {
-      expect(AppShortcuts.autoAdvanceToggle, 'J');
-    });
-  });
-
   group('actionTooltip', () {
     test('appends shortcut in parentheses', () {
       expect(

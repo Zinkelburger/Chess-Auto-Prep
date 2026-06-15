@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../shortcut_tooltip.dart';
-
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_review_entry.dart';
 import '../../models/training_settings.dart';
@@ -235,7 +233,6 @@ class TrainingRatingButtons extends StatelessWidget {
           rating: ReviewRating.again,
           label: 'Again',
           color: Colors.red,
-          shortcut: '1',
           previewEntry: previewEntry,
           reviewService: reviewService,
           onRateLine: onRateLine,
@@ -244,7 +241,6 @@ class TrainingRatingButtons extends StatelessWidget {
           rating: ReviewRating.hard,
           label: 'Hard',
           color: Colors.orange,
-          shortcut: '2',
           previewEntry: previewEntry,
           reviewService: reviewService,
           onRateLine: onRateLine,
@@ -253,7 +249,6 @@ class TrainingRatingButtons extends StatelessWidget {
           rating: ReviewRating.good,
           label: 'Good',
           color: Colors.blue,
-          shortcut: '3',
           previewEntry: previewEntry,
           reviewService: reviewService,
           onRateLine: onRateLine,
@@ -262,7 +257,6 @@ class TrainingRatingButtons extends StatelessWidget {
           rating: ReviewRating.easy,
           label: 'Easy',
           color: Colors.green,
-          shortcut: '4',
           previewEntry: previewEntry,
           reviewService: reviewService,
           onRateLine: onRateLine,
@@ -276,7 +270,6 @@ class _RatingButton extends StatelessWidget {
   final ReviewRating rating;
   final String label;
   final Color color;
-  final String shortcut;
   final RepertoireReviewEntry previewEntry;
   final RepertoireReviewService reviewService;
   final void Function(ReviewRating rating) onRateLine;
@@ -285,7 +278,6 @@ class _RatingButton extends StatelessWidget {
     required this.rating,
     required this.label,
     required this.color,
-    required this.shortcut,
     required this.previewEntry,
     required this.reviewService,
     required this.onRateLine,
@@ -296,9 +288,8 @@ class _RatingButton extends StatelessWidget {
     final interval = reviewService.previewInterval(previewEntry, rating);
     final intervalLabel = RepertoireReviewService.formatInterval(interval);
 
-    return ShortcutTooltip(
-      description: label,
-      shortcut: shortcut,
+    return Tooltip(
+      message: label,
       child: OutlinedButton(
         onPressed: () => onRateLine(rating),
         style: OutlinedButton.styleFrom(
@@ -308,7 +299,7 @@ class _RatingButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('$label ($shortcut)'),
+            Text(label),
             Text(intervalLabel,
                 style: TextStyle(
                     fontSize: 10, color: color.withValues(alpha: 0.7))),

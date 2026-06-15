@@ -181,9 +181,8 @@ class _TrapWalkthroughShell extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    ShortcutIconButton(
-                      description: 'Close tour',
-                      shortcut: 'T',
+                    IconButton(
+                      tooltip: 'Close tour',
                       icon: const Icon(Icons.close, size: 20),
                       onPressed: onClose,
                     ),

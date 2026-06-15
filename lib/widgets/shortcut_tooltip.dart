@@ -1,11 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Single-key shortcuts shared across screens (tooltip text must match handlers).
-abstract final class AppShortcuts {
-  /// Tactics: toggle auto-advance after solve. Training: toggle learn auto-advance.
-  static const autoAdvanceToggle = 'J';
-}
-
 /// Builds a hover tooltip for an action backed by a keyboard shortcut.
 ///
 /// Format: `Description (Shortcut)` — use this (or [ShortcutTooltip] /

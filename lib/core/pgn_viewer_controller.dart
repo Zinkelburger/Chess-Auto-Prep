@@ -50,15 +50,6 @@ class PgnGameEntry {
   }
 }
 
-final digitKeys = {
-  LogicalKeyboardKey.digit0: 0,
-  LogicalKeyboardKey.digit1: 1,
-  LogicalKeyboardKey.digit2: 2,
-  LogicalKeyboardKey.digit3: 3,
-  LogicalKeyboardKey.digit4: 4,
-  LogicalKeyboardKey.digit5: 5,
-};
-
 /// Board perspective mode persisted as [StudyPerspective] header on first game.
 enum PerspectiveMode { white, black, player }
 
