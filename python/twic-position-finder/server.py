@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -21,6 +21,7 @@ from models import (
     deactivate_subscription, validate_fen, rotate_auth_token, revoke_auth_token,
     count_user_subscriptions, create_email_token, consume_email_token,
     cleanup_expired_email_tokens, highest_twic_number, record_notification,
+    parse_fen_list,
 )
 from email_sender import send_verification_email, send_login_email
 from booking import router as booking_router, init_booking_db
@@ -130,7 +131,7 @@ class SubscribeRequest(BaseModel):
     email: EmailStr
     cf_turnstile_token: str = ""
     label: str = ""
-    fen: str | None = None
+    fen: str | list[str] | None = None
     player: str | None = None
     white: str | None = None
     black: str | None = None
@@ -143,6 +144,14 @@ class SubscribeRequest(BaseModel):
     result: str | None = None
     event: str | None = None
 
+    @field_validator("fen", mode="before")
+    @classmethod
+    def _normalize_fen(cls, v):
+        if isinstance(v, list):
+            parts = [s.strip() for s in v if isinstance(s, str) and s.strip()]
+            return "\n".join(parts) if parts else None
+        return v
+
 
 @app.post("/api/subscribe")
 @limiter.limit("5/minute")
@@ -153,11 +162,12 @@ def subscribe(req: SubscribeRequest, request: Request, conn=Depends(db)):
     if not req.fen and not req.player and not req.white and not req.black and not req.eco:
         raise HTTPException(400, "At least one filter (FEN, player, ECO) is required.")
 
-    if req.fen:
+    for i, fen in enumerate(parse_fen_list(req.fen)):
         try:
-            validate_fen(req.fen)
+            validate_fen(fen)
         except ValueError:
-            raise HTTPException(400, "Invalid FEN position. Please check the format.")
+            label = f" #{i + 1}" if len(parse_fen_list(req.fen)) > 1 else ""
+            raise HTTPException(400, f"Invalid FEN position{label}. Please check the format.")
 
     existing = get_user_by_email(conn, req.email)
 
@@ -265,7 +275,7 @@ def get_me(user=Depends(auth_user), conn=Depends(db)):
 
 class SubscriptionCreate(BaseModel):
     label: str = ""
-    fen: str | None = None
+    fen: str | list[str] | None = None
     player: str | None = None
     white: str | None = None
     black: str | None = None
@@ -277,6 +287,14 @@ class SubscriptionCreate(BaseModel):
     time_control: str | None = None
     result: str | None = None
     event: str | None = None
+
+    @field_validator("fen", mode="before")
+    @classmethod
+    def _normalize_fen(cls, v):
+        if isinstance(v, list):
+            parts = [s.strip() for s in v if isinstance(s, str) and s.strip()]
+            return "\n".join(parts) if parts else None
+        return v
 
 
 @app.get("/api/subscriptions")
@@ -295,6 +313,7 @@ def list_subscriptions(user=Depends(auth_user), conn=Depends(db)):
         sub["recent_issues"] = [{"twic": r["twic_number"], "games": r["game_count"]}
                                 for r in rows]
         sub["latest_twic_scanned"] = latest_twic
+        sub["fens"] = parse_fen_list(sub.get("fen"))
     return {"subscriptions": subs}
 
 
@@ -306,11 +325,12 @@ def create_subscription(req: SubscriptionCreate, user=Depends(auth_user),
     if not req.fen and not req.player and not req.white and not req.black and not req.eco:
         raise HTTPException(400, "At least one filter (FEN, player, ECO) is required")
 
-    if req.fen:
+    for i, fen in enumerate(parse_fen_list(req.fen)):
         try:
-            validate_fen(req.fen)
+            validate_fen(fen)
         except ValueError:
-            raise HTTPException(400, "Invalid FEN position. Please check the format.")
+            label = f" #{i + 1}" if len(parse_fen_list(req.fen)) > 1 else ""
+            raise HTTPException(400, f"Invalid FEN position{label}. Please check the format.")
 
     sub = add_subscription(
         conn, user["id"],

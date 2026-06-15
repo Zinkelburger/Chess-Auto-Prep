@@ -3,6 +3,8 @@
 import html
 import os
 
+from models import parse_fen_list
+
 import boto3
 from botocore.exceptions import ClientError
 
@@ -87,8 +89,13 @@ def build_email_html(subscription: dict, games: list[dict],
     """Build a full HTML email body for a subscription match."""
     total_matches = total_matches or len(games)
     sub_desc_parts = []
-    if subscription.get("fen"):
-        sub_desc_parts.append(f"Position: <code>{_esc(subscription['fen'])}</code>")
+    fens = parse_fen_list(subscription.get("fen"))
+    if fens:
+        if len(fens) == 1:
+            sub_desc_parts.append(f"Position: <code>{_esc(fens[0])}</code>")
+        else:
+            fen_items = "".join(f"<li><code>{_esc(f)}</code></li>" for f in fens)
+            sub_desc_parts.append(f"Positions:<ul style='margin:4px 0;padding-left:20px;'>{fen_items}</ul>")
     if subscription.get("player"):
         sub_desc_parts.append(f"Player: {_esc(subscription['player'])}")
     if subscription.get("white"):
@@ -101,7 +108,6 @@ def build_email_html(subscription: dict, games: list[dict],
         sub_desc_parts.append(f"Min Elo: {subscription['min_elo']}")
     if subscription.get("max_elo"):
         sub_desc_parts.append(f"Max Elo: {subscription['max_elo']}")
-    # Only show time_control/result if non-default (i.e. user narrowed them)
     tc = subscription.get("time_control")
     if tc and tc != "classical,rapid,blitz":
         sub_desc_parts.append(f"Time control: {_esc(tc)}")
@@ -204,8 +210,13 @@ def build_email_text(subscription: dict, games: list[dict],
 
     if subscription.get("label"):
         lines.append(f"Subscription: {subscription['label']}")
-    if subscription.get("fen"):
-        lines.append(f"Position: {subscription['fen']}")
+    fens = parse_fen_list(subscription.get("fen"))
+    if len(fens) == 1:
+        lines.append(f"Position: {fens[0]}")
+    elif fens:
+        lines.append("Positions:")
+        for f in fens:
+            lines.append(f"  - {f}")
     if subscription.get("player"):
         lines.append(f"Player: {subscription['player']}")
     lines.append("")
@@ -262,8 +273,13 @@ def build_no_matches_html(subscription: dict, twic_label: str,
                           unsub_token: str | None = None) -> str:
     """Build an HTML email for when a subscription had no matches this week."""
     sub_desc_parts = []
-    if subscription.get("fen"):
-        sub_desc_parts.append(f"Position: <code>{_esc(subscription['fen'])}</code>")
+    fens = parse_fen_list(subscription.get("fen"))
+    if fens:
+        if len(fens) == 1:
+            sub_desc_parts.append(f"Position: <code>{_esc(fens[0])}</code>")
+        else:
+            fen_items = "".join(f"<li><code>{_esc(f)}</code></li>" for f in fens)
+            sub_desc_parts.append(f"Positions:<ul style='margin:4px 0;padding-left:20px;'>{fen_items}</ul>")
     if subscription.get("player"):
         sub_desc_parts.append(f"Player: {_esc(subscription['player'])}")
     if subscription.get("white"):
@@ -355,8 +371,13 @@ def build_no_matches_text(subscription: dict, twic_label: str,
 
     if subscription.get("label"):
         lines.append(f"Subscription: {subscription['label']}")
-    if subscription.get("fen"):
-        lines.append(f"Position: {subscription['fen']}")
+    fens = parse_fen_list(subscription.get("fen"))
+    if len(fens) == 1:
+        lines.append(f"Position: {fens[0]}")
+    elif fens:
+        lines.append("Positions:")
+        for f in fens:
+            lines.append(f"  - {f}")
     if subscription.get("player"):
         lines.append(f"Player: {subscription['player']}")
     lines.append("")

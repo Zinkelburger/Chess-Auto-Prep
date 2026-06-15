@@ -92,6 +92,7 @@ import Base from '../layouts/Base.astro';
     inputMode?: string;
     pattern?: string;
     mono?: boolean;
+    repeatable?: boolean;
     hasAutocomplete?: { jsonUrl: string; statusId: string; matchesId: string; acLabel: string };
     hasBoardPreview?: boolean;
     hasEcoPicker?: boolean;
@@ -99,7 +100,7 @@ import Base from '../layouts/Base.astro';
   }
 
   const FILTER_DEFS: FilterDef[] = [
-    { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true },
+    { key: 'fen', label: 'FEN', inputType: 'text', mono: true, hasBoardPreview: true, repeatable: true },
     { key: 'player', label: 'Player name', inputType: 'text', hasAutocomplete: { jsonUrl: '/players.json', statusId: 'player-status', matchesId: 'player-matches', acLabel: 'player' } },
     { key: 'eco', label: 'ECO Code', inputType: 'text', hasEcoPicker: true },
     { key: 'min_elo', label: 'Minimum Elo', inputType: 'text', inputMode: 'numeric', pattern: '[0-9]*', tooltip: 'At least one player must be at or above this rating' },
@@ -108,20 +109,23 @@ import Base from '../layouts/Base.astro';
   ];
 
   const activeFilters: Set<string> = new Set();
+  let fenCounter = 0;
   const container = document.getElementById('filters-container')!;
   const addBtn = document.getElementById('add-filter-btn')!;
   const filterMenu = document.getElementById('filter-menu')!;
 
-  function buildFilterRow(def: FilterDef): HTMLElement {
+  function buildFilterRow(def: FilterDef, instanceId?: string): HTMLElement {
+    const rowKey = instanceId || def.key;
     const row = document.createElement('div');
     row.className = 'filter-row';
-    row.dataset.filterKey = def.key;
+    row.dataset.filterKey = rowKey;
 
     const body = document.createElement('div');
     body.className = 'filter-body';
 
+    const inputSuffix = instanceId ? instanceId.replace('_', '-') : def.key.replace('_', '-');
     const lbl = document.createElement('label');
-    lbl.setAttribute('for', `sub-${def.key.replace('_', '-')}`);
+    lbl.setAttribute('for', `sub-${inputSuffix}`);
     if (def.tooltip) {
       lbl.innerHTML = `${def.label} <span class="tooltip-trigger" title="${def.tooltip}">?</span>`;
     } else {
@@ -134,11 +138,12 @@ import Base from '../layouts/Base.astro';
 
     const input = document.createElement('input');
     input.type = def.inputType;
-    input.id = `sub-${def.key.replace('_', '-')}`;
+    input.id = `sub-${inputSuffix}`;
     if (def.mono) input.className = 'mono';
     if (def.inputMode) input.inputMode = def.inputMode;
     if (def.pattern) input.pattern = def.pattern;
     input.autocomplete = 'off';
+    if (def.repeatable) input.dataset.filterType = def.key;
     inputWrap.appendChild(input);
 
     if (def.hasAutocomplete) {
@@ -159,11 +164,11 @@ import Base from '../layouts/Base.astro';
 
     if (def.hasBoardPreview) {
       const board = document.createElement('div');
-      board.id = 'fen-board';
+      board.id = `fen-board-${inputSuffix}`;
       board.className = 'board-preview';
       body.appendChild(board);
       const err = document.createElement('div');
-      err.id = 'fen-error';
+      err.id = `fen-error-${inputSuffix}`;
       err.className = 'board-invalid';
       body.appendChild(err);
     }
@@ -184,32 +189,40 @@ import Base from '../layouts/Base.astro';
     removeBtn.className = 'filter-remove';
     removeBtn.innerHTML = '&times;';
     removeBtn.title = 'Remove filter';
-    removeBtn.addEventListener('click', () => removeFilter(def.key));
+    removeBtn.addEventListener('click', () => removeFilter(rowKey));
     row.appendChild(removeBtn);
 
     return row;
   }
 
   function addFilter(key: string) {
-    if (activeFilters.has(key)) return;
     const def = FILTER_DEFS.find(d => d.key === key);
     if (!def) return;
 
-    activeFilters.add(key);
-    const row = buildFilterRow(def);
+    let instanceId: string | undefined;
+    if (def.repeatable) {
+      instanceId = `${key}-${fenCounter++}`;
+    } else {
+      if (activeFilters.has(key)) return;
+    }
+    const rowKey = instanceId || key;
+    activeFilters.add(rowKey);
+
+    const row = buildFilterRow(def, instanceId);
     container.appendChild(row);
 
-    if (def.hasBoardPreview) {
-      const fenInput = document.getElementById('sub-fen') as HTMLInputElement;
-      const fenBoard = document.getElementById('fen-board')!;
-      const fenError = document.getElementById('fen-error')!;
+    if (def.hasBoardPreview && instanceId) {
+      const inputSuffix = instanceId.replace('_', '-');
+      const fenInput = document.getElementById(`sub-${inputSuffix}`) as HTMLInputElement;
+      const fenBoard = document.getElementById(`fen-board-${inputSuffix}`)!;
+      const fenError = document.getElementById(`fen-error-${inputSuffix}`)!;
       fenInput.addEventListener('input', () => (window as any).renderBoardPreview(fenInput.value, fenBoard, fenError));
     }
 
     if (def.hasAutocomplete) {
       setupAutocomplete(
         def.hasAutocomplete.jsonUrl,
-        `sub-${def.key.replace('_', '-')}`,
+        `sub-${key.replace('_', '-')}`,
         def.hasAutocomplete.statusId,
         def.hasAutocomplete.matchesId,
         def.hasAutocomplete.acLabel,
@@ -220,9 +233,9 @@ import Base from '../layouts/Base.astro';
     hideMenu();
   }
 
-  function removeFilter(key: string) {
-    activeFilters.delete(key);
-    const row = container.querySelector(`[data-filter-key="${key}"]`);
+  function removeFilter(rowKey: string) {
+    activeFilters.delete(rowKey);
+    const row = container.querySelector(`[data-filter-key="${rowKey}"]`);
     if (row) row.remove();
     updateMenuState();
   }
@@ -235,7 +248,7 @@ import Base from '../layouts/Base.astro';
       btn.type = 'button';
       btn.className = 'filter-menu-item';
       btn.textContent = def.label;
-      if (activeFilters.has(def.key)) {
+      if (!def.repeatable && activeFilters.has(def.key)) {
         btn.disabled = true;
       } else {
         anyAvailable = true;
@@ -300,11 +313,14 @@ import Base from '../layouts/Base.astro';
     if ((document.getElementById('res-draw') as HTMLInputElement).checked) resParts.push('1/2-1/2');
     const result = resParts.length > 0 && resParts.length < 3 ? resParts.join(',') : undefined;
 
+    const fenInputs = container.querySelectorAll<HTMLInputElement>('input[data-filter-type="fen"]');
+    const fenValues = Array.from(fenInputs).map(el => el.value.trim()).filter(Boolean);
+
     const body: Record<string, unknown> = {
       email: (document.getElementById('sub-email') as HTMLInputElement).value.trim(),
       cf_turnstile_token: turnstileResponse,
       label: safeVal('sub-label') || '',
-      fen: safeVal('sub-fen'),
+      fen: fenValues.length > 0 ? fenValues : undefined,
       player: safeVal('sub-player'),
       eco: safeVal('sub-eco'),
       min_elo: safeNumVal('sub-min-elo'),
@@ -335,6 +351,7 @@ import Base from '../layouts/Base.astro';
         alertEl.textContent = data.message;
         (document.getElementById('subscribe-form') as HTMLFormElement).reset();
         activeFilters.clear();
+        fenCounter = 0;
         container.innerHTML = '';
         addFilter('fen');
         try { (window as any).turnstile?.reset(); } catch { }
