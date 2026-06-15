@@ -550,7 +550,7 @@ import Base from '../layouts/Base.astro';
 
     const body: any = {
       label: safeVal('dash-sub-label') || '',
-      fen: fenValues.length > 1 ? fenValues : fenValues[0] || undefined,
+      fen: fenValues.length > 0 ? fenValues : undefined,
       player: safeVal('dash-sub-player'),
       eco: safeVal('dash-sub-eco'),
       min_elo: safeNumVal('dash-sub-min-elo'),
