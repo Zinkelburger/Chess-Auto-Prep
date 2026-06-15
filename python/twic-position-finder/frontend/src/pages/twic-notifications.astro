@@ -320,7 +320,7 @@ import Base from '../layouts/Base.astro';
       email: (document.getElementById('sub-email') as HTMLInputElement).value.trim(),
       cf_turnstile_token: turnstileResponse,
       label: safeVal('sub-label') || '',
-      fen: fenValues.length > 0 ? fenValues : undefined,
+      fen: fenValues.length > 1 ? fenValues : fenValues[0] || undefined,
       player: safeVal('sub-player'),
       eco: safeVal('sub-eco'),
       min_elo: safeNumVal('sub-min-elo'),
