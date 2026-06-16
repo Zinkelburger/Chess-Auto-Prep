@@ -4,7 +4,11 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
+
 import '../models/repertoire_metadata.dart';
+import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
 import '../widgets/layout/empty_state_placeholder.dart';
@@ -296,62 +300,16 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              if (importResult != null)
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.check_circle_outline,
-                          size: 18,
-                          color:
-                              Theme.of(context).colorScheme.onPrimaryContainer),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${importResult!.gameCount} line${importResult!.gameCount == 1 ? '' : 's'} ready to import',
-                          style: TextStyle(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onPrimaryContainer,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => setState(() => importResult = null),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final pgn = await showPgnImportDialog(
-                      context,
-                      title: 'Import PGN',
-                      confirmLabel: 'Attach',
-                    );
-                    if (pgn != null) {
-                      setState(() => importResult = pgn);
-                      if (nameController.text.trim().isEmpty) {
-                        nameController.text = 'Imported Repertoire';
-                      }
-                    }
-                  },
-                  icon: const Icon(Icons.upload_file),
-                  label: const Text('Import PGN (optional)'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(44),
-                  ),
-                ),
+              _InlinePgnAttach(
+                importResult: importResult,
+                onChanged: (result) {
+                  setState(() => importResult = result);
+                  if (result != null &&
+                      nameController.text.trim().isEmpty) {
+                    nameController.text = 'Imported Repertoire';
+                  }
+                },
+              ),
             ],
           ),
           actions: [
@@ -418,20 +376,22 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
           '// Color: $color\n'
           '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
 
+      int gameCount = 0;
       if (pgnImport != null) {
         await storage.writeFile(filePath, '$header${pgnImport.pgnContent}\n');
-        if (mounted) {
-          showAppSnackBar(
-            context,
-            'Created "$name" with ${pgnImport.gameCount} '
-            'line${pgnImport.gameCount == 1 ? '' : 's'}.',
-          );
-        }
+        gameCount = pgnImport.gameCount;
       } else {
         await storage.writeFile(filePath, header);
       }
 
-      await _loadRepertoires();
+      if (mounted) {
+        Navigator.of(context).pop(RepertoireMetadata(
+          filePath: filePath,
+          name: name,
+          gameCount: gameCount,
+          lastModified: DateTime.now(),
+        ));
+      }
     } catch (e) {
       debugPrint('Create repertoire failed: $e');
       if (mounted) {
@@ -551,5 +511,171 @@ class _RepertoireSelectionScreenState extends State<RepertoireSelectionScreen> {
         }
       }
     }
+  }
+}
+
+String _truncateFilename(String name, {int maxLength = 24}) {
+  if (name.length <= maxLength) return name;
+  final ext = p.extension(name);
+  final base = p.basenameWithoutExtension(name);
+  final available = maxLength - ext.length - 1;
+  if (available < 4) return '${name.substring(0, maxLength - 1)}\u2026';
+  return '${base.substring(0, available)}\u2026$ext';
+}
+
+/// Inline PGN attach widget for the create-repertoire dialog.
+///
+/// Centered "+ Add PGN" pill that opens a file picker directly. After picking,
+/// shows the filename as a pill next to the add button.
+class _InlinePgnAttach extends StatefulWidget {
+  final PgnImportResult? importResult;
+  final ValueChanged<PgnImportResult?> onChanged;
+
+  const _InlinePgnAttach({
+    required this.importResult,
+    required this.onChanged,
+  });
+
+  @override
+  State<_InlinePgnAttach> createState() => _InlinePgnAttachState();
+}
+
+class _InlinePgnAttachState extends State<_InlinePgnAttach> {
+  String? _fileName;
+  String? _error;
+
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pgn', 'txt'],
+        withData: false,
+        withReadStream: false,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final path = result.files.single.path;
+      if (path == null) return;
+
+      final content = await StorageFactory.instance.readFile(path);
+      if (content == null) return;
+
+      final count = pgn.countPgnGames(content);
+      setState(() {
+        _fileName = result.files.single.name;
+        _error = count == 0 ? 'No lines found in file.' : null;
+      });
+
+      if (count > 0) {
+        widget.onChanged(
+            PgnImportResult(pgnContent: content, gameCount: count));
+      } else {
+        widget.onChanged(null);
+      }
+    } catch (e) {
+      setState(() => _error = 'Could not read file: $e');
+      widget.onChanged(null);
+    }
+  }
+
+  void _clear() {
+    setState(() {
+      _fileName = null;
+      _error = null;
+    });
+    widget.onChanged(null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: _pickFile,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add, size: 15, color: cs.onPrimaryContainer),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Add PGN',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: cs.onPrimaryContainer,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (widget.importResult != null && _fileName != null) ...[
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 200),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.description,
+                          size: 13, color: cs.onPrimaryContainer),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          _truncateFilename(_fileName!),
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: cs.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: _clear,
+                        child: Icon(Icons.close,
+                            size: 13, color: cs.onPrimaryContainer),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.warning_amber, size: 13, color: cs.error),
+              const SizedBox(width: 5),
+              Text(_error!,
+                  style: TextStyle(fontSize: 11, color: cs.error)),
+            ],
+          ),
+        ],
+      ],
+    );
   }
 }

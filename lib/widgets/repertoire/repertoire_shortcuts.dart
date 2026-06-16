@@ -17,7 +17,7 @@ class RepertoireShortcuts extends StatelessWidget {
     required this.onUndo,
     required this.onOpenGeneration,
     required this.onOpenAudit,
-    required this.onImportPgn,
+    required this.onImportPgnFile,
     required this.onToggleExpectimax,
     required this.onToggleLinesTab,
     required this.onCollapseBottomPane,
@@ -42,7 +42,7 @@ class RepertoireShortcuts extends StatelessWidget {
   final VoidCallback onUndo;
   final VoidCallback onOpenGeneration;
   final VoidCallback onOpenAudit;
-  final VoidCallback onImportPgn;
+  final VoidCallback onImportPgnFile;
   final VoidCallback onToggleExpectimax;
   final VoidCallback onToggleLinesTab;
 
@@ -101,7 +101,7 @@ class RepertoireShortcuts extends StatelessWidget {
     }
 
     if (event.logicalKey == LogicalKeyboardKey.keyI && hasNoLetterModifiers) {
-      onImportPgn();
+      onImportPgnFile();
       return KeyEventResult.handled;
     }
 
