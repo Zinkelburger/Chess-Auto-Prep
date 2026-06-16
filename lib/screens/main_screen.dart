@@ -6,6 +6,7 @@ import '../core/app_state.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/tactics_control_panel.dart';
+import '../widgets/training/move_input_widget.dart';
 
 import '../services/engine/engine_lifecycle.dart';
 import 'analysis_screen.dart';
@@ -180,21 +181,35 @@ class _TacticsBoardPane extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(12),
-      child: Center(
-        child: AspectRatio(
-          aspectRatio: 1,
-          child: ChessBoardWidget(
-            position: appState.currentPosition,
-            flipped: appState.boardFlipped,
-            onPieceSelected: (square) {
-              // Handle piece selection
-            },
-            onMove: (move) {
-              // Use UCI from CompletedMove and send to validation
-              appState.onMoveAttempted(move.uci);
-            },
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: ChessBoardWidget(
+                  position: appState.currentPosition,
+                  flipped: appState.boardFlipped,
+                  onPieceSelected: (square) {},
+                  onMove: (move) {
+                    appState.onMoveAttempted(move.uci);
+                  },
+                ),
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 320),
+            child: MoveInputWidget(
+              key: TacticsControlPanel.moveInputKey,
+              position: appState.currentPosition,
+              onMove: (move) {
+                appState.onMoveAttempted(move.uci);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

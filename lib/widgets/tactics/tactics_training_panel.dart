@@ -53,7 +53,7 @@ class TacticsTrainingPanel extends StatelessWidget {
   final void Function(List<String> sanMoves, int clickedIndex)?
       onSolutionMoveTapped;
 
-  bool get _showRating => positionSolved || showSolution;
+  bool get _showRating => !autoAdvance && (positionSolved || showSolution);
 
   bool get _useNextLabel => positionSolved || showSolution;
 
@@ -150,7 +150,6 @@ class TacticsTrainingPanel extends StatelessWidget {
         ShortcutTooltip(
           description: 'Toggle auto-advance to next position',
           shortcut: 'J',
-          preferDelayed: true,
           child: CheckboxListTile(
             value: autoAdvance,
             onChanged: (value) => onAutoAdvanceChanged(value ?? true),
@@ -177,6 +176,7 @@ class TacticsTrainingPanel extends StatelessWidget {
           ),
           if (showSolution) const SizedBox(height: 8),
         ],
+        _buildPlayedMoves(),
         if (showSolution)
           Container(
             padding: const EdgeInsets.all(12),
@@ -217,6 +217,42 @@ class TacticsTrainingPanel extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildPlayedMoves() {
+    if (currentMoveIndex == 0) return const SizedBox.shrink();
+    final totalUserMoves = engine.userMoveCount(position);
+    if (totalUserMoves <= 1) return const SizedBox.shrink();
+
+    final played = position.correctLine.sublist(
+      0,
+      currentMoveIndex.clamp(0, position.correctLine.length),
+    );
+    if (played.isEmpty) return const SizedBox.shrink();
+
+    final buf = StringBuffer();
+    var moveNum = (solutionStartPly ~/ 2) + 1;
+    var isWhite = solutionStartPly % 2 == 0;
+
+    for (int i = 0; i < played.length; i++) {
+      if (isWhite) {
+        buf.write('$moveNum. ');
+      } else if (i == 0) {
+        buf.write('$moveNum... ');
+      }
+      buf.write(played[i]);
+      if (!isWhite) moveNum++;
+      isWhite = !isWhite;
+      if (i < played.length - 1) buf.write(' ');
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        buf.toString(),
+        style: TextStyle(fontSize: 14, color: Colors.grey[400]),
+      ),
     );
   }
 
