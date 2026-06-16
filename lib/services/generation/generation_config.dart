@@ -249,6 +249,35 @@ class TreeBuildConfig {
       ? clampEngineThreads(engineThreads)
       : defaultEngineThreads();
 
+  /// Short label for the active build algorithm.
+  String get buildModeLabel => switch (buildMode) {
+        BuildMode.stockfishExpectimax => 'Stockfish + expectimax',
+        BuildMode.maiaDbExplore => 'Maia DB explore',
+        BuildMode.dbExplorer => 'DB Explorer',
+        BuildMode.trapFinder => 'Trap finder',
+      };
+
+  /// Compact one-line summary for Jobs panel and status displays.
+  String get summaryLabel {
+    final parts = <String>[buildModeLabel, '${maxPly}ply'];
+    if (usesStockfish) {
+      parts.add('SF d$evalDepth');
+    }
+    if (buildMode == BuildMode.dbExplorer && pgnFilePaths.isNotEmpty) {
+      parts.add('${pgnFilePaths.length} PGN');
+    }
+    if (maiaOnly || buildMode == BuildMode.maiaDbExplore) {
+      parts.add('Maia $maiaElo');
+    } else if (useLichessDb) {
+      parts.add(useMasters ? 'Masters' : 'Lichess');
+    }
+    return parts.join(' · ');
+  }
+
+  /// Engine resource summary when Stockfish is used.
+  String get engineResourceLabel =>
+      '$resolvedEngineThreads thread${resolvedEngineThreads == 1 ? '' : 's'}';
+
   /// Minimum depth required from external eval sources.
   int get effectiveMinEvalDepth =>
       minAcceptableEvalDepth > 0 ? minAcceptableEvalDepth : evalDepth;

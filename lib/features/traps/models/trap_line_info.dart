@@ -57,6 +57,12 @@ class TrapLineInfo {
   /// All opponent responses at the trap position.
   final List<TrapReply>? allReplies;
 
+  /// Our best reply after the opponent plays the popular blunder.
+  final String? refutationMove;
+
+  /// Eval after our refutation move (our perspective, centipawns).
+  final int? refutationEvalCp;
+
   const TrapLineInfo({
     required this.movesSan,
     required this.trapScore,
@@ -74,6 +80,8 @@ class TrapLineInfo {
     this.openingName,
     this.positionEvalCp,
     this.allReplies,
+    this.refutationMove,
+    this.refutationEvalCp,
   });
 
   Map<String, dynamic> toJson() => {
@@ -94,6 +102,8 @@ class TrapLineInfo {
         if (positionEvalCp != null) 'position_eval_cp': positionEvalCp,
         if (allReplies != null)
           'all_replies': allReplies!.map((r) => r.toJson()).toList(),
+        if (refutationMove != null) 'refutation_move': refutationMove,
+        if (refutationEvalCp != null) 'refutation_eval_cp': refutationEvalCp,
       };
 
   factory TrapLineInfo.fromJson(Map<String, dynamic> json) => TrapLineInfo(
@@ -117,6 +127,8 @@ class TrapLineInfo {
                 .map((r) => TrapReply.fromJson(r as Map<String, dynamic>))
                 .toList()
             : null,
+        refutationMove: json['refutation_move'] as String?,
+        refutationEvalCp: json['refutation_eval_cp'] as int?,
       );
 
   /// Format eval in pawn units (e.g. +1.25, -0.50).

@@ -78,7 +78,8 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
                   Expanded(
                     child: Text(
                       '${traps[i].popularMove}? played ${(traps[i].popularProb * 100).toStringAsFixed(0)}%, '
-                      'loses ${(traps[i].evalDiffCp / 100).toStringAsFixed(1)} pawns',
+                      'loses ${(traps[i].evalDiffCp / 100).toStringAsFixed(1)} pawns'
+                      '${traps[i].refutationMove != null ? ' → punish with ${traps[i].refutationMove}' : ''}',
                       style: const TextStyle(fontSize: 11),
                     ),
                   ),

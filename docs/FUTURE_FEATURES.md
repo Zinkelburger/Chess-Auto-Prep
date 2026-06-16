@@ -118,7 +118,7 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 | **Traps empty state** | **Done** | Prompts "Generate Repertoire" with button when no traps detected |
 | Trap detail when **current position is a trap** (browse context) | **Partial** | Expanded trap list under candidates; not full card in context zone |
 | Eval bar → tap trap indicator → detail | **Not started** | |
-| Detail card actions: **Show Refutation**, **Train This Line** | **Not started** | Buttons stubbed or absent |
+| Detail card actions: **Show Refutation**, **Train This Line** | **Partial** | Refutation move extracted and displayed in detail card + browse panel; interactive "Show Refutation" navigation and "Train This Line" not wired |
 | Sort lines by **ETV** (expected trap value) | **Partial** | Trap count sort exists; ETV sort not exposed |
 
 ### Coverage suggestions

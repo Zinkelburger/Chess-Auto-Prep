@@ -12,7 +12,9 @@ import 'dart:isolate';
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../utils/file_text_reader.dart';
 import '../eval/eval_canonicalize.dart';
+import 'pgn_freq_cache.dart';
 
 // ── Public data types ────────────────────────────────────────────────────
 
@@ -52,6 +54,7 @@ class PgnFreqStats {
   final int skippedElo;
   final int skippedPrefix;
   final int parseErrors;
+  final int fileReadErrors;
 
   const PgnFreqStats({
     this.positions = 0,
@@ -59,16 +62,24 @@ class PgnFreqStats {
     this.skippedElo = 0,
     this.skippedPrefix = 0,
     this.parseErrors = 0,
+    this.fileReadErrors = 0,
   });
 }
 
 // ── PgnFreqMap ───────────────────────────────────────────────────────────
+
+const kDefaultStartFen =
+    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 class PgnFreqMap {
   final Map<String, PgnFreqPosition> _positions = {};
   int totalGames = 0;
 
   int get positionCount => _positions.length;
+
+  /// Exposed for disk cache serialization.
+  Iterable<MapEntry<String, PgnFreqPosition>> get positions =>
+      _positions.entries;
 
   PgnFreqPosition? get(String fen) {
     final key = canonicalizeFen4(fen);
@@ -153,10 +164,12 @@ class PgnFreqMap {
 /// Parse one or more PGN files into a [PgnFreqMap] in a background isolate.
 ///
 /// [onProgress] reports (gamesProcessed, currentFile) periodically.
+/// [useDiskCache] loads/saves `<path>.freq.cache` when file metadata matches.
 Future<(PgnFreqMap, PgnFreqStats)> parsePgnFiles({
   required List<String> paths,
   required PgnFreqConfig config,
   void Function(int gamesProcessed, String currentFile)? onProgress,
+  bool useDiskCache = true,
 }) async {
   final resultPort = ReceivePort();
   final progressPort = ReceivePort();
@@ -175,6 +188,7 @@ Future<(PgnFreqMap, PgnFreqStats)> parsePgnFiles({
     _ParseRequest(
       paths: paths,
       config: config,
+      useDiskCache: useDiskCache,
       resultPort: resultPort.sendPort,
       progressPort: progressPort.sendPort,
     ),
@@ -193,12 +207,14 @@ Future<(PgnFreqMap, PgnFreqStats)> parsePgnFiles({
 class _ParseRequest {
   final List<String> paths;
   final PgnFreqConfig config;
+  final bool useDiskCache;
   final SendPort resultPort;
   final SendPort progressPort;
 
   _ParseRequest({
     required this.paths,
     required this.config,
+    required this.useDiskCache,
     required this.resultPort,
     required this.progressPort,
   });
@@ -215,20 +231,42 @@ void _parseIsolateEntry(_ParseRequest req) {
   int skippedElo = 0;
   int skippedPrefix = 0;
   int parseErrors = 0;
+  int fileReadErrors = 0;
   int totalParsed = 0;
+  final parseWarnings = _ParseWarningLogger();
 
-  final startFen = req.config.startFen ??
-      'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-
-  List<String>? prefixMoves;
-  if (req.config.startMoves != null && req.config.startMoves!.isNotEmpty) {
-    prefixMoves = _parsePrefixMoves(req.config.startMoves!);
-  }
+  final targetKey = _buildTrackingTarget(req.config);
 
   for (final path in req.paths) {
     try {
-      final contents = io.File(path).readAsStringSync();
-      final games = _splitPgnGames(contents);
+      final file = io.File(path);
+      final stat = file.statSync();
+      final manifest = buildPgnFreqManifest(
+        path: path,
+        stat: stat,
+        config: req.config,
+      );
+      final cachePath = pgnFreqCachePath(path);
+
+      PgnFreqMap? fileMap;
+      if (req.useDiskCache) {
+        fileMap = loadPgnFreqCache(cachePath, manifest);
+        if (fileMap != null) {
+          map.merge(fileMap);
+          totalParsed += fileMap.totalGames;
+          req.progressPort.send([totalParsed, path]);
+          continue;
+        }
+      }
+
+      fileMap = PgnFreqMap();
+      final decoded = decodeTextBytesDetailed(file.readAsBytesSync());
+      if (decoded.usedLatin1Fallback) {
+        debugPrint(
+          '[PgnFreqMap] Warning: read $path as Latin-1 (not valid UTF-8)',
+        );
+      }
+      final games = _splitPgnGames(decoded.text);
 
       for (int gi = 0; gi < games.length; gi++) {
         final game = games[gi];
@@ -246,17 +284,19 @@ void _parseIsolateEntry(_ParseRequest req) {
         }
 
         final result = _processGameMovetext(
-          map: map,
+          map: fileMap,
           movetext: game.movetext,
-          startFen: startFen,
-          prefixMoves: prefixMoves,
+          targetKey: targetKey,
           maxPly: req.config.maxPly,
+          gameIndex: gi + 1,
+          headers: game.headers,
+          warnings: parseWarnings,
         );
 
         switch (result) {
           case _GameResult.ok:
             totalParsed++;
-            map.totalGames++;
+            fileMap.totalGames++;
           case _GameResult.prefixSkip:
             skippedPrefix++;
           case _GameResult.error:
@@ -267,11 +307,24 @@ void _parseIsolateEntry(_ParseRequest req) {
           req.progressPort.send([totalParsed, path]);
         }
       }
+
+      map.merge(fileMap);
+
+      if (req.useDiskCache && fileMap.totalGames > 0) {
+        if (!savePgnFreqCache(fileMap, cachePath, manifest)) {
+          debugPrint(
+            '[PgnFreqMap] Warning: could not save frequency cache to $cachePath',
+          );
+        }
+      }
     } catch (e) {
-      debugPrint('[PgnFreqMap] Error parsing $path: $e');
+      fileReadErrors++;
+      debugPrint('[PgnFreqMap] Error reading/parsing $path: $e');
     }
     req.progressPort.send([totalParsed, path]);
   }
+
+  parseWarnings.logSummaryIfNeeded();
 
   req.resultPort.send(_ParseResult(
     map,
@@ -281,6 +334,7 @@ void _parseIsolateEntry(_ParseRequest req) {
       skippedElo: skippedElo,
       skippedPrefix: skippedPrefix,
       parseErrors: parseErrors,
+      fileReadErrors: fileReadErrors,
     ),
   ));
 }
@@ -472,24 +526,89 @@ String? _playUci(String baseFen, String uci) {
   }
 }
 
-bool _sanMovesMatch(String a, String b) {
-  if (a == b) return true;
-  final na = a.replaceAll('0-0-0', 'O-O-O').replaceAll('0-0', 'O-O');
-  final nb = b.replaceAll('0-0-0', 'O-O-O').replaceAll('0-0', 'O-O');
-  return na == nb;
+bool _fenKeysEqual(String fenA, String fenB) {
+  return canonicalizeFen4(fenA) == canonicalizeFen4(fenB);
+}
+
+/// Build the 4-field FEN key games must reach before frequency tracking.
+/// Returns null when no prefix filter is configured.
+String? _buildTrackingTarget(PgnFreqConfig cfg) {
+  final prefixMoves = (cfg.startMoves != null && cfg.startMoves!.isNotEmpty)
+      ? _parsePrefixMoves(cfg.startMoves!)
+      : <String>[];
+
+  final wantFen = cfg.startFen != null &&
+      cfg.startFen!.isNotEmpty &&
+      !_fenKeysEqual(cfg.startFen!, kDefaultStartFen);
+
+  if (prefixMoves.isEmpty && !wantFen) return null;
+
+  var fen = wantFen ? cfg.startFen! : kDefaultStartFen;
+
+  for (final san in prefixMoves) {
+    final uci = _sanToUci(fen, san);
+    if (uci == null) return null;
+    final newFen = _playUci(fen, uci);
+    if (newFen == null) return null;
+    fen = newFen;
+  }
+
+  return canonicalizeFen4(fen);
+}
+
+class _ParseWarningLogger {
+  static const int maxDetailed = 10;
+  int logged = 0;
+  int suppressed = 0;
+
+  void logMoveFailure({
+    required int gameIndex,
+    required Map<String, String> headers,
+    required String failingSan,
+    required String fen,
+    required String reason,
+  }) {
+    if (logged >= maxDetailed) {
+      suppressed++;
+      return;
+    }
+    logged++;
+    final white = headers['White'] ?? '?';
+    final black = headers['Black'] ?? '?';
+    final event = headers['Event'] ?? '?';
+    final date = headers['Date'] ?? '?';
+    debugPrint(
+      '[PgnFreqMap] Warning: $reason SAN "$failingSan" at FEN $fen '
+      '(game #$gameIndex: White=$white, Black=$black, Event=$event, Date=$date)',
+    );
+  }
+
+  void logSummaryIfNeeded() {
+    if (suppressed <= 0) return;
+    debugPrint(
+      '[PgnFreqMap] Warning: suppressed $suppressed additional parse warnings '
+      '(first $maxDetailed shown)',
+    );
+  }
 }
 
 _GameResult _processGameMovetext({
   required PgnFreqMap map,
   required String movetext,
-  required String startFen,
-  List<String>? prefixMoves,
+  required String? targetKey,
   required int maxPly,
+  required int gameIndex,
+  required Map<String, String> headers,
+  required _ParseWarningLogger warnings,
 }) {
-  String fen = startFen;
-  bool tracking = (prefixMoves == null || prefixMoves.isEmpty);
-  int prefixIdx = 0;
-  int plyTracked = 0;
+  var fen = kDefaultStartFen;
+  var tracking = targetKey == null;
+  var plyTracked = 0;
+
+  if (targetKey != null && _fenKeysEqual(fen, targetKey)) {
+    tracking = true;
+    map.recordReach(targetKey);
+  }
 
   final tokens = _tokenizeMovetext(movetext);
 
@@ -499,22 +618,34 @@ _GameResult _processGameMovetext({
     if (_isResult(san)) break;
 
     final uci = _sanToUci(fen, san);
-    if (uci == null) return _GameResult.error;
+    if (uci == null) {
+      warnings.logMoveFailure(
+        gameIndex: gameIndex,
+        headers: headers,
+        failingSan: san,
+        fen: fen,
+        reason: 'cannot parse move',
+      );
+      return _GameResult.error;
+    }
 
     if (!tracking) {
-      if (prefixIdx >= prefixMoves!.length ||
-          !_sanMovesMatch(san, prefixMoves[prefixIdx])) {
-        return _GameResult.prefixSkip;
-      }
-
       final newFen = _playUci(fen, uci);
-      if (newFen == null) return _GameResult.error;
+      if (newFen == null) {
+        warnings.logMoveFailure(
+          gameIndex: gameIndex,
+          headers: headers,
+          failingSan: san,
+          fen: fen,
+          reason: 'illegal move',
+        );
+        return _GameResult.error;
+      }
       fen = newFen;
-      prefixIdx++;
 
-      if (prefixIdx >= prefixMoves.length) {
+      if (targetKey != null && _fenKeysEqual(fen, targetKey)) {
         tracking = true;
-        map.recordReach(canonicalizeFen4(fen));
+        map.recordReach(targetKey);
       }
       continue;
     }
@@ -524,7 +655,16 @@ _GameResult _processGameMovetext({
     map.recordMove(canonicalizeFen4(fen), uci, san);
 
     final newFen = _playUci(fen, uci);
-    if (newFen == null) return _GameResult.error;
+    if (newFen == null) {
+      warnings.logMoveFailure(
+        gameIndex: gameIndex,
+        headers: headers,
+        failingSan: san,
+        fen: fen,
+        reason: 'illegal move',
+      );
+      return _GameResult.error;
+    }
     fen = newFen;
 
     map.recordReach(canonicalizeFen4(fen));

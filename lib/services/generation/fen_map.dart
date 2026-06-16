@@ -1,41 +1,49 @@
 /// Transposition table for the tree build phase.
 ///
-/// Maps FEN strings to canonical [BuildTreeNode] instances and tracks
+/// Maps canonical 4-field FEN keys to [BuildTreeNode] instances and tracks
 /// transposition leaves.  Replaces the C code's hand-rolled hash table
 /// and circular equivalence ring with Dart's standard [HashMap].
 library;
 
 import '../../models/build_tree_node.dart';
+import '../eval/eval_canonicalize.dart';
+
+/// Strip halfmove/fullmove counters; keep piece placement, side to move,
+/// castling rights, and en passant square (matches C `fen_map_canonicalize_key`).
+String canonicalizeFen(String fen) => canonicalizeFen4(fen);
 
 class FenMap {
   final Map<String, BuildTreeNode> _canonical = {};
   final Map<String, List<BuildTreeNode>> _equivalents = {};
 
-  /// Look up the canonical (first-expanded) node for a FEN.
-  BuildTreeNode? getCanonical(String fen) => _canonical[fen];
+  String _key(String fen) => canonicalizeFen(fen);
 
-  bool contains(String fen) => _canonical.containsKey(fen);
+  /// Look up the canonical (first-expanded) node for a FEN.
+  BuildTreeNode? getCanonical(String fen) => _canonical[_key(fen)];
+
+  bool contains(String fen) => _canonical.containsKey(_key(fen));
 
   /// Register a node as the canonical expansion for its FEN.
   /// No-op if the FEN is already registered.
   void putCanonical(String fen, BuildTreeNode node) {
-    _canonical.putIfAbsent(fen, () => node);
+    _canonical.putIfAbsent(_key(fen), () => node);
   }
 
   /// Register a transposition leaf — a node that reached an already-expanded
   /// FEN via a different move order.
   void addTransposition(String fen, BuildTreeNode node) {
-    (_equivalents[fen] ??= []).add(node);
+    (_equivalents[_key(fen)] ??= []).add(node);
   }
 
   /// Get all transposition leaves for a FEN (excludes the canonical node).
   List<BuildTreeNode> getTranspositions(String fen) =>
-      _equivalents[fen] ?? const [];
+      _equivalents[_key(fen)] ?? const [];
 
   /// Get the canonical node plus all transposition leaves for a FEN.
   List<BuildTreeNode> getAllEquivalents(String fen) {
-    final canonical = _canonical[fen];
-    final transpositions = _equivalents[fen] ?? const <BuildTreeNode>[];
+    final key = _key(fen);
+    final canonical = _canonical[key];
+    final transpositions = _equivalents[key] ?? const <BuildTreeNode>[];
     if (canonical == null) return transpositions;
     return [canonical, ...transpositions];
   }

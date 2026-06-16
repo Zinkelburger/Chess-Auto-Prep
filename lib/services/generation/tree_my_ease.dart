@@ -106,6 +106,10 @@ class LinePlayability {
   final double playability;
   final double bottleneckQuality;
   final int bottleneckPly;
+
+  /// Whether the bottleneck is at a position where it is our turn to move.
+  /// When false the bottleneck reflects opponent ease, not our difficulty.
+  final bool bottleneckIsOurMove;
   final int easyMoveCount;
   final int hardMoveCount;
 
@@ -113,6 +117,7 @@ class LinePlayability {
     required this.playability,
     required this.bottleneckQuality,
     required this.bottleneckPly,
+    this.bottleneckIsOurMove = true,
     required this.easyMoveCount,
     required this.hardMoveCount,
   });
@@ -127,6 +132,13 @@ class LinePlayability {
 }
 
 /// Compute playability for a line (list of tree nodes from root to leaf).
+///
+/// [linePath] starts with the root position (index 0) followed by the node
+/// after each successive move.  The root is the starting position, not a
+/// move, so it is included in the geometric-mean quality but excluded from
+/// the bottleneck search.  Additionally the first ply where it is our turn
+/// is the user's deliberate opening choice (e.g. 1…d5 in the Scandinavian)
+/// and is also excluded from the bottleneck — it is not "hard to find."
 LinePlayability computeLinePlayability(
   List<BuildTreeNode> linePath,
   bool playAsWhite,
@@ -137,12 +149,22 @@ LinePlayability computeLinePlayability(
   int easy = 0;
   int hard = 0;
 
+  bool seenFirstOurMove = false;
+
   for (var i = 0; i < linePath.length; i++) {
     final node = linePath[i];
     final quality = computePositionQuality(node, playAsWhite);
     qualities.add(quality);
 
-    if (quality < minQuality) {
+    final isOurMove = node.isWhiteToMove == playAsWhite;
+
+    // Skip root position (not a move) and our first move (opening choice)
+    // from the bottleneck search.
+    final skipBottleneck =
+        i == 0 || (isOurMove && !seenFirstOurMove);
+    if (isOurMove && !seenFirstOurMove) seenFirstOurMove = true;
+
+    if (!skipBottleneck && quality < minQuality) {
       minQuality = quality;
       minPly = i;
     }
@@ -157,10 +179,14 @@ LinePlayability computeLinePlayability(
       .reduce((a, b) => a + b);
   final geoMean = math.exp(logSum / qualities.length);
 
+  final bottleneckIsOurMove = minPly < linePath.length &&
+      linePath[minPly].isWhiteToMove == playAsWhite;
+
   return LinePlayability(
     playability: geoMean.clamp(0.0, 1.0),
     bottleneckQuality: minQuality,
     bottleneckPly: minPly,
+    bottleneckIsOurMove: bottleneckIsOurMove,
     easyMoveCount: easy,
     hardMoveCount: hard,
   );

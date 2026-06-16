@@ -7,16 +7,17 @@
 library;
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 
 import '../models/build_tree_node.dart';
 import '../services/coherence_service.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/tree_serialization.dart';
+import '../services/jobs/generation_job_display.dart';
 import '../services/jobs/repertoire_job.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/tree_build_service.dart';
+import 'package:path/path.dart' as p;
 
 class GenerationSessionController extends ChangeNotifier {
   final TreeBuildService buildService = TreeBuildService();
@@ -40,8 +41,14 @@ class GenerationSessionController extends ChangeNotifier {
 
   // Progress stats (updated by RepertoireGenerationTab)
   String progressStatus = '';
+  GenerationPhase progressPhase = GenerationPhase.idle;
+  TreeBuildConfig? activeConfig;
   int progressNodes = 0;
   int progressDepth = 0;
+  int progressMaxPlyConfig = 20;
+  int progressUnexploredAtDepth = 0;
+  int progressTotalAtDepth = 0;
+  int progressLines = 0;
   double? progressNodesPerMinute;
   double? progressEtaSec;
   int progressElapsedMs = 0;
@@ -97,6 +104,7 @@ class GenerationSessionController extends ChangeNotifier {
     _isPaused = true;
     currentJob?.updateStatus(JobStatus.paused);
     savePartialTree();
+    syncProgressToJob();
     notifyListeners();
   }
 
@@ -105,6 +113,7 @@ class GenerationSessionController extends ChangeNotifier {
     buildService.resumeBuild();
     _isPaused = false;
     currentJob?.updateStatus(JobStatus.running);
+    syncProgressToJob();
     notifyListeners();
   }
 
@@ -117,6 +126,7 @@ class GenerationSessionController extends ChangeNotifier {
     _finishNowRequested = false;
     currentJob?.updateStatus(JobStatus.cancelled);
     currentJob = null;
+    _resetProgress();
     notifyListeners();
   }
 
@@ -133,9 +143,82 @@ class GenerationSessionController extends ChangeNotifier {
     _finishNowRequested = false;
   }
 
-  /// Notify listeners that progress stats have changed (called by the
-  /// generation tab after updating progress fields).
-  void notifyProgressChanged() => notifyListeners();
+  /// Update observable progress fields and mirror to the active job.
+  void updateProgress({
+    String? status,
+    GenerationPhase? phase,
+    TreeBuildConfig? config,
+    int? nodes,
+    int? depth,
+    int? maxPlyConfig,
+    int? unexploredAtDepth,
+    int? totalAtDepth,
+    int? lines,
+    double? nodesPerMinute,
+    double? etaSec,
+    int? elapsedMs,
+  }) {
+    if (status != null) progressStatus = status;
+    if (phase != null) progressPhase = phase;
+    if (config != null) activeConfig = config;
+    if (nodes != null) progressNodes = nodes;
+    if (depth != null) progressDepth = depth;
+    if (maxPlyConfig != null) progressMaxPlyConfig = maxPlyConfig;
+    if (unexploredAtDepth != null) {
+      progressUnexploredAtDepth = unexploredAtDepth;
+    }
+    if (totalAtDepth != null) progressTotalAtDepth = totalAtDepth;
+    if (lines != null) progressLines = lines;
+    if (nodesPerMinute != null) progressNodesPerMinute = nodesPerMinute;
+    if (etaSec != null) progressEtaSec = etaSec;
+    if (elapsedMs != null) progressElapsedMs = elapsedMs;
+    syncProgressToJob();
+    notifyListeners();
+  }
+
+  void syncProgressToJob() {
+    final job = currentJob;
+    if (job == null) return;
+    final statsLine = buildGenerationStatsLine(
+      phase: progressPhase,
+      nodes: progressNodes,
+      currentDepth: progressDepth,
+      maxPlyConfig: progressMaxPlyConfig,
+      unexploredAtDepth: progressUnexploredAtDepth,
+      totalAtDepth: progressTotalAtDepth,
+      nodesPerMinute: progressNodesPerMinute,
+      etaDepthSec: progressEtaSec?.round(),
+      linesExtracted: progressLines,
+    );
+    job.updateProgress(JobProgress(
+      fraction: generationProgressFraction(
+            phase: progressPhase,
+            currentDepth: progressDepth,
+            maxPlyConfig: progressMaxPlyConfig,
+            unexploredAtDepth: progressUnexploredAtDepth,
+            totalAtDepth: progressTotalAtDepth,
+          ) ??
+          0,
+      message: statsLine,
+      nodesProcessed: progressNodes,
+      totalNodes: progressMaxPlyConfig,
+    ));
+  }
+
+  void _resetProgress() {
+    progressStatus = '';
+    progressPhase = GenerationPhase.idle;
+    activeConfig = null;
+    progressNodes = 0;
+    progressDepth = 0;
+    progressMaxPlyConfig = 20;
+    progressUnexploredAtDepth = 0;
+    progressTotalAtDepth = 0;
+    progressLines = 0;
+    progressNodesPerMinute = null;
+    progressEtaSec = null;
+    progressElapsedMs = 0;
+  }
 
   // ── State updates (called by RepertoireGenerationTab) ───────────────
 
@@ -148,6 +231,7 @@ class GenerationSessionController extends ChangeNotifier {
         currentJob!.updateStatus(JobStatus.completed);
         currentJob = null;
       }
+      _resetProgress();
     }
     notifyListeners();
   }

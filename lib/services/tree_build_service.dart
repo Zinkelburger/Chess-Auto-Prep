@@ -220,6 +220,7 @@ class TreeBuildService {
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
     void Function(String status)? onStatusChanged,
+    String? startMoves,
   }) async {
     _stats = BuildStats();
     _evalResolver.stats = _stats;
@@ -234,10 +235,14 @@ class TreeBuildService {
 
     // Phase 0: Parse PGN files into frequency map (isolate)
     onStatusChanged?.call('Parsing PGN files...');
+    final hasStartMoves = startMoves != null && startMoves.isNotEmpty;
+    final pgnCustomFen =
+        !_fenKeysEqual(config.startFen, kDefaultStartFen);
     final (freqMap, freqStats) = await parsePgnFiles(
       paths: config.pgnFilePaths,
       config: PgnFreqConfig(
-        startFen: config.startFen,
+        startFen: (!hasStartMoves && pgnCustomFen) ? config.startFen : null,
+        startMoves: hasStartMoves ? startMoves : null,
         maxPly: config.maxPly,
         minElo: config.minElo,
       ),
@@ -258,15 +263,27 @@ class TreeBuildService {
     _log('Freq map: ${freqStats.totalGames} games, '
         '${freqStats.positions} positions, '
         '${freqStats.skippedElo} elo-filtered, '
-        '${freqStats.parseErrors} errors');
+        '${freqStats.parseErrors} movetext errors, '
+        '${freqStats.fileReadErrors} file read errors');
 
     if (freqStats.totalGames == 0) {
       _buildSw.stop();
-      throw StateError(
-        'No games parsed from ${config.pgnFilePaths.length} file(s). '
-        '${freqStats.skippedElo > 0 ? "${freqStats.skippedElo} skipped by Elo filter. " : ""}'
-        '${freqStats.parseErrors > 0 ? "${freqStats.parseErrors} parse errors." : ""}',
-      );
+      final parts = <String>[
+        'No games parsed from ${config.pgnFilePaths.length} file(s).',
+      ];
+      if (freqStats.fileReadErrors > 0) {
+        parts.add(
+          '${freqStats.fileReadErrors} file(s) could not be read '
+          '(check path and encoding).',
+        );
+      }
+      if (freqStats.skippedElo > 0) {
+        parts.add('${freqStats.skippedElo} skipped by Elo filter.');
+      }
+      if (freqStats.parseErrors > 0) {
+        parts.add('${freqStats.parseErrors} movetext parse errors.');
+      }
+      throw StateError(parts.join(' '));
     }
 
     // Phase 1: BFS tree build from frequency map
@@ -399,6 +416,14 @@ class TreeBuildService {
     final canonical = fenMap.getCanonical(node.fen);
     if (canonical != null) {
       fenMap.addTransposition(node.fen, node);
+      if (node.cumulativeProbability > canonical.cumulativeProbability) {
+        _propagateHigherCumP(
+          canonical,
+          node.cumulativeProbability,
+          config.minProbability,
+          queue,
+        );
+      }
       node.explored = true;
       return;
     }
@@ -755,6 +780,14 @@ class TreeBuildService {
     final canonical = fenMap.getCanonical(node.fen);
     if (canonical != null) {
       fenMap.addTransposition(node.fen, node);
+      if (node.cumulativeProbability > canonical.cumulativeProbability) {
+        _propagateHigherCumP(
+          canonical,
+          node.cumulativeProbability,
+          config.minProbability,
+          queue,
+        );
+      }
       node.explored = true;
       return;
     }
@@ -919,7 +952,9 @@ class TreeBuildService {
     required void Function(BuildProgress) onProgress,
     required Queue<BuildTreeNode> queue,
   }) async {
-    final mpvCount = config.ourMultipv;
+    final mpvCount = node.ply == 0
+        ? (config.ourMultipv >= 10 ? config.ourMultipv : 10)
+        : config.ourMultipv;
     final whiteToMove = isWhiteToMove(node.fen);
 
     final sw = Stopwatch()..start();
@@ -1410,5 +1445,40 @@ class TreeBuildService {
       if (childMax > maxId) maxId = childMax;
     }
     return maxId;
+  }
+
+  /// Scale cumulative probability through a canonical subtree when a
+  /// transposition path has higher probability (matches C `propagate_higher_cumP`).
+  void _propagateHigherCumP(
+    BuildTreeNode canonical,
+    double newCumP,
+    double minProbability,
+    Queue<BuildTreeNode> queue,
+  ) {
+    if (newCumP <= canonical.cumulativeProbability) return;
+    final ratio = newCumP / canonical.cumulativeProbability;
+    canonical.cumulativeProbability = newCumP;
+    _propagateCumPRecursive(canonical, ratio, minProbability, queue);
+  }
+
+  void _propagateCumPRecursive(
+    BuildTreeNode node,
+    double ratio,
+    double minProbability,
+    Queue<BuildTreeNode> queue,
+  ) {
+    for (final child in node.children) {
+      child.cumulativeProbability *= ratio;
+      if (child.children.isNotEmpty) {
+        _propagateCumPRecursive(child, ratio, minProbability, queue);
+      } else if (!child.explored &&
+          child.cumulativeProbability >= minProbability) {
+        queue.add(child);
+      }
+    }
+  }
+
+  bool _fenKeysEqual(String fenA, String fenB) {
+    return canonicalizeFen(fenA) == canonicalizeFen(fenB);
   }
 }

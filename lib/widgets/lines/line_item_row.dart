@@ -549,13 +549,20 @@ class _HardMoveWarning extends StatelessWidget {
     final ply = m.bottleneckPly ?? 0;
     final moveNum = (ply ~/ 2) + 1;
     final moveSan = ply < line.moves.length ? line.moves[ply] : 'move $moveNum';
+    final isOurMove = m.bottleneckIsOurMove;
+    final tooltip = isOurMove
+        ? 'Position where your move is hard to find (low naturalness)'
+        : 'Position where the opponent easily finds strong replies';
+    final label = isOurMove
+        ? 'hard move: $moveNum. $moveSan (ease ${m.bottleneckQuality!.toStringAsFixed(2)})'
+        : 'easy for opponent at $moveNum. $moveSan (quality ${m.bottleneckQuality!.toStringAsFixed(2)})';
 
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Row(
         children: [
           Tooltip(
-            message: 'Position where your move is hard to find (low ease)',
+            message: tooltip,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -563,7 +570,7 @@ class _HardMoveWarning extends StatelessWidget {
                     size: 12, color: AppColors.danger),
                 const SizedBox(width: 4),
                 Text(
-                  'hard move: $moveNum. $moveSan (ease ${m.bottleneckQuality!.toStringAsFixed(2)})',
+                  label,
                   style: TextStyle(fontSize: 10, color: AppColors.danger),
                 ),
               ],

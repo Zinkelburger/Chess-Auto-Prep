@@ -20,9 +20,11 @@ import '../services/generation/tree_serialization.dart';
 import '../services/generation/tree_build_progress.dart';
 import '../services/generation/pgn_export.dart';
 import '../services/engine/engine_lifecycle.dart';
+import '../services/jobs/generation_job_display.dart';
 import '../services/tree_build_service.dart';
 import '../core/generation_session_controller.dart';
 import '../theme/app_colors.dart';
+import '../utils/app_messages.dart';
 import 'generation/build_progress_display.dart';
 import 'generation/generation_config_form.dart';
 
@@ -138,6 +140,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     setState(() {
       if (_buildService.isBuilding) {
         _elapsedMs = _buildService.buildElapsedMs;
+        widget.generationController.updateProgress(elapsedMs: _elapsedMs);
         final api = _buildService.chessDbApiProvider;
         if (api != null) {
           _configFormKey.currentState?.updateChessDbApiUsage(
@@ -245,12 +248,20 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         _isPaused = false;
         _status = 'Building: resumed...';
       });
+      ctrl.updateProgress(
+        status: _status,
+        phase: progressPhaseFromTreeBuild(_status),
+      );
     } else {
       ctrl.pauseBuild();
       setState(() {
         _isPaused = true;
         _status = 'Paused ($_nodes nodes)';
       });
+      ctrl.updateProgress(
+        status: _status,
+        phase: progressPhaseFromTreeBuild(_status),
+      );
     }
   }
 
@@ -265,14 +276,17 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     _totalAtDepth = p.totalAtDepth;
     _etaDepthSec = p.etaDepthSeconds;
 
-    final ctrl = widget.generationController;
-    ctrl.progressNodes = _nodes;
-    ctrl.progressDepth = _currentDepth;
-    ctrl.progressNodesPerMinute = _nodesPerMinute;
-    ctrl.progressEtaSec = _etaDepthSec?.toDouble();
-    ctrl.progressElapsedMs = _elapsedMs;
-    ctrl.progressStatus = _status;
-    ctrl.notifyProgressChanged();
+    widget.generationController.updateProgress(
+      nodes: _nodes,
+      depth: _currentDepth,
+      maxPlyConfig: _maxPlyConfig,
+      unexploredAtDepth: _unexploredAtDepth,
+      totalAtDepth: _totalAtDepth,
+      nodesPerMinute: _nodesPerMinute,
+      etaSec: _etaDepthSec?.toDouble(),
+      elapsedMs: _elapsedMs,
+      phase: progressPhaseFromTreeBuild(_status),
+    );
 
     final now = DateTime.now();
     if (now.difference(_lastProgressUpdate).inMilliseconds < 150) {
@@ -280,6 +294,25 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     }
     _lastProgressUpdate = now;
     setState(() {});
+  }
+
+  GenerationPhase progressPhaseFromTreeBuild(String status) {
+    if (status.toLowerCase().contains('enriching eval')) {
+      return GenerationPhase.enrichingEvals;
+    }
+    if (status.toLowerCase().contains('parsing pgn')) {
+      return GenerationPhase.parsingPgn;
+    }
+    return GenerationPhase.buildingTree;
+  }
+
+  void _setStatus(String status, {GenerationPhase? phase}) {
+    _status = status;
+    widget.generationController.updateProgress(
+      status: status,
+      phase: phase ?? phaseFromStatus(status),
+    );
+    if (mounted) setState(() {});
   }
 
   Future<void> _startTreeBuild({BuildTree? existingTree}) async {
@@ -371,6 +404,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     );
     widget.generationController.onTreeReset();
     widget.generationController.markGenerating(true);
+    final job = widget.generationController.currentJob;
+    if (job != null) {
+      job.configSnapshot = config.toJson();
+    }
+    widget.generationController.updateProgress(
+      status: _status,
+      phase: GenerationPhase.buildingTree,
+      config: config,
+      nodes: _nodes,
+      depth: _currentDepth,
+      maxPlyConfig: config.maxPly,
+      unexploredAtDepth: _unexploredAtDepth,
+      totalAtDepth: _totalAtDepth,
+      elapsedMs: 0,
+    );
     _startUiPulse();
 
     var engineGenerationEntered = false;
@@ -385,18 +433,20 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       if (config.buildMode == BuildMode.dbExplorer) {
         tree = await _buildService.buildFromPgnFreqMap(
           config: config,
+          startMoves: widget.currentMoveSequence.isEmpty
+              ? null
+              : widget.currentMoveSequence.join(' '),
           isCancelled: () =>
               _shouldStop || widget.generationController.finishNowRequested,
           onStatusChanged: (status) {
-            if (mounted) setState(() => _status = status);
+            if (mounted) _setStatus(status);
           },
           onProgress: _handleBuildProgress,
         );
 
         if (_shouldStop && !widget.generationController.finishNowRequested) {
           if (mounted) {
-            setState(
-                () => _status = 'Build cancelled. ${tree.totalNodes} nodes.');
+            _setStatus('Build cancelled. ${tree.totalNodes} nodes.');
           }
           return;
         }
@@ -407,9 +457,10 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         if (skipBuild) {
           tree = existingTree;
           if (mounted) {
-            setState(() => _status =
-                'Tree already at depth ${existingTree.maxPlyReached}, '
-                    'skipping build...');
+            _setStatus(
+              'Tree already at depth ${existingTree.maxPlyReached}, '
+              'skipping build...',
+            );
           }
         } else {
           tree = await _buildService.build(
@@ -424,23 +475,21 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
           if (finishingEarly) {
             widget.generationController.clearFinishNow();
             if (mounted) {
-              setState(() =>
-                  _status = 'Finishing early with ${tree.totalNodes} nodes...');
+              _setStatus('Finishing early with ${tree.totalNodes} nodes...');
             }
           } else if (_shouldStop) {
             if (mounted) {
-              setState(
-                  () => _status = 'Build cancelled. ${tree.totalNodes} nodes.');
+              _setStatus('Build cancelled. ${tree.totalNodes} nodes.');
             }
             return;
           }
         }
       }
 
-      if (mounted) setState(() => _status = 'Phase 2: Computing ease...');
+      if (mounted) _setStatus('Phase 2: Computing ease...');
       final easeCount = calculateTreeEase(tree);
 
-      if (mounted) setState(() => _status = 'Phase 2: Computing expectimax...');
+      if (mounted) _setStatus('Phase 2: Computing expectimax...');
       final fenMap = FenMap()..populate(tree.root);
       final ecaCalc = ExpectimaxCalculator(config: config, fenMap: fenMap);
       final ecaCount = ecaCalc.calculate(tree);
@@ -450,7 +499,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       calculateMyEase(tree, playAsWhite: config.playAsWhite);
 
       if (mounted) {
-        setState(() => _status = 'Phase 2: Selecting repertoire...');
+        _setStatus('Phase 2: Selecting repertoire...');
       }
       final selector = RepertoireSelector(
         config: config,
@@ -464,13 +513,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       tree.computeMetadata();
       _applyKnownRootMoves(tree);
 
-      if (mounted) setState(() => _status = 'Phase 3: Extracting lines...');
+      if (mounted) _setStatus('Phase 3: Extracting lines...');
       final extractor = LineExtractor(config: config, fenMap: fenMap);
       var extractedLines = extractor.extract(tree);
       if (config.rankLinesByImportance) {
         extractedLines.sort((a, b) => b.probability.compareTo(a.probability));
       }
       _lines = extractedLines.length;
+      widget.generationController.updateProgress(lines: _lines);
 
       widget.generationController.onTreeBuilt(tree);
 
@@ -543,7 +593,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         await _pgnWriter.flush(fp);
       }
       if (mounted) {
-        setState(() => _status = 'Generation failed: $e');
+        final message = 'Generation failed: $e';
+        setState(() => _status = message);
+        showAppSnackBar(context, message, isError: true);
       }
     } finally {
       if (engineGenerationEntered) {
