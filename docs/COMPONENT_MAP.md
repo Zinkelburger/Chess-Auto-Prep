@@ -403,7 +403,7 @@ PgnViewerScreen._generateRepertoireFromGames
 
 ### PGN import UX (multi-source panel)
 
-The `PgnSourcesPanel` replaces the monolithic `pgn_import_dialog.dart` bottom sheet
+The `PgnSourcesPanel` extends beyond the single-import `pgn_import_dialog.dart`
 for contexts that manage multiple PGN sources (generation, batch import). Architecture:
 
 ```
@@ -601,7 +601,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `main_screen.dart` | Mode `IndexedStack`, engine lifecycle on mode exit |
 | `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
 | `repertoire_selection_screen.dart` | Pick/create repertoire; lists `RepertoireMetadata` from storage |
-| `repertoire_training_screen.dart` | Training mode shell; keyboard: J toggles manual advance, Space acknowledges learn steps (letter keys suppressed in text fields) |
+| `repertoire_training_screen.dart` | Training mode shell; Lines tab uses `TrainingLinesPanel` (categorized Learn/Review view with SRS metadata); keyboard: J toggles manual advance, Space acknowledges learn steps or opponent-comment Next, `/` focuses move input (letter keys suppressed in text fields) |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; keyboard: N/P/F/E/W/A/T letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen |
 | `player_selection_screen.dart` | Lichess player pick for analysis |
@@ -699,7 +699,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `tactics_parallel_analyzer.dart` / `tactics_parallel_analyzer_stub.dart` | Parallel puzzle analysis |
 | `tactics/tactics_session_controller.dart` | Puzzle session; `startSession(settings)` delegates to DB queue; `setRating(star)` on current position |
 | `tactics/tactics_import_coordinator.dart` | Import UI coordination |
-| `training/training_session_controller.dart` | Repertoire training flow |
+| `training/training_session_controller.dart` | Repertoire training flow; exposes `MoveDisplayInfo` (move notation, side label, comment) and `opponentWaitingForAck` for Chessable-style UI; `startNextNew()` / `startNextDue()` filter `dueQueue` by `isNew` for Learn/Review mode buttons |
 | `training/training_phase.dart` | Phase enum/state |
 
 #### Storage & platform
@@ -811,7 +811,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `pgn_with_analysis_pane.dart` | PGN + analysis dock split |
 | `pgn_with_engine.dart` | PGN pane with inline engine bar |
 | `pgn_viewer_widget.dart` | Game list + board for viewer; `_variationsByPly` holds mainline + **multiple ephemeral RAVs** per branch point (`addEphemeralMove` / `clearEphemeralMoves`); PGN tab renders each root as `( … )`; **Edit mode** (`editMode` prop): NAG inline display, `_AnnotationToolbar` with 6 glyph buttons + comment, right-click context menu with promote/delete gated by `protectOriginal`; `_toggleNag` modifies `PgnNodeData.nags` and persists via `buildMovetext` |
-| `pgn_import_dialog.dart` | PGN file import dialog; live preview counts **lines** via `countPgnGames` (matches Lines list). **Deprecated** — replaced by `PgnSourcesPanel` for multi-source contexts |
+| `pgn_import_dialog.dart` | Compact PGN import `AlertDialog` — file picker pill + paste textarea with live line count via `countPgnGames`; used for repertoire append and create-with-PGN flows. Multi-source contexts use `PgnSourcesPanel` instead |
 | `pgn_sources_panel.dart` | **Compact multi-source PGN attachment panel** — replaces the oversized import dialog; supports multiple PGN files/pastes, per-source slicing via `InlineSliceEditor`, embedded `LinesPreviewPanel` |
 | `pgn_inline_slice_editor.dart` | **Inline slice editor** — "All Lines" / "Slice" radio + position/header/sequence filters + match count via `computeSliceMatches` + preview panel; accepts optional `fenIndex` for instant position lookups; used inside `PgnSourcesPanel` per source |
 | `lines_preview_panel.dart` | **Browseable line list** — fuzzy search, virtualized scrolling, `HoverableMoveChips` per row with `FloatingBoardPreview` on hover; shows full-panel loading spinner while `computing` (replaces stale count + list); used in slice dialog and inline slice editor |
@@ -824,13 +824,14 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `position_analysis_widget.dart` | Weakness UI |
 | `engine_weakness_dialog.dart` | Weakness detail dialog |
 | `lichess_db_info_icon.dart` | Lichess DB info + OAuth entry point |
-| `tactics_control_panel.dart` | Tactics mode shell; **eagerly warms up** StockfishPool + Maia on page load (`_warmUpEngines` in `initState`) so imports start instantly; PGN tab uses [PgnWithEngine] — moves sync to PGN in real time (correct user moves and opponent replies are added via `addEphemeralMove` as they happen; no lazy replay on tab switch); `TacticsBoardUpdate.san` carries the SAN so `_applyBoardUpdate` pushes to PGN; FEN comparison in `onPositionChanged` prevents double-updates; keyboard: **E** (inline engine), **J** (auto-advance), **A** (analyze/reset), **P**/**N** (prev/skip), Space, arrows, Escape (letter keys suppressed in text fields; digit star-rating shortcuts removed) |
-| `tactics/tactics_training_panel.dart` | Puzzle UI; **Show Solution** = numbered SAN line + highlight only; star rating after solve/reveal |
+| `tactics_control_panel.dart` | Tactics mode shell; **eagerly warms up** StockfishPool + Maia on page load (`_warmUpEngines` in `initState`) so imports start instantly; PGN tab uses [PgnWithEngine] — moves sync to PGN in real time (correct user moves and opponent replies are added via `addEphemeralMove` as they happen; no lazy replay on tab switch); `TacticsBoardUpdate.san` carries the SAN so `_applyBoardUpdate` pushes to PGN; FEN comparison in `onPositionChanged` prevents double-updates; Show Solution midway through a multi-move tactic navigates to current position via `_navigateToSolutionIndex` instead of jumping to end; keyboard: **E** (inline engine), **J** (auto-advance), **A** (analyze/reset), **P**/**N** (prev/skip), Space, arrows, Escape (letter keys suppressed in text fields; digit star-rating shortcuts removed) |
+| `tactics/tactics_training_panel.dart` | Puzzle UI; **played-moves trail** shows numbered SAN for moves completed so far in multi-move tactics; **Show Solution** = numbered SAN line + highlight; midway Show Solution navigates to current position (not end); star rating after solve/reveal |
 | `tactics/tactics_browse_panel.dart` | Puzzle browser; per-row tappable star rating, 1-star rows dimmed, hide/show 1★ filter toggle |
 | `tactics/tactics_import_panel.dart` | Import tactics from Lichess/Chess.com; **Session Settings** dialog (order, mistake-type filter, 1-star toggle) opened from toolbar button beside Browse Tactics; live matching count on Start Session |
 | `tactics/puzzle_stats_display.dart` | Puzzle statistics display |
 | `tactics/tactics_delayed_tooltip.dart` | Delayed tooltip for puzzle hints |
-| `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **J** toggles learn auto-advance (`learnRequiresClick`) on training screen + settings tooltip |
+| `training/training_*.dart` | Training panels (progress, results, settings, board controls, repertoire selector); **Chessable-style move display** shows opponent/user moves with full notation ("White's move 1. e4", "Your move 2. Nf3"), comments inline, and **Next button** (Space shortcut) when opponent moves have comments; **J** toggles learn auto-advance (`learnRequiresClick`) on training screen + settings tooltip; `MoveInputWidget` below board accepts SAN/UCI text input, auto-submits on unique legal-move match (Escape clears & blurs) |
+| `training/training_lines_panel.dart` | **Training Lines browser** — replaces raw `RepertoireLinesBrowser` in the trainer Lines tab; top action bar with **Learn** (new lines) / **Review** (due lines) buttons with count badges; lines grouped into three sections: **Due for Review** (sorted weakest-first), **New** (unseen), **Learned** (collapsed by default, sorted by next due date); each row shows color chip, line name, status label ("Due 2h ago" / "New" / "Next: 3d"), pass/fail ratio, and move mastery bar; tapping a row starts that line |
 | `settings/settings_widgets.dart` | Reusable settings tiles |
 | `eval_database_settings_panel.dart` | CdbDirect configuration |
 | `lichess_db_selector.dart` | Explorer DB/speed/rating filters (widget retained; hidden from settings while Explorer mothballed) |
