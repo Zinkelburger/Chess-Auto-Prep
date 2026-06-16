@@ -23,7 +23,8 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onTrainRepertoire,
     this.onOpenGeneration,
     this.onOpenAudit,
-    this.onImportPgn,
+    this.onImportPgnFile,
+    this.onImportPgnPaste,
     this.isWhiteRepertoire,
     this.onSwitchColor,
   });
@@ -40,7 +41,8 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
   final VoidCallback? onOpenAudit;
-  final VoidCallback? onImportPgn;
+  final VoidCallback? onImportPgnFile;
+  final VoidCallback? onImportPgnPaste;
   final bool? isWhiteRepertoire;
   final VoidCallback? onSwitchColor;
 
@@ -71,8 +73,10 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'More actions',
           onSelected: (value) {
             switch (value) {
-              case 'import_pgn':
-                onImportPgn?.call();
+              case 'import_pgn_file':
+                onImportPgnFile?.call();
+              case 'import_pgn_paste':
+                onImportPgnPaste?.call();
               case 'switch_color':
                 onSwitchColor?.call();
               case 'settings':
@@ -80,14 +84,24 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             }
           },
           itemBuilder: (_) => [
-            if (onImportPgn != null)
+            if (onImportPgnFile != null)
               const PopupMenuItem(
-                value: 'import_pgn',
+                value: 'import_pgn_file',
                 child: ListTile(
-                  leading: Icon(Icons.upload_file, size: 20),
-                  title: Text('Import PGN'),
+                  leading: Icon(Icons.file_open, size: 20),
+                  title: Text('Import from file'),
                   trailing: Text('I',
                       style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            if (onImportPgnPaste != null)
+              const PopupMenuItem(
+                value: 'import_pgn_paste',
+                child: ListTile(
+                  leading: Icon(Icons.paste, size: 20),
+                  title: Text('Paste PGN'),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                 ),

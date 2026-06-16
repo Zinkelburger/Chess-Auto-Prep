@@ -22,6 +22,8 @@ import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
+import 'package:file_picker/file_picker.dart';
+import '../services/storage/storage_factory.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
 import '../widgets/layout/board_zone.dart';
@@ -482,7 +484,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onTrainRepertoire: _trainRepertoire,
         onOpenGeneration: _openGenerationDialog,
         onOpenAudit: _openAuditDialog,
-        onImportPgn: _importPgn,
+        onImportPgnFile: _importPgnFromFile,
+        onImportPgnPaste: _importPgnFromPaste,
         trapNavigation: _buildTrapNavigation(),
         isWhiteRepertoire: _controller.isRepertoireWhite,
         onSwitchColor: () async {
@@ -498,7 +501,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           onUndo: _performUndo,
           onOpenGeneration: _openGenerationDialog,
           onOpenAudit: _openAuditDialog,
-          onImportPgn: _importPgn,
+          onImportPgnFile: _importPgnFromFile,
           onToggleExpectimax: InlineExpectimaxBar.toggle,
           onToggleLinesTab: () {
             _toolsTabController.animateTo(
@@ -1275,7 +1278,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       onLineEdited: (updatedPgn) {
         _controller.updateSelectedLineContent(updatedPgn);
       },
-      onImportPgn: _importPgn,
+      onImportPgnFile: _importPgnFromFile,
+      onImportPgnPaste: _importPgnFromPaste,
       onViewInLines: () => _toolsTabController.animateTo(1),
       onReload: _reloadRepertoire,
       generatedTree: _generationController.generatedTree,
@@ -1597,10 +1601,40 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         );
   }
 
-  Future<void> _importPgn() async {
+  Future<void> _importPgnFromFile() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pgn', 'txt'],
+        withData: false,
+        withReadStream: false,
+      );
+      if (result == null || result.files.isEmpty || !mounted) return;
+
+      final path = result.files.single.path;
+      if (path == null) return;
+
+      final content = await StorageFactory.instance.readFile(path);
+      if (content == null || !mounted) return;
+
+      final added = await _controller.importPgnContent(content);
+      if (!mounted) return;
+
+      showAppSnackBar(
+        context,
+        'Added $added line${added == 1 ? '' : 's'} to repertoire.',
+      );
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(context, 'Could not read file: $e', isError: true);
+      }
+    }
+  }
+
+  Future<void> _importPgnFromPaste() async {
     final result = await showPgnImportDialog(
       context,
-      title: 'Import PGN into Repertoire',
+      title: 'Paste PGN',
       confirmLabel: 'Add to Repertoire',
     );
     if (result == null || !mounted) return;
