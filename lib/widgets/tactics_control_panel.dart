@@ -24,6 +24,7 @@ import 'pgn_with_engine.dart';
 import 'tactics/tactics_browse_panel.dart';
 import 'tactics/tactics_import_panel.dart';
 import 'tactics/tactics_training_panel.dart';
+import 'training/move_input_widget.dart';
 
 class _ToggleInlineEngineIntent extends Intent {
   const _ToggleInlineEngineIntent();
@@ -32,6 +33,10 @@ class _ToggleInlineEngineIntent extends Intent {
 /// Tactics training control panel with import, review, and analysis.
 class TacticsControlPanel extends StatefulWidget {
   const TacticsControlPanel({super.key});
+
+  /// Shared key for the tactics move-input widget so the `/` shortcut can
+  /// focus it from the control panel.
+  static final moveInputKey = GlobalKey<MoveInputWidgetState>();
 
   @override
   State<TacticsControlPanel> createState() => _TacticsControlPanelState();
@@ -76,6 +81,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   /// FEN for which the ephemeral solution has already been seeded into the PGN.
   String? _solutionSeededForFen;
+
+  /// Tracks opponent-waiting state to detect when it's the user's turn again
+  /// in multi-move puzzles (so we can refocus the move input).
+  bool _wasWaitingForOpponent = false;
 
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();
@@ -155,9 +164,32 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   void _onSessionChanged() {
     if (mounted) {
       // When solution is toggled on, seed ephemeral moves into PGN once.
+      // If the user is midway through a multi-move tactic, stay at the
+      // current position; otherwise show the full solution at the end.
       if (_session.showSolution && _session.currentPosition != null) {
         _ensureSolutionSeeded();
+        if (_session.currentMoveIndex > 0 && !_session.positionSolved) {
+          _navigateToSolutionIndex(_session.currentMoveIndex - 1);
+        } else {
+          _navigateToSolutionEnd();
+        }
       }
+
+      // Auto-blur move input when puzzle is resolved or solution is shown.
+      if (_session.positionSolved || _session.showSolution) {
+        TacticsControlPanel.moveInputKey.currentState?.unfocus();
+        _focusNode.requestFocus();
+      }
+
+      // Refocus move input when opponent finishes moving in multi-move puzzles.
+      if (_wasWaitingForOpponent &&
+          !_session.waitingForOpponent &&
+          !_session.positionSolved &&
+          !_session.showSolution) {
+        TacticsControlPanel.moveInputKey.currentState?.focus();
+      }
+      _wasWaitingForOpponent = _session.waitingForOpponent;
+
       setState(() {});
     }
   }
@@ -342,6 +374,16 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       } else {
         _resetAnalysis();
       }
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.slash && hasNoLetterModifiers) {
+      TacticsControlPanel.moveInputKey.currentState?.focus();
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.tab) {
+      TacticsControlPanel.moveInputKey.currentState?.focus();
       return KeyEventResult.handled;
     }
 
@@ -838,7 +880,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _resetSolutionState();
     _applyPositionSetup(setup);
     _syncPgnToCurrentTactic();
-    _focusNode.requestFocus();
+    TacticsControlPanel.moveInputKey.currentState?.focus();
   }
 
   // ─── Solution navigation ───────────────────────────────────────────────
@@ -870,6 +912,39 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     for (int i = 0; i < san.length; i++) {
       _pgnViewerController.goBack();
     }
+  }
+
+  /// Navigate the board and PGN viewer to a specific index in the solution.
+  void _navigateToSolutionIndex(int targetIndex) {
+    final san = _solutionSanCache;
+    if (san.isEmpty) return;
+    targetIndex = targetIndex.clamp(-1, san.length - 1);
+
+    final delta = targetIndex - _solutionNavIndex;
+    if (delta > 0) {
+      for (int i = 0; i < delta; i++) {
+        _pgnViewerController.goForward();
+      }
+    } else if (delta < 0) {
+      for (int i = 0; i < -delta; i++) {
+        _pgnViewerController.goBack();
+      }
+    }
+    _solutionNavIndex = targetIndex;
+    _navigateSolutionBoard(_solutionNavIndex);
+  }
+
+  /// Navigate the board and PGN viewer to the end of the solution line.
+  void _navigateToSolutionEnd() {
+    final san = _solutionSanCache;
+    if (san.isEmpty) return;
+
+    final delta = (san.length - 1) - _solutionNavIndex;
+    for (int i = 0; i < delta; i++) {
+      _pgnViewerController.goForward();
+    }
+    _solutionNavIndex = san.length - 1;
+    _navigateSolutionBoard(_solutionNavIndex);
   }
 
   void _solutionArrowForward() {
@@ -964,7 +1039,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
     final appState = context.read<AppState>();
 
-    if (appState.isAnalysisMode) {
+    if (appState.isAnalysisMode ||
+        _session.positionSolved ||
+        _session.showSolution) {
       _addMoveToAnalysis(moveUci);
       return;
     }
