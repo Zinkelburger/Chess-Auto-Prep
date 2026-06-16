@@ -15,6 +15,7 @@ class TrainingResultsPanel extends StatefulWidget {
   final Map<String, RepertoireReviewEntry> reviewMap;
   final String repertoireId;
   final bool lineHadMistake;
+  final bool hadLearnPhaseThisSession;
   final TrainingSettings settings;
   final int sessionCorrect;
   final int sessionIncorrect;
@@ -32,6 +33,7 @@ class TrainingResultsPanel extends StatefulWidget {
     required this.reviewMap,
     required this.repertoireId,
     required this.lineHadMistake,
+    required this.hadLearnPhaseThisSession,
     required this.settings,
     required this.sessionCorrect,
     required this.sessionIncorrect,
@@ -49,6 +51,14 @@ class TrainingResultsPanel extends StatefulWidget {
 class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
   bool _autoRateScheduled = false;
 
+  bool get _shouldAutoRate =>
+      !widget.settings.showRatingButtons || widget.hadLearnPhaseThisSession;
+
+  ReviewRating get _autoRating {
+    if (widget.hadLearnPhaseThisSession) return ReviewRating.good;
+    return widget.lineHadMistake ? ReviewRating.again : ReviewRating.good;
+  }
+
   @override
   void didUpdateWidget(TrainingResultsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -57,6 +67,15 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
         oldWidget.lineHadMistake != widget.lineHadMistake) {
       _autoRateScheduled = false;
     }
+  }
+
+  void _scheduleAutoRate() {
+    if (!_shouldAutoRate || _autoRateScheduled) return;
+    _autoRateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.phase != TrainingPhase.finished) return;
+      widget.onRateLine(_autoRating);
+    });
   }
 
   @override
@@ -77,21 +96,15 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
       );
     }
 
-    if (!widget.settings.showRatingButtons) {
-      if (!_autoRateScheduled) {
-        _autoRateScheduled = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted || widget.phase != TrainingPhase.finished) return;
-          final autoRating =
-              widget.lineHadMistake ? ReviewRating.again : ReviewRating.good;
-          widget.onRateLine(autoRating);
-        });
-      }
+    if (_shouldAutoRate) {
+      _scheduleAutoRate();
+      final message = widget.hadLearnPhaseThisSession
+          ? 'Line learned — continuing...'
+          : widget.lineHadMistake
+              ? 'Scheduling for review...'
+              : 'Line complete!';
       return Center(
-        child: Text(
-          widget.lineHadMistake ? 'Scheduling for review...' : 'Line complete!',
-          style: theme.textTheme.bodyMedium,
-        ),
+        child: Text(message, style: theme.textTheme.bodyMedium),
       );
     }
 
@@ -101,8 +114,10 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('How well did you know this?',
-              style: theme.textTheme.titleSmall),
+          Text(
+            'How well did you know this?',
+            style: theme.textTheme.titleSmall,
+          ),
           const SizedBox(height: 12),
           TrainingRatingButtons(
             currentLine: widget.currentLine,
@@ -178,8 +193,10 @@ class AllCaughtUpPanel extends StatelessWidget {
           Text('All caught up!', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           if (nextDue != null)
-            Text('Next review: ${formatRelativeDate(nextDue)}',
-                style: theme.textTheme.bodySmall),
+            Text(
+              'Next review: ${formatRelativeDate(nextDue)}',
+              style: theme.textTheme.bodySmall,
+            ),
           if (sessionCorrect + sessionIncorrect > 0) ...[
             const SizedBox(height: 16),
             SessionStatsBar(
@@ -210,6 +227,13 @@ class TrainingRatingButtons extends StatelessWidget {
     required this.onRateLine,
   });
 
+  static const _ratings = [
+    (ReviewRating.again, 'Again', Color(0xFFE53935)),
+    (ReviewRating.hard, 'Hard', Color(0xFFFB8C00)),
+    (ReviewRating.good, 'Good', Color(0xFF1E88E5)),
+    (ReviewRating.easy, 'Easy', Color(0xFF43A047)),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final entry = currentLine != null ? reviewMap[currentLine!.id] : null;
@@ -220,43 +244,29 @@ class TrainingRatingButtons extends StatelessWidget {
           lineName: currentLine?.name ?? '',
         );
 
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _RatingButton(
-          rating: ReviewRating.again,
-          label: 'Again',
-          color: Colors.red,
-          previewEntry: previewEntry,
-          reviewService: reviewService,
-          onRateLine: onRateLine,
-        ),
-        _RatingButton(
-          rating: ReviewRating.hard,
-          label: 'Hard',
-          color: Colors.orange,
-          previewEntry: previewEntry,
-          reviewService: reviewService,
-          onRateLine: onRateLine,
-        ),
-        _RatingButton(
-          rating: ReviewRating.good,
-          label: 'Good',
-          color: Colors.blue,
-          previewEntry: previewEntry,
-          reviewService: reviewService,
-          onRateLine: onRateLine,
-        ),
-        _RatingButton(
-          rating: ReviewRating.easy,
-          label: 'Easy',
-          color: Colors.green,
-          previewEntry: previewEntry,
-          reviewService: reviewService,
-          onRateLine: onRateLine,
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = 8.0;
+        final tileWidth = (constraints.maxWidth - spacing) / 2;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final (rating, label, color) in _ratings)
+              SizedBox(
+                width: tileWidth,
+                child: _RatingButton(
+                  rating: rating,
+                  label: label,
+                  color: color,
+                  previewEntry: previewEntry,
+                  reviewService: reviewService,
+                  onRateLine: onRateLine,
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -280,25 +290,42 @@ class _RatingButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final interval = reviewService.previewInterval(previewEntry, rating);
     final intervalLabel = RepertoireReviewService.formatInterval(interval);
 
-    return Tooltip(
-      message: label,
-      child: OutlinedButton(
-        onPressed: () => onRateLine(rating),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: color,
-          side: BorderSide(color: color.withValues(alpha: 0.5)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label),
-            Text(intervalLabel,
-                style: TextStyle(
-                    fontSize: 10, color: color.withValues(alpha: 0.7))),
-          ],
+    return Material(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => onRateLine(rating),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                intervalLabel,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
