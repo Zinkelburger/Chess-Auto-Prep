@@ -17,14 +17,14 @@ import 'services/engine/engine_lifecycle.dart';
 import 'services/eval_cache.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  FlutterError.onError = (FlutterErrorDetails details) {
-    FlutterError.presentError(details);
-    debugPrint('FlutterError: ${details.exceptionAsString()}');
-  };
-
   runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('FlutterError: ${details.exceptionAsString()}');
+    };
+
     try {
       await _initializeApp();
       runApp(const ChessAutoPrepApp());
