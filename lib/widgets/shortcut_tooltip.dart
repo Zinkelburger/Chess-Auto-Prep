@@ -19,9 +19,6 @@ String actionTooltipIf(String description, {String? shortcut}) {
 }
 
 /// Tooltip that always includes a keyboard shortcut on hover.
-///
-/// Set [preferDelayed] for dense control clusters (e.g. tactics training buttons)
-/// so each hover waits [waitDuration] (default 500ms) before showing the tooltip.
 class ShortcutTooltip extends StatelessWidget {
   const ShortcutTooltip({
     super.key,
@@ -29,14 +26,12 @@ class ShortcutTooltip extends StatelessWidget {
     required this.shortcut,
     required this.child,
     this.waitDuration,
-    this.preferDelayed = false,
   });
 
   final String description;
   final String shortcut;
   final Widget child;
   final Duration? waitDuration;
-  final bool preferDelayed;
 
   String get message => actionTooltip(description, shortcut: shortcut);
 
@@ -46,10 +41,10 @@ class ShortcutTooltip extends StatelessWidget {
       shortcut.trim().isNotEmpty,
       'ShortcutTooltip requires a non-empty shortcut',
     );
-    if (preferDelayed || waitDuration != null) {
+    if (waitDuration != null) {
       return Tooltip(
         message: message,
-        waitDuration: waitDuration ?? const Duration(milliseconds: 500),
+        waitDuration: waitDuration,
         child: child,
       );
     }
@@ -134,7 +129,7 @@ class ShortcutIconButton extends StatelessWidget {
   }
 }
 
-/// Convenience wrapper with a short hover delay (tactics training panel).
+/// Convenience wrapper matching [ShortcutTooltip] defaults (no delay).
 Widget shortcutTooltip({
   required String description,
   required String shortcut,
@@ -143,7 +138,6 @@ Widget shortcutTooltip({
   return ShortcutTooltip(
     description: description,
     shortcut: shortcut,
-    preferDelayed: true,
     child: child,
   );
 }
