@@ -1,0 +1,594 @@
+import 'package:flutter/material.dart';
+
+import '../../models/repertoire_line.dart';
+import '../../models/repertoire_move_progress.dart';
+import '../../models/repertoire_review_entry.dart';
+
+/// Training-aware lines browser with Learn/Review action buttons and
+/// lines grouped into Due / New / Learned sections.
+class TrainingLinesPanel extends StatelessWidget {
+  final List<RepertoireLine> lines;
+  final Map<String, RepertoireReviewEntry> reviewMap;
+  final Map<String, RepertoireMoveProgress> moveProgressMap;
+  final void Function(RepertoireLine line) onLineSelected;
+  final VoidCallback onStartNextNew;
+  final VoidCallback onStartNextDue;
+
+  const TrainingLinesPanel({
+    super.key,
+    required this.lines,
+    required this.reviewMap,
+    required this.moveProgressMap,
+    required this.onLineSelected,
+    required this.onStartNextNew,
+    required this.onStartNextDue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final newLines = <RepertoireLine>[];
+    final dueLines = <RepertoireLine>[];
+    final learnedLines = <RepertoireLine>[];
+
+    for (final line in lines) {
+      final entry = reviewMap[line.id];
+      if (entry == null || entry.isNew) {
+        newLines.add(line);
+      } else if (entry.isDue) {
+        dueLines.add(line);
+      } else {
+        learnedLines.add(line);
+      }
+    }
+
+    dueLines.sort((a, b) {
+      final ea = reviewMap[a.id]!;
+      final eb = reviewMap[b.id]!;
+      final ratioA = ea.passCount + ea.failCount > 0
+          ? ea.failCount / (ea.passCount + ea.failCount)
+          : 0.0;
+      final ratioB = eb.passCount + eb.failCount > 0
+          ? eb.failCount / (eb.passCount + eb.failCount)
+          : 0.0;
+      final cmp = ratioB.compareTo(ratioA);
+      if (cmp != 0) return cmp;
+      final aDate = ea.lastReviewedUtc ?? DateTime(2000);
+      final bDate = eb.lastReviewedUtc ?? DateTime(2000);
+      return aDate.compareTo(bDate);
+    });
+
+    learnedLines.sort((a, b) {
+      final ea = reviewMap[a.id]!;
+      final eb = reviewMap[b.id]!;
+      final aDate = ea.dueDateUtc ?? DateTime(2100);
+      final bDate = eb.dueDateUtc ?? DateTime(2100);
+      return aDate.compareTo(bDate);
+    });
+
+    return Column(
+      children: [
+        _ActionBar(
+          newCount: newLines.length,
+          dueCount: dueLines.length,
+          onLearn: newLines.isNotEmpty ? onStartNextNew : null,
+          onReview: dueLines.isNotEmpty ? onStartNextDue : null,
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            children: [
+              if (dueLines.isNotEmpty) ...[
+                _SectionHeader(
+                  title: 'Due for Review',
+                  count: dueLines.length,
+                  color: Colors.orange,
+                ),
+                for (final line in dueLines)
+                  _LineRow(
+                    line: line,
+                    entry: reviewMap[line.id],
+                    moveProgressMap: moveProgressMap,
+                    onTap: () => onLineSelected(line),
+                  ),
+                const SizedBox(height: 8),
+              ],
+              if (newLines.isNotEmpty) ...[
+                _SectionHeader(
+                  title: 'New',
+                  count: newLines.length,
+                  color: Colors.blue,
+                ),
+                for (final line in newLines)
+                  _LineRow(
+                    line: line,
+                    entry: reviewMap[line.id],
+                    moveProgressMap: moveProgressMap,
+                    onTap: () => onLineSelected(line),
+                  ),
+                const SizedBox(height: 8),
+              ],
+              if (learnedLines.isNotEmpty) ...[
+                _CollapsibleSection(
+                  title: 'Learned',
+                  count: learnedLines.length,
+                  color: Colors.green,
+                  children: [
+                    for (final line in learnedLines)
+                      _LineRow(
+                        line: line,
+                        entry: reviewMap[line.id],
+                        moveProgressMap: moveProgressMap,
+                        onTap: () => onLineSelected(line),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ACTION BAR — Learn / Review buttons
+// ---------------------------------------------------------------------------
+
+class _ActionBar extends StatelessWidget {
+  final int newCount;
+  final int dueCount;
+  final VoidCallback? onLearn;
+  final VoidCallback? onReview;
+
+  const _ActionBar({
+    required this.newCount,
+    required this.dueCount,
+    this.onLearn,
+    this.onReview,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ActionButton(
+              label: 'Learn',
+              count: newCount,
+              icon: Icons.school_outlined,
+              color: Colors.blue,
+              onPressed: onLearn,
+              theme: theme,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _ActionButton(
+              label: 'Review',
+              count: dueCount,
+              icon: Icons.replay_outlined,
+              color: Colors.orange,
+              onPressed: onReview,
+              theme: theme,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final int count;
+  final IconData icon;
+  final Color color;
+  final VoidCallback? onPressed;
+  final ThemeData theme;
+
+  const _ActionButton({
+    required this.label,
+    required this.count,
+    required this.icon,
+    required this.color,
+    this.onPressed,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = onPressed == null;
+    final fg = disabled ? theme.colorScheme.onSurface.withValues(alpha: 0.3) : color;
+    return Material(
+      color: color.withValues(alpha: disabled ? 0.05 : 0.12),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: fg.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: fg),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: fg,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: fg.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: fg,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SECTION HEADERS
+// ---------------------------------------------------------------------------
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  final int count;
+  final Color color;
+
+  const _SectionHeader({
+    required this.title,
+    required this.count,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 14,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '($count)',
+            style: TextStyle(
+              fontSize: 11,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CollapsibleSection extends StatefulWidget {
+  final String title;
+  final int count;
+  final Color color;
+  final List<Widget> children;
+
+  const _CollapsibleSection({
+    required this.title,
+    required this.count,
+    required this.color,
+    required this.children,
+  });
+
+  @override
+  State<_CollapsibleSection> createState() => _CollapsibleSectionState();
+}
+
+class _CollapsibleSectionState extends State<_CollapsibleSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Container(
+                  width: 4,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: widget.color,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  widget.title,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: widget.color,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  '(${widget.count})',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  _expanded ? Icons.expand_less : Icons.expand_more,
+                  size: 18,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded) ...widget.children,
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// LINE ROW
+// ---------------------------------------------------------------------------
+
+class _LineRow extends StatelessWidget {
+  final RepertoireLine line;
+  final RepertoireReviewEntry? entry;
+  final Map<String, RepertoireMoveProgress> moveProgressMap;
+  final VoidCallback onTap;
+
+  const _LineRow({
+    required this.line,
+    this.entry,
+    required this.moveProgressMap,
+    required this.onTap,
+  });
+
+  String _statusLabel() {
+    if (entry == null || entry!.isNew) return 'New';
+    if (entry!.isDue) {
+      if (entry!.dueDateUtc == null) return 'Due';
+      final ago = DateTime.now().toUtc().difference(entry!.dueDateUtc!);
+      if (ago.inMinutes < 60) return 'Due ${ago.inMinutes}m ago';
+      if (ago.inHours < 24) return 'Due ${ago.inHours}h ago';
+      return 'Due ${ago.inDays}d ago';
+    }
+    if (entry!.dueDateUtc != null) {
+      final until = entry!.dueDateUtc!.difference(DateTime.now().toUtc());
+      if (until.inHours < 24) return 'Next: ${until.inHours}h';
+      return 'Next: ${until.inDays}d';
+    }
+    return 'Learned';
+  }
+
+  Color _statusColor(ThemeData theme) {
+    if (entry == null || entry!.isNew) return Colors.blue;
+    if (entry!.isDue) return Colors.orange;
+    return Colors.green;
+  }
+
+  double _moveMastery() {
+    if (line.moves.isEmpty) return 0;
+    int learned = 0;
+    for (int i = 0; i < line.moves.length; i++) {
+      final key = '${line.id}:$i';
+      final prog = moveProgressMap[key];
+      if (prog != null && prog.learned) learned++;
+    }
+    return learned / line.moves.length;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final statusColor = _statusColor(theme);
+    final mastery = _moveMastery();
+    final isNew = entry == null || entry!.isNew;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        margin: const EdgeInsets.symmetric(vertical: 2),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: (line.color.toLowerCase() == 'white'
+                            ? Colors.white
+                            : Colors.black)
+                        .withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    line.color.toLowerCase() == 'white' ? 'W' : 'B',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    line.name,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _statusLabel(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Text(
+                  '${line.moves.length} moves',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                ),
+                if (!isNew && entry != null) ...[
+                  const SizedBox(width: 12),
+                  _PassFailChip(
+                    pass: entry!.passCount,
+                    fail: entry!.failCount,
+                  ),
+                ],
+                if (!isNew && mastery > 0) ...[
+                  const Spacer(),
+                  SizedBox(
+                    width: 50,
+                    child: _MasteryBar(value: mastery),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SMALL HELPER WIDGETS
+// ---------------------------------------------------------------------------
+
+class _PassFailChip extends StatelessWidget {
+  final int pass;
+  final int fail;
+
+  const _PassFailChip({required this.pass, required this.fail});
+
+  @override
+  Widget build(BuildContext context) {
+    if (pass == 0 && fail == 0) return const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$pass',
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.green,
+          ),
+        ),
+        Text(
+          '/',
+          style: TextStyle(
+            fontSize: 11,
+            color: Colors.grey[600],
+          ),
+        ),
+        Text(
+          '$fail',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: fail > 0 ? Colors.red : Colors.grey,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MasteryBar extends StatelessWidget {
+  final double value;
+
+  const _MasteryBar({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(3),
+      child: SizedBox(
+        height: 4,
+        child: LinearProgressIndicator(
+          value: value.clamp(0.0, 1.0),
+          backgroundColor:
+              Theme.of(context).colorScheme.surfaceContainerHighest,
+          valueColor: AlwaysStoppedAnimation(
+            value >= 1.0 ? Colors.green : Colors.blue.withValues(alpha: 0.7),
+          ),
+        ),
+      ),
+    );
+  }
+}
