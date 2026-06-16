@@ -44,7 +44,7 @@ void main() {
   });
 
   group('shortcutTooltip', () {
-    testWidgets('shows shortcut after hover delay', (tester) async {
+    testWidgets('shows shortcut immediately on hover', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -67,10 +67,7 @@ void main() {
       await gesture.addPointer(location: center);
       await gesture.moveTo(center);
       await tester.pump();
-      expect(find.text('Analyze (A)'), findsNothing);
-
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
 
       expect(find.text('Analyze (A)'), findsOneWidget);
     });
