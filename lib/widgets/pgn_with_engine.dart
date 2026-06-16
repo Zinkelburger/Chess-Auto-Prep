@@ -42,6 +42,7 @@ class _PgnWithEngineState extends State<PgnWithEngine> {
   String _currentFen = Chess.initial.fen;
 
   void _onPositionChanged(Position position) {
+    if (!mounted) return;
     setState(() => _currentFen = position.fen);
     widget.onPositionChanged?.call(position);
   }
