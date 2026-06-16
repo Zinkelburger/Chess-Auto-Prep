@@ -498,5 +498,56 @@ void main() {
       // Extends through first agreement, stops at second
       expect(line, ['e4', 'e5', 'Nf3']);
     });
+
+    test('capture below 85% but above 50% extends the line', () async {
+      // After 1.e4 d5, PV: exd5 Qxd5 Nc3
+      // Maia says d8d5 (Qxd5 = recapture) at 60% — below 85% but a capture
+      const scandinavianFen =
+          'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2';
+      mockMaia.enqueue({'d8d5': 0.60, 'g8f6': 0.25, 'e7e6': 0.15});
+
+      final line = await TacticsEngine.buildTrainableLine(
+        ['exd5', 'Qxd5', 'Nc3'],
+        maia: mockMaia,
+        maiaElo: 1500,
+        startFen: scandinavianFen,
+      );
+
+      // Should extend because Qxd5 is a capture (lower threshold applies)
+      expect(line, ['exd5', 'Qxd5', 'Nc3']);
+    });
+
+    test('non-capture below 85% does NOT extend the line', () async {
+      // After e4, Maia says e7e5 at 60% — below 85% and NOT a capture
+      mockMaia.enqueue({'e7e5': 0.60, 'd7d5': 0.25, 'c7c5': 0.15});
+
+      final line = await TacticsEngine.buildTrainableLine(
+        ['e4', 'e5', 'Nf3'],
+        maia: mockMaia,
+        maiaElo: 1500,
+        startFen: _startFen,
+      );
+
+      // Should NOT extend because e5 is not a capture
+      expect(line, ['e4']);
+    });
+
+    test('capture below 50% does NOT extend the line', () async {
+      // After 1.e4 d5, Maia says d8d5 (Qxd5) at only 40% — too low even for
+      // capture threshold
+      const scandinavianFen =
+          'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2';
+      mockMaia.enqueue({'d8d5': 0.40, 'g8f6': 0.35, 'e7e6': 0.25});
+
+      final line = await TacticsEngine.buildTrainableLine(
+        ['exd5', 'Qxd5', 'Nc3'],
+        maia: mockMaia,
+        maiaElo: 1500,
+        startFen: scandinavianFen,
+      );
+
+      // Should NOT extend — even a capture at 40% is below the 50% threshold
+      expect(line, ['exd5']);
+    });
   });
 }

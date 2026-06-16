@@ -21,12 +21,32 @@ class TacticsEngine {
   /// Minimum Maia probability for an opponent reply to be considered "obvious".
   static const double maiaMinExtendProb = 0.85;
 
+  /// Lower threshold when the opponent's top Maia move is a capture.
+  /// Recaptures are inherently predictable even when MAIA spreads probability.
+  static const double maiaMinExtendProbCapture = 0.50;
+
   /// Stockfish depth used when Maia's top move disagrees with the PV.
   static const int maiaDisagreeDepth = 14;
 
   /// True when [san] is a capture, check, or mate symbol in SAN.
   static bool isTacticalSan(String san) {
     return san.contains('x') || san.contains('+') || san.contains('#');
+  }
+
+  /// True when [uci] is a capture on the given [pos] (target square occupied
+  /// or en-passant).
+  static bool _isCaptureUci(Position pos, String uci) {
+    final move = Move.parse(uci);
+    if (move is! NormalMove) return false;
+    if (pos.board.pieceAt(move.to) != null) return true;
+    // En-passant: pawn moving diagonally to an empty square.
+    final fromPiece = pos.board.pieceAt(move.from);
+    if (fromPiece != null &&
+        fromPiece.role == Role.pawn &&
+        move.from.file != move.to.file) {
+      return true;
+    }
+    return false;
   }
 
   /// Convert a SAN move to UCI given the current board [pos].
@@ -97,7 +117,9 @@ class TacticsEngine {
       final topMoveUci = topEntry.key;
       final topProb = topEntry.value;
 
-      if (topProb < maiaMinExtendProb) break;
+      final isCapture = _isCaptureUci(pos, topMoveUci);
+      final threshold = isCapture ? maiaMinExtendProbCapture : maiaMinExtendProb;
+      if (topProb < threshold) break;
 
       final pvOppUci = _sanToUci(pos, pvSan[pvIdx]);
       final agree = pvOppUci != null && pvOppUci == topMoveUci;
