@@ -44,6 +44,10 @@ class TrapDetailCard extends StatelessWidget {
             _buildNarrative(theme),
             const SizedBox(height: 12),
             _buildComparison(theme),
+            if (trap.refutationMove != null) ...[
+              const SizedBox(height: 12),
+              _buildRefutation(theme),
+            ],
             const Divider(height: 24),
             _buildStatRow(theme),
             const Divider(height: 24),
@@ -138,6 +142,51 @@ class TrapDetailCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildRefutation(ThemeData theme) {
+    final evalText = trap.refutationEvalCp != null
+        ? trap.formatEval(trap.refutationEvalCp!)
+        : '?';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.green.withAlpha(15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.green.withAlpha(60)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.reply, size: 18, color: Colors.green),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('YOUR REPLY',
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green[700])),
+                const SizedBox(height: 2),
+                Text.rich(TextSpan(children: [
+                  const TextSpan(
+                      text: 'After they blunder, play ',
+                      style: TextStyle(fontSize: 13)),
+                  TextSpan(
+                      text: trap.refutationMove!,
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.bold)),
+                  TextSpan(
+                      text: ' (eval $evalText)',
+                      style: const TextStyle(fontSize: 13)),
+                ])),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

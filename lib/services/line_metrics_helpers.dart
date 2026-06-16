@@ -10,6 +10,7 @@ class LineQualityInfo {
   final double? quality;
   final int? bottleneckPly;
   final double? bottleneckQuality;
+  final bool bottleneckIsOurMove;
   final int trapCount;
   final int? bestTrapEvalDiff;
   final double? coherence;
@@ -18,6 +19,7 @@ class LineQualityInfo {
     this.quality,
     this.bottleneckPly,
     this.bottleneckQuality,
+    this.bottleneckIsOurMove = true,
     this.trapCount = 0,
     this.bestTrapEvalDiff,
     this.coherence,
@@ -46,6 +48,8 @@ Map<String, LineQualityInfo> computeLineMetricsMap({
     int? bestTrapEvalDiff;
     double? coherence;
 
+    bool bottleneckIsOurMove = true;
+
     if (treeRoot != null) {
       final linePath = walkTreeForLine(treeRoot, line.moves);
       if (linePath.isNotEmpty) {
@@ -53,6 +57,7 @@ Map<String, LineQualityInfo> computeLineMetricsMap({
         quality = lp.playability;
         bottleneckPly = lp.bottleneckPly;
         bottleneckQuality = lp.bottleneckQuality;
+        bottleneckIsOurMove = lp.bottleneckIsOurMove;
       }
     }
 
@@ -72,6 +77,7 @@ Map<String, LineQualityInfo> computeLineMetricsMap({
       quality: quality,
       bottleneckPly: bottleneckPly,
       bottleneckQuality: bottleneckQuality,
+      bottleneckIsOurMove: bottleneckIsOurMove,
       trapCount: trapCount,
       bestTrapEvalDiff: bestTrapEvalDiff,
       coherence: coherence,

@@ -88,7 +88,7 @@ Where `q` = `positionQuality` at each node. This correctly penalizes:
 - Lines where our moves are hard to find (low myEase)
 - Lines where opponent moves are easy to find (high ease → low 1-ease)
 
-**Hard moves (bottleneck):** The position with the minimum `positionQuality` in a line. Surfaced with a warning when quality < 0.3.
+**Hard moves (bottleneck):** The position with the minimum `positionQuality` in a line, excluding the root position (not a move) and the first ply where it is our turn (opening choice). Surfaced with a warning when quality < 0.3. When the bottleneck falls on an opponent-move position, the label reads "easy for opponent" instead of "hard move."
 
 ### 7. Trap Detection
 
@@ -96,6 +96,8 @@ A position is a "trap" when:
 - It's the opponent's turn
 - A popular opponent move (high DB frequency or Maia probability) is significantly worse than the best move
 - `trapScore = popularMoveProb × evalDiff / 1000`
+
+After identifying a trap, the extractor also records the **refutation move** — our best reply after the opponent plays the popular blunder (repertoire move preferred, otherwise highest-eval child).
 
 Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line queries.
 

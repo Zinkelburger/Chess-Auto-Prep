@@ -17,8 +17,6 @@ import '../../utils/eval_constants.dart';
 
 class TrapExtractor {
   final bool playAsWhite;
-  final int maxTraps;
-
   /// Minimum trap score to consider (matches C default 0.05).
   final double minTrapScore;
 
@@ -27,23 +25,24 @@ class TrapExtractor {
 
   TrapExtractor({
     required this.playAsWhite,
-    this.maxTraps = 200,
     this.minTrapScore = 0.05,
     this.minTrickSurplus = 0.005,
   });
 
   /// Walk the tree and return trap lines sorted by trick surplus descending.
+  ///
+  /// Deduplicates by FEN so transpositions don't produce repeated entries.
   List<TrapLineInfo> extract(BuildTree tree) {
     final candidates = <_TrapCandidate>[];
     _collectTraps(tree.root, candidates);
 
     candidates.sort((a, b) => b.trickSurplus.compareTo(a.trickSurplus));
 
-    final limit = candidates.length > maxTraps ? maxTraps : candidates.length;
+    final seenFens = <String>{};
     final results = <TrapLineInfo>[];
 
-    for (int i = 0; i < limit; i++) {
-      final c = candidates[i];
+    for (final c in candidates) {
+      if (!seenFens.add(c.fen)) continue;
       final moves = c.node.getLineSan();
 
       results.add(TrapLineInfo(
@@ -63,6 +62,8 @@ class TrapExtractor {
         openingName: c.openingName,
         positionEvalCp: c.positionEvalCp,
         allReplies: c.allReplies,
+        refutationMove: c.refutationMove,
+        refutationEvalCp: c.refutationEvalCp,
       ));
     }
 
@@ -128,6 +129,8 @@ class TrapExtractor {
     final bestEvalUs = -bestEval;
     final evalDiffUs = popularEvalUs - bestEvalUs;
 
+    final refutation = _findRefutation(mostPopular);
+
     candidates.add(_TrapCandidate(
       node: node,
       trapScore: trap,
@@ -143,7 +146,36 @@ class TrapExtractor {
       openingName: node.openingName,
       positionEvalCp: evalUs,
       allReplies: _buildAllReplies(node, bestEvalUs),
+      refutationMove: refutation?.$1,
+      refutationEvalCp: refutation?.$2,
     ));
+  }
+
+  /// Find our best reply after the opponent's popular blunder.
+  ///
+  /// Prefers the repertoire move; falls back to the highest-eval child.
+  /// Returns (SAN, evalCp from our perspective) or null if no children.
+  (String, int)? _findRefutation(BuildTreeNode afterBlunder) {
+    if (afterBlunder.children.isEmpty) return null;
+
+    BuildTreeNode? repMove;
+    BuildTreeNode? bestEvalChild;
+    int bestEval = kWorstEvalCp;
+
+    for (final child in afterBlunder.children) {
+      if (child.isRepertoireMove) repMove ??= child;
+      if (child.hasEngineEval) {
+        final evalUs = child.evalForUs(playAsWhite);
+        if (evalUs > bestEval) {
+          bestEval = evalUs;
+          bestEvalChild = child;
+        }
+      }
+    }
+
+    final pick = repMove ?? bestEvalChild;
+    if (pick == null) return null;
+    return (pick.moveSan, pick.evalForUs(playAsWhite));
   }
 
   /// Builds classified opponent replies at a trap position, sorted by probability.
@@ -222,6 +254,8 @@ class _TrapCandidate {
   final String? openingName;
   final int positionEvalCp;
   final List<TrapReply> allReplies;
+  final String? refutationMove;
+  final int? refutationEvalCp;
 
   _TrapCandidate({
     required this.node,
@@ -238,5 +272,7 @@ class _TrapCandidate {
     this.openingName,
     required this.positionEvalCp,
     required this.allReplies,
+    this.refutationMove,
+    this.refutationEvalCp,
   });
 }

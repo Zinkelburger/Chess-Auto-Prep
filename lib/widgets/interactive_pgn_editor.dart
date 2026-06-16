@@ -18,8 +18,6 @@ import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
-import 'package:chess_auto_prep/features/traps/widgets/trap_move_indicator.dart';
-
 class InteractivePgnEditor extends StatefulWidget {
   /// The move tree to display (owned by controller).
   final MoveTree tree;
@@ -64,7 +62,7 @@ class InteractivePgnEditor extends StatefulWidget {
   final String? currentRepertoireName;
   final String? repertoireColor;
 
-  /// Optional trap index for orange dot markers.
+  /// Optional trap index (currently unused; kept for API compatibility).
   final TrapIndexService? trapIndex;
 
   /// Optional board preview on trap dot hover.
@@ -453,10 +451,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final mainMove =
         main.san == '--' ? null : positionBefore.parseSan(main.san);
     Position positionAfterMain = positionBefore;
-    TrapLineInfo? mainTrap;
     if (mainMove != null) {
       positionAfterMain = positionBefore.play(mainMove);
-      mainTrap = widget.trapIndex?.trapAtFen(positionAfterMain.fen);
     }
 
     if (isWhite) {
@@ -478,7 +474,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     widgets.add(_buildSingleMoveWidget(
       main,
       mainPath,
-      trap: mainTrap,
     ));
 
     if (main.comment != null && main.comment!.isNotEmpty) {
@@ -499,10 +494,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         final variantMove =
             variant.san == '--' ? null : positionBefore.parseSan(variant.san);
         Position positionAfterVariant = positionBefore;
-        TrapLineInfo? variantTrap;
         if (variantMove != null) {
           positionAfterVariant = positionBefore.play(variantMove);
-          variantTrap = widget.trapIndex?.trapAtFen(positionAfterVariant.fen);
         }
 
         if (isWhite) {
@@ -524,7 +517,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         widgets.add(_buildSingleMoveWidget(
           variant,
           variantPath,
-          trap: variantTrap,
         ));
 
         if (variant.comment != null && variant.comment!.isNotEmpty) {
@@ -597,9 +589,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
   Widget _buildSingleMoveWidget(
     MoveNode node,
-    TreePath nodePath, {
-    TrapLineInfo? trap,
-  }) {
+    TreePath nodePath,
+  ) {
     final isSelected = widget.currentPath == nodePath;
     final isOnCtxPath = _isOnContextPath(nodePath);
 
@@ -645,13 +636,6 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 decorationStyle: TextDecorationStyle.dotted,
               ),
             ),
-            if (trap != null)
-              TrapMoveIndicator(
-                trap: trap,
-                boardPreview: widget.boardPreview,
-                previewFen: node.fen,
-                ownerTag: this,
-              ),
           ],
         ),
       ),

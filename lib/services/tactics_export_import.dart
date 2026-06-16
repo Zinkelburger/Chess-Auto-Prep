@@ -1,6 +1,6 @@
-import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import '../utils/file_text_reader.dart';
 import 'tactics_database.dart';
 import 'storage/storage_factory.dart';
 
@@ -56,7 +56,7 @@ class TacticsExportImport {
       // Use bytes (available on all platforms with withData: true)
       String content;
       if (file.bytes != null) {
-        content = utf8.decode(file.bytes!);
+        content = decodeTextBytes(file.bytes!);
       } else {
         throw Exception('Could not read file content');
       }

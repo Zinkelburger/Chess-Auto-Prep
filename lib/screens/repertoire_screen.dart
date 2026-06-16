@@ -1056,16 +1056,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     final gc = _generationController;
     return ListenableBuilder(
-      listenable: Listenable.merge([_jobManager, gc]),
+      listenable: Listenable.merge([_jobManager, gc, _auditController]),
       builder: (context, _) => JobsPanel(
         jobManager: _jobManager,
-        isGenerating: gc.isGenerating,
-        isGenerationPaused: gc.isPaused,
-        isAuditing: _auditController.isAuditing,
-        isAuditPaused: _auditController.isPaused,
-        auditNodesChecked: _auditController.nodesChecked,
-        auditTotalNodes: _auditController.totalNodes,
-        lastAuditConfig: _auditController.lastConfig,
+        generationController: gc,
+        auditController: _auditController,
         onOpenGenerationDialog: _openGenerationDialog,
         onOpenAuditDialog: () => _openAuditDialog(forceConfig: true),
         onPauseAudit: _auditController.pause,
@@ -1075,12 +1070,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onResumeGeneration: gc.resumeBuild,
         onCancelGeneration: gc.cancelBuild,
         onFinishNowGeneration: gc.finishNow,
-        genProgressStatus: gc.progressStatus,
-        genNodes: gc.progressNodes,
-        genDepth: gc.progressDepth,
-        genNodesPerMinute: gc.progressNodesPerMinute,
-        genEtaSec: gc.progressEtaSec,
-        genElapsedMs: gc.progressElapsedMs,
       ),
     );
   }

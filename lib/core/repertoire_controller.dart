@@ -743,6 +743,12 @@ class RepertoireController with ChangeNotifier {
       fullPgn: pgnContent,
     ));
 
+    if (_currentRepertoire != null) {
+      _currentRepertoire = _currentRepertoire!.copyWith(
+        gameCount: _repertoireLines.length,
+      );
+    }
+
     notifyListeners();
   }
 

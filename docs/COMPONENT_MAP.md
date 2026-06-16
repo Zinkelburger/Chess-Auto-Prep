@@ -147,7 +147,7 @@ RepertoireScreen (composition root — wires controllers to widgets)
 - `lib/features/audit/widgets/audit_config_dialog.dart` — legacy modal dialog (audit config now shows inline in Jobs tab)
 - `lib/features/audit/widgets/audit_findings_panel.dart` — findings list with category filter chips, auto-scaled to ~20 findings, bulk dismiss, keyboard navigation, and interrupted-audit resume banner
 - `lib/features/audit/services/audit_persistence.dart` — centralized save/load for audit snapshots (result + config + resume state)
-- `lib/widgets/layout/jobs_panel.dart` — jobs panel with inline config, C-like progress display (depth/nodes/rate/ETA), "Finish Now" button, enriched job tiles
+- `lib/widgets/layout/jobs_panel.dart` — jobs panel: one compact card per active generation/audit job (phase, live stats, threads/hash, progress bar, controls); completed jobs as simple tiles; no duplicate status banners
 - `lib/widgets/repertoire_lines_browser.dart` — line search/filter/group browser for the Lines tab
 - `lib/widgets/layout/board_zone.dart` — board wrapper, passes annotations
 - `lib/widgets/chess_board_widget.dart` — board + annotation overlay (arrows, circles, labels)
@@ -447,7 +447,7 @@ Used by:
 | File | Purpose | Public API / state |
 |------|---------|-------------------|
 | `app_state.dart` | Global app mode, usernames, board position, builder↔trainer pending handoff | `setMode`, `switchToBuilder`/`switchToTrainer`/`switchToBuilderWithGeneration`, `setRepertoireGenerating`, `notifyListeners` |
-| `generation_session_controller.dart` | **Generation session state** — owns `TreeBuildService` + `CoherenceService`; pause/resume/cancel/finishNow; holds generated tree, config, fenMap, job reference; progress stats (nodes, depth, rate, ETA) pushed from gen tab for Jobs panel display; `notifyProgressChanged()` triggers rebuild of listening widgets (Jobs panel via `Listenable.merge`); `dispose()` calls `buildService.stopBuild()`; `pauseBuild`/`cancelBuild` auto-save the in-progress tree via `savePartialTree()` using context set by `setPartialSaveContext()` | `pauseBuild`, `resumeBuild`, `cancelBuild`, `finishNow`, `clearFinishNow`, `markGenerating`, `onTreeBuilt`, `onTreeReset`, `clearTree`, `setPartialSaveContext`, `savePartialTree`, `notifyProgressChanged` |
+| `generation_session_controller.dart` | **Generation session state** — owns `TreeBuildService` + `CoherenceService`; pause/resume/cancel/finishNow; holds generated tree, config, fenMap, job reference; rich progress snapshot (`GenerationPhase`, depth-layer stats, rate, ETA, active `TreeBuildConfig`) synced to `RepertoireJob` via `updateProgress()` for Jobs panel; `dispose()` calls `buildService.stopBuild()`; `pauseBuild`/`cancelBuild` auto-save partial tree via `savePartialTree()` | `pauseBuild`, `resumeBuild`, `cancelBuild`, `finishNow`, `updateProgress`, `syncProgressToJob`, `markGenerating`, `onTreeBuilt`, `setPartialSaveContext`, `savePartialTree` |
 | `audit_session_controller.dart` | **Audit session state** — owns `RepertoireAuditService` + result, live findings, progress, config, interrupted snapshot; handles persistence via `AuditPersistence`; `onLiveFinding` creates a new list on each addition (avoids stale-reference bugs in widget comparisons) | `pause`, `resume`, `cancel`, `saveProgress`, `tryRestore`, `launchResume`, `startFresh`, `onAuditingChanged`, `onResultReady`, `onLiveFinding`, `onProgress` |
 | `coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
@@ -507,7 +507,7 @@ Used by:
 
 | File | Purpose |
 |------|---------|
-| **models/trap_line_info.dart** | Trap metadata + optional `allReplies`, `fen` |
+| **models/trap_line_info.dart** | Trap metadata + optional `allReplies`, `fen`, `refutationMove`, `refutationEvalCp` |
 | **models/trap_reply.dart** | Opponent reply classification at trap position |
 | **services/trap_index_service.dart** | FEN/prefix indexes, repertoire & line metrics, ETV |
 | **widgets/trap_detail_card.dart** | Narrative trap UI, reply table, hoverable move path |
@@ -642,18 +642,19 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 
 | File | Purpose |
 |------|---------|
-| `tree_build_service.dart` | BFS tree build; MultiPV line-0 PV reply stash + opponent-node injection when Maia omits it; `buildFromPgnFreqMap()` for DB Explorer mode |
-| `generation/pgn_freq_map.dart` | PGN frequency map (Dart port of C `pgn_freq.c`): isolate-based PGN parsing, per-position move frequencies, min-elo filtering, move probability filtering |
+| `tree_build_service.dart` | BFS tree build; canonical-FEN transposition table with `propagate_higher_cumP` on higher-probability transposition hits; root MultiPV floor `max(ourMultipv, 10)` at ply 0; MultiPV line-0 PV reply stash + opponent-node injection when Maia omits it; `buildFromPgnFreqMap()` for DB Explorer mode |
+| `generation/pgn_freq_map.dart` | PGN frequency map (Dart port of C `pgn_freq.c`): isolate-based PGN parsing via `file_text_reader` (UTF-8 with Latin-1 fallback), FEN-based prefix matching (games reaching target via transposed move orders), per-position move frequencies keyed by 4-field canonical FEN, min-elo filtering, move probability filtering; detailed parse warnings (first 10 failures); tracks `fileReadErrors` in stats |
+| `generation/pgn_freq_cache.dart` | Disk cache for parsed frequency maps (`<pgn>.freq.cache`); manifest keyed on file path/size/mtime + `startFen`/`startMoves`/`maxPly`/`minElo`; binary format compatible with C `PFREQ` layout |
 | `generation/line_extractor.dart` | Extract lines from tree; PGN `{engine-injected}` on injected opponent moves |
 | `generation/pgn_export.dart` | Export generated lines to PGN (includes `{engine-injected}` annotation) |
-| `generation/generation_config.dart` | `TreeBuildConfig` (default `evalDepth` 14, `relativeEval` true), build modes; DB Explorer fields: `pgnFilePaths`, `dbMinGames`, `dbMinProb`, `minElo` |
+| `generation/generation_config.dart` | `TreeBuildConfig` (default `evalDepth` 14, `relativeEval` true), build modes; `summaryLabel` / `buildModeLabel` / `engineResourceLabel` for Jobs panel; DB Explorer fields: `pgnFilePaths`, `dbMinGames`, `dbMinProb`, `minElo` |
 | `generation/tree_eval_resolver.dart` | Eval resolution during build |
 | `generation/tree_ease.dart` | Opponent ease calculation |
 | `generation/tree_my_ease.dart` | Our-move naturalness + line playability |
 | `generation/eca_calculator.dart` | Expectimax + trap scores |
 | `generation/repertoire_selector.dart` | Mark repertoire moves on tree |
 | `generation/trap_extractor.dart` | Trap candidate collection |
-| `generation/fen_map.dart` | Transposition map; `resolveTransposition(node, fenMap)` follows canonical FEN when a leaf has children elsewhere |
+| `generation/fen_map.dart` | Transposition map keyed by 4-field canonical FEN (`canonicalizeFen`); full FEN stored on nodes; `resolveTransposition(node, fenMap)` follows canonical FEN when a leaf has children elsewhere |
 | `generation/tree_serialization.dart` | tree.json read/write (`pv_continuation_move`, `engine_injected`) |
 | `generation/tree_build_progress.dart` | Progress callbacks |
 
@@ -752,7 +753,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `repertoire/repertoire_analyze_pane.dart` | Wires analyze zones (lines, coverage, traps) |
 | `repertoire/repertoire_analyze_props.dart` | Prop bag for analyze pane |
 | `repertoire/repertoire_lines_with_traps.dart` | Lines tab with trap + coherence panels |
-| `generation/generation_config_form.dart` | `GenerationConfigForm` — settings form (controllers, build mode, advanced thresholds, eval sources); `toConfig({startFen, playAsWhite})`, `validateBeforeStart()`, `seedDbExplorer()`, optional `initialConfig`; DB Explorer mode ("From Added PGN Files") shows helper text + `PgnSourcesPanel` (repertoire lines not used) + tuning fields (Min Games, Min Move Prob, Min Elo) |
+| `generation/generation_config_form.dart` | `GenerationConfigForm` — settings form (controllers, build mode, advanced thresholds, eval sources); prominent **Engine resources** section (threads, hash MB, logical core count) when Stockfish is used; `toConfig({startFen, playAsWhite})`, `validateBeforeStart()`, `seedDbExplorer()`, optional `initialConfig`; DB Explorer mode shows `PgnSourcesPanel` + tuning fields |
 | `repertoire_generation_tab.dart` | Build orchestration + progress UI; embeds `GenerationConfigForm` via `GlobalKey`; receives `GenerationSessionController`; sets `controller.setPartialSaveContext()` at build start so pause/cancel from any source saves partial tree |
 | `repertoire_analysis_dock.dart` | Resizable Engine/Expectimax dock above PGN |
 | `repertoire_lines_browser.dart` | Filter/sort/group lines; 300 ms search debounce; typed `LineSortBy`/`LineMetricsFilter`; filter reset uses single `setState` |
@@ -795,7 +796,8 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `navigation_trail.dart` | Breadcrumb trail widget (used by repertoire tab bar) |
 | `analysis_tab.dart` | Legacy browse/analysis tab wrapper (not used in current repertoire screen) |
 | `generation_config_dialog.dart` | Modal dialog wrapping RepertoireGenerationTab; pops on generation start via controller listener; opened by sparkles button |
-| `layout/jobs_panel.dart` | Jobs tab content for bottom pane: active/completed generation and audit jobs with progress, config summary, pause/resume/cancel controls |
+| `layout/jobs_panel.dart` | Jobs tab: single rich card per active generation or audit job (name, build mode config summary, phase icon/label, C-style live stats, thread/hash chips, linear progress, elapsed, pause/resume/cancel/finish-now); completed jobs as compact list tiles |
+| `services/jobs/generation_job_display.dart` | Phase labels, stats-line formatting, and progress fraction helpers for generation job cards |
 | `analysis/analysis_settings_sheet.dart` | Context-aware analysis/engine settings dialog. Accepts `AnalysisSettingsContext` (`full` or `tacticsEngine`) to gate which sections are shown: engine depth + multiPv always; panel visibility in `full` mode ("Show DB % column" toggle and Lichess DB filter section hidden — Explorer mothballed). |
 | `analysis_download_dialog.dart` | Download games for analysis |
 | `game_analysis_tab.dart` | PGN viewer Analysis tab: chart, classified move list, best-line / Maia taps; each tap adds an **ephemeral RAV** at that ply (accumulates; does not clear prior lines); move list scrolls only when the nearest classified row changes (instant `ensureVisible`, no per-ply jump+animate) |
@@ -851,7 +853,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `chesscom_lichess_elo.dart` | Chess.com blitz → Lichess blitz Elo table + `chessComBlitzToLichessBlitz()` for Maia (tactics Chess.com import) |
 | `app_messages.dart` | Snackbar helpers |
 | `keyboard_shortcut_utils.dart` | Shared `isTextInputFocused()`, `hasNoLetterModifiers`, `isPrimaryModifierPressed` for keyboard shortcut guards |
-| `file_text_reader.dart` | UTF-8 file read with Latin-1 fallback (PGN / text imports) |
+| `file_text_reader.dart` | UTF-8 file read with Latin-1 fallback (`decodeTextBytes`, `decodeTextBytesDetailed`, sync/async helpers) for PGN / text imports |
 | `system_info.dart` | CPU core count (native/stub) |
 
 ### `lib/theme/`
