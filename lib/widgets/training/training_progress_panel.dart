@@ -270,7 +270,7 @@ class LineProgressIndicator extends StatelessWidget {
         Row(
           children: [
             Text(
-              'Move ${currentMoveIndex + 1} / $effectiveLineLength',
+              'Move $currentMoveIndex / $effectiveLineLength',
               style: theme.textTheme.bodySmall,
             ),
             const Spacer(),

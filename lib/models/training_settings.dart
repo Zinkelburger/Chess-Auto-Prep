@@ -59,6 +59,9 @@ class TrainingSettings {
   /// Order in which due lines are presented for review.
   ReviewOrder reviewOrder;
 
+  /// Base delay in milliseconds for opponent/auto moves (200–2000).
+  int moveSpeedMs;
+
   TrainingSettings({
     this.correctStreakThreshold = 3,
     this.trainingDepth,
@@ -68,6 +71,7 @@ class TrainingSettings {
     this.learnDelaySec = 3,
     this.showRatingButtons = true,
     this.reviewOrder = ReviewOrder.byImportance,
+    this.moveSpeedMs = 700,
   });
 
   static const _keyStreakThreshold = 'trainer_streak_threshold';
@@ -78,6 +82,7 @@ class TrainingSettings {
   static const _keyLearnDelaySec = 'trainer_learn_delay_sec';
   static const _keyShowRatingButtons = 'trainer_show_rating_buttons';
   static const _keyReviewOrder = 'trainer_review_order';
+  static const _keyMoveSpeedMs = 'trainer_move_speed_ms';
 
   static Future<TrainingSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -91,6 +96,7 @@ class TrainingSettings {
       showRatingButtons: prefs.getBool(_keyShowRatingButtons) ?? true,
       reviewOrder:
           ReviewOrderLabel.fromStorage(prefs.getString(_keyReviewOrder)),
+      moveSpeedMs: prefs.getInt(_keyMoveSpeedMs) ?? 700,
     );
   }
 
@@ -108,5 +114,6 @@ class TrainingSettings {
     await prefs.setInt(_keyLearnDelaySec, learnDelaySec);
     await prefs.setBool(_keyShowRatingButtons, showRatingButtons);
     await prefs.setString(_keyReviewOrder, reviewOrder.storageValue);
+    await prefs.setInt(_keyMoveSpeedMs, moveSpeedMs);
   }
 }

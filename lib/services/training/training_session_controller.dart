@@ -47,6 +47,9 @@ class TrainingSessionController extends ChangeNotifier {
   int currentMoveIndex = 0;
   TrainingPhase phase = TrainingPhase.drilling;
   bool lineHadMistake = false;
+  /// True when this line session started with the learn walkthrough (new line).
+  bool? _hadLearnPhaseThisSession;
+  bool get hadLearnPhaseThisSession => _hadLearnPhaseThisSession ?? false;
   List<int> wrongMoveIndices = [];
   int replayIndex = 0;
 
@@ -60,6 +63,9 @@ class TrainingSessionController extends ChangeNotifier {
   bool learnQuizzing = false;
   Timer? _learnTimer;
 
+  /// True when opponent move has a comment and we're waiting for Next click.
+  bool opponentWaitingForAck = false;
+
   /// Called whenever a new line session begins (including auto-next).
   VoidCallback? onLineStarted;
 
@@ -68,6 +74,13 @@ class TrainingSessionController extends ChangeNotifier {
   bool waitingForUser = false;
   String? feedback;
   String? currentAnnotation;
+
+  /// The opponent move in the current move-pair (persists while showing
+  /// the user's move prompt and after user answers, until the pair is cleared).
+  MoveDisplayInfo? currentPairOpponent;
+
+  /// The user's move in the current pair (set after user plays correctly).
+  MoveDisplayInfo? currentPairUser;
 
   bool get isWhiteLine => currentLine?.color.toLowerCase() != 'black';
   bool get boardFlipped => !isWhiteLine;
@@ -201,12 +214,16 @@ class TrainingSessionController extends ChangeNotifier {
     feedback = null;
     currentAnnotation = null;
     phase = isNew ? TrainingPhase.learning : TrainingPhase.drilling;
+    _hadLearnPhaseThisSession = isNew;
     lineHadMistake = false;
     wrongMoveIndices = [];
     replayIndex = 0;
     waitingForUser = false;
     learnWaitingForAck = false;
     learnQuizzing = false;
+    opponentWaitingForAck = false;
+    currentPairOpponent = null;
+    currentPairUser = null;
     notifyListeners();
     onLineStarted?.call();
 
@@ -238,6 +255,8 @@ class TrainingSessionController extends ChangeNotifier {
       phase = TrainingPhase.drilling;
       feedback = null;
       currentAnnotation = null;
+      currentPairOpponent = null;
+      currentPairUser = null;
       waitingForUser = false;
       notifyListeners();
       Future.microtask(advanceDrillPhase);
@@ -254,30 +273,43 @@ class TrainingSessionController extends ChangeNotifier {
     session.playMove(san);
 
     final annotation = currentLine!.comments[currentMoveIndex.toString()];
+    final isUserMove = _isUserMove(currentMoveIndex);
+    final display = _buildMoveDisplay(currentMoveIndex, isOpponent: !isUserMove);
 
     currentAnnotation = annotation;
     feedback = null;
     waitingForUser = false;
-    notifyListeners();
-
-    final isUserMove = _isUserMove(currentMoveIndex);
 
     if (!isUserMove) {
-      await Future.delayed(const Duration(milliseconds: 600));
-      currentMoveIndex++;
-      await advanceLearnPhase();
-    } else if (settings.learnRequiresClick) {
-      learnWaitingForAck = true;
+      currentPairOpponent = display;
+      currentPairUser = null;
       notifyListeners();
-    } else if (annotation != null && annotation.isNotEmpty) {
-      _learnTimer = Timer(
-        Duration(seconds: settings.learnDelaySec),
-        learnAcknowledged,
-      );
+
+      if (annotation != null && annotation.isNotEmpty) {
+        opponentWaitingForAck = true;
+        notifyListeners();
+      } else {
+        await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+        currentMoveIndex++;
+        await advanceLearnPhase();
+      }
     } else {
-      await Future.delayed(const Duration(milliseconds: 800));
-      currentMoveIndex++;
-      await advanceLearnPhase();
+      currentPairUser = display;
+      notifyListeners();
+
+      if (settings.learnRequiresClick) {
+        learnWaitingForAck = true;
+        notifyListeners();
+      } else if (annotation != null && annotation.isNotEmpty) {
+        _learnTimer = Timer(
+          Duration(seconds: settings.learnDelaySec),
+          learnAcknowledged,
+        );
+      } else {
+        await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+        currentMoveIndex++;
+        await advanceLearnPhase();
+      }
     }
   }
 
@@ -341,6 +373,7 @@ class TrainingSessionController extends ChangeNotifier {
         return;
       } else {
         await _playOpponentMove(currentMoveIndex);
+        if (opponentWaitingForAck) return;
         currentMoveIndex++;
       }
     }
@@ -357,14 +390,23 @@ class TrainingSessionController extends ChangeNotifier {
       return;
     }
     session.playMove(san);
-    await Future.delayed(const Duration(milliseconds: 400));
+
+    final display = _buildMoveDisplay(moveIndex, isOpponent: true);
+    currentPairOpponent = display;
+    currentPairUser = null;
+
+    final annotation = currentLine!.comments[moveIndex.toString()];
+    currentAnnotation = annotation;
+    notifyListeners();
+
+    await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
   }
 
   void _prepareDrillMove(int moveIndex) {
-    final annotation = currentLine!.comments[moveIndex.toString()];
     waitingForUser = true;
-    currentAnnotation = annotation;
-    feedback = 'Your move';
+    currentAnnotation = null;
+    feedback = null;
+    currentPairUser = null;
     notifyListeners();
   }
 
@@ -386,13 +428,17 @@ class TrainingSessionController extends ChangeNotifier {
 
     if (isCorrect) {
       updateMoveProgress(currentLine!, currentMoveIndex, wasCorrect: true);
+      final display = _buildMoveDisplay(currentMoveIndex, isOpponent: false);
       session.playMove(expectedSan);
       waitingForUser = false;
       feedback = 'Correct!';
-      currentAnnotation = null;
+      currentPairUser = display;
+      currentAnnotation = display.comment;
       notifyListeners();
+
       currentMoveIndex++;
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(Duration(milliseconds: settings.moveSpeedMs ~/ 2));
+      _clearPair();
       await advanceDrillPhase();
     } else {
       updateMoveProgress(currentLine!, currentMoveIndex, wasCorrect: false);
@@ -403,12 +449,15 @@ class TrainingSessionController extends ChangeNotifier {
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 1200));
 
+      final display = _buildMoveDisplay(currentMoveIndex, isOpponent: false);
       session.playMove(expectedSan);
       waitingForUser = false;
+      currentPairUser = display;
       currentAnnotation = null;
       notifyListeners();
       currentMoveIndex++;
-      await Future.delayed(const Duration(milliseconds: 400));
+      await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+      _clearPair();
       await advanceDrillPhase();
     }
   }
@@ -611,6 +660,30 @@ class TrainingSessionController extends ChangeNotifier {
     startLine(dueQueue[nextIndex]);
   }
 
+  /// Start the next unseen/new line from the queue.
+  void startNextNew() {
+    final line = dueQueue.firstWhere(
+      (l) {
+        final entry = reviewMap[l.id];
+        return entry == null || entry.isNew;
+      },
+      orElse: () => dueQueue.first,
+    );
+    startLine(line);
+  }
+
+  /// Start the next due-for-review (not new) line from the queue.
+  void startNextDue() {
+    final line = dueQueue.firstWhere(
+      (l) {
+        final entry = reviewMap[l.id];
+        return entry != null && !entry.isNew && entry.isDue;
+      },
+      orElse: () => dueQueue.first,
+    );
+    startLine(line);
+  }
+
   void updateDueQueue(List<RepertoireLine> queue) {
     dueQueue = queue;
     notifyListeners();
@@ -649,4 +722,112 @@ class TrainingSessionController extends ChangeNotifier {
     if (prog == null) return 0;
     return prog.correctStreak / settings.correctStreakThreshold;
   }
+
+  // ---------------------------------------------------------------------------
+  // MOVE DISPLAY HELPERS
+  // ---------------------------------------------------------------------------
+
+  /// Compute the full move number for a given move index in the current line.
+  int _fullMoveNumber(int moveIndex) {
+    if (currentLine == null) return 1;
+    final startFullmoves = currentLine!.startPosition.fullmoves;
+    final startIsWhite = currentLine!.startPosition.turn == Side.white;
+    if (startIsWhite) {
+      return startFullmoves + (moveIndex ~/ 2);
+    } else {
+      return startFullmoves + ((moveIndex + 1) ~/ 2);
+    }
+  }
+
+  /// Whether the move at [moveIndex] is White's move.
+  bool _isMoveWhite(int moveIndex) {
+    if (currentLine == null) return true;
+    final startIsWhite = currentLine!.startPosition.turn == Side.white;
+    return startIsWhite ? (moveIndex % 2 == 0) : (moveIndex % 2 == 1);
+  }
+
+  /// Format a move as "1. e4" or "1... e5".
+  String formatMoveNotation(int moveIndex, String san) {
+    final num = _fullMoveNumber(moveIndex);
+    final isWhite = _isMoveWhite(moveIndex);
+    return isWhite ? '$num. $san' : '$num... $san';
+  }
+
+  /// Build a [MoveDisplayInfo] for the given move index.
+  MoveDisplayInfo _buildMoveDisplay(int moveIndex, {bool isOpponent = false}) {
+    if (currentLine == null) {
+      return MoveDisplayInfo(
+        moveIndex: moveIndex,
+        san: '',
+        fullMoveNumber: 1,
+        isWhiteMove: true,
+        isOpponentMove: isOpponent,
+        comment: null,
+      );
+    }
+    final san = currentLine!.moves[moveIndex];
+    return MoveDisplayInfo(
+      moveIndex: moveIndex,
+      san: san,
+      fullMoveNumber: _fullMoveNumber(moveIndex),
+      isWhiteMove: _isMoveWhite(moveIndex),
+      isOpponentMove: isOpponent,
+      comment: currentLine!.comments[moveIndex.toString()],
+    );
+  }
+
+  void _clearPair() {
+    currentPairOpponent = null;
+    currentPairUser = null;
+    feedback = null;
+    currentAnnotation = null;
+  }
+
+  void opponentAcknowledged() {
+    opponentWaitingForAck = false;
+    currentAnnotation = null;
+    notifyListeners();
+    Future.microtask(() {
+      if (phase == TrainingPhase.learning) {
+        currentMoveIndex++;
+        advanceLearnPhase();
+      } else {
+        currentMoveIndex++;
+        advanceDrillPhase();
+      }
+    });
+  }
+
+}
+
+/// Information about a move to display in the Chessable-style panel.
+class MoveDisplayInfo {
+  final int moveIndex;
+  final String san;
+  final int fullMoveNumber;
+  final bool isWhiteMove;
+  final bool isOpponentMove;
+  final String? comment;
+
+  const MoveDisplayInfo({
+    required this.moveIndex,
+    required this.san,
+    required this.fullMoveNumber,
+    required this.isWhiteMove,
+    required this.isOpponentMove,
+    this.comment,
+  });
+
+  /// Formatted notation like "1. e4" or "1... e5"
+  String get notation =>
+      isWhiteMove ? '$fullMoveNumber. $san' : '$fullMoveNumber... $san';
+
+  /// Label like "Black's move 1... e5" or "White's move 2. Nf3"
+  String get moveLabel {
+    final side = isWhiteMove ? "White's" : "Black's";
+    return '$side move $notation';
+  }
+
+  /// Label for "Your move" display.
+  String get yourMoveLabel => 'Your move $notation';
 }

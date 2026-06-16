@@ -13,9 +13,10 @@ import '../services/training/training_session_controller.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
-import '../widgets/repertoire_lines_browser.dart';
+import '../widgets/training/move_input_widget.dart';
 import '../widgets/training/repertoire_selector_panel.dart';
 import '../widgets/training/training_board_controls.dart';
+import '../widgets/training/training_lines_panel.dart';
 import '../widgets/training/training_progress_panel.dart';
 import '../widgets/training/training_results_panel.dart';
 import '../widgets/training/training_settings_panel.dart';
@@ -49,6 +50,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   final TextEditingController _repetitionsController = TextEditingController();
   final TextEditingController _depthController = TextEditingController();
   final TextEditingController _delayController = TextEditingController();
+  final GlobalKey<MoveInputWidgetState> _moveInputKey = GlobalKey();
   bool _settingsInitialized = false;
 
   @override
@@ -147,8 +149,26 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
+    // Space for ack states must be checked before isTextInputFocused(),
+    // because the disabled MoveInputWidget can retain text-field focus.
+    if (event.logicalKey == LogicalKeyboardKey.space) {
+      if (_training.learnWaitingForAck) {
+        _training.learnAcknowledged();
+        return KeyEventResult.handled;
+      }
+      if (_training.opponentWaitingForAck) {
+        _training.opponentAcknowledged();
+        return KeyEventResult.handled;
+      }
+    }
+
     if (isTextInputFocused()) {
       return KeyEventResult.ignored;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.slash && hasNoLetterModifiers) {
+      _moveInputKey.currentState?.focus();
+      return KeyEventResult.handled;
     }
 
     if (event.logicalKey == LogicalKeyboardKey.keyJ && hasNoLetterModifiers) {
@@ -156,12 +176,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       settings.learnRequiresClick = !settings.learnRequiresClick;
       settings.save();
       setState(() {});
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.space &&
-        _training.learnWaitingForAck) {
-      _training.learnAcknowledged();
       return KeyEventResult.handled;
     }
 
@@ -257,6 +271,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       boardFlipped: _training.boardFlipped,
       waitingForUser: _training.waitingForUser,
       onMove: _training.handleUserMove,
+      moveInputKey: _moveInputKey,
     );
   }
 
@@ -295,17 +310,15 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TrainingProgressPanel(
-            reviewMap: _training.reviewMap,
-            sessionCorrect: _training.sessionCorrect,
-            sessionIncorrect: _training.sessionIncorrect,
-            sessionStreak: _training.sessionStreak,
-            currentLine: _training.currentLine,
-            phase: _training.phase,
-            currentMoveIndex: _training.currentMoveIndex,
-            effectiveLineLength: _training.effectiveLineLength,
-            dueQueueLength: _training.dueQueue.length,
-          ),
+          if (_training.currentLine != null) ...[
+            Text(
+              _training.currentLine!.name,
+              style: Theme.of(context).textTheme.titleSmall,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const Divider(height: 16),
+          ],
           Expanded(
             child: _training.phase == TrainingPhase.finished
                 ? TrainingResultsPanel(
@@ -315,6 +328,8 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                     reviewMap: _training.reviewMap,
                     repertoireId: _training.repertoireId,
                     lineHadMistake: _training.lineHadMistake,
+                    hadLearnPhaseThisSession:
+                        _training.hadLearnPhaseThisSession == true,
                     settings: _training.settings,
                     sessionCorrect: _training.sessionCorrect,
                     sessionIncorrect: _training.sessionIncorrect,
@@ -330,12 +345,18 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                     currentAnnotation: _training.currentAnnotation,
                     learnQuizzing: _training.learnQuizzing,
                     learnWaitingForAck: _training.learnWaitingForAck,
+                    opponentWaitingForAck: _training.opponentWaitingForAck,
+                    currentPairOpponent: _training.currentPairOpponent,
+                    currentPairUser: _training.currentPairUser,
                     replayIndex: _training.replayIndex,
                     wrongMoveCount: _training.wrongMoveIndices.length,
                     currentLine: _training.currentLine,
                     currentMoveIndex: _training.currentMoveIndex,
+                    waitingForUser: _training.waitingForUser,
+                    isWhiteLine: _training.isWhiteLine,
                     moveDifficulty: _training.moveDifficulty,
                     onLearnAcknowledged: _training.learnAcknowledged,
+                    onOpponentAcknowledged: _training.opponentAcknowledged,
                   ),
           ),
           const Divider(height: 16),
@@ -353,10 +374,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   }
 
   Widget _buildLinesTab() {
-    return RepertoireLinesBrowser(
+    return TrainingLinesPanel(
       lines: _training.lines,
+      reviewMap: _training.reviewMap,
+      moveProgressMap: _training.moveProgressMap,
       onLineSelected: _training.startLine,
-      isExpanded: true,
+      onStartNextNew: _training.startNextNew,
+      onStartNextDue: _training.startNextDue,
     );
   }
 

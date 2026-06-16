@@ -172,13 +172,32 @@ class TrainingSettingsPanel extends StatelessWidget {
               onSettingsChanged();
             },
           ),
+          const SizedBox(height: 24),
+          Text('Move speed', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'How long opponent moves are shown before advancing. '
+            '${settings.moveSpeedMs}ms',
+            style: theme.textTheme.bodySmall,
+          ),
+          Slider(
+            value: settings.moveSpeedMs.toDouble(),
+            min: 200,
+            max: 2000,
+            divisions: 18,
+            label: '${settings.moveSpeedMs}ms',
+            onChanged: (v) {
+              settings.moveSpeedMs = v.round();
+              settings.save();
+              onSettingsChanged();
+            },
+          ),
           const Divider(height: 32),
           Text('Learning new lines', style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           ShortcutTooltip(
             description: 'Toggle auto-advance when learning new lines',
             shortcut: 'J',
-            preferDelayed: true,
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: Text('Manual advance', style: theme.textTheme.titleSmall),
