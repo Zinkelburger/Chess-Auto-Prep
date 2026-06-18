@@ -209,8 +209,8 @@ final _wasBestRe = RegExp(r'[A-Za-z0-9+#-]+\s+was best\.?');
 final _whitespaceRe = RegExp(r'\s+');
 
 /// Strip engine annotation tokens (`[%eval]`, `[%clk]`, `[%maia]`, `[%pv]`),
-/// Lichess classification text, and score arrows from a PGN comment, leaving
-/// only human-readable prose.
+/// Lichess classification text, score arrows, and Chessable `@@...@@` wrapper
+/// markers from a PGN comment, leaving only human-readable prose.
 String filterDisplayComment(String comment) {
   comment = comment.replaceAll(evalCommentRe, '');
   comment = comment.replaceAll(_clkRe, '');
@@ -224,10 +224,19 @@ String filterDisplayComment(String comment) {
   comment = comment.replaceAll(_scoreArrowRe, '');
   comment = comment.replaceAll(_classificationRe, '');
   comment = comment.replaceAll(_wasBestRe, '');
+  // Strip Chessable @@ markers but keep the content between them
+  comment = comment.replaceAll(_chessableMarkerStripRe, '');
   comment = comment.replaceAll(_whitespaceRe, ' ').trim();
   if (comment.isEmpty || comment == '.,;!?') return '';
   return comment;
 }
+
+/// Matches all `@@TagName@@` markers for stripping in plain-text mode.
+final _chessableMarkerStripRe = RegExp(
+  r'@@(?:HeaderStart|HeaderEnd|StartBlockQuote|EndBlockQuote|'
+  r'StartBracket|EndBracket|StartFEN|EndFEN|'
+  r'StartSquare|EndSquare|LinkStart|LinkEnd)@@',
+);
 
 // ---------------------------------------------------------------------------
 // Prose comment formatting (book-style PGNs)
@@ -235,6 +244,10 @@ String filterDisplayComment(String comment) {
 
 /// Split `---` delimiters and collapse whitespace into readable paragraphs.
 /// Returns a list of non-empty paragraph strings ready for display.
+///
+/// For Chessable-style double-space paragraph breaks, use [parseRichComment]
+/// instead (which correctly handles `  ` as a paragraph separator in long
+/// prose while avoiding false splits in short move-annotation comments).
 List<String> formatProseComment(String comment) {
   final filtered = filterDisplayComment(comment);
   if (filtered.isEmpty) return const [];
@@ -243,6 +256,357 @@ List<String> formatProseComment(String comment) {
       .map((p) => p.trim())
       .where((p) => p.isNotEmpty)
       .toList();
+}
+
+// ---------------------------------------------------------------------------
+// Chessable rich-comment support
+// ---------------------------------------------------------------------------
+
+/// Segment types emitted by [parseRichComment].
+enum RichSegmentType {
+  text,
+  header,
+  blockQuote,
+  bracket,
+  fen,
+  link,
+}
+
+/// A single segment of a rich (Chessable-style) PGN comment.
+class RichSegment {
+  final RichSegmentType type;
+
+  /// The textual content of the segment. For [RichSegmentType.text] this may
+  /// contain paragraph breaks encoded as `\n`.
+  final String content;
+
+  const RichSegment(this.type, this.content);
+
+  @override
+  String toString() => 'RichSegment($type, "${content.length > 40 ? '${content.substring(0, 40)}...' : content}")';
+}
+
+/// Strip engine tokens but preserve Chessable `@@...@@` markers.
+///
+/// Crucially this preserves the double-space token structure that book-style
+/// PGNs use to separate inline moves and paragraphs (unlike
+/// [filterDisplayComment], which collapses all whitespace). Used by
+/// [parseRichComment] and [parseCommentTokens].
+String stripEngineTokens(String comment) {
+  comment = comment.replaceAll(evalCommentRe, '');
+  comment = comment.replaceAll(_clkRe, '');
+  comment = comment.replaceAll(maiaCommentRe, '');
+  comment = comment.replaceAll(maiaProbabilityCommentRe, '');
+  comment = comment.replaceAll(humanFrequencyCommentRe, '');
+  comment = comment.replaceAll(cumProbCommentRe, '');
+  comment = comment.replaceAll(importanceCommentRe, '');
+  comment = comment.replaceAll(pvCommentRe, '');
+  comment = comment.replaceAll(maiaTopCommentRe, '');
+  comment = comment.replaceAll(_scoreArrowRe, '');
+  comment = comment.replaceAll(_classificationRe, '');
+  comment = comment.replaceAll(_wasBestRe, '');
+  // Collapse runs of single spaces (but preserve double-spaces for paragraph
+  // detection) — replace 3+ spaces with double-space, single stays.
+  comment = comment.replaceAll(RegExp(r' {3,}'), '  ');
+  comment = comment.trim();
+  if (comment.isEmpty || comment == '.,;!?') return '';
+  return comment;
+}
+
+/// Chessable `@@...@@` marker regex. Captures tag name and inner content.
+final _chessableMarkerRe = RegExp(
+  r'@@(HeaderStart|HeaderEnd|StartBlockQuote|EndBlockQuote|'
+  r'StartBracket|EndBracket|StartFEN|EndFEN|'
+  r'StartSquare|EndSquare|LinkStart|LinkEnd)@@',
+);
+
+/// Returns true when the comment contains Chessable-style `@@...@@` markers,
+/// or when it appears to use double-space paragraph breaks (long prose with
+/// 2+ instances of `  ` that are not mere move-notation spacing).
+bool hasChessableFormatting(String comment) {
+  if (_chessableMarkerRe.hasMatch(comment)) return true;
+  // Detect double-space paragraph breaks in long prose: require the comment
+  // to be long enough that double-spaces are likely real paragraph separators,
+  // not just spacing around move notation.
+  if (comment.length > 300) {
+    final dsCount = '  '.allMatches(comment).length;
+    if (dsCount >= 2) return true;
+  }
+  return false;
+}
+
+/// Parse a Chessable-formatted comment into a list of [RichSegment]s.
+///
+/// Handles:
+/// - `@@HeaderStart@@...@@HeaderEnd@@` → [RichSegmentType.header]
+/// - `@@StartBlockQuote@@...@@EndBlockQuote@@` → [RichSegmentType.blockQuote]
+/// - `@@StartBracket@@...@@EndBracket@@` → [RichSegmentType.bracket]
+/// - `@@StartSquare@@...@@EndSquare@@` → [RichSegmentType.bracket]
+/// - `@@StartFEN@@...@@EndFEN@@` → [RichSegmentType.fen]
+/// - `@@LinkStart@@...@@LinkEnd@@` → [RichSegmentType.link]
+/// - Double-space (`  `) → paragraph break (encoded as `\n` in text segments)
+///
+/// Engine annotation tokens are stripped before parsing (but `@@` markers are
+/// preserved for the parser to consume).
+List<RichSegment> parseRichComment(String comment) {
+  final stripped = stripEngineTokens(comment);
+  if (stripped.isEmpty) return const [];
+
+  final segments = <RichSegment>[];
+  final markers = _chessableMarkerRe.allMatches(stripped).toList();
+
+  if (markers.isEmpty) {
+    _addTextSegments(segments, stripped);
+    return segments;
+  }
+
+  var cursor = 0;
+  var i = 0;
+
+  while (i < markers.length) {
+    final marker = markers[i];
+    final tag = marker.group(1)!;
+
+    // Emit any text before this marker
+    if (marker.start > cursor) {
+      _addTextSegments(segments, stripped.substring(cursor, marker.start));
+    }
+
+    final endTag = _closingTag(tag);
+    if (endTag != null) {
+      // Find the matching end marker
+      final endIdx = markers.indexWhere(
+        (m) => m.group(1) == endTag,
+        i + 1,
+      );
+      if (endIdx != -1) {
+        final innerStart = marker.end;
+        final innerEnd = markers[endIdx].start;
+        final inner = stripped.substring(innerStart, innerEnd).trim();
+        if (inner.isNotEmpty) {
+          segments.add(RichSegment(_segmentType(tag), inner));
+        }
+        cursor = markers[endIdx].end;
+        i = endIdx + 1;
+        continue;
+      }
+    }
+
+    // Unmatched/closing tag — skip it
+    cursor = marker.end;
+    i++;
+  }
+
+  // Remaining text after last marker
+  if (cursor < stripped.length) {
+    _addTextSegments(segments, stripped.substring(cursor));
+  }
+
+  return segments;
+}
+
+/// Add text segments, splitting on double-space paragraph breaks and `---`.
+void _addTextSegments(List<RichSegment> segments, String text) {
+  // Split on double-space (Chessable paragraph break) and `---`
+  final paragraphs = text
+      .split(RegExp(r'\s{2,}|---'))
+      .map((p) => p.trim())
+      .where((p) => p.isNotEmpty)
+      .toList();
+
+  if (paragraphs.isEmpty) return;
+  segments.add(RichSegment(RichSegmentType.text, paragraphs.join('\n')));
+}
+
+/// Map an opening tag to its expected closing tag.
+String? _closingTag(String openTag) {
+  switch (openTag) {
+    case 'HeaderStart':
+      return 'HeaderEnd';
+    case 'StartBlockQuote':
+      return 'EndBlockQuote';
+    case 'StartBracket':
+      return 'EndBracket';
+    case 'StartSquare':
+      return 'EndSquare';
+    case 'StartFEN':
+      return 'EndFEN';
+    case 'LinkStart':
+      return 'LinkEnd';
+    default:
+      return null;
+  }
+}
+
+/// Map an opening tag to a [RichSegmentType].
+RichSegmentType _segmentType(String openTag) {
+  switch (openTag) {
+    case 'HeaderStart':
+      return RichSegmentType.header;
+    case 'StartBlockQuote':
+      return RichSegmentType.blockQuote;
+    case 'StartBracket':
+    case 'StartSquare':
+      return RichSegmentType.bracket;
+    case 'StartFEN':
+      return RichSegmentType.fen;
+    case 'LinkStart':
+      return RichSegmentType.link;
+    default:
+      return RichSegmentType.text;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Inline-move comment tokenization (book-style PGNs)
+// ---------------------------------------------------------------------------
+
+/// A single token of a comment: either prose text or a chess move.
+///
+/// Book PGNs (Chessable / Forward Chess exports) embed analysis lines directly
+/// in comment text, with double-spaces separating each move token (e.g.
+/// `Or  40.cxb5  c4!-+  , winning the pawn ending.`). [parseCommentTokens]
+/// recovers that structure so the viewer can render the moves as clickable
+/// chips and flow the prose naturally instead of one-token-per-line.
+sealed class CommentToken {
+  const CommentToken();
+}
+
+/// A run of human-readable prose.
+class CommentProse extends CommentToken {
+  final String text;
+  const CommentProse(this.text);
+
+  @override
+  String toString() => 'CommentProse("$text")';
+}
+
+/// A single chess move embedded in a comment.
+class CommentMove extends CommentToken {
+  /// The playable SAN core (e.g. `cxb5`, `Rxc4`, `O-O`), with move numbers,
+  /// check/mate glyphs, annotations (`!?`) and eval symbols (`-+`) stripped.
+  final String san;
+
+  /// The original text as written, for display (e.g. `40.cxb5`, `42...Kc3?`).
+  final String display;
+
+  /// Fullmove number this move belongs to, or -1 when it could not be
+  /// determined (in which case the move is shown but not clickable).
+  final int moveNumber;
+
+  /// Whether it is White's move.
+  final bool isWhite;
+
+  /// Identifier of the contiguous run of moves this belongs to. Clicking a
+  /// move replays its whole run from the run's first move.
+  final int runId;
+
+  const CommentMove({
+    required this.san,
+    required this.display,
+    required this.moveNumber,
+    required this.isWhite,
+    required this.runId,
+  });
+
+  bool get isClickable => moveNumber >= 0;
+
+  @override
+  String toString() => 'CommentMove($display)';
+}
+
+/// Matches one move token: optional move number + dots, SAN core, optional
+/// check/mate, annotation glyphs, and eval symbols.
+final _commentMoveRe = RegExp(
+  r'^(?:(\d+)(\.{3}|\.))?'
+  r'(O-O-O|O-O|'
+  r'(?:[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?:=[QRBN])?)'
+  r'([+#]?)'
+  r'(?:[!?]{1,2})?'
+  r'(?:[-+=]{1,2}|[-+]/[-+]|±|∓|⩲|⩱)?$',
+);
+
+/// Splits a comment into tokens: double-space, newline, and `---` are all
+/// token separators in the book-PGN convention.
+final _commentTokenSplitRe = RegExp(r'\n|---|\s{2,}');
+
+/// Parse engine-stripped comment text into prose / move tokens.
+///
+/// Pass the output of [stripEngineTokens] (which preserves the double-space
+/// structure), or a [RichSegment] text body (whose `\n`s mark token breaks).
+List<CommentToken> parseCommentTokens(String text) {
+  final parts = text
+      .split(_commentTokenSplitRe)
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty);
+
+  final tokens = <CommentToken>[];
+  var runId = 0;
+  // Last move seen (regardless of interspersed prose), used both to derive
+  // unnumbered moves and to decide run membership by move-number continuity.
+  int? lastNumber;
+  bool? lastWhite;
+
+  for (final part in parts) {
+    final m = _commentMoveRe.firstMatch(part);
+    if (m == null) {
+      tokens.add(CommentProse(part));
+      continue;
+    }
+
+    final numStr = m.group(1);
+    final dots = m.group(2);
+
+    // Expected successor ply of the previous move.
+    int? expectedNumber;
+    bool? expectedWhite;
+    if (lastNumber != null && lastWhite != null) {
+      expectedNumber = lastWhite ? lastNumber : lastNumber + 1;
+      expectedWhite = !lastWhite;
+    }
+
+    int number;
+    bool white;
+    if (numStr != null) {
+      number = int.parse(numStr);
+      white = dots != '...';
+    } else if (expectedNumber != null) {
+      // Unnumbered move: it is the successor of the previous move.
+      number = expectedNumber;
+      white = expectedWhite!;
+    } else {
+      number = -1;
+      white = true;
+    }
+
+    // A move continues the current line when it is exactly the expected
+    // successor of the previous move; otherwise it starts a new run. Lines
+    // survive interspersed prose ("... is a draw: 43.Rxc4+ ...") but break
+    // when the analysis jumps back to try a different move.
+    final continues = number >= 0 &&
+        expectedNumber != null &&
+        number == expectedNumber &&
+        white == expectedWhite;
+    if (!continues) runId++;
+
+    tokens.add(CommentMove(
+      san: m.group(3)!,
+      display: part,
+      moveNumber: number,
+      isWhite: white,
+      runId: runId,
+    ));
+
+    if (number >= 0) {
+      lastNumber = number;
+      lastWhite = white;
+    } else {
+      lastNumber = null;
+      lastWhite = null;
+    }
+  }
+
+  return tokens;
 }
 
 // ---------------------------------------------------------------------------

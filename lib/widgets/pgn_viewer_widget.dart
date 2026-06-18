@@ -3,6 +3,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart' show plyBeforeMove;
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show buildMovetext;
 import 'package:chess_auto_prep/models/move_tree.dart';
@@ -141,6 +142,18 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   int _activeBranchPly = -1; // which ply we're currently navigating in
   List<MoveNode> _analysisPath = [];
 
+  // Inline-comment line preview: steps the board through a clickable analysis
+  // line embedded in a comment WITHOUT injecting it into the move tree, so the
+  // comment keeps its pretty inline rendering. Fully decoupled from
+  // _analysisPath / ephemeral nodes.
+  List<String> _inlineSans = const [];
+  int _inlineBaseIndex = 0; // mainline ply before the line's first move
+  int _inlineCursor = 0; // # of inline moves currently played (>=1 = active)
+  int _inlineFirstMoveNumber = 0; // run's first move, for highlight matching
+  bool _inlineFirstIsWhite = true;
+
+  bool get _inlineActive => _inlineCursor > 0 && _inlineSans.isNotEmpty;
+
   @override
   bool get wantKeepAlive => true;
 
@@ -270,33 +283,74 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   String _buildGameInfo(PgnGame game) {
-    final white = game.headers['White'] ?? '?';
-    final black = game.headers['Black'] ?? '?';
-
-    // Book-style PGN detection: Black is "?" and White is a chapter title
-    final isBookChapter = black == '?' &&
-        white != '?' &&
-        (game.headers['Event'] == '?' || game.headers['Event'] == null);
-    if (isBookChapter) {
-      final annotator = game.headers['Annotator'];
-      final parts = <String>[white];
-      if (annotator != null && annotator.isNotEmpty) parts.add('by $annotator');
-      return parts.join(' ');
-    }
-
+    final white = (game.headers['White'] ?? '?').trim();
+    final black = (game.headers['Black'] ?? '?').trim();
+    final event = game.headers['Event'] ?? '';
     final wElo = game.headers['WhiteElo'];
     final bElo = game.headers['BlackElo'];
+    final hasElo = (wElo != null && wElo.isNotEmpty && wElo != '?') ||
+        (bElo != null && bElo.isNotEmpty && bElo != '?');
+
+    // Book-style PGN detection: no ratings, no real event, and White holds a
+    // chapter/theme title rather than a "Lastname, Firstname" player name.
+    // These exports put the chapter theme in White and the specific
+    // game/exercise in Black, so present them as title + theme subtitle
+    // instead of the confusing "Theme vs Player1 - Player2 #3/4".
+    final whiteIsTitle = !_isBlankHeader(white) && !_looksLikePlayerName(white);
+    if (!hasElo && _isBlankHeader(event) && whiteIsTitle) {
+      final chapter = _cleanChapterTitle(white);
+      final annotator = game.headers['Annotator'];
+      final example = _isBlankHeader(black) ? '' : black;
+
+      String title;
+      if (example.isNotEmpty && _cleanChapterTitle(example) != chapter) {
+        // Specific game/exercise is the headline; chapter theme is the subtitle.
+        title = '$example\n$chapter';
+      } else {
+        title = chapter;
+      }
+      if (annotator != null && annotator.isNotEmpty) title = '$title\nby $annotator';
+      return title;
+    }
+
+    // If all meaningful headers are blank/?, don't show anything
+    if (_isBlankHeader(white) && _isBlankHeader(black)) return '';
+
     final wStr = wElo != null && wElo.isNotEmpty && wElo != '?'
         ? '$white ($wElo)'
         : white;
     final bStr = bElo != null && bElo.isNotEmpty && bElo != '?'
         ? '$black ($bElo)'
         : black;
-    final event = game.headers['Event'] ?? '';
     final date = game.headers['Date'] ?? '';
     final result = game.headers['Result'] ?? '';
-    return '$wStr vs $bStr\n$event • $date • $result';
+
+    // Build detail line, omitting blank/placeholder parts
+    final details = [event, date, result]
+        .where((s) => s.isNotEmpty && !_isBlankHeader(s))
+        .join(' • ');
+
+    if (_isBlankHeader(wStr) && _isBlankHeader(bStr)) {
+      return details;
+    }
+    if (details.isEmpty) return '$wStr vs $bStr';
+    return '$wStr vs $bStr\n$details';
   }
+
+  static bool _isBlankHeader(String value) {
+    final v = value.trim();
+    return v.isEmpty || v == '?' || RegExp(r'^[?. *]+$').hasMatch(v);
+  }
+
+  /// Heuristic: a real player tag is "Lastname, Firstname" (contains a comma).
+  /// Book chapter/exercise titles don't use that form.
+  static bool _looksLikePlayerName(String value) => value.contains(',');
+
+  /// Strip a leading ordinal like "1) ", "2. ", "3 - " from a chapter title.
+  static final _chapterPrefixRe = RegExp(r'^\s*\d+\s*[).:\-]\s*');
+
+  static String _cleanChapterTitle(String value) =>
+      value.replaceFirst(_chapterPrefixRe, '').trim();
 
   // ── Navigation ──
 
@@ -340,6 +394,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       _currentPosition = pos;
       _analysisPath = [];
       _activeBranchPly = -1;
+      _clearInlineLine();
     });
     widget.onPositionChanged?.call(pos);
   }
@@ -371,6 +426,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       _activeBranchPly = branchPly;
       _currentPosition = pos;
       _analysisPath = path;
+      _clearInlineLine();
     });
     widget.onPositionChanged?.call(pos);
   }
@@ -400,6 +456,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   void _goBack() {
+    if (_inlineActive) {
+      _setInlineCursor(_inlineCursor - 1);
+      return;
+    }
     if (_analysisPath.isNotEmpty) {
       if (_analysisPath.length > 1) {
         final parentPath = _analysisPath.sublist(0, _analysisPath.length - 1);
@@ -413,6 +473,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   void _goForward() {
+    if (_inlineActive) {
+      if (_inlineCursor < _inlineSans.length) {
+        _setInlineCursor(_inlineCursor + 1);
+      }
+      return;
+    }
     if (_analysisPath.isNotEmpty) {
       final current = _analysisPath.last;
       if (current.children.isNotEmpty) {
@@ -424,6 +490,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   void _goToEnd() {
+    if (_inlineActive) {
+      _setInlineCursor(_inlineSans.length);
+      return;
+    }
     if (_analysisPath.isNotEmpty) {
       MoveNode current = _analysisPath.last;
       while (current.children.isNotEmpty) {
@@ -439,11 +509,75 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     _goToMainLineMove(moveIndex + 1);
   }
 
+  /// Begin previewing an inline analysis line embedded in a comment. [sans] is
+  /// the run's full move list (first move is [moveNumber]/[isWhite]); the board
+  /// steps to the move at [clickedIndex]. Unlike a variation, this does NOT add
+  /// anything to the move tree — it just walks the board through the line, so
+  /// the comment keeps its rendering and the arrows step along the line.
+  void _playInlineLine(
+      int moveNumber, bool isWhite, List<String> sans, int clickedIndex) {
+    final baseIndex = plyBeforeMove(
+      moveNumber: moveNumber,
+      isWhite: isWhite,
+      startFullmoves: _startPosition.fullmoves,
+      startWhiteToMove: _startPosition.turn == Side.white,
+    ).clamp(0, _moveHistory.length);
+    // Drop any ephemeral variation moves so we don't leave a stale sideline.
+    _clearAnalysis();
+    _inlineBaseIndex = baseIndex;
+    _inlineSans = sans;
+    _inlineFirstMoveNumber = moveNumber;
+    _inlineFirstIsWhite = isWhite;
+    _setInlineCursor(clickedIndex + 1);
+  }
+
+  /// Move the inline-preview cursor to [cursor] moves played and update the
+  /// board. A cursor of 0 (or below) exits preview back to the base position.
+  void _setInlineCursor(int cursor) {
+    cursor = cursor.clamp(0, _inlineSans.length);
+    if (cursor <= 0) {
+      _clearInlineLine();
+      _goToMainLineMove(_inlineBaseIndex);
+      return;
+    }
+    // Replay the mainline up to the branch point, then the inline moves.
+    Position pos = _startPosition;
+    for (int i = 0; i < _inlineBaseIndex; i++) {
+      final san = _moveHistory[i].san;
+      if (san == '--') continue;
+      final m = pos.parseSan(san);
+      if (m == null) break;
+      pos = pos.play(m);
+    }
+    int played = 0;
+    for (int i = 0; i < cursor; i++) {
+      final m = pos.parseSan(_inlineSans[i]);
+      if (m == null) break;
+      pos = pos.play(m);
+      played++;
+    }
+    if (!mounted) return;
+    setState(() {
+      _mainLineIndex = _inlineBaseIndex;
+      _analysisPath = [];
+      _activeBranchPly = -1;
+      _inlineCursor = played;
+      _currentPosition = pos;
+    });
+    widget.onPositionChanged?.call(pos);
+  }
+
+  void _clearInlineLine() {
+    _inlineSans = const [];
+    _inlineCursor = 0;
+  }
+
   bool get _canGoBack {
-    return _analysisPath.isNotEmpty || _mainLineIndex > 0;
+    return _inlineActive || _analysisPath.isNotEmpty || _mainLineIndex > 0;
   }
 
   bool get _canGoForward {
+    if (_inlineActive) return _inlineCursor < _inlineSans.length;
     if (_analysisPath.isNotEmpty && _analysisPath.last.children.isNotEmpty) {
       return true;
     }
@@ -468,6 +602,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final fenAfter = newPos.fen;
 
     setState(() {
+      _clearInlineLine();
       if (_analysisPath.isEmpty) {
         // Starting new variation from mainline
         final ply = _mainLineIndex;
@@ -521,6 +656,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       }
       _analysisPath = [];
       _activeBranchPly = -1;
+      _clearInlineLine();
     });
   }
 
@@ -732,6 +868,32 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   // ── Build ──
 
+  /// Render `_gameInfo` with the first line as a prominent title and any
+  /// subsequent lines (theme, annotator, event/date) as dimmer subtitles.
+  Widget _buildGameHeader(BuildContext context) {
+    final lines = _gameInfo.split('\n');
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          lines.first,
+          style: theme.textTheme.titleSmall
+              ?.copyWith(fontWeight: FontWeight.w600),
+          textAlign: TextAlign.center,
+        ),
+        for (final line in lines.skip(1))
+          Text(
+            line,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.7),
+            ),
+            textAlign: TextAlign.center,
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -770,12 +932,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
     return Column(
       children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          child: Text(_gameInfo,
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.center),
-        ),
+        if (_gameInfo.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(8),
+            child: _buildGameHeader(context),
+          ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(8),
@@ -789,6 +950,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
               editingCommentIndex: _editingCommentIndex,
               editMode: widget.editMode,
               canEditComments: widget.onCommentsChanged != null,
+              startingMoveNumber: _startPosition.fullmoves,
+              startingWhiteTurn: _startPosition.turn == Side.white,
               onMainLineMoveClicked: _onMainLineMoveClicked,
               onSelectMoveForAnnotation: _selectMoveForAnnotation,
               onShowMoveContextMenu: _showMoveContextMenu,
@@ -800,6 +963,15 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                   setState(() => _selectedMoveIndex = null),
               onGoToAnalysisNode: _goToAnalysisNode,
               onAnalysisNodeAction: widget.onAnalysisNodeAction,
+              onPlayInlineLine: _playInlineLine,
+              activeInlineLine: _inlineActive
+                  ? (
+                      firstMoveNumber: _inlineFirstMoveNumber,
+                      firstIsWhite: _inlineFirstIsWhite,
+                      sans: _inlineSans,
+                      cursor: _inlineCursor,
+                    )
+                  : null,
             ),
           ),
         ),
