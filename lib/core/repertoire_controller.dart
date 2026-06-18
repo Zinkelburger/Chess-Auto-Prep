@@ -5,6 +5,8 @@
 /// Navigation funnels through [jump] — there is no secondary state to sync.
 library;
 
+import 'dart:async';
+
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
@@ -18,6 +20,8 @@ import '../models/repertoire_metadata.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
+import 'move_navigation.dart';
+import 'repertoire_authoring.dart';
 import 'repertoire_writer.dart';
 
 // ---------------------------------------------------------------------------
@@ -32,8 +36,11 @@ List<RepertoireLine> _parseRepertoireInIsolate(
 
 /// Manages repertoire state and acts as the single source of truth.
 /// All UI components should derive their chess position from this class.
-class RepertoireController with ChangeNotifier {
+class RepertoireController with ChangeNotifier, MoveNavigation {
   late final RepertoireWriter writer = RepertoireWriter(this);
+
+  /// Pure PGN-authoring collaborator (game/line construction).
+  final RepertoireAuthoring _authoring = RepertoireAuthoring();
 
   RepertoireMetadata? _currentRepertoire;
   RepertoireMetadata? get currentRepertoire => _currentRepertoire;
@@ -67,10 +74,12 @@ class RepertoireController with ChangeNotifier {
 
   /// The editable PGN move tree.
   MoveTree _tree = MoveTree();
+  @override
   MoveTree get tree => _tree;
 
   /// Cursor into [_tree].  Empty = starting position.
   TreePath _path = TreePath.empty;
+  @override
   TreePath get path => _path;
 
   // ── Derived state (backward-compatible getters) ──────────────────
@@ -105,30 +114,14 @@ class RepertoireController with ChangeNotifier {
   // ── Navigation (single entry point) ──────────────────────────────
 
   /// Jump the cursor to [target].  All navigation funnels here.
+  /// (goBack / goForward / goToStart / goToEnd come from [MoveNavigation].)
+  @override
   void jump(TreePath target) {
     if (_path == target) return;
     if (!_tree.isValidPath(target)) return;
     _path = target;
     _syncOpeningTree();
     notifyListeners();
-  }
-
-  void goBack() {
-    if (_path.isNotEmpty) jump(_path.parent);
-  }
-
-  void goForward() {
-    final children = _path.isEmpty
-        ? _tree.roots
-        : (_tree.nodeAt(_path)?.children ?? const []);
-    if (children.isNotEmpty) jump(_path.child(0));
-  }
-
-  void goToStart() => jump(TreePath.empty);
-
-  void goToEnd() {
-    if (_tree.isEmpty) return;
-    jump(_tree.mainlineEndFrom(_path));
   }
 
   // ── Move entry ───────────────────────────────────────────────────
@@ -584,13 +577,13 @@ class RepertoireController with ChangeNotifier {
         }
         if (moveLines.isEmpty) continue;
 
-        final game = _buildGame(
-          headers['Event'],
-          headers['Date'],
-          headers['White'],
-          headers['Black'],
-          headers['Result'],
-          moveLines,
+        final game = _authoring.buildGame(
+          event: headers['Event'],
+          date: headers['Date'],
+          white: headers['White'],
+          black: headers['Black'],
+          result: headers['Result'],
+          moveLines: moveLines,
         );
         if (game != null) {
           processedGames.add(game);
@@ -690,28 +683,6 @@ class RepertoireController with ChangeNotifier {
     return true;
   }
 
-  String? _buildGame(
-    String? event,
-    String? date,
-    String? white,
-    String? black,
-    String? result,
-    List<String> moveLines,
-  ) {
-    if (moveLines.isEmpty) return null;
-
-    final headers = <String>[];
-    headers.add('[Event "${event ?? "Training Line"}"]');
-    headers.add(
-        '[Date "${date ?? DateTime.now().toIso8601String().split('T')[0]}"]');
-    headers.add('[White "${white ?? "Training"}"]');
-    headers.add('[Black "${black ?? "Me"}"]');
-    headers.add('[Result "${result ?? "1-0"}"]');
-
-    final moves = moveLines.join(' ');
-    return [...headers, '', moves].join('\n');
-  }
-
   /// Append a newly saved line to the in-memory tree and lines list.
   void appendNewLine(
     List<String> moves,
@@ -724,23 +695,12 @@ class RepertoireController with ChangeNotifier {
       _openingTree?.appendLineFromFen(startFen, moves);
     }
 
-    final index = _repertoireLines.length;
-    final service = RepertoireService();
-    final id = service.generateLineId(moves, index);
-    final name = title.isNotEmpty && title != 'Repertoire Line'
-        ? title
-        : (moves.length >= 3
-            ? 'Line: ${moves.take(3).join(' ')}'
-            : 'Repertoire Line ${index + 1}');
-    final startPosition = service.extractStartPositionFromPgn(pgnContent);
-
-    _repertoireLines.add(RepertoireLine(
-      id: id,
-      name: name,
+    _repertoireLines.add(_authoring.buildNewLine(
       moves: moves,
-      color: _isRepertoireWhite ? 'white' : 'black',
-      startPosition: startPosition,
-      fullPgn: pgnContent,
+      title: title,
+      pgnContent: pgnContent,
+      index: _repertoireLines.length,
+      isWhite: _isRepertoireWhite,
     ));
 
     if (_currentRepertoire != null) {
@@ -765,77 +725,28 @@ class RepertoireController with ChangeNotifier {
     final startFen = startingFen ?? kStandardStartFen;
     _openingTree?.appendLineFromFen(startFen, [...prefix, newMove]);
 
-    final lineIndex = _findLineIndexForPrefix(prefix);
+    final lineIndex = _authoring.findLineIndexForPrefix(_repertoireLines, prefix);
     if (lineIndex != null) {
-      final line = _repertoireLines[lineIndex];
-      final newMoves = [...line.moves, newMove];
-      final service = RepertoireService();
-      _repertoireLines[lineIndex] = RepertoireLine(
-        id: line.id,
-        name: line.name,
-        moves: newMoves,
-        color: line.color,
-        startPosition: line.startPosition,
-        fullPgn: service.appendSanToGamePgn(line.fullPgn, line.moves, newMove),
-        comments: line.comments,
-        variations: line.variations,
-        headers: line.headers,
-        importance: line.importance,
-      );
+      _repertoireLines[lineIndex] =
+          _authoring.extendLine(_repertoireLines[lineIndex], newMove);
       notifyListeners();
       return;
     }
 
     final fullPath = [...prefix, newMove];
-    final service = RepertoireService();
     final pgnForLine = updatedPgnContent != null
-        ? _extractLastGamePgn(updatedPgnContent)
-        : service.buildMinimalGamePgn(
+        ? _authoring.extractLastGamePgn(updatedPgnContent)
+        : RepertoireService().buildMinimalGamePgn(
             fullPath,
             startingFen: startingFen,
             isWhiteRepertoire: _isRepertoireWhite,
           );
     appendNewLine(
       fullPath,
-      _defaultLineTitle(fullPath),
+      _authoring.defaultLineTitle(fullPath),
       pgnForLine,
       updateTree: false,
     );
-  }
-
-  int? _findLineIndexForPrefix(List<String> prefix) {
-    int? bestIndex;
-    int bestLen = -1;
-    for (int i = 0; i < _repertoireLines.length; i++) {
-      final moves = _repertoireLines[i].moves;
-      if (moves.length == prefix.length &&
-          _listEquals(moves, prefix) &&
-          moves.length > bestLen) {
-        bestIndex = i;
-        bestLen = moves.length;
-      }
-    }
-    return bestIndex;
-  }
-
-  static bool _listEquals(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
-  String _extractLastGamePgn(String fullPgn) {
-    final games = pgn.splitPgnIntoGames(fullPgn);
-    return games.isEmpty ? fullPgn : games.last;
-  }
-
-  String _defaultLineTitle(List<String> moves) {
-    if (moves.length >= 3) {
-      return 'Line: ${moves.take(3).join(' ')}';
-    }
-    return 'Repertoire Line';
   }
 
   /// Imports PGN content into the current repertoire file.
@@ -862,8 +773,25 @@ class RepertoireController with ChangeNotifier {
     return gameCount > 0 ? gameCount : 1;
   }
 
+  final List<Completer<void>> _loadCompleters = [];
+
+  /// Returns a Future that completes when the current load finishes.
+  /// Resolves immediately if no load is in progress.
+  Future<void> awaitLoaded() {
+    if (!_isLoading) return Future.value();
+    final c = Completer<void>();
+    _loadCompleters.add(c);
+    return c.future;
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
+    if (!loading) {
+      for (final c in _loadCompleters) {
+        c.complete();
+      }
+      _loadCompleters.clear();
+    }
     notifyListeners();
   }
 

@@ -7,11 +7,10 @@ import '../../models/eval_database_settings.dart';
 import '../../models/pgn_source.dart';
 import '../../services/eval/cdbdirect_eval_provider.dart';
 import '../../services/generation/generation_config.dart';
-import '../../services/engine/stockfish_pool.dart';
-import '../../utils/system_info.dart';
 import '../lichess_db_info_icon.dart';
 import '../lichess_db_selector.dart';
 import '../pgn_sources_panel.dart';
+import 'engine_resources_section.dart';
 import 'eval_sources_section.dart';
 
 /// Settings form for repertoire tree generation (build mode, thresholds, eval sources).
@@ -317,7 +316,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<BuildMode>(
-          value: _buildMode,
+          initialValue: _buildMode,
           decoration: const InputDecoration(
             labelText: 'Build Mode',
             border: OutlineInputBorder(),
@@ -430,7 +429,11 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
         if (_buildMode == BuildMode.stockfishExpectimax ||
             _buildMode == BuildMode.dbExplorer) ...[
           const SizedBox(height: 12),
-          _buildEngineResourcesSection(context),
+          EngineResourcesSection(
+            threadsController: _engineThreadsCtrl,
+            isGenerating: widget.isGenerating,
+            isDbExplorer: _buildMode == BuildMode.dbExplorer,
+          ),
         ],
         const SizedBox(height: 12),
         InkWell(
@@ -456,7 +459,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
             children: [
               const SizedBox(height: 8),
               DropdownButtonFormField<SelectionMode>(
-                value: _selectionMode,
+                initialValue: _selectionMode,
                 decoration: const InputDecoration(
                   labelText: 'Line Selection',
                   border: OutlineInputBorder(),
@@ -593,7 +596,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                 Padding(
                   padding: const EdgeInsets.only(left: 8, bottom: 8),
                   child: DropdownButtonFormField<bool>(
-                    value: _annotateMaiaOnly,
+                    initialValue: _annotateMaiaOnly,
                     decoration: const InputDecoration(
                       labelText: 'Probability source',
                       border: OutlineInputBorder(),
@@ -612,8 +615,9 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                     onChanged: widget.isGenerating
                         ? null
                         : (v) {
-                            if (v != null)
+                            if (v != null) {
                               setState(() => _annotateMaiaOnly = v);
+                            }
                           },
                   ),
                 ),
@@ -767,78 +771,6 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     return Tooltip(message: tooltip, child: row);
   }
 
-  Widget _buildEngineResourcesSection(BuildContext context) {
-    final cores = getLogicalCores();
-    final threads = int.tryParse(_engineThreadsCtrl.text.trim()) ??
-        defaultEngineThreads();
-    final clamped = threads.clamp(1, cores);
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: scheme.outlineVariant.withAlpha(80)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.memory_outlined, size: 16, color: scheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                'Engine resources',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Your system has $cores logical core${cores == 1 ? '' : 's'}. '
-            'Tree build uses 1 Stockfish worker with UCI Threads set below.',
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 140,
-                child: _numField(
-                  _engineThreadsCtrl,
-                  'Engine Threads',
-                  tooltip:
-                      'Stockfish UCI threads during tree build (1–$cores). '
-                      'MultiPV searches benefit strongly from multiple threads.',
-                ),
-              ),
-              _ConfigStatChip(
-                label: '$clamped thread${clamped == 1 ? '' : 's'} active',
-                color: scheme.primary,
-              ),
-              _ConfigStatChip(
-                label: '$kPoolHashPerWorkerMb MB hash',
-                color: scheme.secondary,
-              ),
-            ],
-          ),
-          if (_buildMode == BuildMode.dbExplorer) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Engine runs during eval enrichment after the PGN tree is built.',
-              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
   String _buildModeLabel(BuildMode mode) {
     switch (mode) {
       case BuildMode.stockfishExpectimax:
@@ -893,28 +825,5 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     final parsed = double.tryParse(raw.replaceAll('%', '').trim());
     final safePercent = (parsed ?? fallbackPercent).clamp(0.0, 100.0);
     return safePercent / 100.0;
-  }
-}
-
-class _ConfigStatChip extends StatelessWidget {
-  const _ConfigStatChip({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withAlpha(32),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withAlpha(64)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(fontSize: 11, color: color.withAlpha(220)),
-      ),
-    );
   }
 }

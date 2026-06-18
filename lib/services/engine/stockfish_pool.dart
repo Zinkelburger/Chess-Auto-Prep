@@ -16,6 +16,7 @@ import '../../models/analysis/discovery_result.dart';
 import '../../models/engine_settings.dart';
 import 'eval_worker.dart';
 import 'stockfish_connection_factory.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 export 'eval_worker.dart' show EvalResult;
 export '../../models/analysis/discovery_result.dart';
@@ -73,8 +74,8 @@ class StockfishPool {
     }
 
     if (kDebugMode && _workers.isNotEmpty) {
-      print('[Pool] ${_workers.length} workers ready '
-          '(${kPoolHashPerWorkerMb} MB hash, '
+      log.i('[Pool] ${_workers.length} workers ready '
+          '($kPoolHashPerWorkerMb MB hash, '
           '$_threadsPerWorker thread(s) each)');
     }
   }
@@ -106,7 +107,7 @@ class StockfishPool {
       );
       return worker;
     } catch (e) {
-      if (kDebugMode) print('[Pool] Worker #$index spawn failed: $e');
+      if (kDebugMode) log.e('[Pool] Worker #$index spawn failed: $e');
       return null;
     }
   }

@@ -26,6 +26,7 @@ import 'generation/generation_config.dart';
 import 'generation/pgn_freq_map.dart';
 import 'generation/tree_build_progress.dart';
 import 'generation/tree_eval_resolver.dart';
+import 'generation/tree_prune.dart';
 import 'maia_factory.dart';
 import 'maia_service.dart';
 
@@ -185,7 +186,7 @@ class TreeBuildService {
       await _evalResolver.teardownProviders();
     }
 
-    final pruned = _pruneEvalTooLow(tree);
+    final pruned = pruneEvalTooLow(tree);
     if (pruned > 0) {
       _log('Pruned $pruned eval-too-low nodes');
     }
@@ -417,7 +418,7 @@ class TreeBuildService {
     if (canonical != null) {
       fenMap.addTransposition(node.fen, node);
       if (node.cumulativeProbability > canonical.cumulativeProbability) {
-        _propagateHigherCumP(
+        propagateHigherCumP(
           canonical,
           node.cumulativeProbability,
           config.minProbability,
@@ -781,7 +782,7 @@ class TreeBuildService {
     if (canonical != null) {
       fenMap.addTransposition(node.fen, node);
       if (node.cumulativeProbability > canonical.cumulativeProbability) {
-        _propagateHigherCumP(
+        propagateHigherCumP(
           canonical,
           node.cumulativeProbability,
           config.minProbability,
@@ -1375,37 +1376,6 @@ class TreeBuildService {
 
   // ── Prune eval-too-low (post-build cleanup) ────────────────────────────
 
-  int _pruneEvalTooLow(BuildTree tree) {
-    final removed = _pruneRecursive(tree, tree.root);
-    if (removed > 0) {
-      tree.totalNodes = tree.root.countSubtree();
-    }
-    return removed;
-  }
-
-  int _pruneRecursive(BuildTree tree, BuildTreeNode node) {
-    int removed = 0;
-    for (int i = node.children.length - 1; i >= 0; i--) {
-      final child = node.children[i];
-      if (child.pruneReason == PruneReason.evalTooLow) {
-        final subtreeSize = child.countSubtree();
-        _removeFromIndex(tree, child);
-        node.children.removeAt(i);
-        removed += subtreeSize;
-      } else {
-        removed += _pruneRecursive(tree, child);
-      }
-    }
-    return removed;
-  }
-
-  void _removeFromIndex(BuildTree tree, BuildTreeNode node) {
-    tree.nodeIndex.remove(node.nodeId);
-    for (final child in node.children) {
-      _removeFromIndex(tree, child);
-    }
-  }
-
   // ── Helpers ────────────────────────────────────────────────────────────
 
   BuildTreeNode? _makeChild({
@@ -1445,37 +1415,6 @@ class TreeBuildService {
       if (childMax > maxId) maxId = childMax;
     }
     return maxId;
-  }
-
-  /// Scale cumulative probability through a canonical subtree when a
-  /// transposition path has higher probability (matches C `propagate_higher_cumP`).
-  void _propagateHigherCumP(
-    BuildTreeNode canonical,
-    double newCumP,
-    double minProbability,
-    Queue<BuildTreeNode> queue,
-  ) {
-    if (newCumP <= canonical.cumulativeProbability) return;
-    final ratio = newCumP / canonical.cumulativeProbability;
-    canonical.cumulativeProbability = newCumP;
-    _propagateCumPRecursive(canonical, ratio, minProbability, queue);
-  }
-
-  void _propagateCumPRecursive(
-    BuildTreeNode node,
-    double ratio,
-    double minProbability,
-    Queue<BuildTreeNode> queue,
-  ) {
-    for (final child in node.children) {
-      child.cumulativeProbability *= ratio;
-      if (child.children.isNotEmpty) {
-        _propagateCumPRecursive(child, ratio, minProbability, queue);
-      } else if (!child.explored &&
-          child.cumulativeProbability >= minProbability) {
-        queue.add(child);
-      }
-    }
   }
 
   bool _fenKeysEqual(String fenA, String fenB) {

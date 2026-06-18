@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'engine_connection.dart';
 import '../../models/analysis/discovery_result.dart';
 import '../../utils/eval_constants.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 // ── Eval result (side-to-move perspective) ────────────────────────────────
 
@@ -68,7 +69,7 @@ class EvalWorker {
     _sub = engine.stdout.listen(
       _onOutput,
       onError: (Object error) {
-        if (kDebugMode) print('[EvalWorker] Engine stream error: $error');
+        if (kDebugMode) log.e('[EvalWorker] Engine stream error: $error');
         _evalCompleter?.completeError(error);
         _evalCompleter = null;
         _discoveryCompleter?.completeError(error);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../services/engine/engine_lifecycle.dart';
 
@@ -9,54 +10,50 @@ class EngineToggleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: EngineLifecycle(),
-      builder: (context, _) {
-        final state = EngineLifecycle().state;
-        final isOn = state != EngineState.off;
-        final isGenerating = state == EngineState.generating;
-        final isAnalyzing = state == EngineState.analyzing;
+    final lifecycle = context.watch<EngineLifecycle>();
+    final state = lifecycle.state;
+    final isOn = state != EngineState.off;
+    final isGenerating = state == EngineState.generating;
+    final isAnalyzing = state == EngineState.analyzing;
 
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: isAnalyzing
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    )
-                  : Icon(
-                      Icons.bolt,
-                      color: isGenerating
-                          ? Colors.grey
-                          : isOn
-                              ? Theme.of(context).colorScheme.primary
-                              : Colors.grey,
-                    ),
-              tooltip: isGenerating
-                  ? 'Engine busy (generating)'
-                  : isOn
-                      ? 'Disable engine analysis'
-                      : 'Enable engine analysis',
-              onPressed: isGenerating
-                  ? null
-                  : () {
-                      if (isOn) {
-                        EngineLifecycle().toggleOff();
-                      } else {
-                        EngineLifecycle().toggleOn();
-                      }
-                    },
-              visualDensity: VisualDensity.compact,
-            ),
-          ],
-        );
-      },
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          icon: isAnalyzing
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                )
+              : Icon(
+                  Icons.bolt,
+                  color: isGenerating
+                      ? Colors.grey
+                      : isOn
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey,
+                ),
+          tooltip: isGenerating
+              ? 'Engine busy (generating)'
+              : isOn
+                  ? 'Disable engine analysis'
+                  : 'Enable engine analysis',
+          onPressed: isGenerating
+              ? null
+              : () {
+                  if (isOn) {
+                    lifecycle.toggleOff();
+                  } else {
+                    lifecycle.toggleOn();
+                  }
+                },
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
     );
   }
 }

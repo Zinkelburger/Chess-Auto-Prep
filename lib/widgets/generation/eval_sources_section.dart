@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/eval_database_settings.dart';
 import '../../services/eval/chessdb_api_provider.dart';
@@ -208,10 +209,9 @@ class EvalSourcesSectionState extends State<EvalSourcesSection> {
         ),
         const SizedBox(height: 8),
         if (widget.cdbDirectAvailable)
-          ListenableBuilder(
-            listenable: EvalDatabaseSettings.instance,
-            builder: (context, _) {
-              final dbSettings = EvalDatabaseSettings.instance;
+          Builder(
+            builder: (context) {
+              final dbSettings = context.watch<EvalDatabaseSettings>();
               return ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(

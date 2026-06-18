@@ -207,8 +207,9 @@ class CdbDirectEvalProvider implements ExternalEvalProvider {
       _finalize = _lib!
           .lookupFunction<_FinalizeNative, _FinalizeDart>('cdbdirect_finalize');
     } catch (e) {
-      if (kDebugMode)
+      if (kDebugMode) {
         debugPrint('[CdbDirectEvalProvider] symbol load failed: $e');
+      }
       _lib = null;
       return false;
     }

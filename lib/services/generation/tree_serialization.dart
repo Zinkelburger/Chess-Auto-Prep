@@ -96,8 +96,9 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
   }
 
   if (node.isRepertoireMove) obj['is_repertoire_move'] = true;
-  if (node.repertoireScore != 0.0)
+  if (node.repertoireScore != 0.0) {
     obj['repertoire_score'] = node.repertoireScore;
+  }
 
   if (node.children.isNotEmpty) {
     obj['children'] = node.children.map(_nodeToJson).toList();
