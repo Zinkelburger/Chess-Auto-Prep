@@ -4,18 +4,10 @@ import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
-    show
-        filterDisplayComment,
-        buildMovetext,
-        formatProseComment,
-        NagInfo,
-        kMoveNags,
-        nagSymbol,
-        nagColor;
-import 'package:chess_auto_prep/models/analysis_node.dart';
-import 'package:chess_auto_prep/theme/app_colors.dart';
-
-export 'package:chess_auto_prep/models/analysis_node.dart';
+    show buildMovetext;
+import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
+import 'package:chess_auto_prep/core/pgn/pgn_variation_extractor.dart';
 
 class PgnViewerWidgetController {
   _PgnViewerWidgetState? _state;
@@ -143,11 +135,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   bool _isLoading = true;
   String? _error;
 
-  // Variations: ply (0-based mainline index) -> list of root AnalysisNodes.
+  // Variations: ply (0-based mainline index) -> list of root MoveNodes.
   // Supports multiple branch points simultaneously.
-  Map<int, List<AnalysisNode>> _variationsByPly = {};
+  Map<int, List<MoveNode>> _variationsByPly = {};
   int _activeBranchPly = -1; // which ply we're currently navigating in
-  List<AnalysisNode> _analysisPath = [];
+  List<MoveNode> _analysisPath = [];
 
   @override
   bool get wantKeepAlive => true;
@@ -226,7 +218,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       if (!mounted) return;
 
       final startPos = startPositionFromGame(game);
-      final pgnVariations = _extractPgnVariations(game, startPos);
+      final pgnVariations = extractPgnVariations(game, startPos);
 
       setState(() {
         _game = game;
@@ -259,85 +251,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         _isLoading = false;
       });
     }
-  }
-
-  // ── PGN variation extraction ──
-
-  /// Walk the parsed PGN tree and extract sideline variations at each ply.
-  Map<int, List<AnalysisNode>> _extractPgnVariations(
-      PgnGame game, Position startPos) {
-    final result = <int, List<AnalysisNode>>{};
-
-    PgnNode<PgnNodeData> node = game.moves;
-    Position pos = startPos;
-    int ply = 0;
-
-    while (node.children.isNotEmpty) {
-      final mainChild = node.children[0];
-
-      // Sideline variations at this ply (children[1+])
-      if (node.children.length > 1) {
-        final variations = <AnalysisNode>[];
-        for (int i = 1; i < node.children.length; i++) {
-          final sidelineRoot = node.children[i];
-          final converted = _convertPgnSubtree(sidelineRoot, pos);
-          if (converted != null) variations.add(converted);
-        }
-        if (variations.isNotEmpty) {
-          result[ply] = variations;
-        }
-      }
-
-      // Advance position along mainline (skip null moves)
-      if (mainChild.data.san != '--') {
-        final move = pos.parseSan(mainChild.data.san);
-        if (move == null) break;
-        pos = pos.play(move);
-      }
-      ply++;
-      node = mainChild;
-    }
-
-    return result;
-  }
-
-  /// Recursively convert a PgnChildNode subtree into an AnalysisNode tree.
-  AnalysisNode? _convertPgnSubtree(
-      PgnChildNode<PgnNodeData> pgnNode, Position posBeforeMove) {
-    final san = pgnNode.data.san;
-
-    Position posAfter;
-    if (san == '--') {
-      posAfter = posBeforeMove;
-    } else {
-      final move = posBeforeMove.parseSan(san);
-      if (move == null) return null;
-      try {
-        posAfter = posBeforeMove.play(move);
-      } catch (_) {
-        return null;
-      }
-    }
-
-    final comment =
-        (pgnNode.data.comments != null && pgnNode.data.comments!.isNotEmpty)
-            ? pgnNode.data.comments!.first
-            : null;
-
-    final node = AnalysisNode(
-      san: san,
-      fenAfter: posAfter.fen,
-      isEphemeral: false,
-      comment: comment,
-    );
-
-    // Convert children: children[0] is main continuation, [1+] are sub-variations
-    for (int i = 0; i < pgnNode.children.length; i++) {
-      final childNode = _convertPgnSubtree(pgnNode.children[i], posAfter);
-      if (childNode != null) node.children.add(childNode);
-    }
-
-    return node;
   }
 
   // ── Game search ──
@@ -431,7 +344,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     widget.onPositionChanged?.call(pos);
   }
 
-  void _goToAnalysisNode(AnalysisNode targetNode, int branchPly) {
+  void _goToAnalysisNode(MoveNode targetNode, int branchPly) {
     final roots = _variationsByPly[branchPly];
     if (roots == null) return;
 
@@ -462,8 +375,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     widget.onPositionChanged?.call(pos);
   }
 
-  List<AnalysisNode>? _findPathToNode(
-      AnalysisNode target, List<AnalysisNode> roots) {
+  List<MoveNode>? _findPathToNode(
+      MoveNode target, List<MoveNode> roots) {
     for (final root in roots) {
       final path = _findPathRecursive(root, target, []);
       if (path != null) return path;
@@ -471,8 +384,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     return null;
   }
 
-  List<AnalysisNode>? _findPathRecursive(
-      AnalysisNode current, AnalysisNode target, List<AnalysisNode> pathSoFar) {
+  List<MoveNode>? _findPathRecursive(
+      MoveNode current, MoveNode target, List<MoveNode> pathSoFar) {
     final newPath = [...pathSoFar, current];
     if (current.id == target.id) return newPath;
     for (final child in current.children) {
@@ -512,7 +425,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   void _goToEnd() {
     if (_analysisPath.isNotEmpty) {
-      AnalysisNode current = _analysisPath.last;
+      MoveNode current = _analysisPath.last;
       while (current.children.isNotEmpty) {
         current = current.children.first;
       }
@@ -561,7 +474,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         final roots = _variationsByPly.putIfAbsent(ply, () => []);
 
         // Check if this move already exists
-        AnalysisNode? existing;
+        MoveNode? existing;
         for (final root in roots) {
           if (root.san == san) {
             existing = root;
@@ -573,7 +486,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           _analysisPath = [existing];
         } else {
           final newNode =
-              AnalysisNode(san: san, fenAfter: fenAfter, isEphemeral: true);
+              MoveNode(san: san, fen: fenAfter, isEphemeral: true);
           roots.add(newNode);
           _analysisPath = [newNode];
         }
@@ -611,14 +524,14 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     });
   }
 
-  void _removeEphemeralChildren(AnalysisNode node) {
+  void _removeEphemeralChildren(MoveNode node) {
     node.children.removeWhere((c) => c.isEphemeral);
     for (final child in node.children) {
       _removeEphemeralChildren(child);
     }
   }
 
-  bool _subtreeHasEphemeral(AnalysisNode node) {
+  bool _subtreeHasEphemeral(MoveNode node) {
     if (node.isEphemeral) return true;
     for (final child in node.children) {
       if (_subtreeHasEphemeral(child)) return true;
@@ -663,7 +576,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     });
   }
 
-  bool _removeNodeRecursive(List<AnalysisNode> nodes, int targetId) {
+  bool _removeNodeRecursive(List<MoveNode> nodes, int targetId) {
     for (final node in nodes) {
       if (node.children.any((c) => c.id == targetId)) {
         node.children.removeWhere((c) => c.id == targetId);
@@ -817,8 +730,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     widget.onCommentsChanged!(buildMovetext(_moveHistory, result: result));
   }
 
-  String _filterComment(String comment) => filterDisplayComment(comment);
-
   // ── Build ──
 
   @override
@@ -868,7 +779,28 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(8),
-            child: _buildPgnDisplay(),
+            child: PgnMovetextView(
+              game: _game,
+              moveHistory: _moveHistory,
+              variationsByPly: _variationsByPly,
+              mainLineIndex: _mainLineIndex,
+              analysisPath: _analysisPath,
+              selectedMoveIndex: _selectedMoveIndex,
+              editingCommentIndex: _editingCommentIndex,
+              editMode: widget.editMode,
+              canEditComments: widget.onCommentsChanged != null,
+              onMainLineMoveClicked: _onMainLineMoveClicked,
+              onSelectMoveForAnnotation: _selectMoveForAnnotation,
+              onShowMoveContextMenu: _showMoveContextMenu,
+              onStartEditingComment: _startEditingComment,
+              onToggleNag: _toggleNag,
+              onSaveComment: _saveComment,
+              onCancelEditingComment: _cancelEditingComment,
+              onDismissAnnotation: () =>
+                  setState(() => _selectedMoveIndex = null),
+              onGoToAnalysisNode: _goToAnalysisNode,
+              onAnalysisNodeAction: widget.onAnalysisNodeAction,
+            ),
           ),
         ),
         Container(
@@ -898,705 +830,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           ),
         ),
       ],
-    );
-  }
-
-  String _rawComment(PgnNodeData moveData) {
-    if (moveData.comments == null || moveData.comments!.isEmpty) return '';
-    return moveData.comments!.first;
-  }
-
-  Widget _buildPgnDisplay() {
-    if (_moveHistory.isEmpty &&
-        _variationsByPly.isEmpty &&
-        (_game == null || _game!.comments.isEmpty)) {
-      return const SizedBox();
-    }
-
-    final children = <Widget>[];
-    final spans = <InlineSpan>[];
-    var moveNumber = 1;
-    var isWhiteTurn = true;
-
-    const baseStyle = TextStyle(
-      fontFamily: 'monospace',
-      fontSize: 14,
-      color: AppColors.pgnMove,
-    );
-
-    void flushSpans() {
-      if (spans.isNotEmpty) {
-        children.add(RichText(
-          text: TextSpan(style: baseStyle, children: List.of(spans)),
-        ));
-        spans.clear();
-      }
-    }
-
-    // Game-level comments (before any moves) — common in book PGNs
-    if (_game != null && _game!.comments.isNotEmpty) {
-      for (final comment in _game!.comments) {
-        final paragraphs = formatProseComment(comment);
-        if (paragraphs.isNotEmpty) {
-          children.add(_buildProseBlock(paragraphs));
-        }
-      }
-    }
-
-    // Variations at ply 0 (before any move)
-    final varsAtZero = _variationsByPly[0];
-    if (varsAtZero != null && varsAtZero.isNotEmpty) {
-      spans.addAll(_buildVariationSpansAtPly(0));
-    }
-
-    for (int i = 0; i < _moveHistory.length; i++) {
-      final moveData = _moveHistory[i];
-      final san = moveData.san;
-
-      // Render startingComments (comments before the move)
-      if (moveData.startingComments != null &&
-          moveData.startingComments!.isNotEmpty) {
-        for (final sc in moveData.startingComments!) {
-          final paragraphs = formatProseComment(sc);
-          if (paragraphs.isNotEmpty) {
-            flushSpans();
-            children.add(_buildProseBlock(paragraphs));
-          }
-        }
-      }
-
-      // Skip rendering null-move SAN but still show its comments
-      if (san == '--') {
-        if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-          final comment = _filterComment(moveData.comments!.first);
-          if (comment.isNotEmpty) {
-            final paragraphs = formatProseComment(moveData.comments!.first);
-            if (paragraphs.isNotEmpty) {
-              flushSpans();
-              children.add(_buildProseBlock(paragraphs));
-            } else {
-              spans.add(_buildCommentSpan(comment));
-            }
-          }
-        }
-        if (!isWhiteTurn) moveNumber++;
-        isWhiteTurn = !isWhiteTurn;
-        continue;
-      }
-
-      if (isWhiteTurn) {
-        spans.add(TextSpan(
-          text: '$moveNumber. ',
-          style: const TextStyle(
-            color: AppColors.pgnMoveNumber,
-            fontFamily: 'monospace',
-          ),
-        ));
-      }
-
-      final isCurrentMove = i == _mainLineIndex - 1 && _analysisPath.isEmpty;
-      final hasBranch = _variationsByPly.containsKey(i + 1);
-
-      final canEditComments = widget.onCommentsChanged != null;
-      final inEditMode = widget.editMode;
-      final isSelected = inEditMode && _selectedMoveIndex == i;
-
-      // Determine move color: in edit mode, NAG color takes priority
-      final moveNag = (inEditMode &&
-              moveData.nags != null &&
-              moveData.nags!.isNotEmpty)
-          ? moveData.nags!.firstWhere((n) => n >= 1 && n <= 6, orElse: () => 0)
-          : 0;
-      final nagMoveColor = moveNag > 0 ? nagColor(moveNag) : null;
-
-      final moveColor = isCurrentMove
-          ? AppColors.pgnMoveCurrent
-          : (nagMoveColor ??
-              (hasBranch ? AppColors.lichessDb : AppColors.info));
-
-      // Build SAN + NAG text
-      final nagSuffix = (inEditMode &&
-              moveData.nags != null &&
-              moveData.nags!.isNotEmpty)
-          ? moveData.nags!.where((n) => n >= 1 && n <= 6).map(nagSymbol).join()
-          : '';
-
-      spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              _onMainLineMoveClicked(i);
-              if (inEditMode) _selectMoveForAnnotation(i);
-            },
-            onSecondaryTapDown: inEditMode
-                ? (details) => _showMoveContextMenu(i, details.globalPosition)
-                : (canEditComments ? (_) => _startEditingComment(i) : null),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-              decoration: BoxDecoration(
-                color: isCurrentMove
-                    ? AppColors.pgnMoveCurrentBg
-                    : (isSelected
-                        ? AppColors.pgnMoveCurrentBg.withValues(alpha: 0.5)
-                        : null),
-                borderRadius: BorderRadius.circular(3),
-                border: isSelected
-                    ? Border.all(
-                        color: moveColor.withValues(alpha: 0.6), width: 1)
-                    : null,
-              ),
-              child: Text.rich(
-                TextSpan(children: [
-                  TextSpan(
-                    text: san,
-                    style: TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 14,
-                      color: moveColor,
-                      fontWeight:
-                          isCurrentMove ? FontWeight.w500 : FontWeight.normal,
-                      decoration:
-                          isCurrentMove ? null : TextDecoration.underline,
-                      decorationColor:
-                          AppColors.onSurfaceDim.withValues(alpha: 0.45),
-                      decorationStyle: TextDecorationStyle.dotted,
-                    ),
-                  ),
-                  if (nagSuffix.isNotEmpty)
-                    TextSpan(
-                      text: nagSuffix,
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: nagMoveColor ?? AppColors.pgnMove,
-                      ),
-                    ),
-                ]),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      spans.add(const TextSpan(text: ' '));
-
-      // Annotation toolbar (edit mode only)
-      if (isSelected && _editingCommentIndex != i) {
-        flushSpans();
-        children.add(_AnnotationToolbar(
-          moveIndex: i,
-          currentNags: moveData.nags ?? [],
-          onToggleNag: (nagId) => _toggleNag(i, nagId),
-          onComment: () => _startEditingComment(i),
-          onDismiss: () => setState(() => _selectedMoveIndex = null),
-        ));
-      }
-
-      // Inline comment editor
-      if (_editingCommentIndex == i) {
-        flushSpans();
-        children.add(_CommentEditor(
-          initialText: _rawComment(moveData),
-          onSave: (text) => _saveComment(i, text),
-          onCancel: _cancelEditingComment,
-        ));
-      } else if (moveData.comments != null && moveData.comments!.isNotEmpty) {
-        final raw = moveData.comments!.first;
-        final comment = _filterComment(raw);
-        if (comment.isNotEmpty) {
-          final paragraphs = formatProseComment(raw);
-          if (paragraphs.length > 1 || comment.length > 200) {
-            flushSpans();
-            children.add(_buildProseBlock(paragraphs));
-          } else {
-            spans.add(_buildCommentSpan(comment));
-          }
-        }
-      }
-
-      // Render variations at this ply (ply = i+1 because variations branch
-      // *after* the move at index i has been played)
-      final ply = i + 1;
-      final varsHere = _variationsByPly[ply];
-      if (varsHere != null && varsHere.isNotEmpty) {
-        spans.addAll(_buildVariationSpansAtPly(ply));
-      }
-
-      if (!isWhiteTurn) moveNumber++;
-      isWhiteTurn = !isWhiteTurn;
-    }
-
-    // Variations after last move
-    final endPly = _moveHistory.length;
-    final varsAtEnd = _variationsByPly[endPly];
-    if (varsAtEnd != null && varsAtEnd.isNotEmpty) {
-      spans.addAll(_buildVariationSpansAtPly(endPly));
-    }
-
-    flushSpans();
-
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: children,
-    );
-  }
-
-  /// Build an inline comment WidgetSpan (short comments alongside moves).
-  WidgetSpan _buildCommentSpan(String comment) {
-    return WidgetSpan(
-      alignment: PlaceholderAlignment.baseline,
-      baseline: TextBaseline.alphabetic,
-      child: Text(
-        '$comment ',
-        style: const TextStyle(
-          fontSize: 14,
-          height: 1.35,
-          color: AppColors.pgnComment,
-        ),
-      ),
-    );
-  }
-
-  /// Build a prose block widget for long/multi-paragraph comments (book-style).
-  Widget _buildProseBlock(List<String> paragraphs) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppColors.pgnComment.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(6),
-        border: Border(
-          left: BorderSide(
-            color: AppColors.pgnComment.withValues(alpha: 0.3),
-            width: 3,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (int i = 0; i < paragraphs.length; i++) ...[
-            if (i > 0) const SizedBox(height: 8),
-            Text(
-              paragraphs[i],
-              style: const TextStyle(
-                fontSize: 13.5,
-                height: 1.5,
-                color: AppColors.pgnComment,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// Build variation spans for all roots at a given ply.
-  List<InlineSpan> _buildVariationSpansAtPly(int ply) {
-    final roots = _variationsByPly[ply];
-    if (roots == null || roots.isEmpty) return const [];
-
-    final spans = <InlineSpan>[];
-    final moveNum = (ply ~/ 2) + 1;
-    final isWhiteTurn = ply % 2 == 0;
-
-    for (final root in roots) {
-      final bracketColor = root.isEphemeral
-          ? AppColors.pgnEphemeralMove
-          : AppColors.pgnVariation;
-
-      spans.add(TextSpan(
-        text: '( ',
-        style: TextStyle(
-          color: bracketColor,
-          fontFamily: 'monospace',
-        ),
-      ));
-
-      spans.addAll(_buildNodeSpans(root, moveNum, isWhiteTurn, true, ply));
-
-      spans.add(TextSpan(
-        text: ') ',
-        style: TextStyle(
-          color: bracketColor,
-          fontFamily: 'monospace',
-        ),
-      ));
-    }
-
-    return spans;
-  }
-
-  /// Recursively build spans for a node and its children.
-  List<InlineSpan> _buildNodeSpans(AnalysisNode node, int moveNumber,
-      bool isWhiteTurn, bool isFirst, int branchPly) {
-    final spans = <InlineSpan>[];
-    final moveColor =
-        node.isEphemeral ? AppColors.pgnEphemeralMove : AppColors.pgnVariation;
-    const numColor = AppColors.pgnMoveNumber;
-
-    // For null-move variation nodes, skip the move display entirely and just
-    // show the comment inline.
-    if (node.san == '--') {
-      if (node.comment != null && node.comment!.isNotEmpty) {
-        final filtered = _filterComment(node.comment!);
-        if (filtered.isNotEmpty) {
-          spans.add(WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: Text(
-              '$filtered ',
-              style: const TextStyle(
-                fontSize: 13.5,
-                height: 1.4,
-                color: AppColors.pgnComment,
-              ),
-            ),
-          ));
-        }
-      }
-      return spans;
-    }
-
-    if (isWhiteTurn) {
-      spans.add(TextSpan(
-        text: '$moveNumber. ',
-        style: const TextStyle(
-          color: numColor,
-          fontFamily: 'monospace',
-        ),
-      ));
-    } else if (isFirst) {
-      spans.add(TextSpan(
-        text: '$moveNumber... ',
-        style: const TextStyle(
-          color: numColor,
-          fontFamily: 'monospace',
-        ),
-      ));
-    }
-
-    final isCurrentNode =
-        _analysisPath.isNotEmpty && _analysisPath.last.id == node.id;
-
-    spans.add(
-      WidgetSpan(
-        alignment: PlaceholderAlignment.baseline,
-        baseline: TextBaseline.alphabetic,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _goToAnalysisNode(node, branchPly),
-          onSecondaryTapDown: widget.onAnalysisNodeAction != null &&
-                  node.isEphemeral
-              ? (details) =>
-                  widget.onAnalysisNodeAction!(node.id, details.globalPosition)
-              : null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-            decoration: isCurrentNode
-                ? BoxDecoration(
-                    color: node.isEphemeral
-                        ? AppColors.pgnEphemeralBg
-                        : AppColors.pgnMoveCurrentBg,
-                    borderRadius: BorderRadius.circular(3),
-                  )
-                : null,
-            child: Text(
-              node.san,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                color: isCurrentNode
-                    ? (node.isEphemeral
-                        ? AppColors.pgnMoveCurrent
-                        : AppColors.pgnMainLine)
-                    : moveColor,
-                fontWeight: isCurrentNode ? FontWeight.w500 : FontWeight.normal,
-                decoration: isCurrentNode ? null : TextDecoration.underline,
-                decorationColor: AppColors.onSurfaceDim.withValues(alpha: 0.45),
-                decorationStyle: TextDecorationStyle.dotted,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    spans.add(const TextSpan(text: ' '));
-
-    // Show comment after the move (for non-null-move variation nodes)
-    if (node.comment != null && node.comment!.isNotEmpty) {
-      final filtered = _filterComment(node.comment!);
-      if (filtered.isNotEmpty) {
-        spans.add(WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: Text(
-            '$filtered ',
-            style: const TextStyle(
-              fontSize: 13.5,
-              height: 1.4,
-              color: AppColors.pgnComment,
-            ),
-          ),
-        ));
-      }
-    }
-
-    final nextMoveNumber = isWhiteTurn ? moveNumber : moveNumber + 1;
-    final nextIsWhite = !isWhiteTurn;
-
-    if (node.children.isNotEmpty) {
-      spans.addAll(_buildNodeSpans(
-          node.children.first, nextMoveNumber, nextIsWhite, false, branchPly));
-
-      for (int i = 1; i < node.children.length; i++) {
-        final variation = node.children[i];
-        final subColor = variation.isEphemeral
-            ? AppColors.pgnEphemeralMove
-            : AppColors.pgnVariation;
-
-        spans.add(TextSpan(
-          text: '( ',
-          style: TextStyle(
-            color: subColor,
-            fontFamily: 'monospace',
-          ),
-        ));
-        spans.addAll(_buildNodeSpans(
-            variation, nextMoveNumber, nextIsWhite, true, branchPly));
-        spans.add(TextSpan(
-          text: ') ',
-          style: TextStyle(
-            color: subColor,
-            fontFamily: 'monospace',
-          ),
-        ));
-      }
-    }
-
-    return spans;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Annotation toolbar widget (edit mode)
-// ---------------------------------------------------------------------------
-class _AnnotationToolbar extends StatelessWidget {
-  final int moveIndex;
-  final List<int> currentNags;
-  final ValueChanged<int> onToggleNag;
-  final VoidCallback onComment;
-  final VoidCallback onDismiss;
-
-  const _AnnotationToolbar({
-    required this.moveIndex,
-    required this.currentNags,
-    required this.onToggleNag,
-    required this.onComment,
-    required this.onDismiss,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.grey.withValues(alpha: 0.25),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final nag in kMoveNags)
-            _NagButton(
-              nag: nag,
-              isActive: currentNags.contains(nag.id),
-              onTap: () => onToggleNag(nag.id),
-            ),
-          const SizedBox(width: 4),
-          Container(
-            width: 1,
-            height: 22,
-            color: Colors.grey.withValues(alpha: 0.3),
-          ),
-          const SizedBox(width: 4),
-          _ToolbarIconButton(
-            icon: Icons.comment_outlined,
-            tooltip: 'Comment',
-            onTap: onComment,
-          ),
-          const SizedBox(width: 2),
-          _ToolbarIconButton(
-            icon: Icons.close,
-            tooltip: 'Dismiss',
-            onTap: onDismiss,
-            color: Colors.grey[600],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NagButton extends StatelessWidget {
-  final NagInfo nag;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _NagButton({
-    required this.nag,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: nag.name,
-      waitDuration: const Duration(milliseconds: 400),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          decoration: BoxDecoration(
-            color: isActive ? nag.color.withValues(alpha: 0.2) : null,
-            borderRadius: BorderRadius.circular(4),
-            border: isActive
-                ? Border.all(color: nag.color.withValues(alpha: 0.6), width: 1)
-                : null,
-          ),
-          child: Text(
-            nag.symbol,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'monospace',
-              color: isActive ? nag.color : Colors.grey[400],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ToolbarIconButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-  final Color? color;
-
-  const _ToolbarIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      waitDuration: const Duration(milliseconds: 400),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Icon(icon, size: 18, color: color ?? Colors.grey[400]),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Inline comment editor widget
-// ---------------------------------------------------------------------------
-class _CommentEditor extends StatefulWidget {
-  final String initialText;
-  final ValueChanged<String> onSave;
-  final VoidCallback onCancel;
-
-  const _CommentEditor({
-    required this.initialText,
-    required this.onSave,
-    required this.onCancel,
-  });
-
-  @override
-  State<_CommentEditor> createState() => _CommentEditorState();
-}
-
-class _CommentEditorState extends State<_CommentEditor> {
-  late TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialText);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              autofocus: true,
-              maxLines: null,
-              style: TextStyle(fontSize: 13, color: Colors.grey[200]),
-              decoration: InputDecoration(
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                border: InputBorder.none,
-                hintText: 'Comment',
-                hintStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-              onSubmitted: (v) => widget.onSave(v),
-            ),
-          ),
-          IconButton(
-            onPressed: () => widget.onSave(_controller.text),
-            icon: Icon(Icons.check, size: 18, color: Colors.grey[400]),
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-          ),
-          IconButton(
-            onPressed: widget.onCancel,
-            icon: Icon(Icons.close, size: 18, color: Colors.grey[500]),
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-          ),
-        ],
-      ),
     );
   }
 }

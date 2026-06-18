@@ -1,54 +1,25 @@
 import 'dart:async';
-import 'dart:isolate';
 import 'dart:math' as math;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../constants/engine_defaults.dart';
+import 'pgn/auto_play_engine.dart';
+import 'pgn/pgn_fen_index.dart';
+import 'pgn/slice_persistence.dart';
+import 'pgn/viewer_opening_tree.dart';
 import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart';
+import '../models/pgn_game_entry.dart';
+export '../models/pgn_game_entry.dart';
 import '../services/default_pgn_service.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
-import '../services/opening_tree_builder.dart';
-import '../utils/fen_utils.dart';
 import '../widgets/pgn_viewer_widget.dart';
-
-// ---------------------------------------------------------------------------
-// Lightweight model wrapping a single parsed game + its raw text for rewrite.
-// ---------------------------------------------------------------------------
-class PgnGameEntry {
-  final Map<String, String> headers;
-  String pgnText; // full single-game PGN (headers + moves)
-  int studyRating; // 0 = unrated, 1-5
-  String studySummary; // user's one-line summary of the game
-
-  PgnGameEntry({
-    required this.headers,
-    required this.pgnText,
-    this.studyRating = 0,
-    this.studySummary = '',
-  });
-
-  String get label {
-    final w = headers['White'] ?? '?';
-    final b = headers['Black'] ?? '?';
-    final wElo = headers['WhiteElo'];
-    final bElo = headers['BlackElo'];
-    final wStr =
-        wElo != null && wElo.isNotEmpty && wElo != '?' ? '$w ($wElo)' : w;
-    final bStr =
-        bElo != null && bElo.isNotEmpty && bElo != '?' ? '$b ($bElo)' : b;
-    final d = headers['Date'] ?? '';
-    return '$wStr vs $bStr  $d';
-  }
-}
 
 /// Board perspective mode persisted as [StudyPerspective] header on first game.
 enum PerspectiveMode { white, black, player }
@@ -254,7 +225,6 @@ class PgnViewerController extends ChangeNotifier {
 
   SliceConfig activeSliceConfig = const SliceConfig.empty();
   List<int>? _activeSliceIndices;
-  static const slicePrefsPrefix = 'pgn_slice:';
 
   int currentGameIndex = 0;
   Position currentPosition = Chess.initial;
@@ -262,30 +232,52 @@ class PgnViewerController extends ChangeNotifier {
 
   Perspective perspective = const Perspective();
 
-  bool showOpeningTree = false;
-  OpeningTree? openingTree;
-  bool buildingTree = false;
-  int treeBuildProcessed = 0;
-  int treeBuildTotal = 0;
-  int treeBuildGeneration = 0;
-  final Map<String, List<int>> treePositionGameCache = {};
-  List<String> treeCurrentMoveSequence = [];
+  late final ViewerOpeningTree _viewerTree = ViewerOpeningTree(
+    isActive: isActive,
+    onChanged: notifyListeners,
+    filteredGames: () => filteredGames,
+    allGames: () => allGames,
+    fenIndex: () => _fenIndex.value,
+    mainLineIndex: () => pgnWidgetController.mainLineIndex,
+    mainLineLength: () => pgnWidgetController.mainLineLength,
+    currentFen: () => currentPosition.fen,
+    applyPosition: (pos) => currentPosition = pos,
+    onReclaimFocus: () => onReclaimFocus?.call(),
+  );
 
-  Map<String, List<int>>? _fenIndex;
-  int _fenIndexGeneration = 0;
+  bool get showOpeningTree => _viewerTree.showOpeningTree;
+  OpeningTree? get openingTree => _viewerTree.openingTree;
+  bool get buildingTree => _viewerTree.buildingTree;
+  int get treeBuildProcessed => _viewerTree.treeBuildProcessed;
+  int get treeBuildTotal => _viewerTree.treeBuildTotal;
+  List<String> get treeCurrentMoveSequence => _viewerTree.treeCurrentMoveSequence;
+
+  late final PgnFenIndex _fenIndex = PgnFenIndex(
+    isActive: isActive,
+    onChanged: notifyListeners,
+  );
 
   /// Read-only access to the precomputed FEN → game-indices map.
   /// Returns null while the index is being built.
-  Map<String, List<int>>? get fenIndex => _fenIndex;
+  Map<String, List<int>>? get fenIndex => _fenIndex.value;
 
   bool isLoading = false;
 
-  Timer? autoPlayTimer;
-  bool isAutoPlaying = false;
-  bool autoNextGame = false;
-  double autoPlayDelaySec = 1.0;
-  bool isFirstAutoPlayStep = false;
-  DateTime? lastAutoPlayStepTime;
+  /// Auto-play timer logic (extracted). The getters/methods below delegate
+  /// here so existing call-sites keep their API.
+  late final AutoPlayEngine _autoPlay = AutoPlayEngine(
+    isActive: isActive,
+    currentFen: () => pgnWidgetController.currentFen,
+    goForward: pgnWidgetController.goForward,
+    hasNextGame: () => currentGameIndex < filteredGames.length - 1,
+    nextGame: nextGame,
+    onChanged: notifyListeners,
+    schedulePostFrame: schedulePostFrame,
+  );
+
+  bool get isAutoPlaying => _autoPlay.isPlaying;
+  bool get autoNextGame => _autoPlay.autoNextGame;
+  double get autoPlayDelaySec => _autoPlay.delaySec;
 
   int? activeEngineLineMoveIdx;
 
@@ -305,12 +297,10 @@ class PgnViewerController extends ChangeNotifier {
 
   String? errorMessage;
 
-  static const maxTreeCacheEntries = 500;
-
   int get currentPly => pgnWidgetController.mainLineIndex;
 
   void disposeController() {
-    autoPlayTimer?.cancel();
+    _autoPlay.dispose();
     persistDebounce?.cancel();
   }
 
@@ -425,85 +415,30 @@ class PgnViewerController extends ChangeNotifier {
     sortMode = GameSortMode.fileOrder;
     currentGameIndex = 0;
     perspective = newPerspective;
-    openingTree = null;
-    showOpeningTree = false;
-    treeCurrentMoveSequence = [];
+    _viewerTree.resetForNewFile();
     notifyListeners();
 
     await addToRecentFiles(path);
-    await _tryLoadPersistedFenIndex(path, entries.length);
+    await _fenIndex.tryLoadPersisted(path, entries.length);
     await tryRestoreSavedSlice(path, entries);
     await loadCurrentGame();
-    if (_fenIndex == null) _buildFenIndex();
+    if (_fenIndex.value == null) _buildFenIndex();
   }
 
-  Future<void> _tryLoadPersistedFenIndex(String pgnPath, int gameCount) async {
-    try {
-      final storage = StorageFactory.instance;
-      final stat = await storage.fileStat(pgnPath);
-      if (stat == null) return;
-
-      final idxPath = '$pgnPath.fenidx';
-      if (!await storage.fileExists(idxPath)) return;
-      final data = await storage.readFile(idxPath);
-      if (data == null || data.isEmpty) return;
-      final index = pgn.deserializeFenIndex(
-        data,
-        expectedGameCount: gameCount,
-        expectedFileSize: stat.size,
-        expectedModifiedMs: stat.modified.millisecondsSinceEpoch,
-      );
-      if (index == null) return;
-      _fenIndex = index;
-    } catch (_) {
-      // Corrupt or unreadable — fall through to building from scratch.
-    }
-  }
-
-  Future<void> _buildFenIndex() async {
-    final generation = ++_fenIndexGeneration;
-    _fenIndex = null;
-
+  void _buildFenIndex() {
     final gameData = allGames
         .map((g) => (
               headers: Map<String, String>.from(g.headers),
               pgnText: g.pgnText,
             ))
         .toList();
-
-    final index = await Isolate.run(() => pgn.buildFenIndex(gameData));
-    if (!isActive() || generation != _fenIndexGeneration) return;
-
-    _fenIndex = index;
-    notifyListeners();
-    _persistFenIndex();
-  }
-
-  Future<void> _persistFenIndex() async {
-    if (filePath == null || _fenIndex == null) return;
-    try {
-      final storage = StorageFactory.instance;
-      final stat = await storage.fileStat(filePath!);
-      if (stat == null) return;
-      final data = pgn.serializeFenIndex(
-        _fenIndex!,
-        gameCount: allGames.length,
-        fileSize: stat.size,
-        modifiedMs: stat.modified.millisecondsSinceEpoch,
-      );
-      await storage.writeFile('$filePath.fenidx', data);
-    } catch (e) {
-      debugPrint('Failed to persist FEN index: $e');
-    }
+    _fenIndex.build(gameData, filePath: filePath, gameTotal: allGames.length);
   }
 
   Future<void> tryRestoreSavedSlice(
       String path, List<PgnGameEntry> entries) async {
-    final prefs = await SharedPreferences.getInstance();
-    final json = prefs.getString('$slicePrefsPrefix$path');
-    if (json == null) return;
-    final config = SliceConfig.fromJsonString(json);
-    if (config.isEmpty) return;
+    final config = await SlicePersistence.load(path);
+    if (config == null) return;
 
     final allRecords =
         entries.map((g) => (headers: g.headers, pgnText: g.pgnText)).toList();
@@ -632,91 +567,17 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void toggleAutoPlay() {
-    if (isAutoPlaying) {
-      stopAutoPlay();
-    } else {
-      startAutoPlay();
-    }
+    _autoPlay.toggle();
     onReclaimFocus?.call();
   }
 
-  void startAutoPlay() {
-    isFirstAutoPlayStep = true;
-    isAutoPlaying = true;
-    notifyListeners();
-    scheduleNextAutoPlayStep();
-  }
+  void startAutoPlay() => _autoPlay.start();
 
-  void stopAutoPlay() {
-    autoPlayTimer?.cancel();
-    autoPlayTimer = null;
-    if (isAutoPlaying) {
-      isAutoPlaying = false;
-      notifyListeners();
-    }
-  }
+  void stopAutoPlay() => _autoPlay.stop();
 
-  void scheduleNextAutoPlayStep() {
-    autoPlayTimer?.cancel();
-    if (!isAutoPlaying) return;
-    final delayMs =
-        isFirstAutoPlayStep ? 300 : (autoPlayDelaySec * 1000).round();
-    isFirstAutoPlayStep = false;
-    autoPlayTimer = Timer(Duration(milliseconds: delayMs), autoPlayStep);
-  }
+  void setAutoPlaySpeed(double val) => _autoPlay.setSpeed(val);
 
-  void autoPlayStep() {
-    if (!isActive() || !isAutoPlaying) return;
-    if (pgnWidgetController.currentFen == null) return;
-    lastAutoPlayStepTime = DateTime.now();
-
-    final fenBefore = pgnWidgetController.currentFen;
-    pgnWidgetController.goForward();
-
-    final checkAfterForward = () {
-      if (!isActive() || !isAutoPlaying) return;
-      final fenAfter = pgnWidgetController.currentFen;
-      if (fenAfter == fenBefore) {
-        if (autoNextGame && currentGameIndex < filteredGames.length - 1) {
-          nextGame();
-          startAutoPlay();
-        } else {
-          stopAutoPlay();
-        }
-      } else {
-        scheduleNextAutoPlayStep();
-      }
-    };
-
-    if (schedulePostFrame != null) {
-      schedulePostFrame!(checkAfterForward);
-    } else {
-      checkAfterForward();
-    }
-  }
-
-  void setAutoPlaySpeed(double val) {
-    autoPlayDelaySec = val;
-    notifyListeners();
-    if (!isAutoPlaying || lastAutoPlayStepTime == null) return;
-
-    autoPlayTimer?.cancel();
-    final elapsedMs =
-        DateTime.now().difference(lastAutoPlayStepTime!).inMilliseconds;
-    final newDelayMs = (val * 1000).round();
-    final remainingMs = newDelayMs - elapsedMs;
-
-    if (remainingMs <= 0) {
-      autoPlayStep();
-    } else {
-      autoPlayTimer = Timer(Duration(milliseconds: remainingMs), autoPlayStep);
-    }
-  }
-
-  void setAutoNextGame(bool value) {
-    autoNextGame = value;
-    notifyListeners();
-  }
+  void setAutoNextGame(bool value) => _autoPlay.setAutoNextGame(value);
 
   void toggleBoardFlipped() {
     boardFlipped = !boardFlipped;
@@ -787,7 +648,7 @@ class PgnViewerController extends ChangeNotifier {
     try {
       await StorageFactory.instance
           .writeFile(filePath!, '${result.join('\n\n')}\n');
-      _persistFenIndex();
+      _fenIndex.persist(filePath: filePath, gameTotal: allGames.length);
     } catch (e) {
       debugPrint('Failed to persist metadata: $e');
     }
@@ -815,10 +676,10 @@ class PgnViewerController extends ChangeNotifier {
     hasActiveFilters = filteredGames.length != allGames.length;
     activeSliceConfig = config;
     currentGameIndex = 0;
-    openingTree = null;
+    _viewerTree.clearTree();
     notifyListeners();
     persistSliceConfig(config);
-    if (showOpeningTree) rebuildOpeningTree();
+    if (showOpeningTree) _viewerTree.rebuild();
     loadCurrentGame();
   }
 
@@ -828,11 +689,11 @@ class PgnViewerController extends ChangeNotifier {
     activeSliceConfig = const SliceConfig.empty();
     _activeSliceIndices = null;
     currentGameIndex = 0;
-    openingTree = null;
+    _viewerTree.clearTree();
     notifyListeners();
     clearSavedSlice();
     applySortMode();
-    if (showOpeningTree) rebuildOpeningTree();
+    if (showOpeningTree) _viewerTree.rebuild();
     loadCurrentGame();
   }
 
@@ -902,28 +763,21 @@ class PgnViewerController extends ChangeNotifier {
     activeSliceConfig = newConfig;
     _activeSliceIndices = List<int>.from(indices);
     currentGameIndex = 0;
-    openingTree = null;
+    _viewerTree.clearTree();
     notifyListeners();
     persistSliceConfig(newConfig);
-    if (showOpeningTree) rebuildOpeningTree();
+    if (showOpeningTree) _viewerTree.rebuild();
     loadCurrentGame();
   }
 
   Future<void> persistSliceConfig(SliceConfig config) async {
     if (filePath == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    if (config.isEmpty) {
-      await prefs.remove('$slicePrefsPrefix$filePath');
-    } else {
-      await prefs.setString(
-          '$slicePrefsPrefix$filePath', config.toJsonString());
-    }
+    await SlicePersistence.save(filePath!, config);
   }
 
   Future<void> clearSavedSlice() async {
     if (filePath == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('$slicePrefsPrefix$filePath');
+    await SlicePersistence.clear(filePath!);
   }
 
   void setSortMode(GameSortMode mode) {
@@ -936,7 +790,7 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void applySortMode() {
-    treePositionGameCache.clear();
+    _viewerTree.clearCache();
     switch (sortMode) {
       case GameSortMode.fileOrder:
         if (hasActiveFilters) {
@@ -970,96 +824,22 @@ class PgnViewerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleOpeningTree() {
-    showOpeningTree = !showOpeningTree;
-    notifyListeners();
-    if (showOpeningTree && openingTree == null && filteredGames.isNotEmpty) {
-      rebuildOpeningTree();
-    } else if (showOpeningTree && openingTree != null) {
-      _syncTreeToCurrentPosition();
-    }
-    onReclaimFocus?.call();
-  }
+  void toggleOpeningTree() => _viewerTree.toggle();
 
-  Future<void> rebuildOpeningTree() async {
-    final generation = ++treeBuildGeneration;
-    if (filteredGames.isEmpty) {
-      openingTree = null;
-      buildingTree = false;
-      treeBuildProcessed = 0;
-      treeBuildTotal = 0;
-      treePositionGameCache.clear();
-      notifyListeners();
-      return;
-    }
-    buildingTree = true;
-    treeBuildProcessed = 0;
-    treeBuildTotal = filteredGames.length;
-    treePositionGameCache.clear();
-    notifyListeners();
+  Future<void> rebuildOpeningTree() => _viewerTree.rebuild();
 
-    try {
-      final tree = await OpeningTreeBuilder.buildTree(
-        pgnList: filteredGames.map((g) => g.pgnText).toList(),
-        username: '',
-        userIsWhite: null,
-        strictPlayerMatching: false,
-        maxDepth: kOpeningTreeMaxDepth,
-        onProgress: (processed, total) {
-          if (!isActive() || generation != treeBuildGeneration) return;
-          treeBuildProcessed = processed;
-          treeBuildTotal = total;
-          notifyListeners();
-        },
-      );
-      if (!isActive() || generation != treeBuildGeneration) return;
-      openingTree = tree;
-      buildingTree = false;
-      treeBuildProcessed = treeBuildTotal;
-      _syncTreeToCurrentPosition();
-      notifyListeners();
-    } catch (e) {
-      if (!isActive() || generation != treeBuildGeneration) return;
-      buildingTree = false;
-      openingTree = null;
-      treeBuildProcessed = 0;
-      treeBuildTotal = 0;
-      notifyListeners();
-      debugPrint('Failed to build opening tree: $e');
-    }
-  }
+  void onTreeMoveSelected(String move) => _viewerTree.onMoveSelected(move);
 
-  void onTreeMoveSelected(String move) {
-    if (openingTree == null) return;
-    if (openingTree!.makeMove(move)) {
-      treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
-      _updatePositionFromTree();
-    }
-    notifyListeners();
-  }
+  void onTreeGoBack() => _viewerTree.goBack();
 
-  void onTreeGoBack() {
-    if (openingTree == null) return;
-    openingTree!.goBack();
-    treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
-    _updatePositionFromTree();
-    notifyListeners();
-  }
-
-  void onTreeGoForward() {
-    if (openingTree == null) return;
-    final children = openingTree!.currentNode.sortedChildren;
-    if (children.isNotEmpty) {
-      onTreeMoveSelected(children.first.move);
-    }
-  }
+  void onTreeGoForward() => _viewerTree.goForward();
 
   // ── Unified navigation (mode-aware) ──
 
   void navigateBack() {
     stopAutoPlay();
     if (showOpeningTree) {
-      onTreeGoBack();
+      _viewerTree.goBack();
     } else {
       pgnWidgetController.goBack();
     }
@@ -1068,7 +848,7 @@ class PgnViewerController extends ChangeNotifier {
   void navigateForward() {
     stopAutoPlay();
     if (showOpeningTree) {
-      onTreeGoForward();
+      _viewerTree.goForward();
     } else {
       pgnWidgetController.goForward();
     }
@@ -1077,10 +857,7 @@ class PgnViewerController extends ChangeNotifier {
   void navigateToStart() {
     stopAutoPlay();
     if (showOpeningTree) {
-      openingTree?.reset();
-      treeCurrentMoveSequence = [];
-      _updatePositionFromTree();
-      notifyListeners();
+      _viewerTree.resetToStart();
     } else {
       pgnWidgetController.clearEphemeralMoves();
       pgnWidgetController.jumpToMove(1, true);
@@ -1090,16 +867,7 @@ class PgnViewerController extends ChangeNotifier {
   void navigateToEnd() {
     stopAutoPlay();
     if (showOpeningTree) {
-      while (openingTree != null &&
-          openingTree!.currentNode.sortedChildren.isNotEmpty) {
-        openingTree!
-            .makeMove(openingTree!.currentNode.sortedChildren.first.move);
-      }
-      if (openingTree != null) {
-        treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
-        _updatePositionFromTree();
-        notifyListeners();
-      }
+      _viewerTree.goToEnd();
     } else {
       final len = pgnWidgetController.mainLineLength;
       if (len > 0) {
@@ -1113,94 +881,17 @@ class PgnViewerController extends ChangeNotifier {
   /// Handle a board move in the current mode context.
   void onBoardMove(String san) {
     if (showOpeningTree) {
-      onTreeMoveSelected(san);
+      _viewerTree.onMoveSelected(san);
     } else {
       stopAutoPlay();
       pgnWidgetController.addEphemeralMove(san);
     }
   }
 
-  /// Sync the opening tree cursor to the current board position by replaying
-  /// the PGN widget's mainline moves through the tree.
-  void _syncTreeToCurrentPosition() {
-    if (openingTree == null) return;
-    final mainIdx = pgnWidgetController.mainLineIndex;
-    if (mainIdx <= 0) {
-      openingTree!.reset();
-      treeCurrentMoveSequence = [];
-      return;
-    }
-    // Walk the tree along the game's mainline moves up to mainIdx.
-    openingTree!.reset();
-    final state = pgnWidgetController;
-    // Use the mainline length to rebuild the move list.
-    final moveCount = state.mainLineLength;
-    if (moveCount == 0) {
-      treeCurrentMoveSequence = [];
-      return;
-    }
-    // Navigate to current position via FEN lookup as a fallback.
-    final fen = currentPosition.fen;
-    if (openingTree!.navigateToFen(fen)) {
-      treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
-    } else {
-      openingTree!.reset();
-      treeCurrentMoveSequence = [];
-    }
-  }
-
-  /// Update [currentPosition] from the tree's current node FEN.
-  void _updatePositionFromTree() {
-    if (openingTree == null) return;
-    final fen = openingTree!.currentNode.fen;
-    try {
-      currentPosition = Chess.fromSetup(Setup.parseFen(fen));
-    } catch (_) {
-      // FEN may be invalid in rare cases; ignore.
-    }
-  }
-
-  List<int> gamesAtTreePosition() {
-    if (openingTree == null) return [];
-    final fen = normalizeFen(openingTree!.currentNode.fen);
-    return treePositionGameCache.putIfAbsent(fen, () {
-      if (treePositionGameCache.length >= maxTreeCacheEntries) {
-        final keysToRemove =
-            treePositionGameCache.keys.take(maxTreeCacheEntries ~/ 4).toList();
-        for (final k in keysToRemove) {
-          treePositionGameCache.remove(k);
-        }
-      }
-
-      // Fast path: map FEN-index (allGames indices) → filteredGames indices
-      if (_fenIndex != null) {
-        final allIndices = _fenIndex![fen] ?? const [];
-        if (allIndices.isEmpty) return <int>[];
-        final entryToFiltered = <PgnGameEntry, int>{};
-        for (int fi = 0; fi < filteredGames.length; fi++) {
-          entryToFiltered[filteredGames[fi]] = fi;
-        }
-        final results = <int>[];
-        for (final ai in allIndices) {
-          final fi = entryToFiltered[allGames[ai]];
-          if (fi != null) results.add(fi);
-        }
-        return results;
-      }
-
-      final results = <int>[];
-      for (int i = 0; i < filteredGames.length; i++) {
-        if (pgn.gamePassesThroughFen(
-            filteredGames[i].headers, filteredGames[i].pgnText, fen)) {
-          results.add(i);
-        }
-      }
-      return results;
-    });
-  }
+  List<int> gamesAtTreePosition() => _viewerTree.gamesAtTreePosition();
 
   void loadGameFromTree(int filteredIndex) {
-    showOpeningTree = false;
+    _viewerTree.hide();
     currentGameIndex = filteredIndex;
     notifyListeners();
     loadCurrentGame();
