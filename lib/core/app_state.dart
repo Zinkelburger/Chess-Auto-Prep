@@ -20,6 +20,11 @@ class AppState extends ChangeNotifier {
   bool _isRepertoireGenerating = false;
   bool? _initialBoardFlipped;
 
+  // Tactics auto-fetch preferences
+  bool _tacticsAutoFetch = false;
+  DateTime? _lichessLastFetch;
+  DateTime? _chesscomLastFetch;
+
   /// Pending repertoire path for builder<->trainer seamless switching.
   /// Set before switching modes; consumed by the target screen on activation.
   String? pendingRepertoirePath;
@@ -35,6 +40,9 @@ class AppState extends ChangeNotifier {
   String? get chesscomUsername => _chesscomUsername;
   bool get isAnalysisMode => _isAnalysisMode;
   bool get isRepertoireGenerating => _isRepertoireGenerating;
+  bool get tacticsAutoFetch => _tacticsAutoFetch;
+  DateTime? get lichessLastFetch => _lichessLastFetch;
+  DateTime? get chesscomLastFetch => _chesscomLastFetch;
   bool get boardFlipped {
     if (_currentMode == AppMode.tactics && _initialBoardFlipped != null) {
       return _initialBoardFlipped!;
@@ -91,10 +99,37 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setTacticsAutoFetch(bool value) {
+    _tacticsAutoFetch = value;
+    _saveTacticsAutoFetch(value);
+    notifyListeners();
+  }
+
+  void setLichessLastFetch(DateTime? date) {
+    _lichessLastFetch = date;
+    _saveLastFetch('lichess_last_fetch_ms', date);
+    notifyListeners();
+  }
+
+  void setChesscomLastFetch(DateTime? date) {
+    _chesscomLastFetch = date;
+    _saveLastFetch('chesscom_last_fetch_ms', date);
+    notifyListeners();
+  }
+
   Future<void> loadUsernames() async {
     final prefs = await SharedPreferences.getInstance();
     _lichessUsername = prefs.getString('lichess_username');
     _chesscomUsername = prefs.getString('chesscom_username');
+    _tacticsAutoFetch = prefs.getBool('tactics_auto_fetch') ?? false;
+    final lichessMs = prefs.getInt('lichess_last_fetch_ms');
+    _lichessLastFetch = lichessMs != null
+        ? DateTime.fromMillisecondsSinceEpoch(lichessMs)
+        : null;
+    final chesscomMs = prefs.getInt('chesscom_last_fetch_ms');
+    _chesscomLastFetch = chesscomMs != null
+        ? DateTime.fromMillisecondsSinceEpoch(chesscomMs)
+        : null;
 
     await LichessAuthService().loadTokens();
 
@@ -116,6 +151,20 @@ class AppState extends ChangeNotifier {
       await prefs.setString('chesscom_username', username);
     } else {
       await prefs.remove('chesscom_username');
+    }
+  }
+
+  Future<void> _saveTacticsAutoFetch(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('tactics_auto_fetch', value);
+  }
+
+  Future<void> _saveLastFetch(String key, DateTime? date) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (date != null) {
+      await prefs.setInt(key, date.millisecondsSinceEpoch);
+    } else {
+      await prefs.remove(key);
     }
   }
 

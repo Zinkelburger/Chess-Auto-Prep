@@ -10,16 +10,22 @@ import '../tactics_import_service.dart';
 
 enum TacticsImportSource { lichess, chessCom }
 
+enum TacticsImportMode { recent, sinceDate }
+
 class TacticsImportParams {
   const TacticsImportParams({
     required this.username,
+    this.mode = TacticsImportMode.recent,
     this.maxGames = 20,
+    this.since,
     this.depth = 15,
     this.cores = 1,
   });
 
   final String username;
+  final TacticsImportMode mode;
   final int maxGames;
+  final DateTime? since;
   final int depth;
   final int cores;
 }
@@ -39,11 +45,12 @@ class TacticsImportCoordinator extends ChangeNotifier {
     required TacticsImportSource source,
     required TacticsImportParams params,
   }) async {
+    if (isImporting) return;
     if (params.username.isEmpty) {
       throw const TacticsImportUsernameRequired();
     }
 
-    final importService = activeImport = TacticsImportService();
+    final importService = activeImport = TacticsImportService(database: database);
     final depth = params.depth.clamp(1, 25);
     final cores = params.cores.clamp(1, TacticsImportService.availableCores);
 
@@ -55,10 +62,14 @@ class TacticsImportCoordinator extends ChangeNotifier {
     try {
       await importService.initialize();
 
+      final since =
+          params.mode == TacticsImportMode.sinceDate ? params.since : null;
+
       if (source == TacticsImportSource.lichess) {
         await importService.importGamesFromLichess(
           params.username,
           maxGames: params.maxGames,
+          since: since,
           depth: depth,
           maxCores: cores,
           progressCallback: _onProgress,
@@ -68,6 +79,7 @@ class TacticsImportCoordinator extends ChangeNotifier {
         await importService.importGamesFromChessCom(
           params.username,
           maxGames: params.maxGames,
+          since: since,
           depth: depth,
           maxCores: cores,
           progressCallback: _onProgress,

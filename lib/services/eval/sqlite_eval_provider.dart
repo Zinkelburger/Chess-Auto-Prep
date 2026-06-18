@@ -60,16 +60,14 @@ class SqliteEvalProvider implements ExternalEvalProvider {
   final String path;
   final SqliteEvalDatabaseFactory? _openOverride;
 
-  SqliteEvalProvider(
-      {required this.path, SqliteEvalDatabaseFactory? openOverride})
-      : _openOverride = openOverride;
+  SqliteEvalProvider({required this.path, this._openOverride});
 
   /// Opens the database lazily. Safe to call multiple times.
   Future<bool> init() async {
     if (_db != null) return true;
     if (path.isEmpty) return false;
     _db = _openOverride != null
-        ? await _openOverride!(path)
+        ? await _openOverride(path)
         : await openChessDbEvalDatabase(path);
     return _db != null;
   }

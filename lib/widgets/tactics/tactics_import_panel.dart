@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_state.dart';
 import '../../models/tactics_position.dart';
 import '../../models/tactics_session_settings.dart';
+import '../../services/tactics/tactics_import_coordinator.dart';
 import '../../services/tactics_import_service.dart';
 
 /// Import controls and session start UI when no tactic is active.
@@ -17,7 +18,6 @@ class TacticsImportPanel extends StatefulWidget {
     required this.lichessUserController,
     required this.lichessCountController,
     required this.chessComUserController,
-    required this.chessComCountController,
     required this.stockfishDepthController,
     required this.coresController,
     this.depthError,
@@ -34,6 +34,10 @@ class TacticsImportPanel extends StatefulWidget {
     required this.onClearDatabase,
     required this.onBrowseTactics,
     this.clearDatabaseEnabled = true,
+    required this.fetchMode,
+    required this.onFetchModeChanged,
+    required this.sinceDate,
+    required this.onSinceDateChanged,
   });
 
   final String? importStatus;
@@ -43,7 +47,6 @@ class TacticsImportPanel extends StatefulWidget {
   final TextEditingController lichessUserController;
   final TextEditingController lichessCountController;
   final TextEditingController chessComUserController;
-  final TextEditingController chessComCountController;
   final TextEditingController stockfishDepthController;
   final TextEditingController coresController;
   final String? depthError;
@@ -60,6 +63,10 @@ class TacticsImportPanel extends StatefulWidget {
   final VoidCallback onClearDatabase;
   final VoidCallback onBrowseTactics;
   final bool clearDatabaseEnabled;
+  final TacticsImportMode fetchMode;
+  final ValueChanged<TacticsImportMode> onFetchModeChanged;
+  final DateTime? sinceDate;
+  final ValueChanged<DateTime?> onSinceDateChanged;
 
   @override
   State<TacticsImportPanel> createState() => _TacticsImportPanelState();
@@ -105,17 +112,18 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
     );
   }
 
-  /// A single import-source row: username field, recent-games count field, and
-  /// an Import button (enabled only when no import is in progress and fields
-  /// are valid).
+  /// A single import-source row: username field and an Import button
+  /// (enabled only when no import is in progress and fields are valid).
   Widget _buildImportSourceRow({
     required TextEditingController userController,
     required String userLabel,
     required ValueChanged<String> onUsernameChanged,
-    required TextEditingController countController,
     required VoidCallback onImport,
   }) {
-    final canImport = widget.importStatus == null && widget.importFieldsValid;
+    final canImport = widget.importStatus == null &&
+        widget.importFieldsValid &&
+        !(widget.fetchMode == TacticsImportMode.sinceDate &&
+            widget.sinceDate == null);
     return Row(
       children: [
         Expanded(
@@ -131,25 +139,128 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
           ),
         ),
         const SizedBox(width: 8),
-        SizedBox(
-          width: 120,
-          child: TextField(
-            controller: countController,
-            decoration: const InputDecoration(
-              labelText: 'Recent Games',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            keyboardType: TextInputType.number,
-          ),
-        ),
-        const SizedBox(width: 8),
         ElevatedButton(
           onPressed: canImport ? onImport : null,
           child: const Text('Import'),
         ),
       ],
     );
+  }
+
+  Widget _buildFetchModeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SegmentedButton<TacticsImportMode>(
+          segments: const [
+            ButtonSegment(
+              value: TacticsImportMode.recent,
+              label: Text('Recent'),
+              icon: Icon(Icons.history, size: 16),
+            ),
+            ButtonSegment(
+              value: TacticsImportMode.sinceDate,
+              label: Text('Since date'),
+              icon: Icon(Icons.calendar_today, size: 16),
+            ),
+          ],
+          selected: {widget.fetchMode},
+          onSelectionChanged: (s) => widget.onFetchModeChanged(s.first),
+          showSelectedIcon: false,
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        const SizedBox(height: 10),
+        if (widget.fetchMode == TacticsImportMode.recent)
+          Row(
+            children: [
+              SizedBox(
+                width: 80,
+                child: TextField(
+                  controller: widget.lichessCountController,
+                  decoration: const InputDecoration(
+                    labelText: 'Games',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'most recent games per source',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[400],
+                ),
+              ),
+            ],
+          )
+        else
+          _SinceDatePicker(
+            date: widget.sinceDate,
+            onChanged: widget.onSinceDateChanged,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAutoFetchSection() {
+    final appState = context.read<AppState>();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: Checkbox(
+                value: appState.tacticsAutoFetch,
+                onChanged: (v) => appState.setTacticsAutoFetch(v ?? false),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text('Auto-fetch new games on startup',
+                style: TextStyle(fontSize: 13)),
+          ],
+        ),
+        if (appState.lichessLastFetch != null ||
+            appState.chesscomLastFetch != null) ...[
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (appState.lichessLastFetch != null)
+                  Text(
+                    'Lichess: last synced ${_formatDate(appState.lichessLastFetch!)}',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  ),
+                if (appState.chesscomLastFetch != null)
+                  Text(
+                    'Chess.com: last synced ${_formatDate(appState.chesscomLastFetch!)}',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  static String _formatDate(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
   @override
@@ -190,7 +301,6 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
                         userLabel: 'Lichess Username',
                         onUsernameChanged: (v) =>
                             context.read<AppState>().setLichessUsername(v),
-                        countController: widget.lichessCountController,
                         onImport: widget.onImportLichess,
                       ),
                       const SizedBox(height: 12),
@@ -199,9 +309,14 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
                         userLabel: 'Chess.com Username',
                         onUsernameChanged: (v) =>
                             context.read<AppState>().setChesscomUsername(v),
-                        countController: widget.chessComCountController,
                         onImport: widget.onImportChessCom,
                       ),
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
+                      const SizedBox(height: 16),
+                      _buildFetchModeSection(),
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -237,6 +352,10 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
                           ),
                         ],
                       ),
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
+                      const SizedBox(height: 12),
+                      _buildAutoFetchSection(),
                     ],
                   ),
                 ),
@@ -342,6 +461,73 @@ Widget _conditionalTooltip({required String? message, required Widget child}) {
   final text = message?.trim();
   if (text == null || text.isEmpty) return child;
   return Tooltip(message: text, child: child);
+}
+
+/// Date picker row for "since date" fetch mode.
+class _SinceDatePicker extends StatelessWidget {
+  const _SinceDatePicker({required this.date, required this.onChanged});
+
+  final DateTime? date;
+  final ValueChanged<DateTime?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayDate = date ?? DateTime.now().subtract(const Duration(days: 7));
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(4),
+            onTap: () => _pickDate(context, displayDate),
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Fetch games since',
+                border: OutlineInputBorder(),
+                isDense: true,
+                suffixIcon: Icon(Icons.calendar_today, size: 18),
+              ),
+              child: Text(
+                date != null
+                    ? _formatDate(date!)
+                    : 'Tap to select date',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: date != null ? null : Colors.grey[500],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (date != null) ...[
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.clear, size: 18),
+            tooltip: 'Clear date',
+            onPressed: () => onChanged(null),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _pickDate(BuildContext context, DateTime initial) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2010),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) onChanged(picked);
+  }
+
+  static String _formatDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[d.month - 1]} ${d.day}, ${d.year}';
+  }
 }
 
 /// Session settings form (order, mistake-type filter, 1-star toggle).
@@ -543,7 +729,7 @@ class TacticsImportStatusBanner extends StatelessWidget {
           if (analyzedGameCount > 0) ...[
             const SizedBox(height: 8),
             Text(
-              '$analyzedGameCount games already analyzed (will be skipped)',
+              '$analyzedGameCount previously analyzed games in history (duplicates auto-skipped)',
               style: TextStyle(fontSize: 11, color: Colors.grey[400]),
             ),
           ],
