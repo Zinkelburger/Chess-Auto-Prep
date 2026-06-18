@@ -1,4 +1,1 @@
-# Large cached API responses — regenerate with: python fetch_data.py all
-stats_*.json
-nm_profiles.json
-nm_recent_blitz.json
+# intentionally empty — all data files tracked
