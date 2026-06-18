@@ -1,0 +1,38 @@
+---
+description: Guard setState in callbacks — even synchronous ones — with mounted checks
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# Guard `setState` in widget callbacks
+
+Any `setState()` reachable from a callback passed to a child widget, controller, or listener **must** be preceded by `if (!mounted) return;`.
+
+This includes synchronous callbacks — not just `async`, `Timer`, or `Future.delayed` paths.
+
+## Why synchronous callbacks are dangerous
+
+A child widget using `AutomaticKeepAliveClientMixin`, `GlobalKey` reparenting, or living inside a `TabBarView` can outlive its parent. The parent's callback closure still captures `this`, so the child can fire it after the parent is disposed.
+
+## Rules
+
+1. Every `setState()` inside a callback passed to a child widget or controller must have a `mounted` guard.
+2. When a callback both calls `setState()` and forwards to a parent callback, guard **before** both — do not forward to a disposed widget's parent either.
+3. Listener callbacks registered via `addListener` must check `mounted` before calling `setState`.
+
+## Example
+
+```dart
+// BAD — crashes if parent is disposed while child is kept alive
+void _onPositionChanged(Position position) {
+  setState(() => _currentFen = position.fen);
+  widget.onPositionChanged?.call(position);
+}
+
+// GOOD
+void _onPositionChanged(Position position) {
+  if (!mounted) return;
+  setState(() => _currentFen = position.fen);
+  widget.onPositionChanged?.call(position);
+}
+```

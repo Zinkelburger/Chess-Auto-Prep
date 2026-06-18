@@ -27,10 +27,9 @@ Evaluations are resolved through a multi-source chain, stopping at the first hit
 
 1. **Session cache** — in-memory hash of previously evaluated positions
 2. **Local eval DB** (ChessDB direct file) — pre-downloaded centipawn evaluations
-3. **Lichess API** — cloud evaluations from Lichess opening explorer
-4. **Stockfish** — local engine evaluation at configured depth (default: 15)
+3. **Stockfish** — local engine evaluation at configured depth
 
-Depth is configurable via `EngineSettings.depth` (default 15, lowered from 20 for speed).
+Depth is configurable via `TreeBuildConfig.evalDepth` (default 14).
 
 ### 3. BFS Tree Build
 
@@ -132,10 +131,12 @@ Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line quer
 
 - `lib/services/generation/tree_my_ease.dart` — myEase, positionQuality, linePlayability
 - `lib/services/generation/eca_calculator.dart` — expectimax calculation
+- `lib/services/generation/trap_extractor.dart` — whole-tree trap line extraction
 - `lib/services/tree_build_service.dart` — BFS tree building
 - `lib/services/on_the_fly_expectimax_service.dart` — on-the-fly computation
-- `lib/services/candidate_service.dart` — candidate move generation
-- `lib/services/trap_index_service.dart` — trap indexing and lookup
-- `lib/services/coverage_suggestion_service.dart` — coverage gap suggestions
+- `lib/features/browse/services/candidate_service.dart` — candidate move generation
+- `lib/features/traps/services/trap_index_service.dart` — trap indexing and lookup
+- `lib/features/coverage/services/coverage_suggestion_service.dart` — coverage gap suggestions
 - `lib/services/coherence_service.dart` — FP-Growth coherence analysis
 - `lib/features/eval_tree/services/eval_tree_line_metrics.dart` — line quality metrics
+- `lib/core/generated_repertoire.dart` — single derived bundle (tree + FenMap + snapshot + traps)
