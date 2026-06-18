@@ -124,6 +124,20 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
         widget.importFieldsValid &&
         !(widget.fetchMode == TacticsImportMode.sinceDate &&
             widget.sinceDate == null);
+
+    String? disabledReason;
+    if (!canImport) {
+      if (widget.isImporting) {
+        disabledReason = 'Import already in progress';
+      } else if (widget.importStatus != null) {
+        disabledReason = 'Dismiss the status banner to import again';
+      } else if (!widget.importFieldsValid) {
+        disabledReason = 'Fix invalid fields above';
+      } else {
+        disabledReason = 'Select a date first';
+      }
+    }
+
     return Row(
       children: [
         Expanded(
@@ -139,47 +153,34 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
           ),
         ),
         const SizedBox(width: 8),
-        ElevatedButton(
-          onPressed: canImport ? onImport : null,
-          child: const Text('Import'),
+        _conditionalTooltip(
+          message: disabledReason,
+          child: ElevatedButton(
+            onPressed: canImport ? onImport : null,
+            child: const Text('Import'),
+          ),
         ),
       ],
     );
   }
 
   Widget _buildFetchModeSection() {
+    final isRecent = widget.fetchMode == TacticsImportMode.recent;
+    final isSince = !isRecent;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SegmentedButton<TacticsImportMode>(
-          segments: const [
-            ButtonSegment(
-              value: TacticsImportMode.recent,
-              label: Text('Recent'),
-              icon: Icon(Icons.history, size: 16),
-            ),
-            ButtonSegment(
-              value: TacticsImportMode.sinceDate,
-              label: Text('Since date'),
-              icon: Icon(Icons.calendar_today, size: 16),
-            ),
-          ],
-          selected: {widget.fetchMode},
-          onSelectionChanged: (s) => widget.onFetchModeChanged(s.first),
-          showSelectedIcon: false,
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-        ),
-        const SizedBox(height: 10),
-        if (widget.fetchMode == TacticsImportMode.recent)
-          Row(
+        _FetchModeRow(
+          selected: isRecent,
+          onTap: () => widget.onFetchModeChanged(TacticsImportMode.recent),
+          child: Row(
             children: [
               SizedBox(
-                width: 80,
+                width: 72,
                 child: TextField(
                   controller: widget.lichessCountController,
+                  enabled: isRecent,
                   decoration: const InputDecoration(
                     labelText: 'Games',
                     border: OutlineInputBorder(),
@@ -190,19 +191,25 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
               ),
               const SizedBox(width: 8),
               Text(
-                'most recent games per source',
+                'most recent per source',
                 style: TextStyle(
                   fontSize: 13,
-                  color: Colors.grey[400],
+                  color: isRecent ? Colors.grey[400] : Colors.grey[700],
                 ),
               ),
             ],
-          )
-        else
-          _SinceDatePicker(
+          ),
+        ),
+        const SizedBox(height: 8),
+        _FetchModeRow(
+          selected: isSince,
+          onTap: () => widget.onFetchModeChanged(TacticsImportMode.sinceDate),
+          child: _SinceDatePicker(
             date: widget.sinceDate,
             onChanged: widget.onSinceDateChanged,
+            enabled: isSince,
           ),
+        ),
       ],
     );
   }
@@ -213,21 +220,29 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: Checkbox(
-                value: appState.tacticsAutoFetch,
-                onChanged: (v) => appState.setTacticsAutoFetch(v ?? false),
-                visualDensity: VisualDensity.compact,
-              ),
+        InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: () => appState.setTacticsAutoFetch(!appState.tacticsAutoFetch),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: Checkbox(
+                    value: appState.tacticsAutoFetch,
+                    onChanged: (v) =>
+                        appState.setTacticsAutoFetch(v ?? false),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text('Auto-fetch new games on startup',
+                    style: TextStyle(fontSize: 13)),
+              ],
             ),
-            const SizedBox(width: 8),
-            const Text('Auto-fetch new games on startup',
-                style: TextStyle(fontSize: 13)),
-          ],
+          ),
         ),
         if (appState.lichessLastFetch != null ||
             appState.chesscomLastFetch != null) ...[
@@ -463,12 +478,56 @@ Widget _conditionalTooltip({required String? message, required Widget child}) {
   return Tooltip(message: text, child: child);
 }
 
+/// A selectable row: tapping anywhere selects the mode. The active row gets a
+/// primary-colored left border accent; the inactive row dims.
+class _FetchModeRow extends StatelessWidget {
+  const _FetchModeRow({
+    required this.selected,
+    required this.onTap,
+    required this.child,
+  });
+
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: AnimatedOpacity(
+        opacity: selected ? 1.0 : 0.40,
+        duration: const Duration(milliseconds: 150),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: selected ? scheme.primary : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 /// Date picker row for "since date" fetch mode.
 class _SinceDatePicker extends StatelessWidget {
-  const _SinceDatePicker({required this.date, required this.onChanged});
+  const _SinceDatePicker({
+    required this.date,
+    required this.onChanged,
+    this.enabled = true,
+  });
 
   final DateTime? date;
   final ValueChanged<DateTime?> onChanged;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -478,13 +537,14 @@ class _SinceDatePicker extends StatelessWidget {
         Expanded(
           child: InkWell(
             borderRadius: BorderRadius.circular(4),
-            onTap: () => _pickDate(context, displayDate),
+            onTap: enabled ? () => _pickDate(context, displayDate) : null,
             child: InputDecorator(
-              decoration: const InputDecoration(
-                labelText: 'Fetch games since',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'Games since',
+                border: const OutlineInputBorder(),
                 isDense: true,
-                suffixIcon: Icon(Icons.calendar_today, size: 18),
+                enabled: enabled,
+                suffixIcon: const Icon(Icons.calendar_today, size: 18),
               ),
               child: Text(
                 date != null
@@ -498,7 +558,7 @@ class _SinceDatePicker extends StatelessWidget {
             ),
           ),
         ),
-        if (date != null) ...[
+        if (date != null && enabled) ...[
           const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.clear, size: 18),
@@ -644,21 +704,28 @@ class _MistakeTypeCheckbox extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: 32,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 24,
-            height: 24,
-            child: Checkbox(
-              value: selected,
-              onChanged: (v) => onChanged(v ?? false),
-              visualDensity: VisualDensity.compact,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: () => onChanged(!selected),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: Checkbox(
+                value: selected,
+                onChanged: (v) => onChanged(v ?? false),
+                visualDensity: VisualDensity.compact,
+              ),
             ),
-          ),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 13)),
-        ],
+            const SizedBox(width: 6),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(label, style: const TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
       ),
     );
   }
