@@ -7,6 +7,8 @@
 /// trees and game analysis.
 library;
 
+import 'move_tree_node_view.dart';
+
 // ── External eval skip mode ───────────────────────────────────────────────
 
 /// When external eval sources (local ChessDB / API) should be skipped.
@@ -34,7 +36,7 @@ enum PruneReason {
 
 // ── Build tree node ──────────────────────────────────────────────────────
 
-class BuildTreeNode {
+class BuildTreeNode implements MoveTreeNodeView {
   final String fen;
   final String moveSan;
   final String moveUci;
@@ -139,6 +141,14 @@ class BuildTreeNode {
     this.moveProbability = 1.0,
     this.cumulativeProbability = 1.0,
   });
+
+  // ── MoveTreeNodeView ──
+  @override
+  String get san => moveSan;
+  @override
+  String get fenAfter => fen;
+  @override
+  List<MoveTreeNodeView> get orderedChildren => children;
 
   bool get hasEngineEval => engineEvalCp != null;
 

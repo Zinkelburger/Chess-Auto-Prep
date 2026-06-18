@@ -59,7 +59,7 @@ const List<(int chessCom, int lichessBlitz)> kChessComBlitzToLichessBlitzTable =
 /// Linear interpolation between [kChessComBlitzToLichessBlitzTable] anchors;
 /// out-of-range inputs clamp to the first/last Lichess value (not extrapolated).
 int chessComBlitzToLichessBlitz(int chessComBlitz) {
-  final table = kChessComBlitzToLichessBlitzTable;
+  const table = kChessComBlitzToLichessBlitzTable;
   if (table.isEmpty) return chessComBlitz;
 
   if (chessComBlitz <= table.first.$1) return table.first.$2;

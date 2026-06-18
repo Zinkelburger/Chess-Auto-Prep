@@ -9,6 +9,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../constants/chess_constants.dart';
+import 'move_tree_node_view.dart';
 
 // ---------------------------------------------------------------------------
 // TreePath
@@ -99,7 +100,8 @@ class TreePath {
 ///
 /// [children] order matters: index 0 is always the mainline continuation,
 /// index 1+ are variations (same convention as dartchess and Lichess).
-class MoveNode {
+class MoveNode implements MoveTreeNodeView {
+  @override
   final String san;
 
   /// Board FEN *after* this move was played.
@@ -108,16 +110,54 @@ class MoveNode {
   String? comment;
   List<int>? nags;
 
+  /// Stable identity for this node within a session. Used by the analysis
+  /// viewer to locate / delete a specific node without keeping a pointer.
+  final int id;
+
+  /// `true` = user-added (ephemeral) analysis move; `false` = from PGN/repertoire.
+  final bool isEphemeral;
+
   /// Ordered children.  `[0]` = mainline, `[1..]` = variations.
   final List<MoveNode> children;
+
+  static int _nextId = 0;
 
   MoveNode({
     required this.san,
     required this.fen,
     this.comment,
     this.nags,
+    this.isEphemeral = false,
     List<MoveNode>? children,
-  }) : children = children ?? [];
+  })  : id = _nextId++,
+        children = children ?? [];
+
+  /// First child matching [san], or `null`.
+  MoveNode? findChild(String san) {
+    for (final child in children) {
+      if (child.san == san) return child;
+    }
+    return null;
+  }
+
+  /// Append a child move (or return an existing one with the same SAN).
+  /// Returns the node plus whether it is the mainline continuation (`[0]`).
+  (MoveNode node, bool isMainLine) addChild(String san, String fen,
+      {bool isEphemeral = true}) {
+    final existing = findChild(san);
+    if (existing != null) {
+      return (existing, children.indexOf(existing) == 0);
+    }
+    final newNode = MoveNode(san: san, fen: fen, isEphemeral: isEphemeral);
+    children.add(newNode);
+    return (newNode, children.length == 1);
+  }
+
+  // ── MoveTreeNodeView ──
+  @override
+  String get fenAfter => fen;
+  @override
+  List<MoveTreeNodeView> get orderedChildren => children;
 
   @override
   String toString() => 'MoveNode($san, children=${children.length})';

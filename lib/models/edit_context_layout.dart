@@ -74,7 +74,7 @@ class EditContextLayout {
   const EditContextLayout({required this.columns});
 
   /// Default placement when no saved layout exists.
-  static EditContextLayout get defaultLayout => EditContextLayout(
+  static EditContextLayout get defaultLayout => const EditContextLayout(
         columns: [
           EditContextColumnLayout(
             views: [
