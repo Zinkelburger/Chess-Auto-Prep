@@ -22,6 +22,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 class LichessAuthService extends ChangeNotifier {
   // ── Configuration ──────────────────────────────────────────────────
@@ -96,7 +97,7 @@ class LichessAuthService extends ChangeNotifier {
     // the user to log in again.
     if (_accessToken != null && !_isPat && _isTokenExpired) {
       if (kDebugMode) {
-        print('[LichessAuth] Stored OAuth token expired — clearing');
+        log.w('[LichessAuth] Stored OAuth token expired — clearing');
       }
       await _clearTokens();
     }
@@ -172,14 +173,14 @@ class LichessAuthService extends ChangeNotifier {
         );
       } catch (e) {
         if (kDebugMode) {
-          print('[LichessAuth] Failed to bind callback server on '
+          log.e('[LichessAuth] Failed to bind callback server on '
               'port $_callbackPort: $e');
         }
         rethrow;
       }
     } catch (e) {
       if (kDebugMode) {
-        print('[LichessAuth] Failed to bind callback server on '
+        log.e('[LichessAuth] Failed to bind callback server on '
             'port $_callbackPort: $e');
       }
       rethrow;
@@ -187,13 +188,13 @@ class LichessAuthService extends ChangeNotifier {
     _callbackCompleter = Completer<String?>();
 
     if (kDebugMode) {
-      print('[LichessAuth] OAuth callback server listening on '
+      log.i('[LichessAuth] OAuth callback server listening on '
           'http://localhost:$_callbackPort/callback');
     }
 
     _callbackServer!.listen((request) {
       if (kDebugMode) {
-        print('[LichessAuth] Received ${request.method} ${request.uri}');
+        log.i('[LichessAuth] Received ${request.method} ${request.uri}');
       }
       if (request.uri.path == '/callback') {
         final code = request.uri.queryParameters['code'];
@@ -206,7 +207,7 @@ class LichessAuthService extends ChangeNotifier {
         request.response.close();
 
         if (kDebugMode) {
-          print('[LichessAuth] Callback received — '
+          log.e('[LichessAuth] Callback received — '
               '${code != null ? 'auth code OK' : 'error: $error'}');
         }
 
@@ -233,7 +234,7 @@ class LichessAuthService extends ChangeNotifier {
         '&scope=${_scopes.replaceAll(' ', '+')}';
 
     final url = 'https://lichess.org/oauth?$query';
-    if (kDebugMode) print('[LichessAuth] Authorization URL: $url');
+    if (kDebugMode) log.d('[LichessAuth] Authorization URL: $url');
     return url;
   }
 
@@ -244,24 +245,24 @@ class LichessAuthService extends ChangeNotifier {
     if (_callbackCompleter == null) return false;
 
     if (kDebugMode) {
-      print('[LichessAuth] Waiting for OAuth callback '
+      log.w('[LichessAuth] Waiting for OAuth callback '
           '(timeout ${timeout.inSeconds}s)...');
     }
 
     try {
       final code = await _callbackCompleter!.future.timeout(timeout);
       if (code == null) {
-        if (kDebugMode) print('[LichessAuth] Callback returned null (denied)');
+        if (kDebugMode) log.w('[LichessAuth] Callback returned null (denied)');
         return false;
       }
       final ok = await _exchangeCode(code);
       if (kDebugMode) {
-        print('[LichessAuth] Token exchange '
+        log.e('[LichessAuth] Token exchange '
             '${ok ? 'succeeded — logged in as $_username' : 'FAILED'}');
       }
       return ok;
     } on TimeoutException {
-      if (kDebugMode) print('[LichessAuth] OAuth callback timed out');
+      if (kDebugMode) log.w('[LichessAuth] OAuth callback timed out');
       return false;
     } finally {
       await _stopCallbackServer();
@@ -298,7 +299,7 @@ class LichessAuthService extends ChangeNotifier {
         _tokenExpiry = DateTime.now().add(Duration(seconds: expiresIn));
 
         if (kDebugMode) {
-          print('[LichessAuth] Token obtained — expires in '
+          log.i('[LichessAuth] Token obtained — expires in '
               '${(expiresIn / 86400).round()} days');
         }
 
@@ -309,11 +310,11 @@ class LichessAuthService extends ChangeNotifier {
       }
 
       if (kDebugMode) {
-        print('[LichessAuth] Token exchange failed: '
+        log.e('[LichessAuth] Token exchange failed: '
             '${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      if (kDebugMode) print('[LichessAuth] Token exchange error: $e');
+      if (kDebugMode) log.e('[LichessAuth] Token exchange error: $e');
     }
     return false;
   }
@@ -330,8 +331,9 @@ class LichessAuthService extends ChangeNotifier {
     if (_isPat) return _accessToken; // PATs don't expire
 
     if (_isTokenExpired) {
-      if (kDebugMode)
-        print('[LichessAuth] Token expired — please log in again');
+      if (kDebugMode) {
+        log.w('[LichessAuth] Token expired — please log in again');
+      }
       await _clearTokens();
       return null;
     }
@@ -383,7 +385,7 @@ class LichessAuthService extends ChangeNotifier {
         return true;
       }
     } catch (e) {
-      if (kDebugMode) print('[LichessAuth] PAT validation failed: $e');
+      if (kDebugMode) log.e('[LichessAuth] PAT validation failed: $e');
     }
     return false;
   }
@@ -404,7 +406,7 @@ class LichessAuthService extends ChangeNotifier {
         _username = data['username'] as String?;
       }
     } catch (e) {
-      if (kDebugMode) print('[LichessAuth] Failed to fetch username: $e');
+      if (kDebugMode) log.e('[LichessAuth] Failed to fetch username: $e');
     }
   }
 
@@ -448,11 +450,12 @@ class LichessAuthService extends ChangeNotifier {
     final uri = Uri.parse(url);
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-        if (kDebugMode)
-          print('[LichessAuth] launchUrl returned false for $url');
+        if (kDebugMode) {
+          log.w('[LichessAuth] launchUrl returned false for $url');
+        }
       }
     } catch (e) {
-      if (kDebugMode) print('[LichessAuth] Failed to open URL: $e');
+      if (kDebugMode) log.e('[LichessAuth] Failed to open URL: $e');
     }
   }
 

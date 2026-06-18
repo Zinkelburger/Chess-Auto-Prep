@@ -117,7 +117,9 @@ class _ExplorerSectionState extends State<ExplorerSection> {
         _expanded = prefs.getBool(_kExpanded) ?? true;
         _showTree = prefs.getBool(_kShowTree) ?? false;
       });
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
   }
 
   Future<void> _savePrefs() async {
@@ -125,7 +127,9 @@ class _ExplorerSectionState extends State<ExplorerSection> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kExpanded, _expanded);
       await prefs.setBool(_kShowTree, _showTree);
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
   }
 
   Future<void> _onCandidateTap(CandidateMove move) async {
@@ -170,7 +174,9 @@ class _ExplorerSectionState extends State<ExplorerSection> {
           duration: Duration(seconds: 2),
         ),
       );
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
   }
 
   @override

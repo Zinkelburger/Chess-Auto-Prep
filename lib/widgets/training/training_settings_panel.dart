@@ -114,7 +114,7 @@ class TrainingSettingsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<ReviewOrder>(
-            value: settings.reviewOrder,
+            initialValue: settings.reviewOrder,
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               isDense: true,

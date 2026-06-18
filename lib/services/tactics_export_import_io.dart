@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 /// Native (mobile/desktop) implementation for exporting CSV
 Future<void> exportCsvContent(
@@ -21,7 +22,7 @@ Future<void> exportCsvContent(
     );
 
     if (result.status == ShareResultStatus.success) {
-      print('Tactics exported successfully');
+      log.i('Tactics exported successfully');
     }
 
     // Clean up temp file
@@ -39,7 +40,7 @@ Future<void> exportCsvContent(
 
     if (savePath != null) {
       await File(savePath).writeAsString(content);
-      print('Tactics exported to: $savePath');
+      log.i('Tactics exported to: $savePath');
     }
   }
 }

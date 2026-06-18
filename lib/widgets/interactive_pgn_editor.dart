@@ -17,7 +17,7 @@ import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
     show filterDisplayComment;
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
-import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
+
 class InteractivePgnEditor extends StatefulWidget {
   /// The move tree to display (owned by controller).
   final MoveTree tree;

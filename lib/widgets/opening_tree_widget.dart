@@ -1,5 +1,6 @@
 /// Opening tree widget - Interactive move tree explorer
 /// Similar to openingtree.com's interface
+library;
 
 import 'package:flutter/material.dart';
 

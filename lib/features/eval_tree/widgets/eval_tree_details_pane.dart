@@ -305,7 +305,7 @@ class EvalTreeDetailsPane extends StatelessWidget {
           border: Border(
             bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
             left: isRepertoire
-                ? BorderSide(color: kNodeAccentRepertoire, width: 3)
+                ? const BorderSide(color: kNodeAccentRepertoire, width: 3)
                 : BorderSide.none,
           ),
         ),

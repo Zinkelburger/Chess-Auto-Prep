@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
@@ -73,9 +74,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 8),
 
               // ── Database ─────────────────────────────────
-              ListenableBuilder(
-                listenable: EvalDatabaseSettings.instance,
-                builder: (context, _) => _buildDatabaseSection(),
+              Builder(
+                builder: (context) {
+                  context.watch<EvalDatabaseSettings>();
+                  return _buildDatabaseSection();
+                },
               ),
               const SizedBox(height: 24),
 
@@ -103,10 +106,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: 'Stockfish Engine',
       icon: Icons.bolt,
       children: [
-        ListenableBuilder(
-          listenable: EngineLifecycle(),
-          builder: (context, _) {
-            final lifecycle = EngineLifecycle();
+        Builder(
+          builder: (context) {
+            final lifecycle = context.watch<EngineLifecycle>();
             final isOn = lifecycle.state != EngineState.off;
             final isGenerating = lifecycle.state == EngineState.generating;
             return SettingsSwitchTile(

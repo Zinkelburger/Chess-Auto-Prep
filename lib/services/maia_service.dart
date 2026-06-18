@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:onnxruntime/onnxruntime.dart';
 import 'eval_cache.dart';
 import 'maia_tensor.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 class MaiaResult {
   final Map<String, double> policy;
@@ -38,9 +39,9 @@ class MaiaService {
 
       _session = OrtSession.fromBuffer(bytes, sessionOptions);
       _isInitialized = true;
-      print('Maia-3 model initialized successfully');
+      log.i('Maia-3 model initialized successfully');
     } catch (e) {
-      print('Failed to initialize Maia-3: $e');
+      log.e('Failed to initialize Maia-3: $e');
     } finally {
       _isLoading = false;
     }

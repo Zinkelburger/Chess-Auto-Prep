@@ -142,12 +142,12 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
             ),
-            child: Row(
+            child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.warning_amber_rounded,
                     size: 18, color: AppColors.warning),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Native library not found. Run `make setup-cdbdirect` in '
@@ -286,7 +286,7 @@ class _EvalDatabaseSettingsPanelState extends State<EvalDatabaseSettingsPanel> {
           const SizedBox(height: 4),
           Text(
             _dirValidation!.message,
-            style: TextStyle(fontSize: 11, color: AppColors.danger),
+            style: const TextStyle(fontSize: 11, color: AppColors.danger),
           ),
         ],
         const SizedBox(height: 8),

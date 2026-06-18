@@ -176,7 +176,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Expanded(child: _buildEnginePane()),
-                    VerticalDivider(
+                    const VerticalDivider(
                       width: 1,
                       thickness: 1,
                       color: AppColors.divider,

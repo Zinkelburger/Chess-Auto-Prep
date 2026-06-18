@@ -112,7 +112,9 @@ Position startPositionFromGame(PgnGame game) {
   if (setup == '1' && fen.isNotEmpty) {
     try {
       return Chess.fromSetup(Setup.parseFen(expandFen(fen)));
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
   }
   return Chess.initial;
 }
@@ -145,7 +147,9 @@ bool gamePassesThroughFen(
       pos = pos.play(move);
       if (normalizeFen(pos.fen) == targetFen) return true;
     }
-  } catch (_) {}
+  } catch (_) {
+    // Best-effort; failure here is non-fatal and intentionally ignored.
+  }
   return false;
 }
 
@@ -310,7 +314,9 @@ Map<String, List<int>> buildFenIndex(
         pos = pos.play(move);
         record(normalizeFen(pos.fen), i);
       }
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
   }
 
   return index;

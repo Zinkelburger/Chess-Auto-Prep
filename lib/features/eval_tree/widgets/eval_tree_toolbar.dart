@@ -85,13 +85,13 @@ class EvalTreeToolbar extends StatelessWidget {
                   controller.setMetricDisplayMode(selection.first);
                 },
                 showSelectedIcon: false,
-                style: ButtonStyle(
+                style: const ButtonStyle(
                   visualDensity: VisualDensity.compact,
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const WidgetStatePropertyAll(
+                  padding: WidgetStatePropertyAll(
                     EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                   ),
-                  textStyle: const WidgetStatePropertyAll(
+                  textStyle: WidgetStatePropertyAll(
                     TextStyle(fontSize: 10),
                   ),
                 ),
