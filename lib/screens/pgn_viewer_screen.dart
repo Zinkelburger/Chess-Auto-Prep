@@ -28,7 +28,9 @@ import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/fullscreen_game_view.dart';
 import '../widgets/game_analysis_tab.dart';
 import '../widgets/game_nav_bar.dart';
-import '../widgets/opening_tree_widget.dart';
+import '../widgets/pgn/pgn_opening_tree_panel.dart';
+import '../widgets/pgn/pgn_perspective_button.dart';
+import '../widgets/pgn/pgn_slice_chips.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn_slice_dialog.dart';
 
@@ -614,7 +616,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           ),
           if (_controller.allGames.isNotEmpty) ...[
             const SizedBox(width: 8),
-            Expanded(child: _buildSliceChips()),
+            Expanded(
+              child: PgnSliceChips(
+                controller: _controller,
+                onOpenSliceDialog: _openSliceDialog,
+              ),
+            ),
           ],
         ],
       ),
@@ -641,7 +648,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             icon: const Icon(Icons.swap_vert, size: 20),
             tooltip: 'Flip board (F)',
           ),
-          _buildPerspectiveButton(),
+          PgnPerspectiveButton(controller: _controller),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 20),
             tooltip: 'More actions',
@@ -668,225 +675,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
   }
 
-  Widget _buildSliceChips() {
-    final chipLabels = _controller.activeSliceConfig.chipLabels;
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (int i = 0; i < chipLabels.length; i++) ...[
-            _buildActiveChip(chipLabels[i], i),
-            const SizedBox(width: 4),
-          ],
-          _buildAddSliceChip(),
-          if (_controller.hasActiveFilters) ...[
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.blue.withAlpha(20),
-                borderRadius: BorderRadius.circular(8),
-                border:
-                    Border.all(color: Colors.blue.withAlpha(60), width: 0.5),
-              ),
-              child: Text(
-                '${_controller.filteredGames.length}/${_controller.allGames.length}',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue[300],
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActiveChip(String label, int index) {
-    return GestureDetector(
-      onTap: _openSliceDialog,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.blue[900],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.blue.withAlpha(60), width: 0.5),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 140),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.blue[100],
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-            const SizedBox(width: 4),
-            GestureDetector(
-              onTap: () => _controller.removeSliceChip(index),
-              child: Icon(Icons.close,
-                  size: 13, color: Colors.blue[300]!.withAlpha(180)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddSliceChip() {
-    return Tooltip(
-      message: _controller.hasActiveFilters ? 'Edit filters' : 'Add filter',
-      child: GestureDetector(
-        onTap: _openSliceDialog,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: _controller.hasActiveFilters
-                  ? Colors.blue.withAlpha(40)
-                  : Colors.grey[700]!,
-              width: 0.5,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.add,
-                size: 13,
-                color: _controller.hasActiveFilters
-                    ? Colors.blue[300]
-                    : Colors.grey[400],
-              ),
-              const SizedBox(width: 3),
-              Text(
-                _controller.hasActiveFilters ? 'Edit' : 'Slice',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: _controller.hasActiveFilters
-                      ? Colors.blue[300]
-                      : Colors.grey[400],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPerspectiveButton() {
-    final protagonist = _controller.detectProtagonist();
-    final bothPlayers = _controller.detectBothPlayers();
-    final isPlayerMode = _controller.perspective.mode == PerspectiveMode.player;
-    final isWhiteMode = _controller.perspective.mode == PerspectiveMode.white;
-    final isBlackMode = _controller.perspective.mode == PerspectiveMode.black;
-
-    final label = switch (_controller.perspective.mode) {
-      PerspectiveMode.white => 'White',
-      PerspectiveMode.black => 'Black',
-      PerspectiveMode.player => _controller.perspective.playerName,
-    };
-
-    return PopupMenuButton<Perspective>(
-      tooltip: 'Default view as',
-      onSelected: _controller.setPerspective,
-      itemBuilder: (ctx) => [
-        if (bothPlayers != null) ...[
-          PopupMenuItem(
-            value: Perspective(
-                mode: PerspectiveMode.player, playerName: bothPlayers.player1),
-            child: Row(children: [
-              if (isPlayerMode &&
-                  _controller.perspective.playerName == bothPlayers.player1)
-                const Icon(Icons.check, size: 16)
-              else
-                const SizedBox(width: 16),
-              const SizedBox(width: 8),
-              Text(bothPlayers.player1),
-            ]),
-          ),
-          PopupMenuItem(
-            value: Perspective(
-                mode: PerspectiveMode.player, playerName: bothPlayers.player2),
-            child: Row(children: [
-              if (isPlayerMode &&
-                  _controller.perspective.playerName == bothPlayers.player2)
-                const Icon(Icons.check, size: 16)
-              else
-                const SizedBox(width: 16),
-              const SizedBox(width: 8),
-              Text(bothPlayers.player2),
-            ]),
-          ),
-        ] else if (protagonist != null)
-          PopupMenuItem(
-            value: Perspective(
-                mode: PerspectiveMode.player, playerName: protagonist),
-            child: Row(children: [
-              if (isPlayerMode &&
-                  _controller.perspective.playerName == protagonist)
-                const Icon(Icons.check, size: 16)
-              else
-                const SizedBox(width: 16),
-              const SizedBox(width: 8),
-              Text(protagonist),
-            ]),
-          ),
-        PopupMenuItem(
-          value: const Perspective(mode: PerspectiveMode.white),
-          child: Row(children: [
-            if (isWhiteMode)
-              const Icon(Icons.check, size: 16)
-            else
-              const SizedBox(width: 16),
-            const SizedBox(width: 8),
-            const Text('Always White'),
-          ]),
-        ),
-        PopupMenuItem(
-          value: const Perspective(mode: PerspectiveMode.black),
-          child: Row(children: [
-            if (isBlackMode)
-              const Icon(Icons.check, size: 16)
-            else
-              const SizedBox(width: 16),
-            const SizedBox(width: 8),
-            const Text('Always Black'),
-          ]),
-        ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.grey[700]!),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 120),
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 11),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildBoardPane() {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -904,7 +692,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Widget _buildSidePanel() {
-    if (_controller.showOpeningTree) return _buildOpeningTreePanel();
+    if (_controller.showOpeningTree) {
+      return PgnOpeningTreePanel(controller: _controller);
+    }
     return Column(
       children: [
         Row(
@@ -996,186 +786,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             isEditMode: _editMode,
           ),
       ],
-    );
-  }
-
-  Widget _buildOpeningTreePanel() {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.grey[700]!),
-            ),
-          ),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, size: 20),
-                onPressed: _controller.toggleOpeningTree,
-                tooltip: 'Back to Game/Analysis (T)',
-                visualDensity: VisualDensity.compact,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Opening Tree',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                  color: Colors.grey[200],
-                ),
-              ),
-              const Spacer(),
-              if (_controller.buildingTree)
-                Flexible(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          _controller.treeBuildTotal > 0
-                              ? 'Building ${_controller.treeBuildProcessed} / ${_controller.treeBuildTotal}'
-                              : 'Building tree...',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey[400],
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        if (_controller.buildingTree)
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _controller.treeBuildTotal > 0
-                        ? 'Building tree... ${_controller.treeBuildProcessed} / ${_controller.treeBuildTotal} games'
-                        : 'Building tree...',
-                    style: TextStyle(color: Colors.grey[300], fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_controller.treeBuildTotal > 0)
-                    SizedBox(
-                      width: 220,
-                      child: LinearProgressIndicator(
-                        value: _controller.treeBuildProcessed /
-                            _controller.treeBuildTotal,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          )
-        else if (_controller.openingTree == null)
-          Expanded(
-            child: Center(
-              child: Text(
-                'No tree available.\nLoad games to build.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey[500]),
-              ),
-            ),
-          )
-        else ...[
-          Expanded(
-            child: OpeningTreeWidget(
-              tree: _controller.openingTree!,
-              onMoveSelected: _controller.onTreeMoveSelected,
-              onGoBack: _controller.onTreeGoBack,
-              onGoForward: _controller.onTreeGoForward,
-              currentMoveSequence: _controller.treeCurrentMoveSequence,
-            ),
-          ),
-          _buildTreeGamesList(),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildTreeGamesList() {
-    final matchingIndices = _controller.gamesAtTreePosition();
-    if (matchingIndices.isEmpty) return const SizedBox.shrink();
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 180),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.grey[700]!)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Text(
-              '${matchingIndices.length} game${matchingIndices.length == 1 ? '' : 's'} at this position',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[400],
-              ),
-            ),
-          ),
-          Flexible(
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.only(bottom: 4),
-              itemCount: matchingIndices.length,
-              itemBuilder: (context, idx) {
-                final gi = matchingIndices[idx];
-                final game = _controller.filteredGames[gi];
-                return InkWell(
-                  onTap: () => _controller.loadGameFromTree(gi),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    child: Row(
-                      children: [
-                        Icon(Icons.play_arrow,
-                            size: 14, color: Colors.blue[300]),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            game.label,
-                            style: const TextStyle(fontSize: 11),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (game.studyRating > 0) ...[
-                          const Icon(Icons.star, size: 12, color: Colors.amber),
-                          Text('${game.studyRating}',
-                              style: const TextStyle(fontSize: 10)),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
     );
   }
 
