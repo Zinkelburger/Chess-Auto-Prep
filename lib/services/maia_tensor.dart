@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/fen_utils.dart';
+import '../utils/chess_utils.dart' show toStandardUci;
 import 'package:chess_auto_prep/utils/log.dart';
 
 /// Maia-3 tensor preprocessing.
@@ -108,6 +109,12 @@ class MaiaTensor {
 
     final legalMoves = Float32List(_allMoves.length);
 
+    // dartchess encodes castling as king→own-rook (e1h1), but the Maia move
+    // vocabulary uses the standard king→destination encoding (e1g1). We set
+    // the mask at the standard index so the model's trained castling logit is
+    // read, and the returned policy keys also use standard UCI so callers
+    // (tree builder, engine pane, audit) can look them up directly with the
+    // Stockfish/Lichess convention most of the app uses.
     for (final entry in position.legalMoves.entries) {
       final fromSq = entry.key;
       final targets = entry.value;
@@ -115,12 +122,12 @@ class MaiaTensor {
       final fromStr = fromSq.name;
 
       for (final toSq in targets.squares) {
-        final toStr = toSq.name;
         final isPromotion = piece?.role == Role.pawn &&
             ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
                 (piece.color == Side.black && toSq ~/ 8 == 0));
 
         if (isPromotion) {
+          final toStr = toSq.name;
           for (final role in [
             Role.queen,
             Role.rook,
@@ -134,9 +141,10 @@ class MaiaTensor {
             }
           }
         } else {
-          final uci = '$fromStr$toStr';
-          if (_allMoves.containsKey(uci)) {
-            legalMoves[_allMoves[uci]!] = 1.0;
+          final standardUci = toStandardUci(position, fromSq, toSq);
+          final index = _allMoves[standardUci];
+          if (index != null) {
+            legalMoves[index] = 1.0;
           }
         }
       }

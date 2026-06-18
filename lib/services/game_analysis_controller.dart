@@ -20,7 +20,7 @@ import 'dart:math' as math;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
-import '../utils/chess_utils.dart' show uciPvToSan, uciToSan;
+import '../utils/chess_utils.dart' show uciPvToSan, uciToSan, toStandardUci;
 import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'engine/stockfish_pool.dart';
@@ -341,7 +341,11 @@ class GameAnalysisController extends ChangeNotifier {
         final fenBefore = pos.fen;
         final move = pos.parseSan(moveData.san);
         if (move == null) break;
-        final uci = move.uci;
+        // Use standard UCI (king→destination for castling) so Maia policy
+        // lookups match the vocabulary convention.
+        final uci = move is NormalMove
+            ? toStandardUci(pos, move.from, move.to)
+            : move.uci;
         pos = pos.play(move);
         positions.add((
           fenBefore: fenBefore,

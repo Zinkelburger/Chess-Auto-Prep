@@ -76,11 +76,82 @@ Position? tryParseFen(String fen) {
   }
 }
 
+/// 0-based half-move (ply) index, counted from a game that starts at
+/// [startFullmoves]/[startWhiteToMove], of the position *just before* the move
+/// numbered [moveNumber] played by White (when [isWhite]) or Black.
+///
+/// This is the branch point for an inline analysis line: replaying that many
+/// mainline plies from the start lands on the position the line departs from.
+/// Unlike the naive `(moveNumber - startFullmoves) * 2` it stays correct when
+/// the game starts from a Black-to-move FEN (where ply 0 is a Black move).
+///
+/// The result is NOT clamped to any mainline length — callers should clamp.
+int plyBeforeMove({
+  required int moveNumber,
+  required bool isWhite,
+  required int startFullmoves,
+  required bool startWhiteToMove,
+}) {
+  final startAbsPly = (startFullmoves - 1) * 2 + (startWhiteToMove ? 0 : 1);
+  final moveAbsPly = (moveNumber - 1) * 2 + (isWhite ? 0 : 1);
+  return moveAbsPly - startAbsPly;
+}
+
 /// Parse an algebraic square name (e.g. 'e4') to a dartchess [Square].
 Square? parseSquare(String name) => Square.parse(name);
 
 /// Convert a dartchess [Square] to algebraic notation (e.g. 'e4').
 String toAlgebraic(Square square) => square.name;
+
+// =====================================================================
+// Castling move encoding — the single source of truth.
+//
+// dartchess encodes castling as the king moving onto its OWN ROOK's square
+// (e1h1 / e1a1), and [Position.legalMoves] only ever emits such a king target
+// when the castle is actually legal: rook present and unmoved, castling rights
+// intact, path clear, and the king not passing through check. The rest of the
+// chess world (UCI, chess.js, Stockfish, Leela/Maia) uses the king→destination
+// encoding (e1g1 / e1c1).
+//
+// Deciding "is this castling?" from the raw square-index distance is the source
+// of a whole class of bugs: a vertical king move (e1→e2) spans 8 indices and a
+// diagonal one (e1→d2/f2) spans 7/9, so they all look like they jump more than
+// two squares and get mistaken for a castle. The only correct test is whether
+// the destination holds the mover's own rook. Always route through these
+// helpers instead of re-deriving the rule.
+// =====================================================================
+
+/// Whether the king move [from]→[to] — as produced by [Position.legalMoves] —
+/// is a castling move, i.e. [to] holds the side-to-move's own rook.
+///
+/// Because dartchess only emits this king target when castling is genuinely
+/// legal, a `true` result also guarantees the castle is valid (rook unmoved,
+/// rights intact, path clear, king not passing through check).
+bool isCastlingMove(Position position, Square from, Square to) {
+  final king = position.board.pieceAt(from);
+  if (king?.role != Role.king) return false;
+  final dest = position.board.pieceAt(to);
+  return dest != null && dest.role == Role.rook && dest.color == king!.color;
+}
+
+/// The square the king visually lands on for the king move [from]→[to],
+/// translating dartchess's king→rook castling encoding into the standard
+/// king→destination convention. Returns [to] unchanged for normal king moves
+/// (and non-king moves).
+Square castlingKingDestination(Position position, Square from, Square to) {
+  if (!isCastlingMove(position, from, to)) return to;
+  // King and rook share a rank, so moving two files stays on the rank. Rook on
+  // the higher file (kingside) → king lands on the g-file; rook on the lower
+  // file (queenside) → king lands on the c-file.
+  return to > from ? Square(from + 2) : Square(from - 2);
+}
+
+/// Standard UCI for the move [from]→[to] in [position], normalising dartchess's
+/// king→rook castling encoding (e1h1) to the king→destination convention
+/// (e1g1) that Stockfish, Lichess and Leela/Maia use. Non-castling moves are
+/// returned verbatim as `<from><to>`.
+String toStandardUci(Position position, Square from, Square to) =>
+    '${from.name}${castlingKingDestination(position, from, to).name}';
 
 /// Role to uppercase character for SVG asset filenames (e.g. Role.pawn → 'P').
 String roleChar(Role role) => switch (role) {

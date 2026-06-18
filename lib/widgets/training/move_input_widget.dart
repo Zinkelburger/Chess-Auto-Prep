@@ -9,7 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../chess_board_widget.dart';
-import '../../utils/chess_utils.dart' show toAlgebraic;
+import '../../utils/chess_utils.dart'
+    show toAlgebraic, isCastlingMove, castlingKingDestination;
 
 /// A compact text field that lets the user type a move instead of dragging.
 ///
@@ -144,11 +145,9 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
             // For castling, dartchess encodes king→rook-square (e.g. e1h1).
             // Also accept the standard UCI king→destination (e.g. e1g1).
             final uciAliases = <String>[uci];
-            final fileDiff = (fromSq % 8 - toSq % 8).abs();
-            if (piece?.role == Role.king && fileDiff > 1) {
-              final kingDest = toSq > fromSq
-                  ? Square(fromSq + 2) // kingside
-                  : Square(fromSq - 2); // queenside
+            if (isCastlingMove(position, fromSq, toSq)) {
+              final kingDest =
+                  castlingKingDestination(position, fromSq, toSq);
               uciAliases.add('$from${toAlgebraic(kingDest)}');
             }
 
