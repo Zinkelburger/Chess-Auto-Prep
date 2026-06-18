@@ -60,6 +60,19 @@ Future<EvalChainOutcome> resolveEvalChain({
 }) async {
   var mode = extEvalMode;
 
+  // Shared tail for a successful external-source lookup: persist to the project
+  // cache (falling back to the configured depth) and build the outcome.
+  Future<EvalChainOutcome> recordHit(EvalChainSource source, EvalHit hit) async {
+    await cacheWrite?.call(
+        fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
+    return EvalChainOutcome(
+      source: source,
+      whiteCp: hit.cp,
+      depth: hit.depth,
+      extEvalMode: mode,
+    );
+  }
+
   if (canonicalNode != null && canonicalNode.hasEngineEval) {
     stats.transpositionEvalHits++;
     final isWhiteStm = isWhiteToMove(fen);
@@ -97,15 +110,7 @@ Future<EvalChainOutcome> resolveEvalChain({
     if (cdb.isHit) {
       stats.cdbDirectHits++;
       localHit = true;
-      final hit = cdb.hit!;
-      await cacheWrite?.call(
-          fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
-      return EvalChainOutcome(
-        source: EvalChainSource.cdbDirect,
-        whiteCp: hit.cp,
-        depth: hit.depth,
-        extEvalMode: mode,
-      );
+      return recordHit(EvalChainSource.cdbDirect, cdb.hit!);
     }
     if (cdb.shallow) {
       stats.cdbDirectShallow++;
@@ -125,15 +130,7 @@ Future<EvalChainOutcome> resolveEvalChain({
     if (local.isHit) {
       stats.localChessDbHits++;
       localHit = true;
-      final hit = local.hit!;
-      await cacheWrite?.call(
-          fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
-      return EvalChainOutcome(
-        source: EvalChainSource.localChessDb,
-        whiteCp: hit.cp,
-        depth: hit.depth,
-        extEvalMode: mode,
-      );
+      return recordHit(EvalChainSource.localChessDb, local.hit!);
     }
     if (local.shallow) {
       stats.localChessDbShallow++;
@@ -159,15 +156,7 @@ Future<EvalChainOutcome> resolveEvalChain({
       final api = await chessDbApi.lookup(fen, minDepth: minDepth);
       if (api.isHit) {
         stats.chessDbApiHits++;
-        final hit = api.hit!;
-        await cacheWrite?.call(
-            fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
-        return EvalChainOutcome(
-          source: EvalChainSource.chessDbApi,
-          whiteCp: hit.cp,
-          depth: hit.depth,
-          extEvalMode: mode,
-        );
+        return recordHit(EvalChainSource.chessDbApi, api.hit!);
       }
       if (api.shallow) {
         stats.chessDbApiShallow++;

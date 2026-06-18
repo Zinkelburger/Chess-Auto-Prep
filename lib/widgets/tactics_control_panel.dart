@@ -666,6 +666,26 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _syncPgnToCurrentTactic();
   }
 
+  /// Applies a field validation result: updates logical validity immediately and
+  /// clears the error when valid, then debounces showing the red error text.
+  /// Returns the (possibly new) debounce timer to store for the field.
+  Timer? _applyFieldValidation({
+    required String? error,
+    required Timer? currentTimer,
+    required void Function(bool valid) setValid,
+    required void Function(String? error) setError,
+  }) {
+    currentTimer?.cancel();
+    setState(() {
+      setValid(error == null);
+      if (error == null) setError(null);
+    });
+    if (error == null) return null;
+    return Timer(const Duration(milliseconds: 500), () {
+      if (mounted) setState(() => setError(error));
+    });
+  }
+
   void _validateDepth(String value) {
     final v = int.tryParse(value);
     String? error;
@@ -674,19 +694,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     } else if (v < 1 || v > 25) {
       error = 'Must be 1–25';
     }
-
-    _depthErrorTimer?.cancel();
-    // Immediately update logical validity + clear error when valid.
-    setState(() {
-      _depthValid = error == null;
-      if (error == null) _depthError = null;
-    });
-    // Debounce showing the red error text.
-    if (error != null) {
-      _depthErrorTimer = Timer(const Duration(milliseconds: 500), () {
-        if (mounted) setState(() => _depthError = error);
-      });
-    }
+    _depthErrorTimer = _applyFieldValidation(
+      error: error,
+      currentTimer: _depthErrorTimer,
+      setValid: (valid) => _depthValid = valid,
+      setError: (e) => _depthError = e,
+    );
   }
 
   void _validateCores(String value) {
@@ -698,17 +711,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     } else if (v < 1 || v > max) {
       error = 'Must be 1–$max';
     }
-
-    _coresErrorTimer?.cancel();
-    setState(() {
-      _coresValid = error == null;
-      if (error == null) _coresError = null;
-    });
-    if (error != null) {
-      _coresErrorTimer = Timer(const Duration(milliseconds: 500), () {
-        if (mounted) setState(() => _coresError = error);
-      });
-    }
+    _coresErrorTimer = _applyFieldValidation(
+      error: error,
+      currentTimer: _coresErrorTimer,
+      setValid: (valid) => _coresValid = valid,
+      setError: (e) => _coresError = e,
+    );
   }
 
   bool get _importFieldsValid => _depthValid && _coresValid;
@@ -822,19 +830,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       }
     }
     _solutionNavIndex = targetIndex;
-    _navigateSolutionBoard(_solutionNavIndex);
-  }
-
-  /// Navigate the board and PGN viewer to the end of the solution line.
-  void _navigateToSolutionEnd() {
-    final san = _solutionSanCache;
-    if (san.isEmpty) return;
-
-    final delta = (san.length - 1) - _solutionNavIndex;
-    for (int i = 0; i < delta; i++) {
-      _pgnViewerController.goForward();
-    }
-    _solutionNavIndex = san.length - 1;
     _navigateSolutionBoard(_solutionNavIndex);
   }
 

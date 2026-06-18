@@ -427,6 +427,18 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     }
   }
 
+  /// A monospace move-number label (e.g. "12. " or "12... ") for the move list.
+  Widget _moveNumberLabel(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        color: AppColors.pgnMoveNumber,
+        fontFamily: 'monospace',
+        fontSize: 13,
+      ),
+    );
+  }
+
   List<Widget> _buildMoveWidgets(
     List<MoveNode> siblings,
     int moveNumber,
@@ -456,19 +468,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     }
 
     if (isWhite) {
-      widgets.add(Text('$moveNumber. ',
-          style: const TextStyle(
-            color: AppColors.pgnMoveNumber,
-            fontFamily: 'monospace',
-            fontSize: 13,
-          )));
+      widgets.add(_moveNumberLabel('$moveNumber. '));
     } else if (isFirstMove) {
-      widgets.add(Text('$moveNumber... ',
-          style: const TextStyle(
-            color: AppColors.pgnMoveNumber,
-            fontFamily: 'monospace',
-            fontSize: 13,
-          )));
+      widgets.add(_moveNumberLabel('$moveNumber... '));
     }
 
     widgets.add(_buildSingleMoveWidget(
@@ -499,19 +501,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         }
 
         if (isWhite) {
-          widgets.add(Text('$moveNumber. ',
-              style: const TextStyle(
-                color: AppColors.pgnMoveNumber,
-                fontFamily: 'monospace',
-                fontSize: 13,
-              )));
+          widgets.add(_moveNumberLabel('$moveNumber. '));
         } else {
-          widgets.add(Text('$moveNumber... ',
-              style: const TextStyle(
-                color: AppColors.pgnMoveNumber,
-                fontFamily: 'monospace',
-                fontSize: 13,
-              )));
+          widgets.add(_moveNumberLabel('$moveNumber... '));
         }
 
         widgets.add(_buildSingleMoveWidget(

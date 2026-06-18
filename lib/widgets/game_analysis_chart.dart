@@ -368,20 +368,16 @@ class GameAnalysisSummary extends StatelessWidget {
     );
   }
 
+  /// Number of moves in [evals] with the given [classification].
+  int _countClass(List<MoveEval> evals, MoveClassification classification) =>
+      evals.where((e) => e.classification == classification).length;
+
   Widget _buildSideStats(BuildContext context, String label,
       List<MoveEval> sideEvals, Color accent) {
-    final blunders = sideEvals
-        .where((e) => e.classification == MoveClassification.blunder)
-        .length;
-    final mistakes = sideEvals
-        .where((e) => e.classification == MoveClassification.mistake)
-        .length;
-    final inaccuracies = sideEvals
-        .where((e) => e.classification == MoveClassification.inaccuracy)
-        .length;
-    final interesting = sideEvals
-        .where((e) => e.classification == MoveClassification.interesting)
-        .length;
+    final blunders = _countClass(sideEvals, MoveClassification.blunder);
+    final mistakes = _countClass(sideEvals, MoveClassification.mistake);
+    final inaccuracies = _countClass(sideEvals, MoveClassification.inaccuracy);
+    final interesting = _countClass(sideEvals, MoveClassification.interesting);
     final acpl = _computeAcpl(sideEvals);
 
     final theme = Theme.of(context);
