@@ -13,7 +13,6 @@ alwaysApply: true
 | `docs/FUTURE_FEATURES.md` | Backlog only — not built or incomplete |
 | `docs/ALGORITHM.md` | Tree-generation pipeline detail |
 | `docs/tree-display-architecture.md` | Eval-tree graph design |
-| `known-issues.md` | Active bugs |
 
 Do **not** add new files under `docs/specs/` or one-off feature spec markdown. Extend the table above instead.
 

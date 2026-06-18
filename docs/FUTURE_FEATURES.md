@@ -2,7 +2,7 @@
 
 **Backlog only — not current-state documentation.** For what exists today, see [`COMPONENT_MAP.md`](COMPONENT_MAP.md).
 
-Consolidated list of planned or incomplete capabilities (from `known-issues.md`, `tree_builder/TODO_cloud_evals.md`, and gap analysis vs `lib/`). Many foundation pieces from earlier design docs are already shipped; this file lists what is **still missing or incomplete**, de-duplicated and ordered by priority.
+Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO_cloud_evals.md` and gap analysis vs `lib/`). Many foundation pieces from earlier design docs are already shipped; this file lists what is **still missing or incomplete**, de-duplicated and ordered by priority.
 
 **Legend**
 
@@ -158,12 +158,12 @@ Consolidated list of planned or incomplete capabilities (from `known-issues.md`,
 
 ## P3 — Platform, infra & other modes
 
-### Tactics trainer (`known-issues.md`)
+### Tactics trainer
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Mate-in-1 positions shown / scored incorrectly | **Open bug** | Eval measurement for last-move positions suspected broken |
-| Positions with many equivalent winning moves | **Open design** | No filtering strategy for “any move maintains eval” |
+| Mate-in-1 positions shown / scored incorrectly | **Open bug** | "Position to next position" eval measurement suspected broken for last-move-of-game SF evaluations |
+| Positions with many equivalent winning moves | **Open design** | No filtering strategy for "any move maintains eval" (e.g. opponent blunders in equal position -- almost any reply is good) |
 
 ### Tree builder / eval database (`tree_builder/TODO_cloud_evals.md`)
 
@@ -214,5 +214,4 @@ These remain **undecided**; pick one before implementing dependent UI:
 - `docs/ALGORITHM.md` — Flutter pipeline description
 - `tree_builder/ALGORITHM.md` — C `tree_builder` CLI (db-explorer, expectimax)
 - `docs/tree-display-architecture.md` — eval-tree graph performance principles
-- `known-issues.md` — active bugs
 - `tree_builder/TODO_cloud_evals.md` — infra backlog
