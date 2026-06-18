@@ -1,0 +1,234 @@
+[Event "Amber-rapid 8th"]
+[Site "Monte Carlo"]
+[Date "1999.03.16"]
+[EventDate "1999.03.16"]
+[Round "1"]
+[Result "1-0"]
+[White "Vladimir Kramnik"]
+[Black "Veselin Topalov"]
+[ECO "A40"]
+[WhiteElo "2751"]
+[BlackElo "2700"]
+[PlyCount "55"]
+
+1. Nf3 c5 2. c4 g6 3. d4 Bg7 4. e4 Qb6 5. dxc5 Qxc5
+6. Be2 d6 7. O-O Nc6 8. a3 Bg4 9. b4 Qb6 10. Be3 Qd8
+11. Ra2 Nf6 12. Nc3 O-O 13. Rd2 Nd7 14. Qb3 a5 15. h3 Bxf3
+16. Bxf3 axb4 17. axb4 b6 18. Rfd1 Re8 19. Be2 Qc7 20. Nb5 Qb7
+21. f4 Ra1 22. e5 Rxd1+ 23. Qxd1 Nxb4 24. Bf3 Qb8 25. Qa4 dxe5
+26. Rxd7 exf4 27. Bf2 e5 28. Nd6 1-0
+
+[Event "Hoogovens"]
+[Site "Wijk aan Zee NED"]
+[Date "1988.01.15"]
+[EventDate "1988.01.08"]
+[Round "6"]
+[Result "1-0"]
+[White "Anatoly Karpov"]
+[Black "Kiril Dimitrov Georgiev"]
+[ECO "A10"]
+[WhiteElo "?"]
+[BlackElo "?"]
+[PlyCount "81"]
+
+1. c4 g6 2. Nf3 Bg7 3. d4 Nf6 4. g3 O-O 5. Bg2 c6
+6. Nc3 d5 7. Qb3 e6 8. O-O Nbd7 9. Bf4 Nb6 10. c5 Nc4
+11. Qc2 Nh5 12. b3 Nxf4 13. gxf4 Na3 14. Qd2 b5 15. Rfe1 Rb8
+16. Kh1 a5 17. e3 f5 18. Bf1 Bd7 19. Be2 Bf6 20. Rg1 Kh8
+21. Rg3 Qe7 22. Rag1 Rg8 23. Qc1 b4 24. Na4 Rg7 25. Qf1 Rbg8
+26. Qh3 Be8 27. Nb6 Qd8 28. Qh6 Rc7 29. Ne5 Rcg7 30. Bd3 Nb5
+31. Bxb5 cxb5 32. f3 Bh4 33. Rh3 Bf2 34. Rxg6 Bxe3 35. Rxg7 Rxg7
+36. Rg3 Qe7 37. Rxg7 Qxg7 38. Qxg7+ Kxg7 39. c6 Bxc6 40. Nxc6 Bxf4
+41. Nd7 1-0
+
+[Event "Belgrade Investbanka"]
+[Site "Belgrade SRB"]
+[Date "1995.11.27"]
+[EventDate "1995.11.14"]
+[Round "11"]
+[Result "1-0"]
+[White "Vassily Ivanchuk"]
+[Black "Peter Leko"]
+[ECO "E60"]
+[WhiteElo "?"]
+[BlackElo "?"]
+[PlyCount "127"]
+
+1.d4 Nf6 2.c4 g6 3.g3 c6 4.Nc3 d5 5.Qb3 Bg7 6.Bg2 O-O 7.Nf3 Qb6 8.h3
+dxc4 9.Qxc4 Be6 10.Qa4 Na6 11.O-O Qb4 12.Qc2 c5 13.dxc5 Qxc5 14.Be3 Qc8 15.Ng5 Bd5
+16.Qa4 Bxg2 17.Kxg2 Nb8 18.Qh4 Nc6 19.Rfd1 h5 20.Qf4 Qb8 21.Qc4 Qe5 22.Qb3 b6 23.Rac1
+Qc7 24.Nd5 Qb7 25.Nf3 Na5 26.Qb5 Nxd5 27.Rxd5 Rac8 28.Rd7 Qe4 29.b3 Rxc1 30.Bxc1 Nc6
+31.Rc7 Nd4 32.Qa4 a5 33.Be3 e5 34.Re7 Qd5 35.Qd7 Qxd7 36.Rxd7 Nxe2 37.Bxb6 Nc1 38.Bxa5
+Nxa2 39.Ng5 Bh6 40.h4 f6 41.Ne4 f5 42.Ng5 Bxg5 43.hxg5 Rb8 44.Rd6 Kg7 45.Bd8 Rb5
+46.Bf6+ Kf7 47.Rd7+ Kf8 48.Rg7 Nc3 49.Rxg6 Ne4 50.Bh8 f4 51.b4 Rxb4 52.gxf4 exf4 53.f3
+Nc5 54.Rh6 Ra4 55.g6 Ra6 56.Bd4 Ne6 57.Bf6 Ke8 58.Rh7 Rc6 59.Kh2 Ra6 60.Rxh5 Ra2+
+61.Kh3 Ra6 62.Kg4 Rc6 63.Rh7 Ra6 64.Kf5 1-0
+
+[Event "Biel Interzonal"]
+[Site "Biel SUI"]
+[Date "1993.07.27"]
+[EventDate "1993.07.16"]
+[Round "10"]
+[Result "1/2-1/2"]
+[White "Evgeny Anisimovich Pigusov"]
+[Black "Ye Jiangchuan"]
+[ECO "D76"]
+[WhiteElo "2585"]
+[BlackElo "2535"]
+[PlyCount "112"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 O-O 5.d4 d5 6.cxd5 Nxd5 7.O-O Nb6 8.Nc3 Nc6 9.d5 Na5 10.Qc2 c6 11.dxc6 Nxc6 12.Rd1 Qc7 13.Nb5 Qb8 14.Bf4 e5 15.Be3 Bf5 16.Qc5 Rc8 17.Nd6 Bf8 18.Ng5 Bxd6 19.Rxd6 Nd4 20.Qxe5 Nxe2+ 21.Kf1 Nc4 22.Qf6 Nxd6 23.Rd1 h6 24.Nxf7 Nxf7 25.Bd5 Qc7 26.Bxh6 Bh3+ 27.Ke1 Qa5+ 28.b4 Qxb4+ 29.Bd2 Qf8 30.Qxg6+ Qg7 31.Bxf7+ Kh8 32.Qh5+ Qh7 33.Qe5+ Qg7 34.Qh5+ Qh7 35.Bh6 Qf5 36.Rd5 Qxh5 37.Rxh5 Bg4 38.Rh4 Bf5 39.Kxe2 Bh7 40.Rg4 Bg8 41.Bxg8 Rxg8 42.Rh4 Rgc8 43.Be3+ Kg7 44.Kd3 b5 45.Bd4+ Kg6 46.Rg4+ Kh6 47.h4 a5 48.Rg5 b4 49.g4 a4 50.f4 Rd8 51.Rh5+ Kg6 52.f5+ Kf7 53.Rh7+ Kg8 54.Rh8+ Kf7 55.Rh7+ Kg8 56.Rh8+ Kf7 1/2-1/2
+
+[Event "New York Masters 52nd"]
+[Site "New York"]
+[Date "2003.??.??"]
+[Round "2"]
+[Result "0-1"]
+[White "Dean Ippolito"]
+[Black "Hikaru Nakamura"]
+[ECO "D74"]
+[WhiteElo "2378"]
+[BlackElo "2520"]
+[PlyCount "98"]
+
+1.d4 Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 O-O 5.Bg2 d5 6.cxd5 Nxd5 7.O-O Nc6 8.Nc3 Nb6 9.d5 Na5 10.Qc2 e6 11.dxe6 Bxe6 12.Bg5 Qc8 13.Rfd1 Re8 14.Rac1 Nc6 15.b3 Bf5 16.Qd2 Bg4 17.Qf4 f6 18.Bxf6 Rf8 19.Ne4 Bxf3 20.Bxf3 h6 21.Rxc6 bxc6 22.Qe5 Rxf6 23.Nxf6+ Kf7 24.Bxc6 Bxf6 25.Qf4 Rb8 26.a4 g5 27.Qe4 Qe6 28.Rd7+ Nxd7 29.Bd5 Qxd5 30.Qxd5+ Ke7 31.Qe4+ Kd8 32.b4 Be7 33.b5 Bc5 34.h4 Rb6 35.hxg5 hxg5 36.Qa8+ Ke7 37.Qg8 Rf6 38.e3 Ne5 39.Qd5 Nf3+ 40.Kg2 Bd6 41.Qb7 g4 42.a5 Rh6 43.b6 axb6 44.axb6 Rh2+ 45.Kf1 Rh1+ 46.Ke2 Re1+ 47.Kd3 Rd1+ 48.Ke4 Kf6 49.Qd5 Ng5+ 0-1
+
+[Event "European Team Championship"]
+[Site "Novi Sad SRB"]
+[Date "2009.10.27"]
+[Round "6"]
+[Result "1/2-1/2"]
+[White "Evgeny Tomashevsky"]
+[Black "Shakhriyar Mamedyarov"]
+[ECO "D75"]
+[WhiteElo "2688"]
+[BlackElo "2721"]
+[PlyCount "110"]
+
+1.c4 c5 2.Nf3 Nf6 3.g3 d5 4.cxd5 Nxd5 5.Bg2 g6 6.d4 Bg7 7.dxc5 O-O 8.O-O Na6 9.Ng5 e6 10.Ne4 Qc7 11.Nbc3 Nxc3 12.Nxc3 Nxc5 13.Be3 Rd8 14.Qc2 Bd7 15.Rac1 Bc6 16.Ne4 Nxe4 17.Bxe4 Rac8 18.Bxc6 Qxc6 19.Qxc6 Rxc6 20.Rxc6 bxc6 21.b3 Bd4 22.Rd1 c5 23.b4 Rd5 24.bxc5 Bxe3 25.Rxd5 exd5 26.fxe3 Kf8 27.Kf2 Ke7 28.e4 dxe4 29.Ke3 f5 30.Kd4 Ke6 31.e3 a5 32.h3 a4 33.a3 Kd7 34.Kc4 Kc6 35.Kb4 g5 36.Kc4 h6 37.Kd4 h5 38.h4 gxh4 39.gxh4 Kb5 40.Kd5 f4 41.c6 fxe3 42.c7 e2 43.c8=Q e1=Q 44.Qe8+ Kb6 45.Qg6+ Kc7 46.Qd6+ Kb7 47.Qc6+ Kb8 48.Qe8+ Kc7 49.Qe5+ Kd7 50.Qd6+ Kc8 51.Qa6+ Kb8 52.Qb5+ Kc7 53.Qc5+ Kb7 54.Qe7+ Kb6 55.Qf6+ Kc7 1/2-1/2
+
+[Event "European Club Cup"]
+[Site "Saint Vincent ITA"]
+[Date "2005.09.20"]
+[Round "3"]
+[Result "1-0"]
+[White "Semen Isaakovich Dvoirys"]
+[Black "Peter Berntsen"]
+[ECO "A06"]
+[WhiteElo "2589"]
+[BlackElo "2264"]
+[PlyCount "87"]
+
+1.Nf3 d5 2.g3 Nf6 3.Bg2 g6 4.c4 Bg7 5.cxd5 Nxd5 6.Nc3 O-O 7.O-O c6 8.d4 Nd7 9.e4 Nxc3 10.bxc3 Qa5 11.Qb3 c5 12.Rb1 Qc7 13.d5 Ne5 14.Nxe5 Qxe5 15.c4 b6 16.Bb2 Qh5 17.Bxg7 Kxg7 18.Qc3+ Kg8 19.f4 Bh3 20.Bf3 Bg4 21.Bg2 Bh3 22.Bxh3 Qxh3 23.f5 Qh6 24.e5 gxf5 25.Rxf5 f6 26.e6 Rad8 27.Rbf1 Kh8 28.Kg2 Rg8 29.R1f4 Rg6 30.Qf3 Qg7 31.Rh5 Rh6 32.Rg4 Qf8 33.Rgh4 Rxh5 34.Qxh5 Qg7 35.Rg4 Qf8 36.a4 Qe8 37.Qh6 Qf8 38.Qf4 Rc8 39.h4 Qe8 40.Kh3 Qxa4 41.Qh6 Rg8 42.Rxg8+ Kxg8 43.Qh5 Qxc4 44.Qf7+ 1-0
+
+[Event "Dubai"]
+[Site "Dubai UAE"]
+[Date "2001.04.25"]
+[Round "9"]
+[Result "1/2-1/2"]
+[White "Valerij Filippov"]
+[Black "Handszar Odeev"]
+[ECO "D74"]
+[WhiteElo "2632"]
+[BlackElo "2471"]
+[PlyCount "169"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 O-O 5.d4 d5 6.cxd5 Nxd5 7.O-O c6 8.e4 Nb6 9.h3 Na6 10.Nc3 Be6 11.b3 Qd7 12.Kh2 c5 13.Be3 Rfd8 14.Ne2 cxd4 15.Nfxd4 Qe8 16.Qe1 Bd7 17.e5 Bc8 18.Qa5 Nc7 19.Nc3 e6 20.Ne4 Rd5 21.Qc3 Rd7 22.f4 Nbd5 23.Qd2 Qd8 24.Bf2 Bf8 25.Rac1 Ba3 26.Rc2 Qf8 27.Rd1 Kh8 28.Nd6 Bxd6 29.exd6 Qxd6 30.Nf3 f6 31.Bd4 Qf8 32.Qe1 Rg7 33.g4 Qd6 34.Qg3 Ne8 35.g5 Qf8 36.Re2 Bd7 37.Bb2 Rc8 38.Nd4 Qd6 39.Rde1 Nxf4 40.gxf6 Rf7 41.Nxe6 Nxe2 42.Rxe2 Qxg3+ 43.Kxg3 Bxe6 44.Rxe6 Kg8 45.h4 Rd7 46.Re3 Rcd8 47.Bh3 Nc7 48.Bxd7 Rxd7 49.h5 Kf7 50.hxg6+ hxg6 51.Kh4 Ne8 52.Rf3 Rd6 53.Kg5 Rd2 54.Bc3 Rxa2 55.Re3 Rg2+ 56.Kh4 Nxf6 57.Rf3 g5+ 58.Kh3 g4+ 59.Kxg2 gxf3+ 60.Kxf3 Ke6 61.Ke2 Ne4 62.Bd4 a6 63.Kd3 Kd5 64.Be3 Nf6 65.Bd4 Nd7 66.Kc3 Ne5 67.Bf2 Nc6 68.Bb6 Ne5 69.Bf2 b5 70.Bg3 Nc6 71.Kd3 Nd4 72.b4 Nc6 73.Kc3 Ke4 74.Bd6 Kd5 75.Bf8 Ke4 76.Bd6 Kd5 77.Bf8 Ke4 78.Bd6 Nd4 79.Bc5 Nf5 80.Bb6 Ne3 81.Bc5 Nd5+ 82.Kc2 Ne3+ 83.Kc3 Nc4 84.Ba7 Ne3 85.Bc5 1/2-1/2
+
+[Event "Foxwoods Open"]
+[Site "Mashantucket, CT USA"]
+[Date "2008.03.23"]
+[Round "9"]
+[Result "1-0"]
+[White "Dean Ippolito"]
+[Black "Jonathan L Hilton"]
+[ECO "E60"]
+[WhiteElo "2495"]
+[BlackElo "2192"]
+[PlyCount "41"]
+
+1.d4 Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 O-O 5.Bg2 c6 6.Nc3 d5 7.Qb3 e6 8.O-O b6 9.Rd1 Bb7 10.e4 dxc4 11.Qxc4 b5 12.Qe2 b4 13.Na4 Nfd7 14.Bf4 Qa5 15.Qc2 Na6 16.Nd2 Nb6 17.Nc5 Nxc5 18.dxc5 e5 19.Nb3 Qa4 20.Be3 Nc8 21.a3 1-0
+
+[Event "Vienna Open"]
+[Site "Vienna AUT"]
+[Date "1996.08.09"]
+[Round "1"]
+[Result "1-0"]
+[White "Alexander Khalifman"]
+[Black "Robert 1 Ruck"]
+[ECO "E60"]
+[WhiteElo "2640"]
+[BlackElo "2465"]
+[PlyCount "130"]
+
+1.d4 Nf6 2.Nf3 g6 3.c4 Bg7 4.g3 c6 5.Bg2 d5 6.Qb3 O-O 7.O-O dxc4 8.Qxc4 Bf5 9.Nc3 Ne4 10.Nh4 Be6 11.Qd3 Nxc3 12.bxc3 Nd7 13.a4 Nb6 14.a5 Bc4 15.Qc2 Nd7 16.Re1 Re8 17.Nf3 e5 18.e4 Qc7 19.Be3 Ba6 20.Nd2 Nf8 21.f4 exd4 22.cxd4 f5 23.e5 Ne6 24.Nb3 Bf8 25.Red1 Red8 26.Rac1 Rac8 27.Bf3 Ba3 28.Ra1 Bf8 29.Rac1 Ba3 30.Rb1 Qf7 31.Nc5 Bxc5 32.dxc5 Rxd1+ 33.Rxd1 Nc7 34.Rd6 Bc4 35.Rf6 Bb3 36.Rxf7 Bxc2 37.Rd7 Bb3 38.a6 Nxa6 39.Rxb7 Bd5 40.Bxd5+ cxd5 41.Rxa7 Nxc5 42.Bxc5 Rxc5 43.Kf2 d4 44.Ke2 Rc3 45.Rd7 Re3+ 46.Kd2 g5 47.Rxd4 gxf4 48.gxf4 Rh3 49.Rd6 Rf3 50.Rd4 Rh3 51.Rd8+ Kg7 52.Rd7+ Kg6 53.Rd6+ Kh5 54.Rd8 Rxh2+ 55.Kd3 Rh3+ 56.Kd4 Rf3 57.e6 Rxf4+ 58.Ke5 Rf1 59.Kf6 Kg4 60.Rg8+ Kh4 61.e7 Re1 62.e8=Q Rxe8 63.Rxe8 f4 64.Kf5 Kg3 65.Rg8+ 1-0
+
+[Event "Reggio Emilia Top15"]
+[Site "Reggio Emilia ITA"]
+[Date "1991.01.12"]
+[Round "5"]
+[Result "1-0"]
+[White "Oleg Romanishin"]
+[Black "Boris Gulko"]
+[ECO "E60"]
+[WhiteElo "?"]
+[BlackElo "?"]
+[PlyCount "77"]
+
+1.d4 Nf6 2.Nf3 g6 3.c4 Bg7 4.g3 c6 5.Nc3 d5 6.Qb3 dxc4 7.Qxc4 O-O 8.Bg2 Na6 9.O-O Bf5 10.Ne5 Be6 11.Qa4 Qc8 12.Rd1 Nd7 13.Nxd7 Bxd7 14.Qa3 Re8 15.Bg5 Bf8 16.d5 Nc7 17.Qb3 cxd5 18.Nxd5 Bc6 19.e4 Ne6 20.Be3 b6 21.Rac1 Qb7 22.e5 Rac8 23.Rxc6 Qxc6 24.Nxb6 Qc7 25.Nxc8 Rxc8 26.Rc1 Qxc1+ 27.Bxc1 Nd4 28.Qd3 Rxc1+ 29.Bf1 Nc6 30.Qe3 Rc2 31.Bb5 e6 32.Bxc6 Rxc6 33.Qxa7 Rc2 34.Qb8 Kg7 35.Qb3 Rc1+ 36.Kg2 Bc5 37.a4 Bd4 38.a5 Bxe5 39.Qe3 1-0
+
+[Event "Amsterdam ACT op"]
+[Site "Amsterdam"]
+[Date "2004.07.21"]
+[Round "5"]
+[Result "1-0"]
+[White "Pavel V Tregubov"]
+[Black "Arno Bezemer"]
+[ECO "E60"]
+[WhiteElo "2628"]
+[BlackElo "2375"]
+[PlyCount "92"]
+
+1.d4 Nf6 2.c4 g6 3.g3 c6 4.Bg2 d5 5.Nf3 Bg7 6.Qb3 O-O 7.O-O Qb6 8.Nc3 Qxb3 9.axb3 Bf5 10.Ne5 Rd8 11.cxd5 cxd5 12.Bf4 Nbd7 13.g4 Be6 14.Nxd7 Rxd7 15.f3 Rdd8 16.e3 Bd7 17.b4 e6 18.b5 Rdc8 19.Ra2 a5 20.Rfa1 Bf8 21.Rxa5 Rxa5 22.Rxa5 Bb4 23.Ra7 Bxc3 24.bxc3 Bxb5 25.Rxb7 Ba6 26.Rb6 Bd3 27.g5 Ne8 28.e4 Bc2 29.Bd2 Rd8 30.Rc6 Nd6 31.Bf4 Nc4 32.Rc5 Bb3 33.exd5 exd5 34.Bh3 Ba2 35.Bc7 Re8 36.Rxd5 Re3 37.Kf2 Rxc3 38.Rd8+ Kg7 39.Rd7 Rc2+ 40.Kg3 Re2 41.Bd8 Re8 42.d5 Bb1 43.Bf6+ Kf8 44.d6 Bd3 45.Be7+ Kg8 46.Rc7 1-0
+
+[Event "Goodricke Open"]
+[Site "Calcutta IND"]
+[Date "1999.02.10"]
+[Round "5"]
+[Result "1-0"]
+[White "Aleksander Wojtkiewicz"]
+[Black "Krishnan Sasikiran"]
+[ECO "A15"]
+[WhiteElo "2570"]
+[BlackElo "2525"]
+[PlyCount "125"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 c6 5.d4 d5 6.Qb3 a5 7.cxd5 a4 8.Qd1 Nxd5 9.O-O O-O 10.Nc3 Nxc3 11.bxc3 Nd7 12.Ba3 Re8 13.e3 Nb6 14.Qe2 Bg4 15.h3 Be6 16.Nd2 Qc8 17.Kh2 Ra5 18.Rfc1 Qc7 19.c4 Rh5 20.Rab1 Bc8 21.d5 Nd7 22.Kg1 Rh6 23.Ne4 Nf6 24.Nxf6+ Bxf6 25.h4 g5 26.hxg5 Bxg5 27.Rd1 Rg6 28.Be4 f5 29.Bf3 Rh6 30.Bh5 Rd8 31.f4 Bf6 32.Kf2 c5 33.Rh1 Bg7 34.Bb2 e6 35.Bf3 Rxh1 36.Rxh1 e5 37.Qc2 e4 38.Be2 a3 39.Bxa3 Qa5 40.Bc1 Rd6 41.Bd2 Qa3 42.Qb3 Qxb3 43.axb3 Ra6 44.Rb1 Ra2 45.Ke1 b6 46.b4 Bf8 47.Bd1 Ba6 48.Bb3 Ra3 49.b5 Bc8 50.Bc3 Be7 51.Be5 Bd8 52.Kd2 Bd7 53.Kc3 Be8 54.Rh1 h5 55.Kb2 Ra7 56.Bd1 Rh7 57.Be2 Ra7 58.g4 fxg4 59.Bxg4 hxg4 60.Rh8+ Kf7 61.Rh7+ Kg6 62.Rxa7 Kf5 63.Ra8 1-0
+
+[Event "European Championship"]
+[Site "Plovdiv BUL"]
+[Date "2012.03.22"]
+[Round "3"]
+[Result "1-0"]
+[White "Nikita Vitiugov"]
+[Black "Nikola Sedlak"]
+[ECO "A16"]
+[WhiteElo "?"]
+[BlackElo "?"]
+[PlyCount "79"]
+
+1.c4 Nf6 2.Nc3 g6 3.e4 c5 4.Nf3 Nc6 5.d4 cxd4 6.Nxd4 d6 7.f3 Nxd4 8.Qxd4 Bg7 9.Be3 O-O 10.Qd2 a5 11.Na4 Nd7 12.Be2 b6 13.Rd1 Bb7 14.Bh6 Bxh6 15.Qxh6 f5 16.exf5 Rxf5 17.O-O Nc5 18.Nc3 Qf8 19.Qxf8+ Raxf8 20.Rfe1 Re5 21.Bf1 Rxe1 22.Rxe1 Rf7 23.f4 h6 24.g3 g5 25.fxg5 hxg5 26.Bg2 Bxg2 27.Kxg2 Nd3 28.Re2 g4 29.Nd5 Ne5 30.Re4 e6 31.Ne3 Rc7 32.b3 Rg7 33.Rd4 a4 34.Rxd6 axb3 35.axb3 Ra7 36.Rxe6 Ra2+ 37.Kf1 Nf3 38.Nxg4 Nd2+ 39.Kg1 Nf3+ 40.Kh1 1-0
+
+[Event "Baden-Baden"]
+[Site "Baden-Baden FRG"]
+[Date "1981.07.??"]
+[Round "3"]
+[Result "1-0"]
+[White "Anthony Miles"]
+[Black "Jean-Luc Roos"]
+[ECO "A96"]
+[WhiteElo "?"]
+[BlackElo "?"]
+[PlyCount "79"]
+
+1.d4 e6 2.Nf3 f5 3.g3 Nf6 4.Bg2 Be7 5.O-O O-O 6.c4 d6 7.b3 a5 8.Nc3 Qe8 9.e3 Na6 10.Bb2 Bd8 11.a3 c6 12.b4 e5 13.b5 Nb8 14.Nd2 Bc7 15.bxc6 bxc6 16.Nb5 Na6 17.Nxc7 Nxc7 18.c5 exd4 19.Bxd4 d5 20.Qc2 Qh5 21.Nf3 Ne6 22.Rfb1 f4 23.exf4 Ne4 24.Be3 g5 25.Nxg5 N6xg5 26.fxg5 Bf5 27.Qd1 Bg4 28.Qd4 Rf7 29.Qe5 h6 30.Bd4 hxg5 31.f3 Rh7 32.Rb8+ Rxb8 33.Qxb8+ Kf7 34.fxe4 Qxh2+ 35.Kf1 Kg6 36.Qg8+ Kh6 37.Qf8+ Kg6 38.Qf6+ Kh5 39.Be3 Be2+ 40.Kf2 1-0
