@@ -116,8 +116,8 @@ class TacticsImportCoordinator extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onPositionFound(TacticsPosition position) {
-    database.addPosition(position);
+  Future<void> _onPositionFound(TacticsPosition position) async {
+    await database.addPosition(position);
     newPositionsFound++;
     notifyListeners();
   }
