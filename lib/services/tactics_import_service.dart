@@ -27,8 +27,10 @@ typedef OnPositionFoundCallback = void Function(TacticsPosition position);
 typedef ProgressCallback = void Function(String message);
 
 class TacticsImportService {
-  final TacticsDatabase _database = TacticsDatabase();
+  TacticsImportService({TacticsDatabase? database})
+      : _database = database ?? TacticsDatabase();
 
+  final TacticsDatabase _database;
   /// Whether to skip games that have already been analyzed
   bool skipAnalyzedGames = true;
 
@@ -65,25 +67,39 @@ class TacticsImportService {
     return 50 + 50 * _winningChances(centipawns);
   }
 
-  /// Initialize the database (load analyzed game IDs)
+  /// Initialize the database (load analyzed game IDs).
+  /// Called by the coordinator before import; safe to call multiple times.
   Future<void> initialize() async {
-    await _database.loadPositions();
+    if (_database.positions.isEmpty && _database.analyzedGameIds.isEmpty) {
+      await _database.loadPositions();
+    }
   }
 
   Future<List<TacticsPosition>> importGamesFromLichess(
     String username, {
     int? maxGames,
+    DateTime? since,
     int depth = 15,
     int? maxCores,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
-    if (_database.analyzedGameIds.isEmpty) {
-      await _database.loadPositions();
-    }
 
+    final params = <String, String>{
+      'evals': 'false',
+      'clocks': 'false',
+      'opening': 'false',
+      'moves': 'true',
+    };
+    if (since != null) {
+      params['since'] = '${since.millisecondsSinceEpoch}';
+      params['max'] = '${maxGames ?? 200}';
+    } else {
+      params['max'] = '${maxGames ?? 20}';
+    }
+    final query = params.entries.map((e) => '${e.key}=${e.value}').join('&');
     final url = Uri.parse(
-        'https://lichess.org/api/games/user/$username?max=${maxGames ?? 20}&evals=false&clocks=false&opening=false&moves=true');
+        'https://lichess.org/api/games/user/$username?$query');
 
     progressCallback?.call('Downloading games from Lichess...');
     final response = await LichessApiClient().get(
@@ -129,17 +145,13 @@ class TacticsImportService {
   Future<List<TacticsPosition>> importGamesFromChessCom(
     String username, {
     int? maxGames,
+    DateTime? since,
     int depth = 15,
     int? maxCores,
     Function(String)? progressCallback,
     OnPositionFoundCallback? onPositionFound,
   }) async {
-    // Ensure database is loaded to check for already-analyzed games
-    if (_database.analyzedGameIds.isEmpty) {
-      await _database.loadPositions();
-    }
-
-    int targetGames = maxGames ?? 10;
+    int targetGames = maxGames ?? (since != null ? 200 : 10);
     List<String> allGames = [];
 
     progressCallback?.call('Fetching Chess.com game archives for $username…');
@@ -153,9 +165,31 @@ class TacticsImportService {
       throw Exception('No game archives found for $username on Chess.com');
     }
 
+    // When fetching since a date, skip archive months before that date.
+    // Archive URLs are like https://api.chess.com/pub/player/.../games/2024/06
+    int startArchiveIndex = 0;
+    if (since != null) {
+      final sinceYear = since.year;
+      final sinceMonth = since.month;
+      for (int i = 0; i < archives.length; i++) {
+        final parts = archives[i].split('/');
+        if (parts.length >= 2) {
+          final year = int.tryParse(parts[parts.length - 2]);
+          final month = int.tryParse(parts[parts.length - 1]);
+          if (year != null && month != null) {
+            if (year > sinceYear ||
+                (year == sinceYear && month >= sinceMonth)) {
+              startArchiveIndex = i;
+              break;
+            }
+          }
+        }
+      }
+    }
+
     // Walk backwards from the most recent archive.
     for (int i = archives.length - 1;
-        i >= 0 && allGames.length < targetGames;
+        i >= startArchiveIndex && allGames.length < targetGames;
         i--) {
       progressCallback?.call(
         'Downloading Chess.com games (${allGames.length}/$targetGames)…',
@@ -174,6 +208,23 @@ class TacticsImportService {
 
     if (allGames.isEmpty) {
       throw Exception('No games found for $username on Chess.com');
+    }
+
+    // Filter out games older than the since date by parsing PGN Date header.
+    if (since != null) {
+      final sinceDay = DateTime(since.year, since.month, since.day);
+      allGames = allGames.where((gameText) {
+        final dateMatch =
+            RegExp(r'\[(?:Date|UTCDate) "(\d{4})\.(\d{2})\.(\d{2})"\]')
+                .firstMatch(gameText);
+        if (dateMatch == null) return true;
+        final gameDate = DateTime(
+          int.parse(dateMatch.group(1)!),
+          int.parse(dateMatch.group(2)!),
+          int.parse(dateMatch.group(3)!),
+        );
+        return !gameDate.isBefore(sinceDay);
+      }).toList();
     }
 
     // Limit to target games
@@ -377,14 +428,15 @@ class TacticsImportService {
     final gameTasks = <Map<String, dynamic>>[];
     int skippedCount = 0;
 
+    progressCallback?.call(
+      'Checking ${games.length} games against analysis history...',
+    );
+
     for (int i = 0; i < games.length; i++) {
       final gameId = _extractGameId(games[i]);
       if (skipAnalyzedGames && _database.isGameAnalyzed(gameId)) {
         skippedCount++;
         if (kDebugMode) log.w('Skipping already-analyzed game: $gameId');
-        progressCallback?.call(
-          'Skipping game ${i + 1}/${games.length} (already analyzed)...',
-        );
         continue;
       }
       gameTasks.add({
@@ -392,6 +444,13 @@ class TacticsImportService {
         'globalIndex': i + 1,
         'gameId': gameId,
       });
+    }
+
+    if (skippedCount > 0) {
+      progressCallback?.call(
+        'Skipped $skippedCount already-analyzed games. '
+        '${gameTasks.isEmpty ? "Nothing new to analyze!" : "${gameTasks.length} new games to analyze."}',
+      );
     }
 
     if (gameTasks.isEmpty) {
@@ -492,13 +551,13 @@ class TacticsImportService {
               if (_cancelled) break;
               gamePositions[gameId] = positions;
               totalPositionsFound += positions.length;
+              await _database.markGameAnalyzed(gameId);
             } catch (e) {
               if (_cancelled) break;
               if (kDebugMode) log.e('Error analyzing game $gameId: $e');
             }
 
             completedGames++;
-            await _database.markGameAnalyzed(gameId);
 
             final gameTactics = gamePositions[gameId];
             if (gameTactics != null && onPositionFound != null) {
