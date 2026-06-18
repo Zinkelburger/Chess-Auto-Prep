@@ -4,6 +4,7 @@ library;
 
 import 'dart:async';
 import 'dart:collection';
+import 'dart:io' as io;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
@@ -12,6 +13,8 @@ import '../../../models/opening_tree.dart';
 import '../../../services/engine/stockfish_pool.dart';
 import '../../../services/eval_cache.dart';
 import '../../../services/maia_factory.dart';
+import '../../../services/opening_tree_builder.dart';
+import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/probability_service.dart';
 import '../../../utils/fen_utils.dart';
 import '../models/audit_finding.dart';
@@ -86,6 +89,12 @@ class RepertoireAuditService {
     int evalCacheMisses = 0;
 
     await _evalCache.init();
+
+    // Build a merged opening tree from clash PGNs (books/courses) if provided.
+    OpeningTree? clashTree;
+    if (config.clashPgnPaths.isNotEmpty) {
+      clashTree = await _buildClashTree(config.clashPgnPaths, isWhiteRepertoire);
+    }
 
     final startNode = _resolveStartNode(tree, startFen);
     if (startNode == null) {
@@ -176,6 +185,7 @@ class RepertoireAuditService {
           isWhiteRepertoire: isWhiteRepertoire,
           config: config,
           cumulativeProbability: entry.cumProb,
+          clashTree: clashTree,
         );
         for (final f in newFindings) {
           findings.add(f);
@@ -372,6 +382,7 @@ class RepertoireAuditService {
     required bool isWhiteRepertoire,
     required AuditConfig config,
     required double cumulativeProbability,
+    OpeningTree? clashTree,
   }) async {
     final findings = <AuditFinding>[];
     final coveredMoves = node.children.keys.toSet();
@@ -452,7 +463,71 @@ class RepertoireAuditService {
       }
     }
 
+    // Repertoire clashes check (books/courses).
+    if (clashTree != null) {
+      final key = normalizeFen(node.fen);
+      final clashNodes = clashTree.fenToNodes[key];
+      if (clashNodes != null) {
+        for (final clashNode in clashNodes) {
+          final totalAtParent = clashNode.children.values
+              .fold<int>(0, (sum, c) => sum + c.gamesPlayed);
+
+          for (final entry in clashNode.children.entries) {
+            final san = entry.key;
+            if (coveredMoves.contains(san)) continue;
+
+            final alreadyReported = findings.any((f) =>
+                f.type == AuditFindingType.missingResponse &&
+                f.missingMove == san);
+            if (alreadyReported) continue;
+
+            final prob = totalAtParent > 0
+                ? entry.value.gamesPlayed / totalAtParent
+                : 0.0;
+
+            findings.add(AuditFinding(
+              type: AuditFindingType.missingResponse,
+              severity:
+                  prob >= 0.20 ? AuditSeverity.critical : AuditSeverity.info,
+              movePath: movePath,
+              fen: node.fen,
+              missingMove: san,
+              gameCount: entry.value.gamesPlayed,
+              probability: prob,
+              source: MissingResponseSource.clash,
+              cumulativeProbability: cumulativeProbability * prob,
+              transposesIntoRepertoire:
+                  _doesMoveTranspose(node.fen, san, tree),
+            ));
+          }
+        }
+      }
+    }
+
     return findings;
+  }
+
+  /// Build a merged [OpeningTree] from the given PGN file paths.
+  Future<OpeningTree> _buildClashTree(
+    List<String> paths,
+    bool isWhiteRepertoire,
+  ) async {
+    final allGames = <String>[];
+    for (final path in paths) {
+      try {
+        final content = await io.File(path).readAsString();
+        allGames.addAll(pgn.splitPgnIntoGames(content));
+      } catch (e) {
+        if (kDebugMode) debugPrint('[Audit] Failed to read clash PGN $path: $e');
+      }
+    }
+    return OpeningTreeBuilder.buildTree(
+      pgnList: allGames,
+      username: '',
+      userIsWhite: isWhiteRepertoire,
+      strictPlayerMatching: false,
+      maxDepth: 40,
+    );
   }
 
   /// Check if playing [san] from [fen] transposes into a position already
@@ -467,7 +542,9 @@ class RepertoireAuditService {
       for (final key in tree.fenToNodes.keys) {
         if (key.split(' ').take(4).join(' ') == afterPrefix) return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
     return false;
   }
 
@@ -493,7 +570,9 @@ class RepertoireAuditService {
             if (m.total >= config.minGames) moveSet.add(m.san);
           }
         }
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort; failure here is non-fatal and intentionally ignored.
+      }
     }
 
     if (moveSet.length < config.deadEndMinContinuations) {
@@ -507,7 +586,9 @@ class RepertoireAuditService {
               if (san != null) moveSet.add(san);
             }
           }
-        } catch (_) {}
+        } catch (_) {
+          // Best-effort; failure here is non-fatal and intentionally ignored.
+        }
       }
     }
 

@@ -19,6 +19,7 @@ enum AuditSeverity {
 enum MissingResponseSource {
   lichess,
   maia,
+  clash,
 }
 
 class AuditFinding {
@@ -150,7 +151,9 @@ class AuditFinding {
         final numbered = _sanWithMoveNumber(move, movePath.length);
         final probLabel = _missingMoveLocalProbLabel;
         final transTag = transposesIntoRepertoire ? ' · transposes' : '';
-        return 'Missing: $numbered ($probLabel$transTag)';
+        final prefix =
+            source == MissingResponseSource.clash ? 'Clash' : 'Missing';
+        return '$prefix: $numbered ($probLabel$transTag)';
       case AuditFindingType.weakPosition:
         return 'Weak position: eval ${positionEvalCp}cp';
       case AuditFindingType.deadEnd:
@@ -168,6 +171,10 @@ class AuditFinding {
     final probStr = _formatProbability(p);
     if (source == MissingResponseSource.lichess) {
       return 'p=$probStr, ${gameCount ?? 0} games';
+    }
+    if (source == MissingResponseSource.clash) {
+      final count = gameCount ?? 0;
+      return count > 1 ? 'p=$probStr, $count lines' : 'p=$probStr book';
     }
     return 'p=$probStr Maia';
   }

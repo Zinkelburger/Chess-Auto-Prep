@@ -11,11 +11,15 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../theme/app_colors.dart';
 import '../../../utils/keyboard_shortcut_utils.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
 import '../services/audit_persistence.dart';
+import 'audit_dismissed_section.dart';
+import 'audit_filter_bar.dart';
+import 'audit_findings_list.dart';
+import 'audit_resume_banner.dart';
+import 'audit_status_row.dart';
 
 class AuditFindingsPanel extends StatefulWidget {
   final AuditResult? result;
@@ -63,6 +67,9 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   /// Active type filters. Empty set = show all types.
   final Set<AuditFindingType> _activeFilters = {};
 
+  /// When true, only clash-sourced missing responses are shown.
+  bool _clashOnly = false;
+
   /// Max visible findings at once (user-configurable).
   int _maxVisible = 20;
   late final TextEditingController _capController;
@@ -96,22 +103,27 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     super.dispose();
   }
 
+  bool _matchesFilters(AuditFinding f) {
+    if (_hideDismissed && f.dismissed) return false;
+    if (_activeFilters.isNotEmpty && !_activeFilters.contains(f.type)) {
+      return false;
+    }
+    if (_clashOnly &&
+        !(f.type == AuditFindingType.missingResponse &&
+            f.source == MissingResponseSource.clash)) {
+      return false;
+    }
+    return true;
+  }
+
   void _recomputeVisible() {
     final allFindings = widget.result?.findings ?? widget.liveFindings;
 
-    var filtered = allFindings.where((f) {
-      if (_hideDismissed && f.dismissed) return false;
-      if (_activeFilters.isNotEmpty && !_activeFilters.contains(f.type)) {
-        return false;
-      }
-      return true;
-    }).toList();
+    var filtered = allFindings.where(_matchesFilters).toList();
 
     filtered.sort((a, b) =>
         (b.cumulativeProbability ?? 0).compareTo(a.cumulativeProbability ?? 0));
 
-    // Auto-scale: cap at _maxVisible so the list never overwhelms.
-    // As the user dismisses items, lower-probability findings surface.
     if (filtered.length > _maxVisible) {
       _visibleFindings = filtered.sublist(0, _maxVisible);
     } else {
@@ -126,13 +138,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
   /// Total findings that match the current type filter (regardless of auto-scale cap).
   int get _totalMatchingFindings {
     final allFindings = widget.result?.findings ?? widget.liveFindings;
-    return allFindings.where((f) {
-      if (_hideDismissed && f.dismissed) return false;
-      if (_activeFilters.isNotEmpty && !_activeFilters.contains(f.type)) {
-        return false;
-      }
-      return true;
-    }).length;
+    return allFindings.where(_matchesFilters).length;
   }
 
   void _applyCapFromField() {
@@ -360,447 +366,74 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       child: Column(
         children: [
           if (widget.interruptedSnapshot != null && !widget.isAuditing)
-            _buildResumeBanner(widget.interruptedSnapshot!),
-          _buildFilterBar(),
-          _buildStatusRow(),
+            AuditResumeBanner(
+              snapshot: widget.interruptedSnapshot!,
+              onResume: widget.onResumeAudit,
+              onStartFresh: widget.onStartFreshAudit,
+            ),
+          AuditFilterBar(
+            findings: widget.result?.findings ?? widget.liveFindings,
+            activeFilters: _activeFilters,
+            onToggle: _toggleFilter,
+            clashOnly: _clashOnly,
+            onToggleClashOnly: () {
+              setState(() {
+                _clashOnly = !_clashOnly;
+                _selectedIndex = -1;
+                _recomputeVisible();
+              });
+            },
+          ),
+          AuditStatusRow(
+            isAuditing: widget.isAuditing,
+            nodesChecked: widget.auditNodesChecked,
+            totalNodes: widget.auditTotalNodes,
+            visibleCount: _visibleFindings.length,
+            totalMatching: _totalMatchingFindings,
+            selectedIndex: _selectedIndex,
+            hideDismissed: _hideDismissed,
+            capController: _capController,
+            reachThreshold: _reachThreshold,
+            resultTimestamp: widget.result?.timestamp,
+            onRerunAudit: widget.onRerunAudit,
+            onApplyCap: _applyCapFromField,
+            onToggleHideDismissed: () {
+              setState(() {
+                _hideDismissed = !_hideDismissed;
+                _recomputeVisible();
+              });
+            },
+          ),
           const Divider(height: 1),
-          Expanded(child: _buildFindingsList()),
-          _buildDismissedSection(),
-        ],
-      ),
-    );
-  }
-
-  // ── Resume banner ───────────────────────────────────────────────────
-
-  Widget _buildResumeBanner(AuditSnapshot snapshot) {
-    final checked = snapshot.result.nodesChecked;
-    final findings = snapshot.result.findings.length;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.amber.withAlpha(20),
-        border: Border(
-          bottom: BorderSide(color: Colors.amber.withAlpha(60)),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.pause_circle_outline, size: 16, color: Colors.amber),
-          const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              'Audit interrupted at $checked positions ($findings findings)',
-              style: const TextStyle(fontSize: 11, color: Colors.amber),
+            child: AuditFindingsList(
+              findings: _visibleFindings,
+              isAuditing: widget.isAuditing,
+              scrollController: _scrollController,
+              selectedIndex: _selectedIndex,
+              onStartAudit: widget.onStartAudit,
+              onSelect: _selectFinding,
+              onToggleDismiss: (finding) {
+                setState(() {
+                  _dismissFinding(finding);
+                  _recomputeVisible();
+                });
+              },
+              onContextMenu: (finding, pos) =>
+                  _showDismissMenu(context, pos, finding),
             ),
           ),
-          TextButton(
-            onPressed: widget.onResumeAudit,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: const TextStyle(fontSize: 11),
-            ),
-            child: const Text('Resume'),
-          ),
-          const SizedBox(width: 4),
-          TextButton(
-            onPressed: widget.onStartFreshAudit,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: const TextStyle(fontSize: 11),
-              foregroundColor: Colors.grey,
-            ),
-            child: const Text('Start Fresh'),
+          AuditDismissedSection(
+            dismissedCount: (widget.result?.findings ?? widget.liveFindings)
+                .where((f) => f.dismissed)
+                .length,
+            onRestoreAll: _restoreAll,
           ),
         ],
       ),
     );
   }
 
-  // ── Filter bar ──────────────────────────────────────────────────────
-
-  Widget _buildFilterBar() {
-    final allFindings = widget.result?.findings ?? widget.liveFindings;
-    if (allFindings.isEmpty) return const SizedBox.shrink();
-
-    int countOf(AuditFindingType t) =>
-        allFindings.where((f) => f.type == t && !f.dismissed).length;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _filterChip(
-              label: 'Blunders',
-              count: countOf(AuditFindingType.mistake),
-              type: AuditFindingType.mistake,
-              color: AppColors.evalNegative,
-            ),
-            const SizedBox(width: 4),
-            _filterChip(
-              label: 'Inaccuracies',
-              count: countOf(AuditFindingType.inaccuracy),
-              type: AuditFindingType.inaccuracy,
-              color: Colors.orange,
-            ),
-            const SizedBox(width: 4),
-            _filterChip(
-              label: 'Missing',
-              count: countOf(AuditFindingType.missingResponse),
-              type: AuditFindingType.missingResponse,
-              color: Colors.blue,
-            ),
-            const SizedBox(width: 4),
-            _filterChip(
-              label: 'Weak',
-              count: countOf(AuditFindingType.weakPosition),
-              type: AuditFindingType.weakPosition,
-              color: Colors.deepOrange,
-            ),
-            const SizedBox(width: 4),
-            _filterChip(
-              label: 'Dead Ends',
-              count: countOf(AuditFindingType.deadEnd),
-              type: AuditFindingType.deadEnd,
-              color: AppColors.onSurfaceMuted,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _filterChip({
-    required String label,
-    required int count,
-    required AuditFindingType type,
-    required Color color,
-  }) {
-    final isActive = _activeFilters.contains(type);
-    return FilterChip(
-      label: Text(
-        count > 0 ? '$label ($count)' : label,
-        style: TextStyle(
-          fontSize: 12,
-          color: isActive ? Colors.white : color,
-        ),
-      ),
-      selected: isActive,
-      selectedColor: color.withAlpha(80),
-      backgroundColor: Colors.transparent,
-      side: BorderSide(
-        color: isActive ? color : color.withAlpha(60),
-        width: 1,
-      ),
-      visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      showCheckmark: false,
-      onSelected: count > 0 ? (_) => _toggleFilter(type) : null,
-    );
-  }
-
-  // ── Status row (position counter + dismissed toggle) ──────────────────
-
-  Widget _buildStatusRow() {
-    final checked = widget.auditNodesChecked;
-    final total = widget.auditTotalNodes;
-    final progressFraction = total > 0 ? checked / total : 0.0;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (widget.isAuditing && total > 0)
-          LinearProgressIndicator(
-            value: progressFraction,
-            minHeight: 2,
-            backgroundColor: Colors.grey[800],
-          ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          child: Row(
-            children: [
-              if (widget.isAuditing) ...[
-                SizedBox(
-                  width: 10,
-                  height: 10,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.5,
-                    color: Colors.grey[500],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  total > 0
-                      ? '$checked / $total positions · ${_visibleFindings.length} findings'
-                      : 'Starting audit...',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                ),
-              ] else ...[
-                if (_totalMatchingFindings > _visibleFindings.length) ...[
-                  Text('Top',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                  const SizedBox(width: 3),
-                  SizedBox(
-                    width: 34,
-                    height: 20,
-                    child: TextField(
-                      controller: _capController,
-                      style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-                      textAlign: TextAlign.center,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 2),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.grey[700]!, width: 0.5),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.grey[700]!, width: 0.5),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
-                          borderSide:
-                              BorderSide(color: Colors.grey[500]!, width: 1),
-                        ),
-                      ),
-                      onSubmitted: (_) => _applyCapFromField(),
-                      onTapOutside: (_) {
-                        _applyCapFromField();
-                        FocusScope.of(context).unfocus();
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 3),
-                  Text('of $_totalMatchingFindings',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                  if (_reachThreshold != null) ...[
-                    const SizedBox(width: 4),
-                    Text('· ≥ $_reachThreshold reach',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.blueGrey[300])),
-                  ],
-                ] else ...[
-                  Text('${_visibleFindings.length} findings',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                  if (widget.result?.timestamp != null) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      '· ${_formatTimestamp(widget.result!.timestamp!)}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                    ),
-                  ],
-                ],
-              ],
-              if (_selectedIndex >= 0 && _visibleFindings.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Text(
-                  '${_selectedIndex + 1} of ${_visibleFindings.length}',
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
-                ),
-              ],
-              const Spacer(),
-              if (widget.onRerunAudit != null)
-                Tooltip(
-                  message: 'New audit with different settings',
-                  child: IconButton(
-                    icon:
-                        const Icon(Icons.refresh, size: 14, color: Colors.grey),
-                    onPressed: widget.onRerunAudit,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 24, minHeight: 24),
-                  ),
-                ),
-              Tooltip(
-                message: _hideDismissed ? 'Show dismissed' : 'Hide dismissed',
-                child: IconButton(
-                  icon: Icon(
-                    _hideDismissed
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined,
-                    size: 14,
-                    color: Colors.grey,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _hideDismissed = !_hideDismissed;
-                      _recomputeVisible();
-                    });
-                  },
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 24, minHeight: 24),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Findings list ─────────────────────────────────────────────────────
-
-  Widget _buildFindingsList() {
-    if (_visibleFindings.isEmpty) {
-      if (widget.isAuditing) {
-        return Center(
-          child: Text('Auditing...',
-              style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-        );
-      }
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.verified_outlined, size: 40, color: Colors.grey[700]),
-            const SizedBox(height: 12),
-            Text('No audit findings',
-                style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            Text(
-              'Run an audit to check your repertoire for gaps, '
-              'weak moves, and missing responses.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-            ),
-            const SizedBox(height: 16),
-            if (widget.onStartAudit != null)
-              OutlinedButton.icon(
-                onPressed: widget.onStartAudit,
-                icon: const Icon(Icons.policy_outlined, size: 16),
-                label: const Text('Start Audit'),
-              ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      controller: _scrollController,
-      itemCount: _visibleFindings.length,
-      itemExtent: 56,
-      itemBuilder: (context, index) {
-        final finding = _visibleFindings[index];
-        final isSelected = index == _selectedIndex;
-        return _buildFindingTile(finding, index, isSelected);
-      },
-    );
-  }
-
-  Widget _buildFindingTile(AuditFinding finding, int index, bool isSelected) {
-    final color = _findingColor(finding);
-    final icon = _findingIcon(finding);
-
-    return GestureDetector(
-      onSecondaryTapUp: (details) {
-        _showDismissMenu(context, details.globalPosition, finding);
-      },
-      child: Material(
-        color: isSelected
-            ? Theme.of(context).colorScheme.primaryContainer.withAlpha(60)
-            : Colors.transparent,
-        child: InkWell(
-          onTap: () => _selectFinding(index),
-          onLongPress: () {
-            final box = context.findRenderObject() as RenderBox?;
-            if (box != null) {
-              final pos = box.localToGlobal(Offset.zero);
-              _showDismissMenu(context, Offset(pos.dx + 100, pos.dy), finding);
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            child: Row(
-              children: [
-                Icon(icon, color: color, size: 16),
-                const SizedBox(width: 6),
-                if (finding.reachProbLabel != null) ...[
-                  SizedBox(
-                    width: 48,
-                    child: Text(
-                      finding.reachProbLabel!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                        color: finding.dismissed
-                            ? Colors.grey[700]
-                            : Colors.blueGrey[300],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                ],
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        finding.summary,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: finding.dismissed ? Colors.grey : null,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        finding.movePathString,
-                        style:
-                            const TextStyle(fontSize: 11, color: Colors.grey),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(
-                    finding.dismissed ? Icons.undo : Icons.close,
-                    size: 16,
-                    color: finding.dismissed ? Colors.grey : Colors.grey[400],
-                  ),
-                  tooltip: finding.dismissed ? 'Restore' : 'Dismiss (D)',
-                  onPressed: () {
-                    setState(() {
-                      _dismissFinding(finding);
-                      _recomputeVisible();
-                    });
-                  },
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.all(4),
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  hoverColor: Colors.grey.withAlpha(40),
-                  splashRadius: 16,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   // ── Dismiss context menu ──────────────────────────────────────────────
 
@@ -864,72 +497,4 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
     };
   }
 
-  // ── Dismissed section ─────────────────────────────────────────────────
-
-  Widget _buildDismissedSection() {
-    final allFindings = widget.result?.findings ?? widget.liveFindings;
-    final dismissedCount = allFindings.where((f) => f.dismissed).length;
-    if (dismissedCount == 0) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.archive_outlined, size: 14, color: Colors.grey[500]),
-          const SizedBox(width: 4),
-          Text(
-            '$dismissedCount dismissed',
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-          ),
-          const Spacer(),
-          TextButton(
-            onPressed: _restoreAll,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              minimumSize: const Size(0, 20),
-              textStyle: const TextStyle(fontSize: 11),
-            ),
-            child: const Text('Restore all'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Helpers ────────────────────────────────────────────────────────────
-
-  Color _findingColor(AuditFinding finding) {
-    return switch (finding.type) {
-      AuditFindingType.mistake => AppColors.evalNegative,
-      AuditFindingType.inaccuracy => Colors.orange,
-      AuditFindingType.missingResponse => Colors.blue,
-      AuditFindingType.weakPosition => Colors.deepOrange,
-      AuditFindingType.deadEnd => AppColors.onSurfaceMuted,
-    };
-  }
-
-  String _formatTimestamp(DateTime ts) {
-    final now = DateTime.now();
-    final diff = now.difference(ts);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    if (diff.inDays < 1) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${ts.month}/${ts.day}';
-  }
-
-  IconData _findingIcon(AuditFinding finding) {
-    return switch (finding.type) {
-      AuditFindingType.mistake => Icons.error_outline,
-      AuditFindingType.inaccuracy => Icons.warning_amber_outlined,
-      AuditFindingType.missingResponse => Icons.visibility_off_outlined,
-      AuditFindingType.weakPosition => Icons.trending_down,
-      AuditFindingType.deadEnd => Icons.block_outlined,
-    };
-  }
 }
