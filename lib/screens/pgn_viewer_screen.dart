@@ -6,6 +6,7 @@
 /// Stockfish analysis with eval graph, inline engine bar, and comment editing.
 library;
 
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -202,36 +203,31 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final defaultName = _controller.defaultExportFileName();
     if (defaultName == null) return;
 
+    final content = _controller.buildExportContent();
     final outPath = await FilePicker.saveFile(
       dialogTitle: 'Export ${_controller.filteredGames.length} filtered games',
       fileName: defaultName,
       type: FileType.custom,
       allowedExtensions: ['pgn'],
       initialDirectory: p.dirname(_controller.filePath!),
+      bytes: utf8.encode(content),
     );
     if (outPath == null) {
       _reclaimFocus();
       return;
     }
 
-    final savePath = await _controller.exportSliceToPath(outPath);
     if (!mounted) return;
-    if (savePath != null) {
-      final fileName = p.basename(savePath);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-            'Exported ${_controller.filteredGames.length} games to $fileName'),
-        duration: const Duration(seconds: 4),
-        action: SnackBarAction(
-          label: 'Open',
-          onPressed: () => _loadFile(savePath),
-        ),
-      ));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Export failed')),
-      );
-    }
+    final fileName = p.basename(outPath);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+          'Exported ${_controller.filteredGames.length} games to $fileName'),
+      duration: const Duration(seconds: 4),
+      action: SnackBarAction(
+        label: 'Open',
+        onPressed: () => _loadFile(outPath),
+      ),
+    ));
     _reclaimFocus();
   }
 
