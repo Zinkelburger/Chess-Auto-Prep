@@ -6,6 +6,7 @@ library;
 
 import '../../models/build_tree_node.dart';
 import '../../utils/eval_constants.dart';
+import '../eval/eval_canonicalize.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
@@ -24,10 +25,10 @@ class RepertoireSelector {
   /// Mark `isRepertoireMove` flags on the tree.
   /// Returns the count of selected our-move repertoire entries.
   int select(BuildTree tree) {
-    return _selectRecursive(tree.root);
+    return _selectRecursive(tree.root, <String>{});
   }
 
-  int _selectRecursive(BuildTreeNode node) {
+  int _selectRecursive(BuildTreeNode node, Set<String> visited) {
     if (node.ply >= config.maxPly) return 0;
     if (node.cumulativeProbability < config.minProbability) return 0;
 
@@ -36,6 +37,12 @@ class RepertoireSelector {
     // (matches C `resolve_transposition`).
     final resolved = resolveTransposition(node, fenMap);
     if (resolved.children.isEmpty) return 0;
+
+    // Cycle guard: a transposition that re-enters a position already on the
+    // current path would otherwise recurse forever (the ply guard can't stop
+    // a redirect back to a shallower canonical). See REFACTOR_PLAN §1.3.
+    final key = canonicalizeFen4(resolved.fen);
+    if (!identical(resolved, node) && visited.contains(key)) return 0;
 
     // Eval-window guard (skip root)
     if (node.ply > 0 && node.hasEngineEval) {
@@ -46,20 +53,22 @@ class RepertoireSelector {
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     int count = 0;
 
+    visited.add(key);
     if (isOurMove) {
       final winner = _pickOurMove(resolved);
       if (winner != null) {
         winner.child.isRepertoireMove = true;
         winner.child.repertoireScore = winner.expectimaxValue;
         count++;
-        count += _selectRecursive(winner.child);
+        count += _selectRecursive(winner.child, visited);
       }
     } else {
       for (final child in resolved.children) {
         if (child.cumulativeProbability < config.minProbability) continue;
-        count += _selectRecursive(child);
+        count += _selectRecursive(child, visited);
       }
     }
+    visited.remove(key);
 
     return count;
   }

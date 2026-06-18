@@ -143,7 +143,9 @@ bool savePgnFreqCache(
   } catch (_) {
     try {
       io.File(cachePath).deleteSync();
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
     return false;
   } finally {
     raf?.closeSync();

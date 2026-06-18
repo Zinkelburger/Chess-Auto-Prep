@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
+import '../../models/merged_move.dart';
+import 'engine_move_row.dart';
 import '../../services/analysis_service.dart';
 import '../../services/engine/engine_lifecycle.dart';
 import '../../services/eval_cache.dart';
@@ -14,12 +16,10 @@ import '../../services/probability_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../theme/app_colors.dart';
 import '../../utils/chess_utils.dart';
-import '../../utils/fen_utils.dart';
-import '../../utils/eval_constants.dart';
 import 'engine_pane_footer.dart';
 import '../analysis/analysis_settings_sheet.dart';
 import 'floating_board_preview.dart';
-import '../clickable_move_line.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 /// Lightweight stopwatch helper for timestamped performance logging.
 Stopwatch? _perfWatch;
@@ -27,33 +27,11 @@ void _perfLog(String msg) {
   if (!kDebugMode) return;
   _perfWatch ??= Stopwatch();
   final ms = _perfWatch!.elapsedMilliseconds;
-  print('[Perf ${ms.toString().padLeft(6)}ms] $msg');
+  log.i('[Perf ${ms.toString().padLeft(6)}ms] $msg');
 }
 
 void _perfReset() {
   _perfWatch = Stopwatch()..start();
-}
-
-/// Merged move data combining all analysis sources into a single row.
-class _MergedMove {
-  final String uci;
-  String san = '';
-  int? stockfishCp;
-  int? stockfishMate;
-  List<String> fullPv = []; // Full PV from Stockfish (including this move)
-  double? maiaProb; // 0.0 – 1.0
-  double? dbProb; // 0 – 100 (percentage)
-  int? stockfishRank; // 1-based rank from Stockfish MultiPV
-
-  _MergedMove({required this.uci});
-
-  String get evalString =>
-      formatEvalDisplay(scoreCp: stockfishCp, scoreMate: stockfishMate);
-
-  int get effectiveCp =>
-      effectiveCpFromScores(scoreCp: stockfishCp, scoreMate: stockfishMate);
-
-  bool get hasStockfish => stockfishCp != null || stockfishMate != null;
 }
 
 class UnifiedEnginePane extends StatefulWidget {
@@ -262,7 +240,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   void _runAnalysis() {
     if (kDebugMode) {
       final shortFen = widget.fen.split(' ').take(2).join(' ');
-      print('[Engine] ── _runAnalysis() for $shortFen ──');
+      log.i('[Engine] ── _runAnalysis() for $shortFen ──');
     }
 
     EngineLifecycle().onPositionChanged(widget.fen);
@@ -357,7 +335,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       _scheduleSetState();
     } catch (e) {
       _analysis.endEnginePaneAnalysis(widget.fen);
-      if (kDebugMode) print('[Engine] Pipeline FAILED — $e');
+      if (kDebugMode) log.e('[Engine] Pipeline FAILED — $e');
       rethrow;
     }
   }
@@ -445,7 +423,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         startingMoves: _settings.probabilityStartMoves,
       );
     } catch (e) {
-      if (kDebugMode) print('[Engine] Cumulative DB FAILED — $e');
+      if (kDebugMode) log.e('[Engine] Cumulative DB FAILED — $e');
     }
   }
 
@@ -805,199 +783,29 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     );
   }
 
-  Widget _buildMoveRow(_MergedMove move) {
-    final evalMuted = _settings.isAnalysisColumnMuted(EngineSettings.colEval);
-    final lineMuted = _settings.isAnalysisColumnMuted(EngineSettings.colLine);
-    final maiaMuted = _settings.isAnalysisColumnMuted(EngineSettings.colMaia);
-
-    final evalColor = move.hasStockfish
-        ? AppColors.cpEval(move.effectiveCp, muted: evalMuted)
-        : AppColors.onSurfaceDim;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final narrow = constraints.maxWidth < _narrowTableWidth;
-        final showMaia =
-            !narrow && _settings.showMaia && _settings.fetchMaiaForOpponent;
-        final moveWidth = narrow ? 36.0 : 52.0;
-        final evalWidth = narrow ? 44.0 : 58.0;
-        final hPad = narrow ? 4.0 : 12.0;
-
-        return InkWell(
-          onTap: () => widget.onMoveSelected?.call(move.uci),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 6),
-            child: Row(
-              children: [
-                Builder(
-                  builder: (anchorContext) {
-                    return MouseRegion(
-                      onEnter: widget.boardPreview != null
-                          ? (_) {
-                              final box = anchorContext.findRenderObject()
-                                  as RenderBox?;
-                              if (box == null) return;
-                              final anchor = box.localToGlobal(
-                                Offset(box.size.width / 2, box.size.height),
-                              );
-                              _previewEngineMove(move, anchor);
-                            }
-                          : null,
-                      onExit: widget.boardPreview != null
-                          ? (_) => widget.boardPreview!.clearPreview()
-                          : null,
-                      child: SizedBox(
-                        width: moveWidth,
-                        child: Text(
-                          move.san,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                            fontSize: 15,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                Container(
-                  width: evalWidth,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: move.hasStockfish
-                        ? AppColors.cpEvalBg(move.effectiveCp, muted: evalMuted)
-                            .withValues(alpha: evalMuted ? 0.5 : 0.85)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    move.evalString,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: evalColor,
-                      fontFamily: 'monospace',
-                    ),
-                    textAlign: TextAlign.center,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (!narrow) const SizedBox(width: 8),
-                Expanded(
-                  child: _buildContinuationWidget(move, muted: lineMuted),
-                ),
-                if (showMaia)
-                  SizedBox(
-                    width: narrow ? 40 : 46,
-                    child: Text(
-                      move.maiaProb != null
-                          ? '${(move.maiaProb! * 100).toStringAsFixed(0)}%'
-                          : '--',
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: move.maiaProb != null
-                            ? AppColors.maiaColor(muted: maiaMuted)
-                            : AppColors.onSurfaceDim,
-                        fontFamily: 'monospace',
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
+  Widget _buildMoveRow(MergedMove move) {
+    return EngineMoveRow(
+      move: move,
+      settings: _settings,
+      fen: widget.fen,
+      boardPreview: widget.boardPreview,
+      onMoveSelected: widget.onMoveSelected,
+      onLineMoveTapped: widget.onLineMoveTapped,
+      previewStackKey: _previewStackKey,
     );
   }
 
-  Widget _buildContinuationWidget(_MergedMove move, {bool muted = false}) {
-    final lineColor = muted ? AppColors.onSurfaceDim : Colors.grey[500];
-    if (move.fullPv.length <= 1 || widget.boardPreview == null) {
-      final continuation = formatContinuation(widget.fen, move.fullPv);
-      return Text(
-        continuation,
-        style: TextStyle(
-          fontSize: 13,
-          color: lineColor,
-          fontFamily: 'monospace',
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      );
-    }
+  // ─── Merge Logic ──────────────────────────────────
 
-    final afterFirstMove = playUciMove(widget.fen, move.uci);
-    if (afterFirstMove == null) return const SizedBox.shrink();
-
-    final continuationUci = move.fullPv.sublist(1);
-    final sanMoves = uciPvToSan(afterFirstMove, continuationUci,
-        maxMoves: continuationUci.length);
-    if (sanMoves.isEmpty) return const SizedBox.shrink();
-
-    final fenParts = afterFirstMove.split(' ');
-    final fullMoveNumber =
-        int.tryParse(fenParts.length >= 6 ? fenParts[5] : '1') ?? 1;
-    final isBlack = !isWhiteToMove(afterFirstMove);
-    final startPly = (fullMoveNumber - 1) * 2 + (isBlack ? 1 : 0);
-
-    return ClickableMoveLineWidget(
-      sanMoves: sanMoves,
-      startPly: startPly,
-      maxMoves: 8,
-      fontSize: 13,
-      onMoveTapped: (idx) {
-        if (widget.onLineMoveTapped != null) {
-          final fullLine = [move.san, ...sanMoves];
-          widget.onLineMoveTapped!(fullLine, idx + 1);
-          widget.boardPreview?.clearPreview();
-        } else if (idx < continuationUci.length) {
-          widget.onMoveSelected?.call(move.uci);
-        }
-      },
-      onMoveHovered: (idx, anchor) {
-        final fen = fenAfterMoves(afterFirstMove, sanMoves, idx);
-        final uci = idx < continuationUci.length ? continuationUci[idx] : null;
-        widget.boardPreview!.setPreview(
-          fen,
-          moves: sanMoves.sublist(0, idx + 1),
-          target: BoardPreviewTarget.floating,
-          lastMoveUci: uci,
-          anchorGlobal: anchor,
-          ownerTag: _previewStackKey,
-        );
-      },
-      onHoverExit: () => widget.boardPreview!.clearPreview(),
-    );
-  }
-
-  // ─── Merge Logic ────────────────────────────────────────────────────────
-
-  void _previewEngineMove(_MergedMove move, Offset anchorGlobal) {
-    final fen = playUciMove(widget.fen, move.uci);
-    if (fen == null) return;
-    widget.boardPreview!.setPreview(
-      fen,
-      moves: [move.san],
-      target: BoardPreviewTarget.floating,
-      lastMoveUci: move.uci,
-      anchorGlobal: anchorGlobal,
-      ownerTag: _previewStackKey,
-    );
-  }
-
-  List<_MergedMove> _mergeMoves() {
-    final byUci = <String, _MergedMove>{};
+  List<MergedMove> _mergeMoves() {
+    final byUci = <String, MergedMove>{};
     final discovery = _analysis.discoveryResult.value;
 
     if (_selectedMoveUcis.isEmpty) {
       for (final line in discovery.lines) {
         if (line.pv.isEmpty) continue;
         final uci = line.pv.first;
-        final m = byUci.putIfAbsent(uci, () => _MergedMove(uci: uci));
+        final m = byUci.putIfAbsent(uci, () => MergedMove(uci: uci));
         m.stockfishCp = line.scoreCp;
         m.stockfishMate = line.scoreMate;
         m.fullPv = line.pv;
@@ -1005,7 +813,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       }
     } else {
       for (final uci in _selectedMoveUcis) {
-        byUci[uci] = _MergedMove(uci: uci);
+        byUci[uci] = MergedMove(uci: uci);
       }
       for (final line in discovery.lines) {
         if (line.pv.isEmpty) continue;

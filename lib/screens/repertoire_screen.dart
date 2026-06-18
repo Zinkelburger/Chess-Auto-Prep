@@ -18,6 +18,7 @@ import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/repertoire_service.dart';
 import '../utils/app_messages.dart';
+import '../utils/log.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
@@ -166,6 +167,18 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _openBottomPane(BottomPaneTab.jobs);
   }
 
+  void _discoverTrapsFromRepertoire() {
+    final path = _repertoireFilePath;
+    if (path == null) return;
+    _openGenerationDialog();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _generationTabKey.currentState?.seedDbExplorer(
+        pgnPaths: [path],
+      );
+    });
+  }
+
   void _openAuditDialog({bool forceConfig = false}) {
     if (!forceConfig) {
       if (_auditController.isAuditing || _auditController.hasResults) {
@@ -203,58 +216,40 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           lastModified: DateTime.now(),
         ));
       }
-      // If a specific line was requested, navigate to it once loaded.
-      // Use a listener instead of a single post-frame callback so we
-      // don't miss the load if parsing takes more than one frame.
       if (lineId != null) {
-        void waitForLine() {
-          if (!mounted) {
-            _controller.removeListener(waitForLine);
-            return;
-          }
-          final line = _controller.repertoireLines
-              .where((l) => l.id == lineId)
-              .firstOrNull;
-          if (line != null) {
-            _controller.removeListener(waitForLine);
-            _controller.loadPgnLine(line);
-          }
-        }
-
-        _controller.addListener(waitForLine);
-        // Also check immediately in case data is already loaded.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) waitForLine();
-        });
+        _openLineAfterLoad(lineId);
       }
 
       final pendingPgnPaths = appState.pendingGenerationPgnPaths;
       if (pendingPgnPaths != null) {
         appState.pendingGenerationPgnPaths = null;
-        _openGenerationDialog();
-        void waitForGenerationTab() {
-          if (!mounted) {
-            _controller.removeListener(waitForGenerationTab);
-            return;
-          }
-          if (_controller.isLoading) return;
-          _controller.removeListener(waitForGenerationTab);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            _generationTabKey.currentState?.seedDbExplorer(
-              pgnPaths: pendingPgnPaths,
-              autoStart: true,
-            );
-          });
-        }
-
-        _controller.addListener(waitForGenerationTab);
-        // Also try immediately in case loading already finished.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) waitForGenerationTab();
-        });
+        _seedGenerationAfterLoad(pendingPgnPaths);
       }
     }
+  }
+
+  Future<void> _openLineAfterLoad(String lineId) async {
+    await _controller.awaitLoaded();
+    if (!mounted) return;
+    final line = _controller.repertoireLines
+        .where((l) => l.id == lineId)
+        .firstOrNull;
+    if (line != null) {
+      _controller.loadPgnLine(line);
+    }
+  }
+
+  Future<void> _seedGenerationAfterLoad(List<String> pgnPaths) async {
+    _openGenerationDialog();
+    await _controller.awaitLoaded();
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _generationTabKey.currentState?.seedDbExplorer(
+        pgnPaths: pgnPaths,
+        autoStart: true,
+      );
+    });
   }
 
   bool _navigatingToFinding = false;
@@ -345,7 +340,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     try {
       context.read<AppState>().removeListener(_onAppStateChanged);
     } catch (e) {
-      debugPrint('[RepertoireScreen] dispose listener cleanup failed: $e');
+      log.w('dispose listener cleanup failed', name: 'RepertoireScreen', error: e);
     }
 
     super.dispose();
@@ -371,7 +366,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         ),
       );
     } catch (e) {
-      debugPrint('[RepertoireScreen] Undo failed: $e');
+      log.w('Undo failed', name: 'RepertoireScreen', error: e);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -744,7 +739,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     try {
       pos = Chess.fromSetup(Setup.parseFen(currentFen));
     } catch (e) {
-      debugPrint('[RepertoireScreen] Invalid FEN for audit annotations: $e');
+      log.d('Invalid FEN for audit annotations: $e', name: 'RepertoireScreen');
       return const [];
     }
 
@@ -784,7 +779,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         return (_squareName(move.from), _squareName(move.to));
       }
     } catch (e) {
-      debugPrint('[RepertoireScreen] Failed to parse SAN "$san": $e');
+      log.d('Failed to parse SAN "$san": $e', name: 'RepertoireScreen');
     }
     return null;
   }
@@ -1141,9 +1136,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           return;
         }
       } catch (e) {
-        debugPrint(
-          '[RepertoireScreen] Failed to preview missing move '
-          '"${finding.missingMove}": $e',
+        log.d(
+          'Failed to preview missing move "${finding.missingMove}": $e',
+          name: 'RepertoireScreen',
         );
       }
     }
@@ -1360,6 +1355,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   Widget _buildTrapsContent() {
     if (_traps.isEmpty) {
+      final hasRepertoire = _repertoireFilePath != null;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -1379,17 +1375,36 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               ),
               const SizedBox(height: 8),
               Text(
-                'Generate a repertoire to discover positions where '
-                'opponents are likely to make mistakes.',
+                hasRepertoire
+                    ? 'Discover traps in your existing repertoire, or '
+                        'generate a new repertoire to find them.'
+                    : 'Generate a repertoire to discover positions where '
+                        'opponents are likely to make mistakes.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: Colors.grey[600]),
               ),
               const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _openGenerationDialog,
-                icon: const Icon(Icons.auto_awesome, size: 16),
-                label: const Text('Generate Repertoire'),
-              ),
+              if (hasRepertoire) ...[
+                FilledButton.icon(
+                  onPressed: _discoverTrapsFromRepertoire,
+                  icon: const Icon(Icons.search, size: 16),
+                  label: const Text('Discover Traps'),
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: _openGenerationDialog,
+                  icon: const Icon(Icons.auto_awesome, size: 14),
+                  label: const Text('Generate Full Repertoire'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey[400],
+                  ),
+                ),
+              ] else
+                FilledButton.icon(
+                  onPressed: _openGenerationDialog,
+                  icon: const Icon(Icons.auto_awesome, size: 16),
+                  label: const Text('Generate Repertoire'),
+                ),
             ],
           ),
         ),
@@ -1431,8 +1446,16 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _wasGenerating = ctrl.isGenerating;
 
     if (!ctrl.isGenerating) {
-      final fp = _controller.currentRepertoire?.filePath;
-      if (fp != null) _loadTraps(fp);
+      // Prefer the in-memory bundle's trap index (consistent with the tree we
+      // just built); fall back to disk for previously-saved repertoires.
+      final bundle = ctrl.current;
+      if (bundle != null) {
+        _traps = bundle.traps.allTraps;
+        _trapIndex = _traps.isEmpty ? null : bundle.traps;
+      } else {
+        final fp = _controller.currentRepertoire?.filePath;
+        if (fp != null) _loadTraps(fp);
+      }
       if (justFinished && _toolsTabController.index != 1) {
         _toolsTabController.animateTo(1);
       }
@@ -1507,7 +1530,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         showAppSnackBar(context, AppMessages.invalidFen);
       }
     } catch (e) {
-      debugPrint('Clipboard read failed: $e');
+      log.w('Clipboard read failed', name: 'RepertoireScreen', error: e);
       if (mounted) {
         showAppSnackBar(context, AppMessages.clipboardReadFailed,
             isError: true);
@@ -1542,7 +1565,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     try {
       return Chess.fromSetup(Setup.parseFen(fen));
     } catch (e) {
-      debugPrint('[RepertoireScreen] Invalid FEN "$fen": $e');
+      log.d('Invalid FEN "$fen": $e', name: 'RepertoireScreen');
       return _controller.position;
     }
   }

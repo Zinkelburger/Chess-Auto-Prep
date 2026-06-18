@@ -10,8 +10,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../models/build_tree_node.dart';
-import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
-import 'package:chess_auto_prep/features/traps/models/trap_reply.dart';
+import '../eval/eval_canonicalize.dart';
+import 'package:chess_auto_prep/models/trap_line_info.dart';
+import 'package:chess_auto_prep/models/trap_reply.dart';
 import '../../utils/ease_utils.dart' show winProbability;
 import '../../utils/eval_constants.dart';
 
@@ -42,7 +43,7 @@ class TrapExtractor {
     final results = <TrapLineInfo>[];
 
     for (final c in candidates) {
-      if (!seenFens.add(c.fen)) continue;
+      if (!seenFens.add(canonicalizeFen4(c.fen))) continue;
       final moves = c.node.getLineSan();
 
       results.add(TrapLineInfo(

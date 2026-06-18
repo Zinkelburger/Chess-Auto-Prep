@@ -7,6 +7,7 @@ library;
 
 import '../../models/build_tree_node.dart';
 import '../../utils/fen_utils.dart';
+import '../eval/eval_canonicalize.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
 
@@ -145,6 +146,7 @@ class LineExtractor {
       moveAnnotations: const [],
       lines: lines,
       maxLines: maxLines,
+      visited: <String>{},
     );
     return lines;
   }
@@ -188,44 +190,61 @@ class LineExtractor {
     required List<MoveProbabilityAnnotation> moveAnnotations,
     required List<ExtractedLine> lines,
     required int maxLines,
+    required Set<String> visited,
   }) {
     if (lines.length >= maxLines) return;
 
     final resolved = resolveTransposition(node, fenMap);
 
+    // Cycle guard: if following a transposition link re-enters a position
+    // already on the current path, stop expanding and emit the line so far.
+    // Without this, a transposition that loops back produces infinite lines.
+    final key = canonicalizeFen4(resolved.fen);
+    final isTransposed = !identical(resolved, node);
+    final cycle = isTransposed && visited.contains(key);
+
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
     bool pushedAny = false;
 
-    if (isOurMove) {
-      final selected =
-          resolved.children.where((c) => c.isRepertoireMove).firstOrNull;
-      if (selected != null) {
-        pushedAny = true;
-        _extractDfs(
-          node: selected,
-          movesSan: [...movesSan, selected.moveSan],
-          movesUci: [...movesUci, selected.moveUci],
-          moveAnnotations: [...moveAnnotations, MoveProbabilityAnnotation.none],
-          lines: lines,
-          maxLines: maxLines,
-        );
+    if (!cycle) {
+      visited.add(key);
+      if (isOurMove) {
+        final selected =
+            resolved.children.where((c) => c.isRepertoireMove).firstOrNull;
+        if (selected != null) {
+          pushedAny = true;
+          _extractDfs(
+            node: selected,
+            movesSan: [...movesSan, selected.moveSan],
+            movesUci: [...movesUci, selected.moveUci],
+            moveAnnotations: [
+              ...moveAnnotations,
+              MoveProbabilityAnnotation.none
+            ],
+            lines: lines,
+            maxLines: maxLines,
+            visited: visited,
+          );
+        }
+      } else {
+        for (final child in resolved.children) {
+          if (child.cumulativeProbability < config.minProbability) continue;
+          pushedAny = true;
+          _extractDfs(
+            node: child,
+            movesSan: [...movesSan, child.moveSan],
+            movesUci: [...movesUci, child.moveUci],
+            moveAnnotations: [
+              ...moveAnnotations,
+              _annotationForChild(child),
+            ],
+            lines: lines,
+            maxLines: maxLines,
+            visited: visited,
+          );
+        }
       }
-    } else {
-      for (final child in resolved.children) {
-        if (child.cumulativeProbability < config.minProbability) continue;
-        pushedAny = true;
-        _extractDfs(
-          node: child,
-          movesSan: [...movesSan, child.moveSan],
-          movesUci: [...movesUci, child.moveUci],
-          moveAnnotations: [
-            ...moveAnnotations,
-            _annotationForChild(child),
-          ],
-          lines: lines,
-          maxLines: maxLines,
-        );
-      }
+      visited.remove(key);
     }
 
     if (pushedAny || movesSan.isEmpty) return;

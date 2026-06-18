@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'engine_connection.dart';
 import '../storage/app_paths.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 class ProcessConnection implements EngineConnection {
   Process? _process;
@@ -51,7 +52,7 @@ class ProcessConnection implements EngineConnection {
     final file = File(p.join(dir.path, binaryName));
 
     if (!await file.exists()) {
-      print('Extracting Stockfish binary to ${file.path}...');
+      log.i('Extracting Stockfish binary to ${file.path}...');
       await file.parent.create(recursive: true);
 
       final byteData =
@@ -75,7 +76,7 @@ class ProcessConnection implements EngineConnection {
   Future<void> _init() async {
     try {
       final executablePath = await resolveExecutablePath();
-      print('Starting Stockfish from: $executablePath');
+      log.i('Starting Stockfish from: $executablePath');
 
       _process = await Process.start(executablePath, []);
 
@@ -91,7 +92,7 @@ class ProcessConnection implements EngineConnection {
       // Drain stderr to prevent buffer fill-up that can stall the process.
       _process!.stderr.drain<void>();
     } catch (e) {
-      print('Error starting Stockfish process: $e');
+      log.e('Error starting Stockfish process: $e');
       rethrow;
     }
   }

@@ -13,7 +13,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/engine_settings.dart';
-import '../../models/analysis/discovery_result.dart';
 import '../../services/analysis_service.dart';
 import '../../services/eval_cache.dart';
 import '../../services/engine/eval_worker.dart';

@@ -179,18 +179,7 @@ class ExpectimaxCalculator {
       if (cpUs < bestChildCp - config.maxEvalLossCp) continue;
       passing++;
 
-      double v = child.expectimaxValue;
-      if (nw > 0.0) {
-        double novelty = 0.0;
-        if (node.totalGames > 0 && child.totalGames > 0) {
-          novelty = 1.0 - child.totalGames / node.totalGames;
-        } else if (child.maiaFrequency >= 0.0) {
-          novelty = 1.0 - child.maiaFrequency;
-        }
-        if (novelty < 0.0) novelty = 0.0;
-        v *= (1.0 + nw * novelty);
-      }
-
+      final v = _noveltyAdjustedValue(node, child, nw);
       if (v > bestV) {
         bestV = v;
         bestChild = child;
@@ -201,17 +190,7 @@ class ExpectimaxCalculator {
     if (passing == 0) {
       for (final child in node.children) {
         if (!child.hasExpectimax) continue;
-        double v = child.expectimaxValue;
-        if (nw > 0.0) {
-          double novelty = 0.0;
-          if (node.totalGames > 0 && child.totalGames > 0) {
-            novelty = 1.0 - child.totalGames / node.totalGames;
-          } else if (child.maiaFrequency >= 0.0) {
-            novelty = 1.0 - child.maiaFrequency;
-          }
-          if (novelty < 0.0) novelty = 0.0;
-          v *= (1.0 + nw * novelty);
-        }
+        final v = _noveltyAdjustedValue(node, child, nw);
         if (v > bestV) {
           bestV = v;
           bestChild = child;
@@ -224,6 +203,27 @@ class ExpectimaxCalculator {
       child: bestChild,
       expectimaxValue: bestChild.expectimaxValue,
     );
+  }
+
+  /// [child]'s expectimax value scaled by a novelty boost when [nw] > 0.
+  ///   novelty = 1 - child.totalGames/parent.totalGames (if both have games)
+  ///           = 1 - child.maiaFrequency (if Maia data available)
+  ///   v_adj   = v * (1 + nw * novelty)
+  double _noveltyAdjustedValue(
+    BuildTreeNode parent,
+    BuildTreeNode child,
+    double nw,
+  ) {
+    double v = child.expectimaxValue;
+    if (nw <= 0.0) return v;
+    double novelty = 0.0;
+    if (parent.totalGames > 0 && child.totalGames > 0) {
+      novelty = 1.0 - child.totalGames / parent.totalGames;
+    } else if (child.maiaFrequency >= 0.0) {
+      novelty = 1.0 - child.maiaFrequency;
+    }
+    if (novelty < 0.0) novelty = 0.0;
+    return v * (1.0 + nw * novelty);
   }
 
   /// Compute trap scores on opponent-move nodes throughout the tree.

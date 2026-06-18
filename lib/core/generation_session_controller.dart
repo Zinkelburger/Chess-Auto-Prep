@@ -17,6 +17,7 @@ import '../services/jobs/generation_job_display.dart';
 import '../services/jobs/repertoire_job.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/tree_build_service.dart';
+import 'generated_repertoire.dart';
 import 'package:path/path.dart' as p;
 
 class GenerationSessionController extends ChangeNotifier {
@@ -26,9 +27,11 @@ class GenerationSessionController extends ChangeNotifier {
   bool _isGenerating = false;
   bool _isPaused = false;
   bool _finishNowRequested = false;
-  BuildTree? _generatedTree;
-  TreeBuildConfig? _generatedTreeConfig;
-  FenMap? _generatedTreeFenMap;
+
+  /// Single source of truth for the generated tree and every artifact derived
+  /// from it (FenMap, eval-tree snapshot, trap index). Replaces the former
+  /// trio of independently-managed fields. See `docs/REFACTOR_PLAN.md` §1.
+  GeneratedRepertoire? _current;
 
   /// Context for saving partial tree state — set by the generation tab at
   /// build start so that pause/cancel from any source (Jobs panel, board
@@ -56,9 +59,15 @@ class GenerationSessionController extends ChangeNotifier {
   bool get isGenerating => _isGenerating;
   bool get isPaused => _isPaused;
   bool get finishNowRequested => _finishNowRequested;
-  BuildTree? get generatedTree => _generatedTree;
-  TreeBuildConfig? get generatedTreeConfig => _generatedTreeConfig;
-  FenMap? get generatedTreeFenMap => _generatedTreeFenMap;
+
+  /// The current generated repertoire bundle, or null when none is loaded.
+  GeneratedRepertoire? get current => _current;
+
+  // Backward-compatible accessors — all delegate to [_current] so existing
+  // call-sites keep working while sharing one source of truth.
+  BuildTree? get generatedTree => _current?.tree;
+  TreeBuildConfig? get generatedTreeConfig => _current?.config;
+  FenMap? get generatedTreeFenMap => _current?.fenMap;
 
   // ── Partial tree save context ────────────────────────────────────────
 
@@ -238,14 +247,11 @@ class GenerationSessionController extends ChangeNotifier {
 
   void onTreeReset() {
     coherenceService.invalidate();
-    _generatedTree = null;
-    _generatedTreeConfig = null;
-    _generatedTreeFenMap = null;
+    _current = null;
     notifyListeners();
   }
 
   void onTreeBuilt(BuildTree tree) {
-    final fenMap = FenMap()..populate(tree.root);
     TreeBuildConfig? config;
     if (tree.configSnapshot.isNotEmpty) {
       try {
@@ -257,16 +263,20 @@ class GenerationSessionController extends ChangeNotifier {
         debugPrint('[GenerationController] Config parse failed: $e');
       }
     }
-    _generatedTree = tree;
-    _generatedTreeFenMap = fenMap;
-    _generatedTreeConfig = config;
+    final playAsWhite = config?.playAsWhite ??
+        tree.configSnapshot['play_as_white'] as bool? ??
+        tree.root.isWhiteToMove;
+    // Derive FenMap, eval-tree snapshot, and trap index once, here.
+    _current = GeneratedRepertoire.fromTree(
+      tree,
+      playAsWhite: playAsWhite,
+      config: config,
+    );
     notifyListeners();
   }
 
   void clearTree() {
-    _generatedTree = null;
-    _generatedTreeConfig = null;
-    _generatedTreeFenMap = null;
+    _current = null;
     coherenceService.invalidate();
     notifyListeners();
   }

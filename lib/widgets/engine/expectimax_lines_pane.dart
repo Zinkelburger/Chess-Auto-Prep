@@ -233,7 +233,7 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline, size: 18, color: AppColors.danger),
+          const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -372,8 +372,8 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ),
           if (isComputing) ...[
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
+            const Padding(
+              padding: EdgeInsets.only(left: 8),
               child: SizedBox(
                 width: 12,
                 height: 12,

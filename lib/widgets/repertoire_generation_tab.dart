@@ -656,11 +656,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
+                  const Row(
                     children: [
                       Icon(Icons.pause_circle,
                           size: 18, color: AppColors.warning),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text(
                         'Paused Build Available',
                         style: TextStyle(
