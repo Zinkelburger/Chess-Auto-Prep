@@ -20,8 +20,10 @@ import '../utils/log.dart';
 import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart' as parallel;
 
-/// Callback for when a new tactics position is found during import
-typedef OnPositionFoundCallback = void Function(TacticsPosition position);
+/// Callback for when a new tactics position is found during import.
+/// Returns a Future so callers can await persistence before proceeding.
+typedef OnPositionFoundCallback = Future<void> Function(
+    TacticsPosition position);
 
 /// Callback for progress updates during import
 typedef ProgressCallback = void Function(String message);
@@ -551,6 +553,14 @@ class TacticsImportService {
               if (_cancelled) break;
               gamePositions[gameId] = positions;
               totalPositionsFound += positions.length;
+
+              // Persist positions BEFORE marking game analyzed so a
+              // mid-analysis app close doesn't permanently skip this game.
+              if (positions.isNotEmpty && onPositionFound != null) {
+                for (final pos in positions) {
+                  await onPositionFound(pos);
+                }
+              }
               await _database.markGameAnalyzed(gameId);
             } catch (e) {
               if (_cancelled) break;
@@ -558,13 +568,6 @@ class TacticsImportService {
             }
 
             completedGames++;
-
-            final gameTactics = gamePositions[gameId];
-            if (gameTactics != null && onPositionFound != null) {
-              for (final pos in gameTactics) {
-                onPositionFound(pos);
-              }
-            }
 
             progressCallback?.call(
               'Analyzed $completedGames/${gameTasks.length} games '
