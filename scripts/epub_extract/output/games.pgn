@@ -1,0 +1,2550 @@
+[Event "Dayton (Ohio)"]
+[Site "?"]
+[Date "2005.??.??"]
+[Round "?"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Hilton, Jonathan"]
+[Result "*"]
+[ECO "D76"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {5} Nf6 2.c4 g6 3.g3 Bg7 4.d4 0-0 {Wojo usually opted for this move order,
+which discourages Black from playing something other than the King’s Indian
+ortheGriinfeld. Hiswin-ning percentages were higher in those two openings than
+in, say, the English (which would occur after 4.. ig2 c5).} 5.Bg2 d5 6.cxd5 {The
+move most in the spirit of the Griinfeld for Black. 5... c6 first, preparing ...
+d7-d5, is of course another main line for Black. We examine this later in Part
+I.} Qxd5 7.Qb3 {0-0} Nc6 {This is Black’s most common move order. The point is
+to stop White from playing an immediate e2-e4. The alternative} 8.e4 {which is
+designed to give "White some extra options, leads to the same thing after} b6
+9.Qxd5 Na5 10.Nc3 *
+
+[Event "Chesswise International"]
+[Site "Stratton Mountain USA"]
+[Date "2000.07.12"]
+[Round "4"]
+[White "Wojtkiewicz,A"]
+[Black "Hossain,Enam"]
+[Result "1-0"]
+[WhiteElo "2581"]
+[BlackElo "2314"]
+[ECO "D76"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 O-O 5.d4 d5 6.cxd5 Nxd5 7.O-O Nb6 8.Nc3 Nc6
+9.d5 Na5 10.e4 c6 11.Bg5 h6 12.Bf4 cxd5 13.Nxd5 Nxd5 {&iJxd5!? as a surprise
+weapon (or if Whiite is okay with the possibility of a draw). The Main Line:
+Black Times ...g6-gS Perfectly What happens when Black times the ...g6-g5 push
+perfectly, throwing White off balance without irreparably damaging his kingside?
+As we’ll see in the following game, if Black can play ...g6-g5 at just the right
+moment, he can equalize with little difficulty} 14.exd5 Nc4 {A great move. Out
+of the ten games thathave seen this position, "White has scored 90% - a good
+indication ofhow perilous Black’s position has become. The second player has few
+pieces available to defend his kingside, so "White attacks} 15.Qc1 Nb6 {lLlxb2
+lost for Black in Wojtkiewicz-M.Ca-sella, blitz 2000, after} 16.Bxh6 Qxd5 {d6!?,
+as recommended by Rybka, gives White an ever-so-slight pull after 16 ...E!e8}
+17.Re1 Re8 {It is difficult to pinpoint exactly where Black went wrong, and
+already White has penetrated to the seventh rank. The second player is probably
+losing here} 18.Bxg7 Kxg7 {l'!d1 e6 was probably somewhat sounder for Black.
+White would have a clear advantage here regardless, however, thanks to his
+better bishop and active game after} 19.Qc7 Kf8 20.Rad1 Qxa2 {Sadi Simple and
+strong. White dominates the board} 21.Ng5 Qc4 {i.g4 is no better, for instance}
+22.Rxe7 Rxe7 {YlYe5!, threatening mate on h8} 23.Rd8+ Re8 {Summary: Black cannot
+respond to 'White’s unusual} 24.Qd6+ 1-0
+
+[Event "Vienna op"]
+[Site "Vienna"]
+[Date "1995.??.??"]
+[Round "8"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Wittmann, Walter"]
+[Result "1/2-1/2"]
+[WhiteElo "2570"]
+[BlackElo "2380"]
+[ECO "D76"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 O-O 5.d4 d5 6.cxd5 Nxd5 7.O-O Nb6 8.Nc3 Nc6
+9.d5 Na5 10.e4 c6 {®c2, which is the subject of the next chapter. Chapter 2}
+11.Bg5 h6 12.Bf4 cxd5 13.exd5 Nac4 {exd5) and doesn’t have a problem with the
+somewhatdrawish positions that result after} 14.Qe2 g5 {e5, though also common,
+is somewhat worse} 15.Bc1 Bg4 {e5 looks solid for Black, and we believe the
+second player should consider it as one potential weapon against Wojo's 1l..ig5
+system} 16.h3 Bh5 {The only move "White ever tries, and with good reason. If
+White wants to make progress, the pin must be broken} 17.g4 Bg6 {Gaining space.
+This appears to be ^bite’s most plausible continuation. 17J:!e1 l:!e8 l8.a4 has
+been tried on a few occasions, but Black does not have to respond with ...a7-a5
+here: the straightforward 18 ...l:!c8} 18.Rd1 Rc8 {lt'ld4 e6 (which just seems
+equal). Overall, we feel that "White will score better with} 19.Nd4 Nd6 {White
+clogs up the a1-h8 diagonal and prepares f2-f4. Wojo is trying to free up his
+bishop from its cramped quarters on cl. This move also prepares ^bite to play
+b2-b3 and .ib2, which would likely be the optimal placement for his dark-squared
+bishop. This is a nuanced move order by the second player. By unleashing the
+power of Black’s rook along the c-file, Black prevents White from playing b2-b3
+and .ib2, moves which he would like to play to complete his development. The
+less sophisticated} 20.f4 gxf4 {It is difficult to come up with any plan for
+White other than this break, considering that he is no longer able to play b2-b3
+and .ib2} 21.Bxf4 Nbc4 {NowBlack’s knights are both highly active} 22.Kh1 Qa5
+{Black is probably already somewhat better here. He threatens ...Wb4, putting
+pressure on b2. Wojo, the higherrated player, was lucky to have the chance to
+agree to a draw here. Had Black played on, he might have been able to pull off
+an upset. After all, it’s difficult to come up with a constructive move for
+White} 1/2-1/2
+
+[Event "Yerevan"]
+[Site "?"]
+[Date "1996.??.??"]
+[Round "?"]
+[White "Vaganian, Rafael"]
+[Black "Khalifman, Alexander"]
+[Result "*"]
+[ECO "D76"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {6} Nf6 2.g3 g6 3.Bg2 Bg7 4.c4 0-0 5.d4 d5 6.cxd5 Qxd5 7.Nc3 {0-0 ftb6 8.}
+Nc6 1-0
+
+[Event "Biel"]
+[Site "?"]
+[Date "1993.??.??"]
+[Round "?"]
+[White ""]
+[Black "Pigusov, Evgeny"]
+[Result "*"]
+[ECO "D76"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {3} Nf6 2.c4 g6 3.g3 Bg7 *
+
+[Event "New York Masters"]
+[Site "?"]
+[Date "2003.??.??"]
+[Round "?"]
+[White "Ippolito, Dean"]
+[Black "Nakamura, Hikaru"]
+[Result "*"]
+[ECO "D76"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {3} Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 0-0 5.Bg2 d5 6.cxd5 Qxd5 7.0-0 Nc6 8.Nc3 b6
+9.Nxd5 Na5 10.Qc2 e6 11.Ng5 {12. a4 e6 13. e4 (13.dxe6 he6 14. a5 is also strong
+after 14... lLlc8 l5.lLld4) 13... exd5 14. a5! dxe4 15. lLlxe4 16. lLlfg5 lLld6
+17. axb6 axb6 18. Sxa8 Wxa8 19. ®xc7 won for "White in Ippolito-F.Caruana, U.S.
+Open 2004. dxe6 .be6 12.} 0-1
+
+[Event "Philadelphia International"]
+[Site "?"]
+[Date "2012.??.??"]
+[Round "?"]
+[White "Ippolito, Dean"]
+[Black "Evdokimov, AJexander"]
+[Result "*"]
+[ECO "D76"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {2} Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 0-0 5.Bg2 d5 6.cxd5 Qxd5 7.0-0 b6 8.Nc3 Nc6
+9.Nxd5 Na5 10.Qc2 Bd7 11.Ne1 {gdl Best. Now Black should transpose back into
+lines we have previously analyzed with 11... c6 12. dxc6 lt:lxc6. 11.. .ti'c8
+11.. .§c8?! 12. lt:ld4 %Ve8 13. lt:lb3 lt:lxb3 14. axb3 c6 15. 3xa7 cxd5 16..
+&e3 i.f5 17. '1Wd2 Wc6 18. lt:lxd5 gave "White a clear advantage in
+P.Lagowski-M.Walek, Bmo 2004. 12.. 1g5 Given as “!?” by Krasenkow in his
+annotations to E.Pigusov-A.Ayap-bergenov, Komotini 1993, andjust one of many
+good options for "White. That game saw 12. ®e4 ge8 13. ®h4 It:lac4 14.. 1h6 .ih8
+15. gac1 It:lxb2 16. gd4 c5 17. gf4 e5 18. dxe6 .ixe6 19. 1t:lg5 with good
+attacking chances for the first player. Meanwhile, 12. b3 is a seemingly modest
+move with a nice idea in mind: 12 ... c6 13. d6! exd6 14.. ia3 c5 15. gxd6 gave
+"White a nice pull in S.Mamedyarov-S.Kristjansson, Gote-borg 2005. Thetext is
+perhaps "White's most aggressive idea. 12.. .5e8 13. gac1 .ifS This looks
+dubious, but it is hard to find something better for Black. His position is
+already extremely difficult. 13 ... c6 14. b3 .ih3? 15. Ш2 .ixg2 16. 'k!?xg2
+%Vd7 was B.Grabarczyk-P. Svidler, Warsaw 1999, when here 17. lt:le4! would have
+left Black’s knight on a5 trapped after 17... %Vxd5 18. lt:lc5! Wxd2 19.. ixd2.
+"White wins after 19. .. It:ld5 20.. ixa5 b6 21. e4 It:lc7 (or 21... It:lf6 22.
+lt:la6) 22. gd7 gac8 23.. ib4 bxc5 24.. 1xc5, forking Black’s pawns. 14. e4 .ig4
+15. tLla4! This over-the-board novelty is very strong. Black now spent half an
+hour here realizing that he was in serious trouble. 15. b3 c5 16. %Vd2 It:ld7
+had previously allowed Black to untangle himself a bit in A.Khasin-E.Ragozin,
+Elista 1994. 15.. .6ac4 15.. ..M7 16. lt:lxb6 axb6 17. b4 wins for White. 16.
+&xb6 &xb6 17. ti'xc7 17. b3 was Dean’s other candidate move: 17... .&xf3 18.
+^xf3 ^e5 19. M4 .ixf4 20. gxf4 Wh3 21. &g2 %Vh4 22. %Vxc7 gac8 23. %Vxb7 %Vxf4
+was also much better for White. The text seemed more convincing over the board.
+17. ...ixb2 I8.ti'f4! ti'd7 18.. ..1xc1 19. gxc1 Ш7 (or 19... tik4 20. lt:le5)
+20. lt:le5 just wins outright for White. 19. §c7«fa4 Black avoids both 19... ®d8
+20. d6 and 19... e5 20. %Vf6 Wxc7 21. ih6. 20. Sd2 &xf3 21. 1xf3 ®xa2 On 22...
+e5, White had planned 23. '!xb2!, luring the black queen away from the defensive
+maneuver ...Y9a2-e6. After 23... ®xb2 24. ®xf7+, White mates. 23. gdl Y9a4 24.
+J.xe7 &d7 25. e5! Creating a discovered attack against the black queen. 22. d6!
+After this breakthrough, Black’s defense falls apart. 22. •• Y9al+ 25. ••Y9b5
+26. gxb7 Wxe5 27. gxd7} c6 {Black is now down a full piece. Summary: Not
+challenging the dS-pawn cannot be a good strategy for Black: White has too much
+activity in all sectors of the board. In this game, Dean was able to generate a
+powerful attack up the c-file and then quickly shift gears and attack Black’s
+king — all before launching yet another wave of attacks in the center! The
+message herefor players of Black is: don’t let White just have a powerful
+d-pawn. Conclusion: White’s 1O.Y9c2 is strong. Black’s two main choices,
+1O...&xd5 and 1O... c6, lead to positions that are difficultforhim to defend.
+After 1O...itJxd5, "White should be able to get a nice pull with Sdl and 12.}
+12.Qa4 {Against 10...} 1-0
+
+[Event "Novi Sad ol (Men)"]
+[Site "Novi Sad"]
+[Date "1990.??.??"]
+[Round "14"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Fernandes, Antonio"]
+[Result "1-0"]
+[WhiteElo "2515"]
+[BlackElo "2445"]
+[ECO "D75"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 O-O 5.d4 d5 6.cxd5 Nxd5 7.O-O c5 {With this
+move, Black strikes before ^bite can build a big center with e2-e4. Black counts
+on being able to regain his pawn quickly with ...lDa6. By creating a symmetrical
+pawn structure, Black hopes to equalize the game} 8.dxc5 Na6 {lDc6?! was played
+in Wojtkiewicz-“Mr Speltz,” Internet blitz 2004. After} 9.Ng5 Ndb4 {e6, a solid
+move that has the downside of further weakening the dark squares around Black’s
+king, is covered in the next game} 10.Nc3 Nxc5 {foxc5?! was an error here. Black
+regains his pawn, evening out thepawnforces, but iWhite was able to gain time
+chasing around Black’s knights and queen. Black was simply down a few tempi the
+whole game, andfor this reason his position was always unpleasant. With} 11.Be3
+Nba6 12.Qc1 Qe8 {V!ic1, White made the excellent decision to keep the queens on
+the board and play against the black king. After} 13.Nge4 Ne6 {tLlxe4 might have
+relieved Black’s cramp somewhat. Unfortunately for him, however, after} 14.Bh6
+Bd7 {kh6, the dark squares in that sector were a continual source of trouble for
+the second player. iWhite built up a strong position on the kingside and in the
+center,placed hispieces on their optimal squares, and then struck with} 15.Bxg7
+Kxg7 {®xb7 left White up a pawn in E.Geller-V.Savon, Kiev 1963)} 16.Nd5 Bc6 {The
+pressure continues. White will now assault the dark squares around Black’s king}
+17.Qc3+ f6 {.<&g8?? loses to the knight fork on f6} 18.Rfd1 Qf7 {gfdl} 19.Qe3
+Rfd8 {From here, the queen ties down Black’s queenside forces to the a7-pawn and
+exerts pressure on the dark squares} 20.Nec3 Rd6 {tLlac5 with the idea of} 21.b4
+Bxd5 {b4!. Faced with such pressure, Black couldn’t resistfor long. In the next
+game, White plays against Black’s dark-squared bishop by provoking
+...e7-(e6)-e5. This results in the first player’s having all of the activity—an
+edge that Wojo eventually converts into a two-pawn plus} 22.Bxd5 Nxb4 {"White
+has sacrificed a pawn in return for a powerful pin along the a2-g8 diagonal.
+Black is struggling to avoid losing massive amounts of material} 23.Bb3 Rc6
+{Trying to hold on to the knight on e6 with} 24.Rd7 Rac8 {^bite crashes through}
+25.Nb5 Nc2 {Threatening both &xa7 and &d4} 26.Bxc2 Rxc2 27.Nd6 R8c3 {The coup de
+grace. Black can no longerhold e6} 28.Qxc3 Rxc3 {he6, the rook on c5 hangs}
+29.Nxf7 Kxf7 30.Rxb7 Nd4 31.e3 Nf3+ 32.Kg2 Ne5 1-0
+
+[Event "Western States Open"]
+[Site "?"]
+[Date "2004.??.??"]
+[Round "?"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Yanayt, Eugene"]
+[Result "*"]
+[ECO "D75"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {4} Nf6 2.c4 g6 3.g3 Bg7 4.d4 0-0 1-0
+
+[Event "Novi Sad"]
+[Site "?"]
+[Date "2009.??.??"]
+[Round "?"]
+[White "Tornashevsky, Evgeny"]
+[Black "Mamedyarov, Shakhriyar"]
+[Result "*"]
+[ECO "D75"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.e4 {9} Nf6 {2.} *
+
+[Event "Budapest"]
+[Site "?"]
+[Date "1964.??.??"]
+[Round "?"]
+[White ""]
+[Black ""]
+[Result "*"]
+[ECO "D75"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {4} Nf6 2.c4 g6 3.f3 Bg7 4.g3 0-0 5.Bg2 d5 6.cxd5 Qxd5 1-0
+
+[Event "Warsaw"]
+[Site "?"]
+[Date "1990.??.??"]
+[Round "?"]
+[White ""]
+[Black ""]
+[Result "*"]
+[ECO "D75"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {0} Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 Nd5 {0 -0} 1-0
+
+[Event "Zvenigorod"]
+[Site "?"]
+[Date "2008.??.??"]
+[Round "?"]
+[White "Kotsur, Pavel"]
+[Black "Rakhrnanov, AJexander"]
+[Result "*"]
+[ECO "D74"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {8} Nf6 2.c4 g6 1-0
+
+[Event "Sibenik"]
+[Site "?"]
+[Date "2011.??.??"]
+[Round "?"]
+[White ""]
+[Black "Sevic, Davorin"]
+[Result "*"]
+[ECO "D74"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {1} Nf6 2.f3 g6 3.c4 Bg7 4.g3 d5 5.cxd5 Qxd5 6.Bg2 0-0 7.Nc3 {0-0 &c6 8.}
+e5 {&xc3 9. bxc3} 1-0
+
+[Event "Hangzhou"]
+[Site "?"]
+[Date "1965.??.??"]
+[Round "?"]
+[White ""]
+[Black ""]
+[Result "*"]
+[ECO "D74"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {5} Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 0-0 1-0
+
+[Event "Saint Vfucent"]
+[Site "?"]
+[Date "2005.??.??"]
+[Round "?"]
+[White "Dvoirys, Semen"]
+[Black "Bemtsen, Peter"]
+[Result "*"]
+[ECO "D74"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {5 d5 2. g3 c!Df6 3 •.ig g6 4. c4 .ig7 5. cxd5 c!Dxd5 A slightlydifferent
+move order from White than what we are used to. This “odds and ends” section is
+the perfect place to discuss what happens after} Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 0-0
+5.Nd4 Nd5 {6.} 6.Nc3 {Wxd5, though the move order in this game isn’t
+particularly suited for it. Nevertheless, we’ll discuss this here. The
+unorthodox 6 ...Wxd5?! has been tried over fifty times, but with astoundingly
+bad results. 7. ltJc3 and now Black can place the queen on either extreme of the
+board: a) 7... @a5 8. 0-0 :1'i:d8 9. ®b3 ltJc6 10. :1'i:d1 i.e6 (10...Ш611.d5
+ltJa5 12. Wa3 is good forWhite) 11. ®xb7 ltJb4 12. i.f4 ltJbd5 13. ltJxd5 ltJxd5
+was Ippolito-Greanias, World Open1997, when here 14. i.d2 would havejust left
+White a full pawn up. b) 7.. .№5?! 8. ltJg5! and Black’s queen is in serious
+trouble. 8 ...Wg4 (8... h6? 9. МЗ i.g4 1O.,hb7 won material for White in
+L.Roels-T.Hjelmeland, corr. 1990) 9.. ih3! Wh5 1O.hc8 :1'i:xc8 11. ®b3 e6 (or
+11... :1'i:f8 12. Wxb7 ltJbd7 13. h3!, continuing to play against the queen) 12.
+®xb7 (12.ltJxe6 also wins material) 12... ltJbd7 13. h3 :1'i:ab8 14. ®g2 and
+Black lacks sufficient compensation for his pawn. In hindsight, it should not be
+surprising that 6... ®xd5?! turns out so poorly for Black. There is no reason
+for him to bring Her Highness into the line of fire so early here — the dancing
+queen achieves nothing.} c6 {0-0 7. 0-0} 1-0
+
+[Event "Dubai"]
+[Site "?"]
+[Date "2001.??.??"]
+[Round "?"]
+[White "Filippov, Valerij"]
+[Black "Odeev, Handszar"]
+[Result "*"]
+[ECO "D74"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {1} Nf6 2.c4 g6 3.g3 Bg7 *
+
+[Event "Foxwoods"]
+[Site "?"]
+[Date "2008.??.??"]
+[Round "?"]
+[White "Ippolito, Dean"]
+[Black "Hilton, Jonathan"]
+[Result "*"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {8} Nf6 2.c4 g6 3.Bg5 {tO£J} 1-0
+
+[Event "Wijk aan Zee"]
+[Site "?"]
+[Date "1988.??.??"]
+[Round "?"]
+[White "Karpov, Anatoly"]
+[Black "Georgiev, Kiril"]
+[Result "*"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.c4 {8} g6 2.f3 Bg7 3.d4 g5 {f 4.} 1-0
+
+[Event "EUCup final"]
+[Site "Kazan"]
+[Date "1997.12.30"]
+[Round "3"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Krasenkow, Michal"]
+[Result "1/2-1/2"]
+[WhiteElo "2575"]
+[BlackElo "2645"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 O-O 5.d4 c6 6.Nc3 d5 7.Qb3 dxc4 {Vf!b6 and are
+not playing into the} 8.Qxc4 Bf5 {Vf!xc4 variation. Simple development makes
+sense for iWhite, whereas Black must rely on awkward-looking moves like} 9.O-O
+Nbd7 {tDe4 are examined in the nextgame. White prepares the e2-e4 push. Another
+common (but inferior) move order is} 10.Re1 Ne4 {And} 11.Qb3 Nb6 {c5?! unleashes
+White’s light-squared bishop on the hl-a8 diagonal. "White played} 12.a4 a5 {A
+good move, compelling Black to play ...a7-a5, weakening his position along the
+b-file. The second player now comes under considerable pressure. After 12
+....ie6!?, played in Ippolito-J.Fedorowicz, U.S. Chp. 2006, "White obtained a
+nice space advantage after} 13.Bf4 Ra6 {'i'!,a6 in order to withstand WhWhite’s
+pressure. In this particular game, iWhite rushed things with} 14.Ne5 Qxd4
+{'i'!,ac1, for instance), when Black is uncomfortable. By achieving an eventual
+liJj3-e5, ^White will seize control of the e4 square, neutralizing Black’s
+active piece play. The next game examines what happens when Black fails in his
+fight for the e4 square and "White gets his pawn push in the centerwith e2-e4.
+We’ll also examine Black’s move 9 alternatives} 15.e3 Nc5 {Best, since} 16.Qxf7+
+Rxf7 {bxc3 leaves "White slightly better: "White’s better piece coordination and
+pressure along the b-file give him an edge here. Wojo himself remarked that
+after the simple} 17.exd4 Bxe5 {exd4 would leave White slightly better. Black’s
+knight is placed better on c5} 18.Bxe5 Nd3 {^bite makes an oversight, and one
+that passes the advantage to Black} 19.Re2 Nc4 {Now it is Black who has the
+initiative. "White’s queenside is in danger, and he must play precisely to avoid
+a catastrophe. The b2-pawn falls, but "White will counterattack using his bishop
+pair} 20.Bc7 Ncxb2 {®b1 b6, but after} 21.Bd8 Kf8 {Of course, these kinds of
+subtle tactics are usually found only by machines. From a practical standpoint,
+White’s error was on move 14, when he released the tension and gave Black
+counterplay} 22.Ne4 Bxe4 {White increases the pressure on Black. He has ideas of
+ltJg5 or l!bl, trying to throw Black off balance. Black’s most natural reaction,
+but perhaps not his best. 22 ...l!a8} 23.Bxe4 Ke8 {cxd4 V9c4, is probably better
+for Black than the game move but still leaves him under some pressure)} 24.Bc7
+e6 {ib6 ltJc4 25 ..ic5+ would have kept the position murky, and perhaps Black’s
+extra pawn would eventually have made the difference here} 25.Bd6 Rd7 {ib6 and
+^bite had a clear advantage but Black eventually struggled to a draw} 26.Ba3
+Rxd4 {Black has driven out "White’s dark-squared bishop, but this maneuver has
+come at a price to the second player. Black must now liquidate into an equal
+ending to avoid losing a piece} 27.Bxb2 Nxb2 28.Rxb2 Rxe4 29.Rxb7 Rd4 {Black
+returns to the seventh rank to defend his king} 30.Rxh7 Rd7 {exf6 (30.ltJg5,
+preserving White’s space advantage, seems preferable since there is no clear win
+of material with the text move) 30 ... exf6} 31.Rh8+ Kf7 {gh4. He would then
+look to target Black’s four isolated pawns. After having been worse for several
+moves, though, "White decides that he is ready to call it a draw} 32.Rh7+ Ke8
+33.Rh8+ Kf7 34.Rh7+ Ke8 {Wojo concludes it’s best to take the half-point.
+Summary: This gamerepresents the “main line’’ of the entire} 1/2-1/2
+
+[Event "Vienna"]
+[Site "?"]
+[Date "1996.??.??"]
+[Round "?"]
+[White "Khalifman, Alexander"]
+[Black "Ruck, Robert"]
+[Result "*"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {6} Nf6 2.f3 g6 3.c4 Bg7 4.g3 c6 *
+
+[Event "Biel op"]
+[Site "Biel"]
+[Date "1990.??.??"]
+[Round "6"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Lutz, Christopher"]
+[Result "1/2-1/2"]
+[WhiteElo "2515"]
+[BlackElo "2445"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 O-O 5.d4 c6 6.Nc3 d5 7.Qb3 Qb6 {®b3 variation.
+From our analysis above in Wojtkiewicz-Krasenkow, however, it appears that Black
+is still struggling to equalize here. 'White’s straightforward plan of Wb3,
+a2-a4, .if4, tDe5, and so on puts the second player under heavypositional
+pressure. Meanwhile, when Black deviates from our stem game, White can find
+other ways of challenging Black for control of e4. We’ve noted tDh4 and tDg5 as
+being two of them. Overall, it appears that Black cannot count on getting too
+pleasant a position with} 8.O-O Na6 {tDa6 first and only then playing for
+....tfS. In this section, we will deal with these alternatives. First, what
+other plans might Black have? One idea is to tryfor ...b7-b5 and ....ie6,
+expanding on the queenside. This isn’t usually a first-rate option for Black
+because, as we’ll see, it usually does more damage to his queenside than it is
+worth in terms of counterplay. "White can focus on control of the c5 and e5
+squares; these are good places for him to put his knights. His queen, after
+moving to b3 or d3, generally rests nicely on c2, where it exerts pressure on
+the c6-pawn and supports a possible e2-e4 pawn push in the center. White also
+commonly plays a2-a3, either preventing Black’s ...b5-b4 push, or — if Black has
+already played that — breaking up Black’s queenside formation. In the end,
+Black’s a- and c-pawns are almost always weak. A second idea is for Black to
+play something like ...tDbd7 and aim for the ...c6-c5 push. The reasoning for
+Black here is that if he can pull this off without falling behind in
+development, ^bite’s d4-pawn will be successfully challenged. Unfortunately for
+the second player, this rarelyhappens. By the time Black achieves ...c6-c5,
+White is usually far enough ahead in development that he can play dxc5 and
+l'l:ac1, taking advantage of the open c-file. His bishops, often on the g2 and
+e3 squares, rain down on Black’s a7- and b7-pawns. The white queen — which has
+often been chased to b3 by this point, for instance by some knight maneuver
+ending in ...tDb6 — can go to a3, putting further pressure on the c5-pa^. These
+concepts may seem abstract at the moment, but after playing through the
+variations given in the notes to this first game, they will be much easier to
+visualize and comprehend. A word to the wise: in what follows, the reader should
+pay special attention to the maneuvers of ^bite’s queen. When Black chases it,
+where does it go? Back to c2 via a4, d3, or b3? To the a3 square to put pressure
+on Black’s e7-pawn and to counter the idea of ...c6-c5? Developing a feel for
+where best to place White’s queen is key to playing this system well for White.
+We will begin with a game featuring several good queen moves from the first
+player} 9.h3 dxc4 {®xb6 axb6 1O.!i:,a4 !i:,d711.cxd5 cxd512.id2, as explained in
+the next chapter. See the stem game Melkumyan-Kozul, note to move} 10.Qxc4 Bf5
+{BLACK T^AKE ШТН} 11.Ng5 h6 {0,g5 allowed him to expand in the center with
+e2-e4, putting pressure on Black. Wojo could have handled things a bit better at
+a couple of points, though — the cautious} 12.e4 Bd7 {^bite anticipates ...b7-b5
+and returns his queen to the e2 square, a common posting for it in this line}
+13.Nf3 Qa5 14.Qe2 b5 15.Ne5 Rad8 16.Be3 b4 {a3!?, limiting Black’s counterplay,
+may be an improvement. Or perhaps the riskier} 17.Nc4 Qc7 {Black must strike
+quickly, else White will have time to bringhis rooks to bear on the center
+files. This move costs Black a pawn, but the sacrifice is well worth it in order
+to generate some activity for Black’s pieces and to break up White’s pawn
+center} 18.Na4 c5 19.Nxc5 Nxc5 20.dxc5 Bb5 21.Rfc1 Nd7 {Hfcl ^bite prepares to
+step out of the pin. Black will now regroup and try to win back the c-pawn}
+22.Qe1 a5 23.Rab1 Bxc4 {c6!? might have eventually brought WhWhite a much bigger
+advantage. In any case, Black’s resourceful play managed to reach an
+opposite-colored-bishops situation, where tenacious defense allowed him to hang
+onfor the draw} 24.Rxc4 Ne5 {The black knight threatens to hop into d3, so
+"White trades it off. Since this leads to an opposite-colored bishops endgame,
+however, 25Jk2 mighthave been preferable} 25.Bf4 Qc6 {!'!abl Axcl 26J'!xcl, when
+White will look to win Black’s bishop on c4: Wojo does not feel like taking this
+risk and instead plays to simply win a pa^} 26.Bxe5 Bxe5 {'I1;l/xc3, leaving
+White with the bishop pair, was not advisable for Black} 27.a3 Rd4 {^bite breaks
+up Black’s queenside pawns. White will remain ahead a pawn for the rest of the
+game, but the opposite-colored bishops — together with Black’s careful restraint
+of ^bite’s queenside pawns — give the second player good drawing chances}
+28.Rxd4 Bxd4 29.axb4 axb4 30.Qxb4 Bxc5 {Wxb4 ixeS} 31.Qd2 Qb6 32.b4 Rb8 33.b5
+Rd8 {White has succeeded in pushing his extra pawn up to the fifth rank, but it
+will take many moves for it to advance again. Meanwhile, Black pressures f2}
+34.Qc2 Bd4 35.Bf3 Rd6 36.h4 Rf6 {^bite finds himself blockaded on the queenside,
+so he tries to make some slight progress on the kingside} 37.Kg2 Kg7 38.Qe2 e5
+39.h5 g5 {Black wisely locks his pawns on dark squares, out of reach of "White’s
+light-squared bishop. White has weakened Black’s kingside formation, but it will
+still be difficult for him to take advantage of this} 40.Rf1 Bc5 {gfl J.eS}
+41.Bg4 Rd6 42.Rc1 Bb4 43.Rc2 Qd8 44.Qf3 Qb6 {^bite could have tried 44Jk6, with
+the idea of something like} 45.Qe2 Qd8 {bxc6 id6, "White has little chance of
+making progress with his c-pawn} 46.Qc4 Rd2 {Black liquidates into a drawn
+ending. A great resource for Black. Breaking up "White’s connected e- and
+f-pawns destroys "White’s winning chances} 47.Rxd2 Bxd2 {ie6!, breaking through
+on the sixth rank. However, after just} 48.Qc5 Qd4 {i.e6!? with the idea of}
+49.Qxd4 exd4 {id5 .ia5 and so on would have defended adequately for Black. Black
+heads straight for the draw} 50.b6 Ba5 51.b7 Bc7 52.Be2 Kf6 {White regroups. His
+bishop will guard against the advance ofBlack’s d-pawn while his king goes after
+Black’s other pawns, most of which are on dark squares} 53.Kh3 Ke5 54.Bd3 Bb8
+55.Kg4 Ke6 {&g4 Феб} 56.f4 gxf4 57.gxf4 f5+ {Black can always meet White’s
+<i!?c6 with ...<i!?e7. Even ifWhite does manage to win Black’s bishop forthe
+price ofhis b- and f- pawns, he will never win; the best scenario available for
+him is the famous “bishop and rook pawn versus lone king” draw. White’s
+light-squared bishop is of the wrong color — his h-pawn would promote on a dark
+square. Thus, Black easily holds the draw. Summary: WhWhitefought Blackfor
+control of the e4 square here and won. His} 58.exf5+ Kf6 59.Kf3 Bc7 60.Ke4 Bb8
+{f5 would have led to more or less the same scenario} 61.Kxd4 Bxf4 62.Kd5 Bb8
+1/2-1/2
+
+[Event "Zagreb"]
+[Site "?"]
+[Date "1993.??.??"]
+[Round "?"]
+[White ""]
+[Black "Kurajica, Bojan"]
+[Result "*"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {3} Nf6 2.Nf3 g6 3.g3 Bg7 4.Bg2 0-0 5.0-0 d5 6.c4 c6 7.Qb3 dxc4 8.Qxc4 Be6
+9.Qb3 {A common alternative to the main line with 8... .if5. Black looks to
+chase White’s queen around. We’ll examine 8 ...lLla6, a move recommended by
+Janjgava, in the next game. In the meantime, let’s look at 8... lLlbd7, another
+common move. White usually has little trouble getting a small but persistent
+edge here; his plan is just to develop smoothly and allow his unopposed d-pawn
+to influence matters in the center. 0-0 lLlb6 (9 ...%Va5!? 1O.e4 ®h5 11. ВД3
+lLlb6 12. lLle2 E1d8 13. a4! lLlbd7 14. b4! gave White a clear advantage in
+Euwe-Alekhine in the last round of their 1935 World Championship contest,
+allowing Euwe to clinch the match) 1O.1Yd3 and now: a) 1O....ie6 11. E1dl \Wc8
+12. e4 E1d8 13. %Vc2 simply leaves White with a slight space advantage and a
+nice center. Note that E1dl, reinforcing White’s d-pawn, is a common move for
+White. Since often Black’s only way to challenge the d4-pawn is ... c6-c5, it
+makes sense to put ^bite’s rooks on dl and cl. b) lO...lLlfd5 11. E1dl (or 11.
+e4 lLlb4 12. ВД2! with the idea of a2-a3 and E1dl) l1... a5 (l1...lLlb4 12. \Wbl
+.ie6 13. a3 lLla6 14. \Wc2 was a little better for ^thite in
+M.Schwarz-P.Backwinkel, Germany 1993) 12. e4 lLlb4 13. \We2 .ie6 14.. if4 a4
+I5.d5! cxd5 16. \Wb5 lLla6 17. exd5 gave White the initiative in Z.Ribli-J.
+Smejkal, Vrbas 1977. c) 10... .tg4 can be met by either 11. E1dl, keeping a
+slight edge, or 11. lLle5 .ie6 12. E1dl lLlfd5 13. lLlxd5 cxd5 (13... lLlxd5 14.
+a3 a5 is probably better) as in V. Loginov-Y.Kuzubov, Russia Cup 2003. Here 14.
+\Wb3 with the idea of 14... f6 15. lLld3 would have kept Black under positional
+pressure. So can Black play anything else besides 8 ....if5 (the main line), 8
+... .ie6 (examined inthis game), 8... lLla6 (examined in the next game), or 8...
+lLlbd7 (the move we have just seen)? From a practical standpoint, it seems that
+any other alternatives here are rare and don’t deserve much attention. For the
+sake of completeness, we can mention two more: 8... b5!? and 8 ... %Va5. First,
+8... b5!?} h6 {.ie6 1O.\Wc2 b4 l1.lLla4 just leaves Black with a weakened
+queenside. After 11 ....td5, in G.Mittelman-RBagirov, Biel 1998, ^thite
+sacrificed a pa^ with 12. lLlc5 .txf3 13. ^^3 \Wxd4 14. 0-0, when his two
+bishops gave him more than full compensation. After 14... lLlfd7 15. lLlb3 Y;Ve5
+16. a3 (breaking up the queenside) 16... bxa3 17. Sxa3, "White was soon able to
+play tiJa5, ganging up on Black’s c-pawn and eventually winning it: "White then
+had the advantage of the bishop pair. Finally, after 8... Y;Va5, White can
+simply develop to good effect: 9. 0-0 i.e6 10. Y;Vd3 tiJa6 11. tiJg5! i.d7 12.
+i.d2 gives him a slight initiative. After 12... Y;Vd8 (12. ..h6 13. tiJf3 isjust
+a tad better for "White thanks to his solid center; 13. tiJge4, eyeing the c5
+square, is also better for White) 13. Sadl h6 14. tiJf3 .if5 15. Y;Vc4! (not 15.
+e4? tiJc5!) 15... tiJd5 16. Y;Vb3 tiJdb4 (better is 16. ..tiJxc3 17. hc3 Y;Vb6)
+17. Scl with the idea of Sdl, White had a pleasant edge in
+O.Romanishin-A.Kochyev, Moscow 1989: Black’s pieces aren’t particularly well
+coordinated, and it appears that he has been running around in circles. Having
+now dealt with those alternatives, let us return to the game. 9. Y;Va4 &bd7}
+10.Qb5 {tries to prevent tiJg5 but just loses time. 0-0} Na6 {11. Y;Vc2} 11.Rd1
+{12. e4 Sc8 13. a3 (a good move, making it so that when Black plays ... b5-b4,
+"White can take axb4 and play against Black’s weak a- and c-pawns) 13... Y;Va5
+14. i.d2 Y;Vb6 15. b4 (White gains more from locking down the c5 square than he
+loses from surrendering c4) 15... Sfd8 16. h3 tiJe8 17. i.e3 Y;Vb7 18. tiJe2
+(preparing tiJf4) 18... .ic4 19. Ш1 tiJd6 20. 'tJf4 was better for White in
+G.Vescovi-A. Mallahi, Spain 1996: White’s center is strong here, and Black’s
+kingside pawns are somewhat loose — particularly the g6-pawn. Black’s queen on
+b7is also not in a good position to defend Black’s kingside. Adding to Black’s
+problems is the fact that he seems to have the wrong piece on c4: he wants the
+knight there, not the bishop. All this added up to a nice kingside attack for
+White with very little counterplay for Black: 20 ...'tJc7 21. tiJe5 tiJe6??
+(Black cracks under the pressure) 22. tiJxc4 tiJxc4 23. tiJxe6 fxe6 24. e5 25.
+i.e4 g5 26.. ih7, and White won in short order. Meanwhile, 9... tiJa6 transposes
+into analysis given in the next game, while 9.. .b5 l0.®c2 transposes into
+analysis given in the note to Black’s previous move. ' 10. 0-0 c!Llb6 It’s too
+early for 10 ... c5?!. The second player isn’t yet developed enough to make this
+strike:} Qc8 12.Na3! 1-0
+
+[Event "Reggio Emilia"]
+[Site "?"]
+[Date "1991.??.??"]
+[Round "?"]
+[White "Romanishin, Oleg"]
+[Black "Gulko, Boris"]
+[Result "*"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {1} Nf6 2.f3 g6 3.c4 Bg7 4.g3 c6 5.Nc3 d5 6.Qb3 dxc4 7.Qxc4 0-0 8.Bg2 Na6!?
+1-0
+
+[Event "RzeszoW"]
+[Site "?"]
+[Date "1988.??.??"]
+[Round "?"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Mohring, Gunther"]
+[Result "*"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {8} Nf6 2.c4 g6 3.d4 Bg7 4.g3 c6 5.Bg2 0-0 6.d5 {0-0} Qb6 {7.} 7.Qb3 {Vb6
+Black’s most solid line against} Qf2+ {More often than not, the second player
+finds himself groveling for a draw, as we’ll see in this chapter. 8. &c3 Vxb3
+This capturejust allows "White pressure along the open a-file. It is almost
+certainlybetterfor Blackto wait before exchanging queens. We will examine
+Black’s othermove 8 possibilities in the next two games in this chapter. 9. axb3
+&a6 Black’s most popular choice, taking advantage of the b4 square. Less
+attractive is 9... J.f5, when here "White gets a small advantage without a
+fight: 1O.lLle5 gd8 (1O...Wxb3 11. axb3 transposes to 8 ....if5 9. lLle5 Wfxb3
+10. axb3, given in Tregubov-Bezemer below, note to move 8) 11.. if4 lLlbd7 12.
+lLlxd7 gxd7 13.. ie5, with pressure on Black’s position, was
+D.Jakovenko-F.Amonatov, Moscow 2007. After 13.. .gdd8 14. cxd5 lLlxd5 15. lLlxd5
+cxd5 16.. 1xg7 Wxg7 17. gfcl gd7 18. gc5 e6 19. f3 g5 20. Wf2 gd6 21. e4,
+Black’s position was uncomfortable: "White eventually went onto win.
+Alternatively, 9 ...lLlbd7 10. cxd5 lLlxd5 11. lLlxd5 cxd5 12.. if4 also just
+gives White pressure, as has been shown in a handful ofgames. Note that as a
+rule, in these Slav pawn structures, when Black has to recapture on d5 with the
+pawn, he shouldn’t commit to ...lLlbd7 too early. If he does, White should
+usually respond with c4xd5 since the second player will no longer havethe option
+of ...lLlc6 available. One example ofhow the first player can take advantage
+ofhis superior development here is E.Birmingham-M.Apicella, Angers 1990. White
+was better after 12... gd8 13. J.c7 ge8 14. gfcl e6 15. e3 .if8 16. J.fl lLlf6
+17. lLle5 .ie7 18.. ib5 gf8 19 ..ib6 a6 20.. ic5! hc5 21. gxc5 lLle4: But here
+he should have continued with 22l'k7 ltJd6 23. i.f1 ltJe8 24. §c2 f6 25. ltJd3
+ltJd6 26. %acl and so on, rather than with the weaker 22. §c2 f6 23. ltJf3 Sf7
+24. i.d3 ltJd6 25. :!ac1, when ^bite wasn’t quite as well placed as before (he
+would do better to put the knight, not the bishop, on d3!). "White immediately
+agreed to a draw with his higher-rated opponent. 10.. tf4 The most natural
+developing move. The bishop may be headed for e5, taking advantage of the fact
+that Black has already deployed his queen’s knight to a6 instead of d7. 10..
+.1d8 10.. ..1f5 11. cxd5!? (the usual 11. Sa4! followed by ltJe5, with pressure,
+is perhaps a little better than this) 11... ltJxd5 12. ltJxd5 cxd5 13. Sa5 led
+to a miniature in I.Csom-H.Ree, Amsterdam 1974, after 13... i.e4 14. Sb5 ,^rf3?
+(14. ..e6 was better, e.g., 15. Sxb7 ,^rf3 16.. ^rf3 hd4 and Black is fine) 15..
+^rf3 hd4 16. hd5 g5!? 17. hg5 ltJc7 18. Sb4 i.xf2+ 19. Sxf2 ltJxd5 20. Sb5
+ltJf6?? (20...Sfd8 and Black is hanging on) 21.. 1h6 1-0. 11. Sfcl ^bite is
+preparing for cxd5, opening the c-file. Black decides to try to force "White’s
+hand in the center. 11. ...te6 Black aims to increase the pressure on c4,
+forcing "White to choose between cxd5 and the space-gaining c4-c5 push. 12. c5!?
+Not bad, but not the best choice here, either. Of course 12. cxd5 was worse: 12
+...ltJxd5 13. ltJxd5 hd5 would leave Black clearly better thanks to White’s
+b3-pawn. But there was also a third option for "White: maintaining the center
+with 12. Sa4!. Keeping the tension in the position this way would have
+undoubtedly kept- the second player under more pressure. 12.. .£se4 The more
+passive 12 ...ltJe8 was well met by 13. Sa4!, preparing b3-b4-b5, in
+O.Romanishin-E.Thomas, Debrecen 1992. After 13... ltJac7 14. Sb4 Sab8 15. Sal
+a6, Black was under intense pressure on the queenside. "White then expanded on
+the kingside, leaving Black completelytiedup: 16. h3 f6 17. g4 18.. 1g3 f1 9.
+Sa5 (White defends the c5-pawn): 19 ... e5? (Black cracks) 20. dxe5 b5 21. Sd4!
+ixc5 22. Sd1 .ib6 23. Saa1 (the opening ofthe center has favored White, who is
+more active) 23 ... d4?! 24. lZle4 .b:b3 25. Sdc1 ic4 26. exf6 and White was
+winning. The game ended after 26... .id5 27. lZle5 lZld6 28. lZlxd6 Sxd6 29.
+lZlxc6 1-0. The text, which is more aggressive for Black, is an improvement. 13.
+Sa4 Preparing b3-b4-b5. 13 ... h6 13.. .1Zlaxc5!? 14. dxc5 lZlxc5 l5.Sb4 (l5.Sa3
+d4 16. lZla2 d3! 17. Sxc5 dxe2, with threats along the back rank, gives Black a
+big edge, e.g., 18. h3 ixb2 19. Sa4 Sd1+ 20. &h2 .id5 21. Sxd5 cxd5 and Black is
+winning) l5... d4, with the idea of 16. lZlb1 (16.lZlb5 lZlxb3 17. lZlc7 is very
+unclear) 16... a5 17. Sb6 lZlxb3, is recommended by Rybka. The computer gives
+18. Sd1 lZlc5 19. Sc1 lZlb3 20. Sd1 with a draw, but the situation is still
+unclear after other possibilities. Black can also just play 16... lZlxb3
+immediately and, after ^bite moves his rookon al, retreat the knightto c5 and he
+is doing just fine. In any case, this line demonstrates the kind of options
+Black gets when ^bite commits to the c4-c5 push just a little too early. 14.
+h4f6 14.. .1Zlaxc5!?, sacrificing the knight for three pawns, was still a
+possibility here after l5.dxc5 lZlxc5. The difference is that since h2-h4 and
+... h7-h6 have been inserted, White has less to fear along the back rank. 16.
+Sa3 d4 17. lZla2 lZlxb3 (17... d3? is now met by 18. Sxc5 dxe2 19. 3c2 Sd1+ 20.
+&h2 e1V9 21. lZlxe1 Sxel and White is just a piece up) 18. Se1 ( ....ic4 was
+coming) 18... a5 and ^bite seems a little better here than in the note to
+Black’s previous move since he has some new ways to challenge Black’s piece
+activity, for instance 19. 1Zlc1 or 19.. ic7 Sd7 20 ..ie5. This still seems like
+a good route for Black to go, however. In the game, Black pursues a much
+different strategy. 15. Scal 15... lZlxc3?! A positional mistake which allows
+"White to strengthen his position in the center. Nonetheless, it is easy to see
+why Black decided to play this way; his better options require him to have a
+good deal of patience and were difficult to find. For instance, note that the
+obvious alternative 15... g5?! looks premature after 16.. ie3 with lZlel,
+putting pressure on e4, to follow. The better 15 ....ic8!?, trying to make room
+for ... e7-e5, seems solid. The idea is that White cannot play b3-b4-b5 because
+as soon as the pawn reaches b5, Black can insert ...lZlxc3. Play continues 16.
+b4 (16. .icl!? e5 17. e3, copying Black’s strategy, might actually be the best
+way for "White to play!) 16... g5 17. i.e3 1!;>f7, when Black is slowly making
+some headway on the kingside. It is difficult to come up with any plan here for
+White besides 18. lLlxe4 dxe4 19. lLld2 f5 20. lLlc4 (20. hxg5?! i.xd4 21. i.xd4
+Sxd4 22. lLlb3 Sxb4 23. Sxb4 lLlxb4 24. gxh6 I!;>g6 is certainly not better for
+White), but now 20... gxh4 21. gxh4 lLlc7! activates Black’s pieces: 22. Sxa7
+Sxa7 23. Sxa7 lLlb5 24. Sa8 lLlc7 could be met, at the very least, with 25. §b8
+lLla6 26. Sa8 lLlc7 and so on with a draw. Instead, Black commits the same error
+that the second player did in Wojtkiewicz-N.N., page 281 of Volume 1. 16. bxc3
+.tg4 Black is trying to trade pieces to relieve his cramped position. This is
+normally a good practice, but just like with ...lLlxc3, following through with
+Black’s intended exchange (. .. ,^rf3) involves making a positional concession.
+17.. tfl e5 l8..te3 Best. White has threats of dxe5, attacking Black’s bishop on
+g4 by discovery. Instead, 18. dxe5!?,^rf3 (18... fxe5?? 19. 1Llxe5 i.xe5 20.
+i.xe5 would leave Black’s g4-bishop hanging) 19. exf6 (or 19. exf3 lLlxc5 20.
+Sxa7 Sxa7 21. Sxa7 fxe5) 19... i.xf6 20. exf3 lLlxc5 21. Sxa7 Sxa7 22. Sxa7
+i.xc3 23. i.xh6 leaves ^bite up a pawn and with better pawn coverage around his
+king, but the situation isn’t so clear here given Black’s powerful center pawns.
+The game move is more solid and guarantees "White a small edge. 18.. .5ab8?
+Black is cracking under the pressure. 18... .te6 or even 18... i.c8!? would have
+left him with a much more tenable position. White can regroup in the center with
+i.d2, lLlel, e2-e3, and then finally make a play for b3-b4-b5. The text,
+however, allows White to seize an almost decisive advantage. 19. dxe5 .txf3 20.
+exf3 fxe5 21. gcl!? 21.. 1xa6 was more ambitious: 21... bxa6 22. Sxa6 d4 23.
+cxd4 exd4 24. i.d2 d3 25. S1a3 i.b2 26. Sa2 gxb3 27. Sxc6 and Black’s kingside
+pawns drop like flies. The text keeps the two bishops and also leads to a clear
+advantage for White. 21.. .d4 22. cxd4 exd4 23.. tf4 gbc8 24.. td3 Worse is 24
+..ixa6 bxa6 25J'!xa6 !l:d7, when "White has difficulty finding the right way to
+increase the pressure on Black’s position. The text is better. 24.. .ФСТ 25. b4
+White’s bishops overpower Black on the queenside. The rest is a matter of
+technique, though perhaps not necessarily an easy win for the first player. Wojo
+makes it seem effortless. 34... b6 35. Xxe7+ Фхе7 36. cxb6 &xb6 37.. ta6 ФД7 38
+..td3 &d5 39. b5 c5 Wojo misses an opportunity to draw out Black’s king into a
+mating net: 25. i.c4+! <&f6 26.. id6. At the very least, Black will have to
+allow "White to capture on a6, losing material with no compensation. 25.. ..t
+26.. td2 26. .ie5, playing more aggressively, was more accurate. 26.. .gc7 27.
+ФП gcd7 28. f4 &c7 Black can stand being tied up no longer and decides to
+jettison his a7-pawn. At this point, however, he is surely losing. 29. gxa7 &d5
+30. f5 31. ge7 32. gel gde8 33. gxe7+ gxe7 34.. tc8 This is probably not Black’s
+best chance. His connected passed pawns have no prospects for advancing:
+"White’s bishop pair is too strong, and the first player will himself have two
+dangerous outside passed pawns — one on the kingside, the other on the
+queenside. 39 ... cxb5 40. hb5+ Фd6, with an idea of trying to trade off into a
+bishops-of-opposite-color ending, might have held out a little more hope. 40..
+ta5 .td6 41. Фе2 .tc7 42.. td2 Black’s h-pawn drops off. 42.. .6.6 43.. tf5+ Фе7
+44^d3 Фf6 45.. tg4 ie5 45.. .Фg7 46. h5 followed by .if5 and g3-g4 leads to a
+slow death for Black. 46. Фе4 &a4 47. Фd5 &c3+ 48. hc3 Cleanest. 4S.@c4 lLle4
+49. i.xh6 lLlxf2 50. i.g5+ @g6 51.. if3 ,ixg3 52. b6 is another way to go, but
+the text seems obvious. Black achieves a bishops-of-opposite-color ending, but
+it comes too late to save him. 48... dxc3 49.. idl .id4 On other moves, the
+c5-pawn falls: 49... .ibS 50. b6 @e7 51. @xc5 @d7 52. f4 etc. is an easy win for
+White. 50. f4 .if2 51. b6} 8.Kxf2 {Black must give up everything to stop White’s
+b-pawn from promoting, so the contest is over. Summary: Black’s 8... Wfxb3
+wasn’t a great move — it handed White a secure small advantage. Had ^White
+simply played 12. 'Sa4! instead of1 2. cS!?, the position would havejust been a
+routine “plus-over-equal” situation. After iWhite’s premature c4-c5, Black
+certainly had some chances for counterplay. Unfortunately, he missed them and
+instead played the ugly 15... lLlxc3?!, which we already knew was a positional
+error from our study of the Slav Defense in Volume I. It was all downhillfor
+Blackfrom there, though of course giving up the bishop pair with 16... i.g4
+probably didn’t help his cause, either. Once ^White had the two bishops on an
+open board, Black was in serious trouble. White Takes First: Play in the Center
+with J.f4, fileS, f2-f3, and e2-e4 It stands to reason that if Black holds out
+long enough and puts enough pressure on White’s center, he may eventually be
+able to get White to concede and exchange queens on b6. As we’ll see, this is
+probably a better option for Black than exchanging on b3 on move S. Meanwhile,
+"White’s plan will of course be somewhat different in this case; he won’t be
+looking for active play on the queenside, for one thing. Instead, he will look
+to counter Black’s newfound pressure on the queenside by doing what one should
+always do when faced with an attack on the flank: striking in the center! He
+will play i.f4, lLle5, f2-f3, and e2-e4 to obtain the initiative. The nextgame
+is representative of what we might consider the “main line” of the} e5
+{variation, taken as a whole. We see "White play just such a plan. Mikhalevski,
+Victor (250 0) Vydeslaver, Alik (2440) [D7S] Jerusalem 1996 1. d4 tDf6 2. c4 g6
+3. g3 c6 4.. ig2 d5 5. tDfJ.ig7 6. 0-0 0-0 7. Wfb3Wfb6 tDc3} 1-0
+
+[Event "Amsterdam"]
+[Site "?"]
+[Date "2004.??.??"]
+[Round "?"]
+[White "Tregubov, Pavel"]
+[Black "Bezemer, Arno"]
+[Result "*"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {4} Nf6 2.c4 g6 3.g3 c6 1-0
+
+[Event "Wisla BES op"]
+[Site "Wisla"]
+[Date "1992.??.??"]
+[Round "4"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Kaminski, Marcin"]
+[Result "1-0"]
+[WhiteElo "2495"]
+[BlackElo "2360"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 O-O 5.d4 c6 6.Nc3 d5 7.Qb3 Qb6 8.O-O Bf5
+{i.e6?! because of} 9.Ne5 Be6 {lLle5 ke6 to have instant equality? Not at all.
+iWhite can still count on a high winning percentage in this line,just like in
+the rest. Wojo's game against it tells us that even when Black decides to play
+it, there is still no easy way for the second player to dodge a fight.
+Theoretically, though, we think that this may be Black's best chance. As an
+added bonusfor WhWhite, it is relatively rarely that Black knows or chooses to
+employ this line. So, we do notfind it to be of great concern} 10.Qd1 Na6 {®dS
+is the ambitious (and nearly untested)} 11.cxd5 Nxd5 {.cxd5 would give White
+nice pressure: Black would fix his pawn on d5 as a target. Black’s pieces don’t
+look terribly coordinated here, either, with the knight on a6 and the bishop on
+e6} 12.Na4 Qc7 {lLle4! do we find any edge for iWhite here. Then, in the game}
+13.e4 Nb6 {£d2 Wc714.M4 V9cS, when after} 14.Bf4 g5 {Black plays resourcefully.
+14 ... tlJxa4} 15.Nxb6 Qxb6 {axb6 would have given the second player a
+decentposition. We prefer iWhite, but play seems relatively level, as in the
+sample continuation given. So does this mean that Black merely needs to play
+this line with} 16.Be3 Qxb2 {c5 was better, but here after} 17.Rb1 Qc3 {d5
+.ixe518.dxe6 .xe619..ixg5, White still has the two bishops and safer king. With
+the text, Black gives up far too many tempi} 18.Rxb7 c5 {Sxb7 would similarly
+have given White a crushing initiative. Black is trying to maintain a strong
+presence on the al-h8 diagonal} 19.Bd2 Qxd4 {This is likely the move that Black
+overlooked. ^White now has a winning initiative} 20.Nf3 Qd3 {lLlc6, throwing
+another piece into the attack. White smells blood on the kingside, however, and
+decides to play for mate. The white knight is headed for g5} 21.Nxg5 Bc4 {txa2,
+the direct} 22.Re1 Qd4 {gel .d4} 23.Qh5 h6 {lLlf3 would have been White’s
+continuation} 24.Nf3 Qd6 {ifl and so on} 25.e5 Qg6 {No better for Black is}
+26.Qxg6 fxg6 27.Nh4 Bd3 {^White emerges with a winning position thanks to
+Black’s scattered army and weak pawns} 28.Rxe7 Rae8 29.Rxa7 Rxe5 30.Rxg7+ Kxg7
+31.Rxe5 {Summary: Although Black lost this game quickly, it is actually here
+that we find some ideas thatare theoretically promisingfor Black. For the first
+time, it appears that Black can (with accurate play) achieve some counterplay in
+the center and on the queenside. First, it should be noted that, at least
+according to theory, W../@d8!? almost equalizes. Only with the idea of} 1-0
+
+[Event "Sarajevo"]
+[Site "?"]
+[Date "2012.??.??"]
+[Round "?"]
+[White "Melkumyan, Hrant"]
+[Black "Zul, Zdenko"]
+[Result "*"]
+[ECO "D78"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {2} Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 c6 5.Bg2 d5 6.0-0 0-0 7.Qb3 Qb6 8.Qc3 Rd8
+9.Bg5 {A solid move that roughly transposes back into other lines. It has become
+topical lately thanks to games by Radjabov, Vachier-Lagrave, Caruana, and
+Svidler, all of whom have played it in the past couple of years. The other move
+8 alternatives are played infrequently. For instance, 8... .te6?!} dxc4 10.a4
+Na6 {is generally thought to be good for White. 10 ....td7 11. \!;l!xc4 h6 12.
+1Z1f3 and now: a) 12 ...ttJa6 13. e4 l=!ad8 14. h3 Wa5 15. ®e2 left ^bite with
+control of the center in G.Sargissian-G.Guseinov, Antalya 2004. b) 12... .!e6
+13. Wa4 ttJa6 14. e4 l=!fd8 I5.h3 ttJe8 16. l=!dl ttJd6 17. Wc2 ttJb4 18. ®bl as
+19. b3 ttJb5 was G.Sargissian-J.Tihonov, Saratov 2006, when here 20. ttJxb5 Wxb5
+21. ,£b2, with the idea of meeting 21... a4?! with 22. bxa4 Wxa4 23. d5! cxd5 24
+..!xg7 Wxg7? 25. l=!d4, would have given "White a slightly preferable game
+thanks to his pawn center. Meanwhile, another tryfor Black -this one somewhat
+more solid - is 8... ttJa6. Here White can take advantage of his slightly better
+development with 9. ®xb6! axb61O.ttJa4 ttJd7 11. cxd5 cxd5 12. ,£d2, which gave
+"White a nice edge in L.Aronian-G.Guseinov, FIDE World Chp. (knockout) 2004. The
+game continued 12... ttJab8 13. b3 ttJc6 14. e3 e5?! 15. ttJxe5 ttJcxe5 I6.dxe5
+b5 17. ttJc3 he5 18. f4 i.g7 19. ttJxd5! hal 20. %xal: Thanks to his active
+pieces, White dominates the position completely. Finally, Black’s other move 8
+options can be dispensed of easily. We’ll look at 8 ... dxc4, the best of these
+second-rate options, in the next game. Otherwise, we can go ahead and eliminate
+8... ttJbd7 since after 9. cxd5 Wxb3 1O.axb3 ttJxd5 11. ttJxd5 cxd5 12 ..!f4
+ttJf6 13. l=!fc1, White’s advantage was indisputable in B.NikoliC-Z.DjuriC, Nis
+1993. This is part of a theme we have seen recurring a number of times in this
+chapter: when Black commits to ...ttJbd7, "White can play c4xd5, taking
+advantage of the fact that Black can no longer play ... c6xd5 followed by
+...ttJc6. We can also eliminate the alternative 8.. .ttJe4 for Black, since 9.
+cxd5 ttJxc3 10. bxc3 Wxb3 11. axb3 cxd5 l2.ttJe5 was just better for White in
+O.Kozlov-K. Rovid, Kobanya 1992. 9. §dl Keeping the tension. This is likely
+White’s best move. Many strong GMs have tried 9. c5 recently, but for the most
+part they have failed to get an advantage against accurate play by their
+opponents. 9... ®xb31O.axb3 ttJa6 11.. !f4 ttJd7 12. %fdl l=!e8 is the move
+order for Black played by the 2700+ player Vachier-Lagrave, when it seems that
+Black is at least equal. 13. ttJa4 and now: a) 13... f6!? didn’t fare well in
+P.Ha-rikrishna-M.Vachier-Lagrave, Sestao 2011, after 14. ±d2. "White can play
+this move here because Black has given up the option of ...ttJf6-e4. The bishop
+retreat is a game changer: White can shore up his center with e2-e3 and begin a
+queenside pawn stonn with b3-M. The game continued 14... e5 I5.b4 l:j'jc7 16.
+l:j'jc3 ttle6 17. e3, when White had mobilized on the queenside: 17... e4 18.
+l:j'jel b5 19. cxb6 ltJxb6 20. ltJa4 i.a6 21. ltJc5 i.b5 22. Sa2 ltJc7 23. ltJc2
+f5 24. l:j'ja3 a6 25. b3 i.f8 26. Sc1 and Black was under pressure. b) 13 ... e5
+(best) 14. ltJxe5 l:j'jxe5 I5.dxe5 he5 16. he5 Sxe5 17. e3 i.f5 18. Sd2 l:j'jc7
+19. b4 Sae8 was fine for Black in M.Gagunashvili-F.Elsness, Novi Sad 2009. For
+this reason, we prefer the text with 9. Sdl. 9... 'lWxb3 9 ...i.f5 is met by the
+thematic 10. l:j'jel!, increasing the pressure on d5anddefending the c2 square.
+"White comes out ahead in all variations: a) 1O...i.e6 11. c5 \Wxb3 12. axb3
+l:j'jbd7 13. b4 was a little better for "White in D.AniC-I.Nataf, Vichy 2000.
+b)} 11.d5 {\Wxb6 axb6 12.} Rxd5 12.e4 {13. l:j'jxd5 cxd5 l4.a3 Sac8 15. i.g5
+c;f{f8 16. Sac1 Sxcl 17. hc1 ltJc7 18. e3 i.d7 19 ..td2 e6 20. l:j'jd3 was a
+slight edge for "White in V.Ivanchuk-T.Rad-jabov, Khanty-Mansiysk 2011. c) 10...
+dxc4 11. \Wxc4 ltJa6} Bg4 13.Bf4 {13.. if3 i.e6 14. d5 i.g4 15. i.xg4 l:j'jxg4
+16. \We2 l:j'je5 17. i.g5 gave ^White the initiative in E.Inarkiev-P.Svidler,
+Astrakhan 2010. lO.axb3 lL&el Note that this knight move has arisen several
+times now in the notes. It is thematic because it defends c2 while helping White
+put pressure on d5. ^fuite is also preparing f2-f3 and e2-e4 at some point in
+the near future, another idea that is thematic in these lines. 11... h6 11
+...ltJa6 12. Sa4 h6} Nxe4 14.Qf6 {cxd5 cxd5 15.} Nc3 15.Qe5 {16. bxc3 g5 17.
+i.d2 e5 18. e3 was a tad better for White in L.Portisch-V.Hort, Tilburg 1979:
+White is more centralized here and his pieces are somewhat better coordinated,
+given the odd placement of Black’s knight on a6. Nonetheless, this approach is
+likely better for Black than the text, which is slow and does not achieve much.
+12. f3 "White nowjust has easy play in the center. 12.. . g5 We have seen this
+move by Black before, giving his light-squared bishop some breathing room in
+view of the coming e2-e4 push. 13. e4 .i.e6!? This doesn’t seem consistent with
+Black’s previous move. 13... dxe4 14. fxe4 .i.g6} Re8 16.b4 {with the idea of
+...iLlc7, was expected.'^bitewould of course still have a big advantage here
+thanks to his pawn center and activity. 14. e5 "White can also play the more
+forcing 14. cxd5 cxd5 15. e5, when Black has nothing better than 15... iLle8.
+This rules out the possibility of 15... hd5, which Black opted for in the game.
+14.. . iLle8 15. cxd5 hd5 15.. .cxd5} 1-0
+
+[Event "Belgrade"]
+[Site "?"]
+[Date "1995.??.??"]
+[Round "?"]
+[White "Ivanchuk, Vassily"]
+[Black "Leko, Peter"]
+[Result "*"]
+[ECO "D73"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {5} Nf6 2.c4 g6 3.g3 c6 4.Nc3 d5 5.Qb3 Bg7 6.Bg2 0-0 7.Bf3 Bh3!? {8.} 8.Qc2
+{Not exactly the move order we were looking for here, but this turns out to be
+the same thing (in this game, at least) as O-O dxc4 9.} Be6 9.c5 {10. 'i;Ya4
+tLla6 11. h3 (preparing e2-e4 and i.cl-e3), the move orderwe do want. "White can
+playthe immediate 11. e4, of course, but preparing it first seems slightly more
+accurate. The h2-h3 push prevents ...i.g4 and (after "White has played e2-e4 and
+i.e3) ...tLlg4 by Black. 8... dxc4} Bf5 {i.e6} 1-0
+
+[Event "Israel"]
+[Site "?"]
+[Date "2002.??.??"]
+[Round "?"]
+[White "Lerner, Konstantin"]
+[Black "Serebro, AJexsandr"]
+[Result "*"]
+[ECO "D73"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {2} Nf6 2.c4 g6 3.Nf3 Bg7 4.g3 0-0 *
+
+[Event "Kolkata"]
+[Site "?"]
+[Date "1999.??.??"]
+[Round "?"]
+[White ""]
+[Black "Wojtkiewicz, Aleksander"]
+[Result "*"]
+[ECO "D73"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {9} Nf6 2.c4 g6 3.g3 Bg7 *
+
+[Event "Bad Zwesten op"]
+[Site "Bad Zwesten"]
+[Date "1998.??.??"]
+[Round "7"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Glek, Igor V"]
+[Result "1-0"]
+[WhiteElo "2575"]
+[BlackElo "2505"]
+[ECO "D73"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 g6 3.g3 c6 4.Bg2 Bg7 5.d4 d5 6.Qb3 a5 7.cxd5 a4 8.Qd1 cxd5 {V;Ydl
+seems adequate for a small plus for "White. Chances are both players will get
+“out of book” early on. But unfortunately for Black, it is his position, not
+"White’s, that is more difficult to handle over the board. His a-pawn is
+overextended and he doesn’t seem to have any extra activity on the queenside to
+show for it. Part III The English Opening} 9.Nc3 Bd7 {a3, showing less concern
+for this wayward pawn. Conclusion: In this final chapter of Part 11, we examined
+two alternatives for Black to the lines we’ve already looked at, both involving
+moves by the a-pawn — one square or two. The latter is undoubtedly better than
+the former, since Black can never seem to play ...b7-b5 to good effect. Black is
+just too far behind in development. Play is similar here to a Closed Catalan. In
+case of the latter move, Wojo’s solution of} 10.Ne5 O-O {Black’s suffering now
+begins. Allowing White to be the first to plant a knight in the center is the
+price that Black pays for his passive move} 11.O-O Be8 {A pitiful way to defend
+the black pa^ on d5} 12.e3 e6 13.b3 a3 {Black understandably wants to plug up
+the queenside, but this is the equivalent of a pawn sacrifice. His alternative
+also involved giving up material, however} 14.b4 Qb6 {.1.Jbd7 with the idea of
+...ltJb6 was better} 15.Rb1 Nc6 16.Nxc6 Bxc6 {.bxc617.l3b3 and so on promised no
+comfort to Black} 17.b5 Bd7 {dxe5 ltJg4 and Black doesn’t have enough
+compensation so long as "White plays actively. For instance} 18.Rb3 Rfc8 {White
+nets Black’s a3-pawn. Black is now in serious trouble, and he may already be
+losing here} 19.Bxa3 Ne8 20.Qd3 Nd6 21.Bc5 Rxc5 22.dxc5 Qxc5 {ltJf4 with a big
+plus for "White} 23.Rc1 Qb6 {Scl ^bite is now up the exchange. He just needs to
+neutralize Black’s play on the queenside in order to consolidate his material
+plus} 24.Bf1 d4 {Securing the b5-pawn. Overprotection is the key to freeing
+White’s army here} 25.Ne4 Rxa2 {exd4 hd4 would have helped Black increase his
+minor-piece activity} 26.Nc5 Be8 27.exd4 Nf5 {White has succeeded in wresting
+the initiative back from his opponent. At this point, Black is just down the
+exchange. Over the next few moves, "White tries to flex his muscles on the
+queenside} 28.Rb4 Qa5 29.Rcb1 Qb6 30.Na4 Qd8 31.Rd1 Bf8 {gcit MS} 32.Nc5 b6
+{Hoping that Black will fall into the trap and play ...b7-b6} 33.Ra4 Rb2
+{Suddenly, Black has no choice but to exchange rooks on a4. Or does he?} 34.Qc3
+Rxf2 {Black blunders back. 34 ...gxb5 keeps him in the fight} 35.Kxf2 bxc5 {gaS,
+penetrating to the eighth rank} 36.Qf3 Nxd4 {The move Black missed. White
+defends his rook on dl while preparing gaS. Black can no longer hold the eighth
+rank} 37.Ra8 Qb6 38.Rxd4 cxd4 {V;Ya5 i.c6, and Black, with three pieces against
+two rooks, still has some chances of holding on for the draw. After the text,
+the game is over} 39.Rxe8 d3+ {Black is now down almost a full rook. Time to
+call it a day} 40.Kg2 Qxb5 41.Rd8 Qb2+ 42.Kh3 d2 43.Qe2 h5 44.Qxd2 Qb6 45.Qg5
+Kg7 46.Rd7 h4 47.Qf4 {Seeing the seventh rank finally collapse is enough to
+compel Black to throw in the towel} 1-0
+
+[Event "Northern Virginia Open, Springfield"]
+[Site "?"]
+[Date "2005.??.??"]
+[Round "?"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Boudreaux, Floyd"]
+[Result "*"]
+[ECO "B38"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {5} Nf6 2.c4 c5 3.Nc3 g6 4.d4 cxd4 5.Nxd4 Bg7 6.e4 Nc6 7.Be3 d6 8.f3 {8..
+ie2 Played to stop ...lLlg4.} 0-0 {is also fine, but the text seems a bit more
+flexible.} 9.Bd2 {0-0 .id7 10.} a6 1-0
+
+[Event "Louisville (Kentucky), 10.06."]
+[Site "?"]
+[Date "2006.??.??"]
+[Round "?"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Whaley, Davis"]
+[Result "*"]
+[ECO "B39"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {6} c5 2.c4 Nc6 3.d4 cxd4 4.Nxd4 g6 5.e4 Bg7 6.Be3 Nf6 7.Nc3 Ng4 8.Qxg4
+{7.. .0-0 is more common, but the text is played frequently by Black as well.}
+Nxd4 9.0-0-0 {8.. ..1xd4 is risky and thought to be better for White after 9..
+ixd4 lLlxd4 10. 0-0-0 e5 (or 1O... d6 11. Wg3 e5 12. f4, transposing) 11. Wg3 d6
+12. f4 f6 13. f5! (not 13.. : gxf5? 14. '?9g7) 14. lLlb5 lLlxb5 l5.cxb5, with a
+nice initiative for White. 15 ...Wc7+ 16. ФЬ1 gxf5 17. Sc1 We7 18.. !c4+ It>f8
+(18...lt>e8 19. ±d5 is similar) was R.Kreisl-L.Thiede, Australia 2012, when 19.
+'!d5 fxe4 20. §hfl f5 21.. !xe4 f4 22. ®d3 with ideas of g2-g3 would have
+sustained White’s initiative: This is why 8... lLlxd4, as in the text, is almost
+always played. Wdl} Nc6 10.Nb5!? {has never scored well for ^White. Committing
+the king to the queenside seems too risky here, given that the dark-squared
+bishops are still on the board. 9.. .£)e6 The main line. Black’s idea is to
+control the dark squares on the kingside and in the center with his knight. He
+will strengthen his gripbyplaying ... g6-g5, taking the f4 square. 9.. .e5!? is
+a bizarre line that is no longer fashionable, if it ever was. Black weakens the
+d5 square in order to maintain his knight in the center, but "White has at least
+two good ways to continue. The direct 1O..!d3 0-0 11. 0-0 d6 12. Ш2 .!e6 13.
+3ac1 a6 14. b3 l3c8 15. l3fd1 Wa5 16. lLld5 Wxd2 17.. txd2 resulted in a slight
+edge for White in L.Psakhis-M.Berkovich, Israel 2002. Yet} 0-0 {is perhaps more
+interesting. Then} 11.Nd6 {(10 ... lLlxb5 cxb5 0-012..!c4} e6 {13. 0-0} 12.Bd3
+{14. l3c1 was good for "White in S.Tatar Kis-G.Feher, Hungary 2008) 11. Ш2
+(11.lLlxd4?! exd4 12.. txd4 Wa5+ 13. lt>e2 l3e8 14. f3 d5 15.. txg7 l3xe4+ 16.
+lt>d3 was Wojtkiewicz-L.Espig, Bad Worishofen 1998, but here 16... l3xc4 would
+have left Black with a clear advantage) 11... ®e7} g5?! {d6 13. 0-0 !e6 14.
+lLlxd4 exd4 15.. !g5 Ш7 16.. !h6 .txh6 17. Wxh6 f5 18. exf5 hf5 19. 13ad1 left
+^bite with a clear advantage in W.Schmidt-M. Maciejewski, Bydgoszcz 1990:
+Black’s position is suspect: his king is unsafe and his d-pawns will fall. This
+suggests that Black should have exchanged knights with ...lLlxb5 at some point,
+but it is not clear exactly when. Finally, note that 9... lLlc6 is also
+possible, but 1O.®d2 here tends to be just like a regular Maroczy Bind, with no
+special knowledge required on White’s part. lO.gel Ша5 11. ®d2 In-another
+ofWojo’s games, Wojt-kiewicz-J. van Heste, Metz 1991, "White tried 11. ,£d3 g5
+12. 0-0 and was now happily surprised to see the overambitious 12 ... h5? (12...
+b6, to prevent White’s next move, was necessary). "White immediately seized the
+initiative withl3.c5! ,£e5 14. a3 d6 15. cxd6 hd6 16. lild5 Wd8 17. ,£e2,
+leaving Black wondering whyhiskingwas still on e8. 11. •• d6 12. .id3!? 12.. 1e2
+is normal, and perhaps a little better. Black could kick this bishop with
+...lile6-c5 later on. In his Internet blitz games, Wojo usually put this bishop
+on d3 on move 11, as in the game against Van Heste. Perhaps he was mixing
+systems a bit by accident. 12.. . g5?! Something more solid, such as ±d7 13. 0-0
+lilc5 14. ±bl lila4, was called for. Here 15. ^d4 hd4 16. ®xd4 was
+M.Tomey-L.Christiansen, Palo Alto 1981, when 16... ®e5! looks fine for Black.
+Had "White played 12. ,£e2, this might have made more sense: for instance, 12.
+,£e2 ±d7 13. 0-0 ,£c6 14. f3 g5 is a main line. Here, however, "White has too
+much firepower in the center to make this pawn push any good 13. 0-0 Ше5 An
+awkward placement for the black queen, but Black wants to clamp down on the
+kingside dark squares. 13... ,£d7 14. 1.Ы. We5 15. b4 was
+Wojtkie-wicz-J.Maherramzade, Linares 1997, which continued 15... h5 16. lild5
+<£f8 17J'Udl !a4 18. ic2 !c6. Now 19. b5 hd5 (19....ie8 20. ®a5 threatens lilb6)
+20. cxd5 lilc5 21. hg5 would have given White both the initiative and a pawn.
+14. lUe1 14. lild5 immediately, with the idea ofb2-b4 and c4-c5, opening the
+center, was also good. 14.. . .id7 15. b4 .ic6 15.. .0-0 16. lild5 1':1fe8 might
+have actually been a sounder way for Black to handle the position, but castling
+kingside probably isn’t something the second player really wants. 16. c!Od5 h5
+17. :gf1!? Not bad, but there was no reason for ^bite to play it safe. 17. b5,
+with the idea of 17... hd5 (or 17... .id7 18. c5 dxc5 19. hc5 lilxc5 20. 3xc5
+0-0 21. 1':1ec1 with a clear advantage for "White) 18. exd5! ltJf4 19. i.fl 20.
+c5 and c6, is nearly winning for ^White. 17.. .g4 18. ФЫ gc8 18 ... h4,
+continuing the march, made more sense. Now Blackjust gives up a pawn. 19. , ha7
+ga8 20. J.e3 ga3 21. J.bl h4 22. f4 .al? 22 ... gxf3 23. gxf3 was forced for
+Black, but he would still have been a clear pawn down here. 23. f5 ,hdS 24. cxdS
+tl)d8 2SJ.d3 Now the game is over. 2S...J.c3 25 ...®xa2 26. Wxa2 Sxa2 27. i.b5+
+^f8 28Jk8 drops the knight on d8. 26. J.bS+} 1-0
+
+[Event "Plovdiv"]
+[Site "?"]
+[Date "2012.??.??"]
+[Round "?"]
+[White "Vitiugov, Nikita"]
+[Black "Sedlak, Nikola"]
+[Result "*"]
+[ECO "B36"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.c4 {2} Nf6 2.Nc3 g6 3.e4 c5 4.Qc2 {c!Ll£3} Nd5 {5.} 1-0
+
+[Event "Izmir"]
+[Site "?"]
+[Date "2004.??.??"]
+[Round "?"]
+[White "Goloshchapov, AJexander"]
+[Black "Wirig, Anthony"]
+[Result "*"]
+[ECO "B36"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.e4 {4} c5 2.Nf3 Nc6 3.d4 cxd4 4.Nxd4 g6 5.c4 Nf6 6.Nc3 d6 7.Nde2 Nd4 {This is
+slightly different from our recommended move order with 7. f3, but after} 8.Nxd4
+Bg7 9.Be3 0-0 10.Bd2 Be6 11.Nde2 {(instead of 10 ... a5, as in the previous
+game) U'kl VNa5 12.} 1-0
+
+[Event "Soest"]
+[Site "?"]
+[Date "1996.??.??"]
+[Round "?"]
+[White ""]
+[Black "Wojtkiewicz, Aleksander"]
+[Result "*"]
+[ECO "A39"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {6} Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 0-0 5.d4 c5 6.0-0 cxd4 7.Nxd4 Nc6 8.Nc3 a6?
+9.c5 {Surprisingly, this isthe fourth most popular move here. 8... liJxd4, 8...
+liJg4 and 8... 1Mfb6 are all more common. But oddly enough, the second most
+critical move (8 ...liJxd4 is the most critical) — the pawn sacrifice 8... d6 —
+is less common than the atrocious text.} Qc7 10.Nb3 {Black guards c6 so that he
+can break with ... d7-d6. 9 ...ttJxd4 Wxd4 d6 (1O...ttJe8 11. Wb4 d6 12. Sd1 as
+13. Wa3 left Black under pressure on the queenside in R.Dausch-R.Warth-mann,
+Oberliga 1998) 11. cxd6 ttJeS 12. Wh4 ttJxd6 13. 3d1just leaves "White with a
+clear advantage in development. Black’s pieces are tied up. P.Wells-G. Quillan,
+Birmingham 2005, saw 13... i.d7 14. ttJd5 geS 15.. ig5 f6 16. ,ie3 i.c6 17. gac1
+Wa5 1S.i.d2 Wxa2? (1S...WdS is forced) 19. ttJb4 Wxb2 20. ttJxc6 bxc6 21. hc6,
+when ^White was winning.} 1-0
+
+[Event "King’s Island Open"]
+[Site "?"]
+[Date "2006.??.??"]
+[Round "?"]
+[White "Hilton, Jonathan"]
+[Black "Hanken, Jerome"]
+[Result "*"]
+[ECO "A30"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {6} g6 2.g3 Bg7 {Nowadays, I would be more direct and play 2. d4 or; 2. c4
+i.g7 3. d4.} 3.c4 c5 {Once again, if I had this position now, I would stop ...
+e7-e5 with 3. d4.} 4.Bg2 e6!? 5.d4 {Not really a good move, but a Hanken
+specialty. Jerry played this setup with the white pieces in the English Opening
+- a version of it that he called “The Hanken English” - so why not try it with
+Black, he figured. Of course, the problem with this move is that it weakens the
+d6 square. 4... tt'lc6, stopping d2-d4 in its tracks, is more accurate.} Ne7
+6.0-0 cxd4 7.Nxd4 0-0 8.c5!? a6 {In hindsight, this is a bit risky. I liked the
+idea of getting in tt'ld4-b5-d6, however, so I took a chance on it. "White
+should be in no rush to play this move, however. In fact, he might as well wait
+until Black plays ... a7-a6, as in the previous game. 8. tt'lc3 is the main move
+here, when after} 9.Nb3 d6 10.Bf4 {1O..!f4 e5 11.. !g5 (note the similarities to
+the previous game) 11... f6 12.. !e3 tt'lf5 13. i.d2 tt'lc6 14. tt'ld5 tt'lh6?!
+15. i.e3 (targeting b6) 15 .. .f5 16.. ib6 Ш7 17. c5!, White crashed through in
+the center in H.Saldano Dayer-L.Sanchez Delgado, La Roda 2007. White was patient
+about getting in c4-c5 this game, and it paid off. 8... tOa6 8.. . tt'lbc6,
+followed by ... b7-b6 after White moves his knight, was better. Black has more
+chances to generate counterplay this way. If the second player is able to
+quickly work in ... b7-b6, this is a sign that "White has played c4-c5 too soon.
+9. £b3 My hopes of tt'ld4-b5-d6 were dashed, but I was still confident about my
+prospects of carrying out this maneuver with my other knight. 9.. .©c7 Now I can
+carry out the same maneuver that Wojo did in the previous game, .!cl-f4-g5.
+Better was 9... !!b8 with the idea of ... b7-b6 soon.} e5 0-1
+
+[Event "Dayton Chess Club"]
+[Site "?"]
+[Date "2008.??.??"]
+[Round "?"]
+[White "Hilton, Jonathan"]
+[Black "Sprague, Ross"]
+[Result "*"]
+[ECO "A39"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {8} g6 2.c4 Nf6 3.Nc3 Bg7 4.g3 0-0 5.Bg2 Nc6 {cS 6. 0-0} 1-0
+
+[Event "Dayton"]
+[Site "?"]
+[Date "2007.??.??"]
+[Round "?"]
+[White "Hilton, Jonathan"]
+[Black "Les, Whorton"]
+[Result "*"]
+[ECO "A39"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {7} Nf6 2.c4 g6 3.g3 Bg7 4.Bg2 Nc6 {cS 5.} 1-0
+
+[Event "Wuerzburg op"]
+[Site "Wuerzburg"]
+[Date "1996.??.??"]
+[Round "2.1"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Jung, Karl Otto"]
+[Result "1-0"]
+[WhiteElo "2550"]
+[BlackElo "2210"]
+[ECO "A39"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 c5 3.Nc3 Nc6 4.g3 g6 5.Bg2 Bg7 6.d4 cxd4 7.Nxd4 O-O 8.O-O Ng4
+{We’ll be seeing this move come up again later on in this chapter. Black puts
+pressure on d4, forcing White to play the “meek” e2-e3 rather than e2-e4. Black
+hopes to capture on d4 and force "White to retake with the e-pawn. Then Black
+will be able to play ...ttJg4-h6-fS, targeting the newly created d4-pawn} 9.e3
+d6 10.b3 a6 {ttJxc6 bxc6 1l.ixc6 l:!b8 has never been considered a good way for
+White to play. It’s too dangerous: 12 ..tg2 tDe5} 11.Nde2 Rb8 12.h3 Nge5 {ixh6
+are also played at top levels) 12 ...ttJf5} 13.Bd2 Bf5 {i..f5/?. Black was doing
+okay until he missed his one really good chance to play I8. ..b5, which was
+really the main reasonfor provoking e3-e4 in thefirst place. Instead, Black
+tried to put as many of his pieces on the queenside as possible, which turned
+out to be a bad idea: 'White had the plan of E1bl and b3-b4, leaving Black's
+position a tactical mess. Note that ^bite really needs to be prepared to play
+accurately when Black is able to play ...b7-b5. The game often heats up and
+becomes a tactical melee on the queenside and in the center. Sometimes this
+happens because White accidentally allowed Black to play ...b7-b5. Other times,
+it happens because Black is just so determined to play it that he goes for it
+even when he probably shouldn’t. This next game is an example of this. Wojo’s
+opponent plays} 14.e4 Bc8 {14 ....ie6 looks less strange, but Black was likely
+worried thathis bishop would get kicked again, this time by the knight} 15.Be3
+Qa5 {f4 immediately iswhat "White eventually chooses to play after throwing in
+.id2-e3-d2} 16.Bd2 Qd8 {b5? even though the move isn’t any good. However, the
+game heats up so much that even Woj o isn’t able to properly navigate his way
+through the tactics} 17.f4 Nd7 {"White tries something else} 18.Be3 Nc5 {Black
+should have played 18 ...b5 here while he still had the chance} 19.Qd2 Qa5
+20.Rab1 Rd8 {20 ...b5 now runs into} 21.b4 Nxb4 {White now wins material} 22.Nd5
+Be6 23.Rxb4 Bxd5 24.cxd5 b5 {gfd1 with a nice initiative for White: For
+instance} 25.Rbb1 Qa4 {The rest is easy} 26.Nd4 Bxd4 27.Bxd4 Rdc8 28.Rfc1 Qa3
+{1Z1xb1 and so on) fails to} 29.Rc3 Qa5 {&f2, with good chances for White to
+mobilize his queenside majority. But almost anything was better than the text,
+which misses ^bite’s threat entirely} 30.Rbc1 b4 31.Rc4 Qa3 32.Kh2 a5 33.e5 b3
+34.Bb2 Qxa2 35.exd6 exd6 36.Qd4 {Summary: Whdte set up the Full Maroczy Bind in
+response to Black's} 1-0
+
+[Event "New York op"]
+[Site "New York"]
+[Date "1991.??.??"]
+[Round "5"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Dolgitser, Konstantin"]
+[Result "1-0"]
+[WhiteElo "2540"]
+[BlackElo "2280"]
+[ECO "A39"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 c5 3.g3 g6 4.Bg2 Bg7 5.O-O O-O 6.d4 cxd4 7.Nxd4 Nc6 8.Nc3 Nxd4
+9.Qxd4 d6 10.Qd3 a6 {Later on, Wojo would meet this move with} 11.Bd2 Rb8 {i.e3.
+The first, Wojtkiewicz-R.La Flair, New York 1993, features l1....if5, and we
+will see this game in the final section of this chapter. Ultimately, this move
+almost equalizes for Black if played properly. The second game is Wojtkiewicz-R.
+Adamson, World Open 1995, which saw} 12.Rac1 Be6 {gacl .ie6} 13.b3 Nd7 {1. d4,
+gaining a tempo. There are two excellent games by Wojo from the position after}
+14.e4 Nc5 {Sacl Sb8 (14...ttJc5} 15.Qe2 Qd7 {Black thinks the time is right to
+strike with ...b7-b5, but "White can meet it effectivelywith b3-b4, as in the
+previous game} 16.Nd5 b5 {hd517.exd5 13fc818.b4 ttJa4 was tried in
+S.Nagle-C.Jones, U.S. Masters 2007, when here} 17.b4 Na4 {i.xg7 <;t>xg718.b4
+gave ^White a pull in A.Khasin-H.Griinberg, Dresden 1988)} 18.cxb5 Bxd5 {cxb5
+instead, after which WhWhite was probably still better but it was still
+anybody’s game. With} 19.exd5 axb5 {c6 would have crushed Black} 20.Rfe1 Rfe8
+{gfel gfe8 The pawn structure has changed drastically. White has pressure
+against b5 and e7, and the bishop pair to boot. Black, however, has an active
+position and a wide array of tactical resources on the queenside} 21.Rc6 Nb2
+{Best. Black tries to increase his activity on the queenside further. A tactical
+firefight ensues} 22.Bc1 Nc4 {f4 gave White a comfortable edge in A.Kolev-A.Rios
+Parra, Badalona 2003: There are of course many other options forboth sides, but
+anyone interested in the theoretical debate should consult Janjgava’s book. The
+lines are not terribly sharp and "White can play these positions without any
+knowledge ofthe theoty, so it makes more sense to just focus on the big-picture
+ideas. In the next game, we will see an example of a time when I have played
+against} 23.a4 Bc3 {l3xc3, forinstance} 24.axb5 Bxe1 {axb5?, however, White
+threw everything away — only to get it all back again when Black voluntarily
+opened up his kingside and softened his center with} 25.Qxe1 Ne5 {Y4'xc4 looks
+more accurate} 26.b6 Nd3 {^bite has sacrificed one exchange, so now he offers
+another. But of course, Black is not greedy enough to accept this, so "White
+isjust stuckplayingwith a slight disadvantage} 27.Qc3 Nxc1 {ixd5 gives White the
+initiative)} 28.Qxc1 Rb7 {^bite has no way to break through, so it looks like he
+is just down a little bit of material} 29.Qh6 Rc8 {Y4'g4 would have given Black
+a clear advantage. Now, "White suddenly retakes the initiative} 30.Bh3 e6 {I
+once accidentally allowed my opponent to play ...b7-b5 because I overlooked a
+simple tactic, and the game suddenly heated up. I want to stress how players of
+White can com-mitthese kinds of errors just by playing too fast or by
+underestimating their opponents. I played the opening much too confidently,
+using very little time, against my lower-rated opponent (a local player against
+whom I had a plus record) and felt stupid for it going into the middlegame}
+31.b5 f5 {Now it is White who is clearly better. Black’s center and kingside are
+about to fall} 32.dxe6 Qxe6 {Y4'c1! was even better} 33.Rxc8+ Qxc8 34.Bg2 Rb8
+35.Bd5+ Kh8 {id5+ mhS} 36.Qe3 Qe8 {This is the problem for Black} 37.Qxe8+ Rxe8
+{With this, White wins easily} 38.b7 Kg7 {®c4 with the idea of b6-b7 and
+penetrating with the queen also wins, since} 39.f4 Kf6 {b7 doesn’t look that
+much better} 40.h4 Rb8 41.Kf2 Re8 {Wxd6 still leaves White with the upper hand}
+42.b6 h6 {b6 followed by the same plan - White marching his king to a7 - wins}
+43.Kf3 g5 {^>e3 and Black has no way to stop White from marching his king to a7}
+44.h5 gxf4 {b6 and so on doesn’t give Black enough counterplay with his queen}
+45.gxf4 Kg7 46.Bc6 Rd8 47.Ke3 d5 48.Kd4 Kf6 {Фd4 and so on also nets the point
+for "White} 49.Bd7 Rb8 50.Bc8 Ke7 {Summa11l: In this game, Black played ...b7-b5
+through sheer willpower. The move wasn’t any good, and White should have
+punished it with} 51.Kxd5 1-0
+
+[Event "Dayton"]
+[Site "?"]
+[Date "2008.??.??"]
+[Round "?"]
+[White "Hilton, Jonathan"]
+[Black "Dennis, Robert"]
+[Result "*"]
+[ECO "A39"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nc3 {8 I. lf3 c5 2. c4 g6 3. g3 .ig7 4.. ig2 .!Oc6 5. 0-0 .!Of6 6.. !Oc3 0-0
+7. d4 cxd4 8 ..!Oxd4 .!Oxd4 9. 1xd4 d6 10. M3 gb8 11. .id2 II. i.e3, so as to
+transpose into Wo-jo’s favorite 10 ... a6 11 ..te3 E:b8 12. ia7 E:a8 13.. td4
+should Black try 11... a6, is a little more aggressive. The text isn’t bad,
+however. 11. •• .te6 11.. .a6 would transpose into Wojt-kiewicz-Dolgitser above.
+12. b3 a6 13. gac1 M714.a4! Since Black has not taken time out for the maneuver
+...lZlf6-d7-c5, "White might as well play this. Black’s last move prevents him
+from playing ...Wa5 or ...Wb6 to take advantage of the we^messes "White is
+creating on the queenside, so "White has been handed a free pass to prevent ...
+b7-b5. Out of 15 games, White scores 70% here. 14.. . .ih3 15. e4 ixg2 16. &xg2
+©c6 This move is right for Black in principle, but his timing is slightly off.
+Black should defend the e7-pawn first. 16.. .J:Uee8 was played in the recent
+grandmaster game M.Ragger-B.Ma-cieja, Kallithea 2009. White lost this game after
+getting outplayed: 17J'!fdl VNc6 18. lDd5 lDd7 19. f3!? (19.i.g5, trying to
+provoke ... f7-f6, is an improvement) 19... lDc5 20. VNc2 e6 and Black was
+already about equal: Play continued 21. lDb4 Wb6 22. a5 VNc7 23. lDd3 b6, when
+here White probably needed to play 24. axb6 Wxb6 25. b4 lDxd3 26. VNxd3, for
+instance 26.. .1.d4 27. i.c3 hc3 28. VNxc3 VNxb4 29. VNxb4 8:xb4 30. 8:xd6 a5
+31. c5 with the better end of a probable draw for White. Instead, after 24. i.f4
+24... i.d4 25. axb6 8:xb6 26. b4 lDxd3 27. Wxd3 e5 28. d2 8:eb8 29.} Nh6 {8:xb4!
+30.} 1-0
+
+[Event "Horgen"]
+[Site "?"]
+[Date "1994.??.??"]
+[Round "?"]
+[White "Kasparov, Garry"]
+[Black "Uko, Peter"]
+[Result "*"]
+[ECO "A38"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.c4 {4} c5 2.Nf3 Nf6 3.Nc3 Nc6 4.g3 g6 1-0
+
+[Event "chT-POL"]
+[Site "Zakopane chT"]
+[Date "2000.09.09"]
+[Round "7"]
+[White "Wojtkiewicz,A"]
+[Black "Gritsak,O"]
+[Result "1/2-1/2"]
+[WhiteElo "2581"]
+[BlackElo "2500"]
+[ECO "A33"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 c5 2.c4 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 e6 {This flexible move order is an
+excellent choice for Black. The second player scores well against many different
+tries by "White here} 6.Ndb5 d5 {ic5 are examined in later games. The text is
+the main line} 7.Bf4 e5 {d4?! as a surprise, but it isn’t good for much more
+than that. The point is that} 8.cxd5 exf4 {if4, when "^bite wins material)}
+9.dxc6 bxc6 {9 .. .Wb6?! has been tried just a couple of times. 1O.tt:)d6+
+i.xd6} 10.Qxd8+ Kxd8 11.O-O-O+ Bd7 {0-0-0+. Wojo also sometimes played} 12.Nd6
+Bxd6 {The pawn sacrifice 12 ...@c7!?} 13.Rxd6 Ng4 {0,d5!) that might also allow
+Black to draw. In the next game, we will consider} 14.f3 Ne3 {0,dl!?, which
+appears to be a more promising approach for White. Sam-ford Fellowship recipient
+GM Alex Lenderman defeats GM Sergey Kudrin, a veteran of the U.S. chess circuit
+and a player often compared to Wojo, in this one-sided struggle} 15.Rd4 g5 {c5!?
+is tricky after} 16.Ne4 Ke7 {Once again Black’s best move, as 16 ...h6?!}
+17.Nxg5 Rhd8 {gad8, forinstance} 18.g3 Bf5 {Rybka insists that White has a clear
+advantage after} 19.Rxd8 Rxd8 {g4! prepares !1d3, kicking out Black’s bishop and
+getting ready to capture the c5-pawn)} 20.Bh3 Bg6 {gxf4 left White up a pawn in
+M.Mulyar-P.Hummel, Continental Open 2001} 21.Ne4 Rd4 {This gives "White fewer
+chances than} 22.Nc3 f5 {White gets nowhere after} 23.b3 Kd6 {hxg3, when White
+would have bishop and rook versus bishop and knight} 24.gxf4 Rxf4 {ltJf2 fS.
+Black’s activity should once again compensate for his slight structural
+problems} 25.Kd2 Nd5 {l'!f5 with a tiny advantage to White. But 13 ...@e7!? is
+much trickier. Black correctly defends the f7-pawn and decides not to put his
+king on the c-file, where it would be vulnerable. Now} 26.Nxd5 cxd5 {White’s
+kingside pawn majority seems more mobile than Black’s passed c-pawn} 27.Bg2 Rd4+
+{'k!?d2 with a draw soon to follow was M.ROder-M.Carl-hammar, Fourmies 2007}
+28.Ke3 Ke5 {'k!?c3, with the idea of advancing on the queenside. This seems
+rather improbable, since after something like} 29.f4+ Rxf4 30.Bxd5 Rd4 {Sd1 f4,
+Black has locked down "White's pawns and has a more active bishop. Play might
+continue 3U:l:d4 Sh5 32„£f1 Sf5} 31.Bf3 f4+ 32.Kf2 Rd2 {ФГС gd2} 33.a4 Bc2
+{'it;te5 :i3be2+ with perpetual check. It is possible that} 34.a5 Bxb3 35.Rb1
+Bd5 {The players agreed to split the point here, since after} 36.Bxd5 {^xd5??,
+when} 1/2-1/2
+
+[Event "World Open"]
+[Site "?"]
+[Date "2010.??.??"]
+[Round "?"]
+[White "Lenderman, Alex"]
+[Black "Kudrin, Sergey"]
+[Result "*"]
+[ECO "A33"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.c4 {0} c5 2.d4 {0,£J 0,c6 3.} cxd4 1-0
+
+[Event "San Marino op"]
+[Site "San Marino"]
+[Date "1998.??.??"]
+[Round "2"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Vettel, Matthias"]
+[Result "1-0"]
+[WhiteElo "2535"]
+[BlackElo "2205"]
+[ECO "A33"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 c5 2.c4 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 e6 6.Ndb5 d5 7.Bf4 e5 8.cxd5 exf4
+9.dxc6 bxc6 10.Qxd8+ Kxd8 11.O-O-O+ Bd7 {0-0-0+!?. Both sides must play
+accurately — and this usually means knowing the theory behind the position,
+giving a definite edge to the better-prepared player. The games
+Wojtkiewicz-Gritsak (the first game analyzed) and Riemer-Sardella (analyzed in
+the note to Black’s move 14 in Lenderman-Kudrin) work together to provide an
+overview of the most up-to-date ways for Black to fight for equality. Meanwhile,
+in practice, White scores well here, generally over 60%. ’White should be able
+to beat weaker players quickly and draw stronger ones with this system. So, even
+though ^bite can’t count on a theoretical advantage, his results in practice
+should be satisfactory for a Wojo repertoire} 12.Nd6 Kc7 {ctlc7!? did bring him
+some compensation in this game. His bishop pair stayed active and Black had
+plenty of open lines. Letting Whdte organize with} 13.Nxf7 Rg8 14.Ne5 Be6
+{Conclusion: ^bite has a decent amount of play in the queenless middle-game
+resulting after} 15.Nd3 g5 {Thematic, hitting the f4-pawn. The overly ambitious
+exchange sacrifice} 16.g3 Nd5 {h4 is another possible break, but the text has a
+clearer plan associated with it. White will fianchetto his king’s bishop,
+putting pressure on the c6-pa^} 17.Na4 Nb4 {Black correctly pursues further
+trades. Had he not played this, "White would have been able to clamp down on c5}
+18.Nxb4 Bxb4 {a3 llJxd3+ 19J'!xd3 was possibly more accurate, to avoid the
+possibility for Black mentioned in the note to his move} 19.a3 Be7 {9xd3 would
+have left White with a slight structural superiority and some winning chances
+after} 20.Bg2 Rab8 {20 ...i.b3 was better, for instance} 21.Rd2 Rb5 {ib3,
+forcing} 22.Rc2 c5 {'8c2, however — ganging up on the c6-pawn — handed 'White a
+clear advantage. More active play with ....ib3 at some point would have kept
+Black in the game. Theoretically speaking, this game was a successfor ]White. 14
+...ke6 didn't lead to full equalityfor Black, and it appears that the main line
+with} 23.Nc3 Rbb8 {ghxfl} 24.Bd5 Rg6 {A simple way to neutralize Black’s bishop
+pair} 25.Bxe6 Rxe6 26.f3 Rd8 {The knight heads to e4} 27.Ne4 g4 {.'tb6 was more
+stubborn, but perhaps Black didn’t want to suffer through the whole rest of the
+game down a pawn. The text resolves the outcome of the middlegame much more
+quickly} 28.Nxc5 Bxc5 29.Rxc5+ Kb6 30.Rc2 Re3 {The move order} 31.Rf1 Rd6 {Black
+returns the favor} 32.gxf4 gxf3 {hxg3 l'!f8 keeps Black fighting for a draw.
+White must now carefully distinguish between the lines} 33.Rxf3 Rxf3 34.exf3 Rf6
+{The win is now clear. Black’s king is cut off from the kingside, so White’s
+king is free to shepherd the f-pawn up the board} 35.Kd2 Rxf4 {Summary: Black's
+pawn sacrifice} 36.Ke3 {f4 with the idea of 13d6+ and 13h6, tying Black down}
+1-0
+
+[Event "New York Masters"]
+[Site "?"]
+[Date "2002.??.??"]
+[Round "?"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Shahade, Gregory"]
+[Result "*"]
+[ECO "A33"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {2} c5 2.c4 Nc6 3.d4 cxd4 4.Nxd4 Nf6 5.Nc3 e6 6.Ndb5 Bb4 7.Nd6+ {Note that
+6 ... a6} Bxd6 8.Qxd6 Qe7 9.Kd2 {9.. if4 is just an inferior version of the line
+examined in this game. Here 6 ...0-0 1O.®xe7 ll'lxe7 11. .id6 '8e8 12. e4 was
+clearly better for White in J.Murey-Liu Wenzhe, Lucerne 1982. 7.. if4 0-0 8
+..ic7 We consider this forcing move to be more interesting than the old main
+line, S..id6, which can be met by S .... b:d6 ttJxd6 Wb6} Nd4 1-0
+
+[Event "Sochi"]
+[Site "?"]
+[Date "2007.??.??"]
+[Round "?"]
+[White "Miton, Kamil"]
+[Black "Bocharov, Dmitry"]
+[Result "*"]
+[ECO "A33"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {7} c5 2.c4 Nc6 3.d4 cxd4 4.Nxd4 e6 5.Nc3 Nf6 6.Ndb5 d6 1-0
+
+[Event "US Open"]
+[Site "Phoenix USA"]
+[Date "2005.08.08"]
+[Round "3"]
+[White "Wojtkiewicz,A"]
+[Black "De Silva,N"]
+[Result "1-0"]
+[WhiteElo "2535"]
+[BlackElo "2231"]
+[ECO "E17"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 {tDfJ tDf6} 2.c4 e6 3.g3 b6 4.Bg2 Bb7 5.O-O Be7 {d4 right away} 6.Nc3
+O-O 7.Re1 d5 {gel is rare enough fo catch many amateur players off-guard, but
+strong enough to be played at the highest levels. Most of the resulting
+positions are easy to play with White and fit well with other parts of Wojo’s
+repertoire; for instance, there are numerous isolated queen’s pawn and “hanging
+pawn” middlegames. White does not need an in-depth knowledge of the theory here
+to use this opening effectively — just a strong command of the thematic ideas
+behind the system, such as how to put pressure on Black’s queenside and in the
+center, and so on. The Hedgehog The Hedgehog is a frequent guest at almost all
+levels of chess play above 1800 or so. Black plays for the hedgehog pawn
+formation (pawns on a6, b6, d6, e6, f7, g7, and h7) and hopes for dynamic play.
+His pieces are often ideally placed to give him “spring-coiled” energy, ready to
+be unleashed after any number of pawn breaks: ...b6-b5, ...d6-d5, and ...e6-e5
+are all common possibilities. White, for his part, must try to make something
+ofhis space advantage. He can advance on the queenside with b3-b4; play in the
+center with e4-e5; or advance on the kingside, usually with g3-g4-g5. "White
+should vary his strategy according to the specifics of what Black is doing. We
+will first give the “Wojo Weapon” against Black’s hedgehog setup: the move 10
+..tg5!?, a proven point-earner for White. Black seems to be okay if he knows
+what he’s doing, but this rarely happened in Wojo’s experience. Then, we will
+take a brief look at one of our own ideas for combatting the hedgehog} 8.cxd5
+exd5 {d5, unlike in the notes to the previous game. Then} 9.d4 c6 {This is
+considered Black’s best. Otherwise, "White will simply begin to mount pressure
+in the center and on the queenside as he did in the previous game. Black must be
+aggressive in order to avoid a similar fate. 1l...ttJxc5, transposing into the
+note to Black’s move 7, is possible as well. When Black chooses to retake with
+the pawn, a “hanging pawns” structure is reached. One key to White’s strategy
+here is his pressure along the hl-a8 diagonal. Heoften is able to play something
+like ttJf3-e5-c4 due to the pin on Black’s d-pawn} 10.Ne5 Nfd7 {ttJbd7is
+certainly playable and has been ventured with Black by some strong grandmasters,
+though} 11.Nd3 Bf6 {White’s knight on d3 clearly dominates its counterpart on
+d7. It is easy to tell that Black’s last move was a failure from the standpoint
+of completing his development: Rybka even recommends going backwith} 12.Nf4 Na6
+{tLle5 also scores well} 13.e4 dxe4 {Black wants White to initiate the queen
+trade. The downside to this is that his newly created b-pawn will be weak}
+14.Nxe4 Be7 {White executes the thematic maneuver and highlights the weakness of
+Black’s b6-pawn} 15.d5 cxd5 {.dxc416..ixb7 §a717.i.g2 would leave White with a
+clear advantage thanks to his sweeping bishop pair} 16.Nxd5 Bxd5 {Sed1 first to
+stop ...tLlc2 looks best. Then} 17.Qxd5 Nb4 {Sf8! threatens ...tLleS, when Black
+at least has some tactical ideas to keep the game interesting. After lS.Sacl
+tLleS} 18.Qb5 Rc8 {What else?} 19.Rd1 Qc7 {Sdl White exploits the open lines in
+the center. Black’s piece coordination is so bad here that he is practically
+losing} 20.Bf4 Ne5 {White decides that the safer} 21.a3 Nbc6 {®xa7 §fd8 22J'!b1
+would have been good for White)} 22.Rac1 Kh8 {Yet another mistake involving the
+move ...ge8. Instead, 22 ...ge5, holding on to the c5-pawn, may have possibly
+saved Black} 1-0
+
+[Event "World Open"]
+[Site "Philadelphia USA"]
+[Date "2000.07.29"]
+[Round "2"]
+[White "Wojtkiewicz,A"]
+[Black "Goletiani,R"]
+[Result "1-0"]
+[WhiteElo "2563"]
+[BlackElo "2325"]
+[ECO "A30"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 c5 2.c4 Nf6 3.Nc3 e6 4.g3 b6 5.Bg2 Bb7 6.O-O Be7 {a6 is another move
+order, after which Wojo played} 7.d4 cxd4 {gel followed by e2-e4 and d2-d4}
+8.Qxd4 d6 {!tJxd4, allowing the exchange of bishops, relieves too much of the
+pressure on Black’s position. After 8 ...hg2} 9.Rd1 a6 {"White continues to put
+pressure on Black’s d-pawn} 10.Bg5 Nbd7 {The Wojo Weapon. White plays
+provocatively, preparing Wd2 followed by .!g5-f4, ganging up on Black’s d6-pawn.
+1O.b3 is normal here. Preparing i.f4. Black readies to meet i.f4 with ...ttJeS.
+This is the main line, but} 11.Qd2 O-O {WcS!?, counterattacking the c4-pawn, is
+interesting. Now} 12.Bf4 Ne8 {e5?!, for instance 13 ..!g5 VNc714.b3 SacS} 13.e4
+Rc8 {Sac1 is more common. Now} 14.b3 Qc7 {®e3, as M.Carlsen-Wang Yue, Leon
+(rapid) 2009 and many other games, or our recommendation of} 15.Rac1 Qb8 {Wfb8.
+Thus it is difficult to show a clear route to the advantage with Wojo’s system.
+In the next two games, we will present our own suggestion for how "White might
+deal with the Hedgehog. The inspiration for the following plan of playing the
+king’s knight to d2 and expanding on the queenside with b3-b4 comes from the
+game A.Karpov-Z. Ribli, Dubai 1986, which is annotated in Karpov’s My Best Games
+(Edition Olms, 2007). Interested readers might wish to look up this game in a
+database or buy Karpov’s book} 16.Qe2 Qa8 {®b8, leaving b6 unguarded, made}
+17.b4 Ndf6 {Of course, White is not worried about} 18.Nd4 Rc7 19.Nb3 Nd7 {ie3
+was perhaps a little better for White in Wojtkiewicz-U.Adianto, U.S. Open 2000.
+White lost because he seemed to flounder here, not knowing what to do} 20.a3 Qc8
+{g4!?. Then} 21.Na4 Bc6 {The pressure against Black’s queen-side continues. The
+b6-pa^ is now in a most uncomfortable situation} 22.Nc3 Bb7 {Forced, since}
+23.Bf1 Ne5 {@hl. Now} 24.Bxe5 dxe5 {Black has no hope of gaining control of the
+d-file or the d4 square here, so ^White can make this exchange without fear}
+25.Na4 Rc6 {Now ^White breaks through on the queenside} 26.c5 bxc5 {lDbl l"!a5}
+27.Na5 Rd6 {An accurate follow-up, chasing Black off the c-file} 28.Nxc5 Rxd1
+{&xc5 gxdl 29^®xdl White penetrates to the seventh rank and is winning} 29.Qxd1
+Bxc5 {ifl lDd7, when Black had nearly (but perhaps not completely) enough
+compensation for his pawn} 30.Rxc5 Qa8 {1Z1d7 would win the exchange for White}
+31.f3 Nf6 {®c7 leading to a draw. Instead, Black erred with 23 ...We2?} 32.Rc7
+Rd8 {Black cracks under the pressure. 23 ... Wb8, trying to hold the d6- and
+b6-pawns, looks like her best try} 33.Qc2 Qa7+ {1Z1c6, winning the e5-pawn,
+looks no sunnier than the text for Black} 34.Qc5 Qxc5+ 35.bxc5 Ba8 36.c6 Ne8
+37.Ra7 Kf8 {Summary: Black deserted the c-file and b6-pawn with} 1-0
+
+[Event "Indianapolis"]
+[Site "?"]
+[Date "2009.??.??"]
+[Round "?"]
+[White "Hilton, Jonathan"]
+[Black "Michaelides, Matthew"]
+[Result "*"]
+[ECO "A30"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {n} Nf6 2.c4 e6 3.g3 b6 *
+
+[Event "Cincinnati"]
+[Site "?"]
+[Date "2007.??.??"]
+[Round "?"]
+[White "Hilton, Jonathan"]
+[Black "Sadvakasov, Darmen"]
+[Result "*"]
+[ECO "A30"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {7} Nf6 2.c4 b6 3.g3 Bb7 *
+
+[Event "Debrecen"]
+[Site "Debrecen"]
+[Date "1990.??.??"]
+[Round "8"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Horvath, Jozsef"]
+[Result "1/2-1/2"]
+[WhiteElo "2550"]
+[BlackElo "2525"]
+[ECO "A34"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 Nf6 2.c4 c5 3.g3 Nc6 {d4 is also possible here, but now White has to be
+prepared for many additional options for Black, such as} 4.Bg2 d5 5.cxd5 Nxd5
+{g3 leads back to the current game. Alternatively} 6.Nc3 Nc7 {e6, the
+Semi-Tarrasch, is playable but not very interesting for Black. Consequently it
+is a rare guest at any level of play. After} 7.Qa4 Bd7 {®d7 is also playable,
+but does less to neutralize White’s pressure along the h1-a8 and a4-e8
+diagonals. White should play swiftly for e2-e3 and d2-d4, opening up the center}
+8.Qe4 g6 {g6. He develops smoothly, castles, and has a decent command of the
+center, and so on — all of the things that one is supposed to do in the opening.
+That said, iWhite’s bishop pair gives him some chances to gain the upper hand,
+and Black has to play precisely if he wants to neutralize iWhite’s advantage. In
+this game, iWhite managed to get strong play on the queenside with a2-a3, l'!bl,
+and b2-b4. Had heplayed more precisely — say, with} 9.Ne5 Bg7 {f5!? is an
+interesting try with some merit for Black. Now "White has two options} 10.Nxd7
+Qxd7 {Ftacnik gave the label “!?” to this move, which Wojo liked as a surprise
+weapon. White’s idea is to prepare a quick b2-b4. Far more common is} 11.a3 O-O
+{Black has many other options here, though the text is the most common move. The
+alternatives are} 12.Rb1 Rad8 {g4 won for White in Ippolito-M.Dahl, U.S. Open
+2007), when White gets comfortable play against Black’s isolated queen’s pawn
+with either} 13.O-O e6 {l%bl, when now 13 ...ttJd4 (13...a5} 14.Qc4 b6 {b4 b6
+was agreed drawn on the spot in O.Romanishin-M.Palac, Reggio Emilia 2002: White
+could have played on here with} 15.b4 Ne5 {®d5 was Wojtkiewicz-J. Smejkal,
+Polanica-Zdroj 1991. Play in that game continued} 16.Qa2 Qe7 {It is hard to
+believe that White is actually better after having moved his queen so manytimes.
+We must remember, however, that Black has invested several moves relocating his
+knights. For this reason, White is still able to maintain a slight edge} 17.bxc5
+Qxc5 {l=!d1 preparing d2-d4 would have left White a little better: Of these two
+options, then, we prepare 1O.V4'e3} 18.a4 Qc4 {Sax, Haninge 1990, when now}
+19.Rb3 Na6 {axb4, with slightly better chances for "White thanks to his bishop
+pair} 20.Qb1 Qc8 {®b6 would have left White a little better} 21.a5 Nc4 22.axb6
+axb6 23.Qa2 Rd7 {White is a slightly better thanks to his pressure on Black’s
+weak b-pawn} 24.Na4 Rc7 {l%fc1 gives White full compensation thanks to his
+bishop pair, since he can control the al-h8 diagonal)} 25.Qb1 Nc5 {d3 — he would
+have achieved a clear plus. After afew_ inaccuracies, however, the game petered
+out to a draw. In the next game, we examine Black’s move 8 alternatives} 26.Nxb6
+Qa6 {Perhaps Wojo somehowmissedthis move. Now his e2-pawn falls} 27.Rb4 Nxb6
+28.Rxb6 Qxe2 {^White has nothing now, so the game soon peters out to a draw. In
+fact, if anything, it is Black who has chances to play for the win} 29.Rb8 Rcc8
+{e3 (threatening l:%xc5 by preventing ...lLld4) and so on leaves White with a
+slight pull. Now it’s Black who gets the initiative} 30.Rxc8 Rxc8 31.Qc2 Bd4
+32.Bb2 Bxb2 33.Qxb2 Nd3 34.Qd4 Rc1 {Yfd4 gcl} 35.Qe3 Qxe3 {Summary: Black has
+good chances of getting full equality with} 1/2-1/2
+
+[Event "Podolsk"]
+[Site "?"]
+[Date "1990.??.??"]
+[Round "?"]
+[White "Pigusov, Evgeny"]
+[Black "Yudasin, Leonid"]
+[Result "*"]
+[ECO "A34"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {0} c5 2.c4 Nf6 3.g3 Nc6 1-0
+
+[Event "US Masters"]
+[Site "Chicago USA"]
+[Date "2002.03.03"]
+[Round "6"]
+[White "Wojtkiewicz,A"]
+[Black "Andrianov,N"]
+[Result "1-0"]
+[WhiteElo "2535"]
+[BlackElo "2450"]
+[ECO "A87"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 f5 2.g3 Nf6 3.Bg2 g6 4.c4 Bg7 {d6 (still holding out to prevent a quick
+b2-b4)} 5.d4 O-O 6.b4 d6 {) WhWhite’s efforts on the queenside continued until
+he came crashing through on move} 7.Bb2 Qe8 {a3 d5 is also fine for Black (see
+VAnand-H. Nakamura, Wijk aan Zee 2010). So both players might dance around this
+possibility with the move order l.ttJf3 f5} 8.Qb3 c6 {ib2 d5, with a solid game
+for Black. Moving the d-pawn only one square looks more typical of the Dutch
+Defense, but in the present situation it is not a very effective strategy} 9.O-O
+Kh8 {b5 lLld8, relocating the knight to a square where it defends b7, holding
+Black’s queenside together, is another option. Blackmayalso attempt ...lLlt7 and
+...e7-e5. As Davies correctly points out, it is difficult to say for sure
+whether the black knight is better on or d8; if the knight goes to t7, Black’s
+queenside is shaky, but if the knight remains on d8, Black is passive and
+seemingly without a good plan. Best for White is} 10.Nbd2 Be6 {"White develops
+the knight to d2 so as to keep the bishop on b2 bearing do^ on e5. He is aiming
+for further expansion in the centerwith e2-e4. On} 11.Qc2 Na6 {1kYc2!?,
+aimingfor e2-e4. Black had to prevent this with ...d6-d5, but by then it was too
+late to hope for equality — he should have aimed for this move much earlier.
+(See,for instance, the note to his move} 12.a3 d5 {e4 f4 with the idea of
+...h7-h6 and ...g6-g5 gives Black counterplay. The alternatives are no better.
+^bite already has a slight advantage here. For instance, 1O ...h6 1l.E:ae1
+(preparing e2-e4) 1l...d5} 13.Ne5 g5 {.ttJc7 is more solid. White might have
+continued with} 14.e3 g4 {.f4 does not look appealing for Black after} 15.cxd5
+cxd5 {lLlc4 gave "White a clear advantage in I.Khenkin-D.Genocchio, Reggio
+Emilia 1999. The move 10 ...lLle4 wastes time and shouldn’t be played. b) A more
+serious try is} 16.Rfc1 Ne4 {ttJc4 gave White pressure in R.Ossig-C.Lauche,
+Dortmund 2010. White again concentrates his efforts on achieving e2-e4. This is
+a good move, though perhaps it is more natural to expand on the queenside with
+1l.a4. For instance, 1l ...ttJa612.b5 ttJc7} 17.Nxe4 fxe4 {dxe4 looks rather
+ugly but was probably better. Now Black’s g4-pawn is weak, and after White’s
+next move, Black is almost forced to take on e5} 18.Qe2 Bxe5 19.dxe5 Rc8
+{White’s bishop pair will make it easy for him to mop up Black’s queenside pawns
+in any potential endgame} 20.Rxc8 Qxc8 21.Rc1 Qd7 {The pressure on Black’s
+queenside pawnsstarts} 22.Bd4 Rc8 {®xg4!? was also good, for instance} 23.Rxc8+
+Qxc8 {The play against Black’s queenside pawns continues. 24 ..ixa7!? 1kYcl+ 25
+..tfl Wxa3} 24.Bf1 Qb8 {®c1?? could be met by} 25.Qc2 Kg8 {Summary: Against
+Black’s “normal” Leningrad Dutch setup, ^White had little trouble getting an
+advantage. Wojo played a2-a3, shoring up the b-pawn, and} 26.b5 Nc7 27.Qc5 {The
+next game demonstrates a perhaps more typical buildup for "White on the
+queenside against Black’s normal Leningrad Dutch setup} 1-0
+
+[Event "France"]
+[Site "?"]
+[Date "2001.??.??"]
+[Round "?"]
+[White "Bauer, Christian"]
+[Black "Riva Aguado, Oscar"]
+[Result "*"]
+[ECO "A81"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {1} Nf6 {2. g3} 1-0
+
+[Event "Internet blitz"]
+[Site "?"]
+[Date "2004.??.??"]
+[Round "?"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Santos Izquierdo, Francisco Javier"]
+[Result "*"]
+[ECO "A87"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {4} Nf6 {2. g3} *
+
+[Event "National Open"]
+[Site "?"]
+[Date "2005.??.??"]
+[Round "?"]
+[White ""]
+[Black "Wojtkiewicz, Aleksander"]
+[Result "*"]
+[ECO "A87"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {5} Nf6 {2. g3} 2.c4 {3 ..ig2 g6 4. b4 .ig7 5.. ib2 d6 6. d4 Played
+immediately so as to stop ... e7-e5. 6„.0-0 7. c4 as!? This has been tried a
+handful of times and might be worth investigating further for Black. We will
+look at other move 7 alternatives in the next game. 8. b5 ti'e8 The most common
+move for Black here. Alternatively, 8... ttJbd7 9. 0-0 e5 1O.dxe5 ttJg4 11.
+ttJc3 ttJgxe5 12. ttJxe5 .ixe5 13. '.Wd2 ttJc5 14. ttJd5 .ixb2 15. ®xb2 gave
+"White some pressure in S.Iskusnyh-A.Potapov, Siberia 2001. Interestingly,
+however, Black did manage to almost equalize after 15.. Jl:b8 16. 'Sadl .ie6 17.
+Wc3 b6 18. Ш4 ttJd7 19. e4 hd5 20. ®xd5+ m>g7 21. 'Sfel fxe4 22. 'Sxe4 ttJc5 23.
+ti'd4+ ti'f6 24. 'Se7+ 25. 'Sxf7+ mxf7 26.. id5+ mg7 27. Wxf6+ mxf6: The bishop
+and rook are slightly better than the knight and rook here, and White also has
+some chances of pressing on the kingside. However, most players would consider
+this position drawish. And in fact, after 28J'l:e1 l'l:d8 29. h4 h5 30. f3
+l'l:d7, White blundered with 31. g4?? and lost after 31... hxg4 32. fxg4 l'l:h7,
+when Black picked up the h4-pawn. So White definitely needs to find an
+improvementsomewhere in this game. Perhaps 21. exf5 §xf5 22. Ш2 tLlc5 23. f4
+would do the trick: Black seems solid, but the idea of .tc6, taking over the
+e-file, might create some headaches for the second player. Keeping the queens on
+would also increase "White’s attacking chances against the opposing king. 9.
+VlYb3!? White provokes ... a5-a4, but this was not necessary. 9. 0-0 tLlbd7 10.
+tLlc3 would have left White a little better, for instance 10... e5 11. dxe5
+tLlxe5 12. YNb3 Wh8 13. l'l:ac1 tLlfd7 14. tLld5 with pressure against Black’s
+queenside in E.Gasanov-E.Titova-BoriC, Cappelle 2009. 9... a4 10. YNc2 ^bite
+hopes to target Black’s wayward a-pawn. Black, meanwhile, has gained time and
+has an aggressive position. 10_ tLle4?! The knight will be traded off almost
+immediately, so this ends up wasting time. 10 ... c6 11. tLla3 tLlbd7 was
+better, when the game looks quite double-edged. Black will always have the
+resource ...tLlb6 to defend her a-pawn. 11. 0-0 c6 12. £ia3 J.d7 Interestingly,
+Rybka believes this move is the real culprit. The computer thinks that Black can
+avoid having wasted time on ...tLle4 with 12... tLld7 13. tLld2 tLldf6!?,
+sacrificing a pawn: 14. tLlxe4 fxe4 15. J.xe4 tLlxe4 16. YNxe4 which is level
+according to the computer. Most human players would rather take the extra pawn,
+so it seems surprising that Rybka thinks Black has full compensation here. 13.
+&d2 &xd2 14. Wxd2 Black’s knight has been traded off, so her move 10 was in
+vain. ^White is nowjust clearly ahead in space. 14.. .eS Black must fight for
+space in the center, but now White’s command of the d-file is intimidating.
+lS.dxeS dxeS 16. 1fdl .ie6 17. YlYd6 e4 18. Axg7 <!>xg7 19. ®e5+ An important
+maneuver, allowing "White to send his rook in along the d-file ahead of the
+queen. 19.. .<!>g8 20. gd6 21. Wd4 ®e7 22. f3 22... .idS! An important resource
+for Black. If she were forced to play 22 ... exf3, then she would soon have
+trouble fighting forthe center files after 23. exf3: if 23... l3eS, then 24. f4
+We3+ 25. Wxe3 l3xe3 26. l3dS+ <!>g7 27. bxc6 bxc6 2S.ttJb5 is nearly winning for
+^White. 23. c5 23. ®c5!?, threatening l3xg6+ and Wxe7, is another strong
+possibility. The text increases White’s positional advantage. 23.. .6d7 24. fxe4
+fxe4 25. &c4 ^White’s knight finally re-enters the game. White’s space advantage
+and command of the dark squares, and the availability of outposts (like d6),
+give him a clear advantage. 25.. .§ad8 26. Sdl &f6 27. b6 Probably somewhat
+stronger than 27. bxc6 bxc6, which relieves Black’s cramp slightly. 27. .:!hd6
+28. ^xd6 .ba2 29. Wxa4 .idS And here, for some reason that is a mystery to us,
+the game was agreed drawn according to ChessBase. Perhaps the rest of the moves
+have simply been lost. White is clearly better after 30. Wd4!, retaking control
+of the dark squares and tying Black’s rook on fS to the defense ofher f6-knight:
+Black’s position now collapses, since 30 ... h6 or some other mundane movejust
+loses to 31. Sf1, continuing to pile up on the f6-knight and forcing it to
+desert the e4-pawn; and the two most tempting movesforBlackare both bad: 30 „
+Ji:aS? loses to 31. jxb7,while 30 ... e3!? 31. Sd3 i.xg2 32. Sxe3 leaves Black
+down a pawn after 32 ....!e4 33. ttJxe4 ttJxe4 34. Sxe4 35f V!e7 36. fufS+ V!xfS
+37. V!e5. Black would simply have been left trying to suffer her way to a draw.
+Summary: Black really went wrong out of the opening with her move 1O...ttJe4?!.
+This wasted time andjust left White with a tremendous space advantage, which he
+continued topress until the game was (unfortunately) agreed drawn. Had it not
+been for this mistake, however, Black would probably have beenfine. iWhitefur
+his part, might have been more successful with something other than
+theprovoc-ative 9. V!b3!?. After 9. 0-0 and so on, ^White is better. Finally,
+going back a littlefurther, 8... ttJbd7is definitely an improvementfor Black
+over 8... Wfe8. In this case, we believe ^White gets an advantage, but there
+isstill likely some theory to be worked out here. Thus 7... aS!? is worth
+consideringfor Black. The next game considers 7... e5!? and 7... ttJe4!?.
+Eljanov, Pavel (2692) Nijboer, Friso (2578) [AS7] French Team Chp. 200S 1. d4 d6
+ttJf3 g6 3.} *
+
+[Event "Kharkov"]
+[Site "?"]
+[Date "1956.??.??"]
+[Round "?"]
+[White ""]
+[Black ""]
+[Result "*"]
+[ECO "A94"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {6} e6 2.Nf3 Qg5 {3.} 3.g3 {f 4. J.g2 J.e7 Putting the bishop on e7 is
+considered a little old-fashioned by some, but this approach seems sound enough.
+We will also see games in this chapter that feature the position after 4... d5
+5. c4 c6 6. 0-0 ,£d6, when Black has the idea of 7. b3 Vlfe7, stopping ,£a3. 5.
+0-0 0-0 6. b3 6. c4 right away transposes after 6... d5 7. b3. 6... d5 7. c4 c6
+8^±a3 &bd7 S ... ha3 9. ttJxa3 allows White to carry out the maneuver
+ttJa3-c2-el-d3 with ease. The text sets White more problems. 9. ©cl Targeting
+the a3 square in preparation for the all-important ttJbl-a3-c2-el-d3. 9. he7
+Wixe7 10. ttJbd2, as in L.Ftacnik-A.Yusupov, Yerevan Olympiad 1996, gets White
+nowhere. Black can simply fianchetto his queenside bishop: 10... b6! 11. Vlfc2
+,£b7 12. cxd5 cxd5 13. Sfc1 l"i:fcS 14. Wib2 a5 15. l"i:xcS+ l"i:xcS 16. l"i:c1
+l"i:xc1+ 17. Vlfxc1 Wid6 and the players agreed to a draw. White might actually
+be a tiny bit better here; for instance, the correspondence game
+B.Zhak-K.Hansen, 2006, saw lS.e3 b5 19.. tfl b4 20.. tb5 h6 21. h3 g5 22. g4!
+ttJe4 23. ttJxe4 fxe4 24hd7 exf3 25. ^b5 @g7 26. Wic2 with a noticeable
+advantage for "White thanks to Black’s ugly bishop and weak pawn on f3. But most
+of Black’s problems here were caused by ... h7-h6 and ... g7-g5, which weakened
+his king. 9... ttJe4 10. he7 "White needs to playthis right away so as to
+develop his queen’s knight to a3, preventing ... b7-b5 from Black. The recent
+game V.Mikhalevski-M. Sadler, Oslo 2011, saw 1O.e3 a5 11. ttJel b5 12. i.xe7
+Wixe7 13. c5 e5, when Black was already significantly better. Black has a space
+advantage in the center and is doing well on the queenside. 10_Wixe7 11. ttJa3
+b6 12. ttJc2 The “magic” ttJbl-a3-c2-el maneuver is now well underway. 12. „±b7
+13. Wia3 Vlff7 Playable, but not best. GM Andy Soltis, in his book Pawn
+Structure Chess, goes so far as to give this move a question mark. “Black’s
+structure is geared for a kingside attack, but the endgame is preferable to the
+passive middlegame he is now led into.” Thus we are left to conclude that 13..
+:l1;![xa3 was Black’s best option. After 13... 'I1;!/xa3 14. 11Jxa3 aS, Black
+can make "White sit down and scratch his head wondering where his advantage
+went: forinstance 15. gacl gfd8 16. gfdl gac8 17. 11Jel .ia6 18. llJd3 g5 19. e3
+20. f3 11Jef6 21. f <&e7 and it does not seem obvious at all that ^White has
+anything: Black might even play ... c6-c5 himself in the near future. Also, ...
+g5-g4 is a possibility. Furthermore, instead of Soltis’s suggestion of13
+...'I1;!/xa3, what about the novelty 13... c5!? here? Then 14. cxd5 exd5 15.
+dxc5 (15.11Jcel gfe8 16. 11Jd3 c4 17. 'I1;!/xe7 gxe7 18. llJde5 b5 19. 11Jxd7
+gxd7 20. 11Je5 gc7 is unclear) 15... bxc5 16. b4 c4 17. gadl f4 18. llJfd4 (or
+18. llJd2 llJd6) 18... gf6 is unclear. Black’s hanging pawns have been
+blockaded, but Black does have ample activity. Most players of Black would
+probably prefer 13... 'I1;!/xa3, but an attacking player like Shabalov or
+someone playing Black in a must-win situation might do very well with this try.
+In any case, it seems wrong to conclude that White has an advantage. 14. exd5
+14. 11Jcel?! first runs into 14... dxc4 15. bxc4 c5, so "White plays this
+capture first. Thiscapture is sometimes praised as being “thematic” because
+"White now gains chances along the c-file. 14... cxd5?! It is this move that
+looks like the real culprit to us. Black should keep the position unbalanced to
+obtain counterplay. 14... exd5 15. 11Jcel f4!? (15... a5 16. 11Jd3 gac8 17. gacl
+looks better for "White) 16. 11Jd3 (Rybka prefers 16.. 1h3 fxg3 17. fxg3!?, but
+now 17... 'I1;!/e8 18. llJd3 gf6 19. 11Jfe5 llJxe5 20. 11Jxe5 i.c8 21.. 1g2 .ifS
+looks fine for Black) 16... fxg3 17. hxg3 'I1;!/e8 with ... gf6 to follow would
+leave Black with sufficient counterplay. 15. &eel a5 Soltis gives this move a
+question mark. 15... 11Jc3 16. e3 gfc8 17. 11Jd3 'I1;!/f8 18:l1;![b2 gc7 was
+perhaps a more stubborn way for Black to play. 16. &d3 Sfe8 17. &fe5 &xe5 18.
+&xe5 ti'e8 19. 9fc1 ti'd8 20. e3 &e3 21 ..tfl At this point, White really does
+have a slight edge. His bishop is better than Black’s, and he also has control
+of e5 and many other dark squares. 22. b4?! A strange move. 22. Sc2 was better,
+since 22 ... b5 with ... b5-b4 to follow was not an issue: 23. b4! ttJbl 24.
+'I1Bb2 E:xc2 25. 1l;Yxc2 ttJa3 26. 'I1Bc5 axb4 27. 1l;Yxb4 leaves "White with
+pressure against b5. 22... axb4 23. ti'b3 ^bite’s idea is to regain the pawn via
+ttJd3. The direct 23. 'I1Bxb4?! is not good since 23 ...ttJxa2 24. 1l;Yxb6
+ttJxcl 25. 'I1Bxe6+ <&h8 26. E:xc1 ti'e7 defends against "White’s threats. 23_
+.ia6? Black should be more stubborn. 23... 'I1Bd6, holding onto the pawn, was
+better. 24. ttJd3 .ia6 25. 'I1Bxb4 (or 25. ttJxb4 .ixfl 26. E:xc3 .ic4 27.
+'I1Bb2 E:ca7) 25... 'I1Bxb4 26. ttJxb4.ixfl27.<.ixfl b5 intending ...E:c4 leaves
+Black at least equal, if not better. 24. ti'xb4 Now White has emerged with a
+slight plus thanks to his pressure against b6. 24. •• ttJxa2 ?? 24.. .'I1Bc8
+would have left Black only a little worse. 25. Ybb6 Threatening to take on e6.
+The game is over. 25^„ ttJxcl 26. lhc1.ic4 27. ti'xe6+ mfS 28. ti'xf5+ mg8 29.
+ti'e6+ mfS 30. ttJxc4 ge7 30.. .dxc4 31. hc4 is of course hopeless for Black.
+31. ti'f5+ gt7 32. 1l;Yxh71- 0 Summary: This game is sometimes used to
+illustrate the power of White’s ka3 idea. But on closer scrutiny, does it really
+seem like iWhite had any sort of guaranteed advantage here? Black had plenty
+ofoptionsfor counterplay throughout the course of the game. On moves 13,14,23,
+and 24, Black had better options that ranged from providing full counterplay to
+leaving him only slightly worse. Of course, at this point, it is necessary to
+backtrack and say that the plan of .ia3 is not at all a bad one for "White.
+Several top players, including Kasparov, have played it. The system with .ia3 is
+just often overrated and described as somehow “killing” the Stonewall — which,
+in reality, it doesn’t. For instance, A.Huzman-V. Moskalenko, Lvov 1988, saw 1.
+ttJf3 e6 2. c4 f5} Nf6 *
+
+[Event "Ottawa"]
+[Site "?"]
+[Date "2007.??.??"]
+[Round "?"]
+[White ""]
+[Black "Miton, Kamil"]
+[Result "*"]
+[ECO "A90"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {7} d5 2.d4 e6 3.c4 c6 4.g3 Bd6 {4. '%lfc2 is our recommended move order
+here so as to avoid the possibility given in the next note.} 5.Bg2 {Against our
+recommended system, which involves lLlc3, E1b1, and b2-b4 for White, ...i.d6
+followed by ...'Wfe7 makes sense for Black. However, given this game’s move
+order, 4... dxc4! is the move we believe is best for the second player. See
+Chapter 14 of Volume I, “Semi-Slav Hybrids.” Black might also try placing his
+bishop on e7 with 4 .. f5} Nf6 6.0-0 Ke7 7.Qc2 {when now} 1-0
+
+[Event "Biel"]
+[Site "?"]
+[Date "2011.??.??"]
+[Round "?"]
+[White "Salem, Saleh"]
+[Black "Gleizerov, Evgeny"]
+[Result "*"]
+[ECO "A90"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {1} e6 2.c4 Qg5 {3.} *
+
+[Event "Governors Cup"]
+[Site "Sioux Falls USA"]
+[Date "2000.09.30"]
+[Round "2"]
+[White "Wojtkiewicz,A"]
+[Black "Luther,Ron"]
+[Result "1-0"]
+[WhiteElo "2581"]
+[ECO "A84"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 e6 2.c4 f5 3.g3 b6 {e5!?, "White should respond with} 4.Bg2 Bb7 {c4, for
+instance} 5.O-O Nf6 6.d4 Be7 {ttJh4!, with ttJc3 and d2-d3 to follow, is good
+for "White)} 7.d5 O-O {d5 followed by} 8.Nd4 Qc8 {ltJd4!? gave him extra space
+in the center. Black's position was solid, but when White played the tricky}
+9.Nc3 c5 {.±b4!?, hopingto get a better grip on the center, has been played a
+few times, but} 10.Nc2 d6 {Black is planning to play ...e6xd5, aiming for a
+Benoni-like structure. Locking up the game with 10 ...e5?! has not been
+successfulfor Black. M.Tal-A. Nielsen, Stockholm 1961, for instance, went 1l.e4
+fxe412.tLlxe4 tLlxe413.!xe4 d6} 11.e4 exd5 {"White is well placed in the center,
+so it makes sense for him to open up the game there} 12.exd5 Nbd7 {cxd5, which
+would give Black options for counterplay on the queenside and in the center. The
+text keeps Black locked down} 13.Bf4 Ne8 {^bite has a clear advantage. He has
+more space and will also have control of the e-file. Black’s pawn on d6 is a
+clear target, whereas White’s pawn on d5 is strong. That said, Black’s position
+is difficult to crack, so the second player has decent chances to defend
+successfully} 14.Re1 Rf7 {.1.f6, targeting "White’s queen-side, looks more
+stubborn. Then} 15.Nb5 Nf8 {ltJf8??, allowing ИWhite to come crashing through on
+d6. The next game is rather similar to the first in that Black’s d6-pawn becomes
+weak early on} 16.Bxd6 Nxd6 {ltJc3, when "White would keep his clear advantage}
+17.Rxe7 Nxb5 {The point. Now Black must lose material} 18.Rxf7 Kxf7 {"^bite is
+now up a clear pa^, and Black’s king is exposed, too. The rest is easy} 19.cxb5
+Qd7 20.Ne3 g6 {8:xc1 8:xa8. The game was soon drawn. Perhaps this should have
+gone in the chapter on Odds and Ends, but this move order is the sort of
+surprise that might come up when White is expecting to play The rare} 21.Qb3 Kg7
+{ltJe3 and so on wins for White, e.g} 22.a4 Qf7 23.a5 Rd8 24.axb6 axb6 25.Ra7
+Kg8 {gxf5, with an overwhelming amount of material for the queen} 26.Rxb7 1-0
+
+[Event "Ruhrgebiet"]
+[Site "?"]
+[Date "2007.??.??"]
+[Round "?"]
+[White "Spyrou, Emanuel"]
+[Black "Limbourg, Philipp"]
+[Result "*"]
+[ECO "A84"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 {7} e6 2.c4 Qg5 {3.} 1-0
+
+[Event "Baden-Baden"]
+[Site "?"]
+[Date "1981.??.??"]
+[Round "?"]
+[White "Miles, Anthony"]
+[Black "Roos, Louis"]
+[Result "*"]
+[ECO "A99"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {1} e6 2.Nf3 Qg5 {3.} 1-0
+
+[Event "Haifa"]
+[Site "?"]
+[Date "1989.??.??"]
+[Round "?"]
+[White ""]
+[Black "Wojtkiewicz, Aleksander"]
+[Result "*"]
+[ECO "A55"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.f3 {9} Nf6 2.c4 d6 3.d4 Nbd7 4.Nc3 e5 5.e4 Be7 6.g3 {With this move, Black
+makes clear his choice of the Old Indian. 5... g6 was still possible, when} 0-0
+{i.g7 7. i.g2} 1-0
+
+[Event "Katowice op"]
+[Site "Katowice"]
+[Date "1992.??.??"]
+[Round "4"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Espig, Lutz"]
+[Result "1-0"]
+[WhiteElo "2495"]
+[BlackElo "2415"]
+[ECO "A55"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 d6 2.d4 Nf6 3.c4 Nbd7 4.Nc3 e5 5.e4 Be7 6.Be2 O-O 7.O-O c6 8.Re1 a6 {gel
+a6} 9.a3 Qc7 {This time, Black plays ...b7-b5 while there is still time. This is
+a huge improvement over the previous game} 10.Bf1 b5 11.Bg5 Bb7 {h3 is also
+popular here and it scores well. Just as mentioned in the previous game,
+1l...h6} 12.Rc1 Qb8 {Black finally concedes and plays ...h7-h6 in order to
+relieve the pressure along the h4-d8 diagonal} 13.h3 Re8 {ic1 gets Black
+nowhere. White waits for Black to play ...h7-h6, weakening the kingside
+slightly} 14.Qc2 h6 15.Be3 Bf8 16.Rcd1 exd4 {g6 would have transposed to
+Z.Ribli-E.Torre, Alicante 1983. Here White played thematically with} 17.Bxd4 Ne5
+{c5? would now just lose a pawn after} 18.Nd2 Nfd7 {White has more space, so of
+course he does not want to trade. He intends to drive Black’s knight away with
+f2-f4} 19.Be3 Nf6 {if4! is a real headache for Black} 20.Kh1 Qc7 {Necessaryto
+develop Black’s queen’s rook} 21.Bd4 Rac8 22.Rc1 Qb8 {Pushing the black queen
+back to b8. Both sides are shuffling here, each trying the other’s patience.
+Black seems to have gotten the better end of the shuffling, since his rook on a8
+was not previously developed, and meanwhile White has not made much progress.
+Black could have “cashed out” with 22 ...bxc4} 23.Qd1 Nfd7 {Stepping off the
+c-file in preparation for taking on b5. The move order} 24.cxb5 cxb5 {Finally,
+"White decides to take action. Both sides have maneuvered long enough, and White
+is ready to make some progress. The alternative was 24 ...axb5} 25.f4 Nc6 {White
+lines his bishop up with Black’s queen} 26.Bf2 Ne7 {ЖЗ, when now 26 ...c5}
+27.Bd3 Ng6 {f3, White’s position seems slightly preferable thanks to his iron
+grip over d5. Black understandably prefers not to alter the structure ofthe
+position} 28.Bg3 Nf6 {d5!?, unleashing an attack against White’s f4-pawn. Then}
+29.Qf3 Qa8 {e5 might be met by} 30.Bf2 Bc6 {.d5 immediately would run into}
+31.Bd4 Be7 {l:!xc1 ltJdxe5!? (31...ltJc5 32 ..tbl l:!d8 seems a little better
+for White thanks to his kingside space)} 32.Nf1 Nf8 {b4 followed by lLlb3.
+White’s e4-pawn is adequately defended, and Black’s pieces are clustered mostly
+on the kingside, so it makes sense for "White to take some time to attack the
+queenside} 33.Ng3 Ne6 {lLlxe4 Sxcl} 34.Bf2 Nc5 {.d5, but White is still better
+after} 35.Bb1 Bf8 36.Bd4 Ncd7 {"White had lined up along the bl-h7 diagonal, so
+this was necessary} 37.Qd3 g6 {lLlxe4, for instance} 38.e5 dxe5 {e5!. Even
+though Black’s pieces were well positioned to counterattack (for instance, Black
+could play ...hg2+), White still had the upper hand in all variations. It’s
+unclear whether Black lost by resignation, flag fall, or in some other manner,
+but his position was already incredibly hard to play in any case. Conclusion: If
+played correctly, the Old Indian can lead to a fascinating struggle. "White has
+more space and some positional pluses, but Black’s position is solid yet
+flexible and he is able to develop rapidly. Generally speaking, however, players
+of Black rated under 2300 will tend to spend too much time focusing on rote
+maneuvers that don’t really improve the second player’s position. In such cases,
+"White should grab space on the queenside and expect an astronomically high
+winning percentage. Chapter 18} 39.fxe5 {At this point, Black either ran out of
+time or he resigned, or he lost by some other means. Play would likely have
+continued 39 ....txg2+} 1-0
+
+[Event "Valencia op"]
+[Site "Valencia"]
+[Date "1990.??.??"]
+[Round "?"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Anguix Garrido, Juan Francisco"]
+[Result "1-0"]
+[WhiteElo "2550"]
+[BlackElo "2305"]
+[ECO "A53"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 d6 2.d4 Bg4 3.c4 Nd7 4.g3 c6 {txf3, which is a more interesting idea for
+Black than what we saw in the previous game. K1ebel, Martin (2410) Mirschinka,
+Dirk (2260)} 5.Bg2 e5 {Black is playing for a kind of Old Indian, but with his
+bishop on g4. This approach is playable for Black, but not particularly good,
+because Black’s light-squared bishop is actually a very important piece in the
+Old Indian. As we saw in the previous section, Black often places this bishop
+along the h1-a8 diagonal to put pressure on "White’s e-pawn (which advances to
+e4). From g4, Black’s light-squared bishop will likely get traded off for
+White’s f3-knight. This means that Black is just giving "White the bishop pair
+for free} 6.Nc3 Ngf6 7.O-O Be7 8.h3 Bh5 {h3 and} 9.Nh4 O-O {ttJh4, bringing the
+knight to the square. He won the bishop pair, developed efficiently, and took
+space in the center with} 10.Nf5 Re8 {&f5, play transposed back into the main
+game. But} 11.Nxe7+ Rxe7 12.b3 Re8 {b4 gave "White extra space in
+J.Sarkar-D.Sherman, National Chess Congress 2007. This would be our
+recommendation here, since it looks like "White has a comfortable advantage.
+Alternatively} 13.d5 c5 {d5. Other than} 14.Qc2 a6 {dxe5 (14. d5, as in the main
+game, is also good here)} 15.a4 e4 {e4?!, which was a desperate move in a
+somewhat worse positionfor Black, it is difficult to say where Black went wrong,
+except that his opening strategy was simply suspect. Black's poor results with
+this system of ...J.g4, ...ttJbd7, ...e7-e5, and so on make it unattractivefor
+the second player. Now let’s see how White can get an advantage after} 16.Nxe4
+Bg6 {b3 &fd7, as in J.Bartholomew-Akobian, Chicago 2012, is also good, though
+White decided he couldn’t make more progress here and soon took a draw. A
+strange move. Taking with the want to organize the ...b7-b5 thrust at queen
+instead looked more natural. some point} 17.Nxf6+ Qxf6 {Sadl V!c7} 18.Qa2 Qc3
+{Now Black is just down a pawn} 19.Bd2 Qc2 20.Rfe1 Nf6 {gfel f} 21.Bf4 Rad8
+{Targeting d6} 22.a5 Rd7 {White fixes Black's queenside infantry. Wojo makes the
+rest look effortless} 23.Qxc2 Bxc2 {ltJd4, White was clearly better thanks to
+Black's weakened f-pawns and locked-in bishop on g6} 24.Rec1 Bf5 {White’s idea
+is that} 25.g4 Bg6 {J.f3 first before Sa3, thus netting an entire piece, since}
+26.Kf1 Kf8 27.f3 {Black realizes his situation is hopeless, so he resigns.
+Summary: White got a better position in this game after} 1-0
+
+[Event "Bundesliga"]
+[Site "?"]
+[Date "1998.??.??"]
+[Round "?"]
+[White ""]
+[Black "Mirschinka, Dirk"]
+[Result "*"]
+[ECO "A41"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.d4 {8} d6 2.Nf3 Bg4 3.c4 Kd7 4.g3 1-0
+
+[Event "Bad Zwesten op"]
+[Site "Bad Zwesten"]
+[Date "1997.??.??"]
+[Round "3"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Mohr, Stefan"]
+[Result "1-0"]
+[WhiteElo "2565"]
+[BlackElo "2420"]
+[ECO "A42"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 d6 {Black is preparing ...V-fS by covering the g5 square. He also plans to
+meet "White’s h4-h5 advance with ...g6-g5} 2.d4 g6 {c4 !J.g7, with the idea of
+...e7-e5, is similar. Although "White could of course allow Black to play this,
+transposing into an English Opening, Wojo preferred} 3.c4 Bg7 {c5!? is an
+independent option covered in the next game} 4.Nc3 e5 {The point of Black’s
+play. "Why else would he withhold the development of his king’s knight? Of
+course} 5.e4 Nc6 {Wojo also sometimes played} 6.d5 Nce7 {d5 followed by} 7.h4 h6
+{id2, which Wojo also used to good effect} 8.h5 g5 {White’s plan is not so much
+to attack on the kingside as it is to gain space and create a light-square bind}
+9.Be2 f5 {Black gives up the e4 square, but nothing else makes sense here. Watch
+how White now increases his control over e4 and occupies it} 10.exf5 Bxf5 {This
+seems to be Black's only available mechanism forcounterplay. "White
+respondsbyshoring up d5 and pressuring the queenside} 11.Be3 Nf6 {ttJd2 with
+f2-f3 to follow locks up the kingside, giving "White a free hand on the
+queenside, so Black plays} 12.Nd2 O-O {tLlxe4, when here 12 ...gxh5} 13.f3 Bh7
+{^fuite has successfully executed the maneuver ttJd2 and f2-f3, taking over the
+e4 square} 14.g4 c6 {White stops ...ttJf5. Black is now cramped, as White has
+more space and control ofthe light squares. There are no good places for Black's
+knights. Note that this pawn push is thematic: it was also seen in the note to
+Black's move} 15.Qb3 Qd7 {§c1 b616.,ixc8 '.Wxc8wasA.SariC-B. Medak, Pula 2005,
+when here} 16.Nde4 Nxe4 {cxd5 would have ruled out the possibility of the move
+"White played in the game. Now} 17.fxe4 c5 {fue4!? might not have been optimal,
+but Black missed his chances to stir up real counterplay against iWhite’s weak
+pawns and instead just started giving away material. Although the theory in this
+line is not very well developed, it looks promising for ИWhite. And it will be
+Black, not iWhite, who is surprised by an unusual move in the opening.
+Conclusion: This system for Black, with an early ...d7-d6, ...g7-g6, ....tfS-g7,
+looks decent for Black. It is relatively rare, but it does come up in tournament
+practice at all levels, so as "White it’s worth having something up your sleeve
+to play against it. Wojo’s} 18.Kd2 Rf6 {@h8, preparing ...lLle7-g8-f6, is best.
+Black is still okay after} 19.Qb5 Qc7 {Nowthe b2-b4 strike comes quickly.
+Alternatively, 19 ...Wxb5} 20.b4 b6 {cxb5 would have left White with a nice
+space advantage in the resulting queenless middlegame} 21.Rhg1 Qd8 {dxc5, but
+the text is more “fluid” and thus more in keeping with Wojo’s style} 22.Bd3 a6
+{ghfl lLlg8} 23.Qa4 b5 24.Qb3 cxb4 {White again chooses to keep the pawn
+structure fluid} 25.Qxb4 bxc4 26.Qxc4 Rc8 {Black gets too fancy. He is cramped,
+but there was no need to start sacrificing material. Instead, Rybka likes the
+“rook lift” ...1'!c8-f3-h3. After} 27.Qxa6 Rxc3 {The point ofBlack’s play, but
+it does not work} 28.Kxc3 Rf3 {ФхсЗ §f3? Black panics after realizing that the
+more forcing} 29.Kd2 Nxd5 {exd5 e4 can just be met by} 30.exd5 e4 31.Be2 Rxe3
+{But now Black is down a whole rook for nothing} 32.Rac1 Rxe2+ {<&xe3
+i.xa133.1'!xa1 was equally good. _} 33.Kxe2 Bf8 34.Rgf1 1-0
+
+[Event "Melody Amber (rapid)"]
+[Site "?"]
+[Date "1999.??.??"]
+[Round "?"]
+[White "Kramnik, Vladimir"]
+[Black "Topalov, Veselin"]
+[Result "*"]
+[ECO "A40"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.c4 {9 1.. t cS 1.. .g6 2. d4 .ig7 3. c4 c5 4. e4 is another common move order.
+2. c4 g6 3. d4 !i.g7 4. e4 4. d5 would lead to the Benoni. 4”.'i'b6 4... cxd4 5.
+ttJxd4 ttJc6 6.. ie3 would of course transpose into a normal Maroczy Bind. On
+4... d6, ^bite can play 5. d5. Now, if Black develops normally, the game will
+turn into a King’s Indian that is good for White because Black has already
+committed to ... c7-c5. Meanwhile, 4 ...'IWa5+ 5. ttJc3 d6 6. d5!, sacrificing a
+pawn, gives "White chances for a big attack. 6... .txc3+ 7. bxc3 ttJf6 (7
+...%lfxc3+ 8 ..td2 llNg7 9.. id3f61O.%lfcl gave "White more than enough
+compensation in R.Fontaine-B.Chatalbashev, Val Thorens 2007) 8. %lfc2 ttJxe4 9..
+id3 ttJf6 10. 0-0 is the main line here, when now: a) 10... 0-0 nj,g5
+ttJbd712J'!ael Se8 13. ttJh4 Wg7 14. f4 (notice how ^White continues to simply
+build his attack, not worrying about the fact that he is down a pawn) 14...
+%lfd8 15. Sf3 b5 16. cxb5 ttJxd5 17.. ie4 ttJ7f6 18. hf6+ exf6 19. Sdl ttJc7 20.
+ha8 ttJxa8 21. Sffl left "White up material in V.L8znicka-E. Mochalov, Pardubice
+2006. b) 1O....ig4 11. ttJh4 (11.ttJg5 ttJbd7 12. Sbl %lfa6, putting pressure on
+c4, was fine for Black in Wojtkiewicz-W. Ehrenfeucht, Lubniewice 1995) 11...
+Sg8? 12.. ig5 ttJbd7 13. h3 .if5 14. hf5 gxf5 15. hf6 ttJxf6 16. ttJxf5 §g6 17.
+§ael was practically winning for White in P.H.Nielsen-S.CiCak, Swedish Team Chp.
+2010. It is difficult to imagine what could have compelled Black to play 11...
+Sg8?, but it seems certain that 10 ....tg4 is no better than the more common
+11... 0-0. 5. dxc5 llNxc5 6. .ie2 Wojo once tried 6. ttJfd2!?, with the idea of
+ttJb3, but after 6... d6 7.. ie2 llNc7 8. 0-0 ttJc6 9. ttJb3 b6 10. f3 .ie6 11.
+ttJa3 Sc8 12. Sbl ttJf6 13.. ie3 0-0 14. llNd2 ttJd7, Black was doing fine in
+Wojtkiewicz-T.Markowski, Krynica 1998. White’s knights on a3 and b3 are not
+completely sidelined, but they aren’t fantastic, either. After 15. Sbc1 a6,
+White’s knight on a3 had to be rerouted: 16. Whl ttJc5 17. ttJd4 ttJxd4 18..
+ixd4 hd4 19. 1lNxd4 ttJd7 20. llNd2 llNb7 21. b3 and here 21... ttJf6 22. ttJc2
+followed by ttJc2-e3-d5 allowed "White to occupy the d5 square, an important
+objective in Maroczy Bind-type positions, but this didn’t give White anything
+serious. The game was agreed drawn after 22... .id7 23. ttJe3 Sfd8 24. ttJd5
+ttJxd5 25. exd5 e5 26. dxe6 .ixe6 27. f4, probably because Black would have
+equalized after 27... b5. 6... d6 7. 0-0 7. ttJfd2!? would have transposed into
+Wojtkiewicz-Markowski above. The text is the main line, and undoubtedly a more
+serious try for the advantage. - 7.. .6.6 8. a3 The most popular move here, and
+with good reason. Expanding on the queenside with b2-b4 is the best way to take
+advantage of Black’s early queen development. 8 ...Ag4 8.. .®b6 is an
+alternative, but play is more or less similar here after 9. Sa2! (preparing
+b2-b4), for instance, 9... i.g4 1O.i.e3 Wd8 11. b4, transposing back to the main
+game. 9. b4 №6 10. Ae3 M8 Il.ga2 The rook is not at all misplaced on a2. Indeed,
+it is in a perfect position to swing in to d2. 11.. .£sf6 This allows "White to
+finally develop his queen’s knight to c3, but of course Black could not have
+successfully delayed ...ltJf6 much longer. 12. &c3 0-0 Best. A messier idea for
+Black here is 12 ... a5?! 13. b5 i.xf3, when here "White has tried both
+recaptures. After the tame 14 .,^rf3, "White has good chances for the advantage
+after 14... ltJe5 15. i.e2 0-016.c5! (not 16. f4 ltJeg4! 17. i.xg4 ltJxg4 18.
+®xg4 i.xc3, when Black will have counterplay against White’s c-pawn) 16.. .Sc8,
+when here instead of 17. i.d4? ltJed7 18. ltJa4 dxc5, which was much better for
+Black in R.Ponomariov-A.Shabalov, Bavaria 1999, "White should play 17k2! with
+strong pressure, for instance 17... dxc5? 18. f4 ®xd1 19. :ixd1 ltJeg4 20. i.c1
+with the threat of e4-e5. But perhaps even better is 14. gxf3!, since 14.
+..ltJe5 15. c5 gets the same type of position for "White as after the bishop
+recapture, but up a tempo or two. After 15... Wc8 16. f4ltJed7 17. Sc2 ltJxc5
+18. e5! ltJfd7 19. exd6 exd6 20. ®xd6, White soon won in A.Rotstein-N.Sulava,
+Ar-co 2001. 13. gd2 White wastes no time in bringing his rook to the center. The
+slower 13. h3 14. ^i.xf3 allowed 14... a5! in J.Kraai-S.Kudrin, Western States
+Open 2002, equalizing for Blackafter 15. ®b1 (15.b5 ltJe5 16.. te2 §c8 is fine
+for Black thanks to his pressure against c4) 15... axb4 16. axb4 ltJg4 17. hg4
+hc3. The game was agreed drawn after 18. b5 ltJe5 19. 9c1 ltJxg4 20. hxg4 .te5
+21. §xa8 ®xa8. Yet perhaps GM Thomas Luther’s 13. ®b3! is strongest here. He
+certainly did well with it in T.Luther-R.Dautov, Essen 2002, after 13... a5 14.
+§d2 axb4 15. axb4 Wb8 16. h3 i.xf33 17i.xf33 §d8 18. gfd1 and so on. But what
+about 13 ...Wc8, with the idea of ...,^rf3 and .. Me6 — which, as we will see,
+is Black’s strongest plan against the text move? Then "White has 14. h3 .ixf3
+15. ,ixf3 lLle5 16 ..ie2 We6 17. lLld5! (threatening lLlc7) 17... §fc8 18. f3,
+shoring up his dominance in the center: Thus, 13. ®b3 looks promising. 13_ &d7?!
+This seems too passive. 13 ... a5?! could now be met by 14. b5 ,^rf3 (14...
+lLlb8 15. e5 lLlfd7 16. lLla4! leaves Black too far behind in development to put
+up much resistance) 15. gxf3 lLle5 16. f4 lLleg4 17. .td4, when Black’s knights
+are uncomfortably placed. But the sneaky 13.. .Wc8! was tried in
+J.Svensson-B.Steamboat, corr. 2009, when Black’s idea was to meet 14. "®b3 with
+14... .ixf3 15.. ixf3 ®e6 followed by ...lLlc6-e5 and bringing a rook to c8. So
+White avoided this with 14. c5 dxc5 15. bxc5, but giving himself two isolated
+pawns on the queenside turned out not to be such a great idea for "White either.
+Instead, "White might have played into Black’s plan and allowed the second
+player to put his queen on e6 as above, since "White could then have played 16.
+E(b1 (preparing c4-c5) 16... lLle5 17.. ie2 E(ac8 18. c5 lLleg4 19.. if4 Wxb3
+20J:xb3 dxc5 21. e5 with the initiative: After 21... c4 22. E(b1 lLlh5 23hg4
+lLlxf4 24. .ixc8 E(xc8 25. lLld5, White has some chances of converting his extra
+exchange. Play might continue 25 ...lLlxd5 (or 25 ... c3 26. lLlxe7+ @f8 27.
+lLlxc8 cxd2 28. E(d1 .th6 29. E(xd2 lLlh3+ 30. gxh3 hd2 31. lLlxa7 with an extra
+pawn for "White) 26. E(xd5 c3 27. g3 e6 28. E(c5 gxc5 29. bxc5 he5 30. @f1 .id4
+31. @e2 c2 32. E(c1 hc5 33. a4 @f8 34. E(xc2 b6, when a draw is the most
+probable result, but "White’s position is a little easier to play. All this
+tends to suggest that Luther’s 13. Wb3 is an improvement on Kramnik’s play. 14.
+fflJ3 "White now has a pleasant edge. He has been allowed to develop freely and
+is not worried about any pressure on his e4-pawn, as he would have been after
+13... Wc8. 14.. .a5 Black plays the thematic strike. But will it actually help
+him relieve his cramped position on the queenside? 15. h3 A good move, simply
+taking the bishop pair. 15.. ... bf3 16. ^.bf3 axb4 17. axb4 b6 It is clear that
+Black is playing defense here. White’s small advantages are beginning to
+accumulate: first, a space advantage; then, the bishop pair; and soon, more
+active piece play in the center. 18. Sfdl Se8 19. £,e2 Preparing f2-f4, taking
+even more space. 19... BC7 20. tOb5 Vlb7 21. f4 gal This move is principled,
+since in a position like this, the cramped side must seek trades. But now
+"White’s extra activity allows him to break through Black’s ranks. 22. e5! Sxd1+
+23. Vlxd1 The point. Black cannot take on e5 due to the pin down the d-file. 23
+...tOxb4 Forced, since otherwise "White will pin the knight with .1f3. 24.. if3
+Ylb8 24 ...Wc8 is no better after 25 ..1g4! Wb7 26. .1xd7 Wxd7 27. Wa4 lLlc6 28.
+lLlxd6!, winning. 25. ®a4 Winning the knight on b4, which now finds itself
+cornered. 25... dxe5 Desperation, but everything else also loses. 26. Sxd7 exf4
+27.. if2 e5 28. tOd6 White could have of course played 28. Vlxb4, but the black
+knight wasn’t going anywhere.} Nf6 {Summary: White can meet Black’s early ...
+g7-g6, ...kg7, and ... c7-cS by occupying the center with 4. e4. After 4...
+VIa5+, ^White can expect more thanfull compensationfor hispawn after5. d6 6. d5!
+kxc3+ 7. bxc3 lLlf6 8. Wc2 lLlxe4 9. kd3 lLlf6 10. 0-0 with kg5 to follow. And
+if 4... Wb6, as in the main game, ^White has a satisfactory plan with 8. a3.
+Black’s big mistake in this game was playing too passively, since 13...
+lLld7?!just didn’t cut it. Instead, Black should have looked for something
+active like 13... W c8! with ...We6 to follow. ^White, for his part, should
+probably play 13. Wb3 before bringing his rook to d2. Other than that minor
+detail, his play in this game was flawless. Black's Tricky 3 ... a6 After} 2.Nf3
+e6 3.g3 1-0
+
+[Event "Komotini"]
+[Site "?"]
+[Date "1993.??.??"]
+[Round "?"]
+[White "Arnason, Jon L."]
+[Black "Angelis, Mihail"]
+[Result "*"]
+[ECO "A13"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.c4 {3} Nf6 2.Nf3 e6 3.g3 a6 4.b3 {4 ^Ig2 We believe this to be White’s most
+ambitious try here. Wojo’s normal move order here was} b5 5.Nc3 c6 {which to
+this day seems to be considered the main line for the 3... a6 variation.
+However, Wojo was generally unable to win with this move and mostly just used it
+to draw against 2400+ players. After 5 ... b4 6. lLla4, White’s knight is
+sidelined on the queenside, and Black’s position is solid. Note that ... b5-b4
+is good for Black when he hasn’t played ... c7-c5, but often not so good for him
+when he has; the pawn on c5 is often too weak after White’s lLla4. Here 6...
+i.b7 7. d4 d6 8. i.g2 lLlbd7 9. 0-0 i.e7 1O.lLle1 (What else? 10. lLlb2 0-0 11.
+lLld3 aS 12.. lb2 c5 13. e3 Wb6 was fine for Black in the blitz game
+G.Kas-parov-V.Korchnoi, Brussels 1987, so Wojo tries to fight for the e4 square
+instead) 10 ...,xg2 11. lLlxg2 Wc8 12. f3 was agreed drawn in
+Wojtkiewicz-Korchnoi, Debrecen 1992: Black has plenty of space on the queenside
+and will complete his development quickly. 4... bS S.b3 Wojo once tried 5.
+llJe5!? against Gata Kamsky in a New York Masters rapid game. Now} 6.Nd5 {b3}
+Bb7 {7. 0-0 llJbd7 8. d4 llJxe5 9. dxe5 llJd7 10. cxd5 cxd5 l1.e4 d4 12,VNxd4
+.lc5 13. ®c3 with an extra pawn for "White was perhaps a little better for the
+first player in L.Neckar-V.Epishin, Schwarzach 1998. So Kamsky played 5... Sa7.
+"White doesn’t do very well here with 6. cxb5, since after axb5 7. ®b3} 7.Ne3!
+{8. O-O ixg2 9. 'i!lxg2 c6 10. d4 .le7 11.. lg5 d6 12. llJf3 llJbd7 13. llJbd2
+h6 14.. ixf6 llJxf6 15. Sfc1 \!;Ya8 was at least equal for Black, if not better,
+in R.Vaganian-V. Korchnoi, London 1984. So Wojo met 5 .. .''!a7 with 6. d4. Now
+Black has two choices: " a) 6 ... d6} c5 8.Ne5 {(or 7... dxe5} Qb6 {®xdl+ 9.
+'i!lxdl c5 1O.exf6 gxf6 l1.llJc3, with an edge for White in
+A.Greenfield-V.Loginov, St. Petersburg 1998) 8. llJc6 llJxc6 9. ixc6+ id7 10. M3
+\!;Yc8 11. dxc5 dxc5 12. ®c2 gave ^bite a little pressure in L.Neckar-A
+Panchenko, Prague 1982. b) In Wojtkiewicz-Kamsky, New York 2004, Wojo got some
+advantage after 6... .lb7 7. d5! (sharpest) 7... ib4+ (7... d6? 8. \!;yd4! ga8?
+9. llJxf7 'i!lxf7 10. dxe6+ wins for "White) 8. llJc3 cS (8 ... bxc4?! 9. e4
+gives White a clear plus once he retakes on c4) 9. 0-0 0-0 1O.e4 d6 11. llJg4
+llJxg4 12. Wxg4 ic8 13. We2 bxc4 14. ®xc4 e5 15. a3 ia5 l6.ie3 gb7 17. gabl,
+planning b2-b4: Kamsky hung on for the draw, but we encourage readers to
+investigate 5. llJe5!? further if they like it and are interested in it. We
+think our suggestion is strongest, but Wojo’s try against Kamsky looks
+promising, too. cS 5... d5 6. cxd5 exd5 7. d4 is undoubtedly a little better for
+White. Black will play ... c7-c5 to neutralize White’s potential pressure along
+the c-file, but then he has a somewhat loose type of Tarrasch Defense. For
+instance, in V.Filippov-V.Korchnoi, Panormo 2001, 7... c5 8. 0-0 ie6 (8... c4,
+which would allow llJe5 followed by f2-f4, is uncomfortable for Black: if the
+second player closes the center, he gives "White a free hand on the kingside) 9.
+llJc3 llJbd7 1O.e3! (preparing ...llJc3-e2-f4) 10.. .gc8 11. llJe2 .ld6 12. dxc5
+llJxc5 13.. 1b2 llJce4 14. llJfd4 gave White the kind of routine advantage that
+we so commonly saw in our chapter on the Tarrasch in Volume I. Perhaps 5... .ib7
+is Black’s best move order, as it avoids the idea for "White that we advocate in
+this game. Then 6. tLlc3 b4 7. tLla4 d6 is fine for Black, just as in the
+previous note, so "White should play 6. 0-0 c5 (6...i.e7 7.. ib2 c5 S.tLlc3
+'lWb6 9. e3 0-0 1O.'lWe2 is the same thing) 7. tLlc3 'lWb6 S.e3 i.e7 9. 'lWe2
+0-0 1O..ib2 and now: a) The pawn sacrifice 10 ... d5!? 11. cxb5 axb5, an idea
+played by Shabalov, should likely be met by 12. tLlxb5 .ia6 13. a4 tLlc6, and
+here ^bite can tryeither 14. d4 gabS l5.dxc5 i.xb5 16. 'lWxb5 'lWxb5 17. axb5
+gxb5 lSJUcl gxb3 19. tLld4! with some chances with the passed c-pawn, or 14.
+gfc1 tLla7 15. М1 gabS 16. tLlfd4! with the idea of tLld4-c2-a3. b) 10... tLle4
+11. tLlxe4 .ixe4 12. d3 .ib7 13. d4 d6 14. dxc5 'lWxc5 (14. ..dxc5 15. gfd1 has
+been played a few times and gives "White some pressure) l5.gfc1 b4 16. a3 bxa3
+17. gxa3 tLld7 lS.'lWd2 'lWc7 19.. ic3 gfcS 20. i.a5 was a little better for
+White in A.Steinman-D.Hauser, corr. 200S. 6. &c3 'lWb6 By far Black’s most
+popular choice, as 6... b4 7. tLla4 i.b7 S.O-O gives "White good chances.
+Putting the knight on a4 makes sense now that Black has committed himself to ...
+c7-c5, since the knight attacks the c5-pawn and the b6 square. S ...i.e7 9. i.b2
+d6 10. d4 cxd4 (10... tLlbd7 11. dxc5 tLlxc5 12. tLlxc5 dxc5 13. 'lWxdS+ gxdS
+14. gfd1 0-0 l5.tLle5 was uncomfortable for Black in ASlinger- M.Di Marino,
+corr. 200S, since c5 is a permanent problem for the second player) 11. 'lWxd4
+tLlbd7, and here 12. gfd1 0-0 13. ll;l[f4 was Wojtkiewicz-Z.Ksi§ski, Wurzburg
+1996, but Black was fine after 13 ...ll;l[bS, defending d6. So instead "White
+should play 13. a3, trying to gin up more activity on the queenside, for example
+13 ... a5 14. axb4 axb4 l5.ll;l[d2 tLlc5 16. tLlxc5 (better than 16. 'lWxb4
+,.ixf33 17.. 1xf3 gbS) 16... dxc5 17. gxaS haS (or 17.. .'lWxaS lS.ga1 ll;l[cS
+19. tLle5) lS.tLle5 .ixg2 19. 'it>xg2 'lWaS+ 20. f3 gdS 21. ll;l[c2: White has a
+structural advantage here thanks to the pawn configuration. He has a “good”
+bishop against Black’s “bad” one, and he will be able to play ttJe5-d3 at some
+point, targeting cs. If White is- not satisfied with this, however, he could
+also try 13. ttJe1 i.xg2 14. ttJxg2 Vf!c7 l5.ttJe3 Sfd8 16. Vf!f4, as in
+L.Gerzhoy-J.Glud, Heraklio 2002: Here White focused on creating a kingside
+attack by marching his h-pawn up to h6. White’s advantage is less clear than it
+is after 13. a3, but this route is certainly more ambitious. On 6... Vf!a5, we
+recommend that White adopt the same strategy as in the game, with 7. e4. Then
+7... d6 (7... ttJc6 8. e5 ttJg4 9. h3 looks better for White) 8. e5 ttJfd7 9.
+exd6 i.xd61O.Vf!e2 bxc4 11. i.b2!? (11.bxc4, staying flexible, may be more
+accurate) 11... 0-0 12. ttJg5 Sa7 13. bxc4 gave White active play in
+Y.Pelletier-P.NikoliC, Bundesliga l999. 7. e4!? Our recommendation, and White’s
+most aggressive option. 7. 0-0 i.b7 8. e3 i.e7 9. ®e2 ttJe4 10. ttJxe4 i.xe4 11.
+i.b2 0-0 12. d3 i.b7 13. d4, as given in the note to Black’s move 5, was another
+possibility. 7.. . d6 7.. .1.b7 is also feasible, when White has two
+continuations. First, 8. e5 ttJe4 9. 0-0 ttJxc3 (or 9... i.e7 10. Vf!e2 ttJxc3
+11. dxc3 0-0 12. i.g5 with a slight advantage for "White,
+M.Schachinger-ADge-buadze, Liechtenstein 2012) 1O.dxc3 ttJc6 11. Se1 i.e7 12.
+i.g5 gave White a nice space advantage in D.Yevseev-A. Smirnov, St. Petersburg
+2007. And second, 8. Vf!e2 ttJc6 9. 0-0 ttJd41O.ttJxd4 cxd4 11. ttJdl is given
+as a little better for Black by Mikhalchishin in Secrets of Opening Surprises,
+Vol. 5 (New in Chess), though perhaps "White could try 10. Vf!d3 ttJg4 11. cxb5
+ttJxf3+ 12. Vf!xf3 ttJe5 13. ®h5 ttJd3, as in R.Pogorelov-A Stefanova, Salou
+2000. Now 14. Vf!e2 ttJb4 l5.Sb1 would have been a little better for White. In
+general, though, we believe in the maxim, “the simpler the better.” We recommend
+White play 8. e5. 7... ttJc6 8. e5 ttJg4 9. 0-0 i.b7 1O.Se1 was
+A.Kovalyov-NArsenault, Montreal 2010, when after 10 ...i.e7 11. h3 ttJh6 12. d4!
+cxd4 13. ttJe4 the complications greatly favored White: 13... ttJf5 14. g4 ttJh4
+15. ttJxh4 hh4 16. c5 Vf!c7 17. ttJd6+ and "White soon won. 8. 0-0 8. d4! is the
+move we recommend here. Then} 9.d3 {0-0 transposes to the note to "White’s move
+9 while avoiding the possibility of 8... ttJc6. 8... i.b7 We think S...ltJc6, to
+prevent d2-d4, is best.} Be4?! {A good move, but not as ambitious as our
+recommendation. White just tries to hold a slight space advantage in the center
+and on the kingside, where he will soon launch a pawn storm. 9. d4!, our idea,
+is a novelty, and is White’s most aggressive option. Now: a) 9 ... cxd4 10.
+ltJxd4 Yfc7 (10... bxc4?! 11. bxc4 merely opens the b-file for ^White) 11. i.b2
+bxc4 12. Yfe2 ltJbd7 13. §fc1 ltJb6 14. a4 gives ^fuite more than enough
+compensation for the pawn thanks to his huge lead in development. b)} 10.h4
+{1O.ltJxe4 he4 11. 1e1 i.b7 12. d5 e5 13. ltJxe5 dxe5 14. :1xe5+ 'itldS 15.
+i.g5+ 'itlc7 16. a4! (16.i.f4 i.d6 17. Se7+ ltJd7 1S.Yfg4 E:adS 19. E:ae1 with
+hd6+ and Yfxg7 soon to follow is also attractive for White) 16... ltJd7
+(16...i.d6? 17. a5 Yfa7 1S.i.f4! is nearly hopeless for Black) 17. E:e1 i.d6
+1S.a5 Yfa7 19. i.e7 gives ^White strong attacking chances and more than full
+compensation for his piece: Therefore 9. d4! looks strong. 9... &bd7} *
+
+[Event "Reykjavik op"]
+[Site "Reykjavik"]
+[Date "1994.??.??"]
+[Round "8"]
+[White "Wojtkiewicz, Aleksander"]
+[Black "Bronstein, David I"]
+[Result "1-0"]
+[WhiteElo "2560"]
+[BlackElo "2400"]
+[ECO "A04"]
+[Annotator "Wojo's Weapons Vol.3"]
+
+1.Nf3 b5 {This is probably the most challenging move Black can play here. The
+less interesting} 2.e4 Bb7 {a6, we recommend} 3.Bxb5 Bxe4 {g3 a6) offer Black
+decent play. We suggest lines that give White plenty of activity against both of
+these. The other two systems, l...b5!? and the Bogo-Indian, seem less good.
+"White can get an advantage against either of these without the need for
+excessive preparation} 4.d4 Nf6 {a3!?, as played by GMs like Vladimir Kramnik,
+Varuzhan Akobian, and Loek van Wely is objectively best. But the text move is
+good enough for an advantage and is easy to learn, so why not use it?} 5.O-O e6
+{i.xd2f simplyloses time for Black. Now} 6.c4 Bb7 {As the late GM Edmar Mednis
+once pointed out to Dean, 6 ...0-0 is a mistake, since it allows White to
+recapture with the queen on d2 once againafter7.0-0 hd2} 7.Nc3 Be7 {Conclusion:
+Of the systemsforBlackexamined in this chapter, thefirst one (with l...c5 and
+...Wfb6) and the second one (with l.tiJf3 tiJf6} 8.d5 O-O {tiJfl, which Alburt
+et al. believe gives iWhite an advantage against} 9.Ba4 Na6 {This is a more
+interesting try for Black than} 10.a3 Nc5 {b4 ttJh7 was S.Cvetkovic-Z.Nikolic,
+Kladovo 1989, when now ll.ttJel a5 (or ll...fS} 11.Bc2 a5 {e4 a512.lLle1
+lLla613.lLld3 lLld714.f4, when Black is struggling to obtain sufficient
+counterplay. For instance} 12.Be3 exd5 {h4!? ought to take away all of Black’s
+fun. Anyone who disagrees with us on this point might consider} 13.cxd5 g6
+{lLld3 lLla6 lets "White off the hook too easily. After} 14.Re1 Nh5 {h3 (a good
+move, taking the g4 square)} 15.Ne5 Ng7 {lLlg4, as played in
+I.Ibragimov-D.Topolewski, Bad Wildbad 2000. Now after} 16.Bd4 a4 {exf4 was
+necessary to prevent what happens next. Now} 17.Nxa4 d6 {c5!? (17.vgc3, just
+continuing to put pressure on Black, is also good)} 18.Ng4 f5 {J:!fe819.VNxa5
+and Black goes down a pawn} 19.Bxg7 Kxg7 {'8bl. We think that} 20.Qd4+ Bf6 {gael
+f6} 21.Nxf6 Rxf6 {This looks like a desperate attempt by Black to generate
+counterplay. White easily neutralizes his activity} 22.Nc3 Kg8 {®e2, White had
+the simple plan of pawn-storming the kingside. Meanwhile, Black’s knight on c5
+looks nice, but does not really contribute to any overall strategy for Black on
+the queenside} 23.f4 Rf7 {f4 with a big plus for "White} 24.b4 Nd7 {Perhaps
+Black missed this move, or was hoping that White would miss it} 25.Ba4 Nf6
+{!l:xf4 with a good game for "White} 26.Bc6 Rb8 {"White will play ltJc4 and put
+pressure on d6, rendering Black passive. Just about any computer will recommend}
+27.b5 Bxc6 {gbl White is up a piece for the time being} 28.dxc6 d5 {lL'lc6,
+leaving Black down a couple of important pawns, is no improvement over the text}
+29.Rad1 Qd6 {gadl %!ld6} 30.a4 Ra8 31.Re5 Qa3 {lL'lg5?? would have allowed}
+32.Nxd5 Rxa4 33.Nxf6+ Rxf6 {&gl lL'le2+ with a textbook draw by repetition}
+34.Qd8+ Rf8 {A bit bizarre, since} 35.Re8 Qc5+ 36.Kh1 Rb4 37.Rxf8+ Qxf8 {lL'lc5
+is also winning for White} 38.Qxc7 Rxb5 {c5 wraps things up nicely. White is
+still winning after the text, however, and perhaps Wojo was playing quickly to
+make his opponent’s flag fall. Summary: Black can coerce ^White into playing
+against the Bogo-Indian with the move order l.tiJfu tiJf6} 39.h3 Rb8 40.Qd7 Qc5
+{%!ld7 VNcS} 41.c7 Rf8 {c7 gfS} 42.Qd5+ Qxd5 43.Rxd5 Kf7 44.Rd8 {Summary: When
+Black meets l.lLlf3 with 1 ...b5, White can and should take advantage of this
+with} 1-0

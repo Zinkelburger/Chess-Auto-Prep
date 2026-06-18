@@ -1,0 +1,942 @@
+[
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D76] Wojtkiewicz, Aleksander vs Hilton, Jonathan (2005)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "&xd5",
+    "fen": "rnbq1rk1/ppp1ppbp/5np1/3P4/3P4/5PP1/PP2P1BP/RNBQK1NR b KQ - 0 6",
+    "move_number": 6,
+    "turn": "black",
+    "detail": "Ambiguous: ['Qxd5', 'Nxd5'], picked Qxd5",
+    "move_index": 11,
+    "game": "[D76] Wojtkiewicz, Aleksander vs Hilton, Jonathan (2005)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "b",
+    "fen": "rnb2rk1/ppp1ppbp/5np1/3q4/3P4/5PP1/PP2P1BP/RNBQK1NR w KQ - 0 7",
+    "move_number": 7,
+    "turn": "white",
+    "detail": "Inferred piece move for file 'b': Qb3",
+    "move_index": 12,
+    "game": "[D76] Wojtkiewicz, Aleksander vs Hilton, Jonathan (2005)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "lLlc6",
+    "fen": "rnb2rk1/ppp1ppbp/5np1/3q4/3P4/1Q3PP1/PP2P1BP/RNB1K1NR b KQ - 1 7",
+    "move_number": 7,
+    "turn": "black",
+    "detail": "Ambiguous: ['Nc6', 'Qc6'], picked Nc6",
+    "move_index": 13,
+    "game": "[D76] Wojtkiewicz, Aleksander vs Hilton, Jonathan (2005)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "d5",
+    "fen": "r1b2rk1/p1p1ppbp/1pn2np1/3q4/3PP3/1Q3PP1/PP4BP/RNB1K1NR w KQ - 0 9",
+    "move_number": 9,
+    "turn": "white",
+    "detail": "Ambiguous: ['Qxd5', 'exd5'], picked Qxd5",
+    "move_index": 16,
+    "game": "[D76] Wojtkiewicz, Aleksander vs Hilton, Jonathan (2005)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D76] Vaganian, Rafael vs Khalifman, Alexander (1996)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "&xd5",
+    "fen": "rnbq1rk1/ppp1ppbp/5np1/3P4/3P4/5PP1/PP2P1BP/RNBQK1NR b KQ - 0 6",
+    "move_number": 6,
+    "turn": "black",
+    "detail": "Ambiguous: ['Qxd5', 'Nxd5'], picked Qxd5",
+    "move_index": 11,
+    "game": "[D76] Vaganian, Rafael vs Khalifman, Alexander (1996)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "&c6",
+    "fen": "rnb2rk1/ppp1ppbp/5np1/3q4/3P4/2N2PP1/PP2P1BP/R1BQK1NR b KQ - 1 7",
+    "move_number": 7,
+    "turn": "black",
+    "detail": "Ambiguous: ['Nc6', 'Qc6'], picked Nc6",
+    "move_index": 13,
+    "game": "[D76] Vaganian, Rafael vs Khalifman, Alexander (1996)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D76]  vs Pigusov, Evgeny (1993)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "c!bxd5",
+    "fen": "rnbq1rk1/ppp1ppbp/5np1/3P4/3P4/5NP1/PP2PPBP/RNBQK2R b KQ - 0 6",
+    "move_number": 6,
+    "turn": "black",
+    "detail": "Ambiguous: ['Qxd5', 'Nxd5'], picked Qxd5",
+    "move_index": 11,
+    "game": "[D76] Ippolito, Dean vs Nakamura, Hikaru (2003)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "J.g5",
+    "fen": "r1b2rk1/p1p2pbp/1p2pnp1/n2N4/3P4/5NP1/PPQ1PPBP/R1B2RK1 w - - 0 11",
+    "move_number": 11,
+    "turn": "white",
+    "detail": "Ambiguous: ['Ng5', 'Bg5'], picked Ng5",
+    "move_index": 20,
+    "game": "[D76] Ippolito, Dean vs Nakamura, Hikaru (2003)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "ltlxd5",
+    "fen": "rnbq1rk1/ppp1ppbp/5np1/3P4/3P4/5NP1/PP2PPBP/RNBQK2R b KQ - 0 6",
+    "move_number": 6,
+    "turn": "black",
+    "detail": "Ambiguous: ['Qxd5', 'Nxd5'], picked Qxd5",
+    "move_index": 11,
+    "game": "[D76] Ippolito, Dean vs Evdokimov, AJexander (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "ltlc6",
+    "fen": "rnb2rk1/p1p1ppbp/1p3np1/3q4/3P4/2N2NP1/PP2PPBP/R1BQ1RK1 b - - 1 8",
+    "move_number": 8,
+    "turn": "black",
+    "detail": "Ambiguous: ['Nc6', 'Qc6'], picked Nc6",
+    "move_index": 15,
+    "game": "[D76] Ippolito, Dean vs Evdokimov, AJexander (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": ".td7",
+    "fen": "r1b2rk1/p1p1ppbp/1p3np1/n2N4/3P4/5NP1/PPQ1PPBP/R1B2RK1 b - - 2 10",
+    "move_number": 10,
+    "turn": "black",
+    "detail": "Ambiguous: ['Bd7', 'Nd7'], picked Bd7",
+    "move_index": 19,
+    "game": "[D76] Ippolito, Dean vs Evdokimov, AJexander (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "&e1",
+    "fen": "r4rk1/p1pbppbp/1p3np1/n2N4/3P4/5NP1/PPQ1PPBP/R1B2RK1 w - - 3 11",
+    "move_number": 11,
+    "turn": "white",
+    "detail": "Ambiguous: ['Ne1', 'Re1'], picked Ne1",
+    "move_index": 20,
+    "game": "[D76] Ippolito, Dean vs Evdokimov, AJexander (2012)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "a",
+    "fen": "r4rk1/p2bppbp/1pp2np1/n2N4/3P4/6P1/PPQ1PPBP/R1B1NRK1 w - - 0 12",
+    "move_number": 12,
+    "turn": "white",
+    "detail": "Inferred piece move for file 'a': Qa4",
+    "move_index": 22,
+    "game": "[D76] Ippolito, Dean vs Evdokimov, AJexander (2012)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D75] Wojtkiewicz, Aleksander vs Yanayt, Eugene (2004)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D75] Tornashevsky, Evgeny vs Mamedyarov, Shakhriyar (2009)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "&xd5",
+    "fen": "rnbq1rk1/ppp1ppbp/5np1/3P4/3P4/5PP1/PP2P1BP/RNBQK1NR b KQ - 0 6",
+    "move_number": 6,
+    "turn": "black",
+    "detail": "Ambiguous: ['Qxd5', 'Nxd5'], picked Qxd5",
+    "move_index": 11,
+    "game": "[D75]  vs  (1964)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "d",
+    "fen": "rnbqk2r/ppppppbp/5np1/8/2P5/5NP1/PP1PPPBP/RNBQK2R b KQkq - 2 4",
+    "move_number": 4,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'd': Nd5",
+    "move_index": 7,
+    "game": "[D75]  vs  (1990)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D74]  vs Sevic, Davorin (2011)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "&xd5",
+    "fen": "rnbqk2r/ppp1ppbp/5np1/3P4/3P4/5PP1/PP2P2P/RNBQKBNR b KQkq - 0 5",
+    "move_number": 5,
+    "turn": "black",
+    "detail": "Ambiguous: ['Qxd5', 'Nxd5'], picked Qxd5",
+    "move_index": 9,
+    "game": "[D74]  vs Sevic, Davorin (2011)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "d4d5",
+    "fen": "rnbq1rk1/ppppppbp/5np1/8/2P5/5NP1/PP1PPPBP/RNBQK2R w KQ - 3 5",
+    "move_number": 5,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nd4', 'd4'], picked Nd4",
+    "move_index": 8,
+    "game": "[D74] Dvoirys, Semen vs Bemtsen, Peter (2005)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "cxd5",
+    "fen": "rnbq1rk1/ppppppbp/5np1/8/2PN4/6P1/PP1PPPBP/RNBQK2R b KQ - 4 5",
+    "move_number": 5,
+    "turn": "black",
+    "detail": "Ambiguous: ['Nd5', 'd5'], picked Nd5",
+    "move_index": 9,
+    "game": "[D74] Dvoirys, Semen vs Bemtsen, Peter (2005)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D74] Filippov, Valerij vs Odeev, Handszar (2001)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "g",
+    "fen": "rnbqkb1r/pppppp1p/5np1/8/2PP4/8/PP2PPPP/RNBQKBNR w KQkq - 0 3",
+    "move_number": 3,
+    "turn": "white",
+    "detail": "Inferred piece move for file 'g': Bg5",
+    "move_index": 4,
+    "game": "[D78] Ippolito, Dean vs Hilton, Jonathan (2008)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "g",
+    "fen": "rnbqk1nr/ppppppbp/6p1/8/2PP4/5P2/PP2P1PP/RNBQKBNR b KQkq - 0 3",
+    "move_number": 3,
+    "turn": "black",
+    "detail": "Single match for file 'g': g5",
+    "move_index": 5,
+    "game": "[D78] Karpov, Anatoly vs Georgiev, Kiril (1988)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D78] Khalifman, Alexander vs Ruck, Robert (1996)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "Wc8",
+    "fen": "r2q1rk1/pp2ppb1/n1p1bnpp/1Q6/3P4/5NP1/PP2PPBP/RNBR2K1 b - - 3 11",
+    "move_number": 11,
+    "turn": "black",
+    "detail": "Ambiguous: ['Qc8', 'Rc8', 'Bc8'], picked Qc8",
+    "move_index": 21,
+    "game": "[D78]  vs Kurajica, Bojan (1993)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D78] Romanishin, Oleg vs Gulko, Boris (1991)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D78] Wojtkiewicz, Aleksander vs Mohring, Gunther (1988)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "b",
+    "fen": "rnbq1rk1/pp1pppbp/2p2np1/3P4/2P5/5PP1/PP2P1BP/RNBQK1NR b KQ - 0 6",
+    "move_number": 6,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'b': Qb6",
+    "move_index": 11,
+    "game": "[D78] Wojtkiewicz, Aleksander vs Mohring, Gunther (1988)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnb2rk1/pp1pppbp/1qp2np1/3P4/2P5/1Q3PP1/PP2P1BP/RNB1K1NR b KQ - 2 7",
+    "move_number": 7,
+    "turn": "black",
+    "detail": "Single match for file 'f': Qf2+",
+    "move_index": 13,
+    "game": "[D78] Wojtkiewicz, Aleksander vs Mohring, Gunther (1988)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnb2rk1/pp1pppbp/2p2np1/3P4/2P5/1Q3PP1/PP2PqBP/RNB1K1NR w KQ - 3 8",
+    "move_number": 8,
+    "turn": "white",
+    "detail": "Single match for file 'f': Kxf2",
+    "move_index": 14,
+    "game": "[D78] Wojtkiewicz, Aleksander vs Mohring, Gunther (1988)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D78] Tregubov, Pavel vs Bezemer, Arno (2004)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "ltlc3",
+    "fen": "rnb2rk1/pp2ppbp/1qp2np1/3p4/2PP4/1Q3NP1/PP2PPBP/RNB2RK1 w - - 4 8",
+    "move_number": 8,
+    "turn": "white",
+    "detail": "Ambiguous: ['Qc3', 'Nc3'], picked Qc3",
+    "move_index": 14,
+    "game": "[D78] Melkumyan, Hrant vs Zul, Zdenko (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "gd8",
+    "fen": "rnb2rk1/pp2ppbp/1qp2np1/3p4/2PP4/2Q2NP1/PP2PPBP/RNB2RK1 b - - 5 8",
+    "move_number": 8,
+    "turn": "black",
+    "detail": "Ambiguous: ['Rd8', 'Qd8'], picked Rd8",
+    "move_index": 15,
+    "game": "[D78] Melkumyan, Hrant vs Zul, Zdenko (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "l:j'ja6",
+    "fen": "rnbr2k1/pp2ppbp/1qp2np1/6B1/P1pP4/2Q2NP1/1P2PPBP/RN3RK1 b - - 0 10",
+    "move_number": 10,
+    "turn": "black",
+    "detail": "Ambiguous: ['Na6', 'Qa6'], picked Na6",
+    "move_index": 19,
+    "game": "[D78] Melkumyan, Hrant vs Zul, Zdenko (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "l:j'jxd5",
+    "fen": "r1br2k1/pp2ppbp/nqp2np1/3P2B1/P1p5/2Q2NP1/1P2PPBP/RN3RK1 b - - 0 11",
+    "move_number": 11,
+    "turn": "black",
+    "detail": "Ambiguous: ['Rxd5', 'Nxd5'], picked Rxd5",
+    "move_index": 21,
+    "game": "[D78] Melkumyan, Hrant vs Zul, Zdenko (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "i.g4",
+    "fen": "r1b3k1/pp2ppbp/nqp2np1/3r2B1/P1p1P3/2Q2NP1/1P3PBP/RN3RK1 b - - 0 12",
+    "move_number": 12,
+    "turn": "black",
+    "detail": "Ambiguous: ['Bg4', 'Ng4'], picked Bg4",
+    "move_index": 23,
+    "game": "[D78] Melkumyan, Hrant vs Zul, Zdenko (2012)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "r5k1/pp2ppbp/nqp3p1/3r4/P1p1nBb1/2Q2NP1/1P3PBP/RN3RK1 w - - 0 14",
+    "move_number": 14,
+    "turn": "white",
+    "detail": "Single match for file 'f': Qf6",
+    "move_index": 26,
+    "game": "[D78] Melkumyan, Hrant vs Zul, Zdenko (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "e5",
+    "fen": "r5k1/pp2ppbp/nqp2Qp1/3r4/P1p2Bb1/2n2NP1/1P3PBP/RN3RK1 w - - 2 15",
+    "move_number": 15,
+    "turn": "white",
+    "detail": "Ambiguous: ['Qe5', 'Be5', 'Ne5'], picked Qe5",
+    "move_index": 28,
+    "game": "[D78] Melkumyan, Hrant vs Zul, Zdenko (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "f31/;lfb6",
+    "fen": "rnbq1rk1/pp2ppbp/2p2np1/3p4/2PP4/1QN3P1/PP2PPBP/R1B1K1NR w KQ - 4 7",
+    "move_number": 7,
+    "turn": "white",
+    "detail": "Ambiguous: ['Bf3', 'Nf3', 'f3'], picked Bf3",
+    "move_index": 12,
+    "game": "[D73] Ivanchuk, Vassily vs Leko, Peter (1995)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "c",
+    "fen": "rn1q1rk1/pp2ppbp/2p2np1/3p4/2PP4/1QN2BPb/PP2PP1P/R1B1K1NR w KQ - 6 8",
+    "move_number": 8,
+    "turn": "white",
+    "detail": "Inferred piece move for file 'c': Qc2",
+    "move_index": 14,
+    "game": "[D73] Ivanchuk, Vassily vs Leko, Peter (1995)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "c",
+    "fen": "rn1q1rk1/pp2ppbp/2p1bnp1/3p4/2PP4/2N2BP1/PPQ1PP1P/R1B1K1NR w KQ - 8 9",
+    "move_number": 9,
+    "turn": "white",
+    "detail": "Single match for file 'c': c5",
+    "move_index": 16,
+    "game": "[D73] Ivanchuk, Vassily vs Leko, Peter (1995)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rn1q1rk1/pp2ppbp/2p1bnp1/2Pp4/3P4/2N2BP1/PPQ1PP1P/R1B1K1NR b KQ - 0 9",
+    "move_number": 9,
+    "turn": "black",
+    "detail": "Single match for file 'f': Bf5",
+    "move_index": 17,
+    "game": "[D73] Ivanchuk, Vassily vs Leko, Peter (1995)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[D73]  vs Wojtkiewicz, Aleksander (1999)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "tOxd4",
+    "fen": "rnbqkb1r/pp1ppp1p/5np1/8/2Pp4/2N2N2/PP2PPPP/R1BQKB1R w KQkq - 0 5",
+    "move_number": 5,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nxd4', 'Qxd4'], picked Nxd4",
+    "move_index": 8,
+    "game": "[B38] Wojtkiewicz, Aleksander vs Boudreaux, Floyd (2005)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "YlYd2",
+    "fen": "r1bq1rk1/pp2ppbp/2np1np1/8/2PNP3/2N1BP2/PP4PP/R2QKB1R w KQ - 1 9",
+    "move_number": 9,
+    "turn": "white",
+    "detail": "Ambiguous: ['Bd2', 'Kd2', 'Qd2'], picked Bd2",
+    "move_index": 16,
+    "game": "[B38] Wojtkiewicz, Aleksander vs Boudreaux, Floyd (2005)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "c!l)xd4",
+    "fen": "r1bqkbnr/pp1ppppp/2n5/8/2Pp4/5N2/PP2PPPP/RNBQKB1R w KQkq - 0 4",
+    "move_number": 4,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nxd4', 'Qxd4'], picked Nxd4",
+    "move_index": 6,
+    "game": "[B39] Wojtkiewicz, Aleksander vs Whaley, Davis (2006)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "c!l)f6",
+    "fen": "r1bqk1nr/pp1pppbp/2n3p1/8/2PNP3/4B3/PP3PPP/RN1QKB1R b KQkq - 2 6",
+    "move_number": 6,
+    "turn": "black",
+    "detail": "Ambiguous: ['Nf6', 'Bf6'], picked Nf6",
+    "move_index": 11,
+    "game": "[B39] Wojtkiewicz, Aleksander vs Whaley, Davis (2006)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "d6",
+    "fen": "r1bq1rk1/pp1pppbp/2n3p1/1N6/2P1P1Q1/4B3/PP3PPP/2KR1B1R w - - 4 11",
+    "move_number": 11,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nd6', 'Rd6'], picked Nd6",
+    "move_index": 20,
+    "game": "[B39] Wojtkiewicz, Aleksander vs Whaley, Davis (2006)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "'!d3",
+    "fen": "r1bq1rk1/pp1p1pbp/2nNp1p1/8/2P1P1Q1/4B3/PP3PPP/2KR1B1R w - - 0 12",
+    "move_number": 12,
+    "turn": "white",
+    "detail": "Ambiguous: ['Bd3', 'Rd3'], picked Bd3",
+    "move_index": 22,
+    "game": "[B39] Wojtkiewicz, Aleksander vs Whaley, Davis (2006)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "c",
+    "fen": "rnbqkb1r/pp1ppp1p/5np1/2p5/2P1P3/2N5/PP1P1PPP/R1BQKBNR w KQkq - 0 4",
+    "move_number": 4,
+    "turn": "white",
+    "detail": "Single match for file 'c': Qc2",
+    "move_index": 6,
+    "game": "[B36] Vitiugov, Nikita vs Sedlak, Nikola (2012)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "d",
+    "fen": "rnbqkb1r/pp1ppp1p/5np1/2p5/2P1P3/2N5/PPQP1PPP/R1B1KBNR b KQkq - 1 4",
+    "move_number": 4,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'd': Nd5",
+    "move_index": 7,
+    "game": "[B36] Vitiugov, Nikita vs Sedlak, Nikola (2012)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "tLlf3",
+    "fen": "rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+    "move_number": 2,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nf3', 'Qf3'], picked Nf3",
+    "move_index": 2,
+    "game": "[B36] Goloshchapov, AJexander vs Wirig, Anthony (2004)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "tLlxd4",
+    "fen": "r1bqkbnr/pp1ppppp/2n5/8/3pP3/5N2/PPP2PPP/RNBQKB1R w KQkq - 0 4",
+    "move_number": 4,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nxd4', 'Qxd4'], picked Nxd4",
+    "move_index": 6,
+    "game": "[B36] Goloshchapov, AJexander vs Wirig, Anthony (2004)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "J.e2",
+    "fen": "r1bqkb1r/pp2pp1p/2np1np1/8/2PNP3/2N5/PP3PPP/R1BQKB1R w KQkq - 0 7",
+    "move_number": 7,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nde2', 'Nce2', 'Be2', 'Ke2', 'Qe2'], picked Nde2",
+    "move_index": 12,
+    "game": "[B36] Goloshchapov, AJexander vs Wirig, Anthony (2004)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "\u00aexd4",
+    "fen": "r1bqkb1r/pp2pp1p/3p1np1/8/2PnP3/2N5/PP2NPPP/R1BQKB1R w KQkq - 2 8",
+    "move_number": 8,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nxd4', 'Qxd4'], picked Nxd4",
+    "move_index": 14,
+    "game": "[B36] Goloshchapov, AJexander vs Wirig, Anthony (2004)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "\u00aed2",
+    "fen": "r1bq1rk1/pp2ppbp/3p1np1/8/2PNP3/2N1B3/PP3PPP/R2QKB1R w KQ - 3 10",
+    "move_number": 10,
+    "turn": "white",
+    "detail": "Ambiguous: ['Bd2', 'Kd2', 'Qd2'], picked Bd2",
+    "move_index": 18,
+    "game": "[B36] Goloshchapov, AJexander vs Wirig, Anthony (2004)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "i.e2",
+    "fen": "r2q1rk1/pp2ppbp/3pbnp1/8/2PNP3/2N5/PP1B1PPP/R2QKB1R w KQ - 5 11",
+    "move_number": 11,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nde2', 'Nce2', 'Be2', 'Ke2', 'Qe2'], picked Nde2",
+    "move_index": 20,
+    "game": "[B36] Goloshchapov, AJexander vs Wirig, Anthony (2004)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "c!Llxd4",
+    "fen": "rnbq1rk1/pp1pppbp/5np1/8/2Pp4/5NP1/PP2PPBP/RNBQ1RK1 w - - 0 7",
+    "move_number": 7,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nxd4', 'Qxd4'], picked Nxd4",
+    "move_index": 12,
+    "game": "[A39]  vs Wojtkiewicz, Aleksander (1996)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "ttJb3",
+    "fen": "r1b2rk1/1pqpppbp/p1n2np1/2P5/3N4/2N3P1/PP2PPBP/R1BQ1RK1 w - - 1 10",
+    "move_number": 10,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nb3', 'Qb3'], picked Nb3",
+    "move_index": 18,
+    "game": "[A39]  vs Wojtkiewicz, Aleksander (1996)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "tOe7",
+    "fen": "rnbqk1nr/pp1p1pbp/4p1p1/2p5/2PP4/5NP1/PP2PPBP/RNBQK2R b KQkq - 0 5",
+    "move_number": 5,
+    "turn": "black",
+    "detail": "Ambiguous: ['Ne7', 'Ke7', 'Qe7'], picked Ne7",
+    "move_index": 9,
+    "game": "[A30] Hilton, Jonathan vs Hanken, Jerome (2006)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "tOxd4",
+    "fen": "rnbqk2r/pp1pnpbp/4p1p1/8/2Pp4/5NP1/PP2PPBP/RNBQ1RK1 w kq - 0 7",
+    "move_number": 7,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nxd4', 'Qxd4'], picked Nxd4",
+    "move_index": 12,
+    "game": "[A30] Hilton, Jonathan vs Hanken, Jerome (2006)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "tt'lb3",
+    "fen": "rnbq1rk1/1p1pnpbp/p3p1p1/2P5/3N4/6P1/PP2PPBP/RNBQ1RK1 w - - 0 9",
+    "move_number": 9,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nb3', 'Qb3'], picked Nb3",
+    "move_index": 16,
+    "game": "[A30] Hilton, Jonathan vs Hanken, Jerome (2006)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[A39] Hilton, Jonathan vs Les, Whorton (2007)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "c",
+    "fen": "rnbqk2r/ppppppbp/5np1/8/2P5/5PP1/PP1PP1BP/RNBQK1NR b KQkq - 2 4",
+    "move_number": 4,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'c': Nc6",
+    "move_index": 7,
+    "game": "[A39] Hilton, Jonathan vs Les, Whorton (2007)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "c",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "move_number": 1,
+    "turn": "white",
+    "detail": "Inferred piece move for file 'c': Nc3",
+    "move_index": 0,
+    "game": "[A39] Hilton, Jonathan vs Dennis, Robert (2008)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "h",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/R1BQKBNR b KQkq - 1 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'h': Nh6",
+    "move_index": 1,
+    "game": "[A39] Hilton, Jonathan vs Dennis, Robert (2008)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "&xd4",
+    "fen": "r1bqkbnr/pp1ppppp/2n5/8/2Pp4/5N2/PP2PPPP/RNBQKB1R w KQkq - 0 4",
+    "move_number": 4,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nxd4', 'Qxd4'], picked Nxd4",
+    "move_index": 6,
+    "game": "[A33] Wojtkiewicz, Aleksander vs Shahade, Gregory (2002)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": ".tb4",
+    "fen": "r1bqkb1r/pp1p1ppp/2n1pn2/1N6/2P5/2N5/PP2PPPP/R1BQKB1R b KQkq - 1 6",
+    "move_number": 6,
+    "turn": "black",
+    "detail": "Ambiguous: ['Bb4', 'Nb4'], picked Bb4",
+    "move_index": 11,
+    "game": "[A33] Wojtkiewicz, Aleksander vs Shahade, Gregory (2002)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "&d6+",
+    "fen": "r1bqk2r/pp1p1ppp/2n1pn2/1N6/1bP5/2N5/PP2PPPP/R1BQKB1R w KQkq - 2 7",
+    "move_number": 7,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nd6+', 'Qd6'], picked Nd6+",
+    "move_index": 12,
+    "game": "[A33] Wojtkiewicz, Aleksander vs Shahade, Gregory (2002)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "\u00aee7",
+    "fen": "r1bqk2r/pp1p1ppp/2nQpn2/8/2P5/2N5/PP2PPPP/R1B1KB1R b KQkq - 0 8",
+    "move_number": 8,
+    "turn": "black",
+    "detail": "Ambiguous: ['Qe7', 'Ne7'], picked Qe7",
+    "move_index": 15,
+    "game": "[A33] Wojtkiewicz, Aleksander vs Shahade, Gregory (2002)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "1O.\u00aed2",
+    "fen": "r1b1k2r/pp1pqppp/2nQpn2/8/2P5/2N5/PP2PPPP/R1B1KB1R w KQkq - 1 9",
+    "move_number": 9,
+    "turn": "white",
+    "detail": "Ambiguous: ['Kd2', 'Bd2'], picked Kd2",
+    "move_index": 16,
+    "game": "[A33] Wojtkiewicz, Aleksander vs Shahade, Gregory (2002)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "tL'lxd4",
+    "fen": "r1bqkbnr/pp1ppppp/2n5/8/2Pp4/5N2/PP2PPPP/RNBQKB1R w KQkq - 0 4",
+    "move_number": 4,
+    "turn": "white",
+    "detail": "Ambiguous: ['Nxd4', 'Qxd4'], picked Nxd4",
+    "move_index": 6,
+    "game": "[A33] Miton, Kamil vs Bocharov, Dmitry (2007)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "tL'lf6",
+    "fen": "r1bqkbnr/pp1p1ppp/2n1p3/8/2PN4/2N5/PP2PPPP/R1BQKB1R b KQkq - 1 5",
+    "move_number": 5,
+    "turn": "black",
+    "detail": "Ambiguous: ['Nf6', 'Qf6'], picked Nf6",
+    "move_index": 9,
+    "game": "[A33] Miton, Kamil vs Bocharov, Dmitry (2007)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[A30] Hilton, Jonathan vs Michaelides, Matthew (2009)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[A30] Hilton, Jonathan vs Sadvakasov, Darmen (2007)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pp1ppppp/8/2p5/2P5/5P2/PP1PP1PP/RNBQKBNR b KQkq - 0 2",
+    "move_number": 2,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 3,
+    "game": "[A34] Pigusov, Evgeny vs Yudasin, Leonid (1990)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[A87] Wojtkiewicz, Aleksander vs Santos Izquierdo, Francisco Javier (2004)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "g",
+    "fen": "rnbqkbnr/pppp1ppp/4p3/8/3P4/5N2/PPP1PPPP/RNBQKB1R b KQkq - 1 2",
+    "move_number": 2,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'g': Qg5",
+    "move_index": 3,
+    "game": "[A94]  vs  (1956)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "ttJf6",
+    "fen": "rnb1kbnr/pppp1ppp/4p3/6q1/3P4/5NP1/PPP1PP1P/RNBQKB1R b KQkq - 0 3",
+    "move_number": 3,
+    "turn": "black",
+    "detail": "Ambiguous: ['Nf6', 'Qf6'], picked Nf6",
+    "move_index": 5,
+    "game": "[A94]  vs  (1956)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": ".td6",
+    "fen": "rnbqkbnr/pp3ppp/2p1p3/3p4/2PP4/5NP1/PP2PP1P/RNBQKB1R b KQkq - 0 4",
+    "move_number": 4,
+    "turn": "black",
+    "detail": "Ambiguous: ['Bd6', 'Qd6'], picked Bd6",
+    "move_index": 7,
+    "game": "[A90]  vs Miton, Kamil (2007)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "lLlf6",
+    "fen": "rnbqk1nr/pp3ppp/2pbp3/3p4/2PP4/5NP1/PP2PPBP/RNBQK2R b KQkq - 2 5",
+    "move_number": 5,
+    "turn": "black",
+    "detail": "Ambiguous: ['Nf6', 'Qf6'], picked Nf6",
+    "move_index": 9,
+    "game": "[A90]  vs Miton, Kamil (2007)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "1J.e7",
+    "fen": "rnbqk2r/pp3ppp/2pbpn2/3p4/2PP4/5NP1/PP2PPBP/RNBQ1RK1 b kq - 4 6",
+    "move_number": 6,
+    "turn": "black",
+    "detail": "Ambiguous: ['Ke7', 'Qe7', 'Be7'], picked Ke7",
+    "move_index": 11,
+    "game": "[A90]  vs Miton, Kamil (2007)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "g",
+    "fen": "rnbqkbnr/pppp1ppp/4p3/8/2PP4/8/PP2PPPP/RNBQKBNR b KQkq - 0 2",
+    "move_number": 2,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'g': Qg5",
+    "move_index": 3,
+    "game": "[A90] Salem, Saleh vs Gleizerov, Evgeny (2011)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "g",
+    "fen": "rnbqkbnr/pppp1ppp/4p3/8/2P5/5N2/PP1PPPPP/RNBQKB1R b KQkq - 0 2",
+    "move_number": 2,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'g': Qg5",
+    "move_index": 3,
+    "game": "[A84] Spyrou, Emanuel vs Limbourg, Philipp (2007)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "g",
+    "fen": "rnbqkbnr/pppp1ppp/4p3/8/3P4/5N2/PPP1PPPP/RNBQKB1R b KQkq - 1 2",
+    "move_number": 2,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'g': Qg5",
+    "move_index": 3,
+    "game": "[A99] Miles, Anthony vs Roos, Louis (1981)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "f",
+    "fen": "rnbqkbnr/pppppppp/8/8/8/5P2/PPPPP1PP/RNBQKBNR b KQkq - 0 1",
+    "move_number": 1,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'f': Nf6",
+    "move_index": 1,
+    "game": "[A55]  vs Wojtkiewicz, Aleksander (1989)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "Ae7",
+    "fen": "r1bqkb1r/pppn1ppp/3p1n2/4p3/2PPP3/2N2P2/PP4PP/R1BQKBNR b KQkq - 0 5",
+    "move_number": 5,
+    "turn": "black",
+    "detail": "Ambiguous: ['Be7', 'Ke7', 'Qe7'], picked Be7",
+    "move_index": 9,
+    "game": "[A55]  vs Wojtkiewicz, Aleksander (1989)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "ttJd7",
+    "fen": "rn1qkbnr/ppp1pppp/3p4/8/2PP2b1/5N2/PP2PPPP/RNBQKB1R b KQkq - 0 3",
+    "move_number": 3,
+    "turn": "black",
+    "detail": "Ambiguous: ['Kd7', 'Qd7', 'Nd7', 'Bd7'], picked Kd7",
+    "move_index": 5,
+    "game": "[A41]  vs Mirschinka, Dirk (1998)"
+  },
+  {
+    "kind": "inferred_incomplete",
+    "token": "b",
+    "fen": "rn1qkb1r/1b1p1ppp/p3pn2/1pp1N3/2P5/1P2N1P1/P2PPP1P/R1BQKB1R b KQkq - 1 8",
+    "move_number": 8,
+    "turn": "black",
+    "detail": "Inferred piece move for file 'b': Qb6",
+    "move_index": 15,
+    "game": "[A13] Arnason, Jon L. vs Angelis, Mihail (1993)"
+  },
+  {
+    "kind": "ambiguous",
+    "token": "ltJxe4",
+    "fen": "rn2kb1r/1b1p1ppp/pq2pn2/1pp1N3/2P5/1P1PN1P1/P3PP1P/R1BQKB1R b KQkq - 0 9",
+    "move_number": 9,
+    "turn": "black",
+    "detail": "Ambiguous: ['Be4', 'Ne4'], picked Be4",
+    "move_index": 17,
+    "game": "[A13] Arnason, Jon L. vs Angelis, Mihail (1993)"
+  }
+]
