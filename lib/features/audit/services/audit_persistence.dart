@@ -152,7 +152,9 @@ class AuditPersistence {
       if (existing != null && config == null) {
         effectiveConfig = existing.config;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
 
     final snapshot = AuditSnapshot(
       result: result,

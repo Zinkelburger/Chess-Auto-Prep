@@ -49,6 +49,11 @@ class AuditConfig {
   /// Number of MultiPV lines for Stockfish discovery.
   final int multiPv;
 
+  /// PGN file paths for repertoire-clash checking (books, courses, etc.).
+  /// When non-empty the audit walks a merged opening tree built from these
+  /// files and flags opponent moves the repertoire doesn't cover.
+  final List<String> clashPgnPaths;
+
   const AuditConfig({
     this.mistakeThresholdCp = 100,
     this.inaccuracyThresholdCp = 40,
@@ -65,6 +70,7 @@ class AuditConfig {
     this.explorerSpeeds = 'blitz,rapid,classical',
     this.explorerRatings = '1800,2000,2200,2500',
     this.multiPv = 3,
+    this.clashPgnPaths = const [],
   });
 
   Map<String, dynamic> toMap() => {
@@ -83,6 +89,7 @@ class AuditConfig {
         'explorerSpeeds': explorerSpeeds,
         'explorerRatings': explorerRatings,
         'multiPv': multiPv,
+        if (clashPgnPaths.isNotEmpty) 'clashPgnPaths': clashPgnPaths,
       };
 
   factory AuditConfig.fromMap(Map<String, dynamic> m) => AuditConfig(
@@ -103,6 +110,7 @@ class AuditConfig {
         explorerRatings:
             m['explorerRatings'] as String? ?? '1800,2000,2200,2500',
         multiPv: m['multiPv'] as int? ?? 3,
+        clashPgnPaths: (m['clashPgnPaths'] as List?)?.cast<String>() ?? const [],
       );
 
   /// Compact one-line summary for display in Jobs tab.
@@ -111,6 +119,7 @@ class AuditConfig {
       if (useStockfish) 'SF d$evalDepth',
       if (useLichessDb) 'Lichess',
       if (useMaia) 'Maia $maiaElo',
+      if (clashPgnPaths.isNotEmpty) 'Clashes (${clashPgnPaths.length})',
     ];
     return '${sources.join(' + ')} · ${maxPly}ply · mistake≥${mistakeThresholdCp}cp';
   }
@@ -131,6 +140,7 @@ class AuditConfig {
     String? explorerSpeeds,
     String? explorerRatings,
     int? multiPv,
+    List<String>? clashPgnPaths,
   }) {
     return AuditConfig(
       mistakeThresholdCp: mistakeThresholdCp ?? this.mistakeThresholdCp,
@@ -151,6 +161,7 @@ class AuditConfig {
       explorerSpeeds: explorerSpeeds ?? this.explorerSpeeds,
       explorerRatings: explorerRatings ?? this.explorerRatings,
       multiPv: multiPv ?? this.multiPv,
+      clashPgnPaths: clashPgnPaths ?? this.clashPgnPaths,
     );
   }
 }

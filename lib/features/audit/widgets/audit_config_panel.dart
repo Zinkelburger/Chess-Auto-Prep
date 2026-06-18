@@ -4,7 +4,9 @@
 /// back to the screen via callbacks.
 library;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/engine_lifecycle.dart';
@@ -70,6 +72,9 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
   final bool _useLichessDb = false;
   bool _auditSubtreeOnly = false;
 
+  /// PGN file paths for repertoire-clash checking.
+  final List<String> _clashPgnPaths = [];
+
   bool _isAuditing = false;
   AuditProgress? _progress;
   int _liveFindingCount = 0;
@@ -114,7 +119,28 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       useStockfish: true,
       useLichessDb: _useLichessDb,
       useMaia: true,
+      clashPgnPaths: List.unmodifiable(_clashPgnPaths),
     );
+  }
+
+  Future<void> _addClashPgns() async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pgn', 'txt'],
+      allowMultiple: true,
+      withData: false,
+      withReadStream: false,
+    );
+    if (result == null || result.files.isEmpty) return;
+    if (!mounted) return;
+    setState(() {
+      for (final file in result.files) {
+        final filePath = file.path;
+        if (filePath != null && !_clashPgnPaths.contains(filePath)) {
+          _clashPgnPaths.add(filePath);
+        }
+      }
+    });
   }
 
   Future<void> _startAudit() async {
@@ -263,6 +289,61 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
               ],
             ),
           ],
+          const SizedBox(height: 10),
+
+          // Repertoire Clashes
+          Row(
+            children: [
+              Icon(Icons.menu_book_outlined,
+                  size: 14, color: Colors.grey[500]),
+              const SizedBox(width: 6),
+              Text('Repertoire Clashes',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+              const Spacer(),
+              SizedBox(
+                height: 26,
+                child: TextButton.icon(
+                  onPressed: _isAuditing ? null : _addClashPgns,
+                  icon: const Icon(Icons.add, size: 14),
+                  label:
+                      const Text('Add PGN', style: TextStyle(fontSize: 11)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_clashPgnPaths.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (int i = 0; i < _clashPgnPaths.length; i++)
+                  InputChip(
+                    label: Text(
+                      p.basenameWithoutExtension(_clashPgnPaths[i]),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: _isAuditing
+                        ? null
+                        : () => setState(() => _clashPgnPaths.removeAt(i)),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                  ),
+              ],
+            ),
+          ] else
+            Padding(
+              padding: const EdgeInsets.only(left: 20),
+              child: Text('Check against book & course lines',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+            ),
           const SizedBox(height: 10),
 
           // Start / Cancel + progress
