@@ -5,6 +5,7 @@ import '../../models/repertoire_metadata.dart';
 import '../pgn_parsing_service.dart' as pgn;
 import 'app_paths.dart';
 import 'storage_service.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 StorageService getStorageService() => IOStorageService();
 
@@ -61,7 +62,7 @@ class IOStorageService implements StorageService {
       final file = await _resolveFile(path);
       if (await file.exists()) return await readTextFile(file);
     } catch (e, st) {
-      print('Error reading file $path: $e\n$st');
+      log.e('Error reading file $path: $e\n$st');
     }
     return null;
   }
@@ -76,7 +77,7 @@ class IOStorageService implements StorageService {
     try {
       return await (await _resolveFile(path)).exists();
     } catch (e) {
-      print('Error checking file $path: $e');
+      log.e('Error checking file $path: $e');
       return false;
     }
   }
@@ -87,7 +88,7 @@ class IOStorageService implements StorageService {
       final file = await _resolveFile(path);
       if (await file.exists()) await file.delete();
     } catch (e) {
-      print('Error deleting file $path: $e');
+      log.e('Error deleting file $path: $e');
     }
   }
 
@@ -147,7 +148,7 @@ class IOStorageService implements StorageService {
         return await file.readAsString();
       }
     } catch (e) {
-      print('Error reading tactics CSV: $e');
+      log.e('Error reading tactics CSV: $e');
     }
     return null;
   }
@@ -158,7 +159,7 @@ class IOStorageService implements StorageService {
       final file = await _getFile(_tacticsCsvFileName);
       await _writeAtomically(file, csvContent);
     } catch (e) {
-      print('Error saving tactics CSV: $e');
+      log.e('Error saving tactics CSV: $e');
     }
   }
 
@@ -171,7 +172,7 @@ class IOStorageService implements StorageService {
         return content.split('\n').where((id) => id.trim().isNotEmpty).toList();
       }
     } catch (e) {
-      print('Error reading analyzed game IDs: $e');
+      log.e('Error reading analyzed game IDs: $e');
     }
     return [];
   }
@@ -182,7 +183,7 @@ class IOStorageService implements StorageService {
       final file = await _getFile(_analyzedGamesFileName);
       await _writeAtomically(file, ids.join('\n'));
     } catch (e) {
-      print('Error saving analyzed game IDs: $e');
+      log.e('Error saving analyzed game IDs: $e');
     }
   }
 
@@ -194,7 +195,7 @@ class IOStorageService implements StorageService {
         return await readTextFile(file);
       }
     } catch (e) {
-      print('Error reading imported PGNs: $e');
+      log.e('Error reading imported PGNs: $e');
     }
     return null;
   }
@@ -205,7 +206,7 @@ class IOStorageService implements StorageService {
       final file = await _getFile(_importedGamesFileName);
       await _writeAtomically(file, pgnContent);
     } catch (e) {
-      print('Error saving imported PGNs: $e');
+      log.e('Error saving imported PGNs: $e');
     }
   }
 
@@ -223,7 +224,7 @@ class IOStorageService implements StorageService {
         return await readTextFile(file);
       }
     } catch (e) {
-      print('Error reading repertoire PGN: $e');
+      log.e('Error reading repertoire PGN: $e');
     }
     return null;
   }
@@ -234,7 +235,7 @@ class IOStorageService implements StorageService {
       final file = await _getFile(filename);
       await _writeAtomically(file, content);
     } catch (e) {
-      print('Error saving repertoire PGN: $e');
+      log.e('Error saving repertoire PGN: $e');
     }
   }
 
@@ -246,7 +247,7 @@ class IOStorageService implements StorageService {
         return await file.readAsString();
       }
     } catch (e) {
-      print('Error reading repertoire reviews CSV: $e');
+      log.e('Error reading repertoire reviews CSV: $e');
     }
     return null;
   }
@@ -257,7 +258,7 @@ class IOStorageService implements StorageService {
       final file = await _getFile(_repertoireReviewsFileName);
       await _writeAtomically(file, csvContent);
     } catch (e) {
-      print('Error saving repertoire reviews CSV: $e');
+      log.e('Error saving repertoire reviews CSV: $e');
     }
   }
 
@@ -269,7 +270,7 @@ class IOStorageService implements StorageService {
         return await file.readAsString();
       }
     } catch (e) {
-      print('Error reading repertoire review history CSV: $e');
+      log.e('Error reading repertoire review history CSV: $e');
     }
     return null;
   }
@@ -280,7 +281,7 @@ class IOStorageService implements StorageService {
       final file = await _getFile(_repertoireReviewHistoryFileName);
       await _writeAtomically(file, csvContent);
     } catch (e) {
-      print('Error saving repertoire review history CSV: $e');
+      log.e('Error saving repertoire review history CSV: $e');
     }
   }
 
@@ -292,7 +293,7 @@ class IOStorageService implements StorageService {
         return await file.readAsString();
       }
     } catch (e) {
-      print('Error reading repertoire move progress CSV: $e');
+      log.e('Error reading repertoire move progress CSV: $e');
     }
     return null;
   }
@@ -303,7 +304,7 @@ class IOStorageService implements StorageService {
       final file = await _getFile(_repertoireMoveProgressFileName);
       await _writeAtomically(file, csvContent);
     } catch (e) {
-      print('Error saving repertoire move progress CSV: $e');
+      log.e('Error saving repertoire move progress CSV: $e');
     }
   }
 }

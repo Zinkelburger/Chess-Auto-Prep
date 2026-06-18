@@ -16,6 +16,7 @@ import 'tactics_database.dart';
 import 'pgn_parsing_service.dart';
 import 'storage/storage_factory.dart';
 import '../utils/chesscom_lichess_elo.dart';
+import '../utils/log.dart';
 import 'tactics_parallel_analyzer_stub.dart'
     if (dart.library.io) 'tactics_parallel_analyzer.dart' as parallel;
 
@@ -167,7 +168,7 @@ class TacticsImportService {
           allGames.addAll(games);
         }
       } catch (e) {
-        if (kDebugMode) print('Error fetching Chess.com games: $e');
+        if (kDebugMode) log.e('Error fetching Chess.com games: $e');
       }
     }
 
@@ -219,9 +220,10 @@ class TacticsImportService {
       }).toList();
 
       if (newGames.isEmpty) {
-        if (kDebugMode)
-          print(
+        if (kDebugMode) {
+          log.i(
               'All ${games.length} PGNs already in storage, nothing to append');
+        }
         return;
       }
 
@@ -231,12 +233,12 @@ class TacticsImportService {
       await StorageFactory.instance.saveImportedPgns(newContent);
 
       if (kDebugMode) {
-        print(
+        log.w(
             'Appended ${newGames.length} new PGNs to storage (${games.length - newGames.length} duplicates skipped)');
       }
     } catch (e) {
       if (kDebugMode) {
-        print('Error saving PGNs: $e');
+        log.e('Error saving PGNs: $e');
       }
     }
   }
@@ -287,7 +289,7 @@ class TacticsImportService {
 
     // No recognizable game ID found
     if (kDebugMode) {
-      print('Warning: could not extract game ID from PGN headers');
+      log.w('Warning: could not extract game ID from PGN headers');
     }
     return '';
   }
@@ -379,7 +381,7 @@ class TacticsImportService {
       final gameId = _extractGameId(games[i]);
       if (skipAnalyzedGames && _database.isGameAnalyzed(gameId)) {
         skippedCount++;
-        if (kDebugMode) print('Skipping already-analyzed game: $gameId');
+        if (kDebugMode) log.w('Skipping already-analyzed game: $gameId');
         progressCallback?.call(
           'Skipping game ${i + 1}/${games.length} (already analyzed)...',
         );
@@ -408,7 +410,7 @@ class TacticsImportService {
         try {
           await maia.initialize();
         } catch (e) {
-          if (kDebugMode) print('Maia init failed, falling back: $e');
+          if (kDebugMode) log.e('Maia init failed, falling back: $e');
           maia = null;
         }
       }
@@ -421,7 +423,7 @@ class TacticsImportService {
               : userElo;
           maiaElo = lichessElo.clamp(kMinMaiaElo, kMaxMaiaElo);
         }
-        if (kDebugMode) print('Maia line extension enabled (Elo=$maiaElo)');
+        if (kDebugMode) log.d('Maia line extension enabled (Elo=$maiaElo)');
       }
     }
 
@@ -492,7 +494,7 @@ class TacticsImportService {
               totalPositionsFound += positions.length;
             } catch (e) {
               if (_cancelled) break;
-              if (kDebugMode) print('Error analyzing game $gameId: $e');
+              if (kDebugMode) log.e('Error analyzing game $gameId: $e');
             }
 
             completedGames++;

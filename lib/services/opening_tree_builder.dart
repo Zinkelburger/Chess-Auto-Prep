@@ -3,6 +3,7 @@ import 'dart:isolate';
 
 import 'package:dartchess/dartchess.dart';
 import '../models/opening_tree.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 class OpeningTreeBuilder {
   /// Common player name patterns used in repertoire files
@@ -159,7 +160,7 @@ class OpeningTreeBuilder {
 
     if (skipped > 0) {
       // ignore: avoid_print
-      print(
+      log.w(
           '[OpeningTreeBuilder] Skipped $skipped malformed games out of $total');
     }
 

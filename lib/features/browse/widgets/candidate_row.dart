@@ -195,7 +195,7 @@ class _TrapBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.bolt, size: 10, color: AppColors.warning),
+          const Icon(Icons.bolt, size: 10, color: AppColors.warning),
           Text('$count',
               style: const TextStyle(fontSize: 10, color: AppColors.warning)),
           if (onExpandTraps != null) ...[
@@ -242,7 +242,7 @@ class _CoherenceChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.hub, size: 10, color: AppColors.maia),
+            const Icon(Icons.hub, size: 10, color: AppColors.maia),
             const SizedBox(width: 2),
             Text(
               label,

@@ -166,7 +166,7 @@ class _EditContextLayoutSheetState extends State<_EditContextLayoutSheet> {
                             ),
                         PopupMenuItem(
                           value: _layout.columns.length,
-                          child: Text('New column'),
+                          child: const Text('New column'),
                         ),
                       ],
                       onSelected: (targetCol) => _apply(

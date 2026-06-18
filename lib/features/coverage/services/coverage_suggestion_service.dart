@@ -164,9 +164,7 @@ class CoverageSuggestionService {
     if (gap.fen.isNotEmpty && fenMap != null) {
       node = fenMap!.getCanonical(gap.fen);
     }
-    if (node == null) {
-      node = _walkTree(tree!.root, gap.pathToGap);
-    }
+    node ??= _walkTree(tree!.root, gap.pathToGap);
     if (node == null) return null;
 
     final path = <String>[...gap.pathToGap];

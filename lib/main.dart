@@ -136,6 +136,16 @@ class ChessAutoPrepApp extends StatelessWidget {
             return appState;
           },
         ),
+        // App-scoped singletons exposed through Provider so widgets/tests can
+        // depend on them via context (instead of global `.instance` access) and
+        // inject fakes in tests. `.value` because these are process singletons
+        // that must not be disposed by the provider. See MAINTAINABILITY_PLAN
+        // WS-F; `.instance`/factory access remains valid during migration.
+        ChangeNotifierProvider<EngineSettings>.value(value: EngineSettings()),
+        ChangeNotifierProvider<EvalDatabaseSettings>.value(
+          value: EvalDatabaseSettings.instance,
+        ),
+        ChangeNotifierProvider<EngineLifecycle>.value(value: EngineLifecycle()),
       ],
       child: MaterialApp(
         title: 'Chess Auto Prep',

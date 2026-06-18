@@ -1,5 +1,6 @@
 /// Games list widget - Flutter port of Python's games_list.py
 /// Displays a list of games that contain a specific position
+library;
 
 import 'package:flutter/material.dart';
 import '../models/position_analysis.dart';
@@ -84,7 +85,7 @@ class _GamesListWidgetState extends State<GamesListWidget> {
               return ListTile(
                 selected: isSelected,
                 selectedTileColor:
-                    Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
                 dense: true,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

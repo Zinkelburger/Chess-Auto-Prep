@@ -81,7 +81,7 @@ class _CoverageProgressBar extends StatelessWidget {
           if (message != null)
             Text(
               message!,
-              style: TextStyle(fontSize: 11, color: AppColors.lichessDb),
+              style: const TextStyle(fontSize: 11, color: AppColors.lichessDb),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -302,7 +302,7 @@ class _StatsBar extends StatelessWidget {
             Text(' • ', style: TextStyle(color: Colors.grey[600])),
             Text(
               '$matchingCount at current position',
-              style: TextStyle(fontSize: 11, color: AppColors.lichessDb),
+              style: const TextStyle(fontSize: 11, color: AppColors.lichessDb),
             ),
           ],
           if (groupedLines.length > 1) ...[

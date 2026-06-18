@@ -22,6 +22,7 @@ import 'engine/inline_engine_bar.dart';
 import 'pgn_viewer_widget.dart';
 import 'pgn_with_engine.dart';
 import 'tactics/tactics_browse_panel.dart';
+import 'tactics/tactics_edit_dialog.dart';
 import 'tactics/tactics_import_panel.dart';
 import 'tactics/tactics_training_panel.dart';
 import 'training/move_input_widget.dart';
@@ -151,7 +152,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     if (MaiaFactory.isAvailable) {
       try {
         await MaiaFactory.instance?.initialize();
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort; failure here is non-fatal and intentionally ignored.
+      }
     }
   }
 
@@ -163,16 +166,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   void _onSessionChanged() {
     if (mounted) {
-      // When solution is toggled on, seed ephemeral moves into PGN once.
-      // If the user is midway through a multi-move tactic, stay at the
-      // current position; otherwise show the full solution at the end.
+      // When solution is toggled on, seed ephemeral moves into PGN once
+      // and advance one ply past the current position so the board shows
+      // the move the user needed to find.
       if (_session.showSolution && _session.currentPosition != null) {
         _ensureSolutionSeeded();
-        if (_session.currentMoveIndex > 0 && !_session.positionSolved) {
-          _navigateToSolutionIndex(_session.currentMoveIndex - 1);
-        } else {
-          _navigateToSolutionEnd();
-        }
+        _navigateToSolutionIndex(_session.currentMoveIndex);
       }
 
       // Auto-blur move input when puzzle is resolved or solution is shown.
@@ -314,21 +313,21 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    // Only handle key-down events, and only during active training
     if (event is! KeyDownEvent || _session.currentPosition == null) {
-      return KeyEventResult.ignored;
-    }
-
-    if (isTextInputFocused()) {
       return KeyEventResult.ignored;
     }
 
     final key = event.logicalKey;
 
-    // Space — Toggle Solution
+    // Space always toggles solution, even when move input is focused
+    // (Space can never be part of a chess move SAN).
     if (key == LogicalKeyboardKey.space) {
       _session.toggleSolution();
       return KeyEventResult.handled;
+    }
+
+    if (isTextInputFocused()) {
+      return KeyEventResult.ignored;
     }
 
     // Left/Right arrow — navigate solution on Tactic tab, PGN on Analysis tab
@@ -623,125 +622,17 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   Future<void> _showEditDialog(int index) async {
-    final pos = _database.positions[index];
-
-    final correctLineCtrl =
-        TextEditingController(text: pos.correctLine.join(' | '));
-    final mistakeTypeCtrl = TextEditingController(text: pos.mistakeType);
-    final analysisCtrl = TextEditingController(text: pos.mistakeAnalysis);
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Edit Tactic #${index + 1}'),
-        content: SizedBox(
-          width: 480,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Read-only context
-                _readOnlyField('FEN', pos.fen),
-                _readOnlyField('Game', '${pos.gameWhite} vs ${pos.gameBlack}'),
-                _readOnlyField('Context', pos.positionContext),
-                _readOnlyField('You Played', pos.userMove),
-                _readOnlyField('Game ID', pos.gameId),
-                if (pos.reviewCount > 0)
-                  _readOnlyField('Stats',
-                      '${pos.successCount}/${pos.reviewCount} (${(pos.successRate * 100).toStringAsFixed(0)}%)'),
-                const SizedBox(height: 16),
-                const Text('Editable fields',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                const SizedBox(height: 8),
-
-                // Editable fields
-                TextField(
-                  controller: mistakeTypeCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Mistake Type',
-                    hintText: '? or ??',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: correctLineCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Correct Line (pipe-separated)',
-                    hintText: 'Nf3 | e4 | Bb5',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: analysisCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Analysis',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  maxLines: 3,
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save')),
-        ],
-      ),
+    final updated = await TacticsEditDialog.show(
+      context,
+      position: _database.positions[index],
+      index: index,
     );
 
-    if (saved == true && mounted) {
-      final updated = pos.copyWith(
-        correctLine: correctLineCtrl.text
-            .split('|')
-            .map((s) => s.trim())
-            .where((s) => s.isNotEmpty)
-            .toList(),
-        mistakeType: mistakeTypeCtrl.text.trim(),
-        mistakeAnalysis: analysisCtrl.text,
-      );
-
+    if (updated != null && mounted) {
       _database.positions[index] = updated;
       await _database.savePositions();
       setState(() {});
     }
-
-    correctLineCtrl.dispose();
-    mistakeTypeCtrl.dispose();
-    analysisCtrl.dispose();
-  }
-
-  Widget _readOnlyField(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text('$label:',
-                style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          ),
-          Expanded(
-            child: SelectableText(
-              value,
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   /// Reset the board to the standard starting position (used when returning
@@ -1053,7 +944,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         final (_, san) = appState.currentPosition.makeSan(move);
         moveSan = san;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
 
     final prevIndex = _session.currentMoveIndex;
     final update = _session.processMoveAttempt(
@@ -1082,7 +975,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       appState.setCurrentPosition(newPos);
       appState.notifyGameChanged();
       _pgnViewerController.addEphemeralMove(san);
-    } catch (_) {}
+    } catch (_) {
+      // Best-effort; failure here is non-fatal and intentionally ignored.
+    }
   }
 
   void _sessionComplete() {

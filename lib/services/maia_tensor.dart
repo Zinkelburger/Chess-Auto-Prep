@@ -4,6 +4,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:flutter/services.dart';
 
 import '../utils/fen_utils.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 /// Maia-3 tensor preprocessing.
 ///
@@ -33,7 +34,7 @@ class MaiaTensor {
 
       _initialized = true;
     } catch (e) {
-      print('Failed to load Maia move data: $e');
+      log.e('Failed to load Maia move data: $e');
     }
   }
 

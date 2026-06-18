@@ -171,7 +171,7 @@ class _TrapWalkthroughShell extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
                 child: Row(
                   children: [
-                    Icon(Icons.tour, size: 18, color: AppColors.warning),
+                    const Icon(Icons.tour, size: 18, color: AppColors.warning),
                     const SizedBox(width: 8),
                     const Text(
                       'Trap tour',

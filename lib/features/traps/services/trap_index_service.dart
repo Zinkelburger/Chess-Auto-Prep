@@ -6,6 +6,7 @@ library;
 import 'dart:math' show max;
 
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
+import 'package:chess_auto_prep/services/eval/eval_canonicalize.dart';
 
 class TrapIndexService {
   final List<TrapLineInfo> _traps;
@@ -21,7 +22,11 @@ class TrapIndexService {
   /// All traps in load order (unmodifiable).
   List<TrapLineInfo> get allTraps => List.unmodifiable(_traps);
 
-  TrapLineInfo? trapAtFen(String fen) => _fenIndex[fen];
+  /// Look up a trap by position. Keyed on the canonical 4-field FEN so a
+  /// transposed arrival (same position, different move counters) resolves to
+  /// the same trap — matching how [TrapExtractor] dedups. See
+  /// `docs/REFACTOR_PLAN.md` §1.3 (one definition of position identity).
+  TrapLineInfo? trapAtFen(String fen) => _fenIndex[canonicalizeFen4(fen)];
 
   List<TrapLineInfo> trapsInLine(List<String> lineMoves) {
     return _traps
@@ -49,7 +54,7 @@ class TrapIndexService {
     _fenIndex = {};
     for (final trap in _traps) {
       if (trap.fen != null) {
-        _fenIndex.putIfAbsent(trap.fen!, () => trap);
+        _fenIndex.putIfAbsent(canonicalizeFen4(trap.fen!), () => trap);
       }
     }
   }

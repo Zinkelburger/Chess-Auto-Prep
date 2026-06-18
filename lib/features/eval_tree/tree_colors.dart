@@ -111,42 +111,42 @@ List<Shadow> nodeTextOutline(Color fillColor) {
   const outlineWidth = 1.0;
   return [
     Shadow(
-      offset: Offset(outlineWidth, 0),
+      offset: const Offset(outlineWidth, 0),
       blurRadius: 0,
       color: outlineColor,
     ),
     Shadow(
-      offset: Offset(-outlineWidth, 0),
+      offset: const Offset(-outlineWidth, 0),
       blurRadius: 0,
       color: outlineColor,
     ),
     Shadow(
-      offset: Offset(0, outlineWidth),
+      offset: const Offset(0, outlineWidth),
       blurRadius: 0,
       color: outlineColor,
     ),
     Shadow(
-      offset: Offset(0, -outlineWidth),
+      offset: const Offset(0, -outlineWidth),
       blurRadius: 0,
       color: outlineColor,
     ),
     Shadow(
-      offset: Offset(outlineWidth, outlineWidth),
+      offset: const Offset(outlineWidth, outlineWidth),
       blurRadius: 0,
       color: outlineColor,
     ),
     Shadow(
-      offset: Offset(-outlineWidth, outlineWidth),
+      offset: const Offset(-outlineWidth, outlineWidth),
       blurRadius: 0,
       color: outlineColor,
     ),
     Shadow(
-      offset: Offset(outlineWidth, -outlineWidth),
+      offset: const Offset(outlineWidth, -outlineWidth),
       blurRadius: 0,
       color: outlineColor,
     ),
     Shadow(
-      offset: Offset(-outlineWidth, -outlineWidth),
+      offset: const Offset(-outlineWidth, -outlineWidth),
       blurRadius: 0,
       color: outlineColor,
     ),

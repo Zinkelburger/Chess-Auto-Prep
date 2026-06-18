@@ -287,7 +287,7 @@ class LineItemRow extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '${line.comments.length} comment${line.comments.length == 1 ? '' : 's'}',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 10,
                   color: AppColors.evalPositive,
                 ),
@@ -500,23 +500,23 @@ class _LineMetricsRow extends StatelessWidget {
           if (m.quality != null)
             Text(
               'quality ${m.quality!.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 10, color: AppColors.lichessDb),
+              style: const TextStyle(fontSize: 10, color: AppColors.lichessDb),
             ),
           if (m.trapCount > 0)
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.bolt, size: 10, color: AppColors.warning),
+                const Icon(Icons.bolt, size: 10, color: AppColors.warning),
                 Text(
                   ' ${m.trapCount} trap${m.trapCount == 1 ? '' : 's'}',
-                  style: TextStyle(fontSize: 10, color: AppColors.warning),
+                  style: const TextStyle(fontSize: 10, color: AppColors.warning),
                 ),
               ],
             ),
           if (m.coherence != null)
             Text(
               'coherence ${m.coherence!.toStringAsFixed(2)}',
-              style: TextStyle(fontSize: 10, color: AppColors.maia),
+              style: const TextStyle(fontSize: 10, color: AppColors.maia),
             ),
         ],
       ),
@@ -566,12 +566,12 @@ class _HardMoveWarning extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.warning_amber_rounded,
+                const Icon(Icons.warning_amber_rounded,
                     size: 12, color: AppColors.danger),
                 const SizedBox(width: 4),
                 Text(
                   label,
-                  style: TextStyle(fontSize: 10, color: AppColors.danger),
+                  style: const TextStyle(fontSize: 10, color: AppColors.danger),
                 ),
               ],
             ),

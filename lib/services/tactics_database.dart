@@ -4,6 +4,7 @@ import 'package:csv/csv.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import 'storage/storage_factory.dart';
+import 'package:chess_auto_prep/utils/log.dart';
 
 /// Manages tactical positions and review data
 class TacticsDatabase {
@@ -57,18 +58,18 @@ class TacticsDatabase {
             }
           }
         } catch (e) {
-          print('Error parsing position row $i: $e');
+          log.e('Error parsing position row $i: $e');
         }
       }
 
       // Also load the separate analyzed games list (includes games with no blunders)
       await _loadAnalyzedGameIds();
 
-      print('Loaded ${positions.length} tactics positions from storage');
-      print('Tracking ${analyzedGameIds.length} analyzed game IDs');
+      log.i('Loaded ${positions.length} tactics positions from storage');
+      log.i('Tracking ${analyzedGameIds.length} analyzed game IDs');
       return positions.length;
     } catch (e) {
-      print('Error loading positions: $e');
+      log.e('Error loading positions: $e');
       return 0;
     }
   }
@@ -79,10 +80,10 @@ class TacticsDatabase {
       final ids = await StorageFactory.instance.readAnalyzedGameIds();
       if (ids.isNotEmpty) {
         analyzedGameIds.addAll(ids);
-        print('Loaded ${ids.length} analyzed game IDs from storage');
+        log.i('Loaded ${ids.length} analyzed game IDs from storage');
       }
     } catch (e) {
-      print('Error loading analyzed game IDs: $e');
+      log.e('Error loading analyzed game IDs: $e');
     }
   }
 
@@ -93,9 +94,9 @@ class TacticsDatabase {
         await StorageFactory.instance.saveAnalyzedGameIds(
           analyzedGameIds.toList(),
         );
-        print('Saved ${analyzedGameIds.length} analyzed game IDs');
+        log.e('Saved ${analyzedGameIds.length} analyzed game IDs');
       } catch (e) {
-        print('Error saving analyzed game IDs: $e');
+        log.e('Error saving analyzed game IDs: $e');
       }
     });
   }
@@ -128,21 +129,21 @@ class TacticsDatabase {
     analyzedGameIds.clear();
     await _enqueueWrite(() async {
       await StorageFactory.instance.saveAnalyzedGameIds([]);
-      print('Cleared analyzed games tracking');
+      log.i('Cleared analyzed games tracking');
     });
   }
 
   /// Create a TacticsPosition from a CSV row.
   TacticsPosition? _createPositionFromRow(List<dynamic> row) {
     if (row.length < 17) {
-      print('Row too short: ${row.length} fields');
+      log.w('Row too short: ${row.length} fields');
       return null;
     }
 
     try {
       return TacticsPosition.fromCsv(row);
     } catch (e) {
-      print('Error creating position from row: $e');
+      log.e('Error creating position from row: $e');
       return null;
     }
   }
@@ -185,9 +186,9 @@ class TacticsDatabase {
         final csv = const ListToCsvConverter().convert(csvData);
         await StorageFactory.instance.saveTacticsCsv(csv);
 
-        print('Saved ${positions.length} tactics positions to storage');
+        log.e('Saved ${positions.length} tactics positions to storage');
       } catch (e) {
-        print('Error saving positions: $e');
+        log.e('Error saving positions: $e');
       }
     });
   }
@@ -364,7 +365,7 @@ class TacticsDatabase {
     if (added > 0) {
       await savePositions();
       await _saveAnalyzedGameIds();
-      print(
+      log.w(
           'Added $added new positions (${newPositions.length - added} duplicates skipped)');
     }
   }

@@ -120,7 +120,7 @@ class RepertoireBoardPane extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 3),
                         )
                       else
-                        Icon(
+                        const Icon(
                           Icons.pause_circle_filled,
                           size: 36,
                           color: AppColors.warning,
