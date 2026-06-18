@@ -127,26 +127,28 @@ List<String> uciPvToSan(String fen, List<String> uciMoves, {int maxMoves = 8}) {
   }
 }
 
-/// Format a large integer with k/M suffixes.
-String formatCount(int count) {
-  if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
-  if (count >= 1000) return '${(count / 1000).toStringAsFixed(0)}k';
-  return count.toString();
+/// Format a large integer with k/M suffixes, using [mDecimals] decimal places
+/// at the millions threshold and [kDecimals] at the thousands threshold.
+String _formatWithSuffix(int value,
+    {required int mDecimals, required int kDecimals}) {
+  if (value >= 1000000) {
+    return '${(value / 1000000).toStringAsFixed(mDecimals)}M';
+  }
+  if (value >= 1000) return '${(value / 1000).toStringAsFixed(kDecimals)}k';
+  return value.toString();
 }
 
-/// Format a node count with k/M suffixes (one decimal for M).
-String formatNodes(int nodes) {
-  if (nodes >= 1000000) return '${(nodes / 1000000).toStringAsFixed(1)}M';
-  if (nodes >= 1000) return '${(nodes / 1000).toStringAsFixed(1)}k';
-  return nodes.toString();
-}
+/// Format a large integer with k/M suffixes.
+String formatCount(int count) =>
+    _formatWithSuffix(count, mDecimals: 1, kDecimals: 0);
+
+/// Format a node count with k/M suffixes (one decimal for M and k).
+String formatNodes(int nodes) =>
+    _formatWithSuffix(nodes, mDecimals: 1, kDecimals: 1);
 
 /// Format NPS with k/M suffixes.
-String formatNps(int nps) {
-  if (nps >= 1000000) return '${(nps / 1000000).toStringAsFixed(1)}M';
-  if (nps >= 1000) return '${(nps / 1000).toStringAsFixed(0)}k';
-  return nps.toString();
-}
+String formatNps(int nps) =>
+    _formatWithSuffix(nps, mDecimals: 1, kDecimals: 0);
 
 /// Compute the FEN after playing [sanMoves] from [startFen] up to [upToIndex].
 ///

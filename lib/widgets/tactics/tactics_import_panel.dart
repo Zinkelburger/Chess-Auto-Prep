@@ -105,6 +105,53 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
     );
   }
 
+  /// A single import-source row: username field, recent-games count field, and
+  /// an Import button (enabled only when no import is in progress and fields
+  /// are valid).
+  Widget _buildImportSourceRow({
+    required TextEditingController userController,
+    required String userLabel,
+    required ValueChanged<String> onUsernameChanged,
+    required TextEditingController countController,
+    required VoidCallback onImport,
+  }) {
+    final canImport = widget.importStatus == null && widget.importFieldsValid;
+    return Row(
+      children: [
+        Expanded(
+          flex: 2,
+          child: TextField(
+            controller: userController,
+            decoration: InputDecoration(
+              labelText: userLabel,
+              border: const OutlineInputBorder(),
+              isDense: true,
+            ),
+            onChanged: onUsernameChanged,
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 120,
+          child: TextField(
+            controller: countController,
+            decoration: const InputDecoration(
+              labelText: 'Recent Games',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            keyboardType: TextInputType.number,
+          ),
+        ),
+        const SizedBox(width: 8),
+        ElevatedButton(
+          onPressed: canImport ? onImport : null,
+          child: const Text('Import'),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final positionCount = widget.positions.length;
@@ -138,88 +185,22 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
                   constraints: const BoxConstraints(maxWidth: 520),
                   child: Column(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: TextField(
-                              controller: widget.lichessUserController,
-                              decoration: const InputDecoration(
-                                labelText: 'Lichess Username',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                              onChanged: (value) {
-                                context
-                                    .read<AppState>()
-                                    .setLichessUsername(value);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 120,
-                            child: TextField(
-                              controller: widget.lichessCountController,
-                              decoration: const InputDecoration(
-                                labelText: 'Recent Games',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: widget.importStatus == null &&
-                                    widget.importFieldsValid
-                                ? widget.onImportLichess
-                                : null,
-                            child: const Text('Import'),
-                          ),
-                        ],
+                      _buildImportSourceRow(
+                        userController: widget.lichessUserController,
+                        userLabel: 'Lichess Username',
+                        onUsernameChanged: (v) =>
+                            context.read<AppState>().setLichessUsername(v),
+                        countController: widget.lichessCountController,
+                        onImport: widget.onImportLichess,
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: TextField(
-                              controller: widget.chessComUserController,
-                              decoration: const InputDecoration(
-                                labelText: 'Chess.com Username',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                              onChanged: (value) {
-                                context
-                                    .read<AppState>()
-                                    .setChesscomUsername(value);
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 120,
-                            child: TextField(
-                              controller: widget.chessComCountController,
-                              decoration: const InputDecoration(
-                                labelText: 'Recent Games',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                              keyboardType: TextInputType.number,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: widget.importStatus == null &&
-                                    widget.importFieldsValid
-                                ? widget.onImportChessCom
-                                : null,
-                            child: const Text('Import'),
-                          ),
-                        ],
+                      _buildImportSourceRow(
+                        userController: widget.chessComUserController,
+                        userLabel: 'Chess.com Username',
+                        onUsernameChanged: (v) =>
+                            context.read<AppState>().setChesscomUsername(v),
+                        countController: widget.chessComCountController,
+                        onImport: widget.onImportChessCom,
                       ),
                       const SizedBox(height: 12),
                       Row(
