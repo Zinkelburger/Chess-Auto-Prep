@@ -713,7 +713,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 |------|---------|
 | `tactics_engine.dart` | Puzzle validation; `buildTrainableLine` extends lines using **Maia opponent-probability** (≥ 85% threshold) when available — agreement with PV continues from PV, disagreement triggers a fresh Stockfish depth-14 eval for the user's best reply then stops, low confidence stops at single move; falls back to captures/checks/mates heuristic when Maia is unavailable; max 6 ply (3 user moves); `solutionPv` + `solutionLineToSan` for Show Solution |
 | `tactics_database.dart` | Local puzzle store; `startSession(settings)` builds filtered/ordered queue; `setRating(fen, rating)` persists star rating + removes 1-star from live queue |
-| `tactics_import_service.dart` | Import from Lichess/Chess.com; supports `since` parameter for date-based fetch (Lichess `since` query param, Chess.com archive month filtering + PGN date header filtering); 200-game safety cap on date-based imports; initializes Maia at import start; extracts user Elo from first game PGN headers (`WhiteElo`/`BlackElo`) — Lichess uses PGN Elo as-is; Chess.com maps blitz Elo via `chesscom_lichess_elo.dart` then clamps 600–2400 (default 2200); passes `MaiaEvaluator` + `EvalWorker` to `buildTrainableLine` for line extension |
+| `tactics_import_service.dart` | Import from Lichess/Chess.com; supports `since` parameter for date-based fetch (Lichess `since` query param, Chess.com archive month filtering + PGN date header filtering); 200-game safety cap on date-based imports; initializes Maia at import start; extracts user Elo from first game PGN headers (`WhiteElo`/`BlackElo`) — Lichess uses PGN Elo as-is; Chess.com maps blitz Elo via `chesscom_lichess_elo.dart` then clamps 600–2400 (default 2200); passes `MaiaEvaluator` + `EvalWorker` to `buildTrainableLine` for line extension; **atomic per-game completion**: positions are awaited/persisted before `markGameAnalyzed`, so an app close mid-batch never permanently skips a game's blunders |
 | `tactics_export_import.dart` | Export/import facade |
 | `tactics_export_import_io.dart` / `tactics_export_import_stub.dart` | Platform export/import |
 | `tactics_parallel_analyzer.dart` / `tactics_parallel_analyzer_stub.dart` | Parallel puzzle analysis |
@@ -866,7 +866,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `fen_utils.dart` | FEN manipulation; `isWhiteToMove(fen)` shared across eval providers, generation, and Maia |
 | `best_effort_position.dart` | Best-effort board builder from FEN, SAN, or `[gap]`-separated move sequences; handles castling (O-O/O-O-O) by manually repositioning king+rook; produces a renderable `Position` even for illegal placements (used by `PositionPreviewIcon`) |
 | `pgn_utils.dart` | PGN formatting, event title extraction |
-| `pgn_comment_utils.dart` | Comment filtering |
+| `pgn_comment_utils.dart` | Comment filtering, NAG constants, movetext serialization, and Chessable rich-comment parser (`parseRichComment`, `hasChessableFormatting`). Handles `@@HeaderStart@@`, `@@StartBlockQuote@@`, `@@StartBracket@@`, `@@StartSquare@@`, `@@StartFEN@@`, `@@LinkStart@@` markers and double-space paragraph breaks. |
 | `coverage_helpers.dart` | Coverage UI helpers |
 | `lines_filter_helpers.dart` | Line filter/sort/group (`filterSortAndGroupLines`, `getLineGroupName`); typed `LineSortBy` and `LineMetricsFilter` enums (replaces string sort/filter params) |
 | `ease_utils.dart` | Ease display formatting |
