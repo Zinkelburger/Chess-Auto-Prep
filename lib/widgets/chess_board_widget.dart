@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:dartchess/dartchess.dart';
 
-import '../utils/chess_utils.dart' show roleChar, parseSquare, toAlgebraic;
+import '../utils/chess_utils.dart'
+    show roleChar, parseSquare, toAlgebraic, castlingKingDestination;
 
 // ── Board annotations (arrows, circles, labels) ─────────────────────────
 
@@ -351,15 +352,11 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     }
   }
 
-  /// Dartchess encodes castling as king→rook-square. Map to king destination.
-  Square _castlingKingDest(Square from, Square to) {
-    final diff = (to - from).abs();
-    if (diff <= 2) return to; // normal king move, not castling
-    // Kingside: rook on h-file → king lands on g-file
-    if (to > from) return Square(from + 2);
-    // Queenside: rook on a-file → king lands on c-file
-    return Square(from - 2);
-  }
+  /// Map a dartchess king target (king→rook for castling) to the square the
+  /// king visually lands on. See [castlingKingDestination] for why this must
+  /// not be derived from raw square distance.
+  Square _castlingKingDest(Square from, Square to) =>
+      castlingKingDestination(widget.position, from, to);
 
   /// Reverse map: if user clicks the king destination, return the rook square
   /// that dartchess expects for castling.

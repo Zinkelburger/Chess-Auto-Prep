@@ -71,7 +71,6 @@ class MaiaService {
     final eloOppo = inputData['eloOppo'] as double;
     final legalMovesMask = inputData['legalMoves'] as Float32List;
     final isBlack = inputData['isBlack'] as bool;
-
     // Board: [1, 64, 12]
     final inputOrt = OrtValueTensor.createTensorWithDataList(
       floatInput,
