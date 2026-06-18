@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -15,10 +16,12 @@ Future<void> exportCsvContent(
     final tempFile = File(p.join(tempDir.path, filename));
     await tempFile.writeAsString(content);
 
-    final result = await Share.shareXFiles(
-      [XFile(tempFile.path)],
-      subject: 'Chess Tactics - $positionCount positions',
-      text: 'Export of $positionCount chess tactics positions',
+    final result = await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(tempFile.path)],
+        subject: 'Chess Tactics - $positionCount positions',
+        text: 'Export of $positionCount chess tactics positions',
+      ),
     );
 
     if (result.status == ShareResultStatus.success) {
@@ -36,10 +39,10 @@ Future<void> exportCsvContent(
       fileName: filename,
       type: FileType.custom,
       allowedExtensions: ['csv'],
+      bytes: utf8.encode(content),
     );
 
     if (savePath != null) {
-      await File(savePath).writeAsString(content);
       log.i('Tactics exported to: $savePath');
     }
   }

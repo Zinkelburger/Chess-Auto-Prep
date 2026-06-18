@@ -39,7 +39,7 @@ class TacticsDatabase {
         return 0;
       }
 
-      final rows = const CsvToListConverter().convert(content);
+      final rows = Csv().decode(content);
 
       if (rows.isEmpty) {
         await _loadAnalyzedGameIds();
@@ -183,8 +183,8 @@ class TacticsDatabase {
           csvData.add(pos.toCsvRow());
         }
 
-        final csv = const ListToCsvConverter().convert(csvData);
-        await StorageFactory.instance.saveTacticsCsv(csv);
+        final csvString = Csv().encode(csvData);
+        await StorageFactory.instance.saveTacticsCsv(csvString);
 
         log.e('Saved ${positions.length} tactics positions to storage');
       } catch (e) {
