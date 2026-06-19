@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/repertoire_controller.dart';
 import '../../services/games_repertoire/games_draft.dart';
+import '../../services/games_repertoire/draft_repertoire_writer.dart';
+import '../../services/storage/storage_factory.dart';
 import '../../theme/app_colors.dart';
 import 'draft_tree_view.dart';
 import 'merge_conflict_sheet.dart';
@@ -22,12 +24,16 @@ class DraftReviewPane extends StatefulWidget {
     required this.isWhite,
     required this.controller,
     required this.onClose,
+    this.sourceLabel = '',
     this.onSelectLine,
   });
 
   final GamesDraft draft;
   final bool isWhite;
   final RepertoireController controller;
+
+  /// Where the games came from (e.g. username), used to name a saved draft.
+  final String sourceLabel;
 
   /// Called when the draft session ends (merged or discarded).
   final VoidCallback onClose;
@@ -70,6 +76,32 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
       _toast('Merged ${result.addedMoves} new moves into your repertoire.');
     }
     if (mounted) widget.onClose();
+  }
+
+  Future<void> _saveAsDraft() async {
+    final draftTree =
+        widget.draft.materialize(filters: DraftFilters(minGames: _minGames));
+    if (draftTree.isEmpty) {
+      _toast('Nothing to save — every line was filtered out.');
+      return;
+    }
+    final label = widget.sourceLabel.isEmpty ? 'games' : widget.sourceLabel;
+    final side = widget.isWhite ? 'White' : 'Black';
+    final stamp = DateTime.now().toIso8601String().split('T').first;
+    final name = 'Draft $label $side $stamp';
+    final content = draftToRepertoireFile(draftTree,
+        name: name, isWhite: widget.isWhite);
+
+    try {
+      final storage = StorageFactory.instance;
+      final path = await storage.repertoireFilePath(name);
+      await storage.writeFile(path, content);
+      if (!mounted) return;
+      _toast('Saved "$name" — open it from the repertoire list.');
+      widget.onClose();
+    } catch (e) {
+      _toast('Could not save draft: $e');
+    }
   }
 
   void _toast(String msg) {
@@ -158,6 +190,12 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
                   style: const TextStyle(
                       fontSize: 12, color: AppColors.onSurfaceMuted),
                 ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _merging ? null : _saveAsDraft,
+                icon: const Icon(Icons.save_outlined, size: 18),
+                label: const Text('Save'),
               ),
               const SizedBox(width: 8),
               FilledButton.icon(

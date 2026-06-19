@@ -4,6 +4,8 @@ import 'package:chess_auto_prep/models/opening_tree.dart';
 import 'package:chess_auto_prep/services/games_repertoire/repertoire_diff.dart';
 import 'package:chess_auto_prep/services/games_repertoire/games_draft.dart';
 import 'package:chess_auto_prep/services/games_repertoire/repertoire_merge.dart';
+import 'package:chess_auto_prep/services/games_repertoire/draft_repertoire_writer.dart';
+import 'package:chess_auto_prep/services/repertoire_service.dart';
 
 /// Walk an [OpeningTree] to the node reached by [sans].
 OpeningTreeNode? nodeFor(OpeningTree tree, List<String> sans) {
@@ -145,6 +147,33 @@ void main() {
 
       expect(result.addedMoves, 0);
       expect(result.hasConflicts, isFalse);
+    });
+  });
+
+  group('draftToRepertoireFile', () {
+    test('enumerates one line per leaf', () {
+      // e4 then two replies (e5, c5); e5 continues to Nf3.
+      final tree = MoveTree.fromMoves(['e4', 'e5', 'Nf3']);
+      tree.addMove(const TreePath([0]), 'c5'); // second reply to e4
+      final lines = enumerateLines(tree).map((l) => l.join(' ')).toList();
+      expect(lines, hasLength(2));
+      expect(lines, containsAll(['e4 e5 Nf3', 'e4 c5']));
+    });
+
+    test('round-trips through RepertoireService.parseRepertoirePgn', () {
+      final tree = MoveTree.fromMoves(['e4', 'e5', 'Nf3', 'Nc6']);
+      tree.addMove(const TreePath([0]), 'c5');
+
+      final content = draftToRepertoireFile(tree,
+          name: 'Draft hikaru', isWhite: true);
+
+      final parsed =
+          RepertoireService().parseRepertoirePgn(content);
+      expect(parsed, hasLength(2));
+      expect(parsed.every((l) => l.color == 'white'), isTrue);
+      final mainline =
+          parsed.firstWhere((l) => l.moves.length == 4).moves;
+      expect(mainline, ['e4', 'e5', 'Nf3', 'Nc6']);
     });
   });
 }
