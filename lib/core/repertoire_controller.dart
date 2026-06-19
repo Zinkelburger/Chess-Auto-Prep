@@ -17,6 +17,7 @@ import '../models/opening_tree.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../models/repertoire_line.dart';
 import '../models/repertoire_metadata.dart';
+import '../services/games_repertoire/repertoire_merge.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
@@ -313,6 +314,20 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
       if (_path == target) _path = promoted;
     }
     notifyListeners();
+  }
+
+  /// Fold a draft [MoveTree] (built from the user's own games) into the
+  /// repertoire in place. Returns the merge result so the UI can surface any
+  /// conflicts at the user's decision points for mainline/sideline resolution.
+  MergeResult mergeDraft(MoveTree draft, {required bool isWhite}) {
+    final result = RepertoireMerge.merge(
+      target: _tree,
+      draft: draft,
+      isWhite: isWhite,
+    );
+    _syncOpeningTree();
+    notifyListeners();
+    return result;
   }
 
   /// Recursively promote a variation so it becomes the main line

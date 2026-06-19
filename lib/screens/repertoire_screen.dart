@@ -50,6 +50,7 @@ import '../widgets/engine/floating_board_preview.dart';
 import '../features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import '../services/generation/trap_extractor.dart';
+import '../widgets/games_repertoire/build_from_games_dialog.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import 'repertoire_selection_screen.dart';
 
@@ -932,6 +933,14 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           ),
           const SizedBox(width: 4),
           IconButton(
+            onPressed: _buildFromGames,
+            icon: const Icon(Icons.download_for_offline_outlined, size: 16),
+            tooltip: 'Build repertoire from my games',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
             icon: const Icon(Icons.flip, size: 14),
             onPressed: () => setState(() => _boardFlipped = !_boardFlipped),
             tooltip: 'Flip board (F)',
@@ -1476,6 +1485,14 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _generateFromHere() {
     _openGenerationDialog();
+  }
+
+  Future<void> _buildFromGames() {
+    return showBuildFromGamesDialog(
+      context,
+      controller: _controller,
+      initialIsWhite: _controller.isRepertoireWhite,
+    );
   }
 
   void _selectLine(RepertoireLine line) {
