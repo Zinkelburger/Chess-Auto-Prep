@@ -1,13 +1,20 @@
 import 'dart:math';
 
 import 'package:csv/csv.dart';
+import 'package:flutter/foundation.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import 'storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
-/// Manages tactical positions and review data
-class TacticsDatabase {
+/// Manages tactical positions and review data.
+///
+/// This is a [ChangeNotifier]: every mutation of the observable state
+/// (the [positions] list, [analyzedGameIds], session stats) calls
+/// [notifyListeners] so the UI can rebuild reactively instead of relying on
+/// each call site remembering to `setState`. Mutate the data only through the
+/// methods on this class — never poke [positions] directly from the UI.
+class TacticsDatabase extends ChangeNotifier {
   List<TacticsPosition> positions = [];
   Set<String> analyzedGameIds = {}; // Track which games have been analyzed
   ReviewSession currentSession = ReviewSession();
@@ -36,6 +43,7 @@ class TacticsDatabase {
       if (content == null || content.isEmpty) {
         // No CSV found, try to load analyzed games list (legacy or empty state)
         await _loadAnalyzedGameIds();
+        notifyListeners();
         return 0;
       }
 
@@ -43,6 +51,7 @@ class TacticsDatabase {
 
       if (rows.isEmpty) {
         await _loadAnalyzedGameIds();
+        notifyListeners();
         return 0;
       }
 
@@ -67,9 +76,11 @@ class TacticsDatabase {
 
       log.i('Loaded ${positions.length} tactics positions from storage');
       log.i('Tracking ${analyzedGameIds.length} analyzed game IDs');
+      notifyListeners();
       return positions.length;
     } catch (e) {
       log.e('Error loading positions: $e');
+      notifyListeners();
       return 0;
     }
   }
@@ -105,6 +116,7 @@ class TacticsDatabase {
   Future<void> markGameAnalyzed(String gameId) async {
     if (gameId.isNotEmpty && !analyzedGameIds.contains(gameId)) {
       analyzedGameIds.add(gameId);
+      notifyListeners();
       await _saveAnalyzedGameIds();
     }
   }
@@ -115,6 +127,7 @@ class TacticsDatabase {
         gameIds.where((id) => id.isNotEmpty && !analyzedGameIds.contains(id));
     if (newIds.isNotEmpty) {
       analyzedGameIds.addAll(newIds);
+      notifyListeners();
       await _saveAnalyzedGameIds();
     }
   }
@@ -127,6 +140,7 @@ class TacticsDatabase {
   /// Clear analyzed games tracking (for re-analysis)
   Future<void> clearAnalyzedGames() async {
     analyzedGameIds.clear();
+    notifyListeners();
     await _enqueueWrite(() async {
       await StorageFactory.instance.saveAnalyzedGameIds([]);
       log.i('Cleared analyzed games tracking');
@@ -196,6 +210,24 @@ class TacticsDatabase {
   /// Clear all positions from database
   Future<void> clearPositions() async {
     positions.clear();
+    notifyListeners();
+    await savePositions();
+  }
+
+  /// Delete the position at [index] (UI-facing; encapsulates list mutation so
+  /// callers never touch [positions] directly).
+  Future<void> deletePositionAt(int index) async {
+    if (index < 0 || index >= positions.length) return;
+    positions.removeAt(index);
+    notifyListeners();
+    await savePositions();
+  }
+
+  /// Replace the position at [index] with [updated] (e.g. after an edit).
+  Future<void> updatePositionAt(int index, TacticsPosition updated) async {
+    if (index < 0 || index >= positions.length) return;
+    positions[index] = updated;
+    notifyListeners();
     await savePositions();
   }
 
@@ -281,6 +313,7 @@ class TacticsDatabase {
       removeFromSessionQueue(index);
     }
 
+    notifyListeners();
     await savePositions();
   }
 
@@ -319,6 +352,8 @@ class TacticsDatabase {
       currentSession.hintsUsed++;
     }
 
+    notifyListeners();
+
     // Save immediately
     await savePositions();
   }
@@ -332,6 +367,7 @@ class TacticsDatabase {
         analyzedGameIds.add(pos.gameId);
       }
     }
+    notifyListeners();
     await savePositions();
     await _saveAnalyzedGameIds();
   }
@@ -344,6 +380,7 @@ class TacticsDatabase {
       if (position.gameId.isNotEmpty) {
         analyzedGameIds.add(position.gameId);
       }
+      notifyListeners();
       await savePositions();
       await _saveAnalyzedGameIds();
     }
@@ -363,6 +400,7 @@ class TacticsDatabase {
       }
     }
     if (added > 0) {
+      notifyListeners();
       await savePositions();
       await _saveAnalyzedGameIds();
       log.w(

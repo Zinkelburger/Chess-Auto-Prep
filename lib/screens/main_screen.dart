@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
+import '../services/tactics/tactics_import_coordinator.dart';
+import '../services/tactics/tactics_session_controller.dart';
+import '../services/tactics_database.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/tactics_control_panel.dart';
@@ -114,10 +117,41 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 class _TacticsModeView extends StatelessWidget {
   const _TacticsModeView();
 
-  /// Shared key so the control panel's State (and its database/session/import)
-  /// is reparented — not recreated — when the layout crosses the compact/wide
-  /// breakpoint. Without this, resizing across the breakpoint silently throws
-  /// away the active training session and reloads everything.
+  @override
+  Widget build(BuildContext context) {
+    // The three tactics state owners are provided here — above the layout —
+    // so they are a single shared source of truth that outlives any
+    // compact/wide rebuild of the panel. `_TacticsModeView` is cached in the
+    // IndexedStack, so these are created once and live for the app session.
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider<TacticsDatabase>(
+          create: (_) => TacticsDatabase(),
+        ),
+        ChangeNotifierProvider<TacticsSessionController>(
+          create: (ctx) => TacticsSessionController(
+            database: ctx.read<TacticsDatabase>(),
+          ),
+        ),
+        ChangeNotifierProvider<TacticsImportCoordinator>(
+          create: (ctx) => TacticsImportCoordinator(
+            database: ctx.read<TacticsDatabase>(),
+          ),
+        ),
+      ],
+      child: const _TacticsModeScaffold(),
+    );
+  }
+}
+
+class _TacticsModeScaffold extends StatelessWidget {
+  const _TacticsModeScaffold();
+
+  /// Shared key so view-local state (selected tab, PGN cursor, focus) is
+  /// reparented — not recreated — when the layout crosses the compact/wide
+  /// breakpoint. The training data itself (database/session/import) lives in
+  /// the providers above, so it survives regardless of this key; the key just
+  /// avoids re-initializing the panel's UI scaffolding on a resize.
   static final GlobalKey _panelKey = GlobalKey();
 
   @override
