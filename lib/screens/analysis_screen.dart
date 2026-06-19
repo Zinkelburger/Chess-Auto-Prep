@@ -103,7 +103,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           if (_openingTree != null && !_isAnalyzing && !_evalRunning)
             TextButton.icon(
               icon: const Icon(Icons.psychology, size: 18),
-              label: Text(_hasEvals ? 'Re-analyze' : 'Weaknesses'),
+              label: Text(_hasEvals ? 'Re-analyze' : 'Analyze with Engine'),
               onPressed: _showWeaknessConfig,
             ),
           IconButton(
