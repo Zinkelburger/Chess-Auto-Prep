@@ -110,6 +110,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   // ── Build-from-games draft session (inline in the Lines/Draft tab) ──
   GamesDraft? _activeDraft;
   bool _activeDraftIsWhite = true;
+  String _activeDraftLabel = '';
   bool _buildingDraft = false;
   String _draftProgress = '';
   final GamesLibraryService _gamesLibrary = GamesLibraryService();
@@ -849,6 +850,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         draft: draft,
         isWhite: _activeDraftIsWhite,
         controller: _controller,
+        sourceLabel: _activeDraftLabel,
         onClose: _closeDraft,
         onSelectLine: (sans) => _controller.loadMoveSequence(sans),
       );
@@ -1555,6 +1557,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       _activeDraft = null;
       _buildingDraft = true;
       _activeDraftIsWhite = config.isWhite;
+      _activeDraftLabel = config.username;
       _draftProgress = 'Starting…';
     });
 
