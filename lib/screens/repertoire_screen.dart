@@ -50,7 +50,12 @@ import '../widgets/engine/floating_board_preview.dart';
 import '../features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import '../services/generation/trap_extractor.dart';
-import '../widgets/games_repertoire/build_from_games_dialog.dart';
+import '../services/games_library/games_library_service.dart';
+import '../services/games_repertoire/games_draft.dart';
+import '../theme/app_colors.dart';
+import '../services/unified_analysis_builder.dart';
+import '../widgets/games_repertoire/games_source_form.dart';
+import '../widgets/games_repertoire/draft_review_pane.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import 'repertoire_selection_screen.dart';
 
@@ -101,6 +106,15 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   late final TabController _toolsTabController;
   bool _showTrapsInLinesTab = false;
+
+  // ── Build-from-games draft session (inline in the Lines/Draft tab) ──
+  GamesDraft? _activeDraft;
+  bool _activeDraftIsWhite = true;
+  bool _buildingDraft = false;
+  String _draftProgress = '';
+  final GamesLibraryService _gamesLibrary = GamesLibraryService();
+
+  bool get _isDraftActive => _activeDraft != null || _buildingDraft;
 
   String? _lastRepertoireId;
 
@@ -802,13 +816,44 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             physics: const NeverScrollableScrollPhysics(),
             children: [
               _buildPgnTabWithEngines(),
-              _buildLinesTabContent(),
+              _buildSecondTabContent(),
             ],
           ),
         ),
         _buildNavControls(),
       ],
     );
+  }
+
+  /// Second tools tab: normally the Lines list, but it becomes the Draft
+  /// review surface while a build-from-games session is active.
+  Widget _buildSecondTabContent() {
+    if (_buildingDraft) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(_draftProgress, textAlign: TextAlign.center),
+            ),
+          ],
+        ),
+      );
+    }
+    final draft = _activeDraft;
+    if (draft != null) {
+      return DraftReviewPane(
+        draft: draft,
+        isWhite: _activeDraftIsWhite,
+        controller: _controller,
+        onClose: _closeDraft,
+        onSelectLine: (sans) => _controller.loadMoveSequence(sans),
+      );
+    }
+    return _buildLinesTabContent();
   }
 
   Widget _buildPgnTabWithEngines() {
@@ -875,11 +920,21 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.list_alt, size: 14),
+              Icon(
+                _isDraftActive ? Icons.download_done : Icons.list_alt,
+                size: 14,
+                color: _isDraftActive ? AppColors.warning : null,
+              ),
               const SizedBox(width: 4),
               Text(
-                'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
-                style: const TextStyle(fontSize: 12),
+                _isDraftActive
+                    ? 'Draft'
+                    : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _isDraftActive ? AppColors.warning : null,
+                  fontWeight: _isDraftActive ? FontWeight.w600 : null,
+                ),
               ),
             ],
           ),
@@ -1487,12 +1542,73 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _openGenerationDialog();
   }
 
-  Future<void> _buildFromGames() {
-    return showBuildFromGamesDialog(
+  Future<void> _buildFromGames() async {
+    final config = await showGamesSourceForm(
       context,
-      controller: _controller,
       initialIsWhite: _controller.isRepertoireWhite,
     );
+    if (config == null || !mounted) return;
+
+    // Switch to the Lines/Draft tab and show progress inline.
+    _toolsTabController.animateTo(1);
+    setState(() {
+      _activeDraft = null;
+      _buildingDraft = true;
+      _activeDraftIsWhite = config.isWhite;
+      _draftProgress = 'Starting…';
+    });
+
+    try {
+      final records = await _gamesLibrary.getGames(
+        platform: config.platform,
+        username: config.username,
+        selection: config.selection,
+        onProgress: (m) {
+          if (mounted) setState(() => _draftProgress = m);
+        },
+      );
+      if (records.isEmpty) {
+        if (mounted) {
+          setState(() => _buildingDraft = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('No games found for "${config.username}".')));
+        }
+        return;
+      }
+
+      if (mounted) {
+        setState(() => _draftProgress =
+            'Building tree from ${records.length} games…');
+      }
+      final (_, tree) = await UnifiedAnalysisBuilder.buildInIsolate(
+        pgnList: records.map((r) => r.pgn).toList(),
+        username: config.username,
+        isWhite: config.isWhite,
+        strictPlayerMatching: false,
+      );
+      if (!mounted) return;
+      setState(() {
+        _activeDraft = GamesDraft.against(
+          tree: tree,
+          isWhite: config.isWhite,
+          repertoire: _controller.tree,
+        );
+        _buildingDraft = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _buildingDraft = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not build draft: $e')));
+    }
+  }
+
+  void _closeDraft() {
+    if (!mounted) return;
+    setState(() {
+      _activeDraft = null;
+      _buildingDraft = false;
+    });
   }
 
   void _selectLine(RepertoireLine line) {
