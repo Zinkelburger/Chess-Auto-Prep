@@ -24,6 +24,7 @@ import 'pgn_with_engine.dart';
 import 'tactics/tactics_browse_panel.dart';
 import 'tactics/tactics_edit_dialog.dart';
 import 'tactics/tactics_import_panel.dart';
+import 'tactics/tactics_solution_navigator.dart';
 import 'tactics/tactics_training_panel.dart';
 import 'training/move_input_widget.dart';
 
@@ -77,14 +78,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   final PgnViewerWidgetController _pgnViewerController =
       PgnViewerWidgetController();
 
-  /// Current arrow-key position in the solution line (-1 = at tactic start).
-  int _solutionNavIndex = -1;
-
-  /// Cached SAN solution for the current position so we don't recompute.
-  List<String> _solutionSanCache = const [];
-
-  /// FEN for which the ephemeral solution has already been seeded into the PGN.
-  String? _solutionSeededForFen;
+  /// Solution-line navigation (Show Solution board/PGN walking).
+  late final TacticsSolutionNavigator _solutionNav;
 
   /// Tracks opponent-waiting state to detect when it's the user's turn again
   /// in multi-move puzzles (so we can refocus the move input).
@@ -99,6 +94,14 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _database = TacticsDatabase();
     _session = TacticsSessionController(database: _database);
     _import = TacticsImportCoordinator(database: _database);
+    _solutionNav = TacticsSolutionNavigator(
+      pgn: _pgnViewerController,
+      currentTactic: () => _session.currentPosition,
+      solutionToSan: (tactic) => _session.engine.solutionLineToSan(tactic),
+      syncPgnToTactic: _syncPgnToCurrentTactic,
+      setBoardPosition: (position) =>
+          context.read<AppState>().setCurrentPosition(position),
+    );
     _session.onBoardUpdate = _applyBoardUpdate;
     _session.onPositionSetup = _loadPositionSetup;
     _session.addListener(_onSessionChanged);
@@ -172,8 +175,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       // and advance one ply past the current position so the board shows
       // the move the user needed to find.
       if (_session.showSolution && _session.currentPosition != null) {
-        _ensureSolutionSeeded();
-        _navigateToSolutionIndex(_session.currentMoveIndex);
+        _solutionNav.ensureSeeded();
+        _solutionNav.navigateToIndex(_session.currentMoveIndex);
       }
 
       // Auto-blur move input when puzzle is resolved or solution is shown.
@@ -257,6 +260,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     await _database.loadPositions();
     if (mounted) {
       setState(() {});
+      unawaited(_import.refreshPendingCount());
       _maybeAutoFetch();
     }
   }
@@ -422,7 +426,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Left/Right arrow — navigate solution on Tactic tab, PGN on Analysis tab
     if (key == LogicalKeyboardKey.arrowRight) {
       if (_tabController.index == 0 && _session.showSolution) {
-        _solutionArrowForward();
+        if (_solutionNav.arrowForward()) setState(() {});
       } else {
         _pgnViewerController.goForward();
       }
@@ -431,7 +435,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
     if (key == LogicalKeyboardKey.arrowLeft) {
       if (_tabController.index == 0 && _session.showSolution) {
-        _solutionArrowBack();
+        if (_solutionNav.arrowBack()) setState(() {});
       } else {
         _pgnViewerController.goBack();
       }
@@ -500,8 +504,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             ? (ctx.moveNumber! - 1) * 2 + ((ctx.isWhiteToPlay ?? true) ? 0 : 1)
             : 0;
         final solutionSan = _session.showSolution && current != null
-            ? _solutionSanCache.isNotEmpty
-                ? _solutionSanCache
+            ? _solutionNav.sanMoves.isNotEmpty
+                ? _solutionNav.sanMoves
                 : _session.engine.solutionLineToSan(current)
             : const <String>[];
 
@@ -535,8 +539,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   },
                   solutionSanMoves: solutionSan,
                   solutionStartPly: solutionStartPly,
-                  activeSolutionMoveIndex:
-                      _solutionNavIndex >= 0 ? _solutionNavIndex : null,
+                  activeSolutionMoveIndex: _solutionNav.activeIndex,
                   onSolutionMoveTapped:
                       solutionSan.isNotEmpty ? _onSolutionLineMoveTapped : null,
                 )
@@ -573,6 +576,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onSinceDateChanged: (date) {
                     if (mounted) setState(() => _sinceDate = date);
                   },
+                  pendingGameCount: _import.pendingGameCount,
+                  totalStoredGames: _import.totalStoredGames,
+                  onResumeAnalysis: _resumeAnalysis,
                 ),
             ],
           ),
@@ -756,7 +762,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   void _resetAnalysis() {
     if (_session.currentPosition == null) return;
 
-    _resetSolutionState();
+    _solutionNav.reset();
     final setup = _session.resetPuzzleState();
     if (setup != null) _applyPositionSetup(setup);
     _syncPgnToCurrentTactic();
@@ -865,6 +871,29 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
+  Future<void> _resumeAnalysis() async {
+    final appState = context.read<AppState>();
+    final depth =
+        (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
+    final cores = (int.tryParse(_coresController.text) ?? 1)
+        .clamp(1, TacticsImportService.availableCores);
+
+    try {
+      await _import.resumeAnalysis(
+        lichessUsername: appState.lichessUsername,
+        chesscomUsername: appState.chesscomUsername,
+        depth: depth,
+        cores: cores,
+      );
+    } catch (e) {
+      debugPrint('Resume analysis failed: $e');
+      if (mounted) {
+        _import.dismissImportStatus();
+        showAppSnackBar(context, AppMessages.importFailed, isError: true);
+      }
+    }
+  }
+
   void _onStartSession(TacticsSessionSettings settings) {
     final setup = _session.startSession(settings);
     if (setup == null) return;
@@ -880,124 +909,16 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _loadPositionSetup(TacticsPositionSetup setup) {
-    _resetSolutionState();
+    _solutionNav.reset();
     _applyPositionSetup(setup);
     _syncPgnToCurrentTactic();
     TacticsControlPanel.moveInputKey.currentState?.focus();
   }
 
-  // ─── Solution navigation ───────────────────────────────────────────────
-
-  void _resetSolutionState() {
-    _solutionNavIndex = -1;
-    _solutionSanCache = const [];
-    _solutionSeededForFen = null;
-  }
-
-  /// Seed the full solution as an ephemeral variation in the PGN viewer once
-  /// per position. Subsequent Show Solution toggles / arrow presses reuse it.
-  void _ensureSolutionSeeded() {
-    final tactic = _session.currentPosition;
-    if (tactic == null) return;
-    if (_solutionSeededForFen == tactic.fen) return;
-
-    final san = _session.engine.solutionLineToSan(tactic);
-    if (san.isEmpty) return;
-
-    _solutionSanCache = san;
-    _solutionSeededForFen = tactic.fen;
-    _solutionNavIndex = -1;
-
-    _syncPgnToCurrentTactic();
-    for (final move in san) {
-      _pgnViewerController.addEphemeralMove(move);
-    }
-    for (int i = 0; i < san.length; i++) {
-      _pgnViewerController.goBack();
-    }
-  }
-
-  /// Navigate the board and PGN viewer to a specific index in the solution.
-  void _navigateToSolutionIndex(int targetIndex) {
-    final san = _solutionSanCache;
-    if (san.isEmpty) return;
-    targetIndex = targetIndex.clamp(-1, san.length - 1);
-
-    final delta = targetIndex - _solutionNavIndex;
-    if (delta > 0) {
-      for (int i = 0; i < delta; i++) {
-        _pgnViewerController.goForward();
-      }
-    } else if (delta < 0) {
-      for (int i = 0; i < -delta; i++) {
-        _pgnViewerController.goBack();
-      }
-    }
-    _solutionNavIndex = targetIndex;
-    _navigateSolutionBoard(_solutionNavIndex);
-  }
-
-  void _solutionArrowForward() {
-    final san = _solutionSanCache;
-    if (san.isEmpty) return;
-    if (_solutionNavIndex >= san.length - 1) return;
-
-    _solutionNavIndex++;
-    _navigateSolutionBoard(_solutionNavIndex);
-    _pgnViewerController.goForward();
-    setState(() {});
-  }
-
-  void _solutionArrowBack() {
-    if (_solutionNavIndex < 0) return;
-
-    _solutionNavIndex--;
-    _navigateSolutionBoard(_solutionNavIndex);
-    _pgnViewerController.goBack();
-    setState(() {});
-  }
-
-  /// Click handler: jump from wherever we are to [clickedIndex].
+  /// Click handler for a move in the solution line: jump there and repaint.
   void _onSolutionLineMoveTapped(List<String> sanMoves, int clickedIndex) {
-    if (sanMoves.isEmpty || clickedIndex < 0) return;
-
-    _ensureSolutionSeeded();
-
-    final delta = clickedIndex - _solutionNavIndex;
-    if (delta > 0) {
-      for (int i = 0; i < delta; i++) {
-        _pgnViewerController.goForward();
-      }
-    } else if (delta < 0) {
-      for (int i = 0; i < -delta; i++) {
-        _pgnViewerController.goBack();
-      }
-    }
-
-    _solutionNavIndex = clickedIndex;
-    _navigateSolutionBoard(clickedIndex);
+    _solutionNav.onMoveTapped(sanMoves, clickedIndex);
     setState(() {});
-  }
-
-  /// Set the board position to the state after playing solution moves 0..index
-  /// (or to the tactic start when index < 0).
-  void _navigateSolutionBoard(int index) {
-    final tactic = _session.currentPosition;
-    if (tactic == null) return;
-
-    try {
-      Position pos = Chess.fromSetup(Setup.parseFen(tactic.fen));
-      final san = _solutionSanCache;
-      for (int i = 0; i <= index && i < san.length; i++) {
-        final move = pos.parseSan(san[i]);
-        if (move == null) break;
-        pos = pos.play(move);
-      }
-      final appState = context.read<AppState>();
-      appState.setCurrentPosition(pos);
-    } catch (e) {
-      debugPrint('[TacticsPanel] Solution board nav failed: $e');
-    }
   }
 
   void _onAnalyze() {
