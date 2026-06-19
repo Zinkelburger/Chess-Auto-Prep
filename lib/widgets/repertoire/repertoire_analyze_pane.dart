@@ -66,6 +66,8 @@ class RepertoireAnalyzePane {
               boardPreview: props.boardPreview,
               onTrapSelected: props.onTrapSelected,
               metrics: TrapIndexService(props.traps).metrics,
+              repertoireLineMoves:
+                  props.lines.map((l) => l.moves).toList(),
               onStartTour: props.onStartTrapTour,
             )
           : null,
