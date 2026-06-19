@@ -279,41 +279,42 @@ class _NextButtonState extends State<_NextButton>
     final theme = Theme.of(context);
     return AnimatedBuilder(
       animation: _pulseAnimation,
+      child: ShortcutTooltip(
+        description: 'Next',
+        shortcut: 'Space',
+        child: FilledButton.icon(
+          onPressed: widget.onPressed,
+          icon: const Icon(Icons.arrow_forward, size: 20),
+          label: const Text(
+            'Next',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(44),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+          ),
+        ),
+      ),
       builder: (context, child) {
         final glow = _pulseAnimation.value * 0.5;
         return SizedBox(
           width: double.infinity,
-          child: ShortcutTooltip(
-            description: 'Next',
-            shortcut: 'Space',
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: theme.colorScheme.primary
-                        .withValues(alpha: 0.25 + glow * 0.3),
-                    blurRadius: 8 + glow * 8,
-                    spreadRadius: glow * 3,
-                  ),
-                ],
-              ),
-              child: FilledButton.icon(
-                onPressed: widget.onPressed,
-                icon: const Icon(Icons.arrow_forward, size: 20),
-                label: const Text(
-                  'Next',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: theme.colorScheme.primary
+                      .withValues(alpha: 0.25 + glow * 0.3),
+                  blurRadius: 8 + glow * 8,
+                  spreadRadius: glow * 3,
                 ),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(44),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
+              ],
             ),
+            child: child,
           ),
         );
       },
