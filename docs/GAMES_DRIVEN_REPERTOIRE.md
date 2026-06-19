@@ -1,6 +1,10 @@
 # Games-Driven Repertoire — Design Note
 
-**Status:** design only, nothing built. Captured 2026-06-19.
+**Status:** first implementation landed 2026-06-19 (overnight build). Core
+engine + shared library + a working UI flow are committed, tested headlessly,
+and compile. **Not yet GUI-smoke-tested** (no display on the build host) and
+some of the design below is deliberately deferred — see "Implementation status"
+at the bottom.
 
 A plan to add the ability to **build and maintain a repertoire from the games you
 actually play**, instead of only from explorer/theory. This is purely **additive**:
@@ -156,3 +160,52 @@ adds no new UI surface.
 - Draft materialization granularity (whole tree vs per-line accept).
 - How drafts are labeled/listed in `repertoire_selection_screen` and cleaned up
   after merge.
+
+---
+
+## Implementation status (2026-06-19)
+
+### Built, tested headlessly, and compiling
+- **Core engine** `lib/services/games_repertoire/`:
+  - `repertoire_diff.dart` — classify games tree vs repertoire per side.
+  - `games_draft.dart` — GamesDraft: prune subtree, filters, materialize→MoveTree.
+  - `repertoire_merge.dart` — union draft into target, flag my-side conflicts.
+  - 8 unit tests (`test/services/games_repertoire/`), all green.
+- **Shared games library** `lib/services/games_library/`:
+  - `game_filter.dart` — GameRecord parse, speed classification, GameSelection
+    (last-N / since / time-controls), de-dup. 5 unit tests, green.
+  - `games_library_service.dart` — per-(platform,username) cache + injected
+    fetchers (Chess.com via existing AnalysisGamesService; Lichess via games
+    export API).
+- **UI** `lib/widgets/games_repertoire/`:
+  - `draft_tree_view.dart` — coverage-coloured prunable tree + legend.
+  - `merge_conflict_sheet.dart` — pick mainline/sideline at each conflict.
+  - `build_from_games_dialog.dart` — full flow, launched from a new toolbar
+    button (`_buildFromGames`) in `repertoire_screen.dart`.
+  - `RepertoireController.mergeDraft` is the merge entry point.
+- Full app builds (`flutter build linux --debug`); full suite 492 tests pass;
+  `dart analyze` clean on all new/changed files.
+
+### NOT done / deviations from the design above (deliberate, blind-build risk)
+1. **Delivered as a full-screen dialog, not the contextual "Lines→Draft" tab.**
+   The agreed design swaps the Lines tab content; doing that surgery blind in
+   the 1690-line screen was too risky without a display. The dialog delivers the
+   same flow (build → prune/review → merge → resolve) and is the natural thing to
+   refactor into the tab once it can be clicked through.
+2. **Merges straight into the active repertoire**, rather than first persisting a
+   separate "draft" repertoire-library entry. Review/prune still happens before
+   any merge (in the dialog), so the "review before commit" intent holds, but the
+   draft isn't a saved, re-openable library entry yet.
+3. **Shared library is only used by the new flow.** Tactics + weakness-finder
+   still use their own downloaders; migrating them onto `GamesLibraryService` is
+   the remaining half of "download once, share across 3 features."
+4. **Lichess fetcher is unverified against the live API** (Chess.com path reuses
+   the proven AnalysisGamesService). **Audit/engine/comment-on-draft** and the
+   **Extend faucet** are not wired.
+
+### Suggested next session (needs the app running)
+- Smoke-test the flow end-to-end (real download, tree render, prune, merge,
+  conflict resolution) and fix UX papercuts.
+- Promote the dialog into the contextual Lines→Draft tab.
+- Persist drafts as flagged library entries; point audit/engine at them.
+- Migrate tactics + weakness-finder onto GamesLibraryService.
