@@ -83,6 +83,18 @@ class OpeningTreeNode {
     parent?._invalidateSortCache();
   }
 
+  /// Remove the child reached by [movesan], discarding its whole subtree.
+  /// Returns true if a child was removed.
+  bool removeChild(String movesan) {
+    final removed = children.remove(movesan);
+    if (removed != null) {
+      removed.parent = null;
+      _invalidateSortCache();
+      return true;
+    }
+    return false;
+  }
+
   /// Add or get a child node for a move
   OpeningTreeNode getOrCreateChild(String movesan, String resultingFen) {
     if (!children.containsKey(movesan)) {
