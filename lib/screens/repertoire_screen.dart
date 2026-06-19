@@ -1538,11 +1538,21 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Future<void> _buildFromGames() async {
+    final appState = context.read<AppState>();
     final config = await showGamesSourceForm(
       context,
       initialIsWhite: _controller.isRepertoireWhite,
+      initialChesscomUsername: appState.chesscomUsername,
+      initialLichessUsername: appState.lichessUsername,
     );
     if (config == null || !mounted) return;
+
+    // Remember the username app-wide so tactics / weakness finder reuse it.
+    if (config.platform == GamesPlatform.chesscom) {
+      appState.setChesscomUsername(config.username);
+    } else {
+      appState.setLichessUsername(config.username);
+    }
 
     // Switch to the Lines/Draft tab and show progress inline.
     _toolsTabController.animateTo(1);

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/games_library/game_filter.dart';
 import '../../services/games_library/games_library_service.dart';
+import '../common/since_date_picker.dart';
 
 /// What the user chose on the source form.
 class GamesSourceConfig {
@@ -25,28 +26,50 @@ class GamesSourceConfig {
 }
 
 /// Show the form; resolves to the chosen config, or null if cancelled.
+///
+/// [initialChesscomUsername] / [initialLichessUsername] prefill the username
+/// field from whatever is already saved app-wide (e.g. the tactics trainer), so
+/// the user doesn't have to retype it. The platform defaults to whichever one
+/// has a saved username.
 Future<GamesSourceConfig?> showGamesSourceForm(
   BuildContext context, {
   bool initialIsWhite = true,
+  String? initialChesscomUsername,
+  String? initialLichessUsername,
 }) {
   return showDialog<GamesSourceConfig>(
     context: context,
-    builder: (_) => _GamesSourceDialog(initialIsWhite: initialIsWhite),
+    builder: (_) => _GamesSourceDialog(
+      initialIsWhite: initialIsWhite,
+      initialChesscomUsername: initialChesscomUsername,
+      initialLichessUsername: initialLichessUsername,
+    ),
   );
 }
 
 class _GamesSourceDialog extends StatefulWidget {
-  const _GamesSourceDialog({required this.initialIsWhite});
+  const _GamesSourceDialog({
+    required this.initialIsWhite,
+    this.initialChesscomUsername,
+    this.initialLichessUsername,
+  });
   final bool initialIsWhite;
+  final String? initialChesscomUsername;
+  final String? initialLichessUsername;
 
   @override
   State<_GamesSourceDialog> createState() => _GamesSourceDialogState();
 }
 
 class _GamesSourceDialogState extends State<_GamesSourceDialog> {
-  GamesPlatform _platform = GamesPlatform.chesscom;
-  final _usernameCtrl = TextEditingController();
+  late GamesPlatform _platform;
+  late final TextEditingController _usernameCtrl;
   late bool _isWhite = widget.initialIsWhite;
+
+  // Selection mode: by date (default — usually what you want for a repertoire)
+  // or by a fixed count of most-recent games.
+  bool _useDate = true;
+  DateTime _since = DateTime.now().subtract(const Duration(days: 180));
   int _maxGames = 200;
   final Set<GameSpeed> _speeds = {
     GameSpeed.blitz,
@@ -54,6 +77,31 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
     GameSpeed.classical,
   };
   String? _error;
+
+  String? get _savedFor =>
+      _platform == GamesPlatform.chesscom
+          ? widget.initialChesscomUsername
+          : widget.initialLichessUsername;
+
+  @override
+  void initState() {
+    super.initState();
+    final chesscom = widget.initialChesscomUsername?.trim() ?? '';
+    final lichess = widget.initialLichessUsername?.trim() ?? '';
+    // Default to whichever platform already has a saved username.
+    _platform = chesscom.isEmpty && lichess.isNotEmpty
+        ? GamesPlatform.lichess
+        : GamesPlatform.chesscom;
+    _usernameCtrl = TextEditingController(text: _savedFor?.trim() ?? '');
+  }
+
+  void _onPlatformChanged(GamesPlatform platform) {
+    setState(() {
+      _platform = platform;
+      // Swap in the saved username for the newly selected platform.
+      _usernameCtrl.text = _savedFor?.trim() ?? '';
+    });
+  }
 
   @override
   void dispose() {
@@ -71,7 +119,9 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
       platform: _platform,
       username: username,
       isWhite: _isWhite,
-      selection: GameSelection(maxGames: _maxGames, speeds: _speeds),
+      selection: _useDate
+          ? GameSelection(since: _since, speeds: _speeds)
+          : GameSelection(maxGames: _maxGames, speeds: _speeds),
     ));
   }
 
@@ -94,7 +144,7 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
                       value: GamesPlatform.lichess, label: Text('Lichess')),
                 ],
                 selected: {_platform},
-                onSelectionChanged: (s) => setState(() => _platform = s.first),
+                onSelectionChanged: (s) => _onPlatformChanged(s.first),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -117,20 +167,45 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
                 onSelectionChanged: (s) => setState(() => _isWhite = s.first),
               ),
               const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Most recent $_maxGames games',
-                    style: const TextStyle(fontSize: 13)),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                      value: true,
+                      label: Text('From date'),
+                      icon: Icon(Icons.event, size: 16)),
+                  ButtonSegment(
+                      value: false,
+                      label: Text('Most recent'),
+                      icon: Icon(Icons.format_list_numbered, size: 16)),
+                ],
+                selected: {_useDate},
+                onSelectionChanged: (s) => setState(() => _useDate = s.first),
               ),
-              Slider(
-                value: _maxGames.toDouble(),
-                min: 20,
-                max: 1000,
-                divisions: 49,
-                label: '$_maxGames',
-                onChanged: (v) => setState(() => _maxGames = v.round()),
-              ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 12),
+              if (_useDate)
+                SinceDatePicker(
+                  date: _since,
+                  label: 'Games since',
+                  onChanged: (d) => setState(
+                      () => _since = d ?? DateTime.now()
+                          .subtract(const Duration(days: 180))),
+                )
+              else ...[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Most recent $_maxGames games',
+                      style: const TextStyle(fontSize: 13)),
+                ),
+                Slider(
+                  value: _maxGames.toDouble(),
+                  min: 20,
+                  max: 1000,
+                  divisions: 49,
+                  label: '$_maxGames',
+                  onChanged: (v) => setState(() => _maxGames = v.round()),
+                ),
+              ],
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 children: [

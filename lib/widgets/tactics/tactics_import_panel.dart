@@ -6,6 +6,7 @@ import '../../models/tactics_position.dart';
 import '../../models/tactics_session_settings.dart';
 import '../../services/tactics/tactics_import_coordinator.dart';
 import '../../services/tactics_import_service.dart';
+import '../common/since_date_picker.dart';
 
 /// Import controls and session start UI when no tactic is active.
 class TacticsImportPanel extends StatefulWidget {
@@ -232,7 +233,7 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
         _FetchModeRow(
           selected: isSince,
           onTap: () => widget.onFetchModeChanged(TacticsImportMode.sinceDate),
-          child: _SinceDatePicker(
+          child: SinceDatePicker(
             date: widget.sinceDate,
             onChanged: widget.onSinceDateChanged,
             enabled: isSince,
@@ -556,79 +557,6 @@ class _FetchModeRow extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-/// Date picker row for "since date" fetch mode.
-class _SinceDatePicker extends StatelessWidget {
-  const _SinceDatePicker({
-    required this.date,
-    required this.onChanged,
-    this.enabled = true,
-  });
-
-  final DateTime? date;
-  final ValueChanged<DateTime?> onChanged;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final displayDate = date ?? DateTime.now().subtract(const Duration(days: 7));
-    return Row(
-      children: [
-        Expanded(
-          child: InkWell(
-            borderRadius: BorderRadius.circular(4),
-            onTap: enabled ? () => _pickDate(context, displayDate) : null,
-            child: InputDecorator(
-              decoration: InputDecoration(
-                labelText: 'Games since',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                enabled: enabled,
-                suffixIcon: const Icon(Icons.calendar_today, size: 18),
-              ),
-              child: Text(
-                date != null
-                    ? _formatDate(date!)
-                    : 'Tap to select date',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: date != null ? null : Colors.grey[500],
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (date != null && enabled) ...[
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.clear, size: 18),
-            tooltip: 'Clear date',
-            onPressed: () => onChanged(null),
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Future<void> _pickDate(BuildContext context, DateTime initial) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(2010),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null) onChanged(picked);
-  }
-
-  static String _formatDate(DateTime d) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 }
 
