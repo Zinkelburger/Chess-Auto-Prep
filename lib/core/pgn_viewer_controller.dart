@@ -553,6 +553,7 @@ class PgnViewerController extends ChangeNotifier {
         solitaire.onGameChanged(
           mainLineLength: pgnWidgetController.mainLineLength,
           userPlaysWhite: !boardFlipped,
+          whiteToMoveAtStart: currentPosition.turn == Side.white,
         );
       });
     }
@@ -598,6 +599,7 @@ class PgnViewerController extends ChangeNotifier {
   void setAutoNextGame(bool value) => _autoPlay.setAutoNextGame(value);
 
   void toggleBoardFlipped() {
+    if (isSolitaireMode) return;
     boardFlipped = !boardFlipped;
     notifyListeners();
   }
@@ -842,7 +844,10 @@ class PgnViewerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleOpeningTree() => _viewerTree.toggle();
+  void toggleOpeningTree() {
+    if (isSolitaireMode) solitaire.stop();
+    _viewerTree.toggle();
+  }
 
   Future<void> rebuildOpeningTree() => _viewerTree.rebuild();
 
@@ -943,6 +948,7 @@ class PgnViewerController extends ChangeNotifier {
     solitaire.start(
       mainLineLength: pgnWidgetController.mainLineLength,
       userPlaysWhite: !boardFlipped,
+      whiteToMoveAtStart: currentPosition.turn == Side.white,
     );
     solitaire.removeListener(_onSolitaireChanged);
     solitaire.addListener(_onSolitaireChanged);

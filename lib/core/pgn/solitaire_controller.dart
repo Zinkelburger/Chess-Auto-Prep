@@ -24,11 +24,15 @@ class SolitaireController extends ChangeNotifier {
   bool _userIsWhite = true;
   bool get userIsWhite => _userIsWhite;
 
+  /// Whether White is to move at the game's starting position (ply 0).
+  /// False for games starting from a FEN where Black moves first.
+  bool _whiteToMoveAtStart = true;
+
   /// Whether we're waiting for the user to guess.
   bool get waitingForUser {
     if (!_active) return false;
     if (_revealedPly >= _totalMoves) return false;
-    final isWhiteTurn = _revealedPly % 2 == 0;
+    final isWhiteTurn = (_revealedPly % 2 == 0) == _whiteToMoveAtStart;
     return isWhiteTurn == _userIsWhite;
   }
 
@@ -62,10 +66,15 @@ class SolitaireController extends ChangeNotifier {
   VoidCallback? onAdvancePosition;
   VoidCallback? onResetPosition;
 
-  void start({required int mainLineLength, required bool userPlaysWhite}) {
+  void start({
+    required int mainLineLength,
+    required bool userPlaysWhite,
+    bool whiteToMoveAtStart = true,
+  }) {
     _active = true;
     _totalMoves = mainLineLength;
     _userIsWhite = userPlaysWhite;
+    _whiteToMoveAtStart = whiteToMoveAtStart;
     _revealedPly = 0;
     _currentAttempts = 0;
     _correctFirstTry = 0;
@@ -86,10 +95,15 @@ class SolitaireController extends ChangeNotifier {
   }
 
   /// Called when the game changes underneath (next/prev game).
-  void onGameChanged({required int mainLineLength, required bool userPlaysWhite}) {
+  void onGameChanged({
+    required int mainLineLength,
+    required bool userPlaysWhite,
+    bool whiteToMoveAtStart = true,
+  }) {
     if (!_active) return;
     _totalMoves = mainLineLength;
     _userIsWhite = userPlaysWhite;
+    _whiteToMoveAtStart = whiteToMoveAtStart;
     _revealedPly = 0;
     _currentAttempts = 0;
     _correctFirstTry = 0;
@@ -141,7 +155,7 @@ class SolitaireController extends ChangeNotifier {
       return;
     }
 
-    final isWhiteTurn = _revealedPly % 2 == 0;
+    final isWhiteTurn = (_revealedPly % 2 == 0) == _whiteToMoveAtStart;
     if (isWhiteTurn == _userIsWhite) return;
 
     _opponentPlaying = true;

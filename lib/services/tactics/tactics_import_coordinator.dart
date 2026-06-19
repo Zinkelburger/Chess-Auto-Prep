@@ -48,10 +48,18 @@ class TacticsImportCoordinator extends ChangeNotifier {
   int totalStoredGames = 0;
 
   /// Recompute [pendingGameCount] from stored PGNs vs analyzed game IDs.
-  Future<void> refreshPendingCount() async {
+  /// Only counts games for platforms with a configured username, since
+  /// resume cannot process games without one.
+  Future<void> refreshPendingCount({
+    String? lichessUsername,
+    String? chesscomUsername,
+  }) async {
     final service = TacticsImportService(database: database);
     await service.initialize();
-    final counts = await service.countPendingGames();
+    final counts = await service.countPendingGames(
+      lichessUsername: lichessUsername,
+      chesscomUsername: chesscomUsername,
+    );
     pendingGameCount = counts.pending;
     totalStoredGames = counts.total;
     notifyListeners();
@@ -93,7 +101,10 @@ class TacticsImportCoordinator extends ChangeNotifier {
     } finally {
       activeImport = null;
       isImporting = false;
-      await refreshPendingCount();
+      await refreshPendingCount(
+        lichessUsername: lichessUsername,
+        chesscomUsername: chesscomUsername,
+      );
     }
   }
 
@@ -151,7 +162,12 @@ class TacticsImportCoordinator extends ChangeNotifier {
     } finally {
       activeImport = null;
       isImporting = false;
-      await refreshPendingCount();
+      await refreshPendingCount(
+        lichessUsername:
+            source == TacticsImportSource.lichess ? params.username : null,
+        chesscomUsername:
+            source == TacticsImportSource.chessCom ? params.username : null,
+      );
     }
   }
 
