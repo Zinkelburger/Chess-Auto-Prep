@@ -83,6 +83,8 @@ class RepertoireSelector {
         return ecaCalc.scoreOurMoveChildren(node);
       case SelectionMode.playable:
         return _pickByPlayability(node);
+      case SelectionMode.trappy:
+        return _pickByOpponentCpl(node);
     }
   }
 
@@ -129,6 +131,49 @@ class RepertoireSelector {
     // Fallback: if no children have DB data, pick by engine eval
     if (bestChild == null) return _pickByEngineEval(node);
 
+    return ScoredChild(
+      child: bestChild,
+      expectimaxValue: bestChild.expectimaxValue,
+    );
+  }
+
+  /// Trappy mode: pick the child whose subtree maximizes total expected
+  /// opponent centipawn loss, subject to the eval-loss filter.
+  ScoredChild? _pickByOpponentCpl(BuildTreeNode node) {
+    if (node.children.isEmpty) return null;
+
+    int bestChildCp = kWorstEvalCp;
+    for (final child in node.children) {
+      if (!child.hasEngineEval) continue;
+      final cpUs = child.evalForUs(config.playAsWhite);
+      if (cpUs > bestChildCp) bestChildCp = cpUs;
+    }
+
+    double bestCpl = -1.0;
+    BuildTreeNode? bestChild;
+    int passing = 0;
+
+    for (final child in node.children) {
+      if (!child.hasEngineEval) continue;
+      final cpUs = child.evalForUs(config.playAsWhite);
+      if (cpUs < bestChildCp - config.maxEvalLossCp) continue;
+      passing++;
+      if (child.cplValue > bestCpl) {
+        bestCpl = child.cplValue;
+        bestChild = child;
+      }
+    }
+
+    if (passing == 0) {
+      for (final child in node.children) {
+        if (child.cplValue > bestCpl) {
+          bestCpl = child.cplValue;
+          bestChild = child;
+        }
+      }
+    }
+
+    if (bestChild == null) return _pickByEngineEval(node);
     return ScoredChild(
       child: bestChild,
       expectimaxValue: bestChild.expectimaxValue,

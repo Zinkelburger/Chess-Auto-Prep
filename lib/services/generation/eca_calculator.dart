@@ -226,6 +226,80 @@ class ExpectimaxCalculator {
     return v * (1.0 + nw * novelty);
   }
 
+  /// Run CPL value propagation on the full tree.
+  ///
+  /// Bottom-up DFS that computes cumulative expected opponent centipawn loss.
+  /// At opponent nodes: cplV = localCpl + Σ(p_i * cplV(child_i))
+  /// At our nodes: cplV = max(cplV(child_i)) among eval-guarded children.
+  /// Used by SelectionMode.trappy.
+  void calculateCplValues(BuildTreeNode root) {
+    _cplRecursive(root);
+  }
+
+  void _cplRecursive(BuildTreeNode node) {
+    for (final child in node.children) {
+      _cplRecursive(child);
+    }
+
+    if (node.children.isEmpty) {
+      node.cplValue = 0.0;
+      return;
+    }
+
+    final isOurMove = node.isWhiteToMove == config.playAsWhite;
+
+    if (isOurMove) {
+      final best = _pickByCplValue(node);
+      node.cplValue = best?.cplValue ?? 0.0;
+    } else {
+      double covered = 0.0;
+      double v = node.localCpl;
+      for (final child in node.children) {
+        covered += child.moveProbability;
+        v += child.moveProbability * child.cplValue;
+      }
+      if (covered > 1.0) covered = 1.0;
+      node.cplValue = v;
+    }
+  }
+
+  /// Pick the child with the highest CPL value among eval-guarded candidates.
+  BuildTreeNode? _pickByCplValue(BuildTreeNode node) {
+    if (node.children.isEmpty) return null;
+
+    int bestChildCp = kWorstEvalCp;
+    for (final child in node.children) {
+      if (!child.hasEngineEval) continue;
+      final cpUs = child.evalForUs(config.playAsWhite);
+      if (cpUs > bestChildCp) bestChildCp = cpUs;
+    }
+
+    double bestCpl = -1.0;
+    BuildTreeNode? bestChild;
+    int passing = 0;
+
+    for (final child in node.children) {
+      final cpUs = child.evalForUs(config.playAsWhite);
+      if (cpUs < bestChildCp - config.maxEvalLossCp) continue;
+      passing++;
+      if (child.cplValue > bestCpl) {
+        bestCpl = child.cplValue;
+        bestChild = child;
+      }
+    }
+
+    if (passing == 0) {
+      for (final child in node.children) {
+        if (child.cplValue > bestCpl) {
+          bestCpl = child.cplValue;
+          bestChild = child;
+        }
+      }
+    }
+
+    return bestChild;
+  }
+
   /// Compute trap scores on opponent-move nodes throughout the tree.
   /// Trap score measures how often opponents play suboptimal moves:
   ///   trap = clamp(eval_diff / 200, 0, 1) * highest_probability
