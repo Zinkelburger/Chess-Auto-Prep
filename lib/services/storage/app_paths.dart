@@ -8,6 +8,7 @@ class AppPaths {
   static const String repertoiresDirectoryName = 'repertoires';
   static const String analysisGamesDirectoryName = 'analysis_games';
   static const String pgnCollectionsDirectoryName = 'pgn_collections';
+  static const String gamesLibraryDirectoryName = 'games_library';
 
   static Future<Directory> documentsDirectory() async {
     return getApplicationDocumentsDirectory();
@@ -34,6 +35,17 @@ class AppPaths {
   static Future<Directory> analysisGamesDirectory({bool create = false}) async {
     final docs = await documentsDirectory();
     final dir = Directory(p.join(docs.path, analysisGamesDirectoryName));
+    if (create && !await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// Shared raw-games cache used by the unified Games library (tactics,
+  /// weakness finder, repertoire builder all read from here).
+  static Future<Directory> gamesLibraryDirectory({bool create = false}) async {
+    final docs = await documentsDirectory();
+    final dir = Directory(p.join(docs.path, gamesLibraryDirectoryName));
     if (create && !await dir.exists()) {
       await dir.create(recursive: true);
     }
