@@ -218,6 +218,9 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
 
   String selectionModeDescription() => _selectionModeDescription();
 
+  /// Whether the current configuration is ready to start a build.
+  bool get canStart => validateBeforeStart() == null;
+
   /// Returns an error message when the current settings cannot start a build.
   String? validateBeforeStart() {
     if (_buildMode == BuildMode.trapFinder) {
@@ -226,7 +229,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     if (_buildMode == BuildMode.dbExplorer && _pgnFilePaths.isEmpty) {
       final sources = _pgnSourcesKey.currentState?.sources ?? [];
       if (sources.isEmpty) {
-        return 'Add at least one PGN file below (repertoire lines are not used).';
+        return 'Add at least one PGN file first. Use the picker above to '
+            'attach .pgn files with your games.';
       }
     }
     final evalSources = _evalSourcesKey.currentState;
@@ -258,6 +262,11 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
 
     final dbSettings = EvalDatabaseSettings.instance;
 
+    final isTrappyMode = _selectionMode == SelectionMode.trappy;
+    final userMaxEvalLoss = int.tryParse(_evalGuardCtrl.text.trim()) ?? 30;
+    final userMinEval =
+        int.tryParse(_minEvalCtrl.text.trim()) ?? (playAsWhite ? 0 : -100);
+
     return TreeBuildConfig(
       startFen: startFen,
       playAsWhite: playAsWhite,
@@ -273,9 +282,14 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       minElo: int.tryParse(_minEloCtrl.text.trim()) ?? 0,
       evalDepth: evalDepth,
       engineThreads: engineThreads,
-      maxEvalLossCp: int.tryParse(_evalGuardCtrl.text.trim()) ?? 30,
-      minEvalCp:
-          int.tryParse(_minEvalCtrl.text.trim()) ?? (playAsWhite ? 0 : -100),
+      maxEvalLossCp: isTrappyMode
+          ? (userMaxEvalLoss < 100 ? 100 : userMaxEvalLoss)
+          : userMaxEvalLoss,
+      minEvalCp: isTrappyMode
+          ? (playAsWhite
+              ? (userMinEval > -100 ? -100 : userMinEval)
+              : (userMinEval > -300 ? -300 : userMinEval))
+          : userMinEval,
       maxEvalCp:
           int.tryParse(_maxEvalCtrl.text.trim()) ?? (playAsWhite ? 200 : 100),
       maiaElo: int.tryParse(_maiaEloCtrl.text.trim()) ?? 2200,
@@ -481,6 +495,10 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                   DropdownMenuItem(
                     value: SelectionMode.playable,
                     child: Text('Balanced (strength + ease)'),
+                  ),
+                  DropdownMenuItem(
+                    value: SelectionMode.trappy,
+                    child: Text('Trappy (maximize opponent mistakes)'),
                   ),
                 ],
                 onChanged: widget.isGenerating
@@ -815,6 +833,11 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       case SelectionMode.playable:
         return 'Balances strength (60%) with ease of play (40%) — prefers '
             'moves that are both sound and natural to find over the board.';
+      case SelectionMode.trappy:
+        return 'Picks lines where opponents are most likely to blunder. '
+            'Uses expected centipawn loss instead of win probability. '
+            'Build tolerances are automatically widened to explore '
+            'trickier positions.';
     }
   }
 
