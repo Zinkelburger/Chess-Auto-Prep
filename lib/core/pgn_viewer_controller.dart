@@ -10,6 +10,7 @@ import 'package:window_manager/window_manager.dart';
 import 'pgn/auto_play_engine.dart';
 import 'pgn/pgn_fen_index.dart';
 import 'pgn/slice_persistence.dart';
+import 'pgn/solitaire_controller.dart';
 import 'pgn/viewer_opening_tree.dart';
 import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart';
@@ -279,6 +280,11 @@ class PgnViewerController extends ChangeNotifier {
   bool get autoNextGame => _autoPlay.autoNextGame;
   double get autoPlayDelaySec => _autoPlay.delaySec;
 
+  // -- Solitaire mode --
+  final SolitaireController solitaire = SolitaireController();
+
+  bool get isSolitaireMode => solitaire.active;
+
   int? activeEngineLineMoveIdx;
 
   GameSortMode sortMode = GameSortMode.fileOrder;
@@ -301,6 +307,8 @@ class PgnViewerController extends ChangeNotifier {
 
   void disposeController() {
     _autoPlay.dispose();
+    solitaire.removeListener(_onSolitaireChanged);
+    solitaire.dispose();
     persistDebounce?.cancel();
   }
 
@@ -539,6 +547,15 @@ class PgnViewerController extends ChangeNotifier {
     final game = filteredGames[currentGameIndex];
     await analysisController.tryLoadFromPgn(game.pgnText);
     if (!isActive()) return;
+    if (isSolitaireMode) {
+      schedulePostFrame?.call(() {
+        pgnWidgetController.goToMainLineIndex(0);
+        solitaire.onGameChanged(
+          mainLineLength: pgnWidgetController.mainLineLength,
+          userPlaysWhite: !boardFlipped,
+        );
+      });
+    }
     notifyListeners();
     onReclaimFocus?.call();
   }
@@ -567,6 +584,7 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void toggleAutoPlay() {
+    if (isSolitaireMode) return;
     _autoPlay.toggle();
     onReclaimFocus?.call();
   }
@@ -837,6 +855,7 @@ class PgnViewerController extends ChangeNotifier {
   // ── Unified navigation (mode-aware) ──
 
   void navigateBack() {
+    if (isSolitaireMode) return;
     stopAutoPlay();
     if (showOpeningTree) {
       _viewerTree.goBack();
@@ -846,6 +865,7 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void navigateForward() {
+    if (isSolitaireMode) return;
     stopAutoPlay();
     if (showOpeningTree) {
       _viewerTree.goForward();
@@ -855,6 +875,7 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void navigateToStart() {
+    if (isSolitaireMode) return;
     stopAutoPlay();
     if (showOpeningTree) {
       _viewerTree.resetToStart();
@@ -865,6 +886,7 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void navigateToEnd() {
+    if (isSolitaireMode) return;
     stopAutoPlay();
     if (showOpeningTree) {
       _viewerTree.goToEnd();
@@ -882,10 +904,62 @@ class PgnViewerController extends ChangeNotifier {
   void onBoardMove(String san) {
     if (showOpeningTree) {
       _viewerTree.onMoveSelected(san);
+    } else if (isSolitaireMode) {
+      _handleSolitaireMove(san);
     } else {
       stopAutoPlay();
       pgnWidgetController.addEphemeralMove(san);
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // SOLITAIRE MODE
+  // ---------------------------------------------------------------------------
+
+  void toggleSolitaire() {
+    if (isSolitaireMode) {
+      solitaire.stop();
+      notifyListeners();
+    } else {
+      _startSolitaire();
+    }
+  }
+
+  void _startSolitaire() {
+    if (filteredGames.isEmpty) return;
+    stopAutoPlay();
+    pgnWidgetController.clearEphemeralMoves();
+    pgnWidgetController.goToMainLineIndex(0);
+
+    solitaire.onAdvancePosition = () {
+      pgnWidgetController.goForward();
+      notifyListeners();
+    };
+    solitaire.onResetPosition = () {
+      // no-op: board already shows the pre-move position since the move
+      // wasn't applied to the widget
+    };
+
+    solitaire.start(
+      mainLineLength: pgnWidgetController.mainLineLength,
+      userPlaysWhite: !boardFlipped,
+    );
+    solitaire.removeListener(_onSolitaireChanged);
+    solitaire.addListener(_onSolitaireChanged);
+    notifyListeners();
+  }
+
+  void _onSolitaireChanged() {
+    notifyListeners();
+  }
+
+  void _handleSolitaireMove(String san) {
+    final mainIdx = solitaire.revealedPly;
+    final moveHistory = pgnWidgetController.mainLineMoves;
+    if (mainIdx >= moveHistory.length) return;
+
+    final expectedSan = moveHistory[mainIdx];
+    solitaire.handleMove(san, currentPosition, expectedSan);
   }
 
   List<int> gamesAtTreePosition() => _viewerTree.gamesAtTreePosition();
