@@ -319,7 +319,8 @@ AuditFindingsPanel (bottom pane Findings tab)
   → Finding tap → RepertoireController.loadMoveSequence()
 
 Controller state:
-  → AuditResult + liveFindings + interruptedSnapshot + progress
+  → AuditResult + liveFindings + interruptedSnapshot + progress + _activeRepertoireId
+  → Repertoire scoping: onRepertoireSwitching(oldPath) cancels in-flight audit, saves progress to old path, clears all state; tryRestore(newPath) has stale-async guard (discards late loads if user switched again)
   → Board annotations: screen reads controller.result for arrows (mistakes=red, inaccuracies=yellow, missing=blue)
   → JSON persistence: *_audit.json beside repertoire PGN; partial progress saved on cancel/dispose via controller.saveProgress()
   → Interrupted audits: controller.tryRestore() sets interruptedSnapshot; controller.launchResume() passes skipFens + priorFindings
@@ -381,7 +382,7 @@ PgnViewerScreen._pickFile → `FilePicker.pickFiles` (Linux: **XDG Desktop Porta
 Game nav bar (when games loaded): Copy PGN → `filteredGames[currentGameIndex].pgnText` → `Clipboard.setData` + `AppMessages.pgnCopied` snackbar
 Analysis tab / inline engine: tap best line or Maia move → `PgnViewerWidgetController.goToMainLineIndex(branchPly)` + `addEphemeralMove` (new RAV per distinct line; prior RAVs kept)
 Clear annotations → nav bar `onClearAnnotations` or PGN variation context menu / Escape / Home → `clearEphemeralMoves` (removes ephemeral nodes only)
-Keyboard: `N`/`P` prev/next game, `F` flip (`Ctrl+F`/F11 fullscreen), `E` engine (`Ctrl+E` export), `W` auto-next, `A` edit mode, `T` opening tree; plus `←`/`→` navigate, Home/End jump, Space auto-play, Tab cycle tabs, Escape exit edit/fullscreen/clear annotations. Letter keys suppressed while a text field has focus. Digit star-rating shortcuts removed.
+Keyboard: `N`/`P` prev/next game, `F` flip (`Ctrl+F`/F11 fullscreen), `E` engine (`Ctrl+E` export), `W` auto-next, `A` edit mode, `T` opening tree, `S` solitaire mode; plus `←`/`→` navigate, Home/End jump, Space auto-play, Tab cycle tabs, Escape exit edit/fullscreen/clear annotations. Letter keys suppressed while a text field has focus. Digit star-rating shortcuts removed.
 ```
 
 #### Edit Mode (Annotation)
@@ -396,6 +397,22 @@ Toggled via pencil icon in `GameNavBar` or keyboard shortcut `A`. When active:
 - **Persistence**: NAGs saved via `buildMovetext()` → `persistMoveComments()` → file write. NAGs serialize as `$N` tokens after the SAN in standard PGN format.
 
 Key files: `pgn_comment_utils.dart` (NAG constants, `kMoveNags`, `nagColor`, `buildMovetext` with NAG serialization), `pgn_viewer_widget.dart` (`editMode`/`protectOriginal` props, `_AnnotationToolbar`, `_NagButton`), `pgn_viewer_screen.dart` (`_editMode`, `_protectOriginal`, `_buildEditModeBar`), `game_nav_bar.dart` (`onToggleEditMode`, `isEditMode`).
+
+#### Solitaire Mode (Guess-the-Move)
+
+Toggled via brain icon in toolbar or keyboard shortcut `S`. When active:
+
+- **Concept**: User guesses the perspective-side's moves one at a time. Correct guess reveals the move and auto-plays the opponent's reply. Incorrect guess shows feedback and the board stays at the current position for another attempt.
+- **Movetext hiding**: `PgnMovetextView` receives `revealedPly` — moves at index >= revealedPly are hidden (not rendered). Progressively revealed as the user guesses correctly.
+- **Board gating**: `ChessBoardWidget.enableUserMoves` is false except when `solitaire.waitingForUser` is true (user's turn to guess).
+- **Move validation**: FEN-equivalence check (play both moves on the position, compare resulting FEN) with SAN normalization fallback. Same pattern as `TrainingSessionController.isCorrectUserMove`.
+- **Opponent auto-play**: After a correct guess, opponent's move auto-plays after 400ms delay.
+- **Scoring**: Tracks first-try correct guesses vs total user moves. Displayed in a progress bar above the movetext.
+- **Game complete**: Overlay shows score summary with "Next Game" button.
+- **Navigation blocked**: Arrow keys, Home/End, Space (auto-play), and `navigateBack/Forward/ToStart/ToEnd` are disabled during solitaire to prevent peeking.
+- **Incompatible with**: Opening tree mode, edit mode (toggle disabled when opening tree active).
+
+Key files: `lib/core/pgn/solitaire_controller.dart` (state machine, validation, scoring), `lib/core/pgn_viewer_controller.dart` (integration, `toggleSolitaire`, `_handleSolitaireMove`), `lib/screens/pgn_viewer_screen.dart` (UI toggle, feedback overlay, status bar), `lib/widgets/pgn/pgn_movetext_view.dart` (`revealedPly` parameter).
 
 ### Generate repertoire from PGN viewer games
 
@@ -472,7 +489,7 @@ Used by:
 | `coverage_controller.dart` | **Coverage session state** — result, progress, running flag | `calculate`, `clear` |
 | `board_preview_controller.dart` | Debounced hover FEN overlay for board | `setPreview`, `clearPreview`, `previewFen`, `isPreview` |
 | `navigation_stack.dart` | Breadcrumb stack for repertoire navigation | push/pop/jump |
-| `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `detectProtagonist`, `detectBothPlayers` (two-player matchup detection); `loadCurrentGame` resets board to game start (`currentPosition`, engine-line highlight); `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); loads persisted `.fenidx` companion file on open (validated against PGN file size + mtime + game count), or builds `fenIndex` in background, for instant position-filter and tree-position lookups; re-persists `.fenidx` after PGN metadata writes to keep stat values fresh; used by `PgnViewerScreen` |
+| `pgn_viewer_controller.dart` | PGN viewer file load, game index & navigation | `loadFile`, `errorMessage`, slice/export/tree APIs; `detectProtagonist`, `detectBothPlayers` (two-player matchup detection); `loadCurrentGame` resets board to game start (`currentPosition`, engine-line highlight); `applySlice` no-ops when indices + `SliceConfig` unchanged (skips opening-tree rebuild); loads persisted `.fenidx` companion file on open (validated against PGN file size + mtime + game count), or builds `fenIndex` in background, for instant position-filter and tree-position lookups; re-persists `.fenidx` after PGN metadata writes to keep stat values fresh; solitaire mode (`toggleSolitaire`, `SolitaireController`); used by `PgnViewerScreen` |
 | `repertoire_controller.dart` | **Central repertoire session state**: owns `MoveTree` + `TreePath` cursor, `RepertoireMetadata? currentRepertoire`, lines, opening tree. Single navigation entry point `jump(path)`. Surfaces load failures via `loadError`. Move entry via `playMove` (replaces removed `userPlayedMove` / `_isInternalUpdate`). `deleteAtPath` pushes undo snapshot before deleting. | `jump`, `playMove`, `playMoveAtTreePath`, `userSelectedTreeMove` (opening-tree clicks), `goBack`/`goForward`/`goToStart`/`goToEnd`, `loadMoveSequence`, `navigateToLineMove`, `deleteAtPath`, `promoteVariation`, `makeMainLine`, `setCommentAtPath`, `deleteLine`, `setRepertoire`/`loadRepertoire` |
 | `repertoire_writer.dart` | Serialised PGN mutations + undo stack | `addMoveAtPosition`, `acceptSuggestion`, `pushUndo`, `undo`, `canUndo` |
 
@@ -501,10 +518,10 @@ Used by:
 | `repertoire_move_progress.dart` | Training progress per move |
 | `repertoire_review_entry.dart` | FSRS-style review scheduling |
 | `repertoire_review_history_entry.dart` | Review history log |
-| `settings_enums.dart` | `CandidateSource`, `SelectionMode`, `OpponentProbabilityMode`, etc. |
+| `settings_enums.dart` | `CandidateSource`, `SelectionMode` (`expectimax`, `engineOnly`, `dbWinRateOnly`, `playable`, `trappy`), `OpponentProbabilityMode`, etc. |
 | `tactics_position.dart` | Tactics puzzle position; includes `int rating` (0=unrated, 1–5 stars; 1-star excluded from training by default) |
 | `tactics_session_settings.dart` | `TacticsSessionSettings` — order (`newestFirst`/`leastReviewed`/`worstSuccessRate`/`random`), `mistakeTypes` filter, `includeOneStar` toggle; `accepts(pos)` for session filtering |
-| `training_settings.dart` | Trainer behavior (persisted) |
+| `training_settings.dart` | Trainer behavior (persisted); `ReviewOrder` enum includes `hardestFirst` (sorts by ascending playability from tree) |
 
 ### `lib/features/browse/`
 
@@ -535,7 +552,7 @@ Used by:
 | **widgets/trap_navigation_buttons.dart** | Prev/next trap in line (board toolbar) |
 | **widgets/trap_summary_header.dart** | Aggregate trap stats + ETV |
 | **widgets/trap_walkthrough.dart** | Sequential trap tour with list hover preview |
-| **widgets/traps_browser.dart** | Rich trap list with mini board, per-reply stats, classification badges, sort by Eval Drop/Most Common/Trap%/Surplus (wired into repertoire screen Lines tab) |
+| **widgets/traps_browser.dart** | Rich trap list with mini board, per-reply stats, classification badges, sort by Eval Drop/Most Common/Trap%/Surplus; filter toggle: All Explored vs In Repertoire (wired into repertoire screen Lines tab) |
 
 ### `lib/features/eval_tree/`
 
@@ -621,9 +638,9 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `main_screen.dart` | Mode `IndexedStack`, engine lifecycle on mode exit |
 | `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
 | `repertoire_selection_screen.dart` | Pick/create repertoire; lists `RepertoireMetadata` from storage |
-| `repertoire_training_screen.dart` | Training mode shell; Lines tab uses `TrainingLinesPanel` (categorized Learn/Review view with SRS metadata); keyboard: J toggles manual advance, Space acknowledges learn steps or opponent-comment Next, `/` focuses move input (letter keys suppressed in text fields) |
+| `repertoire_training_screen.dart` | Training mode shell; Lines tab uses `TrainingLinesPanel` (categorized Learn/Review view with SRS metadata, per-line playability chips, bottleneck warnings, "needs scoring" banner linking to Builder); keyboard: J toggles manual advance, Space acknowledges learn steps or opponent-comment Next, `/` focuses move input (letter keys suppressed in text fields) |
 | `analysis_screen.dart` | Game weakness / position analysis |
-| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; keyboard: N/P/F/E/W/A/T letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen |
+| `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: N/P/F/E/W/A/T/S letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen |
 | `player_selection_screen.dart` | Lichess player pick for analysis |
 | `settings_screen.dart` | Global engine, opponent model (Maia only; Lichess DB selector hidden), **on-the-fly expectimax** (live dock; separate from Generation tab Engine Depth), CdbDirect settings |
 
@@ -671,8 +688,8 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `generation/tree_eval_resolver.dart` | Eval resolution during build |
 | `generation/tree_ease.dart` | Opponent ease calculation |
 | `generation/tree_my_ease.dart` | Our-move naturalness + line playability |
-| `generation/eca_calculator.dart` | Expectimax + trap scores |
-| `generation/repertoire_selector.dart` | Mark repertoire moves on tree |
+| `generation/eca_calculator.dart` | Expectimax + trap scores + CPL value propagation (trappy mode) |
+| `generation/repertoire_selector.dart` | Mark repertoire moves on tree (5 selection modes incl. trappy) |
 | `generation/trap_extractor.dart` | Trap candidate collection |
 | `generation/fen_map.dart` | Transposition map keyed by 4-field canonical FEN (`canonicalizeFen`); full FEN stored on nodes; `resolveTransposition(node, fenMap)` follows canonical FEN when a leaf has children elsewhere |
 | `generation/tree_serialization.dart` | tree.json read/write (`pv_continuation_move`, `engine_injected`) |
@@ -713,13 +730,13 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 |------|---------|
 | `tactics_engine.dart` | Puzzle validation; `buildTrainableLine` extends lines using **Maia opponent-probability** (≥ 85% threshold) when available — agreement with PV continues from PV, disagreement triggers a fresh Stockfish depth-14 eval for the user's best reply then stops, low confidence stops at single move; falls back to captures/checks/mates heuristic when Maia is unavailable; max 6 ply (3 user moves); `solutionPv` + `solutionLineToSan` for Show Solution |
 | `tactics_database.dart` | Local puzzle store; `startSession(settings)` builds filtered/ordered queue; `setRating(fen, rating)` persists star rating + removes 1-star from live queue |
-| `tactics_import_service.dart` | Import from Lichess/Chess.com; supports `since` parameter for date-based fetch (Lichess `since` query param, Chess.com archive month filtering + PGN date header filtering); 200-game safety cap on date-based imports; initializes Maia at import start; extracts user Elo from first game PGN headers (`WhiteElo`/`BlackElo`) — Lichess uses PGN Elo as-is; Chess.com maps blitz Elo via `chesscom_lichess_elo.dart` then clamps 600–2400 (default 2200); passes `MaiaEvaluator` + `EvalWorker` to `buildTrainableLine` for line extension; **atomic per-game completion**: positions are awaited/persisted before `markGameAnalyzed`, so an app close mid-batch never permanently skips a game's blunders |
+| `tactics_import_service.dart` | Import from Lichess/Chess.com; supports `since` parameter for date-based fetch (Lichess `since` query param, Chess.com archive month filtering + PGN date header filtering); 200-game safety cap on date-based imports; initializes Maia at import start; extracts user Elo from first game PGN headers (`WhiteElo`/`BlackElo`) — Lichess uses PGN Elo as-is; Chess.com maps blitz Elo via `chesscom_lichess_elo.dart` then clamps 600–2400 (default 2200); passes `MaiaEvaluator` + `EvalWorker` to `buildTrainableLine` for line extension; **atomic per-game completion**: positions are awaited/persisted before `markGameAnalyzed`, so an app close mid-batch never permanently skips a game's blunders; `countPendingGames()` reports stored-but-unanalyzed count; `resumeStoredPgns()` re-analyzes from storage (splits by source prefix, uses appropriate username per platform) |
 | `tactics_export_import.dart` | Export/import facade |
 | `tactics_export_import_io.dart` / `tactics_export_import_stub.dart` | Platform export/import |
 | `tactics_parallel_analyzer.dart` / `tactics_parallel_analyzer_stub.dart` | Parallel puzzle analysis |
 | `tactics/tactics_session_controller.dart` | Puzzle session; `startSession(settings)` delegates to DB queue; `setRating(star)` on current position |
-| `tactics/tactics_import_coordinator.dart` | Import UI coordination; `TacticsImportMode.recent` / `TacticsImportMode.sinceDate` for count-based vs date-based fetch; passes `since` param through to service |
-| `training/training_session_controller.dart` | Repertoire training flow; exposes `MoveDisplayInfo` (move notation, side label, comment) and `opponentWaitingForAck` for Chessable-style UI; `startNextNew()` / `startNextDue()` filter `dueQueue` by `isNew` for Learn/Review mode buttons |
+| `tactics/tactics_import_coordinator.dart` | Import UI coordination; `TacticsImportMode.recent` / `TacticsImportMode.sinceDate` for count-based vs date-based fetch; passes `since` param through to service; **resume analysis**: `refreshPendingCount()` diffs stored PGN game IDs against `analyzedGameIds` to detect interrupted imports; `resumeAnalysis()` re-processes only un-analyzed games from storage (no re-download); `pendingGameCount`/`totalStoredGames` drive the resume button |
+| `training/training_session_controller.dart` | Repertoire training flow; exposes `MoveDisplayInfo` (move notation, side label, comment) and `opponentWaitingForAck` for Chessable-style UI; `startNextNew()` / `startNextDue()` filter `dueQueue` by `isNew` for Learn/Review mode buttons; loads `tree.json` alongside PGN to compute per-line `playabilityMap` and `bottleneckMap`; `needsScoring` flag when no tree exists |
 | `training/training_phase.dart` | Phase enum/state |
 
 #### Storage & platform

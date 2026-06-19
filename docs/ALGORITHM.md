@@ -75,6 +75,20 @@ V(leaf)     = winProbability(evalCp)
 
 `P(child)` is the Maia/DB frequency of the opponent's move. The result `V` is displayed as "% win" (practical win rate given human opponents).
 
+### 5b. CPL Value Propagation (Trappy Mode)
+
+When `SelectionMode.trappy` is selected, a parallel propagation computes `cplValue` — the total expected centipawn loss by the opponent downstream from each node:
+
+```
+cplV(leaf)     = 0
+cplV(opp_node) = localCpl + Σ P(child) × cplV(child)
+cplV(our_node) = max over eval-guarded children of cplV(child)
+```
+
+Where `localCpl` is the probability-weighted centipawn loss at a single opponent node (how much the opponent loses on average relative to their best move). The `cplValue` accumulates this across the whole subtree.
+
+**Trappy selection** picks our moves to maximize `cplValue` instead of expectimax `V`. Build tolerances are automatically widened (matching the C `--traps` preset: `maxEvalLossCp` ≥ 100, `minEvalCp` relaxed to -100/-300 for White/Black) so the tree explores speculative territory where traps are more likely.
+
 ### 6. Line Quality (Playability)
 
 **Geometric mean** of `positionQuality` across ALL nodes in a line (both sides):
@@ -125,12 +139,13 @@ Traps are indexed by `TrapIndexService` for O(1) lookup by FEN and per-line quer
 | `onTheFlyMaxDepth` | 5 | EngineSettings | On-the-fly BFS depth |
 | `minProbability` | 0.02 | TreeBuildConfig | Pruning probability threshold |
 | `maxEvalLossCp` | 80 | TreeBuildConfig | Max eval loss for our moves |
+| `selectionMode` | `expectimax` | TreeBuildConfig | `expectimax`, `engineOnly`, `dbWinRateOnly`, `playable`, `trappy` |
 | `maiaElo` | 1500 | EngineSettings | Maia model ELO level |
 
 ## Key Source Files
 
 - `lib/services/generation/tree_my_ease.dart` — myEase, positionQuality, linePlayability
-- `lib/services/generation/eca_calculator.dart` — expectimax calculation
+- `lib/services/generation/eca_calculator.dart` — expectimax calculation + CPL value propagation
 - `lib/services/generation/trap_extractor.dart` — whole-tree trap line extraction
 - `lib/services/tree_build_service.dart` — BFS tree building
 - `lib/services/on_the_fly_expectimax_service.dart` — on-the-fly computation
