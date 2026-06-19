@@ -30,6 +30,9 @@ class AuditSessionController extends ChangeNotifier {
   AuditSnapshot? _interruptedSnapshot;
   RepertoireJob? currentJob;
 
+  /// Tracks which repertoire the current in-memory state belongs to.
+  String? _activeRepertoireId;
+
   AuditResult? get result => _result;
   List<AuditFinding> get liveFindings => List.unmodifiable(_liveFindings);
   int get nodesChecked => _nodesChecked;
@@ -48,6 +51,31 @@ class AuditSessionController extends ChangeNotifier {
 
   int get activeFindingCount =>
       _result?.activeFindingCount ?? _liveFindings.length;
+
+  String? get activeRepertoireId => _activeRepertoireId;
+
+  // ── Repertoire switch ─────────────────────────────────────────────────
+
+  /// Call before loading a new repertoire. Saves in-flight progress to the
+  /// OLD repertoire path and clears all in-memory audit state immediately.
+  void onRepertoireSwitching(String? oldRepertoireFilePath) {
+    if (_isAuditing) {
+      _service.cancel();
+      saveProgress(oldRepertoireFilePath);
+      currentJob?.updateStatus(JobStatus.cancelled);
+      currentJob = null;
+      EngineLifecycle().exitGeneration();
+      _isAuditing = false;
+      _isPaused = false;
+    }
+    _result = null;
+    _liveFindings = [];
+    _nodesChecked = 0;
+    _totalNodes = 0;
+    _interruptedSnapshot = null;
+    _activeRepertoireId = null;
+    notifyListeners();
+  }
 
   // ── Control methods ─────────────────────────────────────────────────
 
@@ -105,8 +133,21 @@ class AuditSessionController extends ChangeNotifier {
   }
 
   Future<void> tryRestore(String? repertoireId) async {
+    _activeRepertoireId = repertoireId;
     final snapshot = await AuditPersistence.instance.load(repertoireId);
-    if (snapshot == null) return;
+
+    // Guard: if the user switched repertoires during the async load, discard.
+    if (_activeRepertoireId != repertoireId) return;
+
+    if (snapshot == null) {
+      _result = null;
+      _liveFindings = [];
+      _nodesChecked = 0;
+      _totalNodes = 0;
+      _interruptedSnapshot = null;
+      notifyListeners();
+      return;
+    }
     _result = snapshot.result;
     _lastConfig = snapshot.config;
     _liveFindings = [];
