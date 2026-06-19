@@ -38,6 +38,9 @@ class TacticsImportPanel extends StatefulWidget {
     required this.onFetchModeChanged,
     required this.sinceDate,
     required this.onSinceDateChanged,
+    this.pendingGameCount = 0,
+    this.totalStoredGames = 0,
+    this.onResumeAnalysis,
   });
 
   final String? importStatus;
@@ -67,6 +70,9 @@ class TacticsImportPanel extends StatefulWidget {
   final ValueChanged<TacticsImportMode> onFetchModeChanged;
   final DateTime? sinceDate;
   final ValueChanged<DateTime?> onSinceDateChanged;
+  final int pendingGameCount;
+  final int totalStoredGames;
+  final VoidCallback? onResumeAnalysis;
 
   @override
   State<TacticsImportPanel> createState() => _TacticsImportPanelState();
@@ -76,6 +82,27 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
   var _settings = const TacticsSessionSettings();
 
   int get _matchingCount => _settings.countMatching(widget.positions);
+
+  @override
+  void initState() {
+    super.initState();
+    // The Import buttons enable/disable based on whether a username is present,
+    // so rebuild as the user types. (Controllers are owned by the parent; we
+    // only add/remove listeners here, never dispose them.)
+    widget.lichessUserController.addListener(_onUsernameChanged);
+    widget.chessComUserController.addListener(_onUsernameChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.lichessUserController.removeListener(_onUsernameChanged);
+    widget.chessComUserController.removeListener(_onUsernameChanged);
+    super.dispose();
+  }
+
+  void _onUsernameChanged() {
+    if (mounted) setState(() {});
+  }
 
   Future<void> _showSessionSettingsDialog() async {
     var draft = _settings;
@@ -120,17 +147,24 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
     required ValueChanged<String> onUsernameChanged,
     required VoidCallback onImport,
   }) {
-    final canImport = widget.importStatus == null &&
+    // Enablement mirrors the real preconditions the import action checks:
+    // a username is required, fields must be valid, no import already running,
+    // and "since date" mode needs a date. A leftover status banner is purely
+    // informational and must NOT block a new import.
+    final hasUsername = userController.text.trim().isNotEmpty;
+    final dateMissing = widget.fetchMode == TacticsImportMode.sinceDate &&
+        widget.sinceDate == null;
+    final canImport = hasUsername &&
         widget.importFieldsValid &&
-        !(widget.fetchMode == TacticsImportMode.sinceDate &&
-            widget.sinceDate == null);
+        !widget.isImporting &&
+        !dateMissing;
 
     String? disabledReason;
     if (!canImport) {
       if (widget.isImporting) {
         disabledReason = 'Import already in progress';
-      } else if (widget.importStatus != null) {
-        disabledReason = 'Dismiss the status banner to import again';
+      } else if (!hasUsername) {
+        disabledReason = 'Enter a username first';
       } else if (!widget.importFieldsValid) {
         disabledReason = 'Fix invalid fields above';
       } else {
@@ -282,6 +316,11 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
   Widget build(BuildContext context) {
     final positionCount = widget.positions.length;
     final matchingCount = _matchingCount;
+    // One unambiguous "ready" label used everywhere: when a filter hides some
+    // positions, show "N of M" so the number never looks wrong (e.g. 2 of 4).
+    final readyLabel = matchingCount == positionCount
+        ? '$matchingCount'
+        : '$matchingCount of $positionCount';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,6 +336,26 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
           ),
           const SizedBox(height: 16),
         ],
+        if (widget.pendingGameCount > 0 && !widget.isImporting)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: widget.onResumeAnalysis,
+                icon: const Icon(Icons.play_arrow, size: 20),
+                label: Text(
+                  'Resume Analysis \u2014 '
+                  '${widget.pendingGameCount} game${widget.pendingGameCount == 1 ? '' : 's'} remaining',
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(14),
+                  side: BorderSide(color: Colors.orange.shade400),
+                  foregroundColor: Colors.orange.shade300,
+                ),
+              ),
+            ),
+          ),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -396,13 +455,22 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
                   widget.isImporting ? Icons.play_circle : Icons.play_arrow),
               label: Text(
                 widget.isImporting
-                    ? 'Start Training Now ($matchingCount positions)'
-                    : 'Start Practice Session ($matchingCount positions)',
+                    ? 'Start Training Now ($readyLabel ready)'
+                    : 'Start Practice Session ($readyLabel ready)',
                 style:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ),
+          if (matchingCount == 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              positionCount == 1
+                  ? 'The only position is filtered out — adjust Session Settings.'
+                  : 'All $positionCount positions are filtered out — adjust Session Settings.',
+              style: TextStyle(fontSize: 12, color: Colors.orange[300]),
+            ),
+          ],
         ],
         if (widget.isImporting && positionCount > 0) ...[
           const SizedBox(height: 8),
@@ -667,10 +735,10 @@ class _SessionSettingsForm extends StatelessWidget {
           onChanged: (v) => onChanged(settings.copyWith(skipReviewed: v)),
         ),
         _MistakeTypeCheckbox(
-          label: '1-star rated',
+          label: 'Exclude 1-star rated',
           type: '',
-          selected: settings.includeOneStar,
-          onChanged: (v) => onChanged(settings.copyWith(includeOneStar: v)),
+          selected: !settings.includeOneStar,
+          onChanged: (v) => onChanged(settings.copyWith(includeOneStar: !v)),
         ),
       ],
     );

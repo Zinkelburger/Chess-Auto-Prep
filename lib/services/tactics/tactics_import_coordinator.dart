@@ -41,6 +41,62 @@ class TacticsImportCoordinator extends ChangeNotifier {
   int newPositionsFound = 0;
   TacticsImportService? activeImport;
 
+  /// Number of stored PGN games not yet analyzed (0 when up-to-date).
+  int pendingGameCount = 0;
+
+  /// Total number of PGN games in storage.
+  int totalStoredGames = 0;
+
+  /// Recompute [pendingGameCount] from stored PGNs vs analyzed game IDs.
+  Future<void> refreshPendingCount() async {
+    final service = TacticsImportService(database: database);
+    await service.initialize();
+    final counts = await service.countPendingGames();
+    pendingGameCount = counts.pending;
+    totalStoredGames = counts.total;
+    notifyListeners();
+  }
+
+  /// Resume analysis of stored PGN games that weren't analyzed yet.
+  Future<void> resumeAnalysis({
+    required String? lichessUsername,
+    required String? chesscomUsername,
+    required int depth,
+    required int cores,
+  }) async {
+    if (isImporting) return;
+
+    final importService =
+        activeImport = TacticsImportService(database: database);
+
+    importStatus = 'Resuming analysis…';
+    isImporting = true;
+    newPositionsFound = 0;
+    notifyListeners();
+
+    try {
+      await importService.initialize();
+      await importService.resumeStoredPgns(
+        lichessUsername: lichessUsername,
+        chesscomUsername: chesscomUsername,
+        depth: depth,
+        maxCores: cores,
+        progressCallback: _onProgress,
+        onPositionFound: _onPositionFound,
+      );
+
+      await database.loadPositions();
+      importStatus = newPositionsFound == 0
+          ? AppMessages.noNewBlunders
+          : AppMessages.addedTactics(newPositionsFound);
+      notifyListeners();
+    } finally {
+      activeImport = null;
+      isImporting = false;
+      await refreshPendingCount();
+    }
+  }
+
   Future<void> import({
     required TacticsImportSource source,
     required TacticsImportParams params,
@@ -95,7 +151,7 @@ class TacticsImportCoordinator extends ChangeNotifier {
     } finally {
       activeImport = null;
       isImporting = false;
-      notifyListeners();
+      await refreshPendingCount();
     }
   }
 
