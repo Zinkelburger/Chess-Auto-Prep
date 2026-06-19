@@ -194,16 +194,21 @@ adds no new UI surface.
    `_activeDraft`/`_buildingDraft` in `repertoire_screen.dart`. Widget tests in
    `test/widgets/games_repertoire_widgets_test.dart` verify prune + the conflict
    flow headlessly.
-2. **Merges straight into the active repertoire**, rather than first persisting a
-   separate "draft" repertoire-library entry. Review/prune still happens before
-   any merge (in the dialog), so the "review before commit" intent holds, but the
-   draft isn't a saved, re-openable library entry yet.
+2. ~~Merges straight into the active repertoire~~ **DONE: drafts can also be
+   saved.** The inline review pane now has a "Save" button beside "Merge" that
+   writes the draft as a re-openable repertoire-library entry
+   (`draft_repertoire_writer.dart`, round-trip tested through
+   `RepertoireService.parseRepertoirePgn`). Merge-after-review is still the fast
+   path; Save is the "stash for later" path.
 3. **Shared library is only used by the new flow.** Tactics + weakness-finder
    still use their own downloaders; migrating them onto `GamesLibraryService` is
-   the remaining half of "download once, share across 3 features."
-4. **Lichess fetcher is unverified against the live API** (Chess.com path reuses
-   the proven AnalysisGamesService). **Audit/engine/comment-on-draft** and the
-   **Extend faucet** are not wired.
+   the remaining half of "download once, share across 3 features." (Deferred —
+   touches two unrelated, working features; do with the app running.)
+4. ~~Lichess fetcher unverified~~ **DONE: both fetchers verified against live
+   APIs** via `tools/verify_games_fetch.dart` — Chess.com (hikaru, 434 games)
+   and Lichess (DrNykterstein, 20 games) parse, classify speeds, parse dates,
+   and filter correctly. **Audit/engine/comment-on-draft** and the **Extend
+   faucet** remain unwired (deferred enhancements, not blockers).
 
 ### Suggested next session (needs the app running)
 - Smoke-test the flow end-to-end (real download, tree render, prune, merge,
