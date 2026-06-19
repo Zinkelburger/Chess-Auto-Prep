@@ -22,6 +22,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onSelectRepertoire,
     this.onTrainRepertoire,
     this.onOpenGeneration,
+    this.onBuildFromGames,
     this.onOpenAudit,
     this.onImportPgnFile,
     this.onImportPgnPaste,
@@ -40,6 +41,7 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onSelectRepertoire;
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
+  final VoidCallback? onBuildFromGames;
   final VoidCallback? onOpenAudit;
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
@@ -58,6 +60,8 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
         BoardZoneControls(trapNavigation: trapNavigation),
         if (onOpenGeneration != null)
           RepertoireGenerateButton(onPressed: onOpenGeneration),
+        if (onBuildFromGames != null)
+          RepertoireFromGamesButton(onPressed: onBuildFromGames),
         if (onOpenAudit != null) RepertoireAuditButton(onPressed: onOpenAudit),
         if (isGenerating)
           RepertoireGenerationStatusChip(
@@ -262,6 +266,42 @@ class RepertoireGenerateButton extends StatelessWidget {
                   onPressed: onPressed,
                   icon: const Icon(Icons.auto_awesome, size: 18),
                   label: const Text('Generate'),
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class RepertoireFromGamesButton extends StatelessWidget {
+  const RepertoireFromGamesButton({
+    super.key,
+    required this.onPressed,
+  });
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final compact =
+        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Center(
+        child: compact
+            ? IconButton(
+                tooltip: 'Build repertoire from my games',
+                onPressed: onPressed,
+                icon: const Icon(Icons.download_for_offline_outlined),
+              )
+            : Tooltip(
+                message: 'Download your games and build a draft repertoire '
+                    'from the lines you actually play',
+                child: TextButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.download_for_offline_outlined,
+                      size: 18),
+                  label: const Text('From Games'),
                 ),
               ),
       ),
