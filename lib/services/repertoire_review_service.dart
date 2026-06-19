@@ -154,11 +154,17 @@ class RepertoireReviewService {
   }
 
   /// Filter due/new lines and sort according to [order].
+  ///
+  /// [playabilityMap] is optional; when provided and [order] is
+  /// [ReviewOrder.hardestFirst], lines are sorted by ascending playability
+  /// (lowest quality first). Lines without playability data sort after those
+  /// with data.
   List<RepertoireLine> orderLinesForReview(
     List<RepertoireLine> lines,
     Map<String, RepertoireReviewEntry> reviewMap,
-    ReviewOrder order,
-  ) {
+    ReviewOrder order, {
+    Map<String, double>? playabilityMap,
+  }) {
     final due = <RepertoireLine>[];
     for (final line in lines) {
       final entry = reviewMap[line.id];
@@ -189,6 +195,17 @@ class RepertoireReviewService {
           if (cmp != 0) return cmp;
           return (eb?.failCount ?? 0).compareTo(ea?.failCount ?? 0);
         });
+      case ReviewOrder.hardestFirst:
+        if (playabilityMap != null && playabilityMap.isNotEmpty) {
+          due.sort((a, b) {
+            final pa = playabilityMap[a.id];
+            final pb = playabilityMap[b.id];
+            if (pa == null && pb == null) return 0;
+            if (pa == null) return 1;
+            if (pb == null) return -1;
+            return pa.compareTo(pb);
+          });
+        }
       case ReviewOrder.sequential:
         break;
     }

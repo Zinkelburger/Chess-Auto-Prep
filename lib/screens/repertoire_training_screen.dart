@@ -126,6 +126,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
         );
   }
 
+  void _scoreInBuilder() {
+    if (_training.repertoire == null) return;
+    context.read<AppState>().switchToBuilder(
+          repertoirePath: _training.repertoire!.filePath,
+        );
+  }
+
   String _formatRelativeDate(DateTime date) {
     final diff = DateTime.now().toUtc().difference(date);
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
@@ -378,9 +385,13 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       lines: _training.lines,
       reviewMap: _training.reviewMap,
       moveProgressMap: _training.moveProgressMap,
+      playabilityMap: _training.playabilityMap,
+      bottleneckMap: _training.bottleneckMap,
+      needsScoring: _training.needsScoring,
       onLineSelected: _training.startLine,
       onStartNextNew: _training.startNextNew,
       onStartNextDue: _training.startNextDue,
+      onScoreInBuilder: _scoreInBuilder,
     );
   }
 
@@ -458,6 +469,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
       delayController: _delayController,
       lines: _training.lines,
       reviewMap: _training.reviewMap,
+      playabilityMap: _training.playabilityMap,
       reviewService: _training.reviewService,
       onDueQueueUpdated: _training.updateDueQueue,
       onSettingsChanged: () => setState(() {}),

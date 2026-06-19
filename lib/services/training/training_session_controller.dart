@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/repertoire_controller.dart';
+import '../../models/build_tree_node.dart' show BuildTreeNode;
 import '../../models/repertoire_line.dart';
 import '../../models/repertoire_metadata.dart';
 import '../../models/repertoire_move_progress.dart';
@@ -12,8 +14,12 @@ import '../../models/repertoire_review_entry.dart'
 import '../../models/repertoire_review_history_entry.dart';
 import '../../models/training_settings.dart';
 import '../../widgets/chess_board_widget.dart';
+import '../generation/tree_my_ease.dart' show computeLinePlayability;
+import '../generation/tree_serialization.dart' show deserializeTree;
+import '../line_metrics_helpers.dart' show walkTreeForLine;
 import '../repertoire_review_service.dart';
 import '../repertoire_service.dart';
+import '../storage/storage_factory.dart';
 import 'training_phase.dart';
 
 /// Manages repertoire training session state: phases, line queue, move validation,
@@ -39,6 +45,19 @@ class TrainingSessionController extends ChangeNotifier {
   Map<String, RepertoireReviewEntry> reviewMap = {};
   Map<String, RepertoireMoveProgress> moveProgressMap = {};
   TrainingSettings settings = TrainingSettings();
+
+  /// Per-line playability scores from the generated tree (0 = hardest, 1 = easiest).
+  /// Empty when no tree.json exists for the repertoire.
+  Map<String, double> playabilityMap = {};
+
+  /// Per-line bottleneck info: (ply, quality, isOurMove).
+  Map<String, ({int ply, double quality, bool isOurMove})> bottleneckMap = {};
+
+  /// True when no tree.json was found for the current repertoire.
+  bool get needsScoring => _treeRoot == null && lines.isNotEmpty;
+
+  BuildTreeNode? _treeRoot;
+  bool? _treeIsWhite;
 
   // -- Training state --
   List<RepertoireLine> dueQueue = [];
@@ -146,10 +165,14 @@ class TrainingSessionController extends ChangeNotifier {
       moveProgressMap = reviewService.indexMoveProgress(
         moveProgress.where((mp) => mp.repertoireId == filePath).toList(),
       );
+
+      await _loadTreeAndComputePlayability(filePath, parsedLines);
+
       dueQueue = reviewService.orderLinesForReview(
         lines,
         reviewMap,
         settings.reviewOrder,
+        playabilityMap: playabilityMap,
       );
       notifyListeners();
 
@@ -160,6 +183,47 @@ class TrainingSessionController extends ChangeNotifier {
     } finally {
       isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadTreeAndComputePlayability(
+    String filePath,
+    List<RepertoireLine> parsedLines,
+  ) async {
+    _treeRoot = null;
+    _treeIsWhite = null;
+    playabilityMap = {};
+    bottleneckMap = {};
+
+    final base = p.withoutExtension(filePath);
+    final treePath = '${base}_tree.json';
+    final storage = StorageFactory.instance;
+
+    try {
+      if (!await storage.fileExists(treePath)) return;
+      final json = await storage.readFile(treePath);
+      if (json == null || json.isEmpty) return;
+
+      final tree = deserializeTree(json);
+      _treeRoot = tree.root;
+
+      final config = tree.configSnapshot;
+      _treeIsWhite = config['play_as_white'] as bool? ?? true;
+
+      for (final line in parsedLines) {
+        final linePath = walkTreeForLine(_treeRoot!, line.moves);
+        if (linePath.length < 2) continue;
+
+        final lp = computeLinePlayability(linePath, _treeIsWhite!);
+        playabilityMap[line.id] = lp.playability;
+        bottleneckMap[line.id] = (
+          ply: lp.bottleneckPly,
+          quality: lp.bottleneckQuality,
+          isOurMove: lp.bottleneckIsOurMove,
+        );
+      }
+    } catch (e) {
+      debugPrint('[TrainingController] Failed to load tree: $e');
     }
   }
 
@@ -630,6 +694,7 @@ class TrainingSessionController extends ChangeNotifier {
         lines,
         reviewMap,
         settings.reviewOrder,
+        playabilityMap: playabilityMap,
       );
       notifyListeners();
     }
@@ -640,6 +705,7 @@ class TrainingSessionController extends ChangeNotifier {
       lines,
       reviewMap,
       settings.reviewOrder,
+      playabilityMap: playabilityMap,
     );
 
     if (dueQueue.isEmpty) {
