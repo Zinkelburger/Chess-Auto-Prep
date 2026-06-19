@@ -56,6 +56,9 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
     obj['expectimax_value'] = node.expectimaxValue;
     obj['subtree_depth'] = node.subtreePly;
     obj['subtree_opp_plies'] = node.subtreeOppPlies;
+    if (node.cplValue != 0.0) {
+      obj['cpl_value'] = node.cplValue;
+    }
   }
 
   if (node.trapScore >= 0.0) {
@@ -197,6 +200,9 @@ BuildTreeNode _nodeFromJson(
     node.localCpl = (obj['local_cpl'] as num).toDouble();
     node.expectimaxValue = (obj['expectimax_value'] as num).toDouble();
     node.hasExpectimax = true;
+    if (obj.containsKey('cpl_value')) {
+      node.cplValue = (obj['cpl_value'] as num).toDouble();
+    }
   } else if (obj.containsKey('local_cpl') &&
       obj.containsKey('accumulated_eca')) {
     node.localCpl = (obj['local_cpl'] as num).toDouble();

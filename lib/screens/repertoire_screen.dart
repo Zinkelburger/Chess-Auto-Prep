@@ -284,6 +284,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       if (_controller.currentRepertoire != null && !_controller.isLoading) {
         final currentId = _controller.currentRepertoire!.filePath;
         if (currentId != _lastRepertoireId) {
+          _auditController.onRepertoireSwitching(_lastRepertoireId);
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
           _generationController.clearTree();
@@ -1474,6 +1475,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       currentMoveSequence: _controller.currentMoveSequence,
       boardPreview: _boardPreview,
       metrics: _trapIndex?.metrics,
+      repertoireLineMoves: _controller.repertoireLines
+          .map((l) => l.moves)
+          .toList(),
       onTrapSelected: (trap) {
         _controller.loadMoveSequence(trap.movesSan);
       },

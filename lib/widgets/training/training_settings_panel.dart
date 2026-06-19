@@ -14,6 +14,7 @@ class TrainingSettingsPanel extends StatelessWidget {
   final TextEditingController delayController;
   final List<RepertoireLine> lines;
   final Map<String, RepertoireReviewEntry> reviewMap;
+  final Map<String, double> playabilityMap;
   final RepertoireReviewService reviewService;
   final void Function(List<RepertoireLine> dueQueue) onDueQueueUpdated;
   final VoidCallback onSettingsChanged;
@@ -26,6 +27,7 @@ class TrainingSettingsPanel extends StatelessWidget {
     required this.delayController,
     required this.lines,
     required this.reviewMap,
+    this.playabilityMap = const {},
     required this.reviewService,
     required this.onDueQueueUpdated,
     required this.onSettingsChanged,
@@ -134,6 +136,7 @@ class TrainingSettingsPanel extends StatelessWidget {
                 lines,
                 reviewMap,
                 settings.reviewOrder,
+                playabilityMap: playabilityMap,
               );
               onDueQueueUpdated(dueQueue);
               settings.save();

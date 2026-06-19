@@ -39,6 +39,9 @@ class TacticsImportPanel extends StatefulWidget {
     required this.onFetchModeChanged,
     required this.sinceDate,
     required this.onSinceDateChanged,
+    this.pendingGameCount = 0,
+    this.totalStoredGames = 0,
+    this.onResumeAnalysis,
   });
 
   final String? importStatus;
@@ -68,6 +71,9 @@ class TacticsImportPanel extends StatefulWidget {
   final ValueChanged<TacticsImportMode> onFetchModeChanged;
   final DateTime? sinceDate;
   final ValueChanged<DateTime?> onSinceDateChanged;
+  final int pendingGameCount;
+  final int totalStoredGames;
+  final VoidCallback? onResumeAnalysis;
 
   @override
   State<TacticsImportPanel> createState() => _TacticsImportPanelState();
@@ -331,6 +337,26 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
           ),
           const SizedBox(height: 16),
         ],
+        if (widget.pendingGameCount > 0 && !widget.isImporting)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: widget.onResumeAnalysis,
+                icon: const Icon(Icons.play_arrow, size: 20),
+                label: Text(
+                  'Resume Analysis \u2014 '
+                  '${widget.pendingGameCount} game${widget.pendingGameCount == 1 ? '' : 's'} remaining',
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(14),
+                  side: BorderSide(color: Colors.orange.shade400),
+                  foregroundColor: Colors.orange.shade300,
+                ),
+              ),
+            ),
+          ),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -637,10 +663,10 @@ class _SessionSettingsForm extends StatelessWidget {
           onChanged: (v) => onChanged(settings.copyWith(skipReviewed: v)),
         ),
         _MistakeTypeCheckbox(
-          label: '1-star rated',
+          label: 'Exclude 1-star rated',
           type: '',
-          selected: settings.includeOneStar,
-          onChanged: (v) => onChanged(settings.copyWith(includeOneStar: v)),
+          selected: !settings.includeOneStar,
+          onChanged: (v) => onChanged(settings.copyWith(includeOneStar: !v)),
         ),
       ],
     );

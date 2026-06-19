@@ -103,6 +103,8 @@ class GameInfo {
   final String date;
   final String site;
   final String event;
+  final String whiteElo;
+  final String blackElo;
 
   GameInfo({
     this.pgnText,
@@ -112,6 +114,8 @@ class GameInfo {
     this.date = '',
     this.site = '',
     this.event = '',
+    this.whiteElo = '',
+    this.blackElo = '',
   });
 
   /// Human-readable game title
@@ -124,6 +128,16 @@ class GameInfo {
       return site;
     }
     return 'Unknown Game';
+  }
+
+  /// Elo rating string, e.g. "1500 vs 1600" or empty.
+  String get eloDisplay {
+    if (whiteElo.isNotEmpty && blackElo.isNotEmpty) {
+      return '$whiteElo vs $blackElo';
+    }
+    if (whiteElo.isNotEmpty) return 'W: $whiteElo';
+    if (blackElo.isNotEmpty) return 'B: $blackElo';
+    return '';
   }
 
   /// Secondary information about the game
@@ -142,8 +156,9 @@ class GameInfo {
     String date = '';
     String site = '';
     String event = '';
+    String whiteElo = '';
+    String blackElo = '';
 
-    // Parse headers from PGN
     final lines = pgnText.split('\n');
     for (final line in lines) {
       if (line.startsWith('[White "')) {
@@ -158,6 +173,10 @@ class GameInfo {
         site = _extractHeader(line);
       } else if (line.startsWith('[Event "')) {
         event = _extractHeader(line);
+      } else if (line.startsWith('[WhiteElo "')) {
+        whiteElo = _extractHeader(line);
+      } else if (line.startsWith('[BlackElo "')) {
+        blackElo = _extractHeader(line);
       }
     }
 
@@ -169,6 +188,8 @@ class GameInfo {
       date: date,
       site: site,
       event: event,
+      whiteElo: whiteElo,
+      blackElo: blackElo,
     );
   }
 
@@ -191,6 +212,8 @@ class GameInfo {
       'date': date,
       'site': site,
       'event': event,
+      'whiteElo': whiteElo,
+      'blackElo': blackElo,
     };
   }
 
@@ -204,6 +227,8 @@ class GameInfo {
       date: json['date'] as String? ?? '',
       site: json['site'] as String? ?? '',
       event: json['event'] as String? ?? '',
+      whiteElo: json['whiteElo'] as String? ?? '',
+      blackElo: json['blackElo'] as String? ?? '',
     );
   }
 }

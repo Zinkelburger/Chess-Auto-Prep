@@ -82,6 +82,10 @@ class PgnViewerWidgetController {
 
   int get mainLineLength => _state?._moveHistory.length ?? 0;
 
+  /// Mainline move SANs in order (for solitaire mode validation).
+  List<String> get mainLineMoves =>
+      _state?._moveHistory.map((m) => m.san).toList() ?? const [];
+
   /// Number of moves deep into the current variation (0 if on mainline).
   int get variationDepth => _state?._analysisPath.length ?? 0;
 
@@ -105,6 +109,9 @@ class PgnViewerWidget extends StatefulWidget {
   final bool editMode;
   final bool protectOriginal;
 
+  /// When non-null, movetext hides moves at index >= this value.
+  final int? revealedPly;
+
   const PgnViewerWidget({
     super.key,
     this.gameId,
@@ -119,6 +126,7 @@ class PgnViewerWidget extends StatefulWidget {
     this.onCommentsChanged,
     this.editMode = false,
     this.protectOriginal = true,
+    this.revealedPly,
   });
 
   @override
@@ -963,6 +971,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                   setState(() => _selectedMoveIndex = null),
               onGoToAnalysisNode: _goToAnalysisNode,
               onAnalysisNodeAction: widget.onAnalysisNodeAction,
+              revealedPly: widget.revealedPly,
               onPlayInlineLine: _playInlineLine,
               activeInlineLine: _inlineActive
                   ? (

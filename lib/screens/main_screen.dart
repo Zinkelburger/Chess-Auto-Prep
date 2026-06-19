@@ -117,6 +117,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 class _TacticsModeView extends StatelessWidget {
   const _TacticsModeView();
 
+  /// Shared key so the control panel's State (and its database/session/import)
+  /// is reparented — not recreated — when the layout crosses the compact/wide
+  /// breakpoint. Without this, resizing across the breakpoint silently throws
+  /// away the active training session and reloads everything.
+  static final GlobalKey _panelKey = GlobalKey();
+
   @override
   Widget build(BuildContext context) {
     // The three tactics state owners are provided here — above the layout —

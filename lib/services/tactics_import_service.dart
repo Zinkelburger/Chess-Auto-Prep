@@ -69,6 +69,102 @@ class TacticsImportService {
     return 50 + 50 * _winningChances(centipawns);
   }
 
+  /// Count stored PGN games that have not yet been analyzed.
+  ///
+  /// Returns `(total, pending)` where `total` is the number of distinct game
+  /// PGNs in storage and `pending` is how many of those lack an entry in
+  /// [TacticsDatabase.analyzedGameIds]. Only counts games for platforms that
+  /// have a configured username, since resume cannot process others.
+  Future<({int total, int pending})> countPendingGames({
+    String? lichessUsername,
+    String? chesscomUsername,
+  }) async {
+    final content = await StorageFactory.instance.readImportedPgns();
+    if (content == null || content.isEmpty) return (total: 0, pending: 0);
+
+    final hasLichess = lichessUsername != null && lichessUsername.isNotEmpty;
+    final hasChessCom = chesscomUsername != null && chesscomUsername.isNotEmpty;
+
+    final games = splitPgnIntoGames(content);
+    int pending = 0;
+    for (final game in games) {
+      final gameId = _extractGameId(game);
+      if (gameId.isEmpty || _database.isGameAnalyzed(gameId)) continue;
+      if (gameId.startsWith('lichess_') && !hasLichess) continue;
+      if (gameId.startsWith('chesscom_') && !hasChessCom) continue;
+      pending++;
+    }
+    return (total: games.length, pending: pending);
+  }
+
+  /// Resume analysis of stored PGN games that haven't been analyzed yet.
+  ///
+  /// Reads saved PGNs from storage, splits them by source (Lichess vs
+  /// Chess.com based on game ID prefix), and processes each batch with the
+  /// appropriate username. Already-analyzed games are skipped automatically
+  /// by [_processGames].
+  Future<List<TacticsPosition>> resumeStoredPgns({
+    required String? lichessUsername,
+    required String? chesscomUsername,
+    required int depth,
+    int? maxCores,
+    ProgressCallback? progressCallback,
+    OnPositionFoundCallback? onPositionFound,
+  }) async {
+    final content = await StorageFactory.instance.readImportedPgns();
+    if (content == null || content.isEmpty) return [];
+
+    final games = splitPgnIntoGames(content);
+    final lichessGames = <String>[];
+    final chessComGames = <String>[];
+
+    for (final game in games) {
+      final gameId = _extractGameId(game);
+      if (_database.isGameAnalyzed(gameId)) continue;
+
+      if (gameId.startsWith('lichess_')) {
+        lichessGames.add(game);
+      } else if (gameId.startsWith('chesscom_')) {
+        chessComGames.add(game);
+      }
+    }
+
+    final allPositions = <TacticsPosition>[];
+
+    if (lichessGames.isNotEmpty &&
+        lichessUsername != null &&
+        lichessUsername.isNotEmpty) {
+      final positions = await _processGames(
+        lichessGames.join('\n\n'),
+        lichessUsername,
+        depth,
+        progressCallback,
+        onPositionFound,
+        maxCores: maxCores,
+        mapChessComEloForMaia: false,
+      );
+      allPositions.addAll(positions);
+    }
+
+    if (!_cancelled &&
+        chessComGames.isNotEmpty &&
+        chesscomUsername != null &&
+        chesscomUsername.isNotEmpty) {
+      final positions = await _processGames(
+        chessComGames.join('\n\n'),
+        chesscomUsername,
+        depth,
+        progressCallback,
+        onPositionFound,
+        maxCores: maxCores,
+        mapChessComEloForMaia: true,
+      );
+      allPositions.addAll(positions);
+    }
+
+    return allPositions;
+  }
+
   /// Initialize the database (load analyzed game IDs).
   /// Called by the coordinator before import; safe to call multiple times.
   Future<void> initialize() async {

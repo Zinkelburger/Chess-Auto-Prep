@@ -10,18 +10,26 @@ class TrainingLinesPanel extends StatelessWidget {
   final List<RepertoireLine> lines;
   final Map<String, RepertoireReviewEntry> reviewMap;
   final Map<String, RepertoireMoveProgress> moveProgressMap;
+  final Map<String, double> playabilityMap;
+  final Map<String, ({int ply, double quality, bool isOurMove})> bottleneckMap;
+  final bool needsScoring;
   final void Function(RepertoireLine line) onLineSelected;
   final VoidCallback onStartNextNew;
   final VoidCallback onStartNextDue;
+  final VoidCallback? onScoreInBuilder;
 
   const TrainingLinesPanel({
     super.key,
     required this.lines,
     required this.reviewMap,
     required this.moveProgressMap,
+    this.playabilityMap = const {},
+    this.bottleneckMap = const {},
+    this.needsScoring = false,
     required this.onLineSelected,
     required this.onStartNextNew,
     required this.onStartNextDue,
+    this.onScoreInBuilder,
   });
 
   @override
@@ -73,6 +81,8 @@ class TrainingLinesPanel extends StatelessWidget {
           onLearn: newLines.isNotEmpty ? onStartNextNew : null,
           onReview: dueLines.isNotEmpty ? onStartNextDue : null,
         ),
+        if (needsScoring)
+          _NeedsScoringBanner(onScoreInBuilder: onScoreInBuilder),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -88,6 +98,8 @@ class TrainingLinesPanel extends StatelessWidget {
                     line: line,
                     entry: reviewMap[line.id],
                     moveProgressMap: moveProgressMap,
+                    playability: playabilityMap[line.id],
+                    bottleneck: bottleneckMap[line.id],
                     onTap: () => onLineSelected(line),
                   ),
                 const SizedBox(height: 8),
@@ -103,6 +115,8 @@ class TrainingLinesPanel extends StatelessWidget {
                     line: line,
                     entry: reviewMap[line.id],
                     moveProgressMap: moveProgressMap,
+                    playability: playabilityMap[line.id],
+                    bottleneck: bottleneckMap[line.id],
                     onTap: () => onLineSelected(line),
                   ),
                 const SizedBox(height: 8),
@@ -118,6 +132,8 @@ class TrainingLinesPanel extends StatelessWidget {
                         line: line,
                         entry: reviewMap[line.id],
                         moveProgressMap: moveProgressMap,
+                        playability: playabilityMap[line.id],
+                        bottleneck: bottleneckMap[line.id],
                         onTap: () => onLineSelected(line),
                       ),
                   ],
@@ -385,12 +401,16 @@ class _LineRow extends StatelessWidget {
   final RepertoireLine line;
   final RepertoireReviewEntry? entry;
   final Map<String, RepertoireMoveProgress> moveProgressMap;
+  final double? playability;
+  final ({int ply, double quality, bool isOurMove})? bottleneck;
   final VoidCallback onTap;
 
   const _LineRow({
     required this.line,
     this.entry,
     required this.moveProgressMap,
+    this.playability,
+    this.bottleneck,
     required this.onTap,
   });
 
@@ -502,6 +522,10 @@ class _LineRow extends StatelessWidget {
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
                   ),
                 ),
+                if (playability != null) ...[
+                  const SizedBox(width: 8),
+                  _PlayabilityChip(value: playability!),
+                ],
                 if (!isNew && entry != null) ...[
                   const SizedBox(width: 12),
                   _PassFailChip(
@@ -518,6 +542,13 @@ class _LineRow extends StatelessWidget {
                 ],
               ],
             ),
+            if (bottleneck != null && bottleneck!.quality < 0.3)
+              _BottleneckHint(
+                line: line,
+                ply: bottleneck!.ply,
+                quality: bottleneck!.quality,
+                isOurMove: bottleneck!.isOurMove,
+              ),
           ],
         ),
       ),
@@ -588,6 +619,157 @@ class _MasteryBar extends StatelessWidget {
             value >= 1.0 ? Colors.green : Colors.blue.withValues(alpha: 0.7),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PLAYABILITY CHIP
+// ---------------------------------------------------------------------------
+
+class _PlayabilityChip extends StatelessWidget {
+  final double value;
+
+  const _PlayabilityChip({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color color;
+    final String label;
+    if (value >= 0.7) {
+      color = Colors.green;
+      label = 'Easy';
+    } else if (value >= 0.4) {
+      color = Colors.orange;
+      label = 'Medium';
+    } else {
+      color = Colors.red;
+      label = 'Hard';
+    }
+
+    return Tooltip(
+      message: 'Line playability: ${(value * 100).toStringAsFixed(0)}%\n'
+          'How natural your moves are to find',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: color.withValues(alpha: 0.4), width: 0.5),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// BOTTLENECK HINT
+// ---------------------------------------------------------------------------
+
+class _BottleneckHint extends StatelessWidget {
+  final RepertoireLine line;
+  final int ply;
+  final double quality;
+  final bool isOurMove;
+
+  const _BottleneckHint({
+    required this.line,
+    required this.ply,
+    required this.quality,
+    required this.isOurMove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final moveNum = (ply ~/ 2) + 1;
+    final moveSan = ply < line.moves.length ? line.moves[ply] : '?';
+    final label = isOurMove
+        ? 'Hard move: $moveNum. $moveSan'
+        : 'Easy for opponent: $moveNum. $moveSan';
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, size: 11, color: Colors.red),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10, color: Colors.red),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// NEEDS SCORING BANNER
+// ---------------------------------------------------------------------------
+
+class _NeedsScoringBanner extends StatelessWidget {
+  final VoidCallback? onScoreInBuilder;
+
+  const _NeedsScoringBanner({this.onScoreInBuilder});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_fix_high, size: 18, color: Colors.amber),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Lines not scored by ease',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.amber,
+                  ),
+                ),
+                Text(
+                  'Generate in Builder to see difficulty and sort by hardest-first.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onScoreInBuilder != null) ...[
+            const SizedBox(width: 8),
+            FilledButton.tonal(
+              onPressed: onScoreInBuilder,
+              style: FilledButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('Score in Builder', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ],
       ),
     );
   }

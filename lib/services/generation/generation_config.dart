@@ -11,6 +11,7 @@ enum SelectionMode {
   engineOnly,
   dbWinRateOnly,
   playable,
+  trappy,
 }
 
 // ── Tree build algorithm mode ───────────────────────────────────────────
@@ -440,6 +441,8 @@ SelectionMode _parseSelectionMode(String? value) {
       return SelectionMode.dbWinRateOnly;
     case 'playable':
       return SelectionMode.playable;
+    case 'trappy':
+      return SelectionMode.trappy;
     default:
       return SelectionMode.expectimax;
   }

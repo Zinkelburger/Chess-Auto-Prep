@@ -99,6 +99,24 @@ class _GamesListWidgetState extends State<GamesListWidget> {
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (game.eloDisplay.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.bar_chart, size: 12,
+                              color: Colors.amber.shade300),
+                          const SizedBox(width: 4),
+                          Text(
+                            game.eloDisplay,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.amber.shade300,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     if (game.subtitle.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(

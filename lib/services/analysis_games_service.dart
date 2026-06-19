@@ -118,13 +118,11 @@ class AnalysisGamesService {
 
       if (isDateMode) {
         onProgress?.call(
-          'Fetching archive ${archives.length - i}… '
-          '(${allGames.length} games so far)',
+          '${allGames.length} games downloaded so far…',
         );
       } else {
         onProgress?.call(
-          'Fetching archive ${archives.length - i}… '
-          '(${allGames.length}/$maxGames)',
+          '${allGames.length} / $maxGames games downloaded so far…',
         );
       }
 
@@ -144,7 +142,7 @@ class AnalysisGamesService {
       await Future.delayed(const Duration(milliseconds: 300));
     }
 
-    onProgress?.call('Downloaded ${allGames.length} non-bullet games');
+    onProgress?.call('${allGames.length} games downloaded');
     return allGames.join('\n\n');
   }
 
@@ -160,7 +158,7 @@ class AnalysisGamesService {
     int? monthsBack,
     void Function(String)? onProgress,
   }) async {
-    onProgress?.call('Fetching Lichess games for $username…');
+    onProgress?.call('Downloading games from Lichess…');
 
     final params = <String, String>{
       'perfType': 'blitz,rapid,classical,correspondence',
@@ -177,12 +175,8 @@ class AnalysisGamesService {
           .subtract(Duration(days: monthsBack * 30))
           .millisecondsSinceEpoch;
       params['since'] = since.toString();
-      onProgress?.call(
-        'Downloading games from the last $monthsBack months…',
-      );
     } else {
       params['max'] = maxGames.toString();
-      onProgress?.call('Downloading up to $maxGames games…');
     }
 
     final uri = Uri.parse('https://lichess.org/api/games/user/$username')
@@ -201,7 +195,7 @@ class AnalysisGamesService {
     }
 
     final games = splitPgnIntoGames(stripBom(response.body));
-    onProgress?.call('Downloaded ${games.length} games');
+    onProgress?.call('${games.length} games downloaded');
     return response.body;
   }
 
