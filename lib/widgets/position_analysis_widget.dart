@@ -341,6 +341,8 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
             tree: tree,
             onMoveSelected: _onTreeMoveSelected,
             onPositionSelected: _onTreePositionSelected,
+            gamesAtPosition: _currentGames,
+            onViewGamePgn: _onGameSelected,
           ),
         ),
       ],

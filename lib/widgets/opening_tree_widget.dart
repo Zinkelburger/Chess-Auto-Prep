@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import 'package:flutter/services.dart';
 import '../models/opening_tree.dart';
+import '../models/position_analysis.dart';
 import '../models/repertoire_line.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 import '../utils/app_messages.dart';
@@ -27,6 +28,12 @@ class OpeningTreeWidget extends StatefulWidget {
   final bool showPgnSearch;
   final CoverageResult? coverageResult;
 
+  /// Games at the current tree position — used to offer "View PGN" at leaves.
+  final List<GameInfo> gamesAtPosition;
+
+  /// Called when the user taps "View PGN" for a game at a leaf node.
+  final Function(GameInfo game)? onViewGamePgn;
+
   const OpeningTreeWidget({
     super.key,
     required this.tree,
@@ -40,6 +47,8 @@ class OpeningTreeWidget extends StatefulWidget {
     this.currentMoveSequence = const [],
     this.showPgnSearch = false,
     this.coverageResult,
+    this.gamesAtPosition = const [],
+    this.onViewGamePgn,
   });
 
   @override
@@ -236,13 +245,13 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
               ? Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Text(
-                      currentNode.parent == null
-                          ? 'No games found.\nAnalyze a player to build the tree.'
-                          : 'No more moves in the database.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.grey),
-                    ),
+                    child: currentNode.parent == null
+                        ? const Text(
+                            'No games found.\nAnalyze a player to build the tree.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey),
+                          )
+                        : _buildLeafState(),
                   ),
                 )
               : ListView.builder(
@@ -364,6 +373,76 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
               ],
             ),
           ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildLeafState() {
+    final games = widget.gamesAtPosition;
+    if (games.isEmpty || widget.onViewGamePgn == null) {
+      return const Text(
+        'No more moves in the tree.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.grey),
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'End of opening tree',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey[400]),
+        ),
+        const SizedBox(height: 12),
+        if (games.length == 1) ...[
+          FilledButton.tonalIcon(
+            onPressed: () => widget.onViewGamePgn!(games.first),
+            icon: const Icon(Icons.description_outlined, size: 18),
+            label: const Text('View full game PGN'),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            games.first.title,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+          ),
+        ] else ...[
+          Text(
+            '${games.length} games reach this position',
+            style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+          ),
+          const SizedBox(height: 8),
+          ...games.take(5).map((game) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => widget.onViewGamePgn!(game),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      alignment: Alignment.centerLeft,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(game.title, style: const TextStyle(fontSize: 12)),
+                        if (game.date.isNotEmpty || game.eloDisplay.isNotEmpty)
+                          Text(
+                            [game.date, game.eloDisplay]
+                                .where((s) => s.isNotEmpty)
+                                .join(' · '),
+                            style: TextStyle(
+                                fontSize: 10, color: Colors.grey[500]),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              )),
         ],
       ],
     );
