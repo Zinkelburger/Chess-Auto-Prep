@@ -277,6 +277,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     await _database.loadPositions();
     if (mounted) {
       setState(() {});
+      final appState = context.read<AppState>();
+      unawaited(_import.refreshPendingCount(
+        lichessUsername: appState.lichessUsername,
+        chesscomUsername: appState.chesscomUsername,
+      ));
       _maybeAutoFetch();
     }
   }
@@ -592,6 +597,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onSinceDateChanged: (date) {
                     if (mounted) setState(() => _sinceDate = date);
                   },
+                  pendingGameCount: _import.pendingGameCount,
+                  totalStoredGames: _import.totalStoredGames,
+                  onResumeAnalysis: _resumeAnalysis,
                 ),
             ],
           ),
@@ -874,6 +882,29 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _showUsernameRequired(platform);
     } catch (e) {
       debugPrint('$platform import failed: $e');
+      if (mounted) {
+        _import.dismissImportStatus();
+        showAppSnackBar(context, AppMessages.importFailed, isError: true);
+      }
+    }
+  }
+
+  Future<void> _resumeAnalysis() async {
+    final appState = context.read<AppState>();
+    final depth =
+        (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
+    final cores = (int.tryParse(_coresController.text) ?? 1)
+        .clamp(1, TacticsImportService.availableCores);
+
+    try {
+      await _import.resumeAnalysis(
+        lichessUsername: appState.lichessUsername,
+        chesscomUsername: appState.chesscomUsername,
+        depth: depth,
+        cores: cores,
+      );
+    } catch (e) {
+      debugPrint('Resume analysis failed: $e');
       if (mounted) {
         _import.dismissImportStatus();
         showAppSnackBar(context, AppMessages.importFailed, isError: true);

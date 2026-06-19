@@ -322,7 +322,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
 
     final validationError = form.validateBeforeStart();
     if (validationError != null) {
-      setState(() => _status = validationError);
+      if (mounted) {
+        showAppSnackBar(context, validationError, isError: true);
+      }
       return;
     }
 
@@ -495,6 +497,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       final ecaCount = ecaCalc.calculate(tree);
 
       ecaCalc.computeTrapScores(tree.root);
+      ecaCalc.calculateCplValues(tree.root);
 
       calculateMyEase(tree, playAsWhite: config.playAsWhite);
 

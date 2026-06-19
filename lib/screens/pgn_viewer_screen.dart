@@ -17,6 +17,7 @@ import 'package:window_manager/window_manager.dart';
 import '../constants/ui_breakpoints.dart';
 import '../core/app_state.dart';
 import '../core/pgn_viewer_controller.dart';
+import '../core/pgn/solitaire_controller.dart';
 import '../services/storage/storage_factory.dart';
 import '../services/game_analysis_controller.dart';
 import '../utils/app_messages.dart';
@@ -415,6 +416,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
     final key = event.logicalKey;
 
+    // In solitaire mode, disable navigation shortcuts that would reveal moves
+    if (_controller.isSolitaireMode) {
+      if (key == LogicalKeyboardKey.arrowLeft ||
+          key == LogicalKeyboardKey.arrowRight ||
+          key == LogicalKeyboardKey.home ||
+          key == LogicalKeyboardKey.end ||
+          key == LogicalKeyboardKey.space) {
+        return KeyEventResult.handled;
+      }
+    }
+
     if (key == LogicalKeyboardKey.arrowLeft) {
       _controller.navigateBack();
       return KeyEventResult.handled;
@@ -472,6 +484,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.keyT && hasNoLetterModifiers) {
       _controller.toggleOpeningTree();
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyS && hasNoLetterModifiers) {
+      if (!_controller.showOpeningTree) _controller.toggleSolitaire();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -640,6 +655,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             tooltip: 'Opening tree (T)',
           ),
           IconButton(
+            onPressed: _controller.showOpeningTree ? null : _controller.toggleSolitaire,
+            icon: Icon(
+              Icons.psychology,
+              size: 20,
+              color: _controller.isSolitaireMode
+                  ? Theme.of(context).colorScheme.primary
+                  : null,
+            ),
+            tooltip: 'Solitaire mode (S)',
+          ),
+          IconButton(
             onPressed: _controller.toggleBoardFlipped,
             icon: const Icon(Icons.swap_vert, size: 20),
             tooltip: 'Flip board (F)',
@@ -672,15 +698,88 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   Widget _buildBoardPane() {
+    final solitaire = _controller.solitaire;
+    final showFeedback = _controller.isSolitaireMode && solitaire.feedback != null;
+
     return Container(
       padding: const EdgeInsets.all(12),
       child: Center(
         child: AspectRatio(
           aspectRatio: 1,
-          child: ChessBoardWidget(
-            position: _controller.currentPosition,
-            flipped: _controller.boardFlipped,
-            onMove: (move) => _controller.onBoardMove(move.san),
+          child: Stack(
+            children: [
+              ChessBoardWidget(
+                position: _controller.currentPosition,
+                flipped: _controller.boardFlipped,
+                onMove: (move) => _controller.onBoardMove(move.san),
+                enableUserMoves: !_controller.isSolitaireMode ||
+                    solitaire.waitingForUser,
+              ),
+              if (showFeedback)
+                Positioned(
+                  top: 8,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: solitaire.feedback == SolitaireFeedback.correct
+                            ? Colors.green.withValues(alpha: 0.85)
+                            : Colors.red.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        solitaire.feedback == SolitaireFeedback.correct
+                            ? 'Correct!'
+                            : 'Incorrect — try again',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (_controller.isSolitaireMode && solitaire.isComplete)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black54,
+                    child: Center(
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'Game Complete!',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                '${solitaire.correctFirstTry}/${solitaire.totalUserMoves} first-try',
+                              ),
+                              const SizedBox(height: 16),
+                              FilledButton(
+                                onPressed: _controller.nextGame,
+                                child: const Text('Next Game'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -872,15 +971,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final game = _controller.filteredGames[_controller.currentGameIndex];
     return Column(
       children: [
-        InlineEngineBar(
-          fen: _controller.currentPosition.fen,
-          onLineMoveTapped: _controller.onEngineLineMoveTapped,
-          activeLineMoveIndex: _controller.activeEngineLineMoveIdx != null
-              ? (_pgnWidgetController.variationDepth > 0
-                  ? _pgnWidgetController.variationDepth - 1
-                  : _controller.activeEngineLineMoveIdx)
-              : null,
-        ),
+        if (!_controller.isSolitaireMode)
+          InlineEngineBar(
+            fen: _controller.currentPosition.fen,
+            onLineMoveTapped: _controller.onEngineLineMoveTapped,
+            activeLineMoveIndex: _controller.activeEngineLineMoveIdx != null
+                ? (_pgnWidgetController.variationDepth > 0
+                    ? _pgnWidgetController.variationDepth - 1
+                    : _controller.activeEngineLineMoveIdx)
+                : null,
+          ),
+        if (_controller.isSolitaireMode) _buildSolitaireStatusBar(),
         const Divider(height: 1),
         if (_editMode) _buildEditModeBar(),
         Expanded(
@@ -893,9 +994,60 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             onCommentsChanged: _controller.persistMoveComments,
             editMode: _editMode,
             protectOriginal: _protectOriginal,
+            revealedPly: _controller.isSolitaireMode
+                ? _controller.solitaire.revealedPly
+                : null,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildSolitaireStatusBar() {
+    final s = _controller.solitaire;
+    final progress = s.totalMoves > 0
+        ? s.revealedPly / s.totalMoves
+        : 0.0;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+      child: Row(
+        children: [
+          Icon(Icons.psychology, size: 16,
+              color: Theme.of(context).colorScheme.primary),
+          const SizedBox(width: 8),
+          Text(
+            'Solitaire',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 6,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            '${s.revealedPly}/${s.totalMoves}',
+            style: const TextStyle(fontSize: 12),
+          ),
+          if (s.totalUserMoves > 0) ...[
+            const SizedBox(width: 8),
+            Text(
+              '${s.correctFirstTry}/${s.totalUserMoves} first-try',
+              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            ),
+          ],
+        ],
+      ),
     );
   }
 

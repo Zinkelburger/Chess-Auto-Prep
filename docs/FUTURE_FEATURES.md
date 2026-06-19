@@ -113,7 +113,8 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 
 | Item | Status | Notes |
 |------|--------|-------|
-| **TrapsBrowser in tools column** | **Done** | Lines tab → Traps segmented view; rich rows with mini board, per-reply stats, classification badges, sort by Eval Drop/Most Common/Trap%/Surplus |
+| **TrapsBrowser in tools column** | **Done** | Lines tab → Traps segmented view; rich rows with mini board, per-reply stats, classification badges, sort by Eval Drop/Most Common/Trap%/Surplus; filter: All Explored vs In Repertoire |
+| **Trappy selection mode** | **Done** | `SelectionMode.trappy` — picks lines maximizing opponent CPL; auto-widens build tolerances; CPL value propagation in `eca_calculator.dart` |
 | **Enriched trap tooltips in PGN** | **Done** | Multi-line tooltip: mistake description, popularity, reach probability, score |
 | **Traps empty state** | **Done** | Prompts "Generate Repertoire" with button when no traps detected |
 | Trap detail when **current position is a trap** (browse context) | **Partial** | Expanded trap list under candidates; not full card in context zone |
@@ -133,10 +134,11 @@ Consolidated list of planned or incomplete capabilities (from `tree_builder/TODO
 
 | Item | Status | Notes |
 |------|--------|-------|
-| **Dream sort** (playability × opponent difficulty × expectimax × traps) | **Not started** | Individual sorts exist (`playability`, `trappy`) |
-| **Bottleneck ply** warning on hard lines | **Not started** | Computed in `LinePlayability` but not surfaced in UI |
-| Training review weighted by **inverse playability** | **Not started** | |
+| **Dream sort** (playability × opponent difficulty × expectimax × traps) | **Not started** | Individual sorts exist (`playability`, `trappy`, `hardestFirst`) |
+| **Bottleneck ply** warning on hard lines | **Done** | Shown in trainer `_LineRow` + builder `_HardMoveWarning` when quality < 0.3 |
+| Training review weighted by **inverse playability** | **Done** | `ReviewOrder.hardestFirst` sorts by ascending playability; trainer loads `tree.json` and computes per-line playability |
 | On-demand `myEase` for manually added moves (Maia lookup) | **Not started** | Defaults to neutral when absent from tree |
+| **"Needs scoring" banner** in trainer | **Done** | Shown when no `tree.json` exists; links to Builder for generation |
 
 ---
 

@@ -117,6 +117,8 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
                 boardPreview: props.boardPreview,
                 onTrapSelected: props.onTrapSelected,
                 metrics: TrapIndexService(props.traps).metrics,
+                repertoireLineMoves:
+                    props.lines.map((l) => l.moves).toList(),
                 onStartTour: props.onStartTrapTour,
               ),
             ),

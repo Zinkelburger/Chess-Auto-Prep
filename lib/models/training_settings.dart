@@ -5,6 +5,7 @@ enum ReviewOrder {
   byImportance,
   random,
   weakestFirst,
+  hardestFirst,
   sequential,
 }
 
@@ -14,6 +15,7 @@ extension ReviewOrderLabel on ReviewOrder {
           'By cumulative probability (most likely first)',
         ReviewOrder.random => 'Random',
         ReviewOrder.weakestFirst => 'Weakest first',
+        ReviewOrder.hardestFirst => 'Hardest to play first',
         ReviewOrder.sequential => 'Sequential',
       };
 
@@ -23,6 +25,8 @@ extension ReviewOrderLabel on ReviewOrder {
         return ReviewOrder.random;
       case 'weakestFirst':
         return ReviewOrder.weakestFirst;
+      case 'hardestFirst':
+        return ReviewOrder.hardestFirst;
       case 'sequential':
         return ReviewOrder.sequential;
       default:
@@ -34,6 +38,7 @@ extension ReviewOrderLabel on ReviewOrder {
         ReviewOrder.byImportance => 'byImportance',
         ReviewOrder.random => 'random',
         ReviewOrder.weakestFirst => 'weakestFirst',
+        ReviewOrder.hardestFirst => 'hardestFirst',
         ReviewOrder.sequential => 'sequential',
       };
 }

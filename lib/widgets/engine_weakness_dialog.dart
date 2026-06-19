@@ -28,7 +28,7 @@ class EngineWeaknessConfig {
     required this.whiteCp,
     required this.blackCp,
     required this.workers,
-    this.redownload = true,
+    this.redownload = false,
     this.monthsBack = 6,
   });
 }
@@ -58,7 +58,7 @@ class _EngineWeaknessConfigDialogState
   late final TextEditingController _blackCpCtrl;
   late final TextEditingController _workersCtrl;
   late final TextEditingController _monthsCtrl;
-  bool _redownload = true;
+  bool _redownload = false;
 
   @override
   void initState() {
@@ -225,11 +225,11 @@ class _EngineWeaknessConfigDialogState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Engine Weakness Analysis',
+                'Analyze with Engine',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
               Text(
-                'Find weak positions according to the engine',
+                'Evaluate your most-played positions with Stockfish',
                 style: TextStyle(color: Colors.grey[400], fontSize: 13),
               ),
             ],

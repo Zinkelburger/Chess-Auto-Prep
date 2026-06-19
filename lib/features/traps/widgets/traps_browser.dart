@@ -20,6 +20,8 @@ import '../../../theme/app_colors.dart';
 import 'trap_detail_card.dart';
 import 'trap_summary_header.dart';
 
+enum TrapFilter { all, inRepertoire }
+
 class TrapsBrowser extends StatefulWidget {
   final List<TrapLineInfo> traps;
   final List<String> currentMoveSequence;
@@ -27,6 +29,10 @@ class TrapsBrowser extends StatefulWidget {
   final void Function(TrapLineInfo trap)? onTrapSelected;
   final TrapRepertoireMetrics? metrics;
   final VoidCallback? onStartTour;
+
+  /// Repertoire line move lists for "In Repertoire" filtering.
+  /// When non-empty, enables the filter toggle.
+  final List<List<String>> repertoireLineMoves;
 
   const TrapsBrowser({
     super.key,
@@ -36,6 +42,7 @@ class TrapsBrowser extends StatefulWidget {
     this.onTrapSelected,
     this.metrics,
     this.onStartTour,
+    this.repertoireLineMoves = const [],
   });
 
   @override
@@ -45,12 +52,37 @@ class TrapsBrowser extends StatefulWidget {
 class _TrapsBrowserState extends State<TrapsBrowser> {
   String _sortBy = 'eval'; // 'eval', 'reach', 'surplus', 'trap'
   String? _expandedTrapKey;
+  TrapFilter _filter = TrapFilter.all;
 
   static String _trapKey(TrapLineInfo trap) =>
       trap.fen ?? trap.movesSan.join('/');
 
+  bool _isTrapInRepertoire(TrapLineInfo trap) {
+    for (final lineMoves in widget.repertoireLineMoves) {
+      if (trap.movesSan.length <= lineMoves.length &&
+          _isPrefix(trap.movesSan, lineMoves)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _isPrefix(List<String> prefix, List<String> line) {
+    for (int i = 0; i < prefix.length; i++) {
+      if (prefix[i] != line[i]) return false;
+    }
+    return true;
+  }
+
+  List<TrapLineInfo> get _filteredTraps {
+    if (_filter == TrapFilter.all || widget.repertoireLineMoves.isEmpty) {
+      return widget.traps;
+    }
+    return widget.traps.where(_isTrapInRepertoire).toList();
+  }
+
   List<TrapLineInfo> get _sortedTraps {
-    final sorted = List<TrapLineInfo>.from(widget.traps);
+    final sorted = List<TrapLineInfo>.from(_filteredTraps);
     switch (_sortBy) {
       case 'trap':
         sorted.sort((a, b) => b.trapScore.compareTo(a.trapScore));
@@ -90,44 +122,101 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
   }
 
   Widget _buildHeader(int count) {
+    final hasRepertoireData = widget.repertoireLineMoves.isNotEmpty;
+    final inRepCount = hasRepertoireData
+        ? widget.traps.where(_isTrapInRepertoire).length
+        : 0;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
-          const SizedBox(width: 8),
-          Text(
-            '$count trap${count == 1 ? '' : 's'}',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (widget.onStartTour != null && count > 0) ...[
-            const SizedBox(width: 8),
-            TextButton.icon(
-              onPressed: widget.onStartTour,
-              icon: const Icon(Icons.tour, size: 14),
-              label: const Text('Tour traps', style: TextStyle(fontSize: 11)),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                foregroundColor: AppColors.warning,
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  size: 16, color: AppColors.warning),
+              const SizedBox(width: 8),
+              Text(
+                '$count trap${count == 1 ? '' : 's'}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
-          const Spacer(),
-          _buildSortChip('Eval Drop', 'eval'),
-          const SizedBox(width: 4),
-          _buildSortChip('Most Common', 'reach'),
-          const SizedBox(width: 4),
-          _buildSortChip('Trap %', 'trap'),
-          const SizedBox(width: 4),
-          _buildSortChip('Surplus', 'surplus'),
+              if (widget.onStartTour != null && count > 0) ...[
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: widget.onStartTour,
+                  icon: const Icon(Icons.tour, size: 14),
+                  label:
+                      const Text('Tour traps', style: TextStyle(fontSize: 11)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: AppColors.warning,
+                  ),
+                ),
+              ],
+              const Spacer(),
+              if (hasRepertoireData) ...[
+                _buildFilterChip(
+                  'All (${ widget.traps.length})',
+                  TrapFilter.all,
+                  tooltip: 'All traps found in the explored tree',
+                ),
+                const SizedBox(width: 4),
+                _buildFilterChip(
+                  'In Repertoire ($inRepCount)',
+                  TrapFilter.inRepertoire,
+                  tooltip: 'Traps along your chosen repertoire lines',
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              _buildSortChip('Eval Drop', 'eval'),
+              const SizedBox(width: 4),
+              _buildSortChip('Most Common', 'reach'),
+              const SizedBox(width: 4),
+              _buildSortChip('Trap %', 'trap'),
+              const SizedBox(width: 4),
+              _buildSortChip('Surplus', 'surplus'),
+            ],
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildFilterChip(String label, TrapFilter value, {String? tooltip}) {
+    final selected = _filter == value;
+    final chip = GestureDetector(
+      onTap: () => setState(() => _filter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.warning.withValues(alpha: 0.2) : Colors.grey[800],
+          borderRadius: BorderRadius.circular(10),
+          border: selected
+              ? Border.all(color: AppColors.warning.withValues(alpha: 0.5), width: 1)
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            color: selected ? AppColors.warning : Colors.grey[400],
+          ),
+        ),
+      ),
+    );
+    return tooltip != null ? Tooltip(message: tooltip, child: chip) : chip;
   }
 
   Widget _buildSortChip(String label, String value) {
