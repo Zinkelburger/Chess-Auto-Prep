@@ -114,6 +114,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 class _TacticsModeView extends StatelessWidget {
   const _TacticsModeView();
 
+  /// Shared key so the control panel's State (and its database/session/import)
+  /// is reparented — not recreated — when the layout crosses the compact/wide
+  /// breakpoint. Without this, resizing across the breakpoint silently throws
+  /// away the active training session and reloads everything.
+  static final GlobalKey _panelKey = GlobalKey();
+
   @override
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
@@ -138,11 +144,11 @@ class _TacticsModeView extends StatelessWidget {
                       child: _TacticsBoardPane(appState: appState),
                     ),
                     const Divider(height: 1, thickness: 1),
-                    const Expanded(
+                    Expanded(
                       flex: 6,
                       child: Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: TacticsControlPanel(),
+                        padding: const EdgeInsets.all(8.0),
+                        child: TacticsControlPanel(key: _panelKey),
                       ),
                     ),
                   ],
@@ -157,11 +163,11 @@ class _TacticsModeView extends StatelessWidget {
                       width: 1,
                       color: Colors.grey[700],
                     ),
-                    const Expanded(
+                    Expanded(
                       flex: 5,
                       child: Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: TacticsControlPanel(),
+                        padding: const EdgeInsets.all(8.0),
+                        child: TacticsControlPanel(key: _panelKey),
                       ),
                     ),
                   ],
