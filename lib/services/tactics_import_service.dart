@@ -73,16 +73,26 @@ class TacticsImportService {
   ///
   /// Returns `(total, pending)` where `total` is the number of distinct game
   /// PGNs in storage and `pending` is how many of those lack an entry in
-  /// [TacticsDatabase.analyzedGameIds].
-  Future<({int total, int pending})> countPendingGames() async {
+  /// [TacticsDatabase.analyzedGameIds]. Only counts games for platforms that
+  /// have a configured username, since resume cannot process others.
+  Future<({int total, int pending})> countPendingGames({
+    String? lichessUsername,
+    String? chesscomUsername,
+  }) async {
     final content = await StorageFactory.instance.readImportedPgns();
     if (content == null || content.isEmpty) return (total: 0, pending: 0);
+
+    final hasLichess = lichessUsername != null && lichessUsername.isNotEmpty;
+    final hasChessCom = chesscomUsername != null && chesscomUsername.isNotEmpty;
 
     final games = splitPgnIntoGames(content);
     int pending = 0;
     for (final game in games) {
       final gameId = _extractGameId(game);
-      if (gameId.isNotEmpty && !_database.isGameAnalyzed(gameId)) pending++;
+      if (gameId.isEmpty || _database.isGameAnalyzed(gameId)) continue;
+      if (gameId.startsWith('lichess_') && !hasLichess) continue;
+      if (gameId.startsWith('chesscom_') && !hasChessCom) continue;
+      pending++;
     }
     return (total: games.length, pending: pending);
   }

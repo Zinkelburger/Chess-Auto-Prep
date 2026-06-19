@@ -260,7 +260,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     await _database.loadPositions();
     if (mounted) {
       setState(() {});
-      unawaited(_import.refreshPendingCount());
+      final appState = context.read<AppState>();
+      unawaited(_import.refreshPendingCount(
+        lichessUsername: appState.lichessUsername,
+        chesscomUsername: appState.chesscomUsername,
+      ));
       _maybeAutoFetch();
     }
   }
