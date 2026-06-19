@@ -91,9 +91,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   @override
   void initState() {
     super.initState();
-    _database = TacticsDatabase();
-    _session = TacticsSessionController(database: _database);
-    _import = TacticsImportCoordinator(database: _database);
+    // The state owners live in providers above the layout (see
+    // `_TacticsModeView`) so they are a single shared source of truth that
+    // survives layout changes. The panel reads them here; it does NOT own
+    // their lifecycle and must not dispose them.
+    _database = context.read<TacticsDatabase>();
+    _session = context.read<TacticsSessionController>();
+    _import = context.read<TacticsImportCoordinator>();
     _solutionNav = TacticsSolutionNavigator(
       pgn: _pgnViewerController,
       currentTactic: () => _session.currentPosition,
@@ -106,6 +110,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _session.onPositionSetup = _loadPositionSetup;
     _session.addListener(_onSessionChanged);
     _import.addListener(_onImportChanged);
+    // Reactive safety net: any database mutation (import streaming, delete,
+    // edit, rating) repaints the panel without each call site having to
+    // remember to setState.
+    _database.addListener(_onDbChanged);
     _tabController = TabController(length: 2, vsync: this);
 
     _lichessUserController = TextEditingController();
@@ -202,6 +210,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     if (mounted) setState(() {});
   }
 
+  void _onDbChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _applyBoardUpdate(TacticsBoardUpdate update) {
     if (!mounted) return;
     final appState = context.read<AppState>();
@@ -241,8 +253,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   @override
   void dispose() {
+    // Detach our listeners/callbacks but do NOT dispose the owners — they are
+    // provider-owned (see `_TacticsModeView`) and shared/outlive this panel.
     _session.removeListener(_onSessionChanged);
     _import.removeListener(_onImportChanged);
+    _database.removeListener(_onDbChanged);
+    _session.onBoardUpdate = null;
+    _session.onPositionSetup = null;
     _appState?.setMoveAttemptedCallback(null);
     _focusNode.dispose();
     _tabController.dispose();
@@ -681,9 +698,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
 
     if (confirmed == true && mounted) {
-      _database.positions.removeAt(index);
-      await _database.savePositions();
-      setState(() {});
+      // Reactive: deletePositionAt notifies, which repaints via _onDbChanged.
+      await _database.deletePositionAt(index);
     }
   }
 
@@ -727,9 +743,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
 
     if (updated != null && mounted) {
-      _database.positions[index] = updated;
-      await _database.savePositions();
-      setState(() {});
+      await _database.updatePositionAt(index, updated);
     }
   }
 
