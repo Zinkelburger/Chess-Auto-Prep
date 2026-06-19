@@ -78,6 +78,9 @@ class PgnMovetextView extends StatelessWidget {
   /// Right-click action on an ephemeral analysis node (delete/clear menu).
   final void Function(int nodeId, Offset globalPosition)? onAnalysisNodeAction;
 
+  /// When non-null, moves at index >= revealedPly are hidden (solitaire mode).
+  final int? revealedPly;
+
   /// Preview an inline analysis line embedded in a comment: navigate the board
   /// through the run starting at [moveNumber]/[isWhite] and stop at
   /// [clickedIndex]. [sans] is the run's full move list. This does not modify
@@ -118,6 +121,7 @@ class PgnMovetextView extends StatelessWidget {
     required this.onDismissAnnotation,
     required this.onGoToAnalysisNode,
     this.onAnalysisNodeAction,
+    this.revealedPly,
     this.onPlayInlineLine,
     this.activeInlineLine,
   });
@@ -172,6 +176,9 @@ class PgnMovetextView extends StatelessWidget {
     }
 
     for (int i = 0; i < moveHistory.length; i++) {
+      // Solitaire mode: stop rendering at the revealed boundary
+      if (revealedPly != null && i >= revealedPly!) break;
+
       final moveData = moveHistory[i];
       final san = moveData.san;
 
