@@ -187,11 +187,13 @@ adds no new UI surface.
   `dart analyze` clean on all new/changed files.
 
 ### NOT done / deviations from the design above (deliberate, blind-build risk)
-1. **Delivered as a full-screen dialog, not the contextual "Lines→Draft" tab.**
-   The agreed design swaps the Lines tab content; doing that surgery blind in
-   the 1690-line screen was too risky without a display. The dialog delivers the
-   same flow (build → prune/review → merge → resolve) and is the natural thing to
-   refactor into the tab once it can be clicked through.
+1. ~~Delivered as a full-screen dialog~~ **DONE: now the inline Lines→Draft tab.**
+   A small source-form modal (`games_source_form.dart`) starts the session; the
+   review/prune/merge surface (`draft_review_pane.dart`) renders inline in the
+   second tools tab, which relabels "Lines"→"Draft" while active. Driven by
+   `_activeDraft`/`_buildingDraft` in `repertoire_screen.dart`. Widget tests in
+   `test/widgets/games_repertoire_widgets_test.dart` verify prune + the conflict
+   flow headlessly.
 2. **Merges straight into the active repertoire**, rather than first persisting a
    separate "draft" repertoire-library entry. Review/prune still happens before
    any merge (in the dialog), so the "review before commit" intent holds, but the
