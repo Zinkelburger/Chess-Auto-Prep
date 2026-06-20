@@ -433,6 +433,60 @@ class PgnViewerController extends ChangeNotifier {
     if (_fenIndex.value == null) _buildFenIndex();
   }
 
+  /// Load PGN games directly from raw text (e.g. pasted from the clipboard).
+  /// Held in memory only — there is no backing file, so rating/comment edits
+  /// are not persisted to disk.
+  Future<void> loadPgnContent(String content) async {
+    errorMessage = null;
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) {
+      errorMessage = 'Clipboard is empty — copy some PGN first';
+      notifyListeners();
+      return;
+    }
+
+    isLoading = true;
+    notifyListeners();
+
+    final entries = await compute(parseMultiGamePgn, trimmed);
+    if (!isActive()) return;
+
+    if (entries.isEmpty) {
+      isLoading = false;
+      errorMessage = 'No valid PGN games found in the pasted text';
+      notifyListeners();
+      return;
+    }
+
+    final perspectiveRaw = entries.first.headers['StudyPerspective'] ?? '';
+    var newPerspective = Perspective.fromHeaderValue(perspectiveRaw);
+    if (perspectiveRaw.trim().isEmpty && entries.length >= 2) {
+      final protagonist = detectProtagonistFrom(entries);
+      if (protagonist != null) {
+        newPerspective = Perspective(
+          mode: PerspectiveMode.player,
+          playerName: protagonist,
+        );
+      }
+    }
+
+    isLoading = false;
+    filePath = null;
+    allGames = entries;
+    filteredGames = List.of(entries);
+    hasActiveFilters = false;
+    activeSliceConfig = const SliceConfig.empty();
+    _activeSliceIndices = null;
+    sortMode = GameSortMode.fileOrder;
+    currentGameIndex = 0;
+    perspective = newPerspective;
+    _viewerTree.resetForNewFile();
+    notifyListeners();
+
+    await loadCurrentGame();
+    _buildFenIndex();
+  }
+
   void _buildFenIndex() {
     final gameData = allGames
         .map((g) => (
@@ -957,6 +1011,13 @@ class PgnViewerController extends ChangeNotifier {
 
   void _onSolitaireChanged() {
     notifyListeners();
+  }
+
+  /// Reveal the current solitaire move (give up on guessing it).
+  void revealSolitaireMove() {
+    if (!isSolitaireMode) return;
+    solitaire.revealCurrentMove();
+    onReclaimFocus?.call();
   }
 
   void _handleSolitaireMove(String san) {

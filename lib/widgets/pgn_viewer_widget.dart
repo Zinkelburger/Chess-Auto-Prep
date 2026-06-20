@@ -162,6 +162,27 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   bool get _inlineActive => _inlineCursor > 0 && _inlineSans.isNotEmpty;
 
+  // Auto-scroll the movetext so the current move stays visible as the user
+  // navigates with the arrow keys.
+  final ScrollController _movetextScrollController = ScrollController();
+  final GlobalKey _currentMoveKey = GlobalKey();
+  int _lastScrolledIndex = -1;
+
+  void _scheduleScrollCurrentMoveIntoView() {
+    if (_mainLineIndex == _lastScrolledIndex) return;
+    _lastScrolledIndex = _mainLineIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _currentMoveKey.currentContext;
+      if (ctx == null || !mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
   @override
   bool get wantKeepAlive => true;
 
@@ -175,6 +196,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   @override
   void dispose() {
     widget.controller?._detach(this);
+    _movetextScrollController.dispose();
     super.dispose();
   }
 
@@ -938,6 +960,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       return const Center(child: Text('No game loaded'));
     }
 
+    _scheduleScrollCurrentMoveIntoView();
+
     return Column(
       children: [
         if (_gameInfo.isNotEmpty)
@@ -947,12 +971,14 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           ),
         Expanded(
           child: SingleChildScrollView(
+            controller: _movetextScrollController,
             padding: const EdgeInsets.all(8),
             child: PgnMovetextView(
               game: _game,
               moveHistory: _moveHistory,
               variationsByPly: _variationsByPly,
               mainLineIndex: _mainLineIndex,
+              currentMoveKey: _currentMoveKey,
               analysisPath: _analysisPath,
               selectedMoveIndex: _selectedMoveIndex,
               editingCommentIndex: _editingCommentIndex,

@@ -136,6 +136,27 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     await _loadFile(result.files.single.path!);
   }
 
+  Future<void> _pastePgn() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+    await _controller.loadPgnContent(data?.text ?? '');
+    if (!mounted) return;
+    final error = _controller.errorMessage;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), duration: const Duration(seconds: 4)),
+      );
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            'Loaded ${_controller.allGames.length} game(s) from clipboard'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _loadFile(String path) async {
     await _controller.loadFile(path);
     if (!mounted) return;
@@ -418,6 +439,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
     // In solitaire mode, disable navigation shortcuts that would reveal moves
     if (_controller.isSolitaireMode) {
+      // H reveals the current move (give up on guessing it).
+      if (key == LogicalKeyboardKey.keyH && hasNoLetterModifiers) {
+        _controller.revealSolitaireMove();
+        return KeyEventResult.handled;
+      }
       if (key == LogicalKeyboardKey.arrowLeft ||
           key == LogicalKeyboardKey.arrowRight ||
           key == LogicalKeyboardKey.home ||
@@ -456,6 +482,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     } else if (key == LogicalKeyboardKey.keyE &&
         HardwareKeyboard.instance.isControlPressed) {
       _exportSlice();
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyV &&
+        HardwareKeyboard.instance.isControlPressed) {
+      _pastePgn();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.keyE && hasNoLetterModifiers) {
       InlineEngineBar.toggleEngine();
@@ -624,6 +654,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            onPressed: _pastePgn,
+            icon: const Icon(Icons.content_paste, size: 18),
+            tooltip: 'Paste PGN from clipboard (Ctrl+V)',
+            visualDensity: VisualDensity.compact,
           ),
           if (_controller.allGames.isNotEmpty) ...[
             const SizedBox(width: 8),
@@ -1044,6 +1081,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             Text(
               '${s.correctFirstTry}/${s.totalUserMoves} first-try',
               style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            ),
+          ],
+          if (s.waitingForUser) ...[
+            const SizedBox(width: 12),
+            TextButton.icon(
+              onPressed: _controller.revealSolitaireMove,
+              icon: const Icon(Icons.visibility, size: 16),
+              label: const Text('Reveal'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ],
         ],

@@ -81,6 +81,9 @@ class PgnMovetextView extends StatelessWidget {
   /// When non-null, moves at index >= revealedPly are hidden (solitaire mode).
   final int? revealedPly;
 
+  /// Attached to the current mainline move so the host can scroll it into view.
+  final Key? currentMoveKey;
+
   /// Preview an inline analysis line embedded in a comment: navigate the board
   /// through the run starting at [moveNumber]/[isWhite] and stop at
   /// [clickedIndex]. [sans] is the run's full move list. This does not modify
@@ -122,6 +125,7 @@ class PgnMovetextView extends StatelessWidget {
     required this.onGoToAnalysisNode,
     this.onAnalysisNodeAction,
     this.revealedPly,
+    this.currentMoveKey,
     this.onPlayInlineLine,
     this.activeInlineLine,
   });
@@ -270,6 +274,7 @@ class PgnMovetextView extends StatelessWidget {
                 ? (details) => onShowMoveContextMenu(i, details.globalPosition)
                 : (canEditComments ? (_) => onStartEditingComment(i) : null),
             child: Container(
+              key: isCurrentMove ? currentMoveKey : null,
               padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
               decoration: BoxDecoration(
                 color: isCurrentMove

@@ -147,6 +147,22 @@ class SolitaireController extends ChangeNotifier {
     }
   }
 
+  /// Reveal the current expected move without the user having guessed it.
+  /// Counts as a played move (so accuracy reflects the help) but never as a
+  /// first-try success. Used by the "Reveal move" / give-up control.
+  void revealCurrentMove() {
+    if (!_active || !waitingForUser) return;
+
+    _totalUserMoves++;
+    _currentAttempts = 0;
+    _feedback = null;
+    _revealedPly++;
+    notifyListeners();
+
+    onAdvancePosition?.call();
+    _maybePlayOpponent();
+  }
+
   /// If it's the opponent's turn, auto-advance after a delay.
   void _maybePlayOpponent() {
     if (!_active) return;
