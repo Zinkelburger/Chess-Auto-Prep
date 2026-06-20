@@ -5,6 +5,25 @@ import 'package:flutter/foundation.dart';
 
 enum SolitaireFeedback { correct, incorrect }
 
+/// A single user-guessed move with all attempts recorded.
+class SolitaireGuess {
+  final int ply;
+  final String expectedSan;
+  final List<String> wrongAttempts;
+  final String correctSan;
+  final bool wasRevealed;
+
+  const SolitaireGuess({
+    required this.ply,
+    required this.expectedSan,
+    required this.wrongAttempts,
+    required this.correctSan,
+    this.wasRevealed = false,
+  });
+
+  bool get firstTry => wrongAttempts.isEmpty && !wasRevealed;
+}
+
 /// Manages solitaire chess mode: the user guesses moves from a loaded PGN game
 /// one at a time. Correct guesses reveal the move; the opponent's reply
 /// auto-plays after a short delay.
@@ -56,11 +75,40 @@ class SolitaireController extends ChangeNotifier {
   int _totalUserMoves = 0;
   int get totalUserMoves => _totalUserMoves;
 
+  /// Number of moves the user revealed (gave up on).
+  int _revealedCount = 0;
+  int get revealedCount => _revealedCount;
+
   /// Whether the current game is complete.
   bool get isComplete => _active && _revealedPly >= _totalMoves;
 
+  /// Log of all user guesses (one entry per user-side move, recorded on
+  /// correct guess or reveal).
+  final List<SolitaireGuess> _guessLog = [];
+  List<SolitaireGuess> get guessLog => List.unmodifiable(_guessLog);
+
+  /// Wrong attempts accumulated for the move currently being guessed.
+  final List<String> _pendingWrongAttempts = [];
+
+  /// Seconds before the reveal button becomes active (0 = always available).
+  int revealDelaySec = 60;
+
+  /// When the user started thinking about the current move.
+  DateTime? _moveStartTime;
+  DateTime? get moveStartTime => _moveStartTime;
+
+  /// Seconds remaining before the reveal button activates. 0 when ready.
+  int get revealCountdownSec {
+    if (_moveStartTime == null || revealDelaySec <= 0) return 0;
+    final elapsed = DateTime.now().difference(_moveStartTime!).inSeconds;
+    return (revealDelaySec - elapsed).clamp(0, revealDelaySec);
+  }
+
+  bool get canReveal => waitingForUser && revealCountdownSec == 0;
+
   Timer? _feedbackTimer;
   Timer? _opponentTimer;
+  Timer? _countdownTimer;
 
   /// Callbacks set by the parent controller.
   VoidCallback? onAdvancePosition;
@@ -79,8 +127,12 @@ class SolitaireController extends ChangeNotifier {
     _currentAttempts = 0;
     _correctFirstTry = 0;
     _totalUserMoves = 0;
+    _revealedCount = 0;
     _feedback = null;
     _opponentPlaying = false;
+    _guessLog.clear();
+    _pendingWrongAttempts.clear();
+    _moveStartTime = null;
     _cancelTimers();
     notifyListeners();
     _maybePlayOpponent();
@@ -90,6 +142,7 @@ class SolitaireController extends ChangeNotifier {
     _active = false;
     _feedback = null;
     _opponentPlaying = false;
+    _moveStartTime = null;
     _cancelTimers();
     notifyListeners();
   }
@@ -108,8 +161,12 @@ class SolitaireController extends ChangeNotifier {
     _currentAttempts = 0;
     _correctFirstTry = 0;
     _totalUserMoves = 0;
+    _revealedCount = 0;
     _feedback = null;
     _opponentPlaying = false;
+    _guessLog.clear();
+    _pendingWrongAttempts.clear();
+    _moveStartTime = null;
     _cancelTimers();
     notifyListeners();
     _maybePlayOpponent();
@@ -128,9 +185,18 @@ class SolitaireController extends ChangeNotifier {
     if (isCorrect) {
       _totalUserMoves++;
       if (_currentAttempts == 0) _correctFirstTry++;
+      _guessLog.add(SolitaireGuess(
+        ply: _revealedPly,
+        expectedSan: expectedSan,
+        wrongAttempts: List.of(_pendingWrongAttempts),
+        correctSan: san,
+      ));
+      _pendingWrongAttempts.clear();
       _currentAttempts = 0;
       _feedback = SolitaireFeedback.correct;
       _revealedPly++;
+      _moveStartTime = null;
+      _countdownTimer?.cancel();
       notifyListeners();
 
       onAdvancePosition?.call();
@@ -139,6 +205,7 @@ class SolitaireController extends ChangeNotifier {
       return true;
     } else {
       _currentAttempts++;
+      _pendingWrongAttempts.add(san);
       _feedback = SolitaireFeedback.incorrect;
       notifyListeners();
       _scheduleFeedbackClear();
@@ -147,7 +214,31 @@ class SolitaireController extends ChangeNotifier {
     }
   }
 
+  /// Reveal the correct move (give up). Logs it as a revealed guess.
+  void revealMove(String expectedSan) {
+    if (!_active || !waitingForUser) return;
+    _totalUserMoves++;
+    _revealedCount++;
+    _guessLog.add(SolitaireGuess(
+      ply: _revealedPly,
+      expectedSan: expectedSan,
+      wrongAttempts: List.of(_pendingWrongAttempts),
+      correctSan: expectedSan,
+      wasRevealed: true,
+    ));
+    _pendingWrongAttempts.clear();
+    _currentAttempts = 0;
+    _revealedPly++;
+    _moveStartTime = null;
+    _countdownTimer?.cancel();
+    notifyListeners();
+
+    onAdvancePosition?.call();
+    _maybePlayOpponent();
+  }
+
   /// If it's the opponent's turn, auto-advance after a delay.
+  /// When it becomes the user's turn, starts the reveal countdown.
   void _maybePlayOpponent() {
     if (!_active) return;
     if (_revealedPly >= _totalMoves) {
@@ -156,7 +247,10 @@ class SolitaireController extends ChangeNotifier {
     }
 
     final isWhiteTurn = (_revealedPly % 2 == 0) == _whiteToMoveAtStart;
-    if (isWhiteTurn == _userIsWhite) return;
+    if (isWhiteTurn == _userIsWhite) {
+      _startRevealCountdown();
+      return;
+    }
 
     _opponentPlaying = true;
     notifyListeners();
@@ -170,6 +264,22 @@ class SolitaireController extends ChangeNotifier {
       notifyListeners();
       _maybePlayOpponent();
     });
+  }
+
+  void _startRevealCountdown() {
+    _moveStartTime = DateTime.now();
+    _countdownTimer?.cancel();
+    if (revealDelaySec > 0) {
+      _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!_active || !waitingForUser) {
+          _countdownTimer?.cancel();
+          return;
+        }
+        notifyListeners();
+        if (revealCountdownSec <= 0) _countdownTimer?.cancel();
+      });
+    }
+    notifyListeners();
   }
 
   void _scheduleFeedbackClear() {
@@ -197,11 +307,52 @@ class SolitaireController extends ChangeNotifier {
     return normalize(san) == normalize(expectedSan);
   }
 
+  /// Build a PGN movetext string annotated with guess comments.
+  ///
+  /// User-side moves get comments: `{1st try}`, `{Revealed}`, or
+  /// `{Tried: e5, d5 (3 tries)}`.
+  String buildGuessPgn(List<String> mainLineMoves) {
+    final guessMap = <int, SolitaireGuess>{};
+    for (final g in _guessLog) {
+      guessMap[g.ply] = g;
+    }
+
+    final buf = StringBuffer();
+    for (int i = 0; i < mainLineMoves.length; i++) {
+      final moveNum = (i ~/ 2) + 1;
+      if (i % 2 == 0) {
+        if (i > 0) buf.write(' ');
+        buf.write('$moveNum.');
+      }
+      buf.write(' ${mainLineMoves[i]}');
+
+      final guess = guessMap[i];
+      if (guess != null) {
+        if (guess.wasRevealed) {
+          if (guess.wrongAttempts.isEmpty) {
+            buf.write(' {Revealed}');
+          } else {
+            buf.write(' {Tried: ${guess.wrongAttempts.join(", ")} then revealed}');
+          }
+        } else if (guess.firstTry) {
+          buf.write(' {1st try}');
+        } else {
+          final tries = guess.wrongAttempts.length + 1;
+          buf.write(' {Tried: ${guess.wrongAttempts.join(", ")} ($tries tries)}');
+        }
+      }
+    }
+    if (buf.isNotEmpty) buf.write(' *');
+    return buf.toString();
+  }
+
   void _cancelTimers() {
     _feedbackTimer?.cancel();
     _feedbackTimer = null;
     _opponentTimer?.cancel();
     _opponentTimer = null;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
   }
 
   @override

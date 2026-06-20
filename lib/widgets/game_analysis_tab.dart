@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../models/solitaire_trophy.dart';
 import '../services/game_analysis_controller.dart';
 import '../utils/chess_utils.dart' show formatEvalDisplay;
 import '../widgets/clickable_move_line.dart';
@@ -32,6 +33,12 @@ class GameAnalysisTab extends StatefulWidget {
   /// Parent should stop auto-play, reclaim focus, etc.
   final VoidCallback? onUserNavigation;
 
+  /// Called after analysis completes so the parent can run trophy detection.
+  final Future<void> Function()? onAnalysisComplete;
+
+  /// Trophies detected in this game (for trophy icons on qualifying moves).
+  final List<SolitaireTrophy> detectedTrophies;
+
   const GameAnalysisTab({
     super.key,
     required this.analysisController,
@@ -41,6 +48,8 @@ class GameAnalysisTab extends StatefulWidget {
     this.gamePgnText,
     this.onAnnotatedMovetext,
     this.onUserNavigation,
+    this.onAnalysisComplete,
+    this.detectedTrophies = const [],
   });
 
   @override
@@ -151,6 +160,10 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       onAnnotatedMovetext: widget.onAnnotatedMovetext != null
           ? (annotated) => widget.onAnnotatedMovetext!(annotated)
           : null,
+      onComplete: () {
+        if (!mounted) return;
+        widget.onAnalysisComplete?.call();
+      },
     );
   }
 
@@ -352,7 +365,13 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
 
     final interesting = _interestingMoves(evals);
 
-    if (interesting.isEmpty) {
+    // Build a set of plies that have trophies for quick lookup.
+    final trophyFens = <String>{};
+    for (final t in widget.detectedTrophies) {
+      trophyFens.add(t.fen);
+    }
+
+    if (interesting.isEmpty && widget.detectedTrophies.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -370,14 +389,47 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       controller: _moveListScroll,
       padding: const EdgeInsets.symmetric(vertical: 4),
       children: [
+        if (widget.detectedTrophies.isNotEmpty)
+          _buildTrophyBanner(widget.detectedTrophies),
         for (var index = 0; index < interesting.length; index++)
           _buildMoveListRow(
             interesting[index],
             index: index,
             nearestIdx: nearestIdx,
             evalByPly: evalByPly,
+            hasTrophy: trophyFens.contains(interesting[index].fenBefore),
           ),
       ],
+    );
+  }
+
+  Widget _buildTrophyBanner(List<SolitaireTrophy> trophies) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.emoji_events, color: Colors.amber, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              trophies.length == 1
+                  ? 'You found a move better than the GM!'
+                  : 'You found ${trophies.length} moves better than the GM!',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.amber,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -386,6 +438,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
     required int index,
     required int nearestIdx,
     required Map<int, MoveEval> evalByPly,
+    bool hasTrophy = false,
   }) {
     final moveNum = (e.ply + 1) ~/ 2;
     final dots = e.isWhiteMove ? '.' : '...';
@@ -465,6 +518,13 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                     ),
                   ),
                 ),
+                if (hasTrophy) ...[
+                  const SizedBox(width: 6),
+                  const Tooltip(
+                    message: 'You found a better move here!',
+                    child: Icon(Icons.emoji_events, color: Colors.amber, size: 16),
+                  ),
+                ],
                 const Spacer(),
                 Text(
                   evalStr,
