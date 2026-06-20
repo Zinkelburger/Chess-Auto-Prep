@@ -21,6 +21,7 @@ import '../utils/app_messages.dart';
 import '../utils/log.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../widgets/chess_board_widget.dart';
+import '../widgets/opening_tree_widget.dart';
 import '../widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
 import 'package:file_picker/file_picker.dart';
@@ -30,7 +31,7 @@ import '../widgets/repertoire_generation_tab.dart';
 import '../widgets/layout/board_zone.dart';
 import '../widgets/layout/bottom_pane.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
-import '../widgets/layout/empty_state_placeholder.dart';
+import '../widgets/repertoire_list_body.dart';
 import '../widgets/layout/jobs_panel.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';
@@ -127,7 +128,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   void initState() {
     super.initState();
 
-    _toolsTabController = TabController(length: 2, vsync: this);
+    _toolsTabController = TabController(length: 3, vsync: this);
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
     _generationController.addListener(_onGenerationChanged);
@@ -141,8 +142,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
       if (appState.pendingRepertoirePath != null) {
         _onAppStateChanged();
-      } else if (_controller.currentRepertoire == null) {
-        _showRepertoireSelection();
       }
     });
   }
@@ -466,12 +465,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           },
           onSelectRepertoire: _showRepertoireSelection,
         ),
-        body: EmptyStatePlaceholder(
-          icon: Icons.library_books,
-          title: 'No Repertoire Selected',
-          actionLabel: 'Select Repertoire',
-          actionIcon: Icons.library_books,
-          onAction: _showRepertoireSelection,
+        body: RepertoireListBody(
+          onSelected: (repertoire) async {
+            await _controller.setRepertoire(repertoire);
+            _reclaimFocus();
+          },
         ),
       );
     }
@@ -820,6 +818,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             children: [
               _buildPgnTabWithEngines(),
               _buildSecondTabContent(),
+              _buildTreeTabContent(),
             ],
           ),
         ),
@@ -858,6 +857,27 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       );
     }
     return _buildLinesTabContent();
+  }
+
+  Widget _buildTreeTabContent() {
+    final tree = _controller.openingTree;
+    if (tree == null) {
+      return const Center(
+        child: Text(
+          'No opening tree available.\nLoad a repertoire to build the tree.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+    return OpeningTreeWidget(
+      tree: tree,
+      repertoireLines: _controller.repertoireLines,
+      currentMoveSequence: _controller.currentMoveSequence,
+      onMoveSelected: _controller.userSelectedTreeMove,
+      onGoBack: _controller.goBack,
+      onGoForward: _controller.goForward,
+    );
   }
 
   Widget _buildPgnTabWithEngines() {
@@ -940,6 +960,17 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   fontWeight: _isDraftActive ? FontWeight.w600 : null,
                 ),
               ),
+            ],
+          ),
+        ),
+        const Tab(
+          height: 30,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.account_tree_outlined, size: 14),
+              SizedBox(width: 4),
+              Text('Tree', style: TextStyle(fontSize: 12)),
             ],
           ),
         ),
