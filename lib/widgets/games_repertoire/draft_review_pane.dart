@@ -149,6 +149,16 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
           padding: EdgeInsets.symmetric(horizontal: 12),
           child: Align(alignment: Alignment.centerLeft, child: DraftLegend()),
         ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(12, 2, 12, 0),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Tap a line to expand · long-press to preview on the board · 🗑 discards it',
+              style: TextStyle(fontSize: 11, color: AppColors.onSurfaceDim),
+            ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(

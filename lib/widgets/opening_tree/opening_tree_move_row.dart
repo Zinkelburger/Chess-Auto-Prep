@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../models/opening_tree.dart';
-import '../../theme/app_colors.dart';
 import 'coverage_annotation.dart';
+import 'win_draw_loss_bar.dart';
 
 /// A single child move row in the opening tree list.
 class OpeningTreeMoveRow extends StatelessWidget {
@@ -100,63 +100,14 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _OpeningTreeWinRateBar(node: node),
+                  child: WinDrawLossBar(
+                    wins: node.wins,
+                    draws: node.draws,
+                    losses: node.losses,
+                  ),
                 ),
               ],
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Visual win rate bar similar to openingtree.com.
-class _OpeningTreeWinRateBar extends StatelessWidget {
-  final OpeningTreeNode node;
-
-  const _OpeningTreeWinRateBar({required this.node});
-
-  @override
-  Widget build(BuildContext context) {
-    final winPercent =
-        node.gamesPlayed > 0 ? node.wins / node.gamesPlayed : 0.0;
-    final drawPercent =
-        node.gamesPlayed > 0 ? node.draws / node.gamesPlayed : 0.0;
-    final lossPercent =
-        node.gamesPlayed > 0 ? node.losses / node.gamesPlayed : 0.0;
-
-    return Container(
-      height: 16,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: Colors.grey[700]!, width: 1),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(1),
-        child: Row(
-          children: [
-            if (winPercent > 0)
-              Expanded(
-                flex: (winPercent * 100).round(),
-                child: Container(
-                  color: AppColors.evalPositive,
-                ),
-              ),
-            if (drawPercent > 0)
-              Expanded(
-                flex: (drawPercent * 100).round(),
-                child: Container(
-                  color: Colors.grey[600],
-                ),
-              ),
-            if (lossPercent > 0)
-              Expanded(
-                flex: (lossPercent * 100).round(),
-                child: Container(
-                  color: AppColors.evalNegative,
-                ),
-              ),
           ],
         ),
       ),

@@ -14,6 +14,7 @@ import '../../models/opening_tree.dart';
 import '../../services/games_repertoire/games_draft.dart';
 import '../../services/games_repertoire/repertoire_diff.dart';
 import '../../theme/app_colors.dart';
+import '../opening_tree/win_draw_loss_bar.dart';
 
 Color statusColor(DraftMoveStatus status) {
   switch (status) {
@@ -48,6 +49,7 @@ class DraftTreeView extends StatefulWidget {
     required this.onChanged,
     this.onSelectLine,
     this.minGames = 1,
+    this.autoCollapseDepth = 1,
   });
 
   final GamesDraft draft;
@@ -62,12 +64,45 @@ class DraftTreeView extends StatefulWidget {
   /// Hide moves played in fewer than this many games (noise control).
   final int minGames;
 
+  /// Nodes at this depth (0-based ply from the root) and deeper start
+  /// collapsed, so the tree opens showing only the first plies instead of a
+  /// fully-expanded wall. Tap a row to drill in.
+  final int autoCollapseDepth;
+
   @override
   State<DraftTreeView> createState() => _DraftTreeViewState();
 }
 
 class _DraftTreeViewState extends State<DraftTreeView> {
   final Set<OpeningTreeNode> _collapsed = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _seedCollapsed(widget.draft.tree.root, 0);
+  }
+
+  @override
+  void didUpdateWidget(covariant DraftTreeView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A fresh draft (or new tree) reseeds the collapse state from scratch.
+    if (!identical(oldWidget.draft, widget.draft) ||
+        !identical(oldWidget.draft.tree, widget.draft.tree)) {
+      _collapsed.clear();
+      _seedCollapsed(widget.draft.tree.root, 0);
+    }
+  }
+
+  /// Collapse every node at [DraftTreeView.autoCollapseDepth] or deeper that has
+  /// children, so deep lines are folded away on first paint.
+  void _seedCollapsed(OpeningTreeNode node, int depth) {
+    for (final child in node.sortedChildren) {
+      if (depth >= widget.autoCollapseDepth && child.sortedChildren.isNotEmpty) {
+        _collapsed.add(child);
+      }
+      _seedCollapsed(child, depth + 1);
+    }
+  }
 
   void _prune(OpeningTreeNode node) {
     setState(() => widget.draft.prune(node));
@@ -160,33 +195,39 @@ class _DraftRow extends StatelessWidget {
         isWhiteMove ? '$moveNumber. ${node.move}' : '$moveNumber… ${node.move}';
     final winPct = (node.winRate * 100).round();
 
+    // Tapping the row drills in (expand/collapse) when there are children;
+    // leaf rows preview the line instead. Long-press always previews.
     return InkWell(
-      onTap: onSelect,
+      onTap: hasChildren ? onToggle : onSelect,
+      onLongPress: onSelect,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(8.0 + depth * 16, 2, 8, 2),
+        padding: EdgeInsets.fromLTRB(8.0 + depth * 16, 3, 4, 3),
         child: Row(
           children: [
+            // Expand/collapse affordance (indicator only — the whole row taps).
             SizedBox(
-              width: 22,
+              width: 18,
               child: hasChildren
-                  ? IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      iconSize: 18,
-                      icon: Icon(collapsed
-                          ? Icons.chevron_right
-                          : Icons.expand_more),
-                      onPressed: onToggle,
+                  ? Icon(
+                      collapsed ? Icons.chevron_right : Icons.expand_more,
+                      size: 18,
+                      color: AppColors.onSurfaceDim,
                     )
                   : null,
             ),
-            Container(width: 4, height: 18, color: color),
+            // Coverage status dot.
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
             const SizedBox(width: 8),
+            // Move label.
             Expanded(
               child: Text(
                 label,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFeatures: const [],
                   fontWeight: status == DraftMoveStatus.inRepertoire
                       ? FontWeight.normal
                       : FontWeight.w600,
@@ -196,12 +237,40 @@ class _DraftRow extends StatelessWidget {
                 ),
               ),
             ),
-            Text(
-              '${node.gamesPlayed}g · $winPct%',
-              style: const TextStyle(
-                  fontSize: 11, color: AppColors.onSurfaceDim),
+            const SizedBox(width: 6),
+            // Games count.
+            SizedBox(
+              width: 30,
+              child: Text(
+                '${node.gamesPlayed}',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.onSurfaceDim),
+              ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 8),
+            // W/D/L bar (shared with the opening explorer).
+            SizedBox(
+              width: 64,
+              child: WinDrawLossBar(
+                wins: node.wins,
+                draws: node.draws,
+                losses: node.losses,
+                height: 12,
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Win %.
+            SizedBox(
+              width: 34,
+              child: Text(
+                '$winPct%',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                    fontSize: 11, color: AppColors.onSurfaceMuted),
+              ),
+            ),
+            // Discard subtree.
             IconButton(
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
