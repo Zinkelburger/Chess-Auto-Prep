@@ -90,6 +90,14 @@ class TrainingSessionController extends ChangeNotifier {
 
   bool isLoading = true;
   String? error;
+
+  /// Transition to idle (no repertoire loaded, not loading).
+  void setIdle() {
+    isLoading = false;
+    error = null;
+    notifyListeners();
+  }
+
   bool waitingForUser = false;
   String? feedback;
   String? currentAnnotation;
@@ -225,12 +233,6 @@ class TrainingSessionController extends ChangeNotifier {
     } catch (e) {
       debugPrint('[TrainingController] Failed to load tree: $e');
     }
-  }
-
-  void clearSelectionError() {
-    error = 'Select a repertoire to start training.';
-    isLoading = false;
-    notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
