@@ -35,6 +35,7 @@ import '../widgets/pgn/pgn_perspective_button.dart';
 import '../widgets/pgn/pgn_slice_chips.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/pgn_slice_dialog.dart';
+import '../widgets/solitaire_trophy_cabinet.dart';
 
 class PgnViewerScreen extends StatefulWidget {
   const PgnViewerScreen({super.key});
@@ -73,6 +74,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     windowManager.addListener(this);
     _controller.loadRecentFiles();
     _controller.loadCollections();
+    _controller.loadSolitaireSettings();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<AppState>().addListener(_onAppStateChanged);
@@ -205,6 +207,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         },
       ),
     ).then((_) => _reclaimFocus());
+  }
+
+  void _showTrophyCabinet() {
+    showDialog(
+      context: context,
+      builder: (_) => const SolitaireTrophyCabinet(),
+    ).then((_) {
+      _controller.loadSolitaireSettings();
+      _reclaimFocus();
+    });
   }
 
   Future<void> _copyCurrentGamePgn() async {
@@ -439,9 +451,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
     // In solitaire mode, disable navigation shortcuts that would reveal moves
     if (_controller.isSolitaireMode) {
-      // H reveals the current move (give up on guessing it).
+      // H reveals the current move once the reveal countdown has elapsed.
       if (key == LogicalKeyboardKey.keyH && hasNoLetterModifiers) {
-        _controller.revealSolitaireMove();
+        if (_controller.solitaire.canReveal) _controller.revealCurrentMove();
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.arrowLeft ||
@@ -707,6 +719,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             icon: const Icon(Icons.swap_vert, size: 20),
             tooltip: 'Flip board (F)',
           ),
+          if (_controller.totalTrophyCount > 0)
+            IconButton(
+              onPressed: () => _showTrophyCabinet(),
+              icon: const Icon(Icons.emoji_events, size: 20, color: Colors.amber),
+              tooltip: 'Trophies (${_controller.totalTrophyCount})',
+            ),
           PgnPerspectiveButton(controller: _controller),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 20),
@@ -714,6 +732,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             onSelected: (value) {
               if (value == 'generate_repertoire') {
                 _generateRepertoireFromGames();
+              } else if (value == 'trophies') {
+                _showTrophyCabinet();
               }
             },
             itemBuilder: (_) => [
@@ -722,6 +742,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 child: ListTile(
                   leading: Icon(Icons.auto_fix_high, size: 20),
                   title: Text('Generate repertoire from games'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                value: 'trophies',
+                child: ListTile(
+                  leading: const Icon(Icons.emoji_events, size: 20, color: Colors.amber),
+                  title: Text('Trophy cabinet (${_controller.totalTrophyCount})'),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -782,6 +811,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                     ),
                   ),
                 ),
+              if (_controller.isSolitaireMode && solitaire.waitingForUser)
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: _buildRevealButton(),
+                ),
               if (_controller.isSolitaireMode && solitaire.isComplete)
                 Positioned.fill(
                   child: Container(
@@ -802,7 +837,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                               ),
                               const SizedBox(height: 12),
                               Text(
-                                '${solitaire.correctFirstTry}/${solitaire.totalUserMoves} first-try',
+                                '${solitaire.correctFirstTry}/${solitaire.totalUserMoves} first-try'
+                                '${solitaire.revealedCount > 0 ? ', ${solitaire.revealedCount} revealed' : ''}',
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Guess annotations saved to PGN',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                               ),
                               const SizedBox(height: 16),
                               FilledButton(
@@ -817,6 +858,53 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                   ),
                 ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRevealButton() {
+    final solitaire = _controller.solitaire;
+    final countdown = solitaire.revealCountdownSec;
+    final canReveal = solitaire.canReveal;
+
+    return Material(
+      color: Colors.transparent,
+      child: Tooltip(
+        message: canReveal
+            ? 'Show the correct move'
+            : 'Available in ${countdown}s',
+        child: InkWell(
+          onTap: canReveal ? _controller.revealCurrentMove : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: canReveal
+                  ? Colors.orange.withValues(alpha: 0.9)
+                  : Colors.grey.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.visibility,
+                  size: 16,
+                  color: canReveal ? Colors.white : Colors.white60,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  canReveal ? 'Reveal' : '${countdown}s',
+                  style: TextStyle(
+                    color: canReveal ? Colors.white : Colors.white60,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -876,6 +964,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                   _controller.stopAutoPlay();
                   _reclaimFocus();
                 },
+                onAnalysisComplete: _controller.isSolitaireMode
+                    ? () => _controller.detectSolitaireTrophies()
+                    : null,
+                detectedTrophies: _controller.lastDetectedTrophies,
               ),
             ],
           ),
@@ -1054,7 +1146,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 8),
           Text(
-            'Solitaire',
+            'Solitaire (${s.userIsWhite ? "White" : "Black"})',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
@@ -1083,21 +1175,95 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               style: TextStyle(fontSize: 12, color: Colors.grey[400]),
             ),
           ],
-          if (s.waitingForUser) ...[
-            const SizedBox(width: 12),
-            TextButton.icon(
-              onPressed: _controller.revealSolitaireMove,
-              icon: const Icon(Icons.visibility, size: 16),
-              label: const Text('Reveal'),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                visualDensity: VisualDensity.compact,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ),
-          ],
+          const SizedBox(width: 4),
+          _buildSolitaireSettingsButton(),
         ],
       ),
+    );
+  }
+
+  Widget _buildSolitaireSettingsButton() {
+    return PopupMenuButton<String>(
+      icon: Icon(Icons.more_vert, size: 16,
+          color: Theme.of(context).colorScheme.primary),
+      tooltip: 'Solitaire settings',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
+      style: IconButton.styleFrom(
+        minimumSize: const Size(28, 28),
+        padding: const EdgeInsets.all(4),
+      ),
+      itemBuilder: (_) {
+        final currentDelay = _controller.solitaire.revealDelaySec;
+        final currentThreshold = _controller.trophyThresholdCp;
+        return [
+          const PopupMenuItem(
+            enabled: false,
+            height: 32,
+            child: Text('Reveal delay',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+          for (final sec in [0, 15, 30, 60, 90, 120])
+            PopupMenuItem(
+              value: 'delay_$sec',
+              height: 36,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    child: sec == currentDelay
+                        ? Icon(Icons.check, size: 16,
+                            color: Theme.of(context).colorScheme.primary)
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    sec == 0 ? 'No delay' : '${sec}s',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+          const PopupMenuDivider(),
+          const PopupMenuItem(
+            enabled: false,
+            height: 32,
+            child: Text('Trophy threshold',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ),
+          for (final cp in [10, 20, 30, 50, 100])
+            PopupMenuItem(
+              value: 'trophy_$cp',
+              height: 36,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    child: cp == currentThreshold
+                        ? Icon(Icons.check, size: 16,
+                            color: Theme.of(context).colorScheme.primary)
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '+${(cp / 100).toStringAsFixed(1)} pawns',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+        ];
+      },
+      onSelected: (value) {
+        if (value.startsWith('delay_')) {
+          final sec = int.parse(value.substring(6));
+          _controller.setSolitaireRevealDelay(sec);
+        } else if (value.startsWith('trophy_')) {
+          final cp = int.parse(value.substring(7));
+          _controller.setTrophyThreshold(cp);
+        }
+        _reclaimFocus();
+      },
     );
   }
 

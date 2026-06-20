@@ -14,6 +14,7 @@ import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
 import '../widgets/training/move_input_widget.dart';
+import '../widgets/repertoire_list_body.dart';
 import '../widgets/training/repertoire_selector_panel.dart';
 import '../widgets/training/training_board_controls.dart';
 import '../widgets/training/training_lines_panel.dart';
@@ -102,7 +103,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     } else if (_training.repertoire != null) {
       await _training.loadRepertoire(startLineId: widget.startLineId);
     } else {
-      await _selectRepertoire();
+      _training.setIdle();
     }
   }
 
@@ -113,8 +114,6 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     if (result != null) {
       _training.setRepertoire(result);
       await _training.loadRepertoire();
-    } else {
-      _training.clearSelectionError();
     }
   }
 
@@ -232,7 +231,16 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
     );
   }
 
+  void _onRepertoireSelected(RepertoireMetadata repertoire) {
+    _training.setRepertoire(repertoire);
+    _training.loadRepertoire();
+  }
+
   Widget _buildBody() {
+    if (_training.repertoire == null && !_training.isLoading) {
+      return RepertoireListBody(onSelected: _onRepertoireSelected);
+    }
+
     final bootstrap = RepertoireSelectorPanel(
       isLoading: _training.isLoading,
       error: _training.error,

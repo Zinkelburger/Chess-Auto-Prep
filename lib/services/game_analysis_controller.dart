@@ -287,6 +287,7 @@ class GameAnalysisController extends ChangeNotifier {
     String pgnText, {
     int? analysisDepth,
     ValueChanged<String>? onAnnotatedMovetext,
+    VoidCallback? onComplete,
   }) async {
     if (_isAnalyzing) cancel();
 
@@ -501,6 +502,7 @@ class GameAnalysisController extends ChangeNotifier {
         final annotated = _rebuildMovetext(mainline, parsed.headers['Result']);
         onAnnotatedMovetext(annotated);
       }
+      if (!_isCancelled) onComplete?.call();
     } catch (e, st) {
       debugPrint('[GameAnalysis] Error: $e\n$st');
     } finally {
