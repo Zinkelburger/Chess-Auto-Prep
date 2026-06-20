@@ -187,7 +187,7 @@ class _FenListWidgetState extends State<FenListWidget> {
           padding: const EdgeInsets.all(16),
           child: Text(
             isEvalSort
-                ? 'No evaluated positions found.\nRun engine weakness analysis first.'
+                ? 'No evaluated positions found.\nRun "Analyze with Engine" first.'
                 : 'No positions found.\nTry lowering the minimum games filter.',
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.grey),
