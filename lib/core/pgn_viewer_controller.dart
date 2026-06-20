@@ -16,10 +16,13 @@ import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart';
 import '../models/pgn_game_entry.dart';
 export '../models/pgn_game_entry.dart';
+import '../models/solitaire_trophy.dart';
 import '../services/default_pgn_service.dart';
-import '../services/pgn_parsing_service.dart' as pgn;
-import '../services/storage/storage_factory.dart';
+import '../services/engine/stockfish_pool.dart';
 import '../services/game_analysis_controller.dart';
+import '../services/pgn_parsing_service.dart' as pgn;
+import '../services/solitaire_trophy_service.dart';
+import '../services/storage/storage_factory.dart';
 import '../widgets/pgn_viewer_widget.dart';
 
 /// Board perspective mode persisted as [StudyPerspective] header on first game.
@@ -285,6 +288,17 @@ class PgnViewerController extends ChangeNotifier {
 
   bool get isSolitaireMode => solitaire.active;
 
+  static const _revealDelayKey = 'solitaire_reveal_delay_sec';
+  static const _trophyThresholdKey = 'solitaire_trophy_threshold_cp';
+
+  int trophyThresholdCp = 20;
+
+  /// Trophies detected after the most recent analysis run (reset per game).
+  List<SolitaireTrophy> lastDetectedTrophies = [];
+
+  /// All-time trophy count (cached from service).
+  int totalTrophyCount = 0;
+
   int? activeEngineLineMoveIdx;
 
   GameSortMode sortMode = GameSortMode.fileOrder;
@@ -504,6 +518,7 @@ class PgnViewerController extends ChangeNotifier {
     notifyListeners();
     persistPerspective();
     orientBoardForCurrentGame();
+    if (isSolitaireMode) _restartSolitaireForCurrentOrientation();
     onReclaimFocus?.call();
   }
 
@@ -599,9 +614,9 @@ class PgnViewerController extends ChangeNotifier {
   void setAutoNextGame(bool value) => _autoPlay.setAutoNextGame(value);
 
   void toggleBoardFlipped() {
-    if (isSolitaireMode) return;
     boardFlipped = !boardFlipped;
     notifyListeners();
+    if (isSolitaireMode) _restartSolitaireForCurrentOrientation();
   }
 
   Future<void> toggleFullScreen() async {
@@ -930,6 +945,28 @@ class PgnViewerController extends ChangeNotifier {
     }
   }
 
+  Future<void> loadSolitaireSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    solitaire.revealDelaySec = prefs.getInt(_revealDelayKey) ?? 60;
+    trophyThresholdCp = prefs.getInt(_trophyThresholdKey) ?? 20;
+    final trophies = await SolitaireTrophyService.instance.loadAll();
+    totalTrophyCount = trophies.length;
+  }
+
+  Future<void> setSolitaireRevealDelay(int seconds) async {
+    solitaire.revealDelaySec = seconds;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_revealDelayKey, seconds);
+    notifyListeners();
+  }
+
+  Future<void> setTrophyThreshold(int cp) async {
+    trophyThresholdCp = cp;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_trophyThresholdKey, cp);
+    notifyListeners();
+  }
+
   void _startSolitaire() {
     if (filteredGames.isEmpty) return;
     stopAutoPlay();
@@ -955,7 +992,39 @@ class PgnViewerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _restartSolitaireForCurrentOrientation() {
+    pgnWidgetController.goToMainLineIndex(0);
+    solitaire.onGameChanged(
+      mainLineLength: pgnWidgetController.mainLineLength,
+      userPlaysWhite: !boardFlipped,
+      whiteToMoveAtStart: currentPosition.turn == Side.white,
+    );
+  }
+
+  /// Build annotated PGN movetext with solitaire guess comments.
+  String buildSolitaireGuessPgn() {
+    return solitaire.buildGuessPgn(pgnWidgetController.mainLineMoves);
+  }
+
+  /// Inject solitaire guess annotations into the current game's PGN movetext.
+  void _injectGuessComments() {
+    if (filteredGames.isEmpty || filePath == null) return;
+    final guessMovetext = buildSolitaireGuessPgn();
+    persistMoveComments(guessMovetext);
+  }
+
+  void revealCurrentMove() {
+    if (!isSolitaireMode || !solitaire.waitingForUser) return;
+    final mainIdx = solitaire.revealedPly;
+    final moveHistory = pgnWidgetController.mainLineMoves;
+    if (mainIdx >= moveHistory.length) return;
+    solitaire.revealMove(moveHistory[mainIdx]);
+  }
+
   void _onSolitaireChanged() {
+    if (solitaire.isComplete) {
+      _injectGuessComments();
+    }
     notifyListeners();
   }
 
@@ -966,6 +1035,96 @@ class PgnViewerController extends ChangeNotifier {
 
     final expectedSan = moveHistory[mainIdx];
     solitaire.handleMove(san, currentPosition, expectedSan);
+  }
+
+  /// After analysis completes, scan solitaire guess log for wrong attempts
+  /// that beat the GM's move by [trophyThresholdCp] or more. Awards trophies.
+  ///
+  /// Returns the number of new trophies detected.
+  Future<int> detectSolitaireTrophies() async {
+    final guessLog = solitaire.guessLog;
+    final evals = analysisController.evals;
+    if (guessLog.isEmpty || evals.isEmpty) return 0;
+
+    final evalByPly = <int, MoveEval>{};
+    for (final e in evals) {
+      evalByPly[e.ply] = e;
+    }
+
+    final game = filteredGames.isNotEmpty
+        ? filteredGames[currentGameIndex]
+        : null;
+    final gameLabel = game != null ? game.label : '';
+    final headers = game?.headers ?? <String, String>{};
+    final gamePgn = game?.pgnText ?? '';
+    final userIsWhite = solitaire.userIsWhite;
+
+    final pool = StockfishPool();
+    final depth = analysisController.depth;
+
+    final newTrophies = <SolitaireTrophy>[];
+
+    try {
+      await pool.ensureWorkers();
+
+      for (final guess in guessLog) {
+        if (guess.wrongAttempts.isEmpty) continue;
+
+        final gmEval = evalByPly[guess.ply + 1];
+        if (gmEval == null) continue;
+
+        final fen = gmEval.fenBefore;
+        final gmCp = gmEval.effectiveCp;
+
+        for (final wrongSan in guess.wrongAttempts) {
+          try {
+            final pos = Chess.fromSetup(Setup.parseFen(fen));
+            final move = pos.parseSan(wrongSan);
+            if (move == null) continue;
+            final afterPos = pos.play(move);
+            final result = await pool.evaluateFen(afterPos.fen, depth);
+
+            // Normalize to White's perspective (same as MoveEval.effectiveCp)
+            final isWhiteToMoveAfter = afterPos.turn == Side.white;
+            final userCpWhiteNorm =
+                isWhiteToMoveAfter ? result.effectiveCp : -result.effectiveCp;
+
+            // Advantage from the guessing side's perspective
+            final advantage = userIsWhite
+                ? (userCpWhiteNorm - gmCp)
+                : (gmCp - userCpWhiteNorm);
+
+            if (advantage >= trophyThresholdCp) {
+              newTrophies.add(SolitaireTrophy(
+                id: '${DateTime.now().microsecondsSinceEpoch}_${guess.ply}_$wrongSan',
+                date: DateTime.now(),
+                fen: fen,
+                userMove: wrongSan,
+                gmMove: guess.expectedSan,
+                userEvalCp: userCpWhiteNorm,
+                gmEvalCp: gmCp,
+                advantageCp: advantage,
+                gameLabel: gameLabel,
+                headers: Map<String, String>.from(headers),
+                pgn: gamePgn,
+              ));
+            }
+          } catch (e) {
+            debugPrint('Trophy eval failed for $wrongSan: $e');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Trophy detection failed: $e');
+    }
+
+    if (newTrophies.isNotEmpty) {
+      await SolitaireTrophyService.instance.addTrophies(newTrophies);
+      totalTrophyCount = SolitaireTrophyService.instance.count;
+    }
+    lastDetectedTrophies = newTrophies;
+    notifyListeners();
+    return newTrophies.length;
   }
 
   List<int> gamesAtTreePosition() => _viewerTree.gamesAtTreePosition();

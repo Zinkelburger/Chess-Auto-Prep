@@ -118,7 +118,7 @@ All five screens now use `Scaffold` + `AppBar` with consistent conventions:
 
 ### Repertoire screen layout (right pane + bottom pane, redesigned June 2026)
 
-Design principles: **Right pane** = PGN/Lines tabs with engine bars inside PGN tab only; Lines tab gets full height without analysis bars. **Bottom pane** = output workspace (findings, jobs/config, lines) — collapsed by default, VS Code-style resizable/collapsible with tabs. **No floating dialogs** — generation and audit config are inline in the Jobs tab. Board and right pane stay spatially stable when the bottom pane opens.
+Design principles: **Right pane** = PGN/Lines/Tree tabs with engine bars inside PGN tab only; Lines and Tree tabs get full height without analysis bars. **Bottom pane** = output workspace (findings, jobs/config, lines) — collapsed by default, VS Code-style resizable/collapsible with tabs. **No floating dialogs** — generation and audit config are inline in the Jobs tab. Board and right pane stay spatially stable when the bottom pane opens.
 
 ```
 RepertoireScreen (composition root — wires controllers to widgets)
@@ -136,11 +136,12 @@ RepertoireScreen (composition root — wires controllers to widgets)
   │         ToolsColumn:
   │           InlineEngineBar (toggleable, shortcut E)
   │           InlineExpectimaxBar (toggleable, shortcut X)
-  │           TabBar: PGN | Lines (shortcut L toggles)
+  │           TabBar: PGN | Lines | Tree (shortcut L toggles PGN↔Lines)
   │             PGN tab: PgnWithAnalysisPane
   │             Lines tab: SegmentedButton (Lines / Traps)
   │               Lines view: RepertoireLinesBrowser
   │               Traps view: TrapsBrowser (sortable, with detail cards)
+  │             Tree tab: OpeningTreeWidget (interactive move tree explorer)
   │           NavControls (|< < > >| + "+" gen-from-here + Flip)
   │       BottomPane (collapsed by default, full width):
   │         Tabs: Findings (auto-scaled, dismissable) | Jobs | Lines
@@ -177,7 +178,9 @@ RepertoireScreen (composition root — wires controllers to widgets)
 
 **Findings tab UX:** Category filter chips (Blunders/Inaccuracies/Missing/Weak/Dead Ends) with counts — multi-select toggles. Findings are sorted by reach probability (cumulative likelihood of the line occurring). The visible count is capped (default 20) and user-configurable via an inline text field in the status row; as findings are dismissed, lower-probability ones surface automatically. Each finding tile shows its reach probability right-aligned (e.g. "12.3%"). When capped, the status row reads "Top [N] of M · X% – Y% reach". Bulk dismiss via right-click context menu: dismiss similar, dismiss at depth, dismiss all of type. Keyboard: N/P to cycle findings (board navigates within full repertoire tree), D to dismiss current — routed through `RepertoireShortcuts` at the screen level (active when the Findings tab is open in the bottom pane), delegating to `AuditFindingsPanelState.selectNext()` / `selectPrevious()` / `dismissSelected()` via `GlobalKey`; ↑/↓ also work when the findings panel has focus. Selected finding is highlighted. Timestamp shows when saved results were generated.
 
-**Lines tab (tools column):** The PGN | Lines tab bar in the tools column provides a Lines tab with a segmented toggle between Lines and Traps views. Engine/expectimax bars are inside the PGN tab only — the Lines tab uses full height. The Lines view shows `RepertoireLinesBrowser` with reach probability badges on each line row; the Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges (BLUNDER/MISTAKE/INACCURACY/OK/BEST), and expandable detail cards. Expanded trap is tracked by identity (`fen` or `movesSan` key), stable across sort changes. Traps empty state prompts "Generate Repertoire". The tools tab auto-switches to Lines only when a generation run actually finishes (tracked via `_wasGenerating`), not on every repertoire switch. Clicking a line switches to the PGN tab for editing. `BoardPreviewController` is threaded through both browsers; a `FloatingBoardPreview` overlay is mounted in the Lines tab `Stack` (uses `_boardFlipped` for correct orientation) and also in the bottom pane Lines tab (separate `_bottomLinesPreviewStackKey`). Hover previews work in both locations.m both lines and traps move chips).
+**Lines tab (tools column):** The PGN | Lines | Tree tab bar in the tools column provides a Lines tab with a segmented toggle between Lines and Traps views. Engine/expectimax bars are inside the PGN tab only — the Lines and Tree tabs use full height. The Lines view shows `RepertoireLinesBrowser` with reach probability badges on each line row; the Traps view shows `TrapsBrowser` (default sort: Eval Drop, also Most Common/Trap%/Surplus) with mini board preview, per-reply stats with classification badges (BLUNDER/MISTAKE/INACCURACY/OK/BEST), and expandable detail cards. Expanded trap is tracked by identity (`fen` or `movesSan` key), stable across sort changes. Traps empty state prompts "Generate Repertoire". The tools tab auto-switches to Lines only when a generation run actually finishes (tracked via `_wasGenerating`), not on every repertoire switch. Clicking a line switches to the PGN tab for editing. `BoardPreviewController` is threaded through both browsers; a `FloatingBoardPreview` overlay is mounted in the Lines tab `Stack` (uses `_boardFlipped` for correct orientation) and also in the bottom pane Lines tab (separate `_bottomLinesPreviewStackKey`). Hover previews work in both locations.
+
+**Tree tab (tools column):** The Tree tab shows `OpeningTreeWidget`, an interactive opening tree explorer built from the repertoire's PGN lines. It displays move statistics (game counts, win rates), navigates with back/forward, and syncs with the board position via `RepertoireController.userSelectedTreeMove`. When no opening tree is available (empty repertoire), shows an empty-state message.
 
 **Lines tab (bottom pane):** Reconnects the existing `RepertoireLinesBrowser` with full search, filter, sort, group, rename, and coverage metrics. Useful for simultaneous PGN + lines viewing.
 
@@ -214,9 +217,9 @@ Overflow menu (⋮): Import PGN (shortcut I), Switch color, Settings → `screen
 ### Repertoire load & edit
 
 ```
-RepertoireSelectionScreen
+RepertoireListBody (embedded inline or in RepertoireSelectionScreen)
   → StorageService.listRepertoireFiles() → List<RepertoireMetadata>
-  → user picks RepertoireMetadata → RepertoireController.setRepertoire / loadRepertoire
+  → user picks RepertoireMetadata → onSelected callback → setRepertoire / loadRepertoire
   → RepertoireController (MoveTree + TreePath, OpeningTree, RepertoireLine list; loadError on failure)
   → InteractivePgnEditor (pure view: tree + path props, action callbacks; memoized move widgets; context-menu path highlighting)
   → EditMainZone (onAutoSave, onDirty, onCopyToClipboard, onViewInLines adapters)
@@ -403,16 +406,20 @@ Key files: `pgn_comment_utils.dart` (NAG constants, `kMoveNags`, `nagColor`, `bu
 Toggled via brain icon in toolbar or keyboard shortcut `S`. When active:
 
 - **Concept**: User guesses the perspective-side's moves one at a time. Correct guess reveals the move and auto-plays the opponent's reply. Incorrect guess shows feedback and the board stays at the current position for another attempt.
+- **Side selection**: Guess side is `!boardFlipped` at solitaire start — defaults to White. Flipping the board (`F` key or swap icon) or changing perspective ("Always Black", player selection) while solitaire is active restarts it for the new side. The status bar shows `Solitaire (White)` or `Solitaire (Black)`.
+- **Guess log & PGN injection**: Every user-guessed move is recorded as a `SolitaireGuess` (ply, expected SAN, wrong attempts, correct SAN, wasRevealed flag). On game completion, guess annotations are automatically injected into the PGN movetext via `persistMoveComments` — comments like `{1st try}`, `{Tried: e5, d5 (3 tries)}`, or `{Revealed}`. The user can then add their own comments in edit mode after completion. The completion overlay notes that annotations were saved.
+- **Reveal button**: Positioned at bottom-right of the board when `waitingForUser`. Disabled for a configurable countdown (default 60s) showing remaining seconds; once the countdown expires the button activates. Clicking it reveals the correct move and logs it as `wasRevealed: true`. The delay is configurable via a settings popover (⋮ on the status bar) with presets: 0, 15, 30, 60, 90, 120s. Setting persisted as `solitaire_reveal_delay_sec` in SharedPreferences.
 - **Movetext hiding**: `PgnMovetextView` receives `revealedPly` — moves at index >= revealedPly are hidden (not rendered). Progressively revealed as the user guesses correctly.
 - **Board gating**: `ChessBoardWidget.enableUserMoves` is false except when `solitaire.waitingForUser` is true (user's turn to guess).
 - **Move validation**: FEN-equivalence check (play both moves on the position, compare resulting FEN) with SAN normalization fallback. Same pattern as `TrainingSessionController.isCorrectUserMove`.
 - **Opponent auto-play**: After a correct guess, opponent's move auto-plays after 400ms delay.
-- **Scoring**: Tracks first-try correct guesses vs total user moves. Displayed in a progress bar above the movetext.
-- **Game complete**: Overlay shows score summary with "Next Game" button.
+- **Scoring**: Tracks first-try correct guesses, total user moves, and revealed count. Displayed in a progress bar above the movetext.
+- **Game complete**: Overlay shows score summary (first-try count + revealed count) and "Next Game" button. Guess annotations already written to PGN.
 - **Navigation blocked**: Arrow keys, Home/End, Space (auto-play), and `navigateBack/Forward/ToStart/ToEnd` are disabled during solitaire to prevent peeking.
 - **Incompatible with**: Opening tree mode, edit mode (toggle disabled when opening tree active).
+- **Trophies**: After solitaire, the user can analyze the game via the Analysis tab. Post-analysis, `detectSolitaireTrophies` evaluates each wrong attempt using Stockfish and compares against the GM move's eval. If the user's guess beat the GM by the trophy threshold (default 20cp, configurable in settings), a `SolitaireTrophy` is persisted to `solitaire_trophies.json`. Trophies are shown as gold icons on qualifying analysis-tab rows, with a banner. A trophy cabinet dialog (trophy icon in toolbar or via ⋮ menu) lists all earned trophies with game info, moves, and eval advantage. Trophies can be individually deleted.
 
-Key files: `lib/core/pgn/solitaire_controller.dart` (state machine, validation, scoring), `lib/core/pgn_viewer_controller.dart` (integration, `toggleSolitaire`, `_handleSolitaireMove`), `lib/screens/pgn_viewer_screen.dart` (UI toggle, feedback overlay, status bar), `lib/widgets/pgn/pgn_movetext_view.dart` (`revealedPly` parameter).
+Key files: `lib/core/pgn/solitaire_controller.dart` (state machine, validation, scoring, `SolitaireGuess`, `buildGuessPgn`, reveal countdown), `lib/core/pgn_viewer_controller.dart` (integration, `toggleSolitaire`, `_handleSolitaireMove`, `_restartSolitaireForCurrentOrientation`, `revealCurrentMove`, `_injectGuessComments`, `detectSolitaireTrophies`, `loadSolitaireSettings`, `setSolitaireRevealDelay`, `setTrophyThreshold`), `lib/screens/pgn_viewer_screen.dart` (UI toggle, feedback overlay, reveal button, status bar with settings popover, trophy cabinet dialog), `lib/widgets/pgn/pgn_movetext_view.dart` (`revealedPly` parameter), `lib/models/solitaire_trophy.dart` (`SolitaireTrophy` data model), `lib/services/solitaire_trophy_service.dart` (trophy persistence), `lib/widgets/solitaire_trophy_cabinet.dart` (trophy list UI), `lib/widgets/game_analysis_tab.dart` (trophy icons + banner in analysis move list).
 
 ### Generate repertoire from PGN viewer games
 
@@ -636,9 +643,9 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | File | Purpose |
 |------|---------|
 | `main_screen.dart` | Mode `IndexedStack`, engine lifecycle on mode exit |
-| `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
-| `repertoire_selection_screen.dart` | Pick/create repertoire; lists `RepertoireMetadata` from storage |
-| `repertoire_training_screen.dart` | Training mode shell; Lines tab uses `TrainingLinesPanel` (categorized Learn/Review view with SRS metadata, per-line playability chips, bottleneck warnings, "needs scoring" banner linking to Builder); keyboard: J toggles manual advance, Space acknowledges learn steps or opponent-comment Next, `/` focuses move input (letter keys suppressed in text fields) |
+| `repertoire_screen.dart` | **Composition root** — wires `GenerationSessionController`, `AuditSessionController`, `CoverageController` to widgets; owns board, PGN, ephemeral finding preview, layout; when no repertoire is selected shows `RepertoireListBody` inline instead of a placeholder button; keyboard shortcuts via `RepertoireShortcuts`; status bar shows "Audit paused" when audit is paused; Jobs panel listens to both `_jobManager` and `_generationController` via `Listenable.merge` |
+| `repertoire_selection_screen.dart` | Full-screen push wrapper around `RepertoireListBody`; pops with selected `RepertoireMetadata` |
+| `repertoire_training_screen.dart` | Training mode shell; when no repertoire is loaded the body shows `RepertoireListBody` inline (no intermediate placeholder); Lines tab uses `TrainingLinesPanel` (categorized Learn/Review view with SRS metadata, per-line playability chips, bottleneck warnings, "needs scoring" banner linking to Builder); keyboard: J toggles manual advance, Space acknowledges learn steps or opponent-comment Next, `/` focuses move input (letter keys suppressed in text fields) |
 | `analysis_screen.dart` | Game weakness / position analysis |
 | `pgn_viewer_screen.dart` | Standalone PGN + `InlineEngineBar`; surfaces `loadFile` errors via SnackBar and empty-state text; ⋮ menu with "Generate repertoire from games"; solitaire mode toggle + feedback overlay + progress bar; keyboard: N/P/F/E/W/A/T/S letters plus arrows, Home/End, Space, Tab, Escape, Ctrl+E export, Ctrl+F/F11 fullscreen |
 | `player_selection_screen.dart` | Lichess player pick for analysis |
@@ -777,6 +784,7 @@ Implements principles from `docs/tree-display-architecture.md` (focused window, 
 | `layout/bottom_pane.dart` | VS Code-style resizable, collapsible bottom pane with tabs (Findings/Jobs/Lines); collapsed by default, opens at max height (60%) to minimise board area, auto-opens on audit/generation start, drag-resizable, badge counts |
 | `layout/repertoire_status_bar.dart` | Bottom metrics bar (badges open bottom pane tabs) |
 | `layout/empty_state_placeholder.dart` | Shared empty states |
+| `repertoire_list_body.dart` | Embeddable repertoire list with create/rename/delete; used inline by Builder and Trainer screens when no repertoire is selected, and by `RepertoireSelectionScreen` as a full-screen push |
 | `layout/responsive_split_layout.dart` | Generic split helper |
 
 #### Repertoire-specific
