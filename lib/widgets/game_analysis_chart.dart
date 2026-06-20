@@ -103,6 +103,19 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
         ? defaultCap
         : (maxAbs * 1.1).clamp(defaultCap, 800.0);
 
+    // Median evaluation across the game — a quick read on whether you were
+    // generally better, worse, or balanced. Shown as a horizontal reference
+    // line only when there is enough data for it to be meaningful.
+    final cpValues = [for (final e in evals) _clampCp(e).toDouble()]..sort();
+    double? medianCp;
+    if (cpValues.length >= 4) {
+      final mid = cpValues.length ~/ 2;
+      medianCp = cpValues.length.isOdd
+          ? cpValues[mid]
+          : (cpValues[mid - 1] + cpValues[mid]) / 2;
+    }
+    final medianColor = isDark ? const Color(0xFF6FBF8F) : const Color(0xFF2E7D52);
+
     const double minPxPerPly = 12.0;
     final plyCount = evals.isEmpty ? 1.0 : evals.last.ply.toDouble();
 
@@ -201,6 +214,26 @@ class _GameAnalysisChartState extends State<GameAnalysisChart> {
                   ),
                 ),
                 extraLinesData: ExtraLinesData(
+                  horizontalLines: [
+                    if (medianCp != null)
+                      HorizontalLine(
+                        y: medianCp,
+                        color: medianColor.withAlpha(170),
+                        strokeWidth: 1,
+                        dashArray: [2, 4],
+                        label: HorizontalLineLabel(
+                          show: true,
+                          alignment: Alignment.topRight,
+                          padding: const EdgeInsets.only(right: 4, bottom: 2),
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: medianColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          labelResolver: (_) => 'median',
+                        ),
+                      ),
+                  ],
                   verticalLines: [
                     if (currentPly != null &&
                         currentPly! >= 0 &&
