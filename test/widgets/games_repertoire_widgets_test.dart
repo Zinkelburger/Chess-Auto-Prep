@@ -52,7 +52,8 @@ void main() {
       expect(changes, 1);
     });
 
-    testWidgets('collapses and expands a node', (tester) async {
+    testWidgets('starts deep lines collapsed and expands on row tap',
+        (tester) async {
       final tree = OpeningTree()..appendLine(['e4', 'e5', 'Nf3']);
       final draft = GamesDraft(tree: tree, isWhite: true);
 
@@ -61,17 +62,26 @@ void main() {
         minGames: 1,
         onChanged: () {},
       )));
-      expect(find.text('2. Nf3'), findsOneWidget);
 
-      // Collapse the e5 node (parent of Nf3).
+      // e5 is at depth 1, so it starts collapsed: Nf3 is hidden and the row
+      // shows the "collapsed" chevron.
+      expect(find.text('2. Nf3'), findsNothing);
       final e5Row = find.ancestor(
         of: find.text('1… e5'),
         matching: find.byType(InkWell),
       );
-      await tester.tap(find.descendant(
-        of: e5Row,
-        matching: find.byIcon(Icons.expand_more),
-      ));
+      expect(
+        find.descendant(of: e5Row, matching: find.byIcon(Icons.chevron_right)),
+        findsOneWidget,
+      );
+
+      // Tapping anywhere on the row (not just the icon) expands it.
+      await tester.tap(find.text('1… e5'));
+      await tester.pumpAndSettle();
+      expect(find.text('2. Nf3'), findsOneWidget);
+
+      // Tapping again collapses it back.
+      await tester.tap(find.text('1… e5'));
       await tester.pumpAndSettle();
       expect(find.text('2. Nf3'), findsNothing);
     });
