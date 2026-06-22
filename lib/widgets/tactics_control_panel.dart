@@ -664,7 +664,34 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         await _database.setRating(pos.fen, rating);
         if (mounted) setState(() {});
       },
+      onBatchDelete: _batchDeleteTactics,
     );
+  }
+
+  Future<void> _batchDeleteTactics(List<int> sortedDescIndices) async {
+    final count = sortedDescIndices.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Tactics'),
+        content: Text('Delete $count selected tactics?\n\nThis cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      for (final idx in sortedDescIndices) {
+        await _database.deletePositionAt(idx);
+      }
+    }
   }
 
   void _selectTacticFromBrowse(int index) {

@@ -3,6 +3,27 @@ import 'package:flutter/material.dart';
 import '../../models/tactics_position.dart';
 import 'puzzle_stats_display.dart';
 
+/// How positions are sorted in the browse list.
+enum TacticsBrowseSort {
+  newest('Newest first'),
+  oldest('Oldest first'),
+  worstSuccess('Worst success'),
+  leastReviewed('Least reviewed');
+
+  const TacticsBrowseSort(this.label);
+  final String label;
+}
+
+/// Review-status filter for the browse list.
+enum TacticsStatusFilter {
+  all('All'),
+  newOnly('New'),
+  struggling('Struggling');
+
+  const TacticsStatusFilter(this.label);
+  final String label;
+}
+
 /// Scrollable list of stored tactics for review and selection.
 class TacticsBrowsePanel extends StatefulWidget {
   const TacticsBrowsePanel({
@@ -14,6 +35,7 @@ class TacticsBrowsePanel extends StatefulWidget {
     required this.onEditTactic,
     required this.onClearAll,
     this.onSetRating,
+    this.onBatchDelete,
   });
 
   final List<TacticsPosition> positions;
@@ -23,13 +45,69 @@ class TacticsBrowsePanel extends StatefulWidget {
   final ValueChanged<int> onEditTactic;
   final VoidCallback onClearAll;
   final void Function(int index, int rating)? onSetRating;
+  final void Function(List<int> indices)? onBatchDelete;
 
   @override
   State<TacticsBrowsePanel> createState() => _TacticsBrowsePanelState();
 }
 
 class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
-  bool _showHidden = true;
+  // Mistake-type filters (all enabled by default).
+  final Set<String> _enabledTypes = {'??', '?', '?!'};
+  TacticsStatusFilter _statusFilter = TacticsStatusFilter.all;
+  TacticsBrowseSort _sort = TacticsBrowseSort.newest;
+  int _minRating = 0; // 0 = show all ratings
+
+  // Multi-select state.
+  bool _selectMode = false;
+  final Set<int> _selected = {};
+
+  List<int> _buildVisibleIndices() {
+    final positions = widget.positions;
+    final indices = <int>[];
+    for (int i = 0; i < positions.length; i++) {
+      final pos = positions[i];
+      if (!_enabledTypes.contains(pos.mistakeType)) continue;
+      if (_minRating > 0 && pos.rating < _minRating) continue;
+      switch (_statusFilter) {
+        case TacticsStatusFilter.all:
+          break;
+        case TacticsStatusFilter.newOnly:
+          if (pos.reviewCount > 0) continue;
+        case TacticsStatusFilter.struggling:
+          if (pos.reviewCount == 0 || pos.successRate >= 0.5) continue;
+      }
+      indices.add(i);
+    }
+    // Apply sort.
+    switch (_sort) {
+      case TacticsBrowseSort.newest:
+        break; // CSV order is newest-last; reverse for newest-first display.
+      case TacticsBrowseSort.oldest:
+        // CSV order is already oldest-first; keep as-is.
+        return indices;
+      case TacticsBrowseSort.worstSuccess:
+        indices.sort((a, b) {
+          final sa = positions[a].successRate;
+          final sb = positions[b].successRate;
+          return sa.compareTo(sb);
+        });
+        return indices;
+      case TacticsBrowseSort.leastReviewed:
+        indices.sort((a, b) {
+          return positions[a].reviewCount.compareTo(positions[b].reviewCount);
+        });
+        return indices;
+    }
+    return indices.reversed.toList();
+  }
+
+  void _exitSelectMode() {
+    setState(() {
+      _selectMode = false;
+      _selected.clear();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,49 +125,50 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
       );
     }
 
-    // Build visible indices, filtering 1-star when toggle is off.
-    final visibleIndices = <int>[];
-    for (int i = 0; i < positions.length; i++) {
-      if (!_showHidden && positions[i].rating == 1) continue;
-      visibleIndices.add(i);
-    }
-    final hiddenCount = positions.where((p) => p.rating == 1).length;
+    final visibleIndices = _buildVisibleIndices();
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              Text(
-                '${visibleIndices.length} tactics',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-              ),
-              if (hiddenCount > 0) ...[
-                const SizedBox(width: 12),
-                FilterChip(
-                  label: Text(
-                    _showHidden
-                        ? 'Hide 1★ ($hiddenCount)'
-                        : 'Show 1★ ($hiddenCount)',
-                    style: const TextStyle(fontSize: 11),
-                  ),
-                  selected: !_showHidden,
-                  onSelected: (_) => setState(() => _showHidden = !_showHidden),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ],
-              const Spacer(),
-              TextButton.icon(
-                onPressed: widget.onClearAll,
-                icon: const Icon(Icons.delete_outline,
-                    size: 16, color: Colors.red),
-                label: const Text('Clear All',
-                    style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
+        _BrowseFilterBar(
+          totalCount: positions.length,
+          visibleCount: visibleIndices.length,
+          enabledTypes: _enabledTypes,
+          statusFilter: _statusFilter,
+          sort: _sort,
+          minRating: _minRating,
+          selectMode: _selectMode,
+          selectedCount: _selected.length,
+          onToggleType: (type) => setState(() {
+            _enabledTypes.contains(type)
+                ? _enabledTypes.remove(type)
+                : _enabledTypes.add(type);
+          }),
+          onStatusChanged: (f) => setState(() => _statusFilter = f),
+          onSortChanged: (s) => setState(() => _sort = s),
+          onMinRatingChanged: (r) => setState(() => _minRating = r),
+          onToggleSelectMode: () {
+            if (_selectMode) {
+              _exitSelectMode();
+            } else {
+              setState(() => _selectMode = true);
+            }
+          },
+          onDeleteSelected: () {
+            if (_selected.isEmpty) return;
+            final sorted = _selected.toList()..sort((a, b) => b.compareTo(a));
+            if (widget.onBatchDelete != null) {
+              widget.onBatchDelete!(sorted);
+            } else {
+              for (final idx in sorted) {
+                widget.onDeleteTactic(idx);
+              }
+            }
+            _exitSelectMode();
+          },
+          onSelectAll: () {
+            setState(() => _selected.addAll(visibleIndices));
+          },
+          onClearAll: widget.onClearAll,
         ),
         const Divider(height: 1),
         const TacticsBrowseHeader(),
@@ -105,12 +184,20 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
                 index: realIndex,
                 isSelected:
                     widget.selectedFen != null && widget.selectedFen == pos.fen,
-                onTap: () => widget.onSelectTactic(realIndex),
+                onTap: _selectMode
+                    ? () => setState(() {
+                          _selected.contains(realIndex)
+                              ? _selected.remove(realIndex)
+                              : _selected.add(realIndex);
+                        })
+                    : () => widget.onSelectTactic(realIndex),
                 onDelete: () => widget.onDeleteTactic(realIndex),
                 onEdit: () => widget.onEditTactic(realIndex),
                 onSetRating: widget.onSetRating != null
                     ? (rating) => widget.onSetRating!(realIndex, rating)
                     : null,
+                selectMode: _selectMode,
+                checked: _selected.contains(realIndex),
               );
             },
           ),
@@ -166,6 +253,8 @@ class TacticsBrowseRow extends StatelessWidget {
     required this.onDelete,
     required this.onEdit,
     this.onSetRating,
+    this.selectMode = false,
+    this.checked = false,
   });
 
   final TacticsPosition position;
@@ -175,6 +264,8 @@ class TacticsBrowseRow extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onEdit;
   final ValueChanged<int>? onSetRating;
+  final bool selectMode;
+  final bool checked;
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +279,7 @@ class TacticsBrowseRow extends StatelessWidget {
         opacity: isDimmed ? 0.45 : 1.0,
         child: Container(
           decoration: BoxDecoration(
-            color: isSelected
+            color: isSelected || checked
                 ? Theme.of(context)
                     .colorScheme
                     .primaryContainer
@@ -203,21 +294,32 @@ class TacticsBrowseRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           child: Row(
             children: [
-              IconButton(
-                onPressed: onDelete,
-                icon: Icon(Icons.close,
-                    size: 16, color: Colors.red.withValues(alpha: 0.6)),
-                tooltip: 'Delete tactic',
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
-              IconButton(
-                onPressed: onEdit,
-                icon: const Icon(Icons.edit, size: 16),
-                tooltip: 'Edit tactic',
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                padding: EdgeInsets.zero,
-              ),
+              if (selectMode)
+                Checkbox(
+                  value: checked,
+                  onChanged: (_) => onTap(),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                )
+              else ...[
+                IconButton(
+                  onPressed: onDelete,
+                  icon: Icon(Icons.close,
+                      size: 16, color: Colors.red.withValues(alpha: 0.6)),
+                  tooltip: 'Delete tactic',
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: EdgeInsets.zero,
+                ),
+                IconButton(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit, size: 16),
+                  tooltip: 'Edit tactic',
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  padding: EdgeInsets.zero,
+                ),
+              ],
               const SizedBox(width: 4),
               SizedBox(
                 width: 32,
@@ -274,6 +376,247 @@ class TacticsBrowseRow extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _BrowseFilterBar extends StatelessWidget {
+  const _BrowseFilterBar({
+    required this.totalCount,
+    required this.visibleCount,
+    required this.enabledTypes,
+    required this.statusFilter,
+    required this.sort,
+    required this.minRating,
+    required this.selectMode,
+    required this.selectedCount,
+    required this.onToggleType,
+    required this.onStatusChanged,
+    required this.onSortChanged,
+    required this.onMinRatingChanged,
+    required this.onToggleSelectMode,
+    required this.onDeleteSelected,
+    required this.onSelectAll,
+    required this.onClearAll,
+  });
+
+  final int totalCount;
+  final int visibleCount;
+  final Set<String> enabledTypes;
+  final TacticsStatusFilter statusFilter;
+  final TacticsBrowseSort sort;
+  final int minRating;
+  final bool selectMode;
+  final int selectedCount;
+  final ValueChanged<String> onToggleType;
+  final ValueChanged<TacticsStatusFilter> onStatusChanged;
+  final ValueChanged<TacticsBrowseSort> onSortChanged;
+  final ValueChanged<int> onMinRatingChanged;
+  final VoidCallback onToggleSelectMode;
+  final VoidCallback onDeleteSelected;
+  final VoidCallback onSelectAll;
+  final VoidCallback onClearAll;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top row: count + actions
+          Row(
+            children: [
+              Text(
+                '$visibleCount / $totalCount tactics',
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const Spacer(),
+              if (selectMode) ...[
+                Text('$selectedCount selected',
+                    style: const TextStyle(fontSize: 12)),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: onSelectAll,
+                  child: const Text('All', style: TextStyle(fontSize: 12)),
+                ),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: selectedCount > 0 ? onDeleteSelected : null,
+                  icon: const Icon(Icons.delete_outline,
+                      size: 14, color: Colors.red),
+                  label: const Text('Delete',
+                      style: TextStyle(color: Colors.red, fontSize: 12)),
+                ),
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: onToggleSelectMode,
+                  child: const Text('Cancel', style: TextStyle(fontSize: 12)),
+                ),
+              ] else ...[
+                IconButton(
+                  onPressed: onToggleSelectMode,
+                  icon: const Icon(Icons.checklist, size: 18),
+                  tooltip: 'Multi-select',
+                  visualDensity: VisualDensity.compact,
+                ),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: onClearAll,
+                  icon: const Icon(Icons.delete_outline,
+                      size: 14, color: Colors.red),
+                  label: const Text('Clear All',
+                      style: TextStyle(color: Colors.red, fontSize: 12)),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Filter row: mistake types + status + rating
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _MistakeTypeChip(
+                type: '??',
+                label: 'Blunders',
+                color: Colors.red,
+                enabled: enabledTypes.contains('??'),
+                onToggle: () => onToggleType('??'),
+              ),
+              _MistakeTypeChip(
+                type: '?',
+                label: 'Mistakes',
+                color: Colors.orange,
+                enabled: enabledTypes.contains('?'),
+                onToggle: () => onToggleType('?'),
+              ),
+              _MistakeTypeChip(
+                type: '?!',
+                label: 'Inaccuracies',
+                color: Colors.yellow.shade700,
+                enabled: enabledTypes.contains('?!'),
+                onToggle: () => onToggleType('?!'),
+              ),
+              const SizedBox(width: 8),
+              ...TacticsStatusFilter.values.map((f) => ChoiceChip(
+                    label: Text(f.label, style: const TextStyle(fontSize: 11)),
+                    selected: statusFilter == f,
+                    onSelected: (_) => onStatusChanged(f),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  )),
+              const SizedBox(width: 8),
+              _MinRatingChip(
+                minRating: minRating,
+                onChanged: onMinRatingChanged,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // Sort row
+          Row(
+            children: [
+              const Icon(Icons.sort, size: 14, color: Colors.grey),
+              const SizedBox(width: 4),
+              ...TacticsBrowseSort.values.map((s) => Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: ChoiceChip(
+                      label: Text(s.label, style: const TextStyle(fontSize: 11)),
+                      selected: sort == s,
+                      onSelected: (_) => onSortChanged(s),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  )),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MistakeTypeChip extends StatelessWidget {
+  const _MistakeTypeChip({
+    required this.type,
+    required this.label,
+    required this.color,
+    required this.enabled,
+    required this.onToggle,
+  });
+
+  final String type;
+  final String label;
+  final Color color;
+  final bool enabled;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(type,
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, fontSize: 12, color: color)),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(fontSize: 11)),
+        ],
+      ),
+      selected: enabled,
+      onSelected: (_) => onToggle(),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+}
+
+class _MinRatingChip extends StatelessWidget {
+  const _MinRatingChip({required this.minRating, required this.onChanged});
+
+  final int minRating;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<int>(
+      tooltip: 'Minimum star rating',
+      onSelected: onChanged,
+      itemBuilder: (_) => [
+        const PopupMenuItem(value: 0, child: Text('Any rating')),
+        for (int r = 2; r <= 5; r++)
+          PopupMenuItem(
+            value: r,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('$r'),
+                const Icon(Icons.star, size: 14, color: Colors.amber),
+                const Text('+'),
+              ],
+            ),
+          ),
+      ],
+      child: Chip(
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.star, size: 13,
+                color: minRating > 0 ? Colors.amber : Colors.grey),
+            const SizedBox(width: 2),
+            Text(
+              minRating > 0 ? '$minRating+' : 'Any',
+              style: const TextStyle(fontSize: 11),
+            ),
+          ],
+        ),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
