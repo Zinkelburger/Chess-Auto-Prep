@@ -5,12 +5,10 @@ import '../../models/tactics_position.dart';
 import '../pgn_viewer_widget.dart';
 
 /// Owns the "Show Solution" navigation state for the tactics Tactic tab:
-/// seeding the solution line into the PGN viewer once per position and walking
-/// the board / PGN cursor forward and back through it.
-///
-/// This used to live inline in TacticsControlPanel; it is extracted so the
-/// trickiest part of the panel (board + PGN cursor kept in lock-step) is
-/// isolated and unit-reviewable.
+/// caching the solution line and walking the board / PGN cursor forward and
+/// back through it.  The solution moves live in the PGN viewer's mainline
+/// (built from tactic FEN + solution SAN by the control panel), so this
+/// navigator only drives the cursor — it does not inject moves.
 class TacticsSolutionNavigator {
   TacticsSolutionNavigator({
     required this.pgn,
@@ -29,7 +27,7 @@ class TacticsSolutionNavigator {
   /// Computes the SAN solution line for a tactic.
   final List<String> Function(TacticsPosition) solutionToSan;
 
-  /// Re-highlights the PGN viewer at the tactic's start move.
+  /// Re-positions the PGN viewer at the tactic's start (mainline index 0).
   final VoidCallback syncPgnToTactic;
 
   /// Writes a board position to the app/board state.
@@ -41,10 +39,10 @@ class TacticsSolutionNavigator {
   /// Cached SAN solution for the current position so we don't recompute.
   List<String> _sanCache = const [];
 
-  /// FEN for which the solution has already been seeded into the PGN.
+  /// FEN for which the solution has already been cached.
   String? _seededForFen;
 
-  /// SAN moves of the seeded solution line (empty until seeded).
+  /// SAN moves of the solution line (empty until seeded).
   List<String> get sanMoves => _sanCache;
 
   /// The move index to highlight in the solution line, or `null` for none.
@@ -57,8 +55,8 @@ class TacticsSolutionNavigator {
     _seededForFen = null;
   }
 
-  /// Seed the full solution as an ephemeral variation in the PGN viewer once
-  /// per position. Subsequent toggles / arrow presses reuse it.
+  /// Cache the solution line and navigate the PGN viewer to the start.
+  /// The solution is the PGN mainline, so no ephemeral moves are added.
   void ensureSeeded() {
     final tactic = currentTactic();
     if (tactic == null) return;
@@ -72,12 +70,6 @@ class TacticsSolutionNavigator {
     _navIndex = -1;
 
     syncPgnToTactic();
-    for (final move in san) {
-      pgn.addEphemeralMove(move);
-    }
-    for (int i = 0; i < san.length; i++) {
-      pgn.goBack();
-    }
   }
 
   /// Navigate the board and PGN viewer to a specific index in the solution.
@@ -86,17 +78,9 @@ class TacticsSolutionNavigator {
     if (san.isEmpty) return;
     targetIndex = targetIndex.clamp(-1, san.length - 1);
 
-    final delta = targetIndex - _navIndex;
-    if (delta > 0) {
-      for (int i = 0; i < delta; i++) {
-        pgn.goForward();
-      }
-    } else if (delta < 0) {
-      for (int i = 0; i < -delta; i++) {
-        pgn.goBack();
-      }
-    }
     _navIndex = targetIndex;
+    // mainline index 0 = tactic start; targetIndex 0 = after first move.
+    pgn.goToMainLineIndex(targetIndex + 1);
     _navigateBoard(_navIndex);
   }
 
@@ -128,18 +112,8 @@ class TacticsSolutionNavigator {
 
     ensureSeeded();
 
-    final delta = clickedIndex - _navIndex;
-    if (delta > 0) {
-      for (int i = 0; i < delta; i++) {
-        pgn.goForward();
-      }
-    } else if (delta < 0) {
-      for (int i = 0; i < -delta; i++) {
-        pgn.goBack();
-      }
-    }
-
     _navIndex = clickedIndex;
+    pgn.goToMainLineIndex(clickedIndex + 1);
     _navigateBoard(clickedIndex);
   }
 

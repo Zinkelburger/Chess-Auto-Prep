@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/analysis_player_info.dart';
 import '../utils/app_messages.dart';
@@ -61,6 +62,41 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
         widget.lichessUsername!.isNotEmpty) {
       _selectedPlatform = 'lichess';
     }
+
+    _loadPrefs();
+  }
+
+  static const _keyMode = 'analysis_download.mode';
+  static const _keyMonths = 'analysis_download.months';
+  static const _keyMaxGames = 'analysis_download.max_games';
+
+  /// Restore the user's last-used download range.
+  Future<void> _loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _mode = prefs.getString(_keyMode) == 'games'
+          ? _DownloadMode.games
+          : _DownloadMode.months;
+      final months = prefs.getInt(_keyMonths);
+      if (months != null && months >= 1) {
+        _months = months;
+        _monthsController.text = '$months';
+      }
+      final maxGames = prefs.getInt(_keyMaxGames);
+      if (maxGames != null && maxGames >= 1 && maxGames <= 500) {
+        _maxGames = maxGames;
+        _maxGamesController.text = '$maxGames';
+      }
+    });
+  }
+
+  Future<void> _savePrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _keyMode, _mode == _DownloadMode.games ? 'games' : 'months');
+    await prefs.setInt(_keyMonths, _months);
+    await prefs.setInt(_keyMaxGames, _maxGames);
   }
 
   @override
@@ -110,6 +146,8 @@ class _AnalysisDownloadDialogState extends State<AnalysisDownloadDialog> {
       setState(() {});
       return;
     }
+
+    _savePrefs();
 
     Navigator.of(context).pop(
       AnalysisPlayerInfo(

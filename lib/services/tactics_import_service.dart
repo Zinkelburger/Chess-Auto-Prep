@@ -549,10 +549,6 @@ class TacticsImportService {
     final gameTasks = <Map<String, dynamic>>[];
     int skippedCount = 0;
 
-    progressCallback?.call(
-      'Checking ${games.length} games against analysis history...',
-    );
-
     for (int i = 0; i < games.length; i++) {
       final gameId = _extractGameId(games[i]);
       if (skipAnalyzedGames && _database.isGameAnalyzed(gameId)) {
@@ -567,16 +563,16 @@ class TacticsImportService {
       });
     }
 
-    if (skippedCount > 0) {
+    if (gameTasks.isNotEmpty) {
+      final n = gameTasks.length;
       progressCallback?.call(
-        'Skipped $skippedCount already-analyzed games. '
-        '${gameTasks.isEmpty ? "Nothing new to analyze!" : "${gameTasks.length} new games to analyze."}',
+        '$n new game${n == 1 ? '' : 's'} found, analyzing…',
       );
     }
 
     if (gameTasks.isEmpty) {
       progressCallback?.call(
-        'All ${games.length} games already analyzed!',
+        'No new games to analyze — you\'re all caught up!',
       );
       return (
         positions: <TacticsPosition>[],
