@@ -234,9 +234,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   String get _metadataSubtitle {
     final p = _currentPlayer;
     if (p == null) return '';
+    final dl = p.downloadedAt != null ? ' · downloaded ${p.downloadTimeAgo}' : '';
     final base =
         '${p.gameCount} games · ${p.platformDisplayName} (${p.username})'
-        ' · ${p.rangeDescription}';
+        ' · ${p.rangeDescription}$dl';
     if (!_isAnalyzing) return base;
     if (_analysisTotal > 0) {
       return '$base · $_analysisPhase · $_analysisCurrent / $_analysisTotal games';
