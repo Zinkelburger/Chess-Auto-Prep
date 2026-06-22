@@ -674,7 +674,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             tooltip: 'Paste PGN from clipboard (Ctrl+V)',
             visualDensity: VisualDensity.compact,
           ),
-          if (_controller.allGames.isNotEmpty) ...[
+          if (_controller.allGames.isNotEmpty &&
+              !_controller.isSolitaireMode) ...[
             const SizedBox(width: 8),
             Expanded(
               child: PgnSliceChips(
@@ -687,22 +688,24 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       ),
       actions: [
         if (_controller.filteredGames.isNotEmpty) ...[
-          IconButton(
-            onPressed: _exportSlice,
-            icon: const Icon(Icons.file_upload_outlined, size: 20),
-            tooltip: 'Export filtered games (Ctrl+E)',
-          ),
-          IconButton(
-            onPressed: _controller.toggleOpeningTree,
-            icon: Icon(
-              Icons.account_tree,
-              size: 20,
-              color: _controller.showOpeningTree
-                  ? Theme.of(context).colorScheme.primary
-                  : null,
+          if (!_controller.isSolitaireMode) ...[
+            IconButton(
+              onPressed: _exportSlice,
+              icon: const Icon(Icons.file_upload_outlined, size: 20),
+              tooltip: 'Export filtered games (Ctrl+E)',
             ),
-            tooltip: 'Opening tree (T)',
-          ),
+            IconButton(
+              onPressed: _controller.toggleOpeningTree,
+              icon: Icon(
+                Icons.account_tree,
+                size: 20,
+                color: _controller.showOpeningTree
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
+              tooltip: 'Opening tree (T)',
+            ),
+          ],
           IconButton(
             onPressed: _controller.showOpeningTree ? null : _controller.toggleSolitaire,
             icon: Icon(
@@ -725,8 +728,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               icon: const Icon(Icons.emoji_events, size: 20, color: Colors.amber),
               tooltip: 'Trophies (${_controller.totalTrophyCount})',
             ),
-          PgnPerspectiveButton(controller: _controller),
-          PopupMenuButton<String>(
+          if (!_controller.isSolitaireMode) ...[
+            PgnPerspectiveButton(controller: _controller),
+            PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 20),
             tooltip: 'More actions',
             onSelected: (value) {
@@ -757,6 +761,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               ),
             ],
           ),
+          ],
         ],
         const AppModeMenuButton(),
       ],
@@ -811,12 +816,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                     ),
                   ),
                 ),
-              if (_controller.isSolitaireMode && solitaire.waitingForUser)
-                Positioned(
-                  bottom: 8,
-                  right: 8,
-                  child: _buildRevealButton(),
-                ),
               if (_controller.isSolitaireMode && solitaire.isComplete)
                 Positioned.fill(
                   child: Container(
@@ -864,52 +863,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
   }
 
-  Widget _buildRevealButton() {
-    final solitaire = _controller.solitaire;
-    final countdown = solitaire.revealCountdownSec;
-    final canReveal = solitaire.canReveal;
-
-    return Material(
-      color: Colors.transparent,
-      child: Tooltip(
-        message: canReveal
-            ? 'Show the correct move'
-            : 'Available in ${countdown}s',
-        child: InkWell(
-          onTap: canReveal ? _controller.revealCurrentMove : null,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: canReveal
-                  ? Colors.orange.withValues(alpha: 0.9)
-                  : Colors.grey.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.visibility,
-                  size: 16,
-                  color: canReveal ? Colors.white : Colors.white60,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  canReveal ? 'Reveal' : '${countdown}s',
-                  style: TextStyle(
-                    color: canReveal ? Colors.white : Colors.white60,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildSidePanel() {
     if (_controller.showOpeningTree) {
@@ -1008,6 +961,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             },
             onToggleEditMode: _toggleEditMode,
             isEditMode: _editMode,
+            isSolitaireMode: _controller.isSolitaireMode,
+            solitaireWaitingForUser: _controller.isSolitaireMode &&
+                _controller.solitaire.waitingForUser,
+            solitaireCanReveal: _controller.isSolitaireMode &&
+                _controller.solitaire.canReveal,
+            solitaireRevealCountdown: _controller.isSolitaireMode
+                ? _controller.solitaire.revealCountdownSec
+                : 0,
+            onReveal: _controller.revealCurrentMove,
+            onExitSolitaire: _controller.toggleSolitaire,
           ),
       ],
     );

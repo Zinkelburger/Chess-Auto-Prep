@@ -41,6 +41,14 @@ class GameNavBar extends StatelessWidget {
   final VoidCallback? onToggleEditMode;
   final bool isEditMode;
 
+  // Solitaire mode props
+  final bool isSolitaireMode;
+  final bool solitaireWaitingForUser;
+  final bool solitaireCanReveal;
+  final int solitaireRevealCountdown;
+  final VoidCallback? onReveal;
+  final VoidCallback? onExitSolitaire;
+
   const GameNavBar({
     super.key,
     required this.games,
@@ -64,6 +72,12 @@ class GameNavBar extends StatelessWidget {
     this.onSetAutoNext,
     this.onToggleEditMode,
     this.isEditMode = false,
+    this.isSolitaireMode = false,
+    this.solitaireWaitingForUser = false,
+    this.solitaireCanReveal = false,
+    this.solitaireRevealCountdown = 0,
+    this.onReveal,
+    this.onExitSolitaire,
   });
 
   @override
@@ -76,73 +90,180 @@ class GameNavBar extends StatelessWidget {
           top: BorderSide(color: Colors.grey[700]!),
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ..._buildStarRating(currentRating),
-                  const SizedBox(width: 8),
-                  _buildSortDropdown(),
-                ],
+      child: isSolitaireMode
+          ? _buildSolitaireLayout(context)
+          : _buildNormalLayout(context),
+    );
+  }
+
+  Widget _buildSolitaireLayout(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            _buildGameCounterDropdown(context),
+            _buildSolitaireControls(context),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ShortcutTooltip(
+              description: 'Previous game',
+              shortcut: 'P',
+              child: TextButton.icon(
+                onPressed: currentIndex > 0 ? onPrev : null,
+                icon: const Icon(Icons.skip_previous, size: 20),
+                label: const Text('Prev'),
               ),
-              _buildGameCounterDropdown(context),
-              _buildAutoPlayControls(),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ShortcutTooltip(
-                description: 'Previous game',
-                shortcut: 'P',
-                child: TextButton.icon(
-                  onPressed: currentIndex > 0 ? onPrev : null,
-                  icon: const Icon(Icons.skip_previous, size: 20),
-                  label: const Text('Prev'),
+            ),
+            const SizedBox(width: 16),
+            ShortcutTooltip(
+              description: 'Next game',
+              shortcut: 'N',
+              child: TextButton.icon(
+                onPressed: currentIndex < games.length - 1 ? onNext : null,
+                icon: const Icon(Icons.skip_next, size: 20),
+                label: const Text('Next'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSolitaireControls(BuildContext context) {
+    final canReveal = solitaireCanReveal;
+    final countdown = solitaireRevealCountdown;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (solitaireWaitingForUser)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ShortcutTooltip(
+              description: canReveal
+                  ? 'Show the correct move'
+                  : 'Available in ${countdown}s',
+              shortcut: 'H',
+              child: ActionChip(
+                onPressed: canReveal ? onReveal : null,
+                avatar: Icon(
+                  Icons.visibility,
+                  size: 16,
+                  color: canReveal ? Colors.white : Colors.white60,
                 ),
-              ),
-              const SizedBox(width: 16),
-              ShortcutTooltip(
-                description: 'Annotate',
-                shortcut: 'A',
-                child: IconButton(
-                  onPressed: onToggleEditMode,
-                  icon: Icon(
-                    Icons.edit_note,
-                    size: 22,
-                    color: isEditMode ? Colors.amber[600] : null,
+                label: Text(
+                  canReveal ? 'Reveal' : '${countdown}s',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: canReveal ? Colors.white : Colors.white60,
                   ),
-                  style: isEditMode
-                      ? IconButton.styleFrom(
-                          backgroundColor: Colors.amber.withValues(alpha: 0.12),
-                        )
-                      : null,
-                  visualDensity: VisualDensity.compact,
                 ),
+                backgroundColor: canReveal
+                    ? Colors.orange.withValues(alpha: 0.9)
+                    : Colors.grey.withValues(alpha: 0.7),
+                side: BorderSide.none,
+                visualDensity: VisualDensity.compact,
               ),
-              const SizedBox(width: 16),
-              ShortcutTooltip(
-                description: 'Next game',
-                shortcut: 'N',
-                child: TextButton.icon(
-                  onPressed: currentIndex < games.length - 1 ? onNext : null,
-                  icon: const Icon(Icons.skip_next, size: 20),
-                  label: const Text('Next'),
-                ),
-              ),
-            ],
+            ),
           ),
-        ],
-      ),
+        ShortcutIconButton(
+          description: 'Fullscreen',
+          shortcut: 'Ctrl+F',
+          onPressed: games.isNotEmpty ? onToggleFullScreen : null,
+          icon: Icon(Icons.fullscreen, size: 24, color: Colors.grey[400]),
+          visualDensity: VisualDensity.compact,
+        ),
+        const SizedBox(width: 4),
+        ShortcutTooltip(
+          description: 'Exit solitaire',
+          shortcut: 'S',
+          child: ActionChip(
+            onPressed: onExitSolitaire,
+            avatar: const Icon(Icons.close, size: 16),
+            label: const Text('Exit', style: TextStyle(fontSize: 12)),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNormalLayout(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ..._buildStarRating(currentRating),
+                const SizedBox(width: 8),
+                _buildSortDropdown(),
+              ],
+            ),
+            _buildGameCounterDropdown(context),
+            _buildAutoPlayControls(),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ShortcutTooltip(
+              description: 'Previous game',
+              shortcut: 'P',
+              child: TextButton.icon(
+                onPressed: currentIndex > 0 ? onPrev : null,
+                icon: const Icon(Icons.skip_previous, size: 20),
+                label: const Text('Prev'),
+              ),
+            ),
+            const SizedBox(width: 16),
+            ShortcutTooltip(
+              description: 'Annotate',
+              shortcut: 'A',
+              child: IconButton(
+                onPressed: onToggleEditMode,
+                icon: Icon(
+                  Icons.edit_note,
+                  size: 22,
+                  color: isEditMode ? Colors.amber[600] : null,
+                ),
+                style: isEditMode
+                    ? IconButton.styleFrom(
+                        backgroundColor: Colors.amber.withValues(alpha: 0.12),
+                      )
+                    : null,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: 16),
+            ShortcutTooltip(
+              description: 'Next game',
+              shortcut: 'N',
+              child: TextButton.icon(
+                onPressed: currentIndex < games.length - 1 ? onNext : null,
+                icon: const Icon(Icons.skip_next, size: 20),
+                label: const Text('Next'),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
