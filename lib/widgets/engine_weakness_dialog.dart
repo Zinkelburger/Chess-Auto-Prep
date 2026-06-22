@@ -185,6 +185,18 @@ class _EngineWeaknessConfigDialogState
                     if (_redownload) _field('Months', _monthsCtrl, 64),
                   ],
                 ),
+                if (widget.playerInfo!.downloadedAt != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 48, top: 4),
+                    child: Text(
+                      'Last downloaded ${widget.playerInfo!.downloadTimeAgo}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey[500],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
               ],
               const SizedBox(height: 12),
               Text(
