@@ -317,11 +317,6 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
   Widget build(BuildContext context) {
     final positionCount = widget.positions.length;
     final matchingCount = _matchingCount;
-    // One unambiguous "ready" label used everywhere: when a filter hides some
-    // positions, show "N of M" so the number never looks wrong (e.g. 2 of 4).
-    final readyLabel = matchingCount == positionCount
-        ? '$matchingCount'
-        : '$matchingCount of $positionCount';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -456,8 +451,8 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
                   widget.isImporting ? Icons.play_circle : Icons.play_arrow),
               label: Text(
                 widget.isImporting
-                    ? 'Start Training Now ($readyLabel ready)'
-                    : 'Start Practice Session ($readyLabel ready)',
+                    ? 'Start Training Now ($matchingCount ready)'
+                    : 'Start Practice Session ($matchingCount ready)',
                 style:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
