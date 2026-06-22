@@ -42,8 +42,8 @@ class AppMessages {
       'A repertoire named "$name" already exists.';
 
   // ── Inline (shown in widget state, not SnackBars) ──────────────
-  static const noNewBlunders =
-      'No new blunders found. Games may have already been analyzed.';
+  static const gamesAlreadyAnalyzed = 'Games were already analyzed.';
+  static const noNewBlunders = 'No new blunders found.';
   static String addedTactics(int count) =>
       'Added $count new tactics position${count == 1 ? '' : 's'}.';
 }

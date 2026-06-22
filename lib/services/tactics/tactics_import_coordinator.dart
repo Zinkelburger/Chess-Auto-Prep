@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/tactics_position.dart';
 import '../../utils/app_messages.dart';
 import '../tactics_database.dart';
-import '../tactics_import_service.dart';
+import '../tactics_import_service.dart' show ImportResult, TacticsImportService;
 
 enum TacticsImportSource { lichess, chessCom }
 
@@ -84,7 +84,7 @@ class TacticsImportCoordinator extends ChangeNotifier {
 
     try {
       await importService.initialize();
-      await importService.resumeStoredPgns(
+      final result = await importService.resumeStoredPgns(
         lichessUsername: lichessUsername,
         chesscomUsername: chesscomUsername,
         depth: depth,
@@ -94,9 +94,7 @@ class TacticsImportCoordinator extends ChangeNotifier {
       );
 
       await database.loadPositions();
-      importStatus = newPositionsFound == 0
-          ? AppMessages.noNewBlunders
-          : AppMessages.addedTactics(newPositionsFound);
+      importStatus = _statusMessage(result);
       notifyListeners();
     } finally {
       activeImport = null;
@@ -132,8 +130,9 @@ class TacticsImportCoordinator extends ChangeNotifier {
       final since =
           params.mode == TacticsImportMode.sinceDate ? params.since : null;
 
+      final ImportResult result;
       if (source == TacticsImportSource.lichess) {
-        await importService.importGamesFromLichess(
+        result = await importService.importGamesFromLichess(
           params.username,
           maxGames: params.maxGames,
           since: since,
@@ -143,7 +142,7 @@ class TacticsImportCoordinator extends ChangeNotifier {
           onPositionFound: _onPositionFound,
         );
       } else {
-        await importService.importGamesFromChessCom(
+        result = await importService.importGamesFromChessCom(
           params.username,
           maxGames: params.maxGames,
           since: since,
@@ -155,9 +154,7 @@ class TacticsImportCoordinator extends ChangeNotifier {
       }
 
       await database.loadPositions();
-      importStatus = newPositionsFound == 0
-          ? AppMessages.noNewBlunders
-          : AppMessages.addedTactics(newPositionsFound);
+      importStatus = _statusMessage(result);
       notifyListeners();
     } finally {
       activeImport = null;
@@ -192,6 +189,16 @@ class TacticsImportCoordinator extends ChangeNotifier {
     await database.addPosition(position);
     newPositionsFound++;
     notifyListeners();
+  }
+
+  String _statusMessage(ImportResult result) {
+    if (newPositionsFound > 0) {
+      return AppMessages.addedTactics(newPositionsFound);
+    }
+    if (result.gamesAnalyzed == 0 && result.gamesSkipped > 0) {
+      return AppMessages.gamesAlreadyAnalyzed;
+    }
+    return AppMessages.noNewBlunders;
   }
 }
 

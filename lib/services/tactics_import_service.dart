@@ -28,6 +28,13 @@ typedef OnPositionFoundCallback = Future<void> Function(
 /// Callback for progress updates during import
 typedef ProgressCallback = void Function(String message);
 
+/// Result of a tactics import or resume operation.
+typedef ImportResult = ({
+  List<TacticsPosition> positions,
+  int gamesAnalyzed,
+  int gamesSkipped,
+});
+
 class TacticsImportService {
   TacticsImportService({TacticsDatabase? database})
       : _database = database ?? TacticsDatabase();
@@ -103,7 +110,7 @@ class TacticsImportService {
   /// Chess.com based on game ID prefix), and processes each batch with the
   /// appropriate username. Already-analyzed games are skipped automatically
   /// by [_processGames].
-  Future<List<TacticsPosition>> resumeStoredPgns({
+  Future<ImportResult> resumeStoredPgns({
     required String? lichessUsername,
     required String? chesscomUsername,
     required int depth,
@@ -112,15 +119,21 @@ class TacticsImportService {
     OnPositionFoundCallback? onPositionFound,
   }) async {
     final content = await StorageFactory.instance.readImportedPgns();
-    if (content == null || content.isEmpty) return [];
+    if (content == null || content.isEmpty) {
+      return (positions: <TacticsPosition>[], gamesAnalyzed: 0, gamesSkipped: 0);
+    }
 
     final games = splitPgnIntoGames(content);
     final lichessGames = <String>[];
     final chessComGames = <String>[];
+    int preFilterSkipped = 0;
 
     for (final game in games) {
       final gameId = _extractGameId(game);
-      if (_database.isGameAnalyzed(gameId)) continue;
+      if (_database.isGameAnalyzed(gameId)) {
+        preFilterSkipped++;
+        continue;
+      }
 
       if (gameId.startsWith('lichess_')) {
         lichessGames.add(game);
@@ -130,11 +143,13 @@ class TacticsImportService {
     }
 
     final allPositions = <TacticsPosition>[];
+    int totalAnalyzed = 0;
+    int totalSkipped = preFilterSkipped;
 
     if (lichessGames.isNotEmpty &&
         lichessUsername != null &&
         lichessUsername.isNotEmpty) {
-      final positions = await _processGames(
+      final result = await _processGames(
         lichessGames.join('\n\n'),
         lichessUsername,
         depth,
@@ -143,14 +158,16 @@ class TacticsImportService {
         maxCores: maxCores,
         mapChessComEloForMaia: false,
       );
-      allPositions.addAll(positions);
+      allPositions.addAll(result.positions);
+      totalAnalyzed += result.gamesAnalyzed;
+      totalSkipped += result.gamesSkipped;
     }
 
     if (!_cancelled &&
         chessComGames.isNotEmpty &&
         chesscomUsername != null &&
         chesscomUsername.isNotEmpty) {
-      final positions = await _processGames(
+      final result = await _processGames(
         chessComGames.join('\n\n'),
         chesscomUsername,
         depth,
@@ -159,10 +176,16 @@ class TacticsImportService {
         maxCores: maxCores,
         mapChessComEloForMaia: true,
       );
-      allPositions.addAll(positions);
+      allPositions.addAll(result.positions);
+      totalAnalyzed += result.gamesAnalyzed;
+      totalSkipped += result.gamesSkipped;
     }
 
-    return allPositions;
+    return (
+      positions: allPositions,
+      gamesAnalyzed: totalAnalyzed,
+      gamesSkipped: totalSkipped,
+    );
   }
 
   /// Initialize the database (load analyzed game IDs).
@@ -173,7 +196,7 @@ class TacticsImportService {
     }
   }
 
-  Future<List<TacticsPosition>> importGamesFromLichess(
+  Future<ImportResult> importGamesFromLichess(
     String username, {
     int? maxGames,
     DateTime? since,
@@ -240,7 +263,7 @@ class TacticsImportService {
     return List<String>.from(data['archives'] as List);
   }
 
-  Future<List<TacticsPosition>> importGamesFromChessCom(
+  Future<ImportResult> importGamesFromChessCom(
     String username, {
     int? maxGames,
     DateTime? since,
@@ -497,16 +520,16 @@ class TacticsImportService {
     final uLower = username.toLowerCase();
 
     String? eloHeader;
-    if (white == uLower || white.contains(uLower)) {
+    if (white == uLower) {
       eloHeader = game.headers['WhiteElo'];
-    } else if (black == uLower || black.contains(uLower)) {
+    } else if (black == uLower) {
       eloHeader = game.headers['BlackElo'];
     }
     if (eloHeader == null) return null;
     return int.tryParse(eloHeader.replaceAll('?', ''));
   }
 
-  Future<List<TacticsPosition>> _processGames(
+  Future<ImportResult> _processGames(
     String pgnContent,
     String username,
     int depth,
@@ -555,7 +578,11 @@ class TacticsImportService {
       progressCallback?.call(
         'All ${games.length} games already analyzed!',
       );
-      return [];
+      return (
+        positions: <TacticsPosition>[],
+        gamesAnalyzed: 0,
+        gamesSkipped: skippedCount,
+      );
     }
 
     // ── Initialize Maia for line extension (desktop only) ────
@@ -696,7 +723,11 @@ class TacticsImportService {
         'Found ${positions.length} tactics positions.',
       );
     }
-    return positions;
+    return (
+      positions: positions,
+      gamesAnalyzed: gameTasks.length,
+      gamesSkipped: skippedCount,
+    );
   }
 
   /// Analyze a single game using a pool worker. Returns discovered tactics.
@@ -714,14 +745,13 @@ class TacticsImportService {
     final white = (game.headers['White'] ?? '').toLowerCase();
     final black = (game.headers['Black'] ?? '').toLowerCase();
 
+    // Exact (case-insensitive) match only. A substring fallback can
+    // misattribute the user's side when an opponent's name is a superstring
+    // of the username (e.g. user "tal" vs opponent "talinda").
     Side? userColor;
     if (white == username) {
       userColor = Side.white;
     } else if (black == username) {
-      userColor = Side.black;
-    } else if (white.contains(username)) {
-      userColor = Side.white;
-    } else if (black.contains(username)) {
       userColor = Side.black;
     }
     if (userColor == null) return [];
