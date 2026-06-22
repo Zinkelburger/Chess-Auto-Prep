@@ -258,6 +258,22 @@ class TacticsDatabase extends ChangeNotifier {
         _sessionQueue.shuffle(Random());
     }
 
+    // Keep each game's positions together, in the order they occurred. The
+    // sort above still decides which game comes first (via the game's first
+    // position in that order).
+    if (settings.groupByGame) {
+      final gameRank = <String, int>{};
+      for (final idx in _sessionQueue) {
+        gameRank.putIfAbsent(positions[idx].gameId, () => gameRank.length);
+      }
+      _sessionQueue.sort((a, b) {
+        final ra = gameRank[positions[a].gameId]!;
+        final rb = gameRank[positions[b].gameId]!;
+        if (ra != rb) return ra.compareTo(rb);
+        return positions[a].moveNumber.compareTo(positions[b].moveNumber);
+      });
+    }
+
     _sessionQueueIndex = 0;
     sessionPositionIndex = _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
   }

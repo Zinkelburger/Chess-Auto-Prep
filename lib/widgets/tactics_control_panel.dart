@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_state.dart';
 import '../models/engine_settings.dart';
+import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/maia_factory.dart';
@@ -101,7 +103,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _solutionNav = TacticsSolutionNavigator(
       pgn: _pgnViewerController,
       currentTactic: () => _session.currentPosition,
-      solutionToSan: (tactic) => _session.engine.solutionLineToSan(tactic),
+      solutionToSan: (tactic) => _session.engine.correctLineToSan(tactic),
       syncPgnToTactic: _syncPgnToCurrentTactic,
       setBoardPosition: (position) =>
           context.read<AppState>().setCurrentPosition(position),
@@ -129,6 +131,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         final appState = _appState ?? context.read<AppState>();
         _lichessUserController.text = appState.lichessUsername ?? '';
         _chessComUserController.text = appState.chesscomUsername ?? '';
+        _loadImportFormPrefs();
 
         appState.setMoveAttemptedCallback(_onMoveAttempted);
         _resetBoardToStart();
@@ -229,7 +232,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         appState.setCurrentPosition(position);
       }
       if (update.san != null) {
-        _pgnViewerController.addEphemeralMove(update.san!);
+        _pgnViewerController.goForward();
       }
     } catch (e) {
       debugPrint('[TacticsPanel] Board update failed: $e');
@@ -527,7 +530,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         final solutionSan = _session.showSolution && current != null
             ? _solutionNav.sanMoves.isNotEmpty
                 ? _solutionNav.sanMoves
-                : _session.engine.solutionLineToSan(current)
+                : _session.engine.correctLineToSan(current)
             : const <String>[];
 
         return SingleChildScrollView(
@@ -569,7 +572,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   importStatus: _import.importStatus,
                   isImporting: _import.isImporting,
                   activeImport: _import.activeImport,
-                  analyzedGameCount: _database.analyzedGameIds.length,
                   lichessUserController: _lichessUserController,
                   lichessCountController: _lichessCountController,
                   chessComUserController: _chessComUserController,
@@ -612,6 +614,44 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   // Analysis (PGN) tab
   // ---------------------------------------------------------------------------
 
+  /// Build a PGN string from the tactic FEN with the solution as the mainline.
+  String _buildSolutionPgn(
+      TacticsPosition tactic, List<String> solutionSan) {
+    String escaped(String s) =>
+        s.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+    final headers = StringBuffer();
+    headers.writeln('[White "${escaped(tactic.gameWhite)}"]');
+    headers.writeln('[Black "${escaped(tactic.gameBlack)}"]');
+    if (tactic.gameDate.isNotEmpty) {
+      headers.writeln('[Date "${escaped(tactic.gameDate)}"]');
+    }
+    headers.writeln('[Result "*"]');
+    headers.writeln('[FEN "${tactic.fen}"]');
+    headers.writeln('[SetUp "1"]');
+
+    if (solutionSan.isEmpty) return '${headers.toString()}\n*';
+
+    final setup = Setup.parseFen(tactic.fen);
+    final buf = StringBuffer();
+    var moveNum = setup.fullmoves;
+    var isWhite = setup.turn == Side.white;
+
+    for (int i = 0; i < solutionSan.length; i++) {
+      if (isWhite) {
+        buf.write('$moveNum. ');
+      } else if (i == 0) {
+        buf.write('$moveNum... ');
+      }
+      buf.write(solutionSan[i]);
+      if (!isWhite) moveNum++;
+      isWhite = !isWhite;
+      if (i < solutionSan.length - 1) buf.write(' ');
+    }
+    buf.write(' *');
+
+    return '${headers.toString()}\n$buf';
+  }
+
   Widget _buildAnalysisTab() {
     if (_session.currentPosition == null) {
       return const Center(
@@ -622,15 +662,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       );
     }
 
-    final ctx = _session.parsePositionContext(
-      _session.currentPosition!.positionContext,
-    );
+    final tactic = _session.currentPosition!;
+    final solutionSan = _session.engine.correctLineToSan(tactic);
+    final pgnText = _buildSolutionPgn(tactic, solutionSan);
 
     return PgnWithEngine(
-      key: ValueKey('analysis_${_session.currentPosition!.gameId}'),
-      gameId: _session.currentPosition!.gameId,
-      moveNumber: ctx.moveNumber,
-      isWhiteToPlay: ctx.isWhiteToPlay,
+      key: ValueKey('analysis_${tactic.fen}'),
+      pgnText: pgnText,
       showStartEndButtons: false,
       controller: _pgnViewerController,
       onPositionChanged: (position) {
@@ -790,18 +828,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     appState.setBoardFlipped(false);
   }
 
-  /// Re-sync the PGN viewer's highlighted move to the current tactic position.
+  /// Re-sync the PGN viewer to the tactic start (solution mainline index 0).
   void _syncPgnToCurrentTactic() {
-    if (_session.currentPosition == null) return;
-    final ctx = _session.parsePositionContext(
-      _session.currentPosition!.positionContext,
-    );
-    if (ctx.moveNumber != null) {
-      _pgnViewerController.jumpToMove(
-        ctx.moveNumber!,
-        ctx.isWhiteToPlay ?? true,
-      );
-    }
+    _pgnViewerController.clearEphemeralMoves();
+    _pgnViewerController.goToMainLineIndex(0);
   }
 
   void _resetAnalysis() {
@@ -868,6 +898,33 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   bool get _importFieldsValid => _depthValid && _coresValid;
 
+  static const _prefImportCount = 'tactics_import.count';
+  static const _prefImportDepth = 'tactics_import.depth';
+  static const _prefImportCores = 'tactics_import.cores';
+
+  /// Restore the last-used fetch count / depth / cores into the form fields.
+  Future<void> _loadImportFormPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final count = prefs.getInt(_prefImportCount);
+    final depth = prefs.getInt(_prefImportDepth);
+    final cores = prefs.getInt(_prefImportCores);
+    if (count != null) _lichessCountController.text = '$count';
+    if (depth != null) _stockfishDepthController.text = '$depth';
+    if (cores != null) _coresController.text = '$cores';
+  }
+
+  /// Remember the current fetch count / depth / cores for next launch.
+  Future<void> _saveImportFormPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final count = int.tryParse(_lichessCountController.text);
+    final depth = int.tryParse(_stockfishDepthController.text);
+    final cores = int.tryParse(_coresController.text);
+    if (count != null) await prefs.setInt(_prefImportCount, count);
+    if (depth != null) await prefs.setInt(_prefImportDepth, depth);
+    if (cores != null) await prefs.setInt(_prefImportCores, cores);
+  }
+
   Future<void> _importLichess() =>
       _runImport(TacticsImportSource.lichess, 'Lichess');
 
@@ -875,6 +932,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _runImport(TacticsImportSource.chessCom, 'Chess.com');
 
   Future<void> _runImport(TacticsImportSource source, String platform) async {
+    _saveImportFormPrefs();
     final username = source == TacticsImportSource.lichess
         ? _lichessUserController.text.trim()
         : _chessComUserController.text.trim();
@@ -1002,17 +1060,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return;
     }
 
-    String? moveSan;
-    try {
-      final move = Move.parse(moveUci);
-      if (move != null) {
-        final (_, san) = appState.currentPosition.makeSan(move);
-        moveSan = san;
-      }
-    } catch (_) {
-      // Best-effort; failure here is non-fatal and intentionally ignored.
-    }
-
     final prevIndex = _session.currentMoveIndex;
     final update = _session.processMoveAttempt(
       moveUci: moveUci,
@@ -1022,8 +1069,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
     if (update != null) {
       _applyBoardUpdate(update);
-      if (moveSan != null && _session.currentMoveIndex > prevIndex) {
-        _pgnViewerController.addEphemeralMove(moveSan);
+      if (_session.currentMoveIndex > prevIndex) {
+        _pgnViewerController.goForward();
       }
     }
   }

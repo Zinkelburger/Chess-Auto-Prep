@@ -15,7 +15,6 @@ class TacticsImportPanel extends StatefulWidget {
     this.importStatus,
     required this.isImporting,
     this.activeImport,
-    required this.analyzedGameCount,
     required this.lichessUserController,
     required this.lichessCountController,
     required this.chessComUserController,
@@ -47,7 +46,6 @@ class TacticsImportPanel extends StatefulWidget {
   final String? importStatus;
   final bool isImporting;
   final TacticsImportService? activeImport;
-  final int analyzedGameCount;
   final TextEditingController lichessUserController;
   final TextEditingController lichessCountController;
   final TextEditingController chessComUserController;
@@ -92,6 +90,10 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
     // only add/remove listeners here, never dispose them.)
     widget.lichessUserController.addListener(_onUsernameChanged);
     widget.chessComUserController.addListener(_onUsernameChanged);
+    // Restore the user's last-used session settings.
+    TacticsSessionSettings.load().then((saved) {
+      if (mounted) setState(() => _settings = saved);
+    });
   }
 
   @override
@@ -129,6 +131,7 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
               FilledButton(
                 onPressed: () {
                   setState(() => _settings = draft);
+                  draft.save();
                   Navigator.pop(ctx);
                 },
                 child: Text('Apply ($matching positions)'),
@@ -326,7 +329,6 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
             status: widget.importStatus!,
             isImporting: widget.isImporting,
             hasActiveImport: widget.activeImport != null,
-            analyzedGameCount: widget.analyzedGameCount,
             onCancelImport: widget.onCancelImport,
             onDismiss: widget.onDismissImportStatus,
           ),
@@ -627,6 +629,12 @@ class _SessionSettingsForm extends StatelessWidget {
             ),
           ],
         ),
+        _MistakeTypeCheckbox(
+          label: 'Group by game',
+          type: '',
+          selected: settings.groupByGame,
+          onChanged: (v) => onChanged(settings.copyWith(groupByGame: v)),
+        ),
         const SizedBox(height: 12),
         Text('Include:',
             style: TextStyle(fontSize: 13, color: Colors.grey[300])),
@@ -729,7 +737,6 @@ class TacticsImportStatusBanner extends StatelessWidget {
     required this.status,
     required this.isImporting,
     required this.hasActiveImport,
-    required this.analyzedGameCount,
     required this.onCancelImport,
     required this.onDismiss,
   });
@@ -737,7 +744,6 @@ class TacticsImportStatusBanner extends StatelessWidget {
   final String status;
   final bool isImporting;
   final bool hasActiveImport;
-  final int analyzedGameCount;
   final VoidCallback onCancelImport;
   final VoidCallback onDismiss;
 
@@ -784,13 +790,6 @@ class TacticsImportStatusBanner extends StatelessWidget {
                 ),
             ],
           ),
-          if (analyzedGameCount > 0) ...[
-            const SizedBox(height: 8),
-            Text(
-              '$analyzedGameCount previously analyzed games in history (duplicates auto-skipped)',
-              style: TextStyle(fontSize: 11, color: Colors.grey[400]),
-            ),
-          ],
         ],
       ),
     );
