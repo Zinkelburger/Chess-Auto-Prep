@@ -97,6 +97,20 @@ int plyBeforeMove({
   return moveAbsPly - startAbsPly;
 }
 
+/// Inverse of [plyBeforeMove]: the (fullmove number, side) of the move played
+/// [ply] half-moves into a game starting at [startFullmoves]/[startWhiteToMove].
+({int moveNumber, bool isWhite}) coordsAtPly({
+  required int ply,
+  required int startFullmoves,
+  required bool startWhiteToMove,
+}) {
+  final abs = ply + (startWhiteToMove ? 0 : 1);
+  return (
+    moveNumber: (abs ~/ 2) + startFullmoves,
+    isWhite: abs.isEven,
+  );
+}
+
 /// Parse an algebraic square name (e.g. 'e4') to a dartchess [Square].
 Square? parseSquare(String name) => Square.parse(name);
 
