@@ -77,6 +77,21 @@ class PgnFenIndex {
     required int gameTotal,
   }) async {
     if (filePath == null || _value == null) return;
+    // Guard against persisting an index that is inconsistent with [gameTotal]:
+    // the header records [gameTotal] as the game count, so any stored index
+    // outside `[0, gameTotal)` would produce a file that passes load-time
+    // validation yet points past `allGames`, crashing consumers with a
+    // RangeError. If the in-memory index and [gameTotal] disagree, skip the
+    // write rather than persist a corrupt companion file.
+    for (final indices in _value!.values) {
+      for (final i in indices) {
+        if (i < 0 || i >= gameTotal) {
+          debugPrint('Skipping FEN index persist: index $i out of range for '
+              '$gameTotal games (stale index vs. game set).');
+          return;
+        }
+      }
+    }
     try {
       final storage = StorageFactory.instance;
       final stat = await storage.fileStat(filePath);

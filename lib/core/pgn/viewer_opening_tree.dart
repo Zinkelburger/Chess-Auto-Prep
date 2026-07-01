@@ -243,6 +243,11 @@ class ViewerOpeningTree {
         }
         final results = <int>[];
         for (final ai in allIndices) {
+          // A persisted `.fenidx` can be stale relative to the current
+          // `allGames` (e.g. reloaded across an edit that changed the game
+          // set), leaving indices that are out of range. Skip those rather
+          // than throwing a RangeError that crashes the tree panel.
+          if (ai < 0 || ai >= all.length) continue;
           final fi = entryToFiltered[all[ai]];
           if (fi != null) results.add(fi);
         }
