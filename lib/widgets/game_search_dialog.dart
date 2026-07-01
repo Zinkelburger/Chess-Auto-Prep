@@ -1,12 +1,14 @@
 /// Compact search dialog for jumping to a game in a large PGN collection.
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'game_nav_item.dart';
 
-const _maxResults = 5;
+const _visibleRows = 10;
 const _dialogWidth = 380.0;
 const _resultRowHeight = 58.0;
 
@@ -42,6 +44,35 @@ class _SearchResult {
     this.isGoToGame = false,
     this.goToLabel,
   });
+}
+
+/// Display + search data computed once per game, so scrolling and searching
+/// never re-parse headers or run date regexes on the fly.
+class _GameEntry {
+  final String white;
+  final String black;
+  final String secondary;
+  final String summary;
+  final int rating;
+  final String searchText;
+
+  const _GameEntry({
+    required this.white,
+    required this.black,
+    required this.secondary,
+    required this.summary,
+    required this.rating,
+    required this.searchText,
+  });
+
+  factory _GameEntry.fromGame(GameNavItem game) => _GameEntry(
+        white: _playerName(game.headers, 'White'),
+        black: _playerName(game.headers, 'Black'),
+        secondary: _formatSecondaryLine(game.headers),
+        summary: _isJunk(game.studySummary) ? '' : game.studySummary,
+        rating: game.studyRating,
+        searchText: _buildSearchableText(game),
+      );
 }
 
 bool _isJunk(String? value) {
@@ -97,18 +128,26 @@ String _formatSecondaryLine(Map<String, String> headers) {
   return parts.join(' · ');
 }
 
-List<_SearchResult> _computeResults(List<GameNavItem> games, String query) {
+List<_SearchResult> _computeResults(List<_GameEntry> entries, String query) {
   final trimmed = query.trim();
-  if (trimmed.isEmpty) return [];
 
   final results = <_SearchResult>[];
   final seen = <int>{};
+
+  // With no query, show every game so the list is browsable by default.
+  if (trimmed.isEmpty) {
+    for (var i = 0; i < entries.length; i++) {
+      results.add(_SearchResult(index: i));
+    }
+    return results;
+  }
+
   final q = trimmed.toLowerCase();
 
   if (RegExp(r'^\d+$').hasMatch(trimmed)) {
     final n = int.parse(trimmed);
     final idx = n - 1;
-    if (idx >= 0 && idx < games.length) {
+    if (idx >= 0 && idx < entries.length) {
       results.add(_SearchResult(
         index: idx,
         isGoToGame: true,
@@ -118,9 +157,9 @@ List<_SearchResult> _computeResults(List<GameNavItem> games, String query) {
     }
   }
 
-  for (var i = 0; i < games.length && results.length < _maxResults; i++) {
+  for (var i = 0; i < entries.length; i++) {
     if (seen.contains(i)) continue;
-    if (_buildSearchableText(games[i]).contains(q)) {
+    if (entries[i].searchText.contains(q)) {
       results.add(_SearchResult(index: i));
       seen.add(i);
     }
@@ -147,15 +186,28 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
 
-  List<_SearchResult> get _results =>
-      _computeResults(widget.games, _controller.text);
+  // Display/search data precomputed once so scrolling and typing stay smooth.
+  late final List<_GameEntry> _entries =
+      widget.games.map(_GameEntry.fromGame).toList();
+
+  // Results cached and only recomputed when the query text changes.
+  late List<_SearchResult> _results = _computeResults(_entries, '');
+  String _lastQuery = '';
 
   @override
   void initState() {
     super.initState();
-    _controller.addListener(() => setState(() {}));
+    _controller.addListener(_onQueryChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
+    });
+  }
+
+  void _onQueryChanged() {
+    if (_controller.text == _lastQuery) return;
+    _lastQuery = _controller.text;
+    setState(() {
+      _results = _computeResults(_entries, _controller.text);
     });
   }
 
@@ -176,9 +228,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final query = _controller.text.trim();
     final results = _results;
-    final current = widget.games[widget.currentIndex];
 
     return CallbackShortcuts(
       bindings: {
@@ -228,25 +278,27 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
-                  height: _maxResults * _resultRowHeight,
-                  child: query.isEmpty
-                      ? _buildEmptyHint(context, current)
-                      : results.isEmpty
-                          ? Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Text(
-                                'No matches',
-                                style: TextStyle(
-                                    color: Colors.grey[500], fontSize: 13),
-                              ),
-                            )
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: results
-                                  .map((r) => _buildResultRow(context, r))
-                                  .toList(),
-                            ),
+                  // Show up to _visibleRows at once, but never taller than the
+                  // window allows (leaving room for the search field + margins).
+                  height: math.min(
+                    _visibleRows * _resultRowHeight,
+                    MediaQuery.of(context).size.height - 220,
+                  ).clamp(_resultRowHeight, _visibleRows * _resultRowHeight),
+                  child: results.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'No matches',
+                            style: TextStyle(
+                                color: Colors.grey[500], fontSize: 13),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: results.length,
+                          itemBuilder: (context, i) =>
+                              _buildResultRow(context, results[i]),
+                        ),
                 ),
               ],
             ),
@@ -256,36 +308,13 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
     );
   }
 
-  Widget _buildEmptyHint(BuildContext context, GameNavItem current) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Type to search',
-          style: TextStyle(color: Colors.grey[500], fontSize: 13),
-        ),
-        const SizedBox(height: 10),
-        _buildResultRow(
-          context,
-          _SearchResult(index: widget.currentIndex),
-          interactive: false,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildResultRow(
-    BuildContext context,
-    _SearchResult result, {
-    bool interactive = true,
-  }) {
-    final game = widget.games[result.index];
+  Widget _buildResultRow(BuildContext context, _SearchResult result) {
+    final entry = _entries[result.index];
     final isCurrent = result.index == widget.currentIndex;
-    final white = _playerName(game.headers, 'White');
-    final black = _playerName(game.headers, 'Black');
-    final secondary = _formatSecondaryLine(game.headers);
-    final rating = game.studyRating;
+    final white = entry.white;
+    final black = entry.black;
+    final secondary = entry.secondary;
+    final rating = entry.rating;
 
     final borderColor = isCurrent
         ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.6)
@@ -338,13 +367,11 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       ),
                     ),
                   ),
-                if (!result.isGoToGame &&
-                    !_isJunk(game.studySummary) &&
-                    game.studySummary.isNotEmpty)
+                if (!result.isGoToGame && entry.summary.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
-                      game.studySummary,
+                      entry.summary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -369,17 +396,6 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
         ],
       ),
     );
-
-    if (!interactive) {
-      return DecoratedBox(
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: borderColor),
-        ),
-        child: content,
-      );
-    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
