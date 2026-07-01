@@ -492,7 +492,12 @@ Map<String, List<int>>? deserializeFenIndex(
     final ids = <int>[];
     for (final s in line.substring(tab + 1).split(',')) {
       final v = int.tryParse(s);
-      if (v != null) ids.add(v);
+      if (v == null) continue;
+      // Reject a stale/malformed index: any game reference outside
+      // `[0, expectedGameCount)` would point past `allGames` and crash
+      // consumers. Returning null forces the caller to rebuild from scratch.
+      if (v < 0 || v >= expectedGameCount) return null;
+      ids.add(v);
     }
     if (ids.isNotEmpty) index[fen] = ids;
   }
