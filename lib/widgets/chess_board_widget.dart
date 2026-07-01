@@ -237,21 +237,23 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     final row = (details.localPosition.dy / squareSize).floor();
     final square = _coordsToSquare(col, row);
 
+    // Always remember which square the press started on so a press that turns
+    // out not to be a drag (very common on desktop, where the pan recognizer
+    // wins the gesture arena after ~1px of mouse movement) can be handled as a
+    // plain square tap in [_onPanEnd] instead of being discarded.
+    _dragStartSquare = square;
+    _dragStartPosition = details.localPosition;
+
+    // Only lift a piece for dragging when the press lands on a movable piece.
+    // Selection/highlight is applied when the drag actually begins so a press
+    // without movement leaves existing selection untouched.
     final sq = parseSquare(square);
     if (sq == null) return;
     final piece = widget.position.board.pieceAt(sq);
     if (piece != null && piece.color == widget.position.turn) {
       final hasLegalMoves = widget.position.legalMoves[sq]?.isNotEmpty ?? false;
-
       if (hasLegalMoves) {
-        setState(() {
-          _dragStartSquare = square;
-          _dragStartPosition = details.localPosition;
-          _draggedPiece = piece;
-          selectedSquare = square;
-          _highlightLegalMoves(square);
-        });
-        widget.onPieceSelected?.call(square);
+        _draggedPiece = piece;
       }
     }
   }
@@ -260,10 +262,15 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
     if (_dragStartSquare != null && _dragStartPosition != null) {
       final distance = (details.localPosition - _dragStartPosition!).distance;
 
-      if (!_isDragging && distance > 3) {
+      // A drag only "lifts" a piece; an empty/opponent square press that moves
+      // is not a drag and will fall through to tap handling on release.
+      if (!_isDragging && _draggedPiece != null && distance > 3) {
         setState(() {
           _isDragging = true;
+          selectedSquare = _dragStartSquare;
+          _highlightLegalMoves(_dragStartSquare!);
         });
+        widget.onPieceSelected?.call(_dragStartSquare!);
       }
 
       if (_isDragging) {
@@ -276,6 +283,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
   void _onPanEnd(DragEndDetails details, double squareSize) {
     if (_isDragging &&
+        _draggedPiece != null &&
         _dragStartSquare != null &&
         _currentDragPosition != null) {
       final col = (_currentDragPosition!.dx / squareSize).floor();
@@ -287,18 +295,31 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
           _tryMakeMove(_dragStartSquare!, endSquare);
         }
       }
+      _resetDragState();
+      return;
     }
 
-    _resetDragState();
+    // Not an actual drag: treat the press as a click on its square. Clear only
+    // the drag bookkeeping (not the current selection) so click-to-move and
+    // click-to-deselect in [_onSquareTap] still see the prior selection.
+    final square = _dragStartSquare;
+    _clearDragBookkeeping();
+    if (square != null) {
+      _onSquareTap(square);
+    }
+  }
+
+  void _clearDragBookkeeping() {
+    _dragStartSquare = null;
+    _isDragging = false;
+    _dragStartPosition = null;
+    _currentDragPosition = null;
+    _draggedPiece = null;
   }
 
   void _resetDragState() {
     setState(() {
-      _dragStartSquare = null;
-      _isDragging = false;
-      _dragStartPosition = null;
-      _currentDragPosition = null;
-      _draggedPiece = null;
+      _clearDragBookkeeping();
       selectedSquare = null;
       _internalHighlights.clear();
     });
