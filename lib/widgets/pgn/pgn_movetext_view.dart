@@ -96,8 +96,12 @@ class PgnMovetextView extends StatelessWidget {
   /// [clickedIndex]. [sans] is the run's full move list. This does not modify
   /// the move tree — it just walks the board so the comment keeps its rendering.
   final void Function(
-          int moveNumber, bool isWhite, List<String> sans, int clickedIndex)?
-      onPlayInlineLine;
+    int moveNumber,
+    bool isWhite,
+    List<String> sans,
+    int clickedIndex, {
+    String? anchorFen,
+  })? onPlayInlineLine;
 
   /// The inline line currently being previewed (for in-place highlighting), or
   /// null. Matched against each rendered run by its first move + move list.
@@ -106,6 +110,7 @@ class PgnMovetextView extends StatelessWidget {
     bool firstIsWhite,
     List<String> sans,
     int cursor,
+    String? anchorFen,
   })? activeInlineLine;
 
   const PgnMovetextView({
@@ -657,6 +662,7 @@ class PgnMovetextView extends StatelessWidget {
     final coords = _coordsAtPly(anchorPly);
     final active = activeInlineLine;
     final isActive = active != null &&
+        active.anchorFen == null &&
         active.cursor == 1 &&
         active.firstMoveNumber == coords.moveNumber &&
         active.firstIsWhite == coords.isWhite &&
@@ -741,6 +747,7 @@ class PgnMovetextView extends StatelessWidget {
     // cursor by position-in-run.
     final active = activeInlineLine;
     final isActiveMove = active != null &&
+        active.anchorFen == run.first.anchorFen &&
         active.firstMoveNumber == run.first.moveNumber &&
         active.firstIsWhite == run.first.isWhite &&
         idxInRun == active.cursor - 1 &&
@@ -755,7 +762,8 @@ class PgnMovetextView extends StatelessWidget {
             ? () {
                 final sans = run.map((m) => m.san).toList();
                 onPlayInlineLine!(
-                    run.first.moveNumber, run.first.isWhite, sans, idxInRun);
+                    run.first.moveNumber, run.first.isWhite, sans, idxInRun,
+                    anchorFen: run.first.anchorFen);
               }
             : null,
         child: Container(

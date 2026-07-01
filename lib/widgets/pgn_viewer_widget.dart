@@ -161,6 +161,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   // _analysisPath / ephemeral nodes.
   List<String> _inlineSans = const [];
   int _inlineBaseIndex = 0; // mainline ply before the line's first move
+  String? _inlineAnchorFen; // FEN the line starts from, when comment-anchored
   int _inlineCursor = 0; // # of inline moves currently played (>=1 = active)
   int _inlineFirstMoveNumber = 0; // run's first move, for highlight matching
   bool _inlineFirstIsWhite = true;
@@ -650,16 +651,23 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   /// anything to the move tree — it just walks the board through the line, so
   /// the comment keeps its rendering and the arrows step along the line.
   void _playInlineLine(
-      int moveNumber, bool isWhite, List<String> sans, int clickedIndex) {
-    final baseIndex = plyBeforeMove(
-      moveNumber: moveNumber,
-      isWhite: isWhite,
-      startFullmoves: _startPosition.fullmoves,
-      startWhiteToMove: _startPosition.turn == Side.white,
-    ).clamp(0, _moveHistory.length);
+      int moveNumber, bool isWhite, List<String> sans, int clickedIndex,
+      {String? anchorFen}) {
+    // FEN-anchored lines start from the FEN, not a mainline position; keep the
+    // mainline highlight where the user is so exiting returns there. Otherwise
+    // locate the branch point by move number as before.
+    final baseIndex = anchorFen != null
+        ? _mainLineIndex
+        : plyBeforeMove(
+            moveNumber: moveNumber,
+            isWhite: isWhite,
+            startFullmoves: _startPosition.fullmoves,
+            startWhiteToMove: _startPosition.turn == Side.white,
+          ).clamp(0, _moveHistory.length);
     // Drop any ephemeral variation moves so we don't leave a stale sideline.
     _clearAnalysis();
     _inlineBaseIndex = baseIndex;
+    _inlineAnchorFen = anchorFen;
     _inlineSans = sans;
     _inlineFirstMoveNumber = moveNumber;
     _inlineFirstIsWhite = isWhite;
@@ -675,14 +683,27 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       _goToMainLineMove(_inlineBaseIndex);
       return;
     }
-    // Replay the mainline up to the branch point, then the inline moves.
-    Position pos = _startPosition;
-    for (int i = 0; i < _inlineBaseIndex; i++) {
-      final san = _moveHistory[i].san;
-      if (san == '--') continue;
-      final m = pos.parseSan(san);
-      if (m == null) break;
-      pos = pos.play(m);
+    // Establish the base position: a comment FEN when anchored, otherwise the
+    // mainline replayed up to the branch point. Then play the inline moves.
+    Position pos;
+    final anchorFen = _inlineAnchorFen;
+    if (anchorFen != null) {
+      try {
+        pos = Chess.fromSetup(Setup.parseFen(anchorFen));
+      } catch (_) {
+        _clearInlineLine();
+        _goToMainLineMove(_inlineBaseIndex);
+        return;
+      }
+    } else {
+      pos = _startPosition;
+      for (int i = 0; i < _inlineBaseIndex; i++) {
+        final san = _moveHistory[i].san;
+        if (san == '--') continue;
+        final m = pos.parseSan(san);
+        if (m == null) break;
+        pos = pos.play(m);
+      }
     }
     int played = 0;
     for (int i = 0; i < cursor; i++) {
@@ -705,6 +726,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   void _clearInlineLine() {
     _inlineSans = const [];
     _inlineCursor = 0;
+    _inlineAnchorFen = null;
   }
 
   bool get _canGoBack {
@@ -1216,6 +1238,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                       firstIsWhite: _inlineFirstIsWhite,
                       sans: _inlineSans,
                       cursor: _inlineCursor,
+                      anchorFen: _inlineAnchorFen,
                     )
                   : null,
             ),
