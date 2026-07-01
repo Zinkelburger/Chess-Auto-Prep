@@ -469,11 +469,11 @@ class PgnMovetextView extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.pgnComment.withValues(alpha: 0.10),
+        color: AppColors.pgnCommentBlockBg,
         borderRadius: BorderRadius.circular(6),
         border: Border(
           left: BorderSide(
-            color: AppColors.pgnComment.withValues(alpha: 0.45),
+            color: AppColors.pgnComment.withValues(alpha: 0.55),
             width: 3,
           ),
         ),
@@ -534,9 +534,10 @@ class PgnMovetextView extends StatelessWidget {
       if (t is CommentMove) (runMoves[t.runId] ??= []).add(t);
     }
 
+    // Prose is set in the proportional default font — monospace is reserved
+    // for moves (and FEN) so long English sentences read like prose, not code.
     const proseStyle = TextStyle(
-      fontFamily: 'monospace',
-      fontSize: 13.5,
+      fontSize: 14,
       height: 1.5,
       color: AppColors.pgnComment,
     );
@@ -769,11 +770,11 @@ class PgnMovetextView extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.pgnComment.withValues(alpha: 0.10),
+        color: AppColors.pgnCommentBlockBg,
         borderRadius: BorderRadius.circular(6),
         border: Border(
           left: BorderSide(
-            color: AppColors.pgnComment.withValues(alpha: 0.45),
+            color: AppColors.pgnComment.withValues(alpha: 0.55),
             width: 3,
           ),
         ),
@@ -800,8 +801,7 @@ class PgnMovetextView extends StatelessWidget {
           child: Text(
             segment.content,
             style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 15,
+              fontSize: 15.5,
               fontWeight: FontWeight.bold,
               height: 1.4,
               color: AppColors.pgnComment,
@@ -827,8 +827,7 @@ class PgnMovetextView extends StatelessWidget {
           child: Text(
             segment.content,
             style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 13,
+              fontSize: 13.5,
               height: 1.5,
               fontStyle: FontStyle.italic,
               color: AppColors.pgnComment.withValues(alpha: 0.85),
@@ -839,12 +838,11 @@ class PgnMovetextView extends StatelessWidget {
       case RichSegmentType.bracket:
         return Text(
           '[${segment.content}]',
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 13,
+          style: const TextStyle(
+            fontSize: 13.5,
             height: 1.4,
             fontStyle: FontStyle.italic,
-            color: AppColors.pgnComment.withValues(alpha: 0.7),
+            color: AppColors.pgnComment,
           ),
         );
 
@@ -856,7 +854,7 @@ class PgnMovetextView extends StatelessWidget {
             color: AppColors.pgnComment.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
-              color: AppColors.pgnComment.withValues(alpha: 0.2),
+              color: AppColors.pgnComment.withValues(alpha: 0.3),
             ),
           ),
           child: Row(
@@ -865,16 +863,16 @@ class PgnMovetextView extends StatelessWidget {
               Icon(
                 Icons.grid_on,
                 size: 14,
-                color: AppColors.pgnComment.withValues(alpha: 0.6),
+                color: AppColors.pgnComment.withValues(alpha: 0.75),
               ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   segment.content,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 11.5,
                     fontFamily: 'monospace',
-                    color: AppColors.pgnComment.withValues(alpha: 0.6),
+                    color: AppColors.pgnComment,
                   ),
                 ),
               ),
