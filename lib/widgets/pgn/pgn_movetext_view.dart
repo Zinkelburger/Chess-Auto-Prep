@@ -249,7 +249,7 @@ class PgnMovetextView extends StatelessWidget {
       final nagMoveColor = moveNag > 0 ? nagColor(moveNag) : null;
 
       final moveColor = isCurrentMove
-          ? AppColors.pgnMoveCurrent
+          ? AppColors.pgnMoveCurrentFg
           : (nagMoveColor ??
               (hasBranch ? AppColors.lichessDb : AppColors.info));
 
@@ -283,10 +283,14 @@ class PgnMovetextView extends StatelessWidget {
                         ? AppColors.pgnMoveCurrentBg.withValues(alpha: 0.5)
                         : null),
                 borderRadius: BorderRadius.circular(3),
-                border: isSelected
-                    ? Border.all(
-                        color: moveColor.withValues(alpha: 0.6), width: 1)
-                    : null,
+                // Always reserve the 1px border so highlighting a move never
+                // resizes it (which would reflow wrapped variation lines).
+                border: isCurrentMove
+                    ? Border.all(color: AppColors.pgnMoveCurrent, width: 1)
+                    : (isSelected
+                        ? Border.all(
+                            color: moveColor.withValues(alpha: 0.6), width: 1)
+                        : Border.all(color: Colors.transparent, width: 1)),
               ),
               child: Text.rich(
                 TextSpan(children: [
@@ -296,8 +300,7 @@ class PgnMovetextView extends StatelessWidget {
                       fontFamily: 'monospace',
                       fontSize: 14,
                       color: moveColor,
-                      fontWeight:
-                          isCurrentMove ? FontWeight.w500 : FontWeight.normal,
+                      fontWeight: FontWeight.normal,
                       decoration:
                           isCurrentMove ? null : TextDecoration.underline,
                       decorationColor:
@@ -424,11 +427,11 @@ class PgnMovetextView extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.pgnComment.withValues(alpha: 0.06),
+        color: AppColors.pgnComment.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(6),
         border: Border(
           left: BorderSide(
-            color: AppColors.pgnComment.withValues(alpha: 0.3),
+            color: AppColors.pgnComment.withValues(alpha: 0.45),
             width: 3,
           ),
         ),
@@ -532,8 +535,14 @@ class PgnMovetextView extends StatelessWidget {
               ? BoxDecoration(
                   color: AppColors.pgnMoveCurrentBg,
                   borderRadius: BorderRadius.circular(3),
+                  border:
+                      Border.all(color: AppColors.pgnMoveCurrent, width: 1),
                 )
-              : null,
+              // Reserve the border width so activating a move doesn't reflow.
+              : BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: Colors.transparent, width: 1),
+                ),
           child: Text(
             '${move.display} ',
             style: TextStyle(
@@ -541,9 +550,9 @@ class PgnMovetextView extends StatelessWidget {
               fontSize: 13.5,
               height: 1.5,
               color: isActiveMove
-                  ? AppColors.pgnMoveCurrent
+                  ? AppColors.pgnMoveCurrentFg
                   : (clickable ? AppColors.info : AppColors.pgnComment),
-              fontWeight: isActiveMove ? FontWeight.w500 : FontWeight.normal,
+              fontWeight: FontWeight.normal,
               decoration: clickable && !isActiveMove
                   ? TextDecoration.underline
                   : null,
@@ -563,11 +572,11 @@ class PgnMovetextView extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.pgnComment.withValues(alpha: 0.06),
+        color: AppColors.pgnComment.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(6),
         border: Border(
           left: BorderSide(
-            color: AppColors.pgnComment.withValues(alpha: 0.3),
+            color: AppColors.pgnComment.withValues(alpha: 0.45),
             width: 3,
           ),
         ),
@@ -798,19 +807,25 @@ class PgnMovetextView extends StatelessWidget {
                         ? AppColors.pgnEphemeralBg
                         : AppColors.pgnMoveCurrentBg,
                     borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: node.isEphemeral
+                          ? AppColors.pgnEphemeralMove
+                          : AppColors.pgnMoveCurrent,
+                      width: 1,
+                    ),
                   )
-                : null,
+                // Reserve the border width so highlighting doesn't reflow.
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: Colors.transparent, width: 1),
+                  ),
             child: Text(
               node.san,
               style: TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 14,
-                color: isCurrentNode
-                    ? (node.isEphemeral
-                        ? AppColors.pgnMoveCurrent
-                        : AppColors.pgnMainLine)
-                    : moveColor,
-                fontWeight: isCurrentNode ? FontWeight.w500 : FontWeight.normal,
+                color: isCurrentNode ? AppColors.pgnMoveCurrentFg : moveColor,
+                fontWeight: FontWeight.normal,
                 decoration: isCurrentNode ? null : TextDecoration.underline,
                 decorationColor: AppColors.onSurfaceDim.withValues(alpha: 0.45),
                 decorationStyle: TextDecorationStyle.dotted,
