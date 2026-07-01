@@ -30,6 +30,7 @@ import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/fullscreen_game_view.dart';
 import '../widgets/game_analysis_tab.dart';
 import '../widgets/game_nav_bar.dart';
+import '../widgets/game_search_dialog.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
 import '../widgets/pgn/pgn_perspective_button.dart';
 import '../widgets/pgn/pgn_slice_chips.dart';
@@ -440,6 +441,26 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     });
   }
 
+  Future<void> _openGameSearch() async {
+    if (_controller.filteredGames.isEmpty) return;
+    final selected = await showDialog<int>(
+      context: context,
+      builder: (_) => GameSearchDialog(
+        games: _controller.filteredGames
+            .map((g) => GameNavItem(
+                  label: g.label,
+                  studyRating: g.studyRating,
+                  studySummary: g.studySummary,
+                  headers: g.headers,
+                ))
+            .toList(),
+        currentIndex: _controller.currentGameIndex,
+      ),
+    );
+    if (selected != null) _controller.goToGame(selected);
+    _reclaimFocus();
+  }
+
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
@@ -511,6 +532,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     } else if (key == LogicalKeyboardKey.keyA && hasNoLetterModifiers) {
       _toggleEditMode();
       return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyS && hasNoLetterModifiers) {
+      _openGameSearch();
+      return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.escape) {
       if (_editMode) {
         _toggleEditMode();
@@ -532,7 +556,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     } else if (key == LogicalKeyboardKey.keyT && hasNoLetterModifiers) {
       _controller.toggleOpeningTree();
       return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.keyS && hasNoLetterModifiers) {
+    } else if (key == LogicalKeyboardKey.keyS &&
+        HardwareKeyboard.instance.isShiftPressed &&
+        !isPrimaryModifierPressed) {
       if (!_controller.showOpeningTree) _controller.toggleSolitaire();
       return KeyEventResult.handled;
     }
@@ -731,7 +757,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                   ? Theme.of(context).colorScheme.primary
                   : null,
             ),
-            tooltip: 'Solitaire mode (S)',
+            tooltip: 'Solitaire mode (Shift+S)',
           ),
           IconButton(
             onPressed: _controller.toggleBoardFlipped,

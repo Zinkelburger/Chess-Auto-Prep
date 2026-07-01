@@ -185,7 +185,7 @@ class GameNavBar extends StatelessWidget {
         const SizedBox(width: 4),
         ShortcutTooltip(
           description: 'Exit solitaire',
-          shortcut: 'S',
+          shortcut: 'Shift+S',
           child: ActionChip(
             onPressed: onExitSolitaire,
             avatar: const Icon(Icons.close, size: 16),
@@ -335,7 +335,7 @@ class GameNavBar extends StatelessWidget {
 
   Widget _buildGameCounterDropdown(BuildContext context) {
     return Tooltip(
-      message: 'Jump to game',
+      message: 'Jump to game (S)',
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
         onTap: games.isEmpty
