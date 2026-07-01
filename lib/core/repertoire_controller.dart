@@ -251,7 +251,12 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
   /// Loads a specific PGN line for editing.
   void loadPgnLine(RepertoireLine line) {
     _selectedPgnLine = line;
-    _tree = MoveTree.fromMoves(line.moves, startingFen: _tree.startingFen);
+    // Build from the full PGN so comments and variations survive — the same
+    // comment-aware path the PGN viewer uses. Fall back to the flat SAN list
+    // for lines that have no PGN text (e.g. synthesized suggestions).
+    _tree = line.fullPgn.trim().isNotEmpty
+        ? MoveTree.fromPgn(line.fullPgn, startingFen: line.startPosition.fen)
+        : MoveTree.fromMoves(line.moves, startingFen: _tree.startingFen);
     _path = _tree.mainlineEndFrom(TreePath.empty);
     _syncOpeningTree();
     notifyListeners();
