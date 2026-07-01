@@ -170,8 +170,10 @@ class PgnMovetextView extends StatelessWidget {
     var moveNumber = startingMoveNumber;
     var isWhiteTurn = startingWhiteTurn;
 
+    // No fontFamily here: every span that needs monospace (move numbers,
+    // moves, brackets) sets it explicitly, so leaving the root proportional
+    // lets prose comment spans (which set no family) read as prose, not code.
     const baseStyle = TextStyle(
-      fontFamily: 'monospace',
       fontSize: 14,
       color: AppColors.pgnMove,
     );
@@ -555,6 +557,35 @@ class PgnMovetextView extends StatelessWidget {
         }
       } else if (t is CommentMove) {
         spans.add(_buildCommentMoveSpan(t, runMoves[t.runId]!));
+      }
+    }
+    return spans;
+  }
+
+  /// Split a variation-node comment into flowing spans: prose in the
+  /// proportional font, embedded moves in monospace. Unlike mainline comments
+  /// these are non-interactive — we don't track a board position to anchor
+  /// their moves to — so the moves are rendered as plain monospace text.
+  List<InlineSpan> _variationCommentSpans(String rawComment) {
+    final filtered = _filterComment(rawComment);
+    if (filtered.isEmpty) return const [];
+    const proseStyle = TextStyle(
+      fontSize: 13.5,
+      height: 1.4,
+      color: AppColors.pgnComment,
+    );
+    const moveStyle = TextStyle(
+      fontFamily: 'monospace',
+      fontSize: 13.5,
+      height: 1.4,
+      color: AppColors.pgnComment,
+    );
+    final spans = <InlineSpan>[];
+    for (final t in parseCommentTokens(stripEngineTokens(filtered))) {
+      if (t is CommentMove) {
+        spans.add(TextSpan(text: '${t.display} ', style: moveStyle));
+      } else if (t is CommentProse) {
+        spans.add(TextSpan(text: '${t.text} ', style: proseStyle));
       }
     }
     return spans;
@@ -949,21 +980,7 @@ class PgnMovetextView extends StatelessWidget {
     // show the comment inline.
     if (node.san == '--') {
       if (node.comment != null && node.comment!.isNotEmpty) {
-        final filtered = _filterComment(node.comment!);
-        if (filtered.isNotEmpty) {
-          spans.add(WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
-            child: Text(
-              '$filtered ',
-              style: const TextStyle(
-                fontSize: 13.5,
-                height: 1.4,
-                color: AppColors.pgnComment,
-              ),
-            ),
-          ));
-        }
+        spans.addAll(_variationCommentSpans(node.comment!));
       }
       return spans;
     }
@@ -1041,22 +1058,7 @@ class PgnMovetextView extends StatelessWidget {
 
     // Show comment after the move (for non-null-move variation nodes)
     if (node.comment != null && node.comment!.isNotEmpty) {
-      final filtered = _filterComment(node.comment!);
-      if (filtered.isNotEmpty) {
-        spans.add(WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: Text(
-            '$filtered ',
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 13.5,
-              height: 1.4,
-              color: AppColors.pgnComment,
-            ),
-          ),
-        ));
-      }
+      spans.addAll(_variationCommentSpans(node.comment!));
     }
 
     final nextMoveNumber = isWhiteTurn ? moveNumber : moveNumber + 1;
