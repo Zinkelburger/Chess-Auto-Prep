@@ -125,22 +125,36 @@ abstract final class AppColors {
   /// Move numbers (`1.` / `2...`) — dim, never bold.
   static const pgnMoveNumber = onSurfaceDim;
 
-  /// Current navigation position along the active line.
+  /// Current navigation position — the "you are here" accent. Used as the
+  /// bright border/glow around the highlighted move pill.
   static const pgnMoveCurrent = info;
-  static const pgnMoveCurrentBg = Color(0xFF1A3348);
+
+  /// Fill of the current-move pill. Bright enough to read as a solid chip on
+  /// the near-black surface (3.55:1) — pairs with [pgnMoveCurrent] border and
+  /// [pgnMoveCurrentFg] text for an unmissable "you are here" marker.
+  static const pgnMoveCurrentBg = Color(0xFF1F6FB2);
+
+  /// Text sitting on the current-move / active pill (light for legibility on
+  /// the blue fill, 4.6:1).
+  static const pgnMoveCurrentFg = Color(0xFFE3F2FD);
 
   /// Explicitly selected move (comment editing, context menu target).
   static const pgnMoveSelectedBg = Color(0xFF1565C0);
 
-  /// Saved sideline / variation text and brackets.
-  static const pgnVariation = pgnMainLineMuted;
+  /// Saved sideline / variation text and brackets. A clearly-teal, readable
+  /// tone (8.2:1) so sidelines read as "alternate line", not "disabled".
+  static const pgnVariation = Color(0xFF8FB3AE);
 
   /// On-the-fly analysis moves (distinct from repertoire, not orange).
   static const pgnEphemeralMove = infoMuted;
-  static const pgnEphemeralBg = Color(0xFF243040);
 
-  /// Inline move comments.
-  static const pgnComment = onSurfaceMuted;
+  /// Fill of the current *ephemeral* (analysis) node pill — a brighter slate
+  /// (2.9:1) that stays legible with [pgnMoveCurrentFg] text.
+  static const pgnEphemeralBg = Color(0xFF42607D);
+
+  /// Inline move comments — lifted off the old flat gray to a readable tone
+  /// (10:1) so even the alpha-dimmed blockquote/bracket/FEN variants clear AA.
+  static const pgnComment = Color(0xFFBDBDBD);
 
   static Color pgnMainLineColor({bool muted = false}) =>
       muted ? pgnMainLineMuted : pgnMainLine;
