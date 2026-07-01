@@ -515,12 +515,19 @@ class CommentMove extends CommentToken {
   String toString() => 'CommentMove($display)';
 }
 
+/// The SAN move-core grammar (no move number, check/mate, or annotation
+/// glyphs): castling, or a piece/pawn move with optional disambiguation,
+/// capture, and promotion. The alternation is a single capturing group so
+/// callers embedding it can capture the core. Shared by [_commentMoveRe] here
+/// and the prose move detector in the movetext view.
+const String kSanCorePattern = r'(O-O-O|O-O|'
+    r'(?:[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?:=[QRBN])?)';
+
 /// Matches one move token: optional move number + dots, SAN core, optional
 /// check/mate, annotation glyphs, and eval symbols.
 final _commentMoveRe = RegExp(
   r'^(?:(\d+)(\.{3}|\.))?'
-  r'(O-O-O|O-O|'
-  r'(?:[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?:=[QRBN])?)'
+  '$kSanCorePattern'
   r'([+#]?)'
   r'(?:[!?]{1,2})?'
   r'(?:[-+=]{1,2}|[-+]/[-+]|±|∓|⩲|⩱)?$',

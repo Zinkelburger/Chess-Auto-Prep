@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/move_tree.dart';
 import '../../theme/app_colors.dart';
+import '../../utils/chess_utils.dart' show coordsAtPly;
 import '../../utils/pgn_comment_utils.dart'
     show
         filterDisplayComment,
@@ -28,6 +29,7 @@ import '../../utils/pgn_comment_utils.dart'
         RichSegmentType,
         NagInfo,
         kMoveNags,
+        kSanCorePattern,
         nagSymbol,
         nagColor;
 
@@ -140,10 +142,15 @@ class PgnMovetextView extends StatelessWidget {
 
   /// A bare SAN move core (no move number, check/annotation glyphs), used to
   /// pre-filter prose words before the (more expensive) legality check.
-  static final RegExp _sanCoreRe = RegExp(
-    r'^(O-O-O|O-O|'
-    r'(?:[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?:=[QRBN])?)$',
-  );
+  static final RegExp _sanCoreRe = RegExp('^$kSanCorePattern\$');
+
+  // Prose-word tokenizers for [_extractLegalSan], hoisted so each prose word
+  // doesn't recompile them.
+  static final RegExp _leadBracketRe = RegExp(r'^[(\["]+');
+  static final RegExp _trailPunctRe = RegExp(r'[)\]",;.!?]+$');
+  static final RegExp _moveNumberPrefixRe = RegExp(r'^\d+\.{1,3}');
+  static final RegExp _ellipsisPrefixRe = RegExp(r'^\.{2,3}');
+  static final RegExp _glyphSuffixRe = RegExp(r'[!?+#]+$');
 
   static String _rawComment(PgnNodeData moveData) {
     if (moveData.comments == null || moveData.comments!.isEmpty) return '';
@@ -591,18 +598,18 @@ class PgnMovetextView extends StatelessWidget {
   /// when the word is not a legal move from [pos].
   ({String prefix, String san, String suffix})? _extractLegalSan(
       String word, Position pos) {
-    final lead = RegExp(r'^[(\["]+').firstMatch(word);
+    final lead = _leadBracketRe.firstMatch(word);
     final prefix = lead?.group(0) ?? '';
     var rest = word.substring(prefix.length);
-    final trail = RegExp(r'[)\]",;.!?]+$').firstMatch(rest);
+    final trail = _trailPunctRe.firstMatch(rest);
     final suffix = trail?.group(0) ?? '';
     rest = rest.substring(0, rest.length - suffix.length);
     if (rest.isEmpty) return null;
     // Strip a leading move number / ellipsis (8., 12..., …) and trailing glyphs.
     var core = rest
-        .replaceFirst(RegExp(r'^\d+\.{1,3}'), '')
-        .replaceFirst(RegExp(r'^\.{2,3}'), '')
-        .replaceFirst(RegExp(r'[!?+#]+$'), '');
+        .replaceFirst(_moveNumberPrefixRe, '')
+        .replaceFirst(_ellipsisPrefixRe, '')
+        .replaceFirst(_glyphSuffixRe, '');
     if (core.isEmpty || !_sanCoreRe.hasMatch(core)) return null;
     try {
       if (pos.parseSan(core) == null) return null;
@@ -662,20 +669,18 @@ class PgnMovetextView extends StatelessWidget {
   }
 
   /// The (fullmove number, side) of a move played at [ply] half-moves in.
-  ({int moveNumber, bool isWhite}) _coordsAtPly(int ply) {
-    final offset = startingWhiteTurn ? 0 : 1;
-    final abs = ply + offset;
-    return (
-      moveNumber: (abs ~/ 2) + startingMoveNumber,
-      isWhite: abs % 2 == 0,
-    );
-  }
+  ({int moveNumber, bool isWhite}) _coordsAtPly(int ply) => coordsAtPly(
+        ply: ply,
+        startFullmoves: startingMoveNumber,
+        startWhiteToMove: startingWhiteTurn,
+      );
 
   /// Replay the mainline into a list of positions: `[k]` is the board after
-  /// `k` half-moves. Returns null when no start position is available.
+  /// `k` half-moves. Returns null when there is no start position, or when
+  /// inline lines are disabled (nothing consumes the positions then).
   List<Position>? _buildPrefixPositions() {
     final start = startPosition;
-    if (start == null) return null;
+    if (start == null || onPlayInlineLine == null) return null;
     final positions = <Position>[start];
     Position pos = start;
     for (final data in moveHistory) {
@@ -903,10 +908,9 @@ class PgnMovetextView extends StatelessWidget {
 
     final spans = <InlineSpan>[];
     // Compute move number accounting for the starting position
-    final startPlyOffset = startingWhiteTurn ? 0 : 1;
-    final absolutePly = ply + startPlyOffset;
-    final moveNum = (absolutePly ~/ 2) + startingMoveNumber;
-    final isWhiteTurn = absolutePly % 2 == 0;
+    final coords = _coordsAtPly(ply);
+    final moveNum = coords.moveNumber;
+    final isWhiteTurn = coords.isWhite;
 
     for (final root in roots) {
       final bracketColor = root.isEphemeral
