@@ -4,9 +4,8 @@ import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
 import 'package:chess_auto_prep/utils/chess_utils.dart' show plyBeforeMove;
-import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
-    show buildMovetext;
 import 'package:chess_auto_prep/models/move_tree.dart';
+import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_variation_extractor.dart';
 
@@ -88,6 +87,12 @@ class PgnViewerWidgetController {
 
   /// Number of moves deep into the current variation (0 if on mainline).
   int get variationDepth => _state?._analysisPath.length ?? 0;
+
+  /// True when navigation is inside a variation / inline preview (off mainline).
+  bool get inVariation => _state?._isInVariation ?? false;
+
+  /// Jump from the current variation back to the mainline branch point.
+  void returnToMainline() => _state?._returnToMainline();
 
   /// Toggle a NAG on a specific move (used by keyboard shortcuts).
   void toggleNagOnMove(int moveIndex, int nagId) {
@@ -211,8 +216,16 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final gameIdChanged = widget.gameId != oldWidget.gameId;
     final pgnChanged = widget.pgnText != oldWidget.pgnText;
 
+    // Skip the reload when the incoming movetext is one this widget just
+    // emitted (an annotation / mainline edit flowing back through onComments
+    // Changed): reloading would reset the cursor to the start of the game.
+    final incomingMovetext = _normalizeMovetext(_stripHeaders(widget.pgnText ?? ''));
+    final isOwnEdit =
+        _lastEmittedMovetext != null && incomingMovetext == _lastEmittedMovetext;
+
     if (gameIdChanged ||
         (pgnChanged &&
+            !isOwnEdit &&
             _stripHeaders(widget.pgnText ?? '') !=
                 _stripHeaders(oldWidget.pgnText ?? ''))) {
       _loadGame();
@@ -485,6 +498,98 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     _goToMainLineMove(0);
   }
 
+  /// True when navigation is currently off the mainline — inside a saved /
+  /// analysis variation or an inline comment-line preview.
+  bool get _isInVariation => _analysisPath.isNotEmpty || _inlineActive;
+
+  /// Jump from the current variation (or inline preview) back to the mainline,
+  /// landing on the move where the current line branched off.
+  void _returnToMainline() {
+    int target;
+    if (_analysisPath.isNotEmpty) {
+      target = _activeBranchPly >= 0 ? _activeBranchPly : _mainLineIndex;
+    } else if (_inlineActive) {
+      target = _inlineBaseIndex;
+    } else {
+      return;
+    }
+    _goToMainLineMove(target.clamp(0, _moveHistory.length));
+  }
+
+  /// The moves that continue from the current position, as tappable chips.
+  /// Returns null unless there's a genuine branch (≥2 options) so the bar stays
+  /// unobtrusive on linear lines. Mirrors Lichess' inline branch picker.
+  Widget? _buildBranchChips() {
+    final chips = <Widget>[];
+    if (_analysisPath.isEmpty && !_inlineActive) {
+      // On the mainline: the next mainline move + any sidelines branching here.
+      final ply = _mainLineIndex;
+      if (ply < _moveHistory.length && _moveHistory[ply].san != '--') {
+        chips.add(_branchChip(_moveHistory[ply].san, AppColors.pgnMainLine,
+            () => _goToMainLineMove(ply + 1),
+            emphasized: true));
+      }
+      for (final root in _variationsByPly[ply] ?? const <MoveNode>[]) {
+        if (root.san == '--') continue;
+        chips.add(_branchChip(
+            root.san,
+            root.isEphemeral
+                ? AppColors.pgnEphemeralMove
+                : AppColors.pgnVariation,
+            () => _goToAnalysisNode(root, ply)));
+      }
+    } else if (_analysisPath.isNotEmpty) {
+      // Inside a variation: the children of the current node.
+      for (final child in _analysisPath.last.children) {
+        if (child.san == '--') continue;
+        chips.add(_branchChip(
+            child.san,
+            child.isEphemeral
+                ? AppColors.pgnEphemeralMove
+                : AppColors.pgnVariation,
+            () => _goToAnalysisNode(child, _activeBranchPly)));
+      }
+    }
+    if (chips.length < 2) return null;
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 8, top: 4),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          const Icon(Icons.call_split, size: 13, color: AppColors.onSurfaceDim),
+          ...chips,
+        ],
+      ),
+    );
+  }
+
+  Widget _branchChip(String san, Color color, VoidCallback onTap,
+      {bool emphasized = false}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: emphasized ? 0.20 : 0.12),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
+        ),
+        child: Text(
+          san,
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 12.5,
+            color: color,
+            fontWeight: emphasized ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _goBack() {
     if (_inlineActive) {
       _setInlineCursor(_inlineCursor - 1);
@@ -631,6 +736,33 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     }
     final fenAfter = newPos.fen;
 
+    // In edit mode, moves become permanent edits saved to disk: extending the
+    // mainline at its end, or adding a real (non-ephemeral) sideline elsewhere.
+    // Outside edit mode, moves are ephemeral scratch analysis (never saved).
+    final editing = widget.editMode &&
+        widget.onCommentsChanged != null &&
+        widget.revealedPly == null;
+
+    // Edit mode at the end of the mainline: extend the mainline itself rather
+    // than start a sideline. Excluded while an inline comment-preview is active:
+    // there _currentPosition is the preview board (not the mainline tail), so
+    // appending `san` here would splice a move that is illegal from the real
+    // last position into the persisted mainline.
+    if (editing &&
+        _analysisPath.isEmpty &&
+        !_inlineActive &&
+        _mainLineIndex == _moveHistory.length) {
+      setState(() {
+        _clearInlineLine();
+        _moveHistory.add(PgnNodeData(san: san));
+        _mainLineIndex = _moveHistory.length;
+        _currentPosition = newPos;
+      });
+      _notifyCommentsChanged();
+      widget.onPositionChanged?.call(newPos);
+      return;
+    }
+
     setState(() {
       _clearInlineLine();
       if (_analysisPath.isEmpty) {
@@ -651,7 +783,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           _analysisPath = [existing];
         } else {
           final newNode =
-              MoveNode(san: san, fen: fenAfter, isEphemeral: true);
+              MoveNode(san: san, fen: fenAfter, isEphemeral: !editing);
           roots.add(newNode);
           _analysisPath = [newNode];
         }
@@ -659,11 +791,13 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       } else {
         // Extending current variation
         final current = _analysisPath.last;
-        final (node, _) = current.addChild(san, fenAfter, isEphemeral: true);
+        final (node, _) =
+            current.addChild(san, fenAfter, isEphemeral: !editing);
         _analysisPath = [..._analysisPath, node];
       }
       _currentPosition = newPos;
     });
+    if (editing) _notifyCommentsChanged();
     widget.onPositionChanged?.call(newPos);
   }
 
@@ -757,6 +891,15 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   int? _editingCommentIndex;
   int? _selectedMoveIndex; // for annotation toolbar in edit mode
+
+  /// The last movetext this widget emitted via [onCommentsChanged] (whitespace-
+  /// normalized). Used so that when our own persisted edit flows back in as an
+  /// updated `pgnText`, `didUpdateWidget` recognizes it and skips the reload
+  /// that would otherwise reset the cursor to the start of the game.
+  String? _lastEmittedMovetext;
+
+  static String _normalizeMovetext(String s) =>
+      s.replaceAll(RegExp(r'\s+'), ' ').trim();
 
   void _startEditingComment(int moveIndex) {
     setState(() => _editingCommentIndex = moveIndex);
@@ -892,8 +1035,75 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   void _notifyCommentsChanged() {
     if (widget.onCommentsChanged == null || _moveHistory.isEmpty) return;
+    final movetext = _buildAnnotatedMovetext();
+    _lastEmittedMovetext = _normalizeMovetext(movetext);
+    widget.onCommentsChanged!(movetext);
+  }
+
+  /// Serialize the current mainline *and* every saved sideline variation (with
+  /// their comments and NAGs) back to PGN movetext. Uses dartchess'
+  /// [PgnGame.makePgn] — which handles variations, NAGs, and move numbering for
+  /// games that start from a custom FEN — then strips the header block so the
+  /// caller can splice it back under the game's existing headers.
+  ///
+  /// Ephemeral (scratch) analysis nodes are excluded; only permanent edits are
+  /// written.
+  String _buildAnnotatedMovetext() {
+    final headers = <String, String>{};
+    final fen = _game?.headers['FEN'];
+    if (fen != null && fen.isNotEmpty) headers['FEN'] = fen;
     final result = _game?.headers['Result'];
-    widget.onCommentsChanged!(buildMovetext(_moveHistory, result: result));
+    if (result != null && result.isNotEmpty) headers['Result'] = result;
+
+    final serializable = PgnGame<PgnNodeData>(
+      headers: headers,
+      moves: _buildPgnTree(),
+      comments: _game?.comments ?? const [],
+    );
+    return _stripHeaders(serializable.makePgn()).trim();
+  }
+
+  /// Rebuild a dartchess move tree from the flat mainline [_moveHistory] plus
+  /// the per-ply sidelines in [_variationsByPly]. Inverts [extractPgnVariations]:
+  /// sidelines keyed at ply `p` are siblings of the mainline move at index `p`
+  /// (i.e. `children[1..]` of the same parent). Ephemeral nodes are skipped.
+  PgnNode<PgnNodeData> _buildPgnTree() {
+    final root = PgnNode<PgnNodeData>();
+    PgnNode<PgnNodeData> parent = root;
+
+    void addSidelines(int ply) {
+      final roots = _variationsByPly[ply];
+      if (roots == null) return;
+      for (final sideline in roots) {
+        if (sideline.isEphemeral) continue;
+        parent.children.add(_moveNodeToPgnChild(sideline));
+      }
+    }
+
+    for (int i = 0; i < _moveHistory.length; i++) {
+      final mainChild = PgnChildNode<PgnNodeData>(_moveHistory[i]);
+      parent.children.add(mainChild); // index 0 = mainline continuation
+      addSidelines(i); // alternatives to _moveHistory[i], sharing `parent`
+      parent = mainChild;
+    }
+    // Sidelines branching after the final mainline move (user-added only).
+    addSidelines(_moveHistory.length);
+    return root;
+  }
+
+  PgnChildNode<PgnNodeData> _moveNodeToPgnChild(MoveNode node) {
+    final hasComment = node.comment != null && node.comment!.trim().isNotEmpty;
+    final hasNags = node.nags != null && node.nags!.isNotEmpty;
+    final child = PgnChildNode<PgnNodeData>(PgnNodeData(
+      san: node.san,
+      comments: hasComment ? [node.comment!.trim()] : null,
+      nags: hasNags ? List<int>.from(node.nags!) : null,
+    ));
+    for (final c in node.children) {
+      if (c.isEphemeral) continue;
+      child.children.add(_moveNodeToPgnChild(c));
+    }
+    return child;
   }
 
   // ── Build ──
@@ -986,6 +1196,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
               canEditComments: widget.onCommentsChanged != null,
               startingMoveNumber: _startPosition.fullmoves,
               startingWhiteTurn: _startPosition.turn == Side.white,
+              startPosition: _startPosition,
               onMainLineMoveClicked: _onMainLineMoveClicked,
               onSelectMoveForAnnotation: _selectMoveForAnnotation,
               onShowMoveContextMenu: _showMoveContextMenu,
@@ -1010,6 +1221,32 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
             ),
           ),
         ),
+        ?_buildBranchChips(),
+        if (_isInVariation)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8, right: 8, top: 2),
+              child: Tooltip(
+                message: 'Return to mainline (R)',
+                waitDuration: const Duration(milliseconds: 400),
+                child: TextButton.icon(
+                  onPressed: _returnToMainline,
+                  icon: const Icon(Icons.subdirectory_arrow_left, size: 16),
+                  label: const Text('Return to mainline'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.pgnMainLine,
+                    textStyle: const TextStyle(fontSize: 12),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+            ),
+          ),
         Container(
           padding: const EdgeInsets.all(8),
           child: Row(

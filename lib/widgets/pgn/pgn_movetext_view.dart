@@ -65,6 +65,11 @@ class PgnMovetextView extends StatelessWidget {
   /// Whether it's white's turn at the start (from the FEN; defaults to true).
   final bool startingWhiteTurn;
 
+  /// The game's starting position. When provided, moves written inside prose
+  /// comments are detected and made clickable if they are *legal* from the
+  /// comment's anchor position (played via [onPlayInlineLine]).
+  final Position? startPosition;
+
   final ValueChanged<int> onMainLineMoveClicked;
   final ValueChanged<int> onSelectMoveForAnnotation;
   final void Function(int moveIndex, Offset globalPosition) onShowMoveContextMenu;
@@ -114,6 +119,7 @@ class PgnMovetextView extends StatelessWidget {
     required this.canEditComments,
     this.startingMoveNumber = 1,
     this.startingWhiteTurn = true,
+    this.startPosition,
     required this.onMainLineMoveClicked,
     required this.onSelectMoveForAnnotation,
     required this.onShowMoveContextMenu,
@@ -131,6 +137,13 @@ class PgnMovetextView extends StatelessWidget {
   });
 
   static String _filterComment(String comment) => filterDisplayComment(comment);
+
+  /// A bare SAN move core (no move number, check/annotation glyphs), used to
+  /// pre-filter prose words before the (more expensive) legality check.
+  static final RegExp _sanCoreRe = RegExp(
+    r'^(O-O-O|O-O|'
+    r'(?:[KQRBN][a-h1-8]?x?[a-h][1-8]|[a-h]x[a-h][1-8]|[a-h][1-8])(?:=[QRBN])?)$',
+  );
 
   static String _rawComment(PgnNodeData moveData) {
     if (moveData.comments == null || moveData.comments!.isEmpty) return '';
@@ -165,10 +178,15 @@ class PgnMovetextView extends StatelessWidget {
       }
     }
 
+    // Board after each mainline half-move (prefix[k] = position after k moves),
+    // used to legality-check moves mentioned inside prose comments.
+    final prefix = _buildPrefixPositions();
+
     // Game-level comments (before any moves) — common in book PGNs
     if (game != null && game!.comments.isNotEmpty) {
       for (final comment in game!.comments) {
-        final w = _buildCommentWidget(comment);
+        final w = _buildCommentWidget(comment,
+            anchorPos: _posAt(prefix, 0), anchorPly: 0);
         if (w != null) children.add(w);
       }
     }
@@ -190,7 +208,8 @@ class PgnMovetextView extends StatelessWidget {
       if (moveData.startingComments != null &&
           moveData.startingComments!.isNotEmpty) {
         for (final sc in moveData.startingComments!) {
-          final w = _buildCommentWidget(sc);
+          final w = _buildCommentWidget(sc,
+              anchorPos: _posAt(prefix, i), anchorPly: i);
           if (w != null) {
             flushSpans();
             children.add(w);
@@ -349,7 +368,8 @@ class PgnMovetextView extends StatelessWidget {
         ));
       } else if (moveData.comments != null && moveData.comments!.isNotEmpty) {
         final raw = moveData.comments!.first;
-        final rendered = _renderComment(raw);
+        final rendered = _renderComment(raw,
+            anchorPos: _posAt(prefix, i + 1), anchorPly: i + 1);
         if (rendered.block != null) {
           flushSpans();
           children.add(rendered.block!);
@@ -370,12 +390,9 @@ class PgnMovetextView extends StatelessWidget {
       isWhiteTurn = !isWhiteTurn;
     }
 
-    // Variations after last move
-    final endPly = moveHistory.length;
-    final varsAtEnd = variationsByPly[endPly];
-    if (varsAtEnd != null && varsAtEnd.isNotEmpty) {
-      spans.addAll(_buildVariationSpansAtPly(endPly));
-    }
+    // NOTE: variations branching after the final move are already rendered by
+    // the loop above (ply = i + 1 reaches moveHistory.length on the last move).
+    // Do NOT re-render them here or they appear twice.
 
     flushSpans();
 
@@ -389,24 +406,34 @@ class PgnMovetextView extends StatelessWidget {
   /// Uses the rich Chessable renderer when markers are present, otherwise
   /// renders prose with inline clickable moves. Returns null if the comment is
   /// empty after filtering.
-  Widget? _buildCommentWidget(String raw) {
+  Widget? _buildCommentWidget(String raw,
+      {Position? anchorPos, int anchorPly = 0}) {
     if (hasChessableFormatting(raw)) {
       final segments = parseRichComment(raw);
-      if (segments.isNotEmpty) return _buildRichCommentBlock(segments);
+      if (segments.isNotEmpty) {
+        return _buildRichCommentBlock(segments,
+            anchorPos: anchorPos, anchorPly: anchorPly);
+      }
     }
     final tokens = parseCommentTokens(stripEngineTokens(raw));
     if (tokens.isEmpty) return null;
-    return _proseContainer(_buildTokenParagraphs(tokens));
+    return _proseContainer(_buildTokenParagraphs(tokens,
+        anchorPos: anchorPos, anchorPly: anchorPly));
   }
 
   /// Decide how to render a mainline-move comment: a flowing inline span list
   /// for short single-paragraph prose, or a bordered block for anything with
   /// embedded moves, Chessable markers, or multiple paragraphs.
-  ({Widget? block, List<InlineSpan> spans}) _renderComment(String raw) {
+  ({Widget? block, List<InlineSpan> spans}) _renderComment(String raw,
+      {Position? anchorPos, int anchorPly = 0}) {
     if (hasChessableFormatting(raw)) {
       final segments = parseRichComment(raw);
       if (segments.isNotEmpty) {
-        return (block: _buildRichCommentBlock(segments), spans: const []);
+        return (
+          block: _buildRichCommentBlock(segments,
+              anchorPos: anchorPos, anchorPly: anchorPly),
+          spans: const []
+        );
       }
     }
     final tokens = parseCommentTokens(stripEngineTokens(raw));
@@ -415,9 +442,17 @@ class PgnMovetextView extends StatelessWidget {
     final hasMove = tokens.any((t) => t is CommentMove);
     final paragraphs = _splitParagraphs(tokens);
     if (!hasMove && paragraphs.length <= 1) {
-      return (block: null, spans: _buildCommentTokenSpans(tokens));
+      return (
+        block: null,
+        spans: _buildCommentTokenSpans(tokens,
+            anchorPos: anchorPos, anchorPly: anchorPly)
+      );
     }
-    return (block: _proseContainer(_buildTokenParagraphs(tokens)), spans: const []);
+    return (
+      block: _proseContainer(_buildTokenParagraphs(tokens,
+          anchorPos: anchorPos, anchorPly: anchorPly)),
+      spans: const []
+    );
   }
 
   /// The bordered container used for block-style comments.
@@ -461,17 +496,22 @@ class PgnMovetextView extends StatelessWidget {
   }
 
   /// Render token paragraphs as a column of flowing rich text.
-  Widget _buildTokenParagraphs(List<CommentToken> tokens) {
+  Widget _buildTokenParagraphs(List<CommentToken> tokens,
+      {Position? anchorPos, int anchorPly = 0}) {
     final paragraphs = _splitParagraphs(tokens);
     if (paragraphs.length == 1) {
-      return Text.rich(TextSpan(children: _buildCommentTokenSpans(paragraphs.first)));
+      return Text.rich(TextSpan(
+          children: _buildCommentTokenSpans(paragraphs.first,
+              anchorPos: anchorPos, anchorPly: anchorPly)));
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (int i = 0; i < paragraphs.length; i++) ...[
           if (i > 0) const SizedBox(height: 8),
-          Text.rich(TextSpan(children: _buildCommentTokenSpans(paragraphs[i]))),
+          Text.rich(TextSpan(
+              children: _buildCommentTokenSpans(paragraphs[i],
+                  anchorPos: anchorPos, anchorPly: anchorPly))),
         ],
       ],
     );
@@ -479,7 +519,8 @@ class PgnMovetextView extends StatelessWidget {
 
   /// Build inline spans for a list of comment tokens: prose as flowing text,
   /// moves as clickable chips that replay their run on the board.
-  List<InlineSpan> _buildCommentTokenSpans(List<CommentToken> tokens) {
+  List<InlineSpan> _buildCommentTokenSpans(List<CommentToken> tokens,
+      {Position? anchorPos, int anchorPly = 0}) {
     // Collect the moves of each run (in order) so a click can replay the line.
     final runMoves = <int, List<CommentMove>>{};
     for (final t in tokens) {
@@ -487,6 +528,7 @@ class PgnMovetextView extends StatelessWidget {
     }
 
     const proseStyle = TextStyle(
+      fontFamily: 'monospace',
       fontSize: 13.5,
       height: 1.5,
       color: AppColors.pgnComment,
@@ -495,13 +537,162 @@ class PgnMovetextView extends StatelessWidget {
     final spans = <InlineSpan>[];
     for (final t in tokens) {
       if (t is CommentProse) {
-        spans.add(TextSpan(text: '${t.text} ', style: proseStyle));
+        // When we know the board at this comment, moves written inline in the
+        // prose (e.g. "…Ndf6") are detected and made clickable if legal.
+        if (anchorPos != null && onPlayInlineLine != null) {
+          spans.addAll(
+              _buildProseSpans(t.text, anchorPos, anchorPly, proseStyle));
+        } else {
+          spans.add(TextSpan(text: '${t.text} ', style: proseStyle));
+        }
       } else if (t is CommentMove) {
         spans.add(_buildCommentMoveSpan(t, runMoves[t.runId]!));
       }
     }
     return spans;
   }
+
+  /// Split a prose string into flowing text + clickable chips for any word that
+  /// parses as a *legal* SAN move from [anchorPos]. The legality check filters
+  /// out ordinary words that merely look move-ish.
+  List<InlineSpan> _buildProseSpans(
+      String text, Position anchorPos, int anchorPly, TextStyle proseStyle) {
+    final spans = <InlineSpan>[];
+    final buffer = StringBuffer();
+    void flushProse() {
+      if (buffer.isNotEmpty) {
+        spans.add(TextSpan(text: buffer.toString(), style: proseStyle));
+        buffer.clear();
+      }
+    }
+
+    final words = text.split(' ');
+    for (int wi = 0; wi < words.length; wi++) {
+      if (wi > 0) buffer.write(' ');
+      final word = words[wi];
+      if (word.isEmpty) continue;
+      final hit = _extractLegalSan(word, anchorPos);
+      if (hit == null) {
+        buffer.write(word);
+        continue;
+      }
+      buffer.write(hit.prefix);
+      flushProse();
+      spans.add(_buildProseMoveSpan(hit.san, anchorPly));
+      buffer.write(hit.suffix);
+    }
+    buffer.write(' ');
+    flushProse();
+    return spans;
+  }
+
+  /// Extract a legal SAN move from a single prose word, along with any leading
+  /// bracket / trailing punctuation to keep rendered separately. Returns null
+  /// when the word is not a legal move from [pos].
+  ({String prefix, String san, String suffix})? _extractLegalSan(
+      String word, Position pos) {
+    final lead = RegExp(r'^[(\["]+').firstMatch(word);
+    final prefix = lead?.group(0) ?? '';
+    var rest = word.substring(prefix.length);
+    final trail = RegExp(r'[)\]",;.!?]+$').firstMatch(rest);
+    final suffix = trail?.group(0) ?? '';
+    rest = rest.substring(0, rest.length - suffix.length);
+    if (rest.isEmpty) return null;
+    // Strip a leading move number / ellipsis (8., 12..., …) and trailing glyphs.
+    var core = rest
+        .replaceFirst(RegExp(r'^\d+\.{1,3}'), '')
+        .replaceFirst(RegExp(r'^\.{2,3}'), '')
+        .replaceFirst(RegExp(r'[!?+#]+$'), '');
+    if (core.isEmpty || !_sanCoreRe.hasMatch(core)) return null;
+    try {
+      if (pos.parseSan(core) == null) return null;
+    } catch (_) {
+      return null;
+    }
+    return (prefix: prefix, san: core, suffix: suffix);
+  }
+
+  /// A clickable chip for a single move detected inside prose. Plays the move
+  /// (a one-move inline line) from its anchor ply via [onPlayInlineLine].
+  WidgetSpan _buildProseMoveSpan(String san, int anchorPly) {
+    final coords = _coordsAtPly(anchorPly);
+    final active = activeInlineLine;
+    final isActive = active != null &&
+        active.cursor == 1 &&
+        active.firstMoveNumber == coords.moveNumber &&
+        active.firstIsWhite == coords.isWhite &&
+        active.sans.length == 1 &&
+        active.sans.first == san;
+
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onPlayInlineLine!(
+            coords.moveNumber, coords.isWhite, [san], 0),
+        child: Container(
+          decoration: isActive
+              ? BoxDecoration(
+                  color: AppColors.pgnMoveCurrentBg,
+                  borderRadius: BorderRadius.circular(3),
+                  border:
+                      Border.all(color: AppColors.pgnMoveCurrent, width: 1),
+                )
+              : BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(color: Colors.transparent, width: 1),
+                ),
+          child: Text(
+            san,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 13.5,
+              height: 1.5,
+              color: isActive ? AppColors.pgnMoveCurrentFg : AppColors.info,
+              fontWeight: FontWeight.normal,
+              decoration: isActive ? null : TextDecoration.underline,
+              decorationColor: AppColors.info.withValues(alpha: 0.4),
+              decorationStyle: TextDecorationStyle.dotted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The (fullmove number, side) of a move played at [ply] half-moves in.
+  ({int moveNumber, bool isWhite}) _coordsAtPly(int ply) {
+    final offset = startingWhiteTurn ? 0 : 1;
+    final abs = ply + offset;
+    return (
+      moveNumber: (abs ~/ 2) + startingMoveNumber,
+      isWhite: abs % 2 == 0,
+    );
+  }
+
+  /// Replay the mainline into a list of positions: `[k]` is the board after
+  /// `k` half-moves. Returns null when no start position is available.
+  List<Position>? _buildPrefixPositions() {
+    final start = startPosition;
+    if (start == null) return null;
+    final positions = <Position>[start];
+    Position pos = start;
+    for (final data in moveHistory) {
+      if (data.san == '--') {
+        positions.add(pos);
+        continue;
+      }
+      final move = pos.parseSan(data.san);
+      if (move == null) break;
+      pos = pos.play(move);
+      positions.add(pos);
+    }
+    return positions;
+  }
+
+  Position? _posAt(List<Position>? prefix, int ply) =>
+      (prefix != null && ply >= 0 && ply < prefix.length) ? prefix[ply] : null;
 
   /// A single clickable move chip inside a comment.
   WidgetSpan _buildCommentMoveSpan(CommentMove move, List<CommentMove> run) {
@@ -566,7 +757,8 @@ class PgnMovetextView extends StatelessWidget {
   }
 
   /// Build a rich comment block from Chessable-formatted content.
-  Widget _buildRichCommentBlock(List<RichSegment> segments) {
+  Widget _buildRichCommentBlock(List<RichSegment> segments,
+      {Position? anchorPos, int anchorPly = 0}) {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -586,14 +778,16 @@ class PgnMovetextView extends StatelessWidget {
         children: [
           for (int i = 0; i < segments.length; i++) ...[
             if (i > 0) const SizedBox(height: 6),
-            _buildRichSegmentWidget(segments[i]),
+            _buildRichSegmentWidget(segments[i],
+                anchorPos: anchorPos, anchorPly: anchorPly),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildRichSegmentWidget(RichSegment segment) {
+  Widget _buildRichSegmentWidget(RichSegment segment,
+      {Position? anchorPos, int anchorPly = 0}) {
     switch (segment.type) {
       case RichSegmentType.header:
         return Padding(
@@ -601,6 +795,7 @@ class PgnMovetextView extends StatelessWidget {
           child: Text(
             segment.content,
             style: const TextStyle(
+              fontFamily: 'monospace',
               fontSize: 15,
               fontWeight: FontWeight.bold,
               height: 1.4,
@@ -627,6 +822,7 @@ class PgnMovetextView extends StatelessWidget {
           child: Text(
             segment.content,
             style: TextStyle(
+              fontFamily: 'monospace',
               fontSize: 13,
               height: 1.5,
               fontStyle: FontStyle.italic,
@@ -639,6 +835,7 @@ class PgnMovetextView extends StatelessWidget {
         return Text(
           '[${segment.content}]',
           style: TextStyle(
+            fontFamily: 'monospace',
             fontSize: 13,
             height: 1.4,
             fontStyle: FontStyle.italic,
@@ -684,6 +881,7 @@ class PgnMovetextView extends StatelessWidget {
         return Text(
           segment.content,
           style: const TextStyle(
+            fontFamily: 'monospace',
             fontSize: 13.5,
             height: 1.5,
             color: AppColors.info,
@@ -693,7 +891,8 @@ class PgnMovetextView extends StatelessWidget {
         );
 
       case RichSegmentType.text:
-        return _buildTokenParagraphs(parseCommentTokens(segment.content));
+        return _buildTokenParagraphs(parseCommentTokens(segment.content),
+            anchorPos: anchorPos, anchorPly: anchorPly);
     }
   }
 
@@ -848,6 +1047,7 @@ class PgnMovetextView extends StatelessWidget {
           child: Text(
             '$filtered ',
             style: const TextStyle(
+              fontFamily: 'monospace',
               fontSize: 13.5,
               height: 1.4,
               color: AppColors.pgnComment,

@@ -299,8 +299,6 @@ class PgnViewerController extends ChangeNotifier {
   /// All-time trophy count (cached from service).
   int totalTrophyCount = 0;
 
-  int? activeEngineLineMoveIdx;
-
   GameSortMode sortMode = GameSortMode.fileOrder;
 
   List<String> recentFiles = [];
@@ -611,7 +609,6 @@ class PgnViewerController extends ChangeNotifier {
     stopAutoPlay();
     analysisController.cancel();
     currentPosition = Chess.initial;
-    activeEngineLineMoveIdx = null;
     orientBoardForCurrentGame();
     final game = filteredGames[currentGameIndex];
     await analysisController.tryLoadFromPgn(game.pgnText);
@@ -906,10 +903,6 @@ class PgnViewerController extends ChangeNotifier {
 
   void onPositionChanged(Position pos) {
     currentPosition = pos;
-    if (activeEngineLineMoveIdx != null &&
-        pgnWidgetController.variationDepth == 0) {
-      activeEngineLineMoveIdx = null;
-    }
     notifyListeners();
   }
 
@@ -1224,7 +1217,6 @@ class PgnViewerController extends ChangeNotifier {
       pgnWidgetController.goBack();
     }
 
-    activeEngineLineMoveIdx = clickedIndex;
     notifyListeners();
     onReclaimFocus?.call();
   }

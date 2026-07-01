@@ -74,11 +74,16 @@ MoveNode? _convertPgnSubtree(
           ? pgnNode.data.comments!.first
           : null;
 
+  final nags = (pgnNode.data.nags != null && pgnNode.data.nags!.isNotEmpty)
+      ? pgnNode.data.nags!.toList()
+      : null;
+
   final node = MoveNode(
     san: san,
     fen: posAfter.fen,
     isEphemeral: false,
     comment: comment,
+    nags: nags,
   );
 
   for (int i = 0; i < pgnNode.children.length; i++) {
