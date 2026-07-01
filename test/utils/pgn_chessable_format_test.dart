@@ -183,6 +183,60 @@ void main() {
     });
   });
 
+  group('parseCommentTokens — bare FEN anchors (book PGNs)', () {
+    const fen = 'r1bqkbnr/pp1ppp1p/2n3p1/8/3NP3/8/PPP2PPP/RNBQKB1R w KQkq - 1 5';
+
+    test('hides the FEN and anchors the following run to it', () {
+      final tokens = parseCommentTokens(
+          'The next part is about more normal Dragon play after $fen\n'
+          '5.Nc3\nBg7\n6.Be3');
+
+      // FEN itself is never emitted as a token.
+      expect(tokens.whereType<CommentProse>().any((p) => p.text.contains('/')),
+          false);
+      // Surrounding prose survives.
+      expect(tokens.first, isA<CommentProse>());
+      expect((tokens.first as CommentProse).text, contains('Dragon play after'));
+
+      final moves = tokens.whereType<CommentMove>().toList();
+      expect(moves.map((m) => m.san), ['Nc3', 'Bg7', 'Be3']);
+      // Every move of the run carries the FEN anchor.
+      expect(moves.every((m) => m.anchorFen == fen), true);
+      // And they form one contiguous run.
+      expect(moves.map((m) => m.runId).toSet().length, 1);
+      // Numbering aligns with the FEN (White to move, fullmove 5).
+      expect(moves[0].moveNumber, 5);
+      expect(moves[0].isWhite, true);
+      expect(moves[1].isWhite, false); // Bg7 = Black's 5th
+    });
+
+    test('an unnumbered first move is seeded from the FEN side/number', () {
+      final tokens = parseCommentTokens('special attention to $fen\nNc3');
+      final move = tokens.whereType<CommentMove>().single;
+      expect(move.san, 'Nc3');
+      expect(move.moveNumber, 5);
+      expect(move.isWhite, true);
+      expect(move.anchorFen, fen);
+    });
+
+    test('non-FEN inline lines keep a null anchor', () {
+      final tokens = parseCommentTokens('Or  40.cxb5  c4!-+  , winning.');
+      expect(
+          tokens.whereType<CommentMove>().every((m) => m.anchorFen == null),
+          true);
+    });
+
+    test('an invalid FEN-looking token stays as prose', () {
+      // 9 ranks — not a legal FEN, must not be swallowed.
+      const bad = 'r1bqkbnr/pp/pp/pp/pp/pp/pp/pp/pp w KQkq - 1 5';
+      final tokens = parseCommentTokens('see $bad here');
+      expect(tokens.whereType<CommentProse>().any((p) => p.text.contains('r1bqkbnr')),
+          true);
+      expect(tokens.whereType<CommentMove>().every((m) => m.anchorFen == null),
+          true);
+    });
+  });
+
   group('filterDisplayComment', () {
     test('strips @@ markers but keeps content', () {
       final result = filterDisplayComment(

@@ -501,12 +501,19 @@ class CommentMove extends CommentToken {
   /// move replays its whole run from the run's first move.
   final int runId;
 
+  /// When non-null, the run this move belongs to starts from this FEN position
+  /// (a bare FEN dropped in the comment prose) rather than the mainline. Book
+  /// PGNs use this to attach analysis lines to positions unrelated to the
+  /// current move. Replayed from the FEN instead of by move number.
+  final String? anchorFen;
+
   const CommentMove({
     required this.san,
     required this.display,
     required this.moveNumber,
     required this.isWhite,
     required this.runId,
+    this.anchorFen,
   });
 
   bool get isClickable => moveNumber >= 0;
@@ -537,15 +544,47 @@ final _commentMoveRe = RegExp(
 /// token separators in the book-PGN convention.
 final _commentTokenSplitRe = RegExp(r'\n|---|\s{2,}');
 
+/// Matches a full FEN embedded in comment prose: board (8 ranks) / side /
+/// castling / en-passant / halfmove / fullmove. Book PGNs (Chessable) drop a
+/// bare FEN in front of an analysis line to mark that line's start position.
+final _fenRe = RegExp(
+  r'(?:[pnbrqkPNBRQK1-8]+/){7}[pnbrqkPNBRQK1-8]+ [wb] (?:-|[KQkq]+) '
+  r'(?:-|[a-h][36]) \d+ \d+',
+);
+
+/// True when [fen] parses as a legal position setup.
+bool _isValidFen(String fen) {
+  try {
+    Setup.parseFen(fen);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// The (moveNumber, isWhite) of the ply *before* the side to move in [fen],
+/// used to seed inline move-number continuity so an unnumbered first move after
+/// the FEN lands on the right ply. Null when the FEN is the very first ply.
+({int number, bool white})? _fenPrevPly(String fen) {
+  final fields = fen.split(' ');
+  if (fields.length < 6) return null;
+  final fullmove = int.tryParse(fields[5]);
+  if (fullmove == null) return null;
+  if (fields[1] == 'w') {
+    // White to move on `fullmove`: previous ply was Black's move fullmove-1.
+    if (fullmove <= 1) return null;
+    return (number: fullmove - 1, white: false);
+  }
+  // Black to move: White has just moved on `fullmove`.
+  return (number: fullmove, white: true);
+}
+
 /// Parse engine-stripped comment text into prose / move tokens.
 ///
 /// Pass the output of [stripEngineTokens] (which preserves the double-space
 /// structure), or a [RichSegment] text body (whose `\n`s mark token breaks).
 List<CommentToken> parseCommentTokens(String text) {
-  final parts = text
-      .split(_commentTokenSplitRe)
-      .map((s) => s.trim())
-      .where((s) => s.isNotEmpty);
+  final rawParts = text.split(_commentTokenSplitRe);
 
   final tokens = <CommentToken>[];
   var runId = 0;
@@ -553,23 +592,33 @@ List<CommentToken> parseCommentTokens(String text) {
   // unnumbered moves and to decide run membership by move-number continuity.
   int? lastNumber;
   bool? lastWhite;
+  // A bare FEN in the prose anchors the *next* run to that position instead of
+  // the mainline. `pending` is armed by a FEN and consumed by the first move of
+  // the run it opens; the anchor then stays attached to that run's moves.
+  String? pendingAnchorFen;
+  String? activeRunAnchorFen;
+  int? anchoredRunId;
+  var forceNewRun = false;
 
-  for (final part in parts) {
+  void handleMove(String part) {
     final m = _commentMoveRe.firstMatch(part);
     if (m == null) {
       tokens.add(CommentProse(part));
-      continue;
+      return;
     }
 
     final numStr = m.group(1);
     final dots = m.group(2);
 
-    // Expected successor ply of the previous move.
+    // Expected successor ply of the previous move. (Copied into locals so they
+    // promote — the closure captures the mutable outer fields.)
+    final ln = lastNumber;
+    final lw = lastWhite;
     int? expectedNumber;
     bool? expectedWhite;
-    if (lastNumber != null && lastWhite != null) {
-      expectedNumber = lastWhite ? lastNumber : lastNumber + 1;
-      expectedWhite = !lastWhite;
+    if (ln != null && lw != null) {
+      expectedNumber = lw ? ln : ln + 1;
+      expectedWhite = !lw;
     }
 
     int number;
@@ -589,12 +638,23 @@ List<CommentToken> parseCommentTokens(String text) {
     // A move continues the current line when it is exactly the expected
     // successor of the previous move; otherwise it starts a new run. Lines
     // survive interspersed prose ("... is a draw: 43.Rxc4+ ...") but break
-    // when the analysis jumps back to try a different move.
-    final continues = number >= 0 &&
+    // when the analysis jumps back to try a different move. A FEN always forces
+    // a fresh run so its line isn't glued onto the preceding one.
+    final continues = !forceNewRun &&
+        number >= 0 &&
         expectedNumber != null &&
         number == expectedNumber &&
         white == expectedWhite;
     if (!continues) runId++;
+
+    // Attach a freshly-armed FEN anchor to the run this move opens; the anchor
+    // then carries to the run's continuation moves.
+    if (forceNewRun && pendingAnchorFen != null) {
+      activeRunAnchorFen = pendingAnchorFen;
+      anchoredRunId = runId;
+      pendingAnchorFen = null;
+    }
+    forceNewRun = false;
 
     tokens.add(CommentMove(
       san: m.group(3)!,
@@ -602,6 +662,7 @@ List<CommentToken> parseCommentTokens(String text) {
       moveNumber: number,
       isWhite: white,
       runId: runId,
+      anchorFen: runId == anchoredRunId ? activeRunAnchorFen : null,
     ));
 
     if (number >= 0) {
@@ -611,6 +672,35 @@ List<CommentToken> parseCommentTokens(String text) {
       lastNumber = null;
       lastWhite = null;
     }
+  }
+
+  for (final raw in rawParts) {
+    final part = raw.trim();
+    if (part.isEmpty) continue;
+
+    // Move tokens never contain a FEN — handle directly.
+    if (_commentMoveRe.hasMatch(part)) {
+      handleMove(part);
+      continue;
+    }
+
+    // Prose: pull out any embedded FEN(s), emitting the surrounding text and
+    // arming the anchor for the following run. The FEN itself is not rendered.
+    var cursor = 0;
+    for (final match in _fenRe.allMatches(part)) {
+      final fen = match.group(0)!;
+      if (!_isValidFen(fen)) continue;
+      final before = part.substring(cursor, match.start).trim();
+      if (before.isNotEmpty) handleMove(before);
+      pendingAnchorFen = fen;
+      forceNewRun = true;
+      final seed = _fenPrevPly(fen);
+      lastNumber = seed?.number;
+      lastWhite = seed?.white;
+      cursor = match.end;
+    }
+    final after = part.substring(cursor).trim();
+    if (after.isNotEmpty) handleMove(after);
   }
 
   return tokens;
