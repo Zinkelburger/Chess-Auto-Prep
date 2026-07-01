@@ -69,6 +69,10 @@ build/
 *.lock
 !pubspec.lock
 
+# Flutter-generated, machine-specific (absolute pub-cache paths)
+.flutter-plugins-dependencies
+**/flutter/ephemeral/
+
 # Project specific
 maia2_models/
 lichess_output.txt
