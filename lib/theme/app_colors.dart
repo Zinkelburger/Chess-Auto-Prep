@@ -156,6 +156,12 @@ abstract final class AppColors {
   /// (10:1) so even the alpha-dimmed blockquote/bracket/FEN variants clear AA.
   static const pgnComment = Color(0xFFBDBDBD);
 
+  /// Solid, near-black fill for bordered comment blocks. Replaces the old
+  /// translucent gray wash (which muddied to ~#232323) with a clean panel that
+  /// sits just above the movetext surface (#121212) and pairs with the
+  /// [pgnComment] accent border. Prose text on it clears ~9.5:1.
+  static const pgnCommentBlockBg = Color(0xFF181818);
+
   static Color pgnMainLineColor({bool muted = false}) =>
       muted ? pgnMainLineMuted : pgnMainLine;
   static Color pgnEphemeralColor({bool muted = false}) =>
