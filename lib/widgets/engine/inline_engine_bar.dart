@@ -34,15 +34,11 @@ class InlineEngineBar extends StatefulWidget {
   final void Function(List<String> sanMoves, int clickedIndex)?
       onLineMoveTapped;
 
-  /// Which move index (0-based) in the engine line is currently active/highlighted.
-  final int? activeLineMoveIndex;
-
   const InlineEngineBar({
     super.key,
     required this.fen,
     this.isActive = true,
     this.onLineMoveTapped,
-    this.activeLineMoveIndex,
   });
 
   /// Whether the engine is currently enabled (static, shared across instances).
@@ -331,7 +327,6 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   Widget _buildLineRow(BuildContext context, DiscoveryLine line) {
     final sanMoves = _pvToSanList(widget.fen, line.pv);
     final san = sanMoves.isNotEmpty ? sanMoves.first : '?';
-    final isFirstActive = widget.activeLineMoveIndex == 0 && line.pvNumber == 1;
 
     final evalStr =
         formatEvalDisplay(scoreCp: line.scoreCp, scoreMate: line.scoreMate);
@@ -351,19 +346,12 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                       onTap: () => widget.onLineMoveTapped!(sanMoves, 0),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 2),
-                        decoration: isFirstActive
-                            ? BoxDecoration(
-                                color: AppColors.pgnMainLine,
-                                borderRadius: BorderRadius.circular(3),
-                              )
-                            : null,
                         child: Text(
                           san,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontFamily: 'monospace',
                             fontSize: 14,
-                            color: isFirstActive ? Colors.white : null,
                           ),
                         ),
                       ),
@@ -398,14 +386,14 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
           ),
           const SizedBox(width: 6),
           Expanded(
-            child: _buildClickableContinuation(sanMoves, line.pvNumber == 1),
+            child: _buildClickableContinuation(sanMoves),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildClickableContinuation(List<String> sanMoves, bool isPv1) {
+  Widget _buildClickableContinuation(List<String> sanMoves) {
     if (sanMoves.length <= 1) return const SizedBox.shrink();
 
     final fenParts = widget.fen.split(' ');
@@ -421,7 +409,6 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       startIndex: 1,
       maxMoves: 7,
       fontSize: 12,
-      activeMoveIndex: isPv1 ? widget.activeLineMoveIndex : null,
       onMoveTapped: widget.onLineMoveTapped != null
           ? (idx) => widget.onLineMoveTapped!(sanMoves, idx)
           : null,

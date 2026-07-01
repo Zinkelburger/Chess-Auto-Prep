@@ -524,6 +524,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       _tabController
           .animateTo((_tabController.index + 1) % _tabController.length);
       return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyR && hasNoLetterModifiers) {
+      if (_pgnWidgetController.inVariation) {
+        _pgnWidgetController.returnToMainline();
+      }
+      return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.keyT && hasNoLetterModifiers) {
       _controller.toggleOpeningTree();
       return KeyEventResult.handled;
@@ -704,6 +709,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                     : null,
               ),
               tooltip: 'Opening tree (T)',
+            ),
+            IconButton(
+              onPressed: _toggleEditMode,
+              icon: Icon(
+                _editMode ? Icons.edit : Icons.edit_outlined,
+                size: 20,
+                color:
+                    _editMode ? Theme.of(context).colorScheme.primary : null,
+              ),
+              tooltip: 'Edit PGN — annotate & extend the mainline, '
+                  'saved to disk (A)',
             ),
           ],
           IconButton(
@@ -1067,11 +1083,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           InlineEngineBar(
             fen: _controller.currentPosition.fen,
             onLineMoveTapped: _controller.onEngineLineMoveTapped,
-            activeLineMoveIndex: _controller.activeEngineLineMoveIdx != null
-                ? (_pgnWidgetController.variationDepth > 0
-                    ? _pgnWidgetController.variationDepth - 1
-                    : _controller.activeEngineLineMoveIdx)
-                : null,
           ),
         if (_controller.isSolitaireMode) _buildSolitaireStatusBar(),
         const Divider(height: 1),
