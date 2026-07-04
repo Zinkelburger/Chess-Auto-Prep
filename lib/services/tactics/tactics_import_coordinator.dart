@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/tactics_position.dart';
 import '../../utils/app_messages.dart';
+import '../../utils/log.dart';
 import '../tactics_database.dart';
 import '../tactics_import_service.dart' show ImportResult, TacticsImportService;
 
@@ -106,16 +107,21 @@ class TacticsImportCoordinator extends ChangeNotifier {
     }
   }
 
-  Future<void> import({
+  /// Runs an import to completion. Returns `true` when a result was produced,
+  /// `false` when it was skipped because another import is already running.
+  /// Throws [TacticsImportUsernameRequired] for an empty username; other
+  /// failures propagate to the caller.
+  Future<bool> import({
     required TacticsImportSource source,
     required TacticsImportParams params,
   }) async {
-    if (isImporting) return;
+    if (isImporting) return false;
     if (params.username.isEmpty) {
       throw const TacticsImportUsernameRequired();
     }
 
-    final importService = activeImport = TacticsImportService(database: database);
+    final importService =
+        activeImport = TacticsImportService(database: database);
     final depth = params.depth.clamp(1, 25);
     final cores = params.cores.clamp(1, TacticsImportService.availableCores);
 
@@ -156,6 +162,7 @@ class TacticsImportCoordinator extends ChangeNotifier {
       await database.loadPositions();
       importStatus = _statusMessage(result);
       notifyListeners();
+      return true;
     } finally {
       activeImport = null;
       isImporting = false;
@@ -166,6 +173,52 @@ class TacticsImportCoordinator extends ChangeNotifier {
             source == TacticsImportSource.chessCom ? params.username : null,
       );
     }
+  }
+
+  /// Fetch new games since the last fetch for every configured platform.
+  /// Used by startup auto-fetch. Failures are logged and dismissed; a
+  /// successful fetch reports its timestamp through [onFetched] so the
+  /// caller can persist it.
+  Future<void> autoFetch({
+    String? lichessUsername,
+    String? chesscomUsername,
+    DateTime? lichessLastFetch,
+    DateTime? chesscomLastFetch,
+    required int depth,
+    required int cores,
+    void Function(TacticsImportSource source, DateTime fetchedAt)? onFetched,
+  }) async {
+    Future<void> fetchOne(
+      TacticsImportSource source,
+      String? username,
+      DateTime? since,
+    ) async {
+      if (username == null || username.isEmpty) return;
+      try {
+        final imported = await import(
+          source: source,
+          params: TacticsImportParams(
+            username: username,
+            mode: TacticsImportMode.sinceDate,
+            since: since ?? DateTime.now().subtract(const Duration(days: 7)),
+            depth: depth,
+            cores: cores,
+          ),
+        );
+        if (imported) {
+          onFetched?.call(source, DateTime.now());
+        }
+      } catch (e) {
+        log.w('Auto-fetch ${source.name} failed: $e',
+            name: 'TacticsImportCoordinator');
+        dismissImportStatus();
+      }
+    }
+
+    await fetchOne(
+        TacticsImportSource.lichess, lichessUsername, lichessLastFetch);
+    await fetchOne(
+        TacticsImportSource.chessCom, chesscomUsername, chesscomLastFetch);
   }
 
   void cancelImport() {
