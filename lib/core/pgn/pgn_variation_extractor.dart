@@ -1,6 +1,6 @@
 /// Pure conversion from a parsed PGN tree into per-ply sideline variations.
 ///
-/// Extracted from `pgn_viewer_widget.dart` (WS-C / B2). These are stateless
+/// Extracted from `pgn_viewer_widget.dart`. These are stateless
 /// helpers: given a [PgnGame] and its start position, they build the
 /// `ply -> root variation nodes` map the movetext view renders.
 library;

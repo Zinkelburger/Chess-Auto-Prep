@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/audit_finding.dart';
 
-/// One row in the audit findings list. Extracted from `audit_findings_panel`
-/// (MAINTAINABILITY_PLAN WS-E). Pure presentation: the parent supplies the
+/// One row in the audit findings list. Extracted from `audit_findings_panel`.
+/// Pure presentation: the parent supplies the
 /// resolved [color]/[icon] and the action callbacks.
 class FindingTile extends StatelessWidget {
   final AuditFinding finding;

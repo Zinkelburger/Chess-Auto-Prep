@@ -1,7 +1,6 @@
 /// Engine-resources panel for the generation config form: shows logical-core
 /// info, the Stockfish UCI-threads field, and live thread/hash stat chips.
-/// Extracted from `GenerationConfigForm`
-/// (MAINTAINABILITY_PLAN WS-E / runbook A6).
+/// Extracted from `GenerationConfigForm`.
 library;
 
 import 'package:flutter/material.dart';

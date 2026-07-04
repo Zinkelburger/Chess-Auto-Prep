@@ -1,6 +1,5 @@
 /// Footer row showing the dismissed-findings count with a "Restore all"
-/// action, extracted from `AuditFindingsPanel`
-/// (MAINTAINABILITY_PLAN WS-E / runbook A5).
+/// action, extracted from `AuditFindingsPanel`.
 library;
 
 import 'package:flutter/material.dart';

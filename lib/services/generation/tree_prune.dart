@@ -1,4 +1,4 @@
-/// Pure tree-shaping helpers extracted from `tree_build_service.dart` (WS-A / B6).
+/// Pure tree-shaping helpers extracted from `tree_build_service.dart`.
 ///
 /// These operate only on the [BuildTree]/[BuildTreeNode] structures passed in —
 /// no engine, network, or service state — so their behavior can be locked in

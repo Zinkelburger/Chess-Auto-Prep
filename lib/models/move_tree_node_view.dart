@@ -5,8 +5,7 @@
 /// `OpeningTreeNode`. This interface lets a single cursor / navigation /
 /// serializer / display routine work across all of them without coupling to a
 /// concrete type. (`MoveNode` now also serves the analysis viewer, which
-/// previously had its own identical `AnalysisNode`.) See
-/// `docs/MAINTAINABILITY_PLAN.md` WS-B.
+/// previously had its own identical `AnalysisNode`.)
 ///
 /// It is intentionally read-only — mutation stays on the concrete classes.
 library;

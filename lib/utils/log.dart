@@ -1,6 +1,6 @@
 /// Tiny logging facade for the app.
 ///
-/// Replaces ad-hoc `print()` calls (see `docs/MAINTAINABILITY_PLAN.md` WS-D).
+/// Replaces ad-hoc `print()` calls.
 /// Routes through `dart:developer.log` so output is structured and filterable;
 /// debug/info are suppressed in release builds while warnings/errors always
 /// surface. No external dependency.

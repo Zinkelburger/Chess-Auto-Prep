@@ -5,8 +5,6 @@
 /// [TreePath] cursor. This mixin provides that one implementation. Implementors
 /// supply [tree], [path], and [jump] (which may do extra work such as syncing
 /// derived state); the directional helpers are defined in terms of those.
-///
-/// See `docs/MAINTAINABILITY_PLAN.md` WS-B (B2).
 library;
 
 import '../models/move_tree.dart';

@@ -1,6 +1,6 @@
 /// Status row for the audit findings panel: audit progress / findings counter,
 /// the visible-cap editor, and the dismissed-visibility toggle. Extracted from
-/// `AuditFindingsPanel` (MAINTAINABILITY_PLAN WS-E / runbook A5).
+/// `AuditFindingsPanel`.
 library;
 
 import 'package:flutter/material.dart';

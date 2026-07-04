@@ -1,5 +1,5 @@
 /// SharedPreferences IO for per-file PGN slice configs, extracted from
-/// `PgnViewerController` (MAINTAINABILITY_PLAN WS-C / runbook A3).
+/// `PgnViewerController`.
 ///
 /// Holds only the load/save/clear of the JSON-encoded [SliceConfig] keyed by
 /// PGN path. The controller keeps `applySlice`/`resetFilters`/`removeSliceChip`
