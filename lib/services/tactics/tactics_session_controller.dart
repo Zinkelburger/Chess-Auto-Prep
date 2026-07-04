@@ -57,6 +57,12 @@ class TacticsSessionController extends ChangeNotifier {
   /// Full position load (e.g. auto-advance to next puzzle).
   void Function(TacticsPositionSetup setup)? onPositionSetup;
 
+  /// Free-play moves (analysis mode, or after the puzzle is resolved).
+  void Function(String moveUci)? onAnalysisMove;
+
+  /// A user move was accepted and advanced the solution line.
+  VoidCallback? onUserMoveAccepted;
+
   TacticsPosition? currentPosition;
   bool positionSolved = false;
   bool attemptRecorded = false;
@@ -204,6 +210,39 @@ class TacticsSessionController extends ChangeNotifier {
     if (index != -1) {
       currentPosition = database.positions[index];
       notifyListeners();
+    }
+  }
+
+  /// Entry point for a move played on the tactics board or typed into the
+  /// move input. Routes to [onAnalysisMove] when not in an active puzzle
+  /// attempt, otherwise validates the move against the solution line and
+  /// pushes the result through [onBoardUpdate] / [onUserMoveAccepted].
+  void handleMoveAttempted({
+    required String moveUci,
+    required String boardFen,
+    required bool inAnalysisMode,
+    TacticsSchedule? schedule,
+    TacticsIsMounted? isMounted,
+  }) {
+    if (currentPosition == null) return;
+
+    if (inAnalysisMode || positionSolved || showSolution) {
+      onAnalysisMove?.call(moveUci);
+      return;
+    }
+
+    final prevIndex = currentMoveIndex;
+    final update = processMoveAttempt(
+      moveUci: moveUci,
+      boardFen: boardFen,
+      schedule: schedule ?? (delay, action) => Future.delayed(delay, action),
+      isMounted: isMounted ?? () => true,
+    );
+    if (update != null) {
+      onBoardUpdate?.call(update);
+      if (currentMoveIndex > prevIndex) {
+        onUserMoveAccepted?.call();
+      }
     }
   }
 

@@ -32,7 +32,6 @@ import '../widgets/layout/board_zone.dart';
 import '../widgets/layout/bottom_pane.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
 import '../widgets/repertoire_list_body.dart';
-import '../widgets/layout/jobs_panel.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';
 import '../widgets/repertoire/repertoire_toolbar.dart';
@@ -42,21 +41,22 @@ import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/engine/inline_expectimax_bar.dart';
 import '../services/jobs/repertoire_job.dart';
 import '../features/audit/models/audit_finding.dart';
-import '../features/audit/widgets/audit_config_panel.dart';
+import '../features/audit/services/audit_board_annotations.dart';
 import '../features/audit/widgets/audit_findings_panel.dart';
+import '../features/audit/widgets/ephemeral_finding_bar.dart';
 import '../features/traps/widgets/trap_navigation_buttons.dart';
 import '../features/traps/widgets/trap_walkthrough.dart';
-import '../features/traps/widgets/traps_browser.dart';
+import '../features/traps/widgets/traps_tab_content.dart';
 import '../widgets/engine/floating_board_preview.dart';
 import '../features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import '../services/generation/trap_extractor.dart';
 import '../services/games_library/games_library_service.dart';
-import '../services/games_repertoire/games_draft.dart';
+import '../services/games_repertoire/games_draft_controller.dart';
 import '../theme/app_colors.dart';
-import '../services/unified_analysis_builder.dart';
 import '../widgets/games_repertoire/games_source_form.dart';
 import '../widgets/games_repertoire/draft_review_pane.dart';
+import '../widgets/layout/jobs_tab_content.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import 'repertoire_selection_screen.dart';
 
@@ -109,14 +109,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   bool _showTrapsInLinesTab = false;
 
   // ── Build-from-games draft session (inline in the Lines/Draft tab) ──
-  GamesDraft? _activeDraft;
-  bool _activeDraftIsWhite = true;
-  String _activeDraftLabel = '';
-  bool _buildingDraft = false;
-  String _draftProgress = '';
-  final GamesLibraryService _gamesLibrary = GamesLibraryService();
+  final GamesDraftController _draftController = GamesDraftController();
 
-  bool get _isDraftActive => _activeDraft != null || _buildingDraft;
+  bool get _isDraftActive => _draftController.isActive;
 
   String? _lastRepertoireId;
 
@@ -134,6 +129,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _generationController.addListener(_onGenerationChanged);
     _auditController.addListener(_onAuditChanged);
     _coverageController.addListener(_onCoverageChanged);
+    _draftController.addListener(_onDraftChanged);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -288,7 +284,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           _boardFlipped = !_controller.isRepertoireWhite;
           _generationController.clearTree();
           _coverageController.clear();
-          EngineSettings().probabilityStartMoves = _controller.rootMoves;
+          EngineSettings.instance.probabilityStartMoves = _controller.rootMoves;
           _loadTraps(currentId);
           newRepertoireId = currentId;
         }
@@ -344,6 +340,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _toolsTabController.dispose();
     _focusNode.dispose();
     _boardPreview.dispose();
+    _draftController.removeListener(_onDraftChanged);
+    _draftController.dispose();
     _coverageController.removeListener(_onCoverageChanged);
     _coverageController.dispose();
     _auditController.removeListener(_onAuditChanged);
@@ -672,138 +670,25 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             onPause: _generationController.pauseBuild,
             onResume: _generationController.resumeBuild,
             onCancel: _generationController.cancelBuild,
-            annotations: _buildBoardAnnotations(),
+            annotations: buildAuditBoardAnnotations(
+              result: _auditController.result,
+              currentFen: _controller.fen,
+            ),
           ),
         ),
-        if (_ephemeralFinding != null) _buildEphemeralBar(),
-      ],
-    );
-  }
-
-  Widget _buildEphemeralBar() {
-    final finding = _ephemeralFinding!;
-    final move = finding.missingMove ?? '?';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.blue.withAlpha(30),
-        border: Border(top: BorderSide(color: Colors.blue.withAlpha(80))),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.visibility_off_outlined,
-              size: 14, color: Colors.blue),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              'Missing: $move (preview)',
-              style: const TextStyle(fontSize: 12, color: Colors.blue),
-            ),
-          ),
-          TextButton.icon(
-            onPressed: _createNewLineFromEphemeral,
-            icon: const Icon(Icons.open_in_new, size: 14),
-            label: const Text('Go to position', style: TextStyle(fontSize: 11)),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.blue,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(Icons.close, size: 14, color: Colors.grey),
-            onPressed: () {
+        if (_ephemeralFinding != null)
+          EphemeralFindingBar(
+            finding: _ephemeralFinding!,
+            onGoToPosition: _createNewLineFromEphemeral,
+            onDismiss: () {
               setState(() {
                 _ephemeralFinding = null;
                 _ephemeralFen = null;
               });
             },
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
           ),
-        ],
-      ),
+      ],
     );
-  }
-
-  /// Build board annotations from audit findings at the current position.
-  ///
-  /// Uses the dartchess library to resolve SAN moves to origin/dest squares
-  /// for drawing arrows. Limited to 6 annotations to avoid visual clutter.
-  List<BoardAnnotation> _buildBoardAnnotations() {
-    final result = _auditController.result;
-    if (result == null) return const [];
-
-    final currentFen = _controller.fen;
-    final fenPrefix = currentFen.split(' ').take(4).join(' ');
-
-    final relevant = result.findings.where((f) {
-      if (f.dismissed) return false;
-      final fFenPrefix = f.fen.split(' ').take(4).join(' ');
-      return fFenPrefix == fenPrefix;
-    }).toList();
-
-    if (relevant.isEmpty) return const [];
-
-    final annotations = <BoardAnnotation>[];
-    const maxAnnotations = 6;
-
-    Position? pos;
-    try {
-      pos = Chess.fromSetup(Setup.parseFen(currentFen));
-    } catch (e) {
-      log.d('Invalid FEN for audit annotations: $e', name: 'RepertoireScreen');
-      return const [];
-    }
-
-    for (final f in relevant) {
-      if (annotations.length >= maxAnnotations) break;
-
-      final (brush, san) = switch (f.type) {
-        AuditFindingType.mistake => (AnnotationBrush.red, f.ourMove),
-        AuditFindingType.inaccuracy => (AnnotationBrush.yellow, f.ourMove),
-        AuditFindingType.missingResponse => (
-            AnnotationBrush.blue,
-            f.missingMove
-          ),
-        _ => (AnnotationBrush.green, null as String?),
-      };
-
-      if (san == null) continue;
-
-      final squares = _sanToSquares(pos, san);
-      if (squares != null) {
-        annotations.add(BoardAnnotation(
-          orig: squares.$1,
-          dest: squares.$2,
-          brush: brush,
-        ));
-      }
-    }
-
-    return annotations;
-  }
-
-  /// Resolve a SAN move to (from, to) square names using dartchess.
-  (String, String)? _sanToSquares(Position pos, String san) {
-    try {
-      final move = pos.parseSan(san);
-      if (move is NormalMove) {
-        return (_squareName(move.from), _squareName(move.to));
-      }
-    } catch (e) {
-      log.d('Failed to parse SAN "$san": $e', name: 'RepertoireScreen');
-    }
-    return null;
-  }
-
-  String _squareName(int sq) {
-    final file = String.fromCharCode(97 + (sq % 8));
-    final rank = (sq ~/ 8) + 1;
-    return '$file$rank';
   }
 
   /// Unified right pane: tabs + nav. Engine bars live inside PGN tab only.
@@ -830,7 +715,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   /// Second tools tab: normally the Lines list, but it becomes the Draft
   /// review surface while a build-from-games session is active.
   Widget _buildSecondTabContent() {
-    if (_buildingDraft) {
+    if (_draftController.isBuilding) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -839,20 +724,21 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(_draftProgress, textAlign: TextAlign.center),
+              child: Text(_draftController.progress,
+                  textAlign: TextAlign.center),
             ),
           ],
         ),
       );
     }
-    final draft = _activeDraft;
+    final draft = _draftController.draft;
     if (draft != null) {
       return DraftReviewPane(
         draft: draft,
-        isWhite: _activeDraftIsWhite,
+        isWhite: _draftController.isWhite,
         controller: _controller,
-        sourceLabel: _activeDraftLabel,
-        onClose: _closeDraft,
+        sourceLabel: _draftController.sourceLabel,
+        onClose: _draftController.close,
         onSelectLine: (sans) => _controller.loadMoveSequence(sans),
       );
     }
@@ -1035,131 +921,51 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildJobsContent() {
-    if (_showInlineGenConfig && !_generationController.isGenerating) {
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
-            child: Row(
-              children: [
-                const Icon(Icons.auto_awesome, size: 16),
-                const SizedBox(width: 6),
-                const Text('Generate Repertoire',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: () => setState(() => _showInlineGenConfig = false),
-                  tooltip: 'Close',
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: RepertoireGenerationTab(
-              key: _generationTabKey,
-              fen: _controller.fen,
-              isWhiteRepertoire: _controller.isRepertoireWhite,
-              currentRepertoire: _controller.currentRepertoire,
-              currentMoveSequence: _controller.currentMoveSequence,
-              generationController: _generationController,
-              onLineSaved: (moves, title, pgn) {
-                _controller.appendNewLine(moves, title, pgn);
-              },
-            ),
-          ),
-        ],
-      );
-    }
-
-    if (_showInlineAuditConfig && !_auditController.isAuditing) {
-      final ac = _auditController;
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
-            child: Row(
-              children: [
-                const Icon(Icons.policy_outlined, size: 16),
-                const SizedBox(width: 6),
-                const Text('Audit Repertoire',
-                    style:
-                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: () =>
-                      setState(() => _showInlineAuditConfig = false),
-                  tooltip: 'Close',
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: AuditConfigPanel(
-              openingTree: _controller.openingTree,
-              isWhiteRepertoire: _controller.isRepertoireWhite,
-              currentFen: _controller.fen,
-              currentMoveSequence: _controller.currentMoveSequence,
-              repertoireFilePath: _repertoireFilePath,
-              auditService: ac.service,
-              onConfigChanged: ac.onConfigChanged,
-              onAuditingChanged: (auditing) {
-                if (!mounted) return;
-                ac.onAuditingChanged(
-                  auditing,
-                  _jobManager,
-                  _controller.currentRepertoire?.name ?? 'Audit',
-                );
-                if (auditing) {
-                  setState(() => _showInlineAuditConfig = false);
-                  _openBottomPane(BottomPaneTab.findings);
-                }
-              },
-              onResultReady: (result) {
-                if (!mounted) return;
-                ac.onResultReady(result, _repertoireFilePath);
-              },
-              onLiveFinding: (finding) {
-                if (!mounted) return;
-                ac.onLiveFinding(finding);
-              },
-              onProgress: (checked, total) {
-                if (!mounted) return;
-                ac.onProgress(checked, total);
-              },
-            ),
-          ),
-        ],
-      );
-    }
-
+    // The inline generation config auto-hides once a generation starts.
     if (_generationController.isGenerating && _showInlineGenConfig) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _showInlineGenConfig = false);
       });
     }
 
-    final gc = _generationController;
-    return ListenableBuilder(
-      listenable: Listenable.merge([_jobManager, gc, _auditController]),
-      builder: (context, _) => JobsPanel(
-        jobManager: _jobManager,
-        generationController: gc,
-        auditController: _auditController,
-        onOpenGenerationDialog: _openGenerationDialog,
-        onOpenAuditDialog: () => _openAuditDialog(forceConfig: true),
-        onPauseAudit: _auditController.pause,
-        onResumeAudit: _auditController.resume,
-        onCancelAudit: () => _auditController.cancel(_repertoireFilePath),
-        onPauseGeneration: gc.pauseBuild,
-        onResumeGeneration: gc.resumeBuild,
-        onCancelGeneration: gc.cancelBuild,
-        onFinishNowGeneration: gc.finishNow,
-      ),
+    return JobsTabContent(
+      showInlineGenConfig: _showInlineGenConfig,
+      showInlineAuditConfig: _showInlineAuditConfig,
+      controller: _controller,
+      generationController: _generationController,
+      auditController: _auditController,
+      jobManager: _jobManager,
+      generationTabKey: _generationTabKey,
+      onCloseInlineGenConfig: () =>
+          setState(() => _showInlineGenConfig = false),
+      onCloseInlineAuditConfig: () =>
+          setState(() => _showInlineAuditConfig = false),
+      onOpenGenerationDialog: _openGenerationDialog,
+      onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
+      onAuditingChanged: (auditing) {
+        if (!mounted) return;
+        _auditController.onAuditingChanged(
+          auditing,
+          _jobManager,
+          _controller.currentRepertoire?.name ?? 'Audit',
+        );
+        if (auditing) {
+          setState(() => _showInlineAuditConfig = false);
+          _openBottomPane(BottomPaneTab.findings);
+        }
+      },
+      onAuditResultReady: (result) {
+        if (!mounted) return;
+        _auditController.onResultReady(result, _repertoireFilePath);
+      },
+      onAuditLiveFinding: (finding) {
+        if (!mounted) return;
+        _auditController.onLiveFinding(finding);
+      },
+      onAuditProgress: (checked, total) {
+        if (!mounted) return;
+        _auditController.onProgress(checked, total);
+      },
     );
   }
 
@@ -1445,74 +1251,20 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildTrapsContent() {
-    if (_traps.isEmpty) {
-      final hasRepertoire = _repertoireFilePath != null;
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.warning_amber_rounded,
-                  size: 48, color: Colors.grey[700]),
-              const SizedBox(height: 16),
-              Text(
-                'No traps detected yet',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[400],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                hasRepertoire
-                    ? 'Discover traps in your existing repertoire, or '
-                        'generate a new repertoire to find them.'
-                    : 'Generate a repertoire to discover positions where '
-                        'opponents are likely to make mistakes.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 20),
-              if (hasRepertoire) ...[
-                FilledButton.icon(
-                  onPressed: _discoverTrapsFromRepertoire,
-                  icon: const Icon(Icons.search, size: 16),
-                  label: const Text('Discover Traps'),
-                ),
-                const SizedBox(height: 10),
-                TextButton.icon(
-                  onPressed: _openGenerationDialog,
-                  icon: const Icon(Icons.auto_awesome, size: 14),
-                  label: const Text('Generate Full Repertoire'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.grey[400],
-                  ),
-                ),
-              ] else
-                FilledButton.icon(
-                  onPressed: _openGenerationDialog,
-                  icon: const Icon(Icons.auto_awesome, size: 16),
-                  label: const Text('Generate Repertoire'),
-                ),
-            ],
-          ),
-        ),
-      );
-    }
-    return TrapsBrowser(
+    return TrapsTabContent(
       traps: _traps,
+      trapIndex: _trapIndex,
       currentMoveSequence: _controller.currentMoveSequence,
+      repertoireLineMoves:
+          _controller.repertoireLines.map((l) => l.moves).toList(),
       boardPreview: _boardPreview,
-      metrics: _trapIndex?.metrics,
-      repertoireLineMoves: _controller.repertoireLines
-          .map((l) => l.moves)
-          .toList(),
+      hasRepertoire: _repertoireFilePath != null,
       onTrapSelected: (trap) {
         _controller.loadMoveSequence(trap.movesSan);
       },
       onStartTour: _openTrapWalkthrough,
+      onDiscoverTraps: _discoverTrapsFromRepertoire,
+      onOpenGeneration: _openGenerationDialog,
     );
   }
 
@@ -1591,65 +1343,19 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     // Switch to the Lines/Draft tab and show progress inline.
     _toolsTabController.animateTo(1);
-    setState(() {
-      _activeDraft = null;
-      _buildingDraft = true;
-      _activeDraftIsWhite = config.isWhite;
-      _activeDraftLabel = config.username;
-      _draftProgress = 'Starting…';
-    });
-
-    try {
-      final records = await _gamesLibrary.getGames(
-        platform: config.platform,
-        username: config.username,
-        selection: config.selection,
-        onProgress: (m) {
-          if (mounted) setState(() => _draftProgress = m);
-        },
-      );
-      if (records.isEmpty) {
-        if (mounted) {
-          setState(() => _buildingDraft = false);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('No games found for "${config.username}".')));
-        }
-        return;
-      }
-
-      if (mounted) {
-        setState(() => _draftProgress =
-            'Building tree from ${records.length} games…');
-      }
-      final (_, tree) = await UnifiedAnalysisBuilder.buildInIsolate(
-        pgnList: records.map((r) => r.pgn).toList(),
-        username: config.username,
-        isWhite: config.isWhite,
-        strictPlayerMatching: false,
-      );
-      if (!mounted) return;
-      setState(() {
-        _activeDraft = GamesDraft.against(
-          tree: tree,
-          isWhite: config.isWhite,
-          repertoire: _controller.tree,
-        );
-        _buildingDraft = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _buildingDraft = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not build draft: $e')));
+    final error = await _draftController.build(
+      config: config,
+      repertoire: _controller.tree,
+    );
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error),
+      ));
     }
   }
 
-  void _closeDraft() {
-    if (!mounted) return;
-    setState(() {
-      _activeDraft = null;
-      _buildingDraft = false;
-    });
+  void _onDraftChanged() {
+    if (mounted) setState(() {});
   }
 
   void _selectLine(RepertoireLine line) {

@@ -1,0 +1,67 @@
+/// Banner shown under the board while previewing a missing-move finding.
+library;
+
+import 'package:flutter/material.dart';
+
+import '../models/audit_finding.dart';
+
+class EphemeralFindingBar extends StatelessWidget {
+  final AuditFinding finding;
+
+  /// Navigate the repertoire cursor to the previewed position.
+  final VoidCallback onGoToPosition;
+
+  /// Dismiss the preview and restore the normal board state.
+  final VoidCallback onDismiss;
+
+  const EphemeralFindingBar({
+    super.key,
+    required this.finding,
+    required this.onGoToPosition,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final move = finding.missingMove ?? '?';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.blue.withAlpha(30),
+        border: Border(top: BorderSide(color: Colors.blue.withAlpha(80))),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.visibility_off_outlined,
+              size: 14, color: Colors.blue),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Missing: $move (preview)',
+              style: const TextStyle(fontSize: 12, color: Colors.blue),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onGoToPosition,
+            icon: const Icon(Icons.open_in_new, size: 14),
+            label: const Text('Go to position', style: TextStyle(fontSize: 11)),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.blue,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.close, size: 14, color: Colors.grey),
+            onPressed: onDismiss,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,92 +1,30 @@
 /// Shared move-sequence filter widget for PGN slice/search.
 ///
 /// Finds games containing specific SAN moves in order, with configurable
-/// gap tolerance between groups separated by `[gap]`.
+/// gap tolerance between groups separated by `[gap]`. All state lives on the
+/// [SliceFilterController] passed in by the host.
 library;
 
 import 'package:flutter/material.dart';
 
-import '../../services/pgn_parsing_service.dart' as pgn;
+import '../../core/slice_filter_controller.dart';
 
-/// Stateful widget for the move sequence filter.
-class SequenceFilter extends StatefulWidget {
-  /// Called when the filter changes.
-  final VoidCallback onChanged;
+class SequenceFilter extends StatelessWidget {
+  final SliceFilterController controller;
 
-  /// Pre-populate from existing config.
-  final String? initialPattern;
-  final int initialGap;
-
-  const SequenceFilter({
-    super.key,
-    required this.onChanged,
-    this.initialPattern,
-    this.initialGap = 4,
-  });
-
-  @override
-  State<SequenceFilter> createState() => SequenceFilterState();
-}
-
-class SequenceFilterState extends State<SequenceFilter> {
-  late final TextEditingController _sequenceController;
-  late final TextEditingController _gapController;
-  String? _error;
-
-  /// Parsed sequence groups (or empty).
-  List<List<String>> get groups {
-    final text = _sequenceController.text.trim();
-    if (text.isEmpty) return const [];
-    return pgn.parseSequenceGroups(text);
-  }
-
-  /// Current max-gap setting.
-  int get gap => int.tryParse(_gapController.text) ?? 4;
-
-  /// Whether the filter has content.
-  bool get hasFilter => _sequenceController.text.trim().isNotEmpty;
-
-  @override
-  void initState() {
-    super.initState();
-    _sequenceController =
-        TextEditingController(text: widget.initialPattern ?? '');
-    _gapController = TextEditingController(text: widget.initialGap.toString());
-  }
-
-  @override
-  void dispose() {
-    _sequenceController.dispose();
-    _gapController.dispose();
-    super.dispose();
-  }
-
-  void _validate() {
-    final text = _sequenceController.text.trim();
-    if (text.isEmpty) {
-      setState(() => _error = null);
-      widget.onChanged();
-      return;
-    }
-    final parsed = pgn.parseSequenceGroups(text);
-    if (parsed.isEmpty) {
-      setState(() => _error = 'No valid moves found');
-      return;
-    }
-    for (final group in parsed) {
-      for (final san in group) {
-        if (!RegExp(r'^[a-hKQRBNO0-9x+#=]+$').hasMatch(san)) {
-          setState(() => _error = "Invalid move token: '$san'");
-          return;
-        }
-      }
-    }
-    setState(() => _error = null);
-    widget.onChanged();
-  }
+  const SequenceFilter({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([controller, controller.sequenceText]),
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    final error = controller.sequenceError;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -107,7 +45,7 @@ class SequenceFilterState extends State<SequenceFilter> {
         ),
         const SizedBox(height: 8),
         TextField(
-          controller: _sequenceController,
+          controller: controller.sequenceText,
           decoration: InputDecoration(
             hintText: 'e.g.  d5 e5 [gap] f6',
             hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
@@ -115,15 +53,15 @@ class SequenceFilterState extends State<SequenceFilter> {
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             border: const OutlineInputBorder(),
-            suffixIcon: _sequenceController.text.isNotEmpty
+            suffixIcon: controller.sequenceText.text.isNotEmpty
                 ? IconButton(
                     icon: const Icon(Icons.close, size: 16),
                     padding: EdgeInsets.zero,
                     constraints:
                         const BoxConstraints(minWidth: 28, minHeight: 28),
                     onPressed: () {
-                      _sequenceController.clear();
-                      _validate();
+                      controller.sequenceText.clear();
+                      controller.validateSequence();
                     },
                   )
                 : null,
@@ -131,16 +69,16 @@ class SequenceFilterState extends State<SequenceFilter> {
                 const BoxConstraints(minWidth: 32, minHeight: 28),
           ),
           style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-          onChanged: (_) => _validate(),
-          onSubmitted: (_) => _validate(),
+          onChanged: (_) => controller.validateSequence(),
+          onSubmitted: (_) => controller.validateSequence(),
         ),
         const SizedBox(height: 6),
         Row(
           children: [
-            if (_error != null)
+            if (error != null)
               Expanded(
                 child: Text(
-                  _error!,
+                  error,
                   style: const TextStyle(fontSize: 11, color: Colors.red),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -153,7 +91,7 @@ class SequenceFilterState extends State<SequenceFilter> {
             SizedBox(
               width: 40,
               child: TextField(
-                controller: _gapController,
+                controller: controller.gapText,
                 decoration: const InputDecoration(
                   isDense: true,
                   contentPadding:
@@ -162,11 +100,7 @@ class SequenceFilterState extends State<SequenceFilter> {
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                 keyboardType: TextInputType.number,
-                onChanged: (_) {
-                  if (_sequenceController.text.trim().isNotEmpty) {
-                    widget.onChanged();
-                  }
-                },
+                onChanged: (_) => controller.sequenceGapChanged(),
               ),
             ),
             const SizedBox(width: 4),

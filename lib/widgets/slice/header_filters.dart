@@ -1,164 +1,53 @@
 /// Shared header filters widget for PGN slice/search.
 ///
 /// Renders a dynamic list of field/mode/value filter rows with add/remove.
+/// All state lives on the [SliceFilterController] passed in by the host.
 library;
 
 import 'package:flutter/material.dart';
 
+import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
-
-/// Mutable filter row used internally.
-class HeaderFilterRow {
-  String field;
-  MatchMode mode;
-  String value;
-  final TextEditingController controller;
-
-  HeaderFilterRow({
-    this.field = 'Black',
-    this.mode = MatchMode.contains,
-    String initialValue = '',
-  })  : value = initialValue,
-        controller = TextEditingController(text: initialValue);
-
-  HeaderFilterConfig toConfig() =>
-      HeaderFilterConfig(field: field, mode: mode, value: value);
-}
-
-/// Available PGN header field options.
-const kHeaderFieldOptions = [
-  'White',
-  'Black',
-  'Event',
-  'Result',
-  'Date',
-  'ECO',
-  'Opening',
-  'Site',
-  'WhiteElo',
-  'BlackElo',
-  'StudyRating',
-  'StudySummary',
-];
-
-/// Match modes available for a given field.
-List<MatchMode> modesForField(String field) {
-  if (field == 'Date' ||
-      field == 'StudyRating' ||
-      field == 'WhiteElo' ||
-      field == 'BlackElo') {
-    return MatchMode.values;
-  }
-  return [
-    MatchMode.contains,
-    MatchMode.notContains,
-    MatchMode.exact,
-    MatchMode.regex,
-  ];
-}
 
 final _ecoExact = RegExp(r'^[A-E]\d{2}$');
 bool _isValidEco(String value) => _ecoExact.hasMatch(value.trim());
 
-/// Stateful widget managing a dynamic list of PGN header filter rows.
-class HeaderFilters extends StatefulWidget {
-  /// Called whenever a filter value changes (debounced by caller if needed).
-  final VoidCallback onChanged;
+class HeaderFilters extends StatelessWidget {
+  final SliceFilterController controller;
 
-  /// Pre-populate from existing config.
-  final List<HeaderFilterConfig>? initialFilters;
-
-  const HeaderFilters({
-    super.key,
-    required this.onChanged,
-    this.initialFilters,
-  });
-
-  @override
-  State<HeaderFilters> createState() => HeaderFiltersState();
-}
-
-class HeaderFiltersState extends State<HeaderFilters> {
-  final List<HeaderFilterRow> _filters = [];
-
-  /// Get current filter configs (non-empty values only).
-  List<HeaderFilterConfig> get configs => _filters
-      .where((f) => f.value.isNotEmpty)
-      .map((f) => f.toConfig())
-      .toList();
-
-  /// Get raw filter data for slice computation.
-  List<({String field, MatchMode mode, String value})> get rawFilters =>
-      _filters
-          .where((f) => f.value.isNotEmpty)
-          .map((f) => (field: f.field, mode: f.mode, value: f.value))
-          .toList();
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.initialFilters != null) {
-      for (final f in widget.initialFilters!) {
-        if (f.value.isEmpty) continue;
-        _filters.add(HeaderFilterRow(
-          field: kHeaderFieldOptions.contains(f.field) ? f.field : 'Black',
-          mode: f.mode,
-          initialValue: f.value,
-        ));
-      }
-    }
-    if (_filters.isEmpty) {
-      _filters.add(HeaderFilterRow(field: 'Date', mode: MatchMode.after));
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final f in _filters) {
-      f.controller.dispose();
-    }
-    super.dispose();
-  }
+  const HeaderFilters({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'Header Filters',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-            color: Colors.grey[300],
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Header Filters',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              color: Colors.grey[300],
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        for (int i = 0; i < _filters.length; i++) _buildFilterRow(i),
-        TextButton.icon(
-          onPressed: _addFilter,
-          icon: const Icon(Icons.add, size: 16),
-          label: const Text('Add filter'),
-        ),
-      ],
+          const SizedBox(height: 8),
+          for (int i = 0; i < controller.headerRows.length; i++)
+            _buildFilterRow(i),
+          TextButton.icon(
+            onPressed: controller.addHeaderRow,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Add filter'),
+          ),
+        ],
+      ),
     );
   }
 
-  void _addFilter() {
-    setState(() => _filters.add(HeaderFilterRow()));
-  }
-
-  void _removeFilter(int i) {
-    setState(() {
-      _filters[i].controller.dispose();
-      _filters.removeAt(i);
-    });
-    widget.onChanged();
-  }
-
   Widget _buildFilterRow(int index) {
-    final f = _filters[index];
+    final f = controller.headerRows[index];
     final availableModes = modesForField(f.field);
     if (!availableModes.contains(f.mode)) {
       f.mode = availableModes.first;
@@ -207,19 +96,7 @@ class HeaderFiltersState extends State<HeaderFilters> {
                           value: s,
                           child: Text(s, style: const TextStyle(fontSize: 12))))
                       .toList(),
-                  onChanged: (v) {
-                    setState(() {
-                      f.field = v!;
-                      final modes = modesForField(f.field);
-                      if (!modes.contains(f.mode)) {
-                        f.mode = modes.first;
-                      } else if (isNumericField(f.field) &&
-                          f.mode == MatchMode.contains) {
-                        f.mode = MatchMode.after;
-                      }
-                    });
-                    if (f.value.isNotEmpty) widget.onChanged();
-                  },
+                  onChanged: (v) => controller.setHeaderField(index, v!),
                 ),
               ),
               const SizedBox(width: 6),
@@ -244,10 +121,7 @@ class HeaderFiltersState extends State<HeaderFilters> {
                                 style: const TextStyle(fontSize: 12)),
                           ))
                       .toList(),
-                  onChanged: (v) {
-                    setState(() => f.mode = v!);
-                    if (f.value.isNotEmpty) widget.onChanged();
-                  },
+                  onChanged: (v) => controller.setHeaderMode(index, v!),
                 ),
               ),
               const SizedBox(width: 6),
@@ -272,15 +146,12 @@ class HeaderFiltersState extends State<HeaderFilters> {
                         const BoxConstraints(minWidth: 28, minHeight: 28),
                   ),
                   style: const TextStyle(fontSize: 12),
-                  onChanged: (v) {
-                    f.value = v;
-                    widget.onChanged();
-                  },
+                  onChanged: (v) => controller.setHeaderValue(index, v),
                 ),
               ),
               const SizedBox(width: 4),
               IconButton(
-                onPressed: () => _removeFilter(index),
+                onPressed: () => controller.removeHeaderRow(index),
                 icon: const Icon(Icons.close, size: 18),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
