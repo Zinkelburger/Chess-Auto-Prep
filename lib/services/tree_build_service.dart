@@ -31,7 +31,7 @@ import 'maia_factory.dart';
 import 'maia_service.dart';
 
 class TreeBuildService {
-  final StockfishPool _pool = StockfishPool();
+  final StockfishPool _pool = StockfishPool.instance;
   final TreeEvalResolver _evalResolver = TreeEvalResolver();
 
   static const double _pvInjectEpsilon = 0.01;
@@ -102,7 +102,7 @@ class TreeBuildService {
 
     await Future.wait([
       if (cfg.usesStockfish &&
-          EngineLifecycle().state != EngineState.generating)
+          EngineLifecycle.instance.state != EngineState.generating)
         _pool.prepareForTreeBuild(cfg.resolvedEngineThreads)
       else if (cfg.usesStockfish)
         Future.value()
@@ -355,7 +355,7 @@ class TreeBuildService {
       await _evalResolver.initProviders(config);
 
       if (config.usesStockfish || config.needsStockfish) {
-        if (EngineLifecycle().state != EngineState.generating) {
+        if (EngineLifecycle.instance.state != EngineState.generating) {
           await _pool.prepareForTreeBuild(config.resolvedEngineThreads);
         }
       }

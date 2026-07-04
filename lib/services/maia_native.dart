@@ -7,7 +7,7 @@ bool get isMaiaAvailable => true;
 MaiaEvaluator? createMaiaEvaluator() => _NativeMaiaEvaluator();
 
 class _NativeMaiaEvaluator implements MaiaEvaluator {
-  final _maiaService = MaiaService();
+  final _maiaService = MaiaService.instance;
 
   @override
   Future<void> initialize() => _maiaService.initialize();

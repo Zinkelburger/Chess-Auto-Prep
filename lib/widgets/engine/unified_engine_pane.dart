@@ -91,9 +91,9 @@ class _PositionSnapshot {
 }
 
 class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
-  final EngineSettings _settings = EngineSettings();
-  final AnalysisService _analysis = AnalysisService();
-  final ProbabilityService _probabilityService = ProbabilityService();
+  final EngineSettings _settings = EngineSettings.instance;
+  final AnalysisService _analysis = AnalysisService.instance;
+  final ProbabilityService _probabilityService = ProbabilityService.instance;
   final GlobalKey _previewStackKey = GlobalKey();
 
   // ── Per-FEN analysis cache (static — survives widget rebuilds) ──
@@ -119,9 +119,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
   /// Whether analysis should run right now.
   bool get _isActive =>
-      widget.isActive && EngineLifecycle().state != EngineState.off;
+      widget.isActive && EngineLifecycle.instance.state != EngineState.off;
 
-  bool get _engineEnabled => EngineLifecycle().state != EngineState.off;
+  bool get _engineEnabled => EngineLifecycle.instance.state != EngineState.off;
 
   @override
   void initState() {
@@ -130,8 +130,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     // Manual listener: analysisConfigRevision changes trigger re-analysis, not just rebuild.
     _settings.addListener(_onSettingsChanged);
     _analysis.poolStatus.addListener(_onPoolStatusChanged);
-    EngineLifecycle().addListener(_onLifecycleChanged);
-    _lastLifecycleState = EngineLifecycle().state;
+    EngineLifecycle.instance.addListener(_onLifecycleChanged);
+    _lastLifecycleState = EngineLifecycle.instance.state;
 
     if (_isActive) {
       _analysis.beginEnginePaneAnalysis(widget.fen);
@@ -194,14 +194,14 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
     _analysis.poolStatus.removeListener(_onPoolStatusChanged);
-    EngineLifecycle().removeListener(_onLifecycleChanged);
+    EngineLifecycle.instance.removeListener(_onLifecycleChanged);
     _analysis.cancel();
     super.dispose();
   }
 
   void _onLifecycleChanged() {
     if (!mounted) return;
-    final state = EngineLifecycle().state;
+    final state = EngineLifecycle.instance.state;
     final prev = _lastLifecycleState;
     _lastLifecycleState = state;
 
@@ -243,7 +243,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       log.i('[Engine] ── _runAnalysis() for $shortFen ──');
     }
 
-    EngineLifecycle().onPositionChanged(widget.fen);
+    EngineLifecycle.instance.onPositionChanged(widget.fen);
     _trySaveCurrentToCache();
     _analysis.beginEnginePaneAnalysis(widget.fen);
     _initialAnalysisStarted = false;
@@ -489,7 +489,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       if (!mounted) return;
       final ps = _analysis.poolStatus.value;
       if (ps.isComplete) {
-        EngineLifecycle().onAnalysisComplete();
+        EngineLifecycle.instance.onAnalysisComplete();
         _analysis.endEnginePaneAnalysis(_currentAnalysisFen);
         _perfLog(
             'Evaluation COMPLETE — ${_analysis.results.value.length} evals');

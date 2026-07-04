@@ -51,7 +51,7 @@ class _MoveLineState {
 
 class OnTheFlyExpectimaxService extends ChangeNotifier {
   final TreeBuildService _buildService = TreeBuildService();
-  final EngineSettings _settings = EngineSettings();
+  final EngineSettings _settings = EngineSettings.instance;
 
   final Map<String, _CachedSubtree> _cache = {};
   final Map<String, _MoveLineState> _moveLines = {};
@@ -142,7 +142,7 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
     notifyListeners();
 
     // Let the engine pane finish Maia + DB + discovery + eval first.
-    await AnalysisService().waitForEnginePaneAnalysis(fen);
+    await AnalysisService.instance.waitForEnginePaneAnalysis(fen);
     if (_runGeneration != gen) return;
 
     await _runProgressiveBuild(

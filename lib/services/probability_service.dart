@@ -28,8 +28,12 @@ class MoveInLineProbability {
 }
 
 class ProbabilityService {
-  static final ProbabilityService _instance = ProbabilityService._internal();
-  factory ProbabilityService() => _instance;
+  /// Application-wide shared instance.
+  static final ProbabilityService instance = ProbabilityService._internal();
+
+  /// Create an independent instance (unit tests only).
+  @visibleForTesting
+  ProbabilityService.fresh() : this._internal();
 
   ProbabilityService._internal();
 

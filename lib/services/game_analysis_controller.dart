@@ -298,7 +298,7 @@ class GameAnalysisController extends ChangeNotifier {
     notifyListeners();
 
     final useDepth = analysisDepth ?? _depth;
-    final pool = StockfishPool();
+    final pool = StockfishPool.instance;
 
     try {
       final parsed = PgnGame.parsePgn(pgnText);
@@ -550,7 +550,7 @@ class GameAnalysisController extends ChangeNotifier {
 
   void cancel() {
     _isCancelled = true;
-    StockfishPool().stopAll();
+    StockfishPool.instance.stopAll();
   }
 
   List<String> _uciPvToSan(String fen, List<String> uciMoves) =>

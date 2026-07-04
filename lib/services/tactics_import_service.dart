@@ -48,12 +48,12 @@ class TacticsImportService {
   /// Signal the current import to stop after the current game finishes.
   void cancel() {
     _cancelled = true;
-    StockfishPool().stopAll();
+    StockfishPool.instance.stopAll();
   }
 
   /// Check if engine-based analysis is available on this platform
   bool get isAnalysisAvailable =>
-      StockfishPool().workerCount > 0 || parallel.isParallelAnalysisAvailable;
+      StockfishPool.instance.workerCount > 0 || parallel.isParallelAnalysisAvailable;
 
   /// Whether parallel multi-core analysis is available (desktop only).
   static bool get isParallelAvailable => parallel.isParallelAnalysisAvailable;
@@ -223,7 +223,7 @@ class TacticsImportService {
         'https://lichess.org/api/games/user/$username?$query');
 
     progressCallback?.call('Downloading games from Lichess...');
-    final response = await LichessApiClient().get(
+    final response = await LichessApiClient.instance.get(
       url,
       extraHeaders: {'Accept': 'application/x-chess-pgn'},
     );
@@ -608,8 +608,8 @@ class TacticsImportService {
     }
 
     // ── Ensure the shared pool has enough workers ─────────────
-    final pool = StockfishPool();
-    final targetWorkers = maxCores ?? EngineSettings().workers;
+    final pool = StockfishPool.instance;
+    final targetWorkers = maxCores ?? EngineSettings.instance.workers;
     await pool.ensureWorkers(targetWorkers);
 
     if (pool.workerCount == 0) {

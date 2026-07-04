@@ -400,8 +400,13 @@ class EngineSettings with ChangeNotifier {
   /// Detected logical CPU cores.
   static final int systemCores = getLogicalCores();
 
-  static final EngineSettings _instance = EngineSettings._internal();
-  factory EngineSettings() => _instance;
+  /// Application-wide shared instance.
+  static final EngineSettings instance = EngineSettings._internal();
+
+  /// Create an independent instance (unit tests only).
+  @visibleForTesting
+  EngineSettings.fresh() : this._internal();
+
   EngineSettings._internal();
 
   /// Load saved settings from SharedPreferences.

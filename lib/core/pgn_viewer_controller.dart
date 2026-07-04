@@ -1106,7 +1106,7 @@ class PgnViewerController extends ChangeNotifier {
     final gamePgn = game?.pgnText ?? '';
     final userIsWhite = solitaire.userIsWhite;
 
-    final pool = StockfishPool();
+    final pool = StockfishPool.instance;
     final depth = analysisController.depth;
 
     final newTrophies = <SolitaireTrophy>[];

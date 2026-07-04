@@ -14,9 +14,9 @@ class LichessDbInfoIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: LichessAuthService(),
+      listenable: LichessAuthService.instance,
       builder: (context, _) {
-        if (LichessAuthService().isLoggedIn) return const SizedBox.shrink();
+        if (LichessAuthService.instance.isLoggedIn) return const SizedBox.shrink();
         return IconButton(
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(
@@ -64,7 +64,7 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
   bool _oauthInProgress = false;
 
   Future<void> _startLogin() async {
-    final lichess = LichessAuthService();
+    final lichess = LichessAuthService.instance;
     setState(() => _oauthInProgress = true);
 
     try {

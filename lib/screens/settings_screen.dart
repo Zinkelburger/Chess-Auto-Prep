@@ -24,7 +24,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final _engine = EngineSettings();
+  final _engine = EngineSettings.instance;
   late final TextEditingController _probStartCtrl;
 
   @override

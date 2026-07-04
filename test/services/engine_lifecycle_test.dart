@@ -14,7 +14,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    lifecycle = EngineLifecycle();
+    lifecycle = EngineLifecycle.instance;
     lifecycle.resetForTest();
     EngineLifecycle.testMode = true;
     notificationCount = 0;

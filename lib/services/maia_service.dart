@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:onnxruntime/onnxruntime.dart';
 import 'eval_cache.dart';
@@ -14,8 +14,12 @@ class MaiaResult {
 }
 
 class MaiaService {
-  static final MaiaService _instance = MaiaService._internal();
-  factory MaiaService() => _instance;
+  /// Application-wide shared instance.
+  static final MaiaService instance = MaiaService._internal();
+
+  /// Create an independent instance (unit tests only).
+  @visibleForTesting
+  MaiaService.fresh() : this._internal();
 
   OrtSession? _session;
   bool _isInitialized = false;

@@ -64,7 +64,7 @@ class AuditSessionController extends ChangeNotifier {
       saveProgress(oldRepertoireFilePath);
       currentJob?.updateStatus(JobStatus.cancelled);
       currentJob = null;
-      EngineLifecycle().exitGeneration();
+      EngineLifecycle.instance.exitGeneration();
       _isAuditing = false;
       _isPaused = false;
     }
@@ -101,7 +101,7 @@ class AuditSessionController extends ChangeNotifier {
     saveProgress(repertoireFilePath);
     currentJob?.updateStatus(JobStatus.cancelled);
     currentJob = null;
-    EngineLifecycle().exitGeneration();
+    EngineLifecycle.instance.exitGeneration();
     _isAuditing = false;
     _isPaused = false;
     notifyListeners();
@@ -269,8 +269,8 @@ class AuditSessionController extends ChangeNotifier {
     notifyListeners();
 
     if (config.useStockfish) {
-      await EngineLifecycle().enterGeneration(1);
-      await StockfishPool().ensureWorkers(1);
+      await EngineLifecycle.instance.enterGeneration(1);
+      await StockfishPool.instance.ensureWorkers(1);
     }
     try {
       final auditResult = await _service.audit(
@@ -304,7 +304,7 @@ class AuditSessionController extends ChangeNotifier {
       currentJob = null;
       notifyListeners();
     } finally {
-      if (config.useStockfish) EngineLifecycle().exitGeneration();
+      if (config.useStockfish) EngineLifecycle.instance.exitGeneration();
     }
   }
 

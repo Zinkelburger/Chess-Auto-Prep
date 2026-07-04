@@ -54,8 +54,8 @@ class RepertoireAnalysisDock extends StatefulWidget {
 
 class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   final OnTheFlyExpectimaxService _onTheFly = OnTheFlyExpectimaxService();
-  final EngineSettings _settings = EngineSettings();
-  final AnalysisService _analysis = AnalysisService();
+  final EngineSettings _settings = EngineSettings.instance;
+  final AnalysisService _analysis = AnalysisService.instance;
   bool _autoComputeScheduled = false;
 
   @override
@@ -116,8 +116,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   }
 
   void _maybeAutoCompute() {
-    if (EngineLifecycle().state == EngineState.off ||
-        EngineLifecycle().state == EngineState.generating) {
+    if (EngineLifecycle.instance.state == EngineState.off ||
+        EngineLifecycle.instance.state == EngineState.generating) {
       return;
     }
     if (widget.isGenerating && !widget.isGenerationPaused) return;
@@ -145,8 +145,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
 
   bool get _engineActive =>
       widget.isActive &&
-      EngineLifecycle().state != EngineState.off &&
-      EngineLifecycle().state != EngineState.generating &&
+      EngineLifecycle.instance.state != EngineState.off &&
+      EngineLifecycle.instance.state != EngineState.generating &&
       (!widget.isGenerating || widget.isGenerationPaused);
 
   @override
@@ -339,7 +339,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       onSetRoot: widget.controller.rootMoves.isEmpty
           ? () async {
               await widget.controller.setRootPosition();
-              EngineSettings().probabilityStartMoves =
+              EngineSettings.instance.probabilityStartMoves =
                   widget.controller.rootMoves;
             }
           : null,

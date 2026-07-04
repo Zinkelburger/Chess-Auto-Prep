@@ -560,5 +560,5 @@ class CoverageService {
     _apiCalls = 0;
   }
 
-  bool get isRateLimited => LichessApiClient().isBackingOff;
+  bool get isRateLimited => LichessApiClient.instance.isBackingOff;
 }

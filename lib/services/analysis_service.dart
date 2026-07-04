@@ -25,11 +25,16 @@ export '../utils/ease_utils.dart' show scoreToQ, kEaseAlpha, kEaseBeta;
 export 'engine/eval_worker.dart' show EvalResult;
 
 class AnalysisService {
-  static final AnalysisService _instance = AnalysisService._();
-  factory AnalysisService() => _instance;
+  /// Application-wide shared instance.
+  static final AnalysisService instance = AnalysisService._();
+
+  /// Create an independent instance (unit tests only).
+  @visibleForTesting
+  AnalysisService.fresh() : this._();
+
   AnalysisService._();
 
-  final StockfishPool _pool = StockfishPool();
+  final StockfishPool _pool = StockfishPool.instance;
 
   int _generation = 0;
 
