@@ -16,12 +16,17 @@ import 'stockfish_pool.dart';
 enum EngineState { off, idle, analyzing, generating }
 
 class EngineLifecycle extends ChangeNotifier {
-  static final EngineLifecycle _instance = EngineLifecycle._();
-  factory EngineLifecycle() => _instance;
+  /// Application-wide shared instance.
+  static final EngineLifecycle instance = EngineLifecycle._();
+
+  /// Create an independent instance (unit tests only).
+  @visibleForTesting
+  EngineLifecycle.fresh() : this._();
+
   EngineLifecycle._();
 
-  final StockfishPool _pool = StockfishPool();
-  final AnalysisService _analysis = AnalysisService();
+  final StockfishPool _pool = StockfishPool.instance;
+  final AnalysisService _analysis = AnalysisService.instance;
 
   EngineState _state = EngineState.off;
   EngineState get state => _state;

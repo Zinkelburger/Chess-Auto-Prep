@@ -40,9 +40,9 @@ void main() {
 Future<void> _initializeApp() async {
   await windowManager.ensureInitialized();
 
-  await EngineSettings().loadFromPrefs();
+  await EngineSettings.instance.loadFromPrefs();
   await EvalDatabaseSettings.instance.load();
-  await EngineLifecycle().loadPersistedState();
+  await EngineLifecycle.instance.loadPersistedState();
   await EvalCache.instance.init();
 
   _startBrowserExtensionServer();
@@ -139,13 +139,16 @@ class ChessAutoPrepApp extends StatelessWidget {
         // App-scoped singletons exposed through Provider so widgets/tests can
         // depend on them via context (instead of global `.instance` access) and
         // inject fakes in tests. `.value` because these are process singletons
-        // that must not be disposed by the provider. See MAINTAINABILITY_PLAN
-        // WS-F; `.instance`/factory access remains valid during migration.
-        ChangeNotifierProvider<EngineSettings>.value(value: EngineSettings()),
+        // (`.instance`) that must not be disposed by the provider.
+        ChangeNotifierProvider<EngineSettings>.value(
+          value: EngineSettings.instance,
+        ),
         ChangeNotifierProvider<EvalDatabaseSettings>.value(
           value: EvalDatabaseSettings.instance,
         ),
-        ChangeNotifierProvider<EngineLifecycle>.value(value: EngineLifecycle()),
+        ChangeNotifierProvider<EngineLifecycle>.value(
+          value: EngineLifecycle.instance,
+        ),
       ],
       child: MaterialApp(
         title: 'Chess Auto Prep',

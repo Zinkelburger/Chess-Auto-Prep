@@ -52,7 +52,7 @@ class InlineEngineBar extends StatefulWidget {
 }
 
 class _InlineEngineBarState extends State<InlineEngineBar> {
-  final EngineSettings _settings = EngineSettings();
+  final EngineSettings _settings = EngineSettings.instance;
 
   static bool _engineEnabled = false;
 
@@ -173,18 +173,18 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     _lastAnalyzedFen = fen;
 
     setState(() => _isSearching = true);
-    AnalysisService().beginEnginePaneAnalysis(fen);
+    AnalysisService.instance.beginEnginePaneAnalysis(fen);
 
     final whiteToMove = isWhiteToMove(fen);
 
     try {
       final worker = await _ensureWorker();
       if (!mounted || _generation != myGen) {
-        AnalysisService().endEnginePaneAnalysis(fen);
+        AnalysisService.instance.endEnginePaneAnalysis(fen);
         return;
       }
       if (worker == null) {
-        AnalysisService().endEnginePaneAnalysis(fen);
+        AnalysisService.instance.endEnginePaneAnalysis(fen);
         setState(() => _isSearching = false);
         return;
       }
@@ -201,17 +201,17 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
       );
 
       if (!mounted || _generation != myGen) {
-        AnalysisService().endEnginePaneAnalysis(fen);
+        AnalysisService.instance.endEnginePaneAnalysis(fen);
         return;
       }
-      AnalysisService().endEnginePaneAnalysis(fen);
+      AnalysisService.instance.endEnginePaneAnalysis(fen);
       setState(() {
         _discovery = result;
         _isSearching = false;
       });
       _persistBestEvalToCache(fen, result);
     } catch (e) {
-      AnalysisService().endEnginePaneAnalysis(fen);
+      AnalysisService.instance.endEnginePaneAnalysis(fen);
       if (!mounted || _generation != myGen) return;
       if (kDebugMode) debugPrint('[InlineEngine] Discovery failed: $e');
       setState(() => _isSearching = false);

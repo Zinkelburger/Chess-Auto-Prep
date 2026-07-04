@@ -8,7 +8,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    settings = EngineSettings();
+    settings = EngineSettings.instance;
     settings.resetToDefaults();
   });
 

@@ -63,7 +63,7 @@ class _EngineWeaknessConfigDialogState
   @override
   void initState() {
     super.initState();
-    final settings = EngineSettings();
+    final settings = EngineSettings.instance;
     _depthCtrl = TextEditingController(text: '20');
     _minGamesCtrl = TextEditingController(text: '3');
     _whiteCpCtrl = TextEditingController(text: '-50');
@@ -101,7 +101,7 @@ class _EngineWeaknessConfigDialogState
   }
 
   String get _resourceSummary {
-    final workers = int.tryParse(_workersCtrl.text) ?? EngineSettings().workers;
+    final workers = int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.workers;
     return '$workers workers × $kPoolHashPerWorkerMb MB hash each = '
         '${workers * kPoolHashPerWorkerMb} MB total';
   }
@@ -112,7 +112,7 @@ class _EngineWeaknessConfigDialogState
       minGames: int.tryParse(_minGamesCtrl.text) ?? 3,
       whiteCp: int.tryParse(_whiteCpCtrl.text) ?? -50,
       blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
-      workers: int.tryParse(_workersCtrl.text) ?? EngineSettings().workers,
+      workers: int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.workers,
       redownload: _redownload,
       monthsBack: int.tryParse(_monthsCtrl.text) ?? 6,
     ));

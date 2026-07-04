@@ -60,7 +60,7 @@ class ExpectimaxLinesPane extends StatefulWidget {
 }
 
 class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
-  final EngineSettings _settings = EngineSettings();
+  final EngineSettings _settings = EngineSettings.instance;
   List<ExpectimaxLine> _lines = [];
   int _maxPlies = 12;
   final GlobalKey _previewStackKey = GlobalKey();

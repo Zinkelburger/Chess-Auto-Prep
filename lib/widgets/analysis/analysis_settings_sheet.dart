@@ -63,7 +63,7 @@ class _AnalysisSettingsSheet extends StatefulWidget {
 }
 
 class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
-  final _settings = EngineSettings();
+  final _settings = EngineSettings.instance;
 
   bool get _isFull => widget.mode == AnalysisSettingsContext.full;
   bool get _isExpectimaxOnly =>

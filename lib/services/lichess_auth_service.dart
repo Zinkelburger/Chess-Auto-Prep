@@ -7,7 +7,7 @@
 ///   4. Personal Access Token (PAT) support as a fallback
 ///
 /// Usage:
-///   final auth = LichessAuthService();
+///   final auth = LichessAuthService.instance;
 ///   await auth.loadTokens(); // on startup
 ///   final headers = await auth.getHeaders({'Accept': '...'});
 library;
@@ -53,8 +53,13 @@ class LichessAuthService extends ChangeNotifier {
 
   // ── Singleton ──────────────────────────────────────────────────────
 
-  static final LichessAuthService _instance = LichessAuthService._internal();
-  factory LichessAuthService() => _instance;
+  /// Application-wide shared instance.
+  static final LichessAuthService instance = LichessAuthService._internal();
+
+  /// Create an independent instance (unit tests only).
+  @visibleForTesting
+  LichessAuthService.fresh() : this._internal();
+
   LichessAuthService._internal();
 
   // ── State ──────────────────────────────────────────────────────────

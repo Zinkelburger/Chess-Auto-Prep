@@ -19,7 +19,7 @@ import 'generation_config.dart';
 class TreeEvalResolver {
   final EvalCache evalCache = EvalCache.instance;
   final Map<String, ExplorerResponse?> _dbCache = {};
-  final ProbabilityService _probabilityService = ProbabilityService();
+  final ProbabilityService _probabilityService = ProbabilityService.instance;
 
   SqliteEvalProvider? _localChessDb;
   CdbDirectEvalProvider? _cdbDirect;

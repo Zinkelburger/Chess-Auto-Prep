@@ -21,7 +21,7 @@ class _PositionToEval {
 }
 
 class EngineWeaknessService {
-  final StockfishPool _pool = StockfishPool();
+  final StockfishPool _pool = StockfishPool.instance;
   bool _cancelled = false;
 
   int get workerCount => _pool.workerCount;

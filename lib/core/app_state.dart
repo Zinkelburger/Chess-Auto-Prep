@@ -131,7 +131,7 @@ class AppState extends ChangeNotifier {
         ? DateTime.fromMillisecondsSinceEpoch(chesscomMs)
         : null;
 
-    await LichessAuthService().loadTokens();
+    await LichessAuthService.instance.loadTokens();
 
     notifyListeners();
   }
@@ -200,15 +200,5 @@ class AppState extends ChangeNotifier {
       _isAnalysisMode = false;
       notifyListeners();
     }
-  }
-
-  Function(String)? _onMoveAttempted;
-
-  void setMoveAttemptedCallback(Function(String)? callback) {
-    _onMoveAttempted = callback;
-  }
-
-  void onMoveAttempted(String moveUci) {
-    _onMoveAttempted?.call(moveUci);
   }
 }

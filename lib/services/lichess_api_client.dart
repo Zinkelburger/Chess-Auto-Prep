@@ -8,7 +8,7 @@
 ///   • Configurable retry on transient errors
 ///   • Centralised Lichess Explorer response parsing via [fetchExplorer]
 ///
-/// Main-thread code uses the singleton: `LichessApiClient()`.
+/// Main-thread code uses the singleton: `LichessApiClient.instance`.
 /// Isolate code creates a disposable instance via
 /// `LichessApiClient.withToken(token)` and calls [close] when finished.
 library;
@@ -34,8 +34,13 @@ class _SlotWaitInfo {
 class LichessApiClient {
   // ── Singleton (main thread) ─────────────────────────────────────────
 
-  static final LichessApiClient _instance = LichessApiClient._internal();
-  factory LichessApiClient() => _instance;
+  /// Application-wide shared instance (main thread).
+  static final LichessApiClient instance = LichessApiClient._internal();
+
+  /// Create an independent instance (unit tests only). For isolate use, call
+  /// the public [LichessApiClient.withToken] constructor instead.
+  @visibleForTesting
+  LichessApiClient.fresh() : this._internal();
 
   LichessApiClient._internal()
       : _httpClient = http.Client(),
@@ -99,7 +104,7 @@ class LichessApiClient {
     Map<String, String>? extra,
   ]) async {
     if (_useAuthService) {
-      return LichessAuthService().getHeaders(extra);
+      return LichessAuthService.instance.getHeaders(extra);
     }
     final headers = <String, String>{};
     if (extra != null) headers.addAll(extra);

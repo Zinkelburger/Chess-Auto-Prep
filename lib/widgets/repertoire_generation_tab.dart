@@ -426,7 +426,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     var engineGenerationEntered = false;
     try {
       if (config.needsStockfish) {
-        await EngineLifecycle().enterGeneration(config.resolvedEngineThreads);
+        await EngineLifecycle.instance.enterGeneration(config.resolvedEngineThreads);
         engineGenerationEntered = true;
       }
 
@@ -602,7 +602,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       }
     } finally {
       if (engineGenerationEntered) {
-        await EngineLifecycle().exitGeneration();
+        await EngineLifecycle.instance.exitGeneration();
       }
       if (gen == _buildGeneration) {
         _isGenerating = false;

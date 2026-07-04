@@ -104,7 +104,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     _service.cancel();
     if (mounted) setState(() => _isAuditing = false);
     widget.onAuditingChanged(false);
-    EngineLifecycle().exitGeneration();
+    EngineLifecycle.instance.exitGeneration();
   }
 
   AuditConfig _buildConfig() {
@@ -165,8 +165,8 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
     });
     onAuditingChangedCb(true);
 
-    await EngineLifecycle().enterGeneration(1);
-    await StockfishPool().ensureWorkers(1);
+    await EngineLifecycle.instance.enterGeneration(1);
+    await StockfishPool.instance.ensureWorkers(1);
 
     try {
       final result = await _service.audit(
@@ -190,7 +190,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
       if (mounted) setState(() => _isAuditing = false);
     } finally {
       onAuditingChangedCb(false);
-      EngineLifecycle().exitGeneration();
+      EngineLifecycle.instance.exitGeneration();
     }
   }
 

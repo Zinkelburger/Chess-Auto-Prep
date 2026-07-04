@@ -182,7 +182,7 @@ class AnalysisGamesService {
     final uri = Uri.parse('https://lichess.org/api/games/user/$username')
         .replace(queryParameters: params);
 
-    final response = await LichessApiClient().get(
+    final response = await LichessApiClient.instance.get(
       uri,
       extraHeaders: {'Accept': 'application/x-chess-pgn'},
     );

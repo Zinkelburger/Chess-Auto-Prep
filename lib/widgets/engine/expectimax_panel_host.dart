@@ -64,7 +64,7 @@ class ExpectimaxPanelHost extends StatefulWidget {
 
 class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
   OnTheFlyExpectimaxService? _ownedOnTheFly;
-  final EngineSettings _settings = EngineSettings();
+  final EngineSettings _settings = EngineSettings.instance;
   bool _autoComputeScheduled = false;
 
   OnTheFlyExpectimaxService get _onTheFly =>
@@ -123,8 +123,8 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
   void _maybeAutoCompute() {
     if (!_ownsOnTheFly && widget.onTheFlyService != null) return;
     if (!widget.autoComputeEnabled) return;
-    if (EngineLifecycle().state == EngineState.off ||
-        EngineLifecycle().state == EngineState.generating) {
+    if (EngineLifecycle.instance.state == EngineState.off ||
+        EngineLifecycle.instance.state == EngineState.generating) {
       return;
     }
     if (widget.isGenerating && !widget.isGenerationPaused) return;

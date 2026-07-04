@@ -41,8 +41,8 @@ class AuditProgress {
 }
 
 class RepertoireAuditService {
-  final StockfishPool _pool = StockfishPool();
-  final ProbabilityService _probService = ProbabilityService();
+  final StockfishPool _pool = StockfishPool.instance;
+  final ProbabilityService _probService = ProbabilityService.instance;
   final EvalCache _evalCache = EvalCache.instance;
 
   bool _cancelled = false;

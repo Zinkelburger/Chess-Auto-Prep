@@ -26,8 +26,13 @@ const int kPoolHashPerWorkerMb = 128;
 
 class StockfishPool {
   // ── Singleton ───────────────────────────────────────────────────────────
-  static final StockfishPool _instance = StockfishPool._();
-  factory StockfishPool() => _instance;
+  /// Application-wide shared instance.
+  static final StockfishPool instance = StockfishPool._();
+
+  /// Create an independent instance (unit tests only).
+  @visibleForTesting
+  StockfishPool.fresh() : this._();
+
   StockfishPool._();
 
   // ── State ───────────────────────────────────────────────────────────────
@@ -59,7 +64,7 @@ class StockfishPool {
       _threadsPerWorker = threadsPerWorker;
     }
 
-    final target = count ?? EngineSettings().workers;
+    final target = count ?? EngineSettings.instance.workers;
     while (_workers.length < target) {
       final w = await _spawnOne(_workers.length);
       if (w == null) break;

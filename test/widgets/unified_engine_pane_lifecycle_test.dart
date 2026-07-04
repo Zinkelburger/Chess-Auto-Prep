@@ -15,8 +15,8 @@ const _e4Fen = 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1';
 /// interaction should fail these tests.
 class _EnginePaneLifecycleHarness {
   _EnginePaneLifecycleHarness({required this.fenProvider}) {
-    EngineLifecycle().addListener(_onLifecycleChanged);
-    _lastLifecycleState = EngineLifecycle().state;
+    EngineLifecycle.instance.addListener(_onLifecycleChanged);
+    _lastLifecycleState = EngineLifecycle.instance.state;
   }
 
   final String Function() fenProvider;
@@ -28,15 +28,15 @@ class _EnginePaneLifecycleHarness {
   bool isActive = true;
 
   bool get _engineActive =>
-      isActive && EngineLifecycle().state != EngineState.off;
+      isActive && EngineLifecycle.instance.state != EngineState.off;
 
   void dispose() {
-    EngineLifecycle().removeListener(_onLifecycleChanged);
+    EngineLifecycle.instance.removeListener(_onLifecycleChanged);
   }
 
   void runAnalysis() {
     runAnalysisCount++;
-    EngineLifecycle().onPositionChanged(fenProvider());
+    EngineLifecycle.instance.onPositionChanged(fenProvider());
   }
 
   void onFenChanged() {
@@ -56,7 +56,7 @@ class _EnginePaneLifecycleHarness {
   }
 
   void _onLifecycleChanged() {
-    final state = EngineLifecycle().state;
+    final state = EngineLifecycle.instance.state;
     final prev = _lastLifecycleState;
     _lastLifecycleState = state;
 
@@ -82,7 +82,7 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    lifecycle = EngineLifecycle();
+    lifecycle = EngineLifecycle.instance;
     lifecycle.resetForTest();
     EngineLifecycle.testMode = true;
 
