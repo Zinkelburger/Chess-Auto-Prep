@@ -1,6 +1,6 @@
 /// One row of merged engine analysis (Stockfish + Maia + DB) for the unified
 /// engine pane. Promoted from a private class to enable extracting the row
-/// widget. See MAINTAINABILITY_PLAN WS-C/WS-E.
+/// widget.
 library;
 
 import '../utils/chess_utils.dart';

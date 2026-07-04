@@ -1,6 +1,6 @@
 /// Opening-tree side panel for the PGN Viewer.
 ///
-/// Extracted from `pgn_viewer_screen.dart` (WS-C / B3). A section widget that
+/// Extracted from `pgn_viewer_screen.dart`. A section widget that
 /// renders the opening-tree header, build progress, the [OpeningTreeWidget],
 /// and the "games at this position" list. It reads all state and issues all
 /// actions through the shared [PgnViewerController] (the screen's view-model),

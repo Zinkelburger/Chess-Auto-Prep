@@ -1,5 +1,5 @@
 /// Horizontal type-filter chip row for the audit findings panel, extracted
-/// from `AuditFindingsPanel` (MAINTAINABILITY_PLAN WS-E / runbook A5).
+/// from `AuditFindingsPanel`.
 library;
 
 import 'package:flutter/material.dart';

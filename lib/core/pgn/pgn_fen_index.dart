@@ -1,5 +1,5 @@
 /// Precomputed FEN → game-indices map for the PGN viewer, extracted from
-/// `PgnViewerController` (MAINTAINABILITY_PLAN WS-C / runbook A1).
+/// `PgnViewerController`.
 ///
 /// Owns the index value, its build generation, and the persistence IO
 /// (`<pgn>.fenidx`). `PgnViewerController` keeps its public `fenIndex` getter

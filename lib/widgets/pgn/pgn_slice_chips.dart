@@ -1,6 +1,6 @@
 /// Dataset-slice chip bar shown in the PGN Viewer app bar.
 ///
-/// Extracted from `pgn_viewer_screen.dart` (WS-C / B3). Renders the active
+/// Extracted from `pgn_viewer_screen.dart`. Renders the active
 /// slice chips, an add/edit-filter chip, and a filtered/total game count.
 /// State is read from the shared [PgnViewerController]; opening the slice
 /// dialog is the screen's concern, passed in via [onOpenSliceDialog].

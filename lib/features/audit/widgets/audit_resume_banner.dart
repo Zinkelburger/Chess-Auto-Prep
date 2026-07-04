@@ -1,5 +1,5 @@
 /// Banner shown when an interrupted audit can be resumed, extracted from
-/// `AuditFindingsPanel` (MAINTAINABILITY_PLAN WS-E / runbook A5).
+/// `AuditFindingsPanel`.
 library;
 
 import 'package:flutter/material.dart';

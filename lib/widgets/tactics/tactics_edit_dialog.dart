@@ -1,6 +1,6 @@
 /// Edit dialog for a stored tactics position.
 ///
-/// Extracted from `tactics_control_panel.dart` (WS-E / B4). A self-contained
+/// Extracted from `tactics_control_panel.dart`. A self-contained
 /// dialog that shows read-only game context plus editable mistake-type /
 /// correct-line / analysis fields. On save it returns the updated
 /// [TacticsPosition] (via `copyWith`); persistence stays with the caller.

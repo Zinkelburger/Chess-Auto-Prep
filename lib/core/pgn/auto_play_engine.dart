@@ -1,5 +1,5 @@
 /// Auto-play timer logic for the PGN viewer, extracted from
-/// `PgnViewerController` (MAINTAINABILITY_PLAN WS-C).
+/// `PgnViewerController`.
 ///
 /// Owns the timer + playback state and drives the board through injected
 /// callbacks. `PgnViewerController` keeps its public API and delegates here, so

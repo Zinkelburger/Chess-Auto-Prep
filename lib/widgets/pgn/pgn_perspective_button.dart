@@ -1,6 +1,6 @@
 /// Board-perspective selector for the PGN Viewer app bar.
 ///
-/// Extracted from `pgn_viewer_screen.dart` (WS-C / B3). A popup menu letting
+/// Extracted from `pgn_viewer_screen.dart`. A popup menu letting
 /// the user pick the default board orientation (a detected player, both
 /// players, or always White/Black). State and the apply action come from the
 /// shared [PgnViewerController].

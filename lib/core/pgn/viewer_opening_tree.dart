@@ -1,5 +1,4 @@
-/// Opening-tree mode for the PGN viewer, extracted from `PgnViewerController`
-/// (MAINTAINABILITY_PLAN WS-C / runbook A2).
+/// Opening-tree mode for the PGN viewer, extracted from `PgnViewerController`.
 ///
 /// Owns the tree state (build progress, current cursor, position cache) and the
 /// tree-mode navigation logic, driving the board through injected callbacks.

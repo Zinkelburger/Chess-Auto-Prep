@@ -9,10 +9,9 @@ import '../clickable_move_line.dart';
 import '../../models/merged_move.dart';
 
 /// One row of the unified engine table: move SAN + eval chip + PV continuation
-/// (+ Maia%). Extracted from `unified_engine_pane.dart` (MAINTAINABILITY_PLAN
-/// WS-C/WS-E). Hover/preview and tap callbacks are driven through the injected
-/// [boardPreview] and callbacks; [previewStackKey] is the parent's preview
-/// stack anchor.
+/// (+ Maia%). Extracted from `unified_engine_pane.dart`. Hover/preview and
+/// tap callbacks are driven through the injected [boardPreview] and callbacks;
+/// [previewStackKey] is the parent's preview stack anchor.
 class EngineMoveRow extends StatelessWidget {
   static const double _narrowTableWidth = 200;
 

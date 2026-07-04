@@ -1,5 +1,5 @@
 /// Scrollable findings list (with empty/auditing states) for the audit panel,
-/// extracted from `AuditFindingsPanel` (MAINTAINABILITY_PLAN WS-E / runbook A5).
+/// extracted from `AuditFindingsPanel`.
 ///
 /// Owns only presentation: it delegates each row to [FindingTile] and reports
 /// selection / dismiss / context-menu intents back to the panel via callbacks.

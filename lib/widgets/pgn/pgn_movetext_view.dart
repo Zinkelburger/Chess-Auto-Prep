@@ -2,7 +2,7 @@
 ///
 /// Renders the mainline + sideline variations + inline/prose comments as a
 /// flowing `Wrap` of `RichText`, plus the edit-mode annotation toolbar and
-/// inline comment editor. Extracted from `pgn_viewer_widget.dart` (WS-C / B2)
+/// inline comment editor. Extracted from `pgn_viewer_widget.dart`
 /// as a pure leaf view: it takes the move history, the per-ply variation tree,
 /// the current navigation/edit state, and callbacks — it owns no state of its
 /// own (the inline editor keeps its own [TextEditingController]).
