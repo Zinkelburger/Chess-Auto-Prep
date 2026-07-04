@@ -1,15 +1,17 @@
 /// Slice dialog — filter a PGN game collection by board position and headers.
 ///
-/// The data models ([SliceConfig], [MatchMode], [HeaderFilterConfig]) now live
-/// in `lib/models/pgn_filter_models.dart` and are re-exported here for
-/// backward compatibility. The position / sequence / header filter UIs are the
-/// shared widgets under `slice/`, the same ones [InlineSliceEditor] uses.
+/// The data models ([SliceConfig], [MatchMode], [HeaderFilterConfig]) live in
+/// `lib/models/pgn_filter_models.dart` and are re-exported here for backward
+/// compatibility. Filter state lives on a [SliceFilterController]; the
+/// position / sequence / header filter UIs are the shared widgets under
+/// `slice/`, the same ones [InlineSliceEditor] uses.
 library;
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/slice_filter_controller.dart';
 import '../models/pgn_filter_models.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import 'lines_preview_panel.dart';
@@ -51,13 +53,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   List<int> _matchingIndices = [];
   bool _computing = false;
 
-  /// Active initial config; cleared (null) by Reset. Drives the filter widgets'
-  /// pre-population. New [GlobalKey]s force them to rebuild from this on reset.
-  SliceConfig? _initial;
-
-  GlobalKey<PositionFilterState> _positionKey = GlobalKey();
-  GlobalKey<SequenceFilterState> _sequenceKey = GlobalKey();
-  GlobalKey<HeaderFiltersState> _headerKey = GlobalKey();
+  late final SliceFilterController _filters;
 
   Timer? _recomputeDebounce;
   int _computeGeneration = 0;
@@ -65,15 +61,22 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
   @override
   void initState() {
     super.initState();
-    _initial = widget.initialConfig;
-    // Filter states aren't mounted until after the first frame.
+    _filters = SliceFilterController(initialConfig: widget.initialConfig);
+    _filters.addListener(_onFiltersChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _recompute());
   }
 
   @override
   void dispose() {
     _recomputeDebounce?.cancel();
+    _filters.dispose();
     super.dispose();
+  }
+
+  void _onFiltersChanged() {
+    // While the sequence input is invalid, keep the last valid results.
+    if (_filters.sequenceError != null) return;
+    _scheduleRecompute();
   }
 
   void _scheduleRecompute() {
@@ -85,19 +88,13 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     final generation = ++_computeGeneration;
     setState(() => _computing = true);
 
-    final positionFen = _positionKey.currentState?.parsedFen;
-    final headerFilters = _headerKey.currentState?.rawFilters ?? const [];
-    final seqState = _sequenceKey.currentState;
-    final seqGroups = seqState?.groups ?? const <List<String>>[];
-    final seqGap = seqState?.gap ?? 4;
-
     pgn
         .computeSliceMatches(
       games: widget.allGames,
-      targetFen: positionFen,
-      filters: headerFilters,
-      seqGroups: seqGroups,
-      seqGap: seqGap,
+      targetFen: _filters.positionFen,
+      filters: _filters.rawHeaderFilters,
+      seqGroups: _filters.sequenceGroups,
+      seqGap: _filters.sequenceGap,
       fenIndex: widget.fenIndex,
     )
         .then((indices) {
@@ -109,28 +106,10 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     });
   }
 
-  SliceConfig _buildConfig() {
-    final seqState = _sequenceKey.currentState;
-    return SliceConfig(
-      positionInput: _positionKey.currentState?.parsedFen,
-      headerFilters: _headerKey.currentState?.configs ?? const [],
-      sequencePattern: seqState?.hasFilter == true
-          ? seqState!.groups.map((g) => g.join(' ')).join(' [gap] ')
-          : null,
-      sequenceGap: seqState?.gap ?? 4,
-    );
-  }
-
   void _reset() {
-    setState(() {
-      _initial = null;
-      // Fresh keys force the filter widgets to rebuild with empty state.
-      _positionKey = GlobalKey();
-      _sequenceKey = GlobalKey();
-      _headerKey = GlobalKey();
-      _matchingIndices = [];
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _recompute());
+    setState(() => _matchingIndices = []);
+    // reset() notifies, which schedules the recompute.
+    _filters.reset();
   }
 
   @override
@@ -145,24 +124,13 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               PositionFilter(
-                key: _positionKey,
+                controller: _filters,
                 currentFen: widget.currentFen,
-                initialValue: _initial?.positionInput,
-                onChanged: (_) => _scheduleRecompute(),
               ),
               const Divider(),
-              SequenceFilter(
-                key: _sequenceKey,
-                initialPattern: _initial?.sequencePattern,
-                initialGap: _initial?.sequenceGap ?? 4,
-                onChanged: _scheduleRecompute,
-              ),
+              SequenceFilter(controller: _filters),
               const Divider(),
-              HeaderFilters(
-                key: _headerKey,
-                initialFilters: _initial?.headerFilters,
-                onChanged: _scheduleRecompute,
-              ),
+              HeaderFilters(controller: _filters),
               const SizedBox(height: 16),
               SizedBox(
                 height: 200,
@@ -189,7 +157,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
         FilledButton(
           onPressed: _matchingIndices.isNotEmpty
               ? () {
-                  widget.onApply(_matchingIndices, _buildConfig());
+                  widget.onApply(_matchingIndices, _filters.buildConfig());
                   Navigator.pop(context);
                 }
               : null,

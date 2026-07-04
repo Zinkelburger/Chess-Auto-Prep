@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/services/tactics/tactics_session_controller.dart';
+import 'package:chess_auto_prep/widgets/tactics_control_panel.dart';
 
 /// Parse a move string (UCI or SAN) to a UCI string (e.g. "b8d7").
 /// Returns null if the move can't be parsed.
@@ -24,13 +26,21 @@ String? parseMoveToUci(Position position, String moveStr) {
   return null;
 }
 
-/// Send a UCI move through AppState.onMoveAttempted — the same path
-/// the board's onMove callback uses.
+/// Send a UCI move through TacticsSessionController.handleMoveAttempted —
+/// the same path the board's onMove callback uses.
 Future<void> playMoveViaAppState(
   WidgetTester tester,
   String uci,
 ) async {
-  getAppState(tester).onMoveAttempted(uci);
+  final appState = getAppState(tester);
+  // Read the session controller from below the tactics MultiProvider.
+  final context = tester.element(find.byType(TacticsControlPanel));
+  Provider.of<TacticsSessionController>(context, listen: false)
+      .handleMoveAttempted(
+    moveUci: uci,
+    boardFen: appState.currentPosition.fen,
+    inAnalysisMode: appState.isAnalysisMode,
+  );
   await tester.pump();
   await tester.pumpAndSettle();
 }

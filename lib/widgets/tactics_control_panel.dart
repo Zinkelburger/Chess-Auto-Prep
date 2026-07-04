@@ -4,18 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_state.dart';
 import '../models/engine_settings.dart';
-import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/maia_factory.dart';
 import '../services/tactics/tactics_import_coordinator.dart';
+import '../services/tactics/tactics_import_form.dart';
 import '../services/tactics/tactics_session_controller.dart';
+import '../services/tactics/tactics_solution_pgn.dart';
 import '../services/tactics_database.dart';
-import '../services/tactics_import_service.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
@@ -48,33 +47,14 @@ class TacticsControlPanel extends StatefulWidget {
 
 class _TacticsControlPanelState extends State<TacticsControlPanel>
     with TickerProviderStateMixin {
-  AppState? _appState;
-
   late TacticsDatabase _database;
   late TacticsSessionController _session;
   late TacticsImportCoordinator _import;
 
   late TabController _tabController;
 
-  // Import controllers
-  late TextEditingController _lichessUserController;
-  late TextEditingController _lichessCountController;
-  late TextEditingController _chessComUserController;
-  late TextEditingController _stockfishDepthController;
-  late TextEditingController _coresController;
-
-  // Validation: _*Valid tracks logical state (immediate), _*Error is the
-  // displayed red text (debounced so it doesn't flash while typing).
-  bool _depthValid = true;
-  bool _coresValid = true;
-  String? _depthError;
-  String? _coresError;
-  Timer? _depthErrorTimer;
-  Timer? _coresErrorTimer;
-
-  // Fetch mode state
-  TacticsImportMode _fetchMode = TacticsImportMode.recent;
-  DateTime? _sinceDate;
+  /// Import form state (text fields, validation, fetch mode, prefs).
+  late final TacticsImportForm _form;
 
   // PGN Viewer controller for analysis tab
   final PgnViewerWidgetController _pgnViewerController =
@@ -110,6 +90,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
     _session.onBoardUpdate = _applyBoardUpdate;
     _session.onPositionSetup = _loadPositionSetup;
+    _session.onAnalysisMove = _addMoveToAnalysis;
+    _session.onUserMoveAccepted = _pgnViewerController.goForward;
     _session.addListener(_onSessionChanged);
     _import.addListener(_onImportChanged);
     // Reactive safety net: any database mutation (import streaming, delete,
@@ -118,22 +100,17 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _database.addListener(_onDbChanged);
     _tabController = TabController(length: 2, vsync: this);
 
-    _lichessUserController = TextEditingController();
-    _lichessCountController = TextEditingController(text: '20');
-    _chessComUserController = TextEditingController();
-    _stockfishDepthController = TextEditingController(text: '15');
-    final defaultCores = EngineSettings().workers;
-    _coresController = TextEditingController(text: '$defaultCores');
+    _form = TacticsImportForm(defaultCores: EngineSettings.instance.workers);
+    _form.addListener(_onFormChanged);
 
-    // Initialize controllers from AppState and reset board
+    // Initialize the form from AppState and reset board
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final appState = _appState ?? context.read<AppState>();
-        _lichessUserController.text = appState.lichessUsername ?? '';
-        _chessComUserController.text = appState.chesscomUsername ?? '';
-        _loadImportFormPrefs();
+        final appState = context.read<AppState>();
+        _form.lichessUser.text = appState.lichessUsername ?? '';
+        _form.chessComUser.text = appState.chesscomUsername ?? '';
+        _form.loadPrefs();
 
-        appState.setMoveAttemptedCallback(_onMoveAttempted);
         _resetBoardToStart();
       }
     });
@@ -161,8 +138,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   /// Fire-and-forget: spawn Stockfish workers and load the Maia ONNX model
   /// while the user is still looking at the import form.
   Future<void> _warmUpEngines() async {
-    final pool = StockfishPool();
-    final targetWorkers = EngineSettings().workers;
+    final pool = StockfishPool.instance;
+    final targetWorkers = EngineSettings.instance.workers;
     await pool.ensureWorkers(targetWorkers);
     // Maia init is cheap after the first call (singleton).
     if (MaiaFactory.isAvailable) {
@@ -172,12 +149,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         // Best-effort; failure here is non-fatal and intentionally ignored.
       }
     }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _appState ??= context.read<AppState>();
   }
 
   void _onSessionChanged() {
@@ -210,6 +181,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _onImportChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _onFormChanged() {
     if (mounted) setState(() {});
   }
 
@@ -263,16 +238,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _database.removeListener(_onDbChanged);
     _session.onBoardUpdate = null;
     _session.onPositionSetup = null;
-    _appState?.setMoveAttemptedCallback(null);
+    _session.onAnalysisMove = null;
+    _session.onUserMoveAccepted = null;
     _focusNode.dispose();
     _tabController.dispose();
-    _lichessUserController.dispose();
-    _lichessCountController.dispose();
-    _chessComUserController.dispose();
-    _stockfishDepthController.dispose();
-    _coresController.dispose();
-    _depthErrorTimer?.cancel();
-    _coresErrorTimer?.cancel();
+    _form.removeListener(_onFormChanged);
+    _form.dispose();
     super.dispose();
   }
 
@@ -297,7 +268,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     if (_autoFetchAttempted) return;
     _autoFetchAttempted = true;
 
-    final appState = _appState ?? context.read<AppState>();
+    final appState = context.read<AppState>();
 
     // Ensure preferences are loaded before checking auto-fetch setting.
     // loadUsernames() may still be in flight if called from main().
@@ -309,69 +280,22 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
     if (_import.isImporting) return;
 
-    final lichessUser = appState.lichessUsername;
-    final chesscomUser = appState.chesscomUsername;
-    if ((lichessUser == null || lichessUser.isEmpty) &&
-        (chesscomUser == null || chesscomUser.isEmpty)) {
-      return;
-    }
-
-    final depth =
-        (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
-    final cores = (int.tryParse(_coresController.text) ?? 1)
-        .clamp(1, TacticsImportService.availableCores);
-
-    // Auto-fetch from Lichess if username is set
-    if (lichessUser != null && lichessUser.isNotEmpty) {
-      final since = appState.lichessLastFetch;
-      try {
-        await _import.import(
-          source: TacticsImportSource.lichess,
-          params: TacticsImportParams(
-            username: lichessUser,
-            mode: TacticsImportMode.sinceDate,
-            since: since ?? DateTime.now().subtract(const Duration(days: 7)),
-            depth: depth,
-            cores: cores,
-          ),
-        );
-        if (mounted && _import.importStatus != null) {
-          appState.setLichessLastFetch(DateTime.now());
+    await _import.autoFetch(
+      lichessUsername: appState.lichessUsername,
+      chesscomUsername: appState.chesscomUsername,
+      lichessLastFetch: appState.lichessLastFetch,
+      chesscomLastFetch: appState.chesscomLastFetch,
+      depth: _form.depth,
+      cores: _form.cores,
+      onFetched: (source, fetchedAt) {
+        if (!mounted) return;
+        if (source == TacticsImportSource.lichess) {
+          appState.setLichessLastFetch(fetchedAt);
+        } else {
+          appState.setChesscomLastFetch(fetchedAt);
         }
-      } catch (e) {
-        debugPrint('Auto-fetch Lichess failed: $e');
-        if (mounted) {
-          _import.dismissImportStatus();
-        }
-      }
-    }
-
-    if (!mounted) return;
-
-    // Auto-fetch from Chess.com if username is set
-    if (chesscomUser != null && chesscomUser.isNotEmpty) {
-      final since = appState.chesscomLastFetch;
-      try {
-        await _import.import(
-          source: TacticsImportSource.chessCom,
-          params: TacticsImportParams(
-            username: chesscomUser,
-            mode: TacticsImportMode.sinceDate,
-            since: since ?? DateTime.now().subtract(const Duration(days: 7)),
-            depth: depth,
-            cores: cores,
-          ),
-        );
-        if (mounted && _import.importStatus != null) {
-          appState.setChesscomLastFetch(DateTime.now());
-        }
-      } catch (e) {
-        debugPrint('Auto-fetch Chess.com failed: $e');
-        if (mounted) {
-          _import.dismissImportStatus();
-        }
-      }
-    }
+      },
+    );
   }
 
   @override
@@ -572,16 +496,16 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   importStatus: _import.importStatus,
                   isImporting: _import.isImporting,
                   activeImport: _import.activeImport,
-                  lichessUserController: _lichessUserController,
-                  lichessCountController: _lichessCountController,
-                  chessComUserController: _chessComUserController,
-                  stockfishDepthController: _stockfishDepthController,
-                  coresController: _coresController,
-                  depthError: _depthError,
-                  coresError: _coresError,
-                  importFieldsValid: _importFieldsValid,
-                  onValidateDepth: _validateDepth,
-                  onValidateCores: _validateCores,
+                  lichessUserController: _form.lichessUser,
+                  lichessCountController: _form.fetchCount,
+                  chessComUserController: _form.chessComUser,
+                  stockfishDepthController: _form.depthText,
+                  coresController: _form.coresText,
+                  depthError: _form.depthError,
+                  coresError: _form.coresError,
+                  importFieldsValid: _form.fieldsValid,
+                  onValidateDepth: _form.validateDepth,
+                  onValidateCores: _form.validateCores,
                   onImportLichess: _importLichess,
                   onImportChessCom: _importChessCom,
                   onDismissImportStatus: _import.dismissImportStatus,
@@ -591,14 +515,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   clearDatabaseEnabled: !_import.isImporting,
                   onClearDatabase: _confirmClearDatabase,
                   onBrowseTactics: () => _tabController.animateTo(1),
-                  fetchMode: _fetchMode,
-                  onFetchModeChanged: (mode) {
-                    if (mounted) setState(() => _fetchMode = mode);
-                  },
-                  sinceDate: _sinceDate,
-                  onSinceDateChanged: (date) {
-                    if (mounted) setState(() => _sinceDate = date);
-                  },
+                  fetchMode: _form.fetchMode,
+                  onFetchModeChanged: _form.setFetchMode,
+                  sinceDate: _form.sinceDate,
+                  onSinceDateChanged: _form.setSinceDate,
                   pendingGameCount: _import.pendingGameCount,
                   totalStoredGames: _import.totalStoredGames,
                   onResumeAnalysis: _resumeAnalysis,
@@ -614,44 +534,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   // Analysis (PGN) tab
   // ---------------------------------------------------------------------------
 
-  /// Build a PGN string from the tactic FEN with the solution as the mainline.
-  String _buildSolutionPgn(
-      TacticsPosition tactic, List<String> solutionSan) {
-    String escaped(String s) =>
-        s.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-    final headers = StringBuffer();
-    headers.writeln('[White "${escaped(tactic.gameWhite)}"]');
-    headers.writeln('[Black "${escaped(tactic.gameBlack)}"]');
-    if (tactic.gameDate.isNotEmpty) {
-      headers.writeln('[Date "${escaped(tactic.gameDate)}"]');
-    }
-    headers.writeln('[Result "*"]');
-    headers.writeln('[FEN "${tactic.fen}"]');
-    headers.writeln('[SetUp "1"]');
-
-    if (solutionSan.isEmpty) return '${headers.toString()}\n*';
-
-    final setup = Setup.parseFen(tactic.fen);
-    final buf = StringBuffer();
-    var moveNum = setup.fullmoves;
-    var isWhite = setup.turn == Side.white;
-
-    for (int i = 0; i < solutionSan.length; i++) {
-      if (isWhite) {
-        buf.write('$moveNum. ');
-      } else if (i == 0) {
-        buf.write('$moveNum... ');
-      }
-      buf.write(solutionSan[i]);
-      if (!isWhite) moveNum++;
-      isWhite = !isWhite;
-      if (i < solutionSan.length - 1) buf.write(' ');
-    }
-    buf.write(' *');
-
-    return '${headers.toString()}\n$buf';
-  }
-
   Widget _buildAnalysisTab() {
     if (_session.currentPosition == null) {
       return const Center(
@@ -664,7 +546,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
     final tactic = _session.currentPosition!;
     final solutionSan = _session.engine.correctLineToSan(tactic);
-    final pgnText = _buildSolutionPgn(tactic, solutionSan);
+    final pgnText = buildSolutionPgn(tactic, solutionSan);
 
     return PgnWithEngine(
       key: ValueKey('analysis_${tactic.fen}'),
@@ -843,88 +725,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _syncPgnToCurrentTactic();
   }
 
-  /// Applies a field validation result: updates logical validity immediately and
-  /// clears the error when valid, then debounces showing the red error text.
-  /// Returns the (possibly new) debounce timer to store for the field.
-  Timer? _applyFieldValidation({
-    required String? error,
-    required Timer? currentTimer,
-    required void Function(bool valid) setValid,
-    required void Function(String? error) setError,
-  }) {
-    currentTimer?.cancel();
-    setState(() {
-      setValid(error == null);
-      if (error == null) setError(null);
-    });
-    if (error == null) return null;
-    return Timer(const Duration(milliseconds: 500), () {
-      if (mounted) setState(() => setError(error));
-    });
-  }
-
-  void _validateDepth(String value) {
-    final v = int.tryParse(value);
-    String? error;
-    if (v == null) {
-      error = 'Must be a number';
-    } else if (v < 1 || v > 25) {
-      error = 'Must be 1–25';
-    }
-    _depthErrorTimer = _applyFieldValidation(
-      error: error,
-      currentTimer: _depthErrorTimer,
-      setValid: (valid) => _depthValid = valid,
-      setError: (e) => _depthError = e,
-    );
-  }
-
-  void _validateCores(String value) {
-    final v = int.tryParse(value);
-    final max = TacticsImportService.availableCores;
-    String? error;
-    if (v == null) {
-      error = 'Must be a number';
-    } else if (v < 1 || v > max) {
-      error = 'Must be 1–$max';
-    }
-    _coresErrorTimer = _applyFieldValidation(
-      error: error,
-      currentTimer: _coresErrorTimer,
-      setValid: (valid) => _coresValid = valid,
-      setError: (e) => _coresError = e,
-    );
-  }
-
-  bool get _importFieldsValid => _depthValid && _coresValid;
-
-  static const _prefImportCount = 'tactics_import.count';
-  static const _prefImportDepth = 'tactics_import.depth';
-  static const _prefImportCores = 'tactics_import.cores';
-
-  /// Restore the last-used fetch count / depth / cores into the form fields.
-  Future<void> _loadImportFormPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    final count = prefs.getInt(_prefImportCount);
-    final depth = prefs.getInt(_prefImportDepth);
-    final cores = prefs.getInt(_prefImportCores);
-    if (count != null) _lichessCountController.text = '$count';
-    if (depth != null) _stockfishDepthController.text = '$depth';
-    if (cores != null) _coresController.text = '$cores';
-  }
-
-  /// Remember the current fetch count / depth / cores for next launch.
-  Future<void> _saveImportFormPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final count = int.tryParse(_lichessCountController.text);
-    final depth = int.tryParse(_stockfishDepthController.text);
-    final cores = int.tryParse(_coresController.text);
-    if (count != null) await prefs.setInt(_prefImportCount, count);
-    if (depth != null) await prefs.setInt(_prefImportDepth, depth);
-    if (cores != null) await prefs.setInt(_prefImportCores, cores);
-  }
-
   Future<void> _importLichess() =>
       _runImport(TacticsImportSource.lichess, 'Lichess');
 
@@ -932,26 +732,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       _runImport(TacticsImportSource.chessCom, 'Chess.com');
 
   Future<void> _runImport(TacticsImportSource source, String platform) async {
-    _saveImportFormPrefs();
-    final username = source == TacticsImportSource.lichess
-        ? _lichessUserController.text.trim()
-        : _chessComUserController.text.trim();
-    final count = int.tryParse(_lichessCountController.text) ?? 20;
+    _form.savePrefs();
 
     try {
-      await _import.import(
-        source: source,
-        params: TacticsImportParams(
-          username: username,
-          mode: _fetchMode,
-          maxGames: _fetchMode == TacticsImportMode.recent ? count : 200,
-          since: _fetchMode == TacticsImportMode.sinceDate ? _sinceDate : null,
-          depth:
-              (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25),
-          cores: (int.tryParse(_coresController.text) ?? 1)
-              .clamp(1, TacticsImportService.availableCores),
-        ),
-      );
+      await _import.import(source: source, params: _form.paramsFor(source));
       // Only update last-fetch on non-cancelled completion.
       // cancelImport() clears importStatus; success leaves it non-null.
       if (mounted && _import.importStatus != null) {
@@ -976,17 +760,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   Future<void> _resumeAnalysis() async {
     final appState = context.read<AppState>();
-    final depth =
-        (int.tryParse(_stockfishDepthController.text) ?? 15).clamp(1, 25);
-    final cores = (int.tryParse(_coresController.text) ?? 1)
-        .clamp(1, TacticsImportService.availableCores);
-
     try {
       await _import.resumeAnalysis(
         lichessUsername: appState.lichessUsername,
         chesscomUsername: appState.chesscomUsername,
-        depth: depth,
-        cores: cores,
+        depth: _form.depth,
+        cores: _form.cores,
       );
     } catch (e) {
       debugPrint('Resume analysis failed: $e');
@@ -1044,33 +823,6 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           showAppSnackBar(context, AppMessages.clipboardWriteFailed,
               isError: true);
         }
-      }
-    }
-  }
-
-  void _onMoveAttempted(String moveUci) {
-    if (_session.currentPosition == null) return;
-
-    final appState = context.read<AppState>();
-
-    if (appState.isAnalysisMode ||
-        _session.positionSolved ||
-        _session.showSolution) {
-      _addMoveToAnalysis(moveUci);
-      return;
-    }
-
-    final prevIndex = _session.currentMoveIndex;
-    final update = _session.processMoveAttempt(
-      moveUci: moveUci,
-      boardFen: appState.currentPosition.fen,
-      schedule: (delay, action) => Future.delayed(delay, action),
-      isMounted: () => mounted,
-    );
-    if (update != null) {
-      _applyBoardUpdate(update);
-      if (_session.currentMoveIndex > prevIndex) {
-        _pgnViewerController.goForward();
       }
     }
   }

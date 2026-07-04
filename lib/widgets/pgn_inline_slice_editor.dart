@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../core/board_preview_controller.dart';
+import '../core/slice_filter_controller.dart';
 import '../models/pgn_filter_models.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import 'lines_preview_panel.dart';
@@ -67,12 +68,7 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
   bool _computing = false;
   bool _showPreview = false;
 
-  final GlobalKey<PositionFilterState> _positionKey =
-      GlobalKey<PositionFilterState>();
-  final GlobalKey<HeaderFiltersState> _headerKey =
-      GlobalKey<HeaderFiltersState>();
-  final GlobalKey<SequenceFilterState> _sequenceKey =
-      GlobalKey<SequenceFilterState>();
+  late final SliceFilterController _filters;
 
   Timer? _recomputeDebounce;
   int _computeGeneration = 0;
@@ -80,6 +76,8 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
   @override
   void initState() {
     super.initState();
+    _filters = SliceFilterController(initialConfig: widget.initialConfig);
+    _filters.addListener(_onFiltersChanged);
     _mode = (widget.initialConfig != null && !widget.initialConfig!.isEmpty)
         ? _SliceMode.slice
         : _SliceMode.allLines;
@@ -91,7 +89,14 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
   @override
   void dispose() {
     _recomputeDebounce?.cancel();
+    _filters.dispose();
     super.dispose();
+  }
+
+  void _onFiltersChanged() {
+    // While the sequence input is invalid, keep the last valid results.
+    if (_filters.sequenceError != null) return;
+    _scheduleRecompute();
   }
 
   void _scheduleRecompute() {
@@ -103,19 +108,13 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
     final generation = ++_computeGeneration;
     setState(() => _computing = true);
 
-    final positionFen = _positionKey.currentState?.parsedFen;
-    final headerFilters = _headerKey.currentState?.rawFilters ?? [];
-    final seqState = _sequenceKey.currentState;
-    final seqGroups = seqState?.groups ?? const [];
-    final seqGap = seqState?.gap ?? 4;
-
     pgn
         .computeSliceMatches(
       games: widget.allGames,
-      targetFen: positionFen,
-      filters: headerFilters,
-      seqGroups: seqGroups,
-      seqGap: seqGap,
+      targetFen: _filters.positionFen,
+      filters: _filters.rawHeaderFilters,
+      seqGroups: _filters.sequenceGroups,
+      seqGap: _filters.sequenceGap,
       fenIndex: widget.fenIndex,
     )
         .then((indices) {
@@ -128,17 +127,7 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
   }
 
   void _applySlice() {
-    final config = SliceConfig(
-      positionInput: _positionKey.currentState?.parsedFen,
-      headerFilters: _headerKey.currentState?.configs ?? [],
-      sequencePattern: _sequenceKey.currentState?.hasFilter == true
-          ? _sequenceKey.currentState!.groups
-              .map((g) => g.join(' '))
-              .join(' [gap] ')
-          : null,
-      sequenceGap: _sequenceKey.currentState?.gap ?? 4,
-    );
-    widget.onResult(_matchedIndices, config);
+    widget.onResult(_matchedIndices, _filters.buildConfig());
   }
 
   void _clearSlice() {
@@ -232,24 +221,13 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   PositionFilter(
-                    key: _positionKey,
+                    controller: _filters,
                     currentFen: widget.currentFen,
-                    initialValue: widget.initialConfig?.positionInput,
-                    onChanged: (_) => _scheduleRecompute(),
                   ),
                   const SizedBox(height: 12),
-                  SequenceFilter(
-                    key: _sequenceKey,
-                    initialPattern: widget.initialConfig?.sequencePattern,
-                    initialGap: widget.initialConfig?.sequenceGap ?? 4,
-                    onChanged: _scheduleRecompute,
-                  ),
+                  SequenceFilter(controller: _filters),
                   const SizedBox(height: 12),
-                  HeaderFilters(
-                    key: _headerKey,
-                    initialFilters: widget.initialConfig?.headerFilters,
-                    onChanged: _scheduleRecompute,
-                  ),
+                  HeaderFilters(controller: _filters),
                 ],
               ),
             ),

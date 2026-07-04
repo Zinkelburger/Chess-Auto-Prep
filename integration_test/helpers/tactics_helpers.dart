@@ -92,7 +92,7 @@ Future<List<String>> showSolutionAndParseMoves(WidgetTester tester) async {
   return line.sanMoves;
 }
 
-/// Play the user moves from a tactic solution via AppState.onMoveAttempted.
+/// Play the user moves from a tactic solution via the tactics session controller.
 ///
 /// [allMoves] is the interleaved list [userMove, opponentResponse, ...].
 /// Only user moves (even indices) are played; opponent moves are automatic.

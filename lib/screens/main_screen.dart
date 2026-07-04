@@ -58,7 +58,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
     if (previousMode == AppMode.repertoire &&
         currentMode != AppMode.repertoire) {
-      EngineLifecycle().toggleOff();
+      EngineLifecycle.instance.toggleOff();
     }
 
     _lastMode = currentMode;
@@ -74,7 +74,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached) {
-      EngineLifecycle().toggleOff();
+      EngineLifecycle.instance.toggleOff();
     }
   }
 
@@ -116,12 +116,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
 class _TacticsModeView extends StatelessWidget {
   const _TacticsModeView();
-
-  /// Shared key so the control panel's State (and its database/session/import)
-  /// is reparented — not recreated — when the layout crosses the compact/wide
-  /// breakpoint. Without this, resizing across the breakpoint silently throws
-  /// away the active training session and reloads everything.
-  static final GlobalKey _panelKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -223,6 +217,16 @@ class _TacticsBoardPane extends StatelessWidget {
 
   final AppState appState;
 
+  /// Route a board/input move into the tactics session (puzzle validation or
+  /// free-play analysis, decided by the session controller).
+  void _attemptMove(BuildContext context, String uci) {
+    context.read<TacticsSessionController>().handleMoveAttempted(
+          moveUci: uci,
+          boardFen: appState.currentPosition.fen,
+          inAnalysisMode: appState.isAnalysisMode,
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -237,9 +241,7 @@ class _TacticsBoardPane extends StatelessWidget {
                   position: appState.currentPosition,
                   flipped: appState.boardFlipped,
                   onPieceSelected: (square) {},
-                  onMove: (move) {
-                    appState.onMoveAttempted(move.uci);
-                  },
+                  onMove: (move) => _attemptMove(context, move.uci),
                 ),
               ),
             ),
@@ -250,9 +252,7 @@ class _TacticsBoardPane extends StatelessWidget {
             child: MoveInputWidget(
               key: TacticsControlPanel.moveInputKey,
               position: appState.currentPosition,
-              onMove: (move) {
-                appState.onMoveAttempted(move.uci);
-              },
+              onMove: (move) => _attemptMove(context, move.uci),
             ),
           ),
         ],

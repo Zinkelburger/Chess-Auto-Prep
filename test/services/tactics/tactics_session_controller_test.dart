@@ -113,6 +113,123 @@ void main() {
     expect(session.feedback, 'Correct!');
   });
 
+  group('handleMoveAttempted routing', () {
+    test('routes to onAnalysisMove in analysis mode', () {
+      final db = TacticsDatabase();
+      db.positions.add(_samplePosition());
+      final session =
+          TacticsSessionController(database: db)..autoAdvance = false;
+      session.selectPosition(db.positions.first);
+
+      String? analysisMove;
+      final boardUpdates = <TacticsBoardUpdate>[];
+      session.onAnalysisMove = (uci) => analysisMove = uci;
+      session.onBoardUpdate = boardUpdates.add;
+
+      session.handleMoveAttempted(
+        moveUci: 'd2d4',
+        boardFen: db.positions.first.fen,
+        inAnalysisMode: true,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+
+      expect(analysisMove, 'd2d4');
+      expect(boardUpdates, isEmpty, reason: 'no puzzle validation ran');
+      expect(session.feedback, isEmpty);
+    });
+
+    test('routes to onAnalysisMove after puzzle is solved', () {
+      final db = TacticsDatabase();
+      db.positions.add(_samplePosition());
+      final session =
+          TacticsSessionController(database: db)..autoAdvance = false;
+      session.selectPosition(db.positions.first);
+      session.positionSolved = true;
+
+      String? analysisMove;
+      session.onAnalysisMove = (uci) => analysisMove = uci;
+
+      session.handleMoveAttempted(
+        moveUci: 'd2d4',
+        boardFen: db.positions.first.fen,
+        inAnalysisMode: false,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+
+      expect(analysisMove, 'd2d4');
+    });
+
+    test('validates move and fires board update + move-accepted callback', () {
+      final db = TacticsDatabase();
+      db.positions.add(_samplePosition());
+      final session =
+          TacticsSessionController(database: db)..autoAdvance = false;
+      session.selectPosition(db.positions.first);
+
+      final boardUpdates = <TacticsBoardUpdate>[];
+      var moveAccepted = false;
+      session.onBoardUpdate = boardUpdates.add;
+      session.onUserMoveAccepted = () => moveAccepted = true;
+
+      session.handleMoveAttempted(
+        moveUci: 'e2e4',
+        boardFen: db.positions.first.fen,
+        inAnalysisMode: false,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+
+      expect(boardUpdates, hasLength(1));
+      expect(boardUpdates.first.applyMoveUci, 'e2e4');
+      expect(moveAccepted, isTrue, reason: 'correct move advanced the line');
+      expect(session.positionSolved, isTrue);
+    });
+
+    test('incorrect move fires board update but not move-accepted', () {
+      final db = TacticsDatabase();
+      db.positions.add(_samplePosition());
+      final session =
+          TacticsSessionController(database: db)..autoAdvance = false;
+      session.selectPosition(db.positions.first);
+
+      final boardUpdates = <TacticsBoardUpdate>[];
+      var moveAccepted = false;
+      session.onBoardUpdate = boardUpdates.add;
+      session.onUserMoveAccepted = () => moveAccepted = true;
+
+      session.handleMoveAttempted(
+        moveUci: 'd2d4',
+        boardFen: db.positions.first.fen,
+        inAnalysisMode: false,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+
+      expect(boardUpdates.first.applyMoveUci, 'd2d4',
+          reason: 'wrong move still shown before reset');
+      expect(moveAccepted, isFalse);
+      expect(session.feedback, 'Incorrect');
+    });
+
+    test('does nothing without an active position', () {
+      final session = TacticsSessionController(database: TacticsDatabase());
+      String? analysisMove;
+      session.onAnalysisMove = (uci) => analysisMove = uci;
+
+      session.handleMoveAttempted(
+        moveUci: 'e2e4',
+        boardFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        inAnalysisMode: true,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+
+      expect(analysisMove, isNull);
+    });
+  });
+
   test('multi-move tactic: currentTacticFen tracks board through all plies',
       () {
     // 5-ply line: e4, e5, Nf3, Nc6, Bb5.
