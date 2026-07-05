@@ -20,6 +20,7 @@ import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import 'engine/inline_engine_bar.dart';
+import 'trainer_keyboard_scope.dart';
 import 'pgn_viewer_widget.dart';
 import 'pgn_with_engine.dart';
 import 'tactics/tactics_browse_panel.dart';
@@ -300,55 +301,50 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
+    // holdsFocus: the panel keeps keyboard focus for its navigation shortcuts
+    // (arrows, p/n/j/a/e) and hands focus to the move input when typing is
+    // wanted. Space bubbles to _handleKeyEvent to toggle the solution.
+    return TrainerKeyboardScope(
+      holdsFocus: true,
+      focusNode: _focusNode,
+      onKeyEvent: _handleKeyEvent,
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.keyE): _ToggleInlineEngineIntent(),
       },
-      child: Actions(
-        actions: {
-          _ToggleInlineEngineIntent: CallbackAction<_ToggleInlineEngineIntent>(
-            onInvoke: (_) {
-              if (_session.currentPosition == null || isTextInputFocused()) {
-                return null;
-              }
-              InlineEngineBar.toggleEngine();
+      actions: {
+        _ToggleInlineEngineIntent: CallbackAction<_ToggleInlineEngineIntent>(
+          onInvoke: (_) {
+            if (_session.currentPosition == null || isTextInputFocused()) {
               return null;
-            },
+            }
+            InlineEngineBar.toggleEngine();
+            return null;
+          },
+        ),
+      },
+      child: Column(
+        children: [
+          TabBar(
+            controller: _tabController,
+            tabs: [
+              const Tab(text: 'Tactic'),
+              Tab(
+                text: _session.currentPosition != null ? 'PGN' : 'Browse',
+              ),
+            ],
           ),
-        },
-        child: Focus(
-          focusNode: _focusNode,
-          autofocus: true,
-          onKeyEvent: _handleKeyEvent,
-          child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onTap: () => _focusNode.requestFocus(),
-            child: Column(
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
               children: [
-                TabBar(
-                  controller: _tabController,
-                  tabs: [
-                    const Tab(text: 'Tactic'),
-                    Tab(
-                      text: _session.currentPosition != null ? 'PGN' : 'Browse',
-                    ),
-                  ],
-                ),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildTacticTab(),
-                      _session.currentPosition != null
-                          ? _buildAnalysisTab()
-                          : _buildBrowseTab(),
-                    ],
-                  ),
-                ),
+                _buildTacticTab(),
+                _session.currentPosition != null
+                    ? _buildAnalysisTab()
+                    : _buildBrowseTab(),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }

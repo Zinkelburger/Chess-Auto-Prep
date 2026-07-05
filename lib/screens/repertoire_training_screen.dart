@@ -13,6 +13,7 @@ import '../services/training/training_session_controller.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/pgn_viewer_widget.dart';
+import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/training/repertoire_selector_panel.dart';
@@ -142,12 +143,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
   @override
   Widget build(BuildContext context) {
-    // This Focus is an ancestor key handler only — it must NOT take primary
-    // focus, otherwise it swallows typed moves (e.g. "e6") instead of letting
-    // the move-input field receive them. Key events from focused descendants
-    // (move input, board, buttons) still bubble up to onKeyEvent.
-    return Focus(
-      canRequestFocus: false,
+    // Ancestor-only key handling (holdsFocus defaults to false): the scope must
+    // not take primary focus, or it swallows typed moves (e.g. "e6") instead of
+    // letting the move-input field receive them. Space still bubbles up to
+    // _onKeyEvent to advance the Learn step.
+    return TrainerKeyboardScope(
       onKeyEvent: _onKeyEvent,
       child: Scaffold(
         appBar: _buildAppBar(),
