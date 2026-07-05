@@ -142,8 +142,12 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
 
   @override
   Widget build(BuildContext context) {
+    // This Focus is an ancestor key handler only — it must NOT take primary
+    // focus, otherwise it swallows typed moves (e.g. "e6") instead of letting
+    // the move-input field receive them. Key events from focused descendants
+    // (move input, board, buttons) still bubble up to onKeyEvent.
     return Focus(
-      autofocus: true,
+      canRequestFocus: false,
       onKeyEvent: _onKeyEvent,
       child: Scaffold(
         appBar: _buildAppBar(),
@@ -155,8 +159,11 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    // Space for ack states must be checked before isTextInputFocused(),
-    // because the disabled MoveInputWidget can retain text-field focus.
+    // Space advances the Learn "Next" step. It's checked before the text-input
+    // guard because space is never a valid move character (the move input
+    // filters it out) and the disabled move-input field can retain focus. The
+    // "Next" button also self-focuses (see _NextButton.autofocus), so this is a
+    // secondary path — whichever the focused node is, space advances.
     if (event.logicalKey == LogicalKeyboardKey.space) {
       if (_training.learnWaitingForAck) {
         _training.learnAcknowledged();

@@ -284,6 +284,8 @@ class _NextButtonState extends State<_NextButton>
         shortcut: 'Space',
         child: FilledButton.icon(
           onPressed: widget.onPressed,
+          // Self-focus so Space activates "Next" no matter where focus was.
+          autofocus: true,
           icon: const Icon(Icons.arrow_forward, size: 20),
           label: const Text(
             'Next',

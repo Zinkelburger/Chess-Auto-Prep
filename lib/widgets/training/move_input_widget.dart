@@ -283,6 +283,9 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
         controller: _controller,
         focusNode: _focusNode,
         enabled: widget.enabled,
+        // Grab focus as soon as the field becomes the user's input target so
+        // typed moves land here rather than an ancestor Focus node.
+        autofocus: widget.enabled,
         autocorrect: false,
         enableSuggestions: false,
         textCapitalization: TextCapitalization.none,
