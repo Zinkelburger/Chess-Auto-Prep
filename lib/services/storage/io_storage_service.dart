@@ -141,6 +141,34 @@ class IOStorageService implements StorageService {
     return p.join(dir.path, '$name.pgn');
   }
 
+  // ── Study file management ────────────────────────────────────────────────
+
+  @override
+  Future<List<RepertoireMetadata>> listStudyFiles() async {
+    final dir = await AppPaths.studiesDirectory(create: true);
+    final entries = <RepertoireMetadata>[];
+    await for (final entity in dir.list()) {
+      if (!entity.path.toLowerCase().endsWith('.pgn')) continue;
+      final stat = await entity.stat();
+      final content = await readTextFile(File(entity.path));
+      entries.add(RepertoireMetadata(
+        filePath: entity.path,
+        name: p.basenameWithoutExtension(entity.path),
+        gameCount: pgn.countPgnGames(content),
+        lastModified: stat.modified,
+      ));
+    }
+    entries.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return entries;
+  }
+
+  @override
+  Future<String> studyFilePath(String name) async {
+    final dir = await AppPaths.studiesDirectory(create: true);
+    return p.join(dir.path, '$name.pgn');
+  }
+
   // ── Tactics set management ───────────────────────────────────────────────
 
   @override

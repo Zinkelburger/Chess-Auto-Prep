@@ -10,6 +10,7 @@ class AppPaths {
   static const String pgnCollectionsDirectoryName = 'pgn_collections';
   static const String gamesLibraryDirectoryName = 'games_library';
   static const String tacticsSetsDirectoryName = 'tactics_sets';
+  static const String studiesDirectoryName = 'studies';
 
   static Future<Directory> documentsDirectory() async {
     return getApplicationDocumentsDirectory();
@@ -27,6 +28,16 @@ class AppPaths {
   static Future<Directory> repertoiresDirectory({bool create = false}) async {
     final docs = await documentsDirectory();
     final dir = Directory(p.join(docs.path, repertoiresDirectoryName));
+    if (create && !await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// Local studies (one multi-chapter PGN per study).
+  static Future<Directory> studiesDirectory({bool create = false}) async {
+    final docs = await documentsDirectory();
+    final dir = Directory(p.join(docs.path, studiesDirectoryName));
     if (create && !await dir.exists()) {
       await dir.create(recursive: true);
     }

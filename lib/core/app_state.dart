@@ -9,6 +9,7 @@ enum AppMode {
   repertoire,
   repertoireTrainer,
   pgnViewer,
+  study,
 }
 
 class AppState extends ChangeNotifier {

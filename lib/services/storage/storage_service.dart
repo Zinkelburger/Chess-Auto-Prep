@@ -46,6 +46,15 @@ abstract class StorageService {
   /// Returns the absolute path for a repertoire file with the given [name].
   Future<String> repertoireFilePath(String name);
 
+  // ── Study file management ────────────────────────────────────────────────
+
+  /// Lists all `.pgn` files in the studies directory ([RepertoireMetadata]
+  /// is reused: `gameCount` is the chapter count).
+  Future<List<RepertoireMetadata>> listStudyFiles();
+
+  /// Returns the absolute path for a study file with the given [name].
+  Future<String> studyFilePath(String name);
+
   // ── Tactics set management ───────────────────────────────────────────────
 
   /// Lists all `.csv` files in the tactics-sets directory.

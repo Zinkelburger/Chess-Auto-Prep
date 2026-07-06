@@ -53,6 +53,12 @@ class AppModeMenuButton extends StatelessWidget {
               label: 'PGN Viewer',
               isSelected: appState.currentMode == AppMode.pgnViewer,
             ),
+            _buildMenuItem(
+              mode: AppMode.study,
+              icon: Icons.edit_note,
+              label: 'Study',
+              isSelected: appState.currentMode == AppMode.study,
+            ),
           ],
         );
       },
