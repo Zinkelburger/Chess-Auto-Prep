@@ -780,9 +780,21 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 _generateRepertoireFromGames();
               } else if (value == 'trophies') {
                 _showTrophyCabinet();
+              } else if (value == 'make_puzzle') {
+                context.read<AppState>().switchToPuzzleCreator(
+                    seedFen: _controller.currentPosition.fen);
               }
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'make_puzzle',
+                child: ListTile(
+                  leading: Icon(Icons.extension, size: 20),
+                  title: Text('Make puzzle from this position'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
               const PopupMenuItem(
                 value: 'generate_repertoire',
                 child: ListTile(

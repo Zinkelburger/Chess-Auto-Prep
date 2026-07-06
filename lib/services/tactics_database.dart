@@ -528,6 +528,39 @@ class TacticsDatabase extends ChangeNotifier {
     await _saveAnalyzedGameIds();
   }
 
+  /// Add [position] to the set named [setName].
+  ///
+  /// For the active set this is [addPosition].  For any other set it is a
+  /// write-through: load that set's CSV, dedupe by FEN, append, write back —
+  /// without disturbing the in-memory active set.  Returns `true` when the
+  /// position was added (`false` = duplicate FEN).
+  Future<bool> addPositionToSet(String setName, TacticsPosition position) async {
+    if (setName == _activeSetName) {
+      final before = positions.length;
+      await addPosition(position);
+      return positions.length > before;
+    }
+
+    final storage = StorageFactory.instance;
+    final path = await storage.tacticsSetPath(setName);
+    final content = await storage.readFile(path);
+
+    final existing = <TacticsPosition>[];
+    if (content != null && content.isNotEmpty) {
+      final rows = Csv().decode(content);
+      for (int i = 1; i < rows.length; i++) {
+        final parsed = _createPositionFromRow(rows[i]);
+        if (parsed != null) existing.add(parsed);
+      }
+    }
+    if (existing.any((p) => p.fen == position.fen)) return false;
+
+    existing.add(position);
+    await storage.writeFile(path, _encodeCsv(existing));
+    await refreshSetList();
+    return true;
+  }
+
   /// Add a single position (for streaming/live import)
   Future<void> addPosition(TacticsPosition position) async {
     // Check for duplicates by FEN

@@ -104,6 +104,7 @@ class TacticsPosition {
   String get description => switch (mistakeType) {
         '??' => 'Fix the blunder - find the best move',
         '?!' => 'Correct the inaccuracy - find the best move',
+        'custom' => 'Find the best move',
         _ => 'Improve on the mistake - find the best move',
       };
   String get gameSource => '$gameWhite vs $gameBlack';

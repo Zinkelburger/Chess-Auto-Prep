@@ -51,6 +51,11 @@ class BoardEditorController extends ChangeNotifier {
 
   Square? _epSquare;
 
+  // Move counters are carried through from a loaded FEN so a position pasted
+  // from a real game keeps its move number ("Move 23, White to play").
+  int _halfmoves = 0;
+  int _fullmoves = 1;
+
   EditorTool? _tool;
   EditorTool? get tool => _tool;
 
@@ -111,6 +116,8 @@ class BoardEditorController extends ChangeNotifier {
     _blackKingside = true;
     _blackQueenside = true;
     _epSquare = null;
+    _halfmoves = 0;
+    _fullmoves = 1;
     notifyListeners();
   }
 
@@ -236,7 +243,8 @@ class BoardEditorController extends ChangeNotifier {
   String get fen {
     final turnField = _turn == Side.white ? 'w' : 'b';
     final epField = _epSquare?.name ?? '-';
-    return '${_board.fen} $turnField $_castlingField $epField 0 1';
+    return '${_board.fen} $turnField $_castlingField $epField '
+        '$_halfmoves $_fullmoves';
   }
 
   /// The validated position, or `null` when the setup is illegal (see
@@ -302,6 +310,8 @@ class BoardEditorController extends ChangeNotifier {
       _blackKingside = castling.contains('k');
       _blackQueenside = castling.contains('q');
       _epSquare = (ep != null && epCandidates.contains(ep)) ? ep : null;
+      _halfmoves = fields.length > 4 ? (int.tryParse(fields[4]) ?? 0) : 0;
+      _fullmoves = fields.length > 5 ? (int.tryParse(fields[5]) ?? 1) : 1;
       notifyListeners();
       return true;
     } catch (_) {

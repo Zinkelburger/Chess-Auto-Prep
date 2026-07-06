@@ -656,6 +656,14 @@ class _SessionSettingsForm extends StatelessWidget {
           selected: settings.mistakeTypes.contains('?!'),
           onChanged: (v) => _toggleMistakeType('?!', v),
         ),
+        _MistakeTypeCheckbox(
+          label: 'Custom puzzles',
+          type: TacticsSessionSettings.customMistakeType,
+          selected: settings.mistakeTypes
+              .contains(TacticsSessionSettings.customMistakeType),
+          onChanged: (v) =>
+              _toggleMistakeType(TacticsSessionSettings.customMistakeType, v),
+        ),
         const SizedBox(height: 8),
         Text('Filter:',
             style: TextStyle(fontSize: 13, color: Colors.grey[300])),
