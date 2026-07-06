@@ -16,6 +16,7 @@ import '../services/tactics/tactics_session_controller.dart';
 import '../services/tactics/tactics_solution_pgn.dart';
 import '../screens/puzzle_creator_screen.dart';
 import '../services/tactics_database.dart';
+import '../services/tactics_export_import.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
@@ -441,12 +442,27 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   _renameActiveSet();
                 case 'delete':
                   _deleteActiveSet();
+                case 'export_csv':
+                  _exportActiveSet(TacticsExportFormat.csv);
+                case 'export_pgn':
+                  _exportActiveSet(TacticsExportFormat.pgn);
+                case 'import':
+                  _importIntoActiveSet();
               }
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'new', child: Text('New set…')),
               PopupMenuItem(value: 'rename', child: Text('Rename set…')),
               PopupMenuItem(value: 'delete', child: Text('Delete set…')),
+              PopupMenuDivider(),
+              PopupMenuItem(
+                  value: 'export_csv',
+                  child: Text('Export set (CSV, lossless)…')),
+              PopupMenuItem(
+                  value: 'export_pgn',
+                  child: Text('Export set (PGN, shareable)…')),
+              PopupMenuItem(
+                  value: 'import', child: Text('Import puzzles into set…')),
             ],
           ),
         ],
@@ -549,6 +565,75 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       await _database.renameSet(oldName, newName);
     } on ArgumentError catch (e) {
       if (mounted) showAppSnackBar(context, e.message as String, isError: true);
+    }
+  }
+
+  Future<void> _exportActiveSet(TacticsExportFormat format) async {
+    try {
+      await TacticsExportImport(_database).exportTactics(format: format);
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(context, 'Export failed: $e', isError: true);
+      }
+    }
+  }
+
+  Future<void> _importIntoActiveSet() async {
+    // Merge by default; offer replace for whole-set restores.
+    bool replace = false;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('Import into "${_database.activeSetName}"'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Pick a CSV (lossless) or PGN (shared set) file.\n'
+                'New puzzles are merged in; duplicates are skipped.',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                title: const Text('Replace set contents',
+                    style: TextStyle(fontSize: 13)),
+                value: replace,
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                onChanged: (v) =>
+                    setDialogState(() => replace = v ?? false),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Choose file…')),
+          ],
+        ),
+      ),
+    );
+    if (proceed != true) return;
+
+    try {
+      final result =
+          await TacticsExportImport(_database).importTactics(replace: replace);
+      if (!mounted) return;
+      final warned = result.warnings.isEmpty
+          ? ''
+          : ' (${result.warnings.length} skipped)';
+      showAppSnackBar(
+          context, 'Imported ${result.imported} puzzle(s)$warned.');
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(context, 'Import failed: $e', isError: true);
+      }
     }
   }
 

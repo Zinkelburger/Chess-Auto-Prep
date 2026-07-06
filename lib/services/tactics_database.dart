@@ -285,6 +285,26 @@ class TacticsDatabase extends ChangeNotifier {
     });
   }
 
+  /// Parse tactics-CSV [content] (with header row) into positions.
+  /// Bad rows are reported as warnings instead of failing the whole file.
+  static ({List<TacticsPosition> positions, List<String> warnings}) parseCsv(
+      String content) {
+    final positions = <TacticsPosition>[];
+    final warnings = <String>[];
+    if (content.trim().isEmpty) {
+      return (positions: positions, warnings: warnings);
+    }
+    final rows = Csv().decode(content);
+    for (int i = 1; i < rows.length; i++) {
+      try {
+        positions.add(TacticsPosition.fromCsv(rows[i]));
+      } catch (e) {
+        warnings.add('Row $i: $e');
+      }
+    }
+    return (positions: positions, warnings: warnings);
+  }
+
   /// Create a TacticsPosition from a CSV row.
   TacticsPosition? _createPositionFromRow(List<dynamic> row) {
     if (row.length < 17) {

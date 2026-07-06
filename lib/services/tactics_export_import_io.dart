@@ -6,8 +6,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
-/// Native (mobile/desktop) implementation for exporting CSV
-Future<void> exportCsvContent(
+/// Native (mobile/desktop) implementation for exporting a puzzle-set file
+/// (CSV or PGN — the extension comes from [filename]).
+Future<void> exportContent(
     String content, String filename, int positionCount) async {
   // On mobile, use share sheet
   if (Platform.isAndroid || Platform.isIOS) {
@@ -34,11 +35,12 @@ Future<void> exportCsvContent(
     } catch (_) {/* temp-file cleanup — ignore */}
   } else {
     // On desktop, let user choose save location
+    final extension = p.extension(filename).replaceFirst('.', '');
     final savePath = await FilePicker.saveFile(
       dialogTitle: 'Export Tactics',
       fileName: filename,
       type: FileType.custom,
-      allowedExtensions: ['csv'],
+      allowedExtensions: [if (extension.isNotEmpty) extension else 'csv'],
       bytes: utf8.encode(content),
     );
 
