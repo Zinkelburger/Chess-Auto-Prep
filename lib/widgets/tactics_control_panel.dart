@@ -324,6 +324,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       },
       child: Column(
         children: [
+          _buildSetPickerRow(),
           TabBar(
             controller: _tabController,
             tabs: [
@@ -347,6 +348,195 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         ],
       ),
     );
+  }
+
+  // ── Set picker ─────────────────────────────────────────────────────────
+
+  /// Names for the set dropdown: everything on disk plus the active set
+  /// (which may not have a file yet on a fresh install).
+  List<String> get _setNames {
+    final names = _database.availableSets.map((s) => s.name).toList();
+    if (!names.contains(_database.activeSetName)) {
+      names.insert(0, _database.activeSetName);
+    }
+    return names;
+  }
+
+  Widget _buildSetPickerRow() {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
+      child: Row(
+        children: [
+          Icon(Icons.collections_bookmark,
+              size: 16, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: DropdownButton<String>(
+              value: _database.activeSetName,
+              isExpanded: true,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              items: [
+                for (final name in _setNames)
+                  DropdownMenuItem(value: name, child: Text(name)),
+              ],
+              onChanged: (name) {
+                if (name != null) _switchSet(name);
+              },
+            ),
+          ),
+          Text(
+            '${_database.positions.length}',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 18),
+            tooltip: 'Manage sets',
+            onSelected: (action) {
+              switch (action) {
+                case 'new':
+                  _createSet();
+                case 'rename':
+                  _renameActiveSet();
+                case 'delete':
+                  _deleteActiveSet();
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'new', child: Text('New set…')),
+              PopupMenuItem(value: 'rename', child: Text('Rename set…')),
+              PopupMenuItem(value: 'delete', child: Text('Delete set…')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Confirm ending an in-progress puzzle before an action that discards the
+  /// session queue.  Returns true when it is safe to proceed.
+  Future<bool> _confirmEndSession() async {
+    if (!_session.hasActivePosition) return true;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('End session?'),
+        content: const Text(
+            'Switching sets ends the current training session.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('End & switch')),
+        ],
+      ),
+    );
+    return proceed ?? false;
+  }
+
+  Future<void> _switchSet(String name) async {
+    if (name == _database.activeSetName) return;
+    if (!await _confirmEndSession()) return;
+    _session.endSession();
+    await _database.switchSet(name);
+    if (mounted) _resetBoardToStart();
+  }
+
+  /// Prompt for a set name; returns a filesystem-safe name or null.
+  Future<String?> _promptSetName(String title, {String? initial}) async {
+    final controller = TextEditingController(text: initial ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Set name',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          onSubmitted: (value) => Navigator.pop(ctx, value),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('OK')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null) return null;
+    // Same sanitization as repertoire naming.
+    final safeName = result
+        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .trim();
+    if (safeName.isEmpty) {
+      if (mounted) {
+        showAppSnackBar(context, 'Invalid set name.', isError: true);
+      }
+      return null;
+    }
+    return safeName;
+  }
+
+  Future<void> _createSet() async {
+    final name = await _promptSetName('New puzzle set');
+    if (name == null) return;
+    if (!await _confirmEndSession()) return;
+    _session.endSession();
+    try {
+      await _database.createSet(name);
+      if (mounted) _resetBoardToStart();
+    } on ArgumentError catch (e) {
+      if (mounted) showAppSnackBar(context, e.message as String, isError: true);
+    }
+  }
+
+  Future<void> _renameActiveSet() async {
+    final oldName = _database.activeSetName;
+    final newName =
+        await _promptSetName('Rename set "$oldName"', initial: oldName);
+    if (newName == null || newName == oldName) return;
+    try {
+      await _database.renameSet(oldName, newName);
+    } on ArgumentError catch (e) {
+      if (mounted) showAppSnackBar(context, e.message as String, isError: true);
+    }
+  }
+
+  Future<void> _deleteActiveSet() async {
+    final name = _database.activeSetName;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete set "$name"?'),
+        content: Text(
+            'This permanently deletes the set and its ${_database.positions.length} puzzle(s).'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    _session.endSession();
+    await _database.deleteSetByName(name);
+    if (mounted) _resetBoardToStart();
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {

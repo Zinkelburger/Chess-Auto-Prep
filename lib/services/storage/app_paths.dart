@@ -9,6 +9,7 @@ class AppPaths {
   static const String analysisGamesDirectoryName = 'analysis_games';
   static const String pgnCollectionsDirectoryName = 'pgn_collections';
   static const String gamesLibraryDirectoryName = 'games_library';
+  static const String tacticsSetsDirectoryName = 'tactics_sets';
 
   static Future<Directory> documentsDirectory() async {
     return getApplicationDocumentsDirectory();
@@ -26,6 +27,16 @@ class AppPaths {
   static Future<Directory> repertoiresDirectory({bool create = false}) async {
     final docs = await documentsDirectory();
     final dir = Directory(p.join(docs.path, repertoiresDirectoryName));
+    if (create && !await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
+  }
+
+  /// Named tactics puzzle sets (one CSV per set).
+  static Future<Directory> tacticsSetsDirectory({bool create = false}) async {
+    final docs = await documentsDirectory();
+    final dir = Directory(p.join(docs.path, tacticsSetsDirectoryName));
     if (create && !await dir.exists()) {
       await dir.create(recursive: true);
     }

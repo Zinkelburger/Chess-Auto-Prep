@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import '../../utils/file_text_reader.dart';
 import '../../models/repertoire_metadata.dart';
+import '../../models/tactics_set_metadata.dart';
 import '../pgn_parsing_service.dart' as pgn;
 import 'app_paths.dart';
 import 'storage_service.dart';
@@ -138,6 +139,74 @@ class IOStorageService implements StorageService {
   Future<String> repertoireFilePath(String name) async {
     final dir = await AppPaths.repertoiresDirectory(create: true);
     return p.join(dir.path, '$name.pgn');
+  }
+
+  // ── Tactics set management ───────────────────────────────────────────────
+
+  @override
+  Future<List<TacticsSetMetadata>> listTacticsSets() async {
+    final dir = await AppPaths.tacticsSetsDirectory(create: true);
+    final entries = <TacticsSetMetadata>[];
+    await for (final entity in dir.list()) {
+      if (!entity.path.toLowerCase().endsWith('.csv')) continue;
+      final stat = await entity.stat();
+      entries.add(TacticsSetMetadata(
+        filePath: entity.path,
+        name: p.basenameWithoutExtension(entity.path),
+        positionCount: await _countCsvDataRows(File(entity.path)),
+        lastModified: stat.modified,
+      ));
+    }
+    entries.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return entries;
+  }
+
+  /// Non-empty line count minus the header row.  Cheap approximation used
+  /// for the set picker; the database parses rows properly on load.
+  Future<int> _countCsvDataRows(File file) async {
+    try {
+      final content = await readTextFile(file);
+      final lines =
+          content.split('\n').where((l) => l.trim().isNotEmpty).length;
+      return lines > 0 ? lines - 1 : 0;
+    } catch (e) {
+      log.e('Error counting rows in ${file.path}: $e');
+      return 0;
+    }
+  }
+
+  @override
+  Future<String> tacticsSetPath(String name) async {
+    final dir = await AppPaths.tacticsSetsDirectory(create: true);
+    return p.join(dir.path, '$name.csv');
+  }
+
+  @override
+  Future<void> deleteTacticsSet(String name) async {
+    await deleteFile(await tacticsSetPath(name));
+  }
+
+  @override
+  Future<bool> migrateLegacyTacticsCsv(String defaultSetName) async {
+    try {
+      final existingSets = await listTacticsSets();
+      if (existingSets.isNotEmpty) return false;
+
+      final legacyFile = await _getFile(_tacticsCsvFileName);
+      if (!await legacyFile.exists()) return false;
+
+      final content = await readTextFile(legacyFile);
+      if (content.trim().isEmpty) return false;
+
+      await writeFile(await tacticsSetPath(defaultSetName), content);
+      await legacyFile.rename('${legacyFile.path}.bak');
+      log.i('Migrated legacy tactics CSV into set "$defaultSetName"');
+      return true;
+    } catch (e) {
+      log.e('Error migrating legacy tactics CSV: $e');
+      return false;
+    }
   }
 
   @override

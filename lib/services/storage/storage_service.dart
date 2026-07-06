@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../models/repertoire_metadata.dart';
+import '../../models/tactics_set_metadata.dart';
 
 /// Abstract interface for storage operations.
 ///
@@ -45,8 +46,31 @@ abstract class StorageService {
   /// Returns the absolute path for a repertoire file with the given [name].
   Future<String> repertoireFilePath(String name);
 
+  // ── Tactics set management ───────────────────────────────────────────────
+
+  /// Lists all `.csv` files in the tactics-sets directory.
+  ///
+  /// Each entry contains the file path, display name, position count, and
+  /// last-modified timestamp.
+  Future<List<TacticsSetMetadata>> listTacticsSets();
+
+  /// Returns the absolute path for a tactics-set file with the given [name].
+  Future<String> tacticsSetPath(String name);
+
+  /// Deletes the tactics-set file with the given [name].  No-op if missing.
+  Future<void> deleteTacticsSet(String name);
+
+  /// One-time migration: if no set files exist yet and the legacy root-level
+  /// `tactics_positions.csv` does, move its content into [defaultSetName] and
+  /// rename the legacy file to `.bak` (kept as a rollback).  Returns `true`
+  /// if a migration ran.
+  Future<bool> migrateLegacyTacticsCsv(String defaultSetName);
+
   // ── Domain-specific helpers ──────────────────────────────────────────────
 
+  /// Legacy single-file tactics CSV at the documents root.  Superseded by
+  /// named sets ([listTacticsSets] / [tacticsSetPath]); retained only for
+  /// [migrateLegacyTacticsCsv].
   Future<String?> readTacticsCsv();
   Future<void> saveTacticsCsv(String csvContent);
 

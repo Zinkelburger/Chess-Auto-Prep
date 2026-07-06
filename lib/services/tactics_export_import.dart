@@ -14,13 +14,20 @@ class TacticsExportImport {
 
   TacticsExportImport(this._database);
 
+  /// Read the active set's raw CSV content from storage.
+  Future<String?> _readActiveSetCsv() async {
+    final storage = StorageFactory.instance;
+    return storage
+        .readFile(await storage.tacticsSetPath(_database.activeSetName));
+  }
+
   /// Export tactics to a file that users can share/save
   /// On mobile: Opens share sheet
   /// On desktop: Opens file picker to choose save location
   Future<void> exportTactics() async {
     try {
       // Get the current CSV content
-      final csvContent = await StorageFactory.instance.readTacticsCsv();
+      final csvContent = await _readActiveSetCsv();
 
       if (csvContent == null || csvContent.isEmpty) {
         throw Exception('No tactics data to export');
@@ -28,7 +35,7 @@ class TacticsExportImport {
 
       await platform.exportCsvContent(
         csvContent,
-        'tactics_positions_export.csv',
+        '${_database.activeSetName}_tactics_export.csv',
         _database.positions.length,
       );
     } catch (e) {
@@ -72,10 +79,11 @@ class TacticsExportImport {
   }
 
   Future<int> _importFromCsvContent(String csvContent) async {
-    // Save the CSV content via StorageService
-    await StorageFactory.instance.saveTacticsCsv(csvContent);
+    // Replace the active set's CSV content, then reload from storage.
+    final storage = StorageFactory.instance;
+    await storage.writeFile(
+        await storage.tacticsSetPath(_database.activeSetName), csvContent);
 
-    // Reload from storage
     final count = await _database.loadPositions();
 
     return count;
@@ -83,7 +91,7 @@ class TacticsExportImport {
 
   /// Get statistics about stored tactics
   Future<Map<String, dynamic>> getTacticsStats() async {
-    final csvContent = await StorageFactory.instance.readTacticsCsv();
+    final csvContent = await _readActiveSetCsv();
     final fileExists = csvContent != null && csvContent.isNotEmpty;
 
     final stats = <String, dynamic>{
@@ -109,10 +117,12 @@ class TacticsExportImport {
     return stats;
   }
 
-  /// Clear all tactics data (useful for testing)
+  /// Clear all tactics data in the active set (useful for testing)
   Future<void> clearAllTactics() async {
     // Save empty content to clear the data
-    await StorageFactory.instance.saveTacticsCsv('');
+    final storage = StorageFactory.instance;
+    await storage.writeFile(
+        await storage.tacticsSetPath(_database.activeSetName), '');
     _database.positions.clear();
   }
 }
