@@ -19,6 +19,7 @@ import '../utils/fen_utils.dart';
 import '../widgets/fen_list_widget.dart';
 import '../widgets/games_list_widget.dart';
 import '../widgets/opening_tree_widget.dart';
+import 'board_editor/board_editor_dialog.dart';
 import 'chess_board_widget.dart';
 import 'pgn_viewer_widget.dart';
 import 'pgn_with_engine.dart';
@@ -155,20 +156,51 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   }
 
   Widget _buildBoardPane() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: AspectRatio(
-          aspectRatio: 1.0,
-          child: ChessBoardWidget(
-            position: _currentBoard ?? _startingPosition,
-            flipped:
-                widget.playerIsWhite != null ? !widget.playerIsWhite! : false,
-            onMove: _onBoardMove,
+    return Column(
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4, right: 8),
+            child: TextButton.icon(
+              icon: const Icon(Icons.dashboard_customize, size: 16),
+              label: const Text('Set up position'),
+              onPressed: _openBoardEditor,
+            ),
           ),
         ),
-      ),
+        Expanded(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: AspectRatio(
+                aspectRatio: 1.0,
+                child: ChessBoardWidget(
+                  position: _currentBoard ?? _startingPosition,
+                  flipped: widget.playerIsWhite != null
+                      ? !widget.playerIsWhite!
+                      : false,
+                  onMove: _onBoardMove,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
+  }
+
+  /// Open the board editor seeded with the current position; navigating to
+  /// the result keeps the board/FEN-list/PGN panes in sync (games list will
+  /// simply be empty for an off-tree position).
+  Future<void> _openBoardEditor() async {
+    final position = await BoardEditorDialog.show(
+      context,
+      initialFen: (_currentBoard ?? _startingPosition).fen,
+    );
+    if (position == null || !mounted) return;
+    widget.openingTree?.navigateToFen(position.fen);
+    _navigateTo(position.fen);
   }
 
   Widget _buildStackedPanels() {
