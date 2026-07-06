@@ -2,8 +2,10 @@ import 'dart:math';
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
+import '../models/tactics_set_metadata.dart';
 import 'storage/storage_factory.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
@@ -15,11 +17,27 @@ import 'package:chess_auto_prep/utils/log.dart';
 /// each call site remembering to `setState`. Mutate the data only through the
 /// methods on this class — never poke [positions] directly from the UI.
 class TacticsDatabase extends ChangeNotifier {
+  /// Name of the set legacy single-file installs migrate into.
+  static const String defaultSetName = 'Default';
+
+  /// SharedPreferences key remembering the last active set across launches.
+  static const String _activeSetPrefsKey = 'tactics_active_set';
+
   List<TacticsPosition> positions = [];
   Set<String> analyzedGameIds = {}; // Track which games have been analyzed
   ReviewSession currentSession = ReviewSession();
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
+
+  /// The named set currently loaded into [positions].
+  String _activeSetName = defaultSetName;
+  String get activeSetName => _activeSetName;
+
+  /// Metadata for every set on disk (for the set picker).
+  List<TacticsSetMetadata> availableSets = [];
+
+  /// Whether the active-set name has been restored from prefs this run.
+  bool _activeSetRestored = false;
 
   /// The filtered + ordered queue for the active session.
   /// `null` when no session is active.
@@ -31,14 +49,36 @@ class TacticsDatabase extends ChangeNotifier {
   /// Settings for the current session (kept for mid-session rating logic).
   TacticsSessionSettings _sessionSettings = const TacticsSessionSettings();
 
-  /// Load positions from CSV file
+  /// Load positions for the active set from its CSV file.
+  ///
+  /// On first call this also migrates a legacy root-level
+  /// `tactics_positions.csv` into the [defaultSetName] set and restores the
+  /// last active set name from preferences.
   Future<int> loadPositions() async {
     await _pendingWrite;
     positions.clear();
     analyzedGameIds.clear();
 
     try {
-      final content = await StorageFactory.instance.readTacticsCsv();
+      final storage = StorageFactory.instance;
+      await storage.migrateLegacyTacticsCsv(defaultSetName);
+      final restoredNow = !_activeSetRestored;
+      await _restoreActiveSetName();
+      availableSets = await storage.listTacticsSets();
+
+      // If the *remembered* set vanished (deleted externally), fall back.
+      // Only on the prefs-restore load: an explicitly chosen set (switchSet /
+      // createSet) may legitimately have no file until its first save.
+      if (restoredNow &&
+          availableSets.isNotEmpty &&
+          !availableSets.any((s) => s.name == _activeSetName)) {
+        _activeSetName = availableSets.any((s) => s.name == defaultSetName)
+            ? defaultSetName
+            : availableSets.first.name;
+      }
+
+      final content =
+          await storage.readFile(await storage.tacticsSetPath(_activeSetName));
 
       if (content == null || content.isEmpty) {
         // No CSV found, try to load analyzed games list (legacy or empty state)
@@ -74,7 +114,8 @@ class TacticsDatabase extends ChangeNotifier {
       // Also load the separate analyzed games list (includes games with no blunders)
       await _loadAnalyzedGameIds();
 
-      log.i('Loaded ${positions.length} tactics positions from storage');
+      log.i(
+          'Loaded ${positions.length} tactics positions from set "$_activeSetName"');
       log.i('Tracking ${analyzedGameIds.length} analyzed game IDs');
       notifyListeners();
       return positions.length;
@@ -82,6 +123,103 @@ class TacticsDatabase extends ChangeNotifier {
       log.e('Error loading positions: $e');
       notifyListeners();
       return 0;
+    }
+  }
+
+  /// Restore the active set name from preferences (first load only).
+  Future<void> _restoreActiveSetName() async {
+    if (_activeSetRestored) return;
+    _activeSetRestored = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored = prefs.getString(_activeSetPrefsKey);
+      if (stored != null && stored.isNotEmpty) {
+        _activeSetName = stored;
+      }
+    } catch (e) {
+      log.e('Error restoring active tactics set: $e');
+    }
+  }
+
+  Future<void> _persistActiveSetName() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_activeSetPrefsKey, _activeSetName);
+    } catch (e) {
+      log.e('Error persisting active tactics set: $e');
+    }
+  }
+
+  // ── Set management ─────────────────────────────────────────────────────
+
+  /// Re-scan the sets directory (e.g. after external changes).
+  Future<void> refreshSetList() async {
+    availableSets = await StorageFactory.instance.listTacticsSets();
+    notifyListeners();
+  }
+
+  /// Switch to another named set: waits for pending writes to the current
+  /// set, then loads [name].  Any active session queue is discarded (its
+  /// indices refer to the old set's positions).
+  Future<void> switchSet(String name) async {
+    if (name == _activeSetName) return;
+    await _pendingWrite;
+    _activeSetName = name;
+    _sessionQueue = [];
+    _sessionQueueIndex = 0;
+    currentSession = ReviewSession();
+    await _persistActiveSetName();
+    await loadPositions();
+  }
+
+  /// Create a new empty set and switch to it.  Throws [ArgumentError] if a
+  /// set with that name already exists.
+  Future<void> createSet(String name) async {
+    final storage = StorageFactory.instance;
+    final path = await storage.tacticsSetPath(name);
+    if (await storage.fileExists(path)) {
+      throw ArgumentError('A set named "$name" already exists');
+    }
+    await storage.writeFile(path, _encodeCsv(const []));
+    await switchSet(name);
+  }
+
+  /// Rename a set (the active one keeps its contents loaded).  Throws
+  /// [ArgumentError] if the target name is taken.
+  Future<void> renameSet(String oldName, String newName) async {
+    if (oldName == newName) return;
+    final storage = StorageFactory.instance;
+    final oldPath = await storage.tacticsSetPath(oldName);
+    final newPath = await storage.tacticsSetPath(newName);
+    if (await storage.fileExists(newPath)) {
+      throw ArgumentError('A set named "$newName" already exists');
+    }
+    await _pendingWrite;
+    await storage.renameFile(oldPath, newPath);
+    if (_activeSetName == oldName) {
+      _activeSetName = newName;
+      await _persistActiveSetName();
+    }
+    await refreshSetList();
+  }
+
+  /// Delete a set's file.  Deleting the active set clears the in-memory
+  /// positions and switches to another set (or an empty [defaultSetName]).
+  Future<void> deleteSetByName(String name) async {
+    await _pendingWrite;
+    await StorageFactory.instance.deleteTacticsSet(name);
+    availableSets = await StorageFactory.instance.listTacticsSets();
+    if (_activeSetName == name) {
+      _activeSetName = availableSets.isNotEmpty
+          ? availableSets.first.name
+          : defaultSetName;
+      _sessionQueue = [];
+      _sessionQueueIndex = 0;
+      currentSession = ReviewSession();
+      await _persistActiveSetName();
+      await loadPositions();
+    } else {
+      notifyListeners();
     }
   }
 
@@ -162,45 +300,47 @@ class TacticsDatabase extends ChangeNotifier {
     }
   }
 
-  /// Save positions back to CSV
+  /// Encode [rows] as the tactics CSV format (header + data rows).
+  static String _encodeCsv(List<TacticsPosition> rows) {
+    final List<List<dynamic>> csvData = [
+      // Header row — must match toCsvRow() column order exactly.
+      [
+        'fen',
+        'game_white',
+        'game_black',
+        'game_result',
+        'game_date',
+        'game_id',
+        'game_url',
+        'position_context',
+        'user_move',
+        'correct_line',
+        'mistake_type',
+        'mistake_analysis',
+        'review_count',
+        'success_count',
+        'last_reviewed',
+        'time_to_solve',
+        'hints_used',
+        'opponent_best_response',
+        'rating',
+      ],
+      for (final pos in rows) pos.toCsvRow(),
+    ];
+    return Csv().encode(csvData);
+  }
+
+  /// Save positions back to the active set's CSV.
   Future<void> savePositions() async {
+    // Capture the target set now: a switchSet() while this write is queued
+    // must not redirect the old set's data into the new file.
+    final setName = _activeSetName;
     await _enqueueWrite(() async {
       try {
-        // Create CSV data
-        final List<List<dynamic>> csvData = [
-          // Header row — must match toCsvRow() column order exactly.
-          [
-            'fen',
-            'game_white',
-            'game_black',
-            'game_result',
-            'game_date',
-            'game_id',
-            'game_url',
-            'position_context',
-            'user_move',
-            'correct_line',
-            'mistake_type',
-            'mistake_analysis',
-            'review_count',
-            'success_count',
-            'last_reviewed',
-            'time_to_solve',
-            'hints_used',
-            'opponent_best_response',
-            'rating',
-          ]
-        ];
-
-        // Data rows
-        for (final pos in positions) {
-          csvData.add(pos.toCsvRow());
-        }
-
-        final csvString = Csv().encode(csvData);
-        await StorageFactory.instance.saveTacticsCsv(csvString);
-
-        log.e('Saved ${positions.length} tactics positions to storage');
+        final storage = StorageFactory.instance;
+        await storage.writeFile(
+            await storage.tacticsSetPath(setName), _encodeCsv(positions));
+        log.i('Saved ${positions.length} tactics positions to set "$setName"');
       } catch (e) {
         log.e('Error saving positions: $e');
       }
