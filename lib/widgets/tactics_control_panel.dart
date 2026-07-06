@@ -14,6 +14,7 @@ import '../services/tactics/tactics_import_coordinator.dart';
 import '../services/tactics/tactics_import_form.dart';
 import '../services/tactics/tactics_session_controller.dart';
 import '../services/tactics/tactics_solution_pgn.dart';
+import '../screens/puzzle_creator_screen.dart';
 import '../services/tactics_database.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
@@ -71,6 +72,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();
 
+  /// AppState reference for the pending puzzle-seed listener (kept so
+  /// dispose() can unsubscribe without touching context).
+  AppState? _appStateRef;
+
   @override
   void initState() {
     super.initState();
@@ -113,6 +118,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         _form.loadPrefs();
 
         _resetBoardToStart();
+
+        // "Make puzzle from this position" hooks in other modes set a seed
+        // FEN before switching here; consume it now (panel just created) and
+        // on later AppState notifications (panel cached in IndexedStack).
+        _appStateRef = appState;
+        appState.addListener(_onAppStateForPuzzleSeed);
+        _consumePendingPuzzleSeed(appState);
       }
     });
 
@@ -230,10 +242,37 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
+  void _onAppStateForPuzzleSeed() {
+    final appState = _appStateRef;
+    if (appState != null) _consumePendingPuzzleSeed(appState);
+  }
+
+  void _consumePendingPuzzleSeed(AppState appState) {
+    final seed = appState.pendingPuzzleSeedFen;
+    if (seed == null || !mounted) return;
+    appState.pendingPuzzleSeedFen = null;
+    // Defer navigation out of the notify/build phase.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _openPuzzleCreator(seedFen: seed);
+    });
+  }
+
+  Future<void> _openPuzzleCreator({String? seedFen}) async {
+    final saved = await PuzzleCreatorScreen.push(
+      context,
+      database: _database,
+      initialFen: seedFen,
+    );
+    if (saved != null && mounted) {
+      showAppSnackBar(context, 'Puzzle saved.');
+    }
+  }
+
   @override
   void dispose() {
     // Detach our listeners/callbacks but do NOT dispose the owners — they are
     // provider-owned (see `_TacticsModeView`) and shared/outlive this panel.
+    _appStateRef?.removeListener(_onAppStateForPuzzleSeed);
     _session.removeListener(_onSessionChanged);
     _import.removeListener(_onImportChanged);
     _database.removeListener(_onDbChanged);
@@ -771,6 +810,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         if (mounted) setState(() {});
       },
       onBatchDelete: _batchDeleteTactics,
+      onCreatePuzzle: () => _openPuzzleCreator(),
     );
   }
 

@@ -24,8 +24,12 @@ class TacticsSessionSettings {
     this.groupByGame = true,
     this.includeOneStar = false,
     this.skipReviewed = false,
-    this.mistakeTypes = const {'??', '?'},
+    this.mistakeTypes = const {'??', '?', customMistakeType},
   });
+
+  /// Marker mistake-type for manually created puzzles (they have no
+  /// engine-graded blunder classification).
+  static const String customMistakeType = 'custom';
 
   final TacticsSessionOrder order;
 
@@ -78,12 +82,26 @@ class TacticsSessionSettings {
   static const _keyIncludeOneStar = 'tactics_session.include_one_star';
   static const _keySkipReviewed = 'tactics_session.skip_reviewed';
   static const _keyMistakeTypes = 'tactics_session.mistake_types';
+  static const _keyCustomTypeMigrated = 'tactics_session.custom_type_migrated';
 
   /// Load saved session settings, falling back to defaults for any missing key.
   static Future<TacticsSessionSettings> load() async {
     const defaults = TacticsSessionSettings();
     final prefs = await SharedPreferences.getInstance();
-    final storedTypes = prefs.getStringList(_keyMistakeTypes);
+    var storedTypes = prefs.getStringList(_keyMistakeTypes);
+
+    // One-time migration: type lists saved before the "custom" type existed
+    // would silently hide manually created puzzles; opt them in once (the
+    // user can still disable the chip afterwards).
+    if (storedTypes != null &&
+        !(prefs.getBool(_keyCustomTypeMigrated) ?? false)) {
+      if (!storedTypes.contains(customMistakeType)) {
+        storedTypes = [...storedTypes, customMistakeType];
+        await prefs.setStringList(_keyMistakeTypes, storedTypes);
+      }
+      await prefs.setBool(_keyCustomTypeMigrated, true);
+    }
+
     return TacticsSessionSettings(
       order: TacticsSessionOrder.fromStorage(prefs.getString(_keyOrder)),
       groupByGame: prefs.getBool(_keyGroupByGame) ?? defaults.groupByGame,

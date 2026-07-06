@@ -12,7 +12,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:provider/provider.dart';
 
+import '../core/app_state.dart';
 import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
 import '../utils/fen_utils.dart';
@@ -158,15 +160,27 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   Widget _buildBoardPane() {
     return Column(
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 4, right: 8),
-            child: TextButton.icon(
-              icon: const Icon(Icons.dashboard_customize, size: 16),
-              label: const Text('Set up position'),
-              onPressed: _openBoardEditor,
-            ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, left: 8, right: 8),
+          child: Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              TextButton.icon(
+                icon: const Icon(Icons.extension, size: 16),
+                label: const Text('Make puzzle'),
+                onPressed: () {
+                  context.read<AppState>().switchToPuzzleCreator(
+                        seedFen: (_currentBoard ?? _startingPosition).fen,
+                      );
+                },
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.dashboard_customize, size: 16),
+                label: const Text('Set up position'),
+                onPressed: _openBoardEditor,
+              ),
+            ],
           ),
         ),
         Expanded(

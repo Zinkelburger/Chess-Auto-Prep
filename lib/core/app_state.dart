@@ -34,6 +34,11 @@ class AppState extends ChangeNotifier {
   /// mode, pre-seeded with these PGN file paths.
   List<String>? pendingGenerationPgnPaths;
 
+  /// FEN to seed the puzzle creator with ("Make puzzle from this position"
+  /// hooks in other modes).  Set before switching to tactics mode; consumed
+  /// by the tactics panel on activation.
+  String? pendingPuzzleSeedFen;
+
   AppMode get currentMode => _currentMode;
   Position get currentPosition => _currentPosition;
   String? get lichessUsername => _lichessUsername;
@@ -55,6 +60,13 @@ class AppState extends ChangeNotifier {
 
   void setMode(AppMode mode) {
     _currentMode = mode;
+    notifyListeners();
+  }
+
+  /// Switch to tactics mode and open the puzzle creator seeded with [seedFen].
+  void switchToPuzzleCreator({required String seedFen}) {
+    pendingPuzzleSeedFen = seedFen;
+    _currentMode = AppMode.tactics;
     notifyListeners();
   }
 

@@ -36,6 +36,7 @@ class TacticsBrowsePanel extends StatefulWidget {
     required this.onClearAll,
     this.onSetRating,
     this.onBatchDelete,
+    this.onCreatePuzzle,
   });
 
   final List<TacticsPosition> positions;
@@ -47,13 +48,16 @@ class TacticsBrowsePanel extends StatefulWidget {
   final void Function(int index, int rating)? onSetRating;
   final void Function(List<int> indices)? onBatchDelete;
 
+  /// Opens the manual puzzle creator.  Hidden when null.
+  final VoidCallback? onCreatePuzzle;
+
   @override
   State<TacticsBrowsePanel> createState() => _TacticsBrowsePanelState();
 }
 
 class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
   // Mistake-type filters (all enabled by default).
-  final Set<String> _enabledTypes = {'??', '?', '?!'};
+  final Set<String> _enabledTypes = {'??', '?', '?!', 'custom'};
   TacticsStatusFilter _statusFilter = TacticsStatusFilter.all;
   TacticsBrowseSort _sort = TacticsBrowseSort.newest;
   int _minRating = 0; // 0 = show all ratings
@@ -114,12 +118,25 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
     final positions = widget.positions;
 
     if (positions.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Text(
-            'No tactics found yet.\nImport games to discover tactical positions.',
-            textAlign: TextAlign.center,
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'No tactics in this set yet.\nImport games to discover tactical positions, or create your own.',
+                textAlign: TextAlign.center,
+              ),
+              if (widget.onCreatePuzzle != null) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('New puzzle'),
+                  onPressed: widget.onCreatePuzzle,
+                ),
+              ],
+            ],
           ),
         ),
       );
@@ -169,6 +186,7 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
             setState(() => _selected.addAll(visibleIndices));
           },
           onClearAll: widget.onClearAll,
+          onCreatePuzzle: widget.onCreatePuzzle,
         ),
         const Divider(height: 1),
         const TacticsBrowseHeader(),
@@ -324,13 +342,14 @@ class TacticsBrowseRow extends StatelessWidget {
               SizedBox(
                 width: 32,
                 child: Text(
-                  pos.mistakeType,
+                  pos.mistakeType == 'custom' ? '✎' : pos.mistakeType,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                     color: switch (pos.mistakeType) {
                       '??' => Colors.red,
                       '?!' => Colors.yellow,
+                      'custom' => Colors.lightBlue,
                       _ => Colors.orange,
                     },
                   ),
@@ -399,6 +418,7 @@ class _BrowseFilterBar extends StatelessWidget {
     required this.onDeleteSelected,
     required this.onSelectAll,
     required this.onClearAll,
+    this.onCreatePuzzle,
   });
 
   final int totalCount;
@@ -417,6 +437,7 @@ class _BrowseFilterBar extends StatelessWidget {
   final VoidCallback onDeleteSelected;
   final VoidCallback onSelectAll;
   final VoidCallback onClearAll;
+  final VoidCallback? onCreatePuzzle;
 
   @override
   Widget build(BuildContext context) {
@@ -456,6 +477,13 @@ class _BrowseFilterBar extends StatelessWidget {
                   child: const Text('Cancel', style: TextStyle(fontSize: 12)),
                 ),
               ] else ...[
+                if (onCreatePuzzle != null)
+                  TextButton.icon(
+                    onPressed: onCreatePuzzle,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('New puzzle',
+                        style: TextStyle(fontSize: 12)),
+                  ),
                 IconButton(
                   onPressed: onToggleSelectMode,
                   icon: const Icon(Icons.checklist, size: 18),
@@ -500,6 +528,13 @@ class _BrowseFilterBar extends StatelessWidget {
                 color: Colors.yellow.shade700,
                 enabled: enabledTypes.contains('?!'),
                 onToggle: () => onToggleType('?!'),
+              ),
+              _MistakeTypeChip(
+                type: '✎',
+                label: 'Custom',
+                color: Colors.lightBlue,
+                enabled: enabledTypes.contains('custom'),
+                onToggle: () => onToggleType('custom'),
               ),
               const SizedBox(width: 8),
               ...TacticsStatusFilter.values.map((f) => ChoiceChip(
