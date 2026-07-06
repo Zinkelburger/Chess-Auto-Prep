@@ -1,0 +1,261 @@
+/// State owner for Study mode: a [StudyDocument] (chapters of editable
+/// [MoveTree]s), the active chapter, a [TreePath] cursor, and debounced
+/// autosave to the backing PGN file.
+///
+/// Modeled on [RepertoireController] but intentionally lighter: no colors,
+/// no lines/coverage/traps — just annotated games in named files.
+library;
+
+import 'dart:async';
+
+import 'package:dartchess/dartchess.dart';
+import 'package:flutter/foundation.dart';
+
+import '../models/move_tree.dart';
+import '../models/repertoire_metadata.dart';
+import '../models/study_document.dart';
+import '../services/storage/storage_factory.dart';
+import '../utils/chess_utils.dart' show tryParseFen;
+import 'package:chess_auto_prep/utils/log.dart';
+
+class StudyController extends ChangeNotifier {
+  StudyDocument _doc = StudyDocument.fresh('Untitled study');
+  StudyDocument get doc => _doc;
+
+  int _chapterIndex = 0;
+  int get chapterIndex => _chapterIndex;
+  StudyChapter get chapter => _doc.chapters[_chapterIndex];
+  MoveTree get tree => chapter.tree;
+
+  TreePath _cursor = TreePath.empty;
+  TreePath get cursor => _cursor;
+
+  bool _dirty = false;
+  bool get dirty => _dirty;
+
+  bool flipped = false;
+
+  Timer? _autoSaveTimer;
+  static const _autoSaveDelay = Duration(seconds: 2);
+
+  /// Studies on disk (refreshed by [refreshStudyList]).
+  List<RepertoireMetadata> availableStudies = [];
+
+  /// Board position at the cursor.
+  Position get currentPosition =>
+      tryParseFen(tree.fenAt(_cursor)) ?? Chess.initial;
+
+  // ── File management ──────────────────────────────────────────────────
+
+  Future<void> refreshStudyList() async {
+    availableStudies = await StorageFactory.instance.listStudyFiles();
+    notifyListeners();
+  }
+
+  /// Create a new study file named [name] and make it active.
+  /// Throws [ArgumentError] when the name is taken.
+  Future<void> newStudy(String name) async {
+    final storage = StorageFactory.instance;
+    final path = await storage.studyFilePath(name);
+    if (await storage.fileExists(path)) {
+      throw ArgumentError('A study named "$name" already exists');
+    }
+    await flushSave();
+    _doc = StudyDocument.fresh(name)..filePath = path;
+    _chapterIndex = 0;
+    _cursor = TreePath.empty;
+    _dirty = true; // persist the empty skeleton
+    await flushSave();
+    await refreshStudyList();
+  }
+
+  Future<void> openStudy(String path) async {
+    await flushSave();
+    final content = await StorageFactory.instance.readFile(path);
+    final name = path.split('/').last.replaceAll(RegExp(r'\.pgn$'), '');
+    _doc = StudyDocument.fromPgn(content ?? '', name: name, filePath: path);
+    _chapterIndex = 0;
+    _cursor = TreePath.empty;
+    _dirty = false;
+    notifyListeners();
+  }
+
+  Future<void> deleteStudy(String path) async {
+    await StorageFactory.instance.deleteFile(path);
+    if (_doc.filePath == path) {
+      _doc = StudyDocument.fresh('Untitled study');
+      _chapterIndex = 0;
+      _cursor = TreePath.empty;
+      _dirty = false;
+    }
+    await refreshStudyList();
+  }
+
+  /// Whole-file atomic rewrite (storage layer writes tmp + rename).
+  Future<void> _save() async {
+    final path = _doc.filePath;
+    if (path == null) return;
+    try {
+      await StorageFactory.instance.writeFile(path, _doc.toPgn());
+      _dirty = false;
+    } catch (e) {
+      log.e('Error saving study: $e');
+    }
+  }
+
+  /// Persist any pending changes now (mode switch, dispose, file switch).
+  Future<void> flushSave() async {
+    _autoSaveTimer?.cancel();
+    if (_dirty) await _save();
+  }
+
+  void _markDirty() {
+    _dirty = true;
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(_autoSaveDelay, _save);
+    notifyListeners();
+  }
+
+  // ── Chapters ─────────────────────────────────────────────────────────
+
+  void selectChapter(int index) {
+    if (index < 0 || index >= _doc.chapters.length) return;
+    _chapterIndex = index;
+    _cursor = TreePath.empty;
+    notifyListeners();
+  }
+
+  void addChapter(String name, {String? startingFen}) {
+    _doc.chapters.add(StudyChapter(name: name, startingFen: startingFen));
+    _chapterIndex = _doc.chapters.length - 1;
+    _cursor = TreePath.empty;
+    _markDirty();
+  }
+
+  void renameChapter(int index, String name) {
+    if (index < 0 || index >= _doc.chapters.length) return;
+    _doc.chapters[index].name = name;
+    _markDirty();
+  }
+
+  void deleteChapter(int index) {
+    if (_doc.chapters.length <= 1) return; // keep at least one
+    if (index < 0 || index >= _doc.chapters.length) return;
+    _doc.chapters.removeAt(index);
+    if (_chapterIndex >= _doc.chapters.length) {
+      _chapterIndex = _doc.chapters.length - 1;
+    }
+    _cursor = TreePath.empty;
+    _markDirty();
+  }
+
+  // ── Navigation ───────────────────────────────────────────────────────
+
+  void jumpTo(TreePath path) {
+    if (!tree.isValidPath(path)) return;
+    _cursor = path;
+    notifyListeners();
+  }
+
+  void goBack() {
+    if (_cursor.isEmpty) return;
+    _cursor = _cursor.parent;
+    notifyListeners();
+  }
+
+  /// Follow the mainline continuation from the cursor, if any.
+  void goForward() {
+    final children =
+        _cursor.isEmpty ? tree.roots : (tree.nodeAt(_cursor)?.children ?? []);
+    if (children.isEmpty) return;
+    _cursor = _cursor.child(0);
+    notifyListeners();
+  }
+
+  void goToStart() {
+    _cursor = TreePath.empty;
+    notifyListeners();
+  }
+
+  void goToEnd() {
+    _cursor = tree.mainlineEndFrom(_cursor);
+    notifyListeners();
+  }
+
+  void toggleFlipped() {
+    flipped = !flipped;
+    notifyListeners();
+  }
+
+  // ── Editing ──────────────────────────────────────────────────────────
+
+  /// Play [san] at the cursor: follows an existing child or adds a new node
+  /// (a variation when the move differs from the mainline continuation).
+  bool playSan(String san) {
+    final path = tree.addMove(_cursor, san);
+    if (path == null) return false;
+    _cursor = path;
+    _markDirty();
+    return true;
+  }
+
+  void setComment(TreePath path, String? comment) {
+    tree.setComment(path, comment);
+    _markDirty();
+  }
+
+  void deleteAt(TreePath path) {
+    tree.deleteAt(path);
+    // If the cursor was inside the deleted subtree, retreat to its parent.
+    if (path.isAncestorOf(_cursor) || !tree.isValidPath(_cursor)) {
+      _cursor = path.parent;
+    }
+    _markDirty();
+  }
+
+  void promote(TreePath path) {
+    final onCursorLine = path.isAncestorOf(_cursor);
+    final sanLine = tree.sanSequenceAt(_cursor);
+    tree.promoteVariation(path);
+    if (onCursorLine) _reanchorCursor(sanLine);
+    _markDirty();
+  }
+
+  /// Recursively promote so [target] lies on the mainline (same algorithm as
+  /// RepertoireController.makeMainLine).
+  void makeMainLine(TreePath target) {
+    if (target.isEmpty) return;
+    final sanLine = tree.sanSequenceAt(_cursor);
+    final indices = target.toList();
+    for (int depth = 0; depth < indices.length; depth++) {
+      if (indices[depth] != 0) {
+        tree.promoteVariation(TreePath(indices.sublist(0, depth + 1)));
+        indices[depth] = 0;
+      }
+    }
+    _reanchorCursor(sanLine);
+    _markDirty();
+  }
+
+  /// After a structural change, re-locate the cursor by replaying its SAN
+  /// sequence (paths shift when siblings reorder).
+  void _reanchorCursor(List<String> sanLine) {
+    var path = TreePath.empty;
+    var siblings = tree.roots;
+    for (final san in sanLine) {
+      final idx = siblings.indexWhere((n) => n.san == san);
+      if (idx == -1) break;
+      path = path.child(idx);
+      siblings = siblings[idx].children;
+    }
+    _cursor = path;
+  }
+
+  @override
+  void dispose() {
+    _autoSaveTimer?.cancel();
+    // Best-effort synchronous kick; the atomic write completes on its own.
+    if (_dirty) unawaited(_save());
+    super.dispose();
+  }
+}

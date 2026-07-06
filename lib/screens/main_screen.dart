@@ -11,11 +11,13 @@ import '../widgets/app_mode_menu_button.dart';
 import '../widgets/tactics_control_panel.dart';
 import '../widgets/training/move_input_widget.dart';
 
+import '../core/study_controller.dart';
 import '../services/engine/engine_lifecycle.dart';
 import 'analysis_screen.dart';
 import 'pgn_viewer_screen.dart';
 import 'repertoire_screen.dart';
 import 'repertoire_training_screen.dart';
+import 'study_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -31,6 +33,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     AppMode.repertoire,
     AppMode.repertoireTrainer,
     AppMode.pgnViewer,
+    AppMode.study,
   ];
 
   final Map<AppMode, Widget> _modeViews = <AppMode, Widget>{};
@@ -110,6 +113,11 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         return const RepertoireTrainingScreen();
       case AppMode.pgnViewer:
         return const PgnViewerScreen();
+      case AppMode.study:
+        return ChangeNotifierProvider<StudyController>(
+          create: (_) => StudyController(),
+          child: const StudyScreen(),
+        );
     }
   }
 }
