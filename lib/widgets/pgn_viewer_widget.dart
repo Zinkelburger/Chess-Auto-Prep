@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
+import 'package:provider/provider.dart';
+import 'package:chess_auto_prep/core/app_state.dart';
+import 'package:chess_auto_prep/core/study_controller.dart';
 import 'package:chess_auto_prep/services/pgn_parsing_service.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
+import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/fen_utils.dart';
-import 'package:chess_auto_prep/utils/chess_utils.dart' show plyBeforeMove;
+import 'package:chess_auto_prep/utils/pgn_date_utils.dart';
+import 'package:chess_auto_prep/utils/chess_utils.dart'
+    show coordsAtPly, plyBeforeMove;
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
+import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_variation_extractor.dart';
 
@@ -94,10 +102,36 @@ class PgnViewerWidgetController {
   /// Jump from the current variation back to the mainline branch point.
   void returnToMainline() => _state?._returnToMainline();
 
+  /// Number of continuation candidates at the current fork (< 2 when linear).
+  int get branchCandidateCount => _state?._branchCandidates().length ?? 0;
+
+  /// Play the [index]-th (0-based) branch candidate shown in the fork bar.
+  /// Returns false when there is no fork or the index is out of range.
+  bool selectBranchCandidate(int index) {
+    final state = _state;
+    if (state == null) return false;
+    final candidates = state._branchCandidates();
+    if (candidates.length < 2 || index < 0 || index >= candidates.length) {
+      return false;
+    }
+    candidates[index].onTap();
+    return true;
+  }
+
   /// Toggle a NAG on a specific move (used by keyboard shortcuts).
   void toggleNagOnMove(int moveIndex, int nagId) {
     _state?._toggleNag(moveIndex, nagId);
   }
+
+  /// Record [san] as an ephemeral variation at the current mainline position
+  /// without navigating into it (solitaire wrong attempts, shown live).
+  void recordVariationMove(String san) => _state?._recordVariationMove(san);
+
+  /// Append solitaire guess notes to mainline move comments ([notes] keyed by
+  /// 0-based move index) and persist through the standard movetext serializer,
+  /// keeping the game's own annotations intact.
+  void addGuessAnnotations(Map<int, String> notes) =>
+      _state?._addGuessAnnotations(notes);
 }
 
 class PgnViewerWidget extends StatefulWidget {
@@ -109,7 +143,6 @@ class PgnViewerWidget extends StatefulWidget {
   final PgnViewerWidgetController? controller;
   final String? initialFen;
   final bool showStartEndButtons;
-  final Function(int nodeId, Offset globalPosition)? onAnalysisNodeAction;
   final ValueChanged<String>? onCommentsChanged;
   final bool editMode;
   final bool protectOriginal;
@@ -127,7 +160,6 @@ class PgnViewerWidget extends StatefulWidget {
     this.controller,
     this.initialFen,
     this.showStartEndButtons = true,
-    this.onAnalysisNodeAction,
     this.onCommentsChanged,
     this.editMode = false,
     this.protectOriginal = true,
@@ -180,8 +212,16 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _currentMoveKey.currentContext;
       if (ctx == null || !mounted) return;
-      Scrollable.ensureVisible(
-        ctx,
+      // Scroll only the movetext's own scrollable. The static
+      // Scrollable.ensureVisible walks *all* ancestor scrollables, and when
+      // this widget sits kept-alive behind a TabBarView (PGN viewer side
+      // panel) that would drag the tab view back to this tab on every
+      // navigation from the Analysis tab.
+      final renderObject = ctx.findRenderObject();
+      final scrollable = Scrollable.maybeOf(ctx);
+      if (renderObject == null || scrollable == null) return;
+      scrollable.position.ensureVisible(
+        renderObject,
         alignment: 0.5,
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
@@ -366,7 +406,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final bStr = bElo != null && bElo.isNotEmpty && bElo != '?'
         ? '$black ($bElo)'
         : black;
-    final date = game.headers['Date'] ?? '';
+    final date = formatPgnDate(game.headers['Date']);
     final result = game.headers['Result'] ?? '';
 
     // Build detail line, omitting blank/placeholder parts
@@ -424,6 +464,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   void _goToMainLineMove(int moveIndex) {
+    // Solitaire: never walk the board past the revealed frontier.
+    if (widget.revealedPly != null && moveIndex > widget.revealedPly!) {
+      moveIndex = widget.revealedPly!;
+    }
     if (moveIndex < 0 || moveIndex > _moveHistory.length) return;
     Position pos = _startPosition;
     for (int i = 0; i < moveIndex; i++) {
@@ -517,41 +561,71 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     _goToMainLineMove(target.clamp(0, _moveHistory.length));
   }
 
-  /// The moves that continue from the current position, as tappable chips.
-  /// Returns null unless there's a genuine branch (≥2 options) so the bar stays
-  /// unobtrusive on linear lines. Mirrors Lichess' inline branch picker.
-  Widget? _buildBranchChips() {
-    final chips = <Widget>[];
+  /// The continuation candidates at the current position, in the order the
+  /// fork bar shows them (mainline continuation first). Shared by the chip
+  /// rendering and the 1–9 keyboard shortcuts so both always agree.
+  List<({String san, Color color, VoidCallback onTap, bool emphasized})>
+      _branchCandidates() {
+    final candidates =
+        <({String san, Color color, VoidCallback onTap, bool emphasized})>[];
     if (_analysisPath.isEmpty && !_inlineActive) {
       // On the mainline: the next mainline move + any sidelines branching here.
+      // In solitaire the frontier ply is still being guessed: its mainline
+      // move and the source game's alternatives stay hidden there.
       final ply = _mainLineIndex;
-      if (ply < _moveHistory.length && _moveHistory[ply].san != '--') {
-        chips.add(_branchChip(_moveHistory[ply].san, AppColors.pgnMainLine,
-            () => _goToMainLineMove(ply + 1),
-            emphasized: true));
+      final atSolitaireFrontier =
+          widget.revealedPly != null && ply >= widget.revealedPly!;
+      if (!atSolitaireFrontier &&
+          ply < _moveHistory.length &&
+          _moveHistory[ply].san != '--') {
+        candidates.add((
+          san: _moveHistory[ply].san,
+          color: AppColors.pgnMainLine,
+          onTap: () => _goToMainLineMove(ply + 1),
+          emphasized: true,
+        ));
       }
       for (final root in _variationsByPly[ply] ?? const <MoveNode>[]) {
         if (root.san == '--') continue;
-        chips.add(_branchChip(
-            root.san,
-            root.isEphemeral
-                ? AppColors.pgnEphemeralMove
-                : AppColors.pgnVariation,
-            () => _goToAnalysisNode(root, ply)));
+        if (atSolitaireFrontier && !root.isEphemeral) continue;
+        candidates.add((
+          san: root.san,
+          color: root.isEphemeral
+              ? AppColors.pgnEphemeralMove
+              : AppColors.pgnVariation,
+          onTap: () => _goToAnalysisNode(root, ply),
+          emphasized: false,
+        ));
       }
     } else if (_analysisPath.isNotEmpty) {
       // Inside a variation: the children of the current node.
       for (final child in _analysisPath.last.children) {
         if (child.san == '--') continue;
-        chips.add(_branchChip(
-            child.san,
-            child.isEphemeral
-                ? AppColors.pgnEphemeralMove
-                : AppColors.pgnVariation,
-            () => _goToAnalysisNode(child, _activeBranchPly)));
+        candidates.add((
+          san: child.san,
+          color: child.isEphemeral
+              ? AppColors.pgnEphemeralMove
+              : AppColors.pgnVariation,
+          onTap: () => _goToAnalysisNode(child, _activeBranchPly),
+          emphasized: false,
+        ));
       }
     }
-    if (chips.length < 2) return null;
+    return candidates;
+  }
+
+  /// The moves that continue from the current position, as tappable chips.
+  /// Returns null unless there's a genuine branch (≥2 options) so the bar stays
+  /// unobtrusive on linear lines. Mirrors Lichess' inline branch picker.
+  /// Each chip carries a keycap badge; keys 1–9 play the matching candidate.
+  Widget? _buildBranchChips() {
+    final candidates = _branchCandidates();
+    if (candidates.length < 2) return null;
+    final chips = <Widget>[
+      for (final (i, c) in candidates.indexed)
+        _branchChip(c.san, c.color, c.onTap,
+            emphasized: c.emphasized, shortcutNumber: i < 9 ? i + 1 : null),
+    ];
     return Padding(
       padding: const EdgeInsets.only(left: 8, right: 8, top: 4),
       child: Wrap(
@@ -567,7 +641,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   Widget _branchChip(String san, Color color, VoidCallback onTap,
-      {bool emphasized = false}) {
+      {bool emphasized = false, int? shortcutNumber}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
@@ -578,14 +652,39 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
         ),
-        child: Text(
-          san,
-          style: TextStyle(
-            fontFamily: 'monospace',
-            fontSize: 12.5,
-            color: color,
-            fontWeight: emphasized ? FontWeight.w600 : FontWeight.normal,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (shortcutNumber != null) ...[
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  '$shortcutNumber',
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 10.5,
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              san,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 12.5,
+                color: color,
+                fontWeight: emphasized ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -738,7 +837,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     if (_analysisPath.isNotEmpty && _analysisPath.last.children.isNotEmpty) {
       return true;
     }
-    if (_analysisPath.isEmpty && _mainLineIndex < _moveHistory.length) {
+    final mainLimit = widget.revealedPly != null
+        ? widget.revealedPly!.clamp(0, _moveHistory.length)
+        : _moveHistory.length;
+    if (_analysisPath.isEmpty && _mainLineIndex < mainLimit) {
       return true;
     }
     return false;
@@ -821,6 +923,27 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     });
     if (editing) _notifyCommentsChanged();
     widget.onPositionChanged?.call(newPos);
+  }
+
+  /// Add [san] as an ephemeral variation root at the current mainline ply
+  /// without navigating into it — the board stays on the pre-move position.
+  /// Used by solitaire to show wrong attempts as live variations.
+  void _recordVariationMove(String san) {
+    if (_analysisPath.isNotEmpty || _inlineActive) return;
+    final parsedMove = _currentPosition.parseSan(san);
+    if (parsedMove == null) return;
+    final Position newPos;
+    try {
+      newPos = _currentPosition.play(parsedMove);
+    } catch (_) {
+      return;
+    }
+    final ply = _mainLineIndex;
+    final roots = _variationsByPly.putIfAbsent(ply, () => []);
+    if (roots.any((r) => r.san == san)) return;
+    setState(() {
+      roots.add(MoveNode(san: san, fen: newPos.fen, isEphemeral: true));
+    });
   }
 
   // ── Clear / delete ──
@@ -950,6 +1073,30 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     setState(() => _editingCommentIndex = null);
   }
 
+  /// Append guess notes to mainline move comments and persist once, keeping
+  /// the game's own annotations (unlike replacing the whole movetext).
+  void _addGuessAnnotations(Map<int, String> notes) {
+    if (notes.isEmpty || _moveHistory.isEmpty) return;
+    setState(() {
+      notes.forEach((index, note) {
+        if (index < 0 || index >= _moveHistory.length) return;
+        final moveData = _moveHistory[index];
+        final existing =
+            (moveData.comments == null || moveData.comments!.isEmpty)
+                ? ''
+                : moveData.comments!.first;
+        if (existing.contains(note)) return;
+        final merged = existing.isEmpty ? note : '$existing $note';
+        if (moveData.comments == null || moveData.comments!.isEmpty) {
+          moveData.comments = [merged];
+        } else {
+          moveData.comments![0] = merged;
+        }
+      });
+    });
+    _notifyCommentsChanged();
+  }
+
   void _toggleNag(int moveIndex, int nagId) {
     if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
     final moveData = _moveHistory[moveIndex];
@@ -977,82 +1124,220 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     });
   }
 
-  void _showMoveContextMenu(int moveIndex, Offset globalPosition) {
+  RelativeRect _menuPosition(Offset globalPosition) {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final position = RelativeRect.fromRect(
+    return RelativeRect.fromRect(
       Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
       Offset.zero & overlay.size,
     );
-    final protectOriginal = widget.protectOriginal;
-    final hasBranch = _variationsByPly.containsKey(moveIndex + 1);
+  }
 
-    showMenu<String>(
-      context: context,
-      position: position,
-      items: [
-        const PopupMenuItem(
-          value: 'comment',
-          child: Row(
-            children: [
-              Icon(Icons.comment_outlined, size: 18),
-              SizedBox(width: 8),
-              Text('Comment'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'annotate',
-          child: Row(
-            children: [
-              Icon(Icons.edit_note, size: 18),
-              SizedBox(width: 8),
-              Text('Annotate'),
-            ],
-          ),
-        ),
-        if (hasBranch) ...[
-          const PopupMenuDivider(),
-          PopupMenuItem(
-            value: 'promote',
-            enabled: !protectOriginal,
-            child: Row(
-              children: [
-                Icon(Icons.arrow_upward,
-                    size: 18, color: protectOriginal ? Colors.grey[700] : null),
-                const SizedBox(width: 8),
-                Text('Promote variation',
-                    style: protectOriginal
-                        ? TextStyle(color: Colors.grey[700])
-                        : null),
-              ],
+  static PopupMenuItem<String> _menuItem(
+      String value, IconData icon, String label,
+      {bool enabled = true, Color? color}) {
+    final effectiveColor = enabled ? color : Colors.grey[700];
+    return PopupMenuItem(
+      value: value,
+      enabled: enabled,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: effectiveColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: effectiveColor != null
+                  ? TextStyle(color: effectiveColor)
+                  : null,
             ),
           ),
         ],
-        const PopupMenuDivider(),
-        PopupMenuItem(
-          value: 'delete',
-          enabled: !protectOriginal,
-          child: Row(
-            children: [
-              Icon(Icons.delete_outline,
-                  size: 18,
-                  color: protectOriginal ? Colors.grey[700] : Colors.red),
-              const SizedBox(width: 8),
-              Text('Delete move',
-                  style: TextStyle(
-                      color: protectOriginal ? Colors.grey[700] : Colors.red)),
-            ],
-          ),
-        ),
+      ),
+    );
+  }
+
+  void _showMoveContextMenu(int moveIndex, Offset globalPosition) {
+    final protectOriginal = widget.protectOriginal;
+    final hasBranch = _variationsByPly.containsKey(moveIndex + 1);
+    final line = _moveHistory.sublist(0, moveIndex + 1);
+
+    showMenu<String>(
+      context: context,
+      position: _menuPosition(globalPosition),
+      items: [
+        _menuItem('copy_line', Icons.copy_outlined, 'Copy line PGN'),
+        _menuItem('add_to_study', Icons.menu_book_outlined,
+            'Add to study…'),
+        if (widget.editMode) ...[
+          const PopupMenuDivider(),
+          _menuItem('comment', Icons.comment_outlined, 'Comment'),
+          _menuItem('annotate', Icons.edit_note, 'Annotate'),
+          if (hasBranch) ...[
+            const PopupMenuDivider(),
+            _menuItem('promote', Icons.arrow_upward, 'Promote variation',
+                enabled: !protectOriginal),
+          ],
+          const PopupMenuDivider(),
+          _menuItem('delete', Icons.delete_outline, 'Delete move',
+              enabled: !protectOriginal, color: Colors.red),
+        ] else if (widget.onCommentsChanged != null) ...[
+          const PopupMenuDivider(),
+          _menuItem('comment', Icons.comment_outlined, 'Comment'),
+        ],
       ],
     ).then((action) {
-      if (action == 'comment') {
+      if (action == 'copy_line') {
+        _copyLinePgn(line);
+      } else if (action == 'add_to_study') {
+        _addLineToStudy(line);
+      } else if (action == 'comment') {
         _startEditingComment(moveIndex);
       } else if (action == 'annotate') {
         _selectMoveForAnnotation(moveIndex);
       }
       // promote and delete require tree manipulation (future)
     });
+  }
+
+  void _showVariationContextMenu(
+      MoveNode node, int branchPly, Offset globalPosition) {
+    final line = _lineToVariationNode(node, branchPly);
+    if (line == null) return;
+
+    showMenu<String>(
+      context: context,
+      position: _menuPosition(globalPosition),
+      items: [
+        _menuItem('copy_line', Icons.copy_outlined, 'Copy line PGN'),
+        _menuItem('add_to_study', Icons.menu_book_outlined,
+            'Add to study…'),
+        if (node.isEphemeral) ...[
+          const PopupMenuDivider(),
+          _menuItem('delete', Icons.delete_outline, 'Delete variation',
+              color: Colors.red),
+          _menuItem('clear_all', Icons.clear_all, 'Clear all analysis'),
+        ],
+      ],
+    ).then((action) {
+      if (action == 'copy_line') {
+        _copyLinePgn(line);
+      } else if (action == 'add_to_study') {
+        _addLineToStudy(line);
+      } else if (action == 'delete') {
+        _deleteAnalysisNode(node.id);
+      } else if (action == 'clear_all') {
+        _clearAnalysis();
+      }
+    });
+  }
+
+  // ── Copy line / add line to study ──
+
+  /// Move data from the game start to [node]: the mainline up to the branch
+  /// point, then the variation path. Null when the node can't be located.
+  List<PgnNodeData>? _lineToVariationNode(MoveNode node, int branchPly) {
+    final roots = _variationsByPly[branchPly];
+    if (roots == null) return null;
+    final path = _findPathToNode(node, roots);
+    if (path == null) return null;
+    return [
+      for (int i = 0; i < branchPly && i < _moveHistory.length; i++)
+        _moveHistory[i],
+      for (final n in path)
+        PgnNodeData(
+          san: n.san,
+          comments: (n.comment != null && n.comment!.trim().isNotEmpty)
+              ? [n.comment!.trim()]
+              : null,
+          nags: (n.nags != null && n.nags!.isNotEmpty)
+              ? List<int>.from(n.nags!)
+              : null,
+        ),
+    ];
+  }
+
+  /// Serialize a single line to PGN: `[FEN]`/`[SetUp]` headers when the game
+  /// starts from a custom position, then numbered movetext (comments and
+  /// NAGs of the source moves included).
+  String _buildLinePgn(List<PgnNodeData> line) {
+    final headers = <String, String>{};
+    final fen = _game?.headers['FEN'];
+    if (fen != null && fen.isNotEmpty) {
+      headers['FEN'] = fen;
+      headers['SetUp'] = '1';
+    }
+    final root = PgnNode<PgnNodeData>();
+    PgnNode<PgnNodeData> parent = root;
+    for (final data in line) {
+      final child = PgnChildNode<PgnNodeData>(data);
+      parent.children.add(child);
+      parent = child;
+    }
+    return PgnGame<PgnNodeData>(
+      headers: headers,
+      moves: root,
+      comments: const [],
+    ).makePgn().trim();
+  }
+
+  String _suggestChapterName(List<PgnNodeData> line) {
+    final coords = coordsAtPly(
+      ply: line.length - 1,
+      startFullmoves: _startPosition.fullmoves,
+      startWhiteToMove: _startPosition.turn == Side.white,
+    );
+    final moveLabel =
+        '${coords.moveNumber}${coords.isWhite ? '.' : '...'}${line.last.san}';
+    final white = _game?.headers['White'] ?? '';
+    final black = _game?.headers['Black'] ?? '';
+    if (!_isBlankHeader(white) && !_isBlankHeader(black)) {
+      return '$white – $black: $moveLabel';
+    }
+    return 'Line to $moveLabel';
+  }
+
+  Future<void> _copyLinePgn(List<PgnNodeData> line) async {
+    if (line.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: _buildLinePgn(line)));
+    if (!mounted) return;
+    showAppSnackBar(context, 'Line copied to clipboard');
+  }
+
+  Future<void> _addLineToStudy(List<PgnNodeData> line) async {
+    if (line.isEmpty) return;
+    final pgn = _buildLinePgn(line);
+    final result = await showDialog<AddToStudyResult>(
+      context: context,
+      builder: (_) =>
+          AddToStudyDialog(initialChapterName: _suggestChapterName(line)),
+    );
+    if (result == null || !mounted) return;
+
+    final study = context.read<StudyController>();
+    final appState = context.read<AppState>();
+    try {
+      final path = result.existingPath ??
+          await StorageFactory.instance.studyFilePath(result.newStudyName!);
+      await study.addChapterToStudyFile(path, result.chapterName, pgn);
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        'Added "${result.chapterName}" to ${result.studyName}',
+        actionLabel: 'Open',
+        onAction: () async {
+          await study.openStudy(path);
+          study.selectChapter(study.doc.chapters.length - 1);
+          appState.setMode(AppMode.study);
+        },
+      );
+    } catch (e) {
+      debugPrint('Add line to study failed: $e');
+      if (mounted) {
+        showAppSnackBar(context, 'Failed to add line to study.',
+            isError: true);
+      }
+    }
   }
 
   void _notifyCommentsChanged() {
@@ -1229,7 +1514,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
               onDismissAnnotation: () =>
                   setState(() => _selectedMoveIndex = null),
               onGoToAnalysisNode: _goToAnalysisNode,
-              onAnalysisNodeAction: widget.onAnalysisNodeAction,
+              onShowVariationContextMenu: _showVariationContextMenu,
               revealedPly: widget.revealedPly,
               onPlayInlineLine: _playInlineLine,
               activeInlineLine: _inlineActive
@@ -1253,12 +1538,14 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
               child: Tooltip(
                 message: 'Return to mainline (R)',
                 waitDuration: const Duration(milliseconds: 400),
-                child: TextButton.icon(
+                child: OutlinedButton.icon(
                   onPressed: _returnToMainline,
                   icon: const Icon(Icons.subdirectory_arrow_left, size: 16),
                   label: const Text('Return to mainline'),
-                  style: TextButton.styleFrom(
+                  style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.pgnMainLine,
+                    side: BorderSide(
+                        color: AppColors.pgnMainLine.withValues(alpha: 0.6)),
                     textStyle: const TextStyle(fontSize: 12),
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

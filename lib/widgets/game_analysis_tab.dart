@@ -139,10 +139,16 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       if (!mounted) return;
       final ctx = _nearestItemKey.currentContext;
       if (ctx == null) return;
-      Scrollable.ensureVisible(
-        ctx,
+      // Scroll only the move list itself — the static Scrollable.ensureVisible
+      // would also scroll the enclosing TabBarView and yank the side panel to
+      // this tab while the user is on the Game tab (this widget stays alive
+      // offstage).
+      final renderObject = ctx.findRenderObject();
+      final scrollable = Scrollable.maybeOf(ctx);
+      if (renderObject == null || scrollable == null) return;
+      scrollable.position.ensureVisible(
+        renderObject,
         alignment: 0.5,
-        duration: Duration.zero,
       );
     });
   }

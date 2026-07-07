@@ -11,7 +11,6 @@ import '../widgets/app_mode_menu_button.dart';
 import '../widgets/tactics_control_panel.dart';
 import '../widgets/training/move_input_widget.dart';
 
-import '../core/study_controller.dart';
 import '../services/engine/engine_lifecycle.dart';
 import 'analysis_screen.dart';
 import 'pgn_viewer_screen.dart';
@@ -114,10 +113,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       case AppMode.pgnViewer:
         return const PgnViewerScreen();
       case AppMode.study:
-        return ChangeNotifierProvider<StudyController>(
-          create: (_) => StudyController(),
-          child: const StudyScreen(),
-        );
+        return const StudyScreen();
     }
   }
 }

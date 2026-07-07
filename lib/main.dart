@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'constants/engine_defaults.dart';
 import 'core/app_state.dart';
+import 'core/study_controller.dart';
 import 'models/engine_settings.dart';
 import 'models/eval_database_settings.dart';
 import 'screens/main_screen.dart';
@@ -148,6 +149,12 @@ class ChessAutoPrepApp extends StatelessWidget {
         ),
         ChangeNotifierProvider<EngineLifecycle>.value(
           value: EngineLifecycle.instance,
+        ),
+        // App-scoped (not study-mode-scoped) so other modes can add chapters
+        // ("Add line to study" in the PGN viewer) through the same document
+        // the study screen edits.
+        ChangeNotifierProvider<StudyController>(
+          create: (_) => StudyController(),
         ),
       ],
       child: MaterialApp(
