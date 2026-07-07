@@ -129,27 +129,36 @@ final _sanTokenPattern = RegExp(r'^[a-hKQRBNO0-9x+#=]+$');
 class SliceFilterController extends ChangeNotifier {
   SliceFilterController({SliceConfig? initialConfig}) {
     _applyConfig(initialConfig);
+    // Live-parse: typed input becomes an active filter as soon as it parses.
+    // (A separate "apply" step let users type a position, see it silently
+    // ignored, and slice on the wrong filter set.)
+    positionText.addListener(_onPositionTextChanged);
   }
 
   // ── Position filter ──
 
   final TextEditingController positionText = TextEditingController();
   PositionParseResult _positionParse = const PositionParseResult.ok(null);
+  String _lastParsedPositionText = '';
 
   PositionParseResult get positionParse => _positionParse;
   String? get positionFen => _positionParse.fen;
   bool get hasPositionFilter => _positionParse.isValid && positionFen != null;
 
-  /// Parse [positionText] and activate the position filter.
-  void applyPosition() {
+  void _onPositionTextChanged() {
+    if (positionText.text == _lastParsedPositionText) return;
+    _lastParsedPositionText = positionText.text;
     _positionParse = parsePositionInput(positionText.text);
     notifyListeners();
   }
 
+  /// Set the position filter to [fen] (e.g. the current board position).
+  void setPositionFen(String fen) {
+    positionText.text = fen; // listener parses + notifies
+  }
+
   void clearPosition() {
-    positionText.clear();
-    _positionParse = const PositionParseResult.ok(null);
-    notifyListeners();
+    positionText.clear(); // listener resets parse state + notifies
   }
 
   // ── Sequence filter ──
@@ -254,6 +263,30 @@ class SliceFilterController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether a preset-style player filter ([field] = White/Black) is active.
+  bool hasPresetHeaderFilter(String field, String value) => headerRows
+      .any((r) => r.field == field && r.value == value);
+
+  /// Toggle a preset player filter. Applying "«P» as White" removes any
+  /// "«P» as Black" row (and vice versa) so the presets swap, not stack.
+  void togglePresetHeaderFilter(String field, String value) {
+    final wasActive = hasPresetHeaderFilter(field, value);
+    for (var i = headerRows.length - 1; i >= 0; i--) {
+      final r = headerRows[i];
+      if ((r.field == 'White' || r.field == 'Black') && r.value == value) {
+        r.controller.dispose();
+        headerRows.removeAt(i);
+      }
+    }
+    if (!wasActive) {
+      headerRows.add(HeaderFilterRow(field: field, initialValue: value));
+    }
+    if (headerRows.isEmpty) {
+      headerRows.add(HeaderFilterRow(field: 'Date', mode: MatchMode.after));
+    }
+    notifyListeners();
+  }
+
   // ── Whole-config operations ──
 
   /// Snapshot the current filters as a serializable config.
@@ -278,6 +311,7 @@ class SliceFilterController extends ChangeNotifier {
 
   void _applyConfig(SliceConfig? config) {
     positionText.text = config?.positionInput ?? '';
+    _lastParsedPositionText = positionText.text;
     _positionParse = positionText.text.isNotEmpty
         ? parsePositionInput(positionText.text)
         : const PositionParseResult.ok(null);

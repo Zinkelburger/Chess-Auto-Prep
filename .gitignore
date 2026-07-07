@@ -100,3 +100,6 @@ tree_builder/*.json
 
 # Embedded repos
 maia-platform-frontend/
+
+# Generated FEN indexes for PGN collections
+*.fenidx

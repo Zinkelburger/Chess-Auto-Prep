@@ -8,6 +8,22 @@ import 'package:dartchess/dartchess.dart';
 import '../constants/chess_constants.dart';
 import '../utils/fen_utils.dart';
 
+/// How win/draw/loss stats should be colored when displayed.
+///
+/// The PGN-viewer tree counts `wins` from White's perspective. Green/red only
+/// makes sense when we know whose games these are — otherwise color like
+/// lichess: white / grey / black segments.
+enum WdlPerspective {
+  /// `wins` belong to the protagonist playing White → green = wins.
+  playerIsWhite,
+
+  /// The protagonist plays Black → green = `losses` (Black's wins).
+  playerIsBlack,
+
+  /// No known protagonist: neutral white/grey/black coloring.
+  whiteBlack,
+}
+
 class OpeningTreeNode {
   /// The move that led to this node (SAN notation, e.g. "e4", "Nf3")
   /// Empty string for root node

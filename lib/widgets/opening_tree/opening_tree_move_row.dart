@@ -10,6 +10,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
   final int parentGamesPlayed;
   final CoverageStatus? coverageStatus;
   final VoidCallback? onTap;
+  final WdlPerspective perspective;
 
   const OpeningTreeMoveRow({
     super.key,
@@ -17,6 +18,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
     required this.parentGamesPlayed,
     this.coverageStatus,
     this.onTap,
+    this.perspective = WdlPerspective.playerIsWhite,
   });
 
   @override
@@ -25,10 +27,18 @@ class OpeningTreeMoveRow extends StatelessWidget {
         ? (node.gamesPlayed / parentGamesPlayed * 100)
         : 0.0;
 
+    // Score from the displayed point of view: the protagonist's when known,
+    // otherwise White's (shown without a good/bad color).
+    final displayRate = perspective == WdlPerspective.playerIsBlack
+        ? 1.0 - node.winRate
+        : node.winRate;
+
     Color winRateColor;
-    if (node.winRate >= 0.55) {
+    if (perspective == WdlPerspective.whiteBlack) {
+      winRateColor = Colors.grey[300]!;
+    } else if (displayRate >= 0.55) {
       winRateColor = Colors.green;
-    } else if (node.winRate >= 0.45) {
+    } else if (displayRate >= 0.45) {
       winRateColor = Colors.orange;
     } else {
       winRateColor = Colors.red;
@@ -75,7 +85,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${node.winRatePercent.toStringAsFixed(1)}%',
+                  '${(displayRate * 100).toStringAsFixed(1)}%',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -104,6 +114,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
                     wins: node.wins,
                     draws: node.draws,
                     losses: node.losses,
+                    perspective: perspective,
                   ),
                 ),
               ],

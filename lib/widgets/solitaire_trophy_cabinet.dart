@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/solitaire_trophy.dart';
 import '../services/solitaire_trophy_service.dart';
+import '../utils/pgn_date_utils.dart';
 
 /// Dialog that shows the user's collection of solitaire trophies.
 class SolitaireTrophyCabinet extends StatefulWidget {
@@ -118,7 +119,7 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
   Widget _buildTrophyRow(SolitaireTrophy trophy) {
     final white = trophy.headers['White'] ?? '?';
     final black = trophy.headers['Black'] ?? '?';
-    final date = trophy.headers['Date'] ?? '';
+    final date = formatPgnDate(trophy.headers['Date']);
     final gameInfo = '$white vs $black${date.isNotEmpty ? ' ($date)' : ''}';
     final advStr = (trophy.advantageCp / 100).toStringAsFixed(1);
 

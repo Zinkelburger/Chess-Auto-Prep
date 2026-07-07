@@ -34,6 +34,9 @@ class OpeningTreeWidget extends StatefulWidget {
   /// Called when the user taps "View PGN" for a game at a leaf node.
   final Function(GameInfo game)? onViewGamePgn;
 
+  /// How win/draw/loss stats are colored (see [WdlPerspective]).
+  final WdlPerspective wdlPerspective;
+
   const OpeningTreeWidget({
     super.key,
     required this.tree,
@@ -49,6 +52,7 @@ class OpeningTreeWidget extends StatefulWidget {
     this.coverageResult,
     this.gamesAtPosition = const [],
     this.onViewGamePgn,
+    this.wdlPerspective = WdlPerspective.playerIsWhite,
   });
 
   @override
@@ -261,6 +265,7 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     return OpeningTreeMoveRow(
                       node: child,
                       parentGamesPlayed: currentNode.gamesPlayed,
+                      perspective: widget.wdlPerspective,
                       coverageStatus: resolveCoverageStatus(
                         node: child,
                         tree: widget.tree,

@@ -145,36 +145,39 @@ class GameNavBar extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (solitaireWaitingForUser)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ShortcutTooltip(
-              description: canReveal
-                  ? 'Show the correct move'
-                  : 'Available in ${countdown}s',
-              shortcut: 'H',
-              child: ActionChip(
-                onPressed: canReveal ? onReveal : null,
-                avatar: Icon(
-                  Icons.visibility,
-                  size: 16,
-                  color: canReveal ? Colors.white : Colors.white60,
-                ),
-                label: Text(
-                  canReveal ? 'Reveal' : '${countdown}s',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: canReveal ? Colors.white : Colors.white60,
-                  ),
-                ),
-                backgroundColor: canReveal
-                    ? Colors.orange.withValues(alpha: 0.9)
-                    : Colors.grey.withValues(alpha: 0.7),
-                side: BorderSide.none,
-                visualDensity: VisualDensity.compact,
+        // Always visible so the control is discoverable; grayed out until it
+        // can be used (countdown running or opponent to move).
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: ShortcutTooltip(
+            description: canReveal
+                ? 'Give up and show the correct move'
+                : countdown > 0
+                    ? 'Available in ${countdown}s'
+                    : 'Available on your turn',
+            shortcut: 'R',
+            child: ActionChip(
+              onPressed: canReveal ? onReveal : null,
+              avatar: Icon(
+                Icons.visibility,
+                size: 16,
+                color: canReveal ? Colors.white : Colors.white38,
               ),
+              label: Text(
+                countdown > 0 ? 'Reveal in ${countdown}s' : 'Reveal',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: canReveal ? Colors.white : Colors.white38,
+                ),
+              ),
+              backgroundColor: canReveal
+                  ? Colors.orange.withValues(alpha: 0.9)
+                  : Colors.grey.withValues(alpha: 0.4),
+              side: BorderSide.none,
+              visualDensity: VisualDensity.compact,
             ),
           ),
+        ),
         ShortcutIconButton(
           description: 'Fullscreen',
           shortcut: 'Ctrl+F',

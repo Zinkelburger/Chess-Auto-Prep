@@ -40,6 +40,14 @@ class AppState extends ChangeNotifier {
   /// by the tactics panel on activation.
   String? pendingPuzzleSeedFen;
 
+  /// PGN content pending solitaire training in the PGN viewer ("Train this
+  /// chapter" in Study mode). Consumed by the viewer screen on activation.
+  String? pendingSolitairePgn;
+
+  /// Board orientation for the pending solitaire session (true = user guesses
+  /// White's moves).
+  bool pendingSolitaireAsWhite = true;
+
   AppMode get currentMode => _currentMode;
   Position get currentPosition => _currentPosition;
   String? get lichessUsername => _lichessUsername;
@@ -68,6 +76,15 @@ class AppState extends ChangeNotifier {
   void switchToPuzzleCreator({required String seedFen}) {
     pendingPuzzleSeedFen = seedFen;
     _currentMode = AppMode.tactics;
+    notifyListeners();
+  }
+
+  /// Switch to the PGN viewer and start solitaire on [pgn] ("Train this
+  /// chapter" in Study mode).
+  void switchToSolitaireTraining({required String pgn, required bool asWhite}) {
+    pendingSolitairePgn = pgn;
+    pendingSolitaireAsWhite = asWhite;
+    _currentMode = AppMode.pgnViewer;
     notifyListeners();
   }
 

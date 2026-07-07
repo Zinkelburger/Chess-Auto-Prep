@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/pgn_viewer_controller.dart';
+import '../../models/pgn_filter_models.dart';
 
 class PgnSliceChips extends StatelessWidget {
   final PgnViewerController controller;
@@ -33,6 +34,14 @@ class PgnSliceChips extends StatelessWidget {
             const SizedBox(width: 4),
           ],
           _buildAddSliceChip(),
+          // One-click presets for the detected protagonist. Applied presets
+          // turn into regular slice chips (with ✕) above, so only offer the
+          // ones that aren't active yet.
+          for (final preset in controller.slicePresets)
+            if (!controller.isPresetActive(preset.filter)) ...[
+              const SizedBox(width: 4),
+              _buildPresetChip(preset.label, preset.filter),
+            ],
           if (controller.hasActiveFilters) ...[
             const SizedBox(width: 6),
             Container(
@@ -92,6 +101,34 @@ class PgnSliceChips extends StatelessWidget {
                   size: 13, color: Colors.blue[300]!.withAlpha(180)),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPresetChip(String label, HeaderFilterConfig filter) {
+    return Tooltip(
+      message: 'Slice: $label',
+      child: GestureDetector(
+        onTap: () => controller.applySlicePreset(filter),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey[850],
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.blue.withAlpha(70), width: 0.5),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.person_outline, size: 13, color: Colors.blue[200]),
+              const SizedBox(width: 3),
+              Text(
+                label,
+                style: TextStyle(fontSize: 11, color: Colors.blue[100]),
+              ),
+            ],
+          ),
         ),
       ),
     );

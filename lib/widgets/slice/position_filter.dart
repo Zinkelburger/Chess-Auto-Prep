@@ -74,15 +74,6 @@ class PositionFilter extends StatelessWidget {
                       const BoxConstraints(minWidth: 32, minHeight: 28),
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                onSubmitted: (_) => controller.applyPosition(),
-              ),
-            ),
-            const SizedBox(width: 6),
-            SizedBox(
-              height: 36,
-              child: OutlinedButton(
-                onPressed: controller.applyPosition,
-                child: const Text('Apply', style: TextStyle(fontSize: 12)),
               ),
             ),
             if (text.text.isNotEmpty)
@@ -113,17 +104,14 @@ class PositionFilter extends StatelessWidget {
           ),
         if (currentFen != null) ...[
           const SizedBox(height: 4),
+          // Always captures the current board position (never a toggle — a
+          // toggle silently *cleared* a stale filter when the user meant to
+          // re-capture, which produced wrong slices/exports).
           _BoardPositionChip(
             currentFen: currentFen!,
-            isActive: hasFilter,
-            onTap: () {
-              if (hasFilter) {
-                controller.clearPosition();
-              } else {
-                controller.positionText.text = currentFen!;
-                controller.applyPosition();
-              }
-            },
+            isActive:
+                hasFilter && controller.positionFen == normalizeFen(currentFen!),
+            onTap: () => controller.setPositionFen(currentFen!),
           ),
         ],
       ],
@@ -152,8 +140,8 @@ class _BoardPositionChip extends StatelessWidget {
       message: isStart
           ? 'Navigate to a position on the board first'
           : isActive
-              ? 'Remove board position filter'
-              : 'Use the current board position',
+              ? 'Filtering on the current board position'
+              : 'Filter games through the current board position',
       child: GestureDetector(
         onTap: isStart ? null : onTap,
         child: Container(
@@ -184,7 +172,7 @@ class _BoardPositionChip extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                'Board position',
+                'Use board position',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,

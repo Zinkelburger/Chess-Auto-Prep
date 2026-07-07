@@ -35,10 +35,9 @@ void main() {
     c.dispose();
   });
 
-  test('applyPosition parses SAN sequence into a FEN', () {
+  test('typed position input live-parses SAN sequence into a FEN', () {
     final c = SliceFilterController();
     c.positionText.text = '1. e4 c6';
-    c.applyPosition();
     expect(c.positionFen, isNotNull);
     expect(c.positionParse.error, isNull);
     expect(c.hasPositionFilter, isTrue);
@@ -49,12 +48,23 @@ void main() {
     c.dispose();
   });
 
-  test('applyPosition reports errors for invalid input', () {
+  test('live parse reports errors for invalid input', () {
     final c = SliceFilterController();
     c.positionText.text = '1. e4 zz9';
-    c.applyPosition();
     expect(c.positionFen, isNull);
     expect(c.positionParse.error, isNotNull);
+    c.dispose();
+  });
+
+  test('setPositionFen activates the filter directly', () {
+    final c = SliceFilterController();
+    c.setPositionFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -');
+    expect(c.hasPositionFilter, isTrue);
+    // Re-capture with a different position replaces, never toggles off.
+    c.setPositionFen(
+        'rnbqkbnr/pp1ppppp/2p5/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -');
+    expect(c.hasPositionFilter, isTrue);
+    expect(c.positionFen, contains('2p5'));
     c.dispose();
   });
 
@@ -122,7 +132,6 @@ void main() {
     var notified = 0;
     c.addListener(() => notified++);
     c.positionText.text = '1. d4';
-    c.applyPosition();
 
     c.reset();
     expect(c.positionFen, isNull);
