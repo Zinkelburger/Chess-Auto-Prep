@@ -69,6 +69,33 @@ class StudyController extends ChangeNotifier {
     await refreshStudyList();
   }
 
+  /// Append a chapter (parsed from [pgn], including any `[FEN]` header) to
+  /// the study at [path], creating the file when it doesn't exist yet.
+  ///
+  /// Routes through the in-memory document when that study is the open one,
+  /// so a later autosave can't clobber the addition; otherwise edits the
+  /// file on disk directly.
+  Future<void> addChapterToStudyFile(
+      String path, String chapterName, String pgn) async {
+    final chapter =
+        StudyChapter(name: chapterName, tree: MoveTree.fromPgn(pgn));
+    if (_doc.filePath == path) {
+      _doc.chapters.add(chapter);
+      _markDirty();
+      await flushSave();
+    } else {
+      final storage = StorageFactory.instance;
+      final existing = await storage.fileExists(path)
+          ? (await storage.readFile(path) ?? '')
+          : '';
+      final content = existing.trimRight().isEmpty
+          ? chapter.toPgn()
+          : '${existing.trimRight()}\n\n${chapter.toPgn()}';
+      await storage.writeFile(path, content);
+    }
+    await refreshStudyList();
+  }
+
   Future<void> openStudy(String path) async {
     await flushSave();
     final content = await StorageFactory.instance.readFile(path);
@@ -137,6 +164,25 @@ class StudyController extends ChangeNotifier {
     _doc.chapters[index].name = name;
     _markDirty();
   }
+
+  /// Replace the current chapter's starting position with [fen]. The
+  /// chapter's moves are cleared — they were rooted in the old position.
+  void setChapterStartingPosition(String fen) {
+    final old = chapter;
+    _doc.chapters[_chapterIndex] = StudyChapter(
+      name: old.name,
+      headers: Map<String, String>.from(old.headers),
+      startingFen: fen,
+    );
+    _cursor = TreePath.empty;
+    _markDirty();
+  }
+
+  /// Whether the current chapter has any moves (something to train).
+  bool get chapterHasMoves => tree.roots.isNotEmpty;
+
+  /// The current chapter serialized as a standalone PGN game.
+  String chapterPgn() => chapter.toPgn();
 
   void deleteChapter(int index) {
     if (_doc.chapters.length <= 1) return; // keep at least one

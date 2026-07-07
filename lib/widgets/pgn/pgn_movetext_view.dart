@@ -82,8 +82,9 @@ class PgnMovetextView extends StatelessWidget {
   final VoidCallback onDismissAnnotation;
   final void Function(MoveNode node, int branchPly) onGoToAnalysisNode;
 
-  /// Right-click action on an ephemeral analysis node (delete/clear menu).
-  final void Function(int nodeId, Offset globalPosition)? onAnalysisNodeAction;
+  /// Right-click on a variation node (copy line / add to study / delete menu).
+  final void Function(MoveNode node, int branchPly, Offset globalPosition)?
+      onShowVariationContextMenu;
 
   /// When non-null, moves at index >= revealedPly are hidden (solitaire mode).
   final int? revealedPly;
@@ -136,7 +137,7 @@ class PgnMovetextView extends StatelessWidget {
     required this.onCancelEditingComment,
     required this.onDismissAnnotation,
     required this.onGoToAnalysisNode,
-    this.onAnalysisNodeAction,
+    this.onShowVariationContextMenu,
     this.revealedPly,
     this.currentMoveKey,
     this.onPlayInlineLine,
@@ -208,7 +209,8 @@ class PgnMovetextView extends StatelessWidget {
     // Variations at ply 0 (before any move)
     final varsAtZero = variationsByPly[0];
     if (varsAtZero != null && varsAtZero.isNotEmpty) {
-      spans.addAll(_buildVariationSpansAtPly(0));
+      spans.addAll(_buildVariationSpansAtPly(0,
+          ephemeralOnly: revealedPly != null && revealedPly! <= 0));
     }
 
     for (int i = 0; i < moveHistory.length; i++) {
@@ -303,9 +305,8 @@ class PgnMovetextView extends StatelessWidget {
               onMainLineMoveClicked(i);
               if (inEditMode) onSelectMoveForAnnotation(i);
             },
-            onSecondaryTapDown: inEditMode
-                ? (details) => onShowMoveContextMenu(i, details.globalPosition)
-                : (canEditComments ? (_) => onStartEditingComment(i) : null),
+            onSecondaryTapDown: (details) =>
+                onShowMoveContextMenu(i, details.globalPosition),
             child: Container(
               key: isCurrentMove ? currentMoveKey : null,
               padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
@@ -393,11 +394,14 @@ class PgnMovetextView extends StatelessWidget {
       }
 
       // Render variations at this ply (ply = i+1 because variations branch
-      // *after* the move at index i has been played)
+      // *after* the move at index i has been played). In solitaire, source
+      // variations at the un-guessed frontier would spoil the position, so
+      // only the user's own (ephemeral) attempts show there.
       final ply = i + 1;
       final varsHere = variationsByPly[ply];
       if (varsHere != null && varsHere.isNotEmpty) {
-        spans.addAll(_buildVariationSpansAtPly(ply));
+        spans.addAll(_buildVariationSpansAtPly(ply,
+            ephemeralOnly: revealedPly != null && ply >= revealedPly!));
       }
 
       if (!isWhiteTurn) moveNumber++;
@@ -938,10 +942,17 @@ class PgnMovetextView extends StatelessWidget {
     }
   }
 
-  /// Build variation spans for all roots at a given ply.
-  List<InlineSpan> _buildVariationSpansAtPly(int ply) {
-    final roots = variationsByPly[ply];
+  /// Build variation spans for all roots at a given ply. With
+  /// [ephemeralOnly], source-game variations are skipped and only the user's
+  /// scratch lines render (solitaire frontier).
+  List<InlineSpan> _buildVariationSpansAtPly(int ply,
+      {bool ephemeralOnly = false}) {
+    var roots = variationsByPly[ply];
     if (roots == null || roots.isEmpty) return const [];
+    if (ephemeralOnly) {
+      roots = roots.where((r) => r.isEphemeral).toList();
+      if (roots.isEmpty) return const [];
+    }
 
     final spans = <InlineSpan>[];
     // Compute move number accounting for the starting position
@@ -1021,9 +1032,9 @@ class PgnMovetextView extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => onGoToAnalysisNode(node, branchPly),
-          onSecondaryTapDown: onAnalysisNodeAction != null && node.isEphemeral
-              ? (details) =>
-                  onAnalysisNodeAction!(node.id, details.globalPosition)
+          onSecondaryTapDown: onShowVariationContextMenu != null
+              ? (details) => onShowVariationContextMenu!(
+                  node, branchPly, details.globalPosition)
               : null,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),

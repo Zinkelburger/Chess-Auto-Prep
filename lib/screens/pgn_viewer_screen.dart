@@ -90,8 +90,24 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _onAppStateChanged() {
     final appState = context.read<AppState>();
     if (appState.currentMode == AppMode.pgnViewer) {
+      final pendingPgn = appState.pendingSolitairePgn;
+      if (pendingPgn != null) {
+        appState.pendingSolitairePgn = null;
+        _startSolitaireTraining(pendingPgn, appState.pendingSolitaireAsWhite);
+      }
       _reclaimFocus();
     }
+  }
+
+  /// "Train this chapter" hand-off from Study mode: load the chapter PGN and
+  /// drop straight into solitaire with the requested orientation.
+  Future<void> _startSolitaireTraining(String pgn, bool asWhite) async {
+    if (_controller.isSolitaireMode) _controller.toggleSolitaire();
+    await _controller.loadPgnContent(pgn);
+    if (!mounted || _controller.errorMessage != null) return;
+    _controller.setPerspective(Perspective(
+        mode: asWhite ? PerspectiveMode.white : PerspectiveMode.black));
+    if (!_controller.isSolitaireMode) _controller.toggleSolitaire();
   }
 
   void _onAnalysisUpdate() {
@@ -146,17 +162,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     final error = _controller.errorMessage;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), duration: const Duration(seconds: 4)),
-      );
+      showAppSnackBar(context, error, duration: const Duration(seconds: 4));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-            'Loaded ${_controller.allGames.length} game(s) from clipboard'),
-        duration: const Duration(seconds: 2),
-      ),
+    showAppSnackBar(
+      context,
+      'Loaded ${_controller.allGames.length} game(s) from clipboard',
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -165,12 +177,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (!mounted) return;
     final error = _controller.errorMessage;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error),
-          duration: const Duration(seconds: 5),
-        ),
-      );
+      showAppSnackBar(context, error, duration: const Duration(seconds: 5));
       return;
     }
     _showPendingSliceRestoreSnackBar();
@@ -180,15 +187,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     final info = _controller.pendingSliceRestore;
     if (info == null || !mounted) return;
     _controller.clearPendingSliceRestore();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-          'Restored last slice (${info.filteredCount}/${info.totalCount} games)'),
-      duration: const Duration(seconds: 3),
-      action: SnackBarAction(
-        label: 'Undo',
-        onPressed: _controller.resetFilters,
-      ),
-    ));
+    showAppSnackBar(
+      context,
+      'Restored last slice (${info.filteredCount}/${info.totalCount} games)',
+      actionLabel: 'Undo',
+      onAction: _controller.resetFilters,
+    );
   }
 
   void _openSliceDialog() {
@@ -203,6 +207,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             ? null
             : _controller.activeSliceConfig,
         fenIndex: _controller.fenIndex,
+        presets: _controller.slicePresets,
         onApply: (indices, config) {
           _controller.applySlice(indices, config);
         },
@@ -254,15 +259,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
     if (!mounted) return;
     final fileName = p.basename(outPath);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(
-          'Exported ${_controller.filteredGames.length} games to $fileName'),
+    showAppSnackBar(
+      context,
+      'Exported ${_controller.filteredGames.length} games to $fileName',
       duration: const Duration(seconds: 4),
-      action: SnackBarAction(
-        label: 'Open',
-        onPressed: () => _loadFile(outPath),
-      ),
-    ));
+      actionLabel: 'Open',
+      onAction: () => _loadFile(outPath),
+    );
     _reclaimFocus();
   }
 
@@ -470,18 +473,20 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
     final key = event.logicalKey;
 
-    // In solitaire mode, disable navigation shortcuts that would reveal moves
+    // Solitaire: arrows/home/end browse the revealed region (the PGN widget
+    // caps mainline navigation at the frontier); autoplay and tab-switching
+    // stay disabled.
     if (_controller.isSolitaireMode) {
-      // H reveals the current move once the reveal countdown has elapsed.
-      if (key == LogicalKeyboardKey.keyH && hasNoLetterModifiers) {
+      // R reveals the current move once the reveal countdown has elapsed
+      // (return-to-mainline's R is inert during solitaire).
+      if (key == LogicalKeyboardKey.keyR && hasNoLetterModifiers) {
         if (_controller.solitaire.canReveal) _controller.revealCurrentMove();
         return KeyEventResult.handled;
       }
-      if (key == LogicalKeyboardKey.arrowLeft ||
-          key == LogicalKeyboardKey.arrowRight ||
-          key == LogicalKeyboardKey.home ||
-          key == LogicalKeyboardKey.end ||
-          key == LogicalKeyboardKey.space) {
+      if (key == LogicalKeyboardKey.space ||
+          key == LogicalKeyboardKey.tab ||
+          ((key == LogicalKeyboardKey.keyE || key == LogicalKeyboardKey.keyA) &&
+              hasNoLetterModifiers)) {
         return KeyEventResult.handled;
       }
     }
@@ -556,6 +561,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     } else if (key == LogicalKeyboardKey.keyT && hasNoLetterModifiers) {
       _controller.toggleOpeningTree();
       return KeyEventResult.handled;
+    } else if (key.keyId >= LogicalKeyboardKey.digit1.keyId &&
+        key.keyId <= LogicalKeyboardKey.digit9.keyId &&
+        hasNoLetterModifiers) {
+      // Play the numbered branch candidate shown in the fork bar.
+      final index = key.keyId - LogicalKeyboardKey.digit1.keyId;
+      if (_pgnWidgetController.selectBranchCandidate(index)) {
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
     } else if (key == LogicalKeyboardKey.keyS &&
         HardwareKeyboard.instance.isShiftPressed &&
         !isPrimaryModifierPressed) {
@@ -563,47 +577,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
-  }
-
-  void _showAnalysisNodeMenu(int nodeId, Offset globalPosition) {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final position = RelativeRect.fromRect(
-      Rect.fromLTWH(globalPosition.dx, globalPosition.dy, 0, 0),
-      Offset.zero & overlay.size,
-    );
-    showMenu<String>(
-      context: context,
-      position: position,
-      items: [
-        const PopupMenuItem(
-          value: 'delete',
-          child: Row(
-            children: [
-              Icon(Icons.delete_outline, size: 18, color: Colors.red),
-              SizedBox(width: 8),
-              Text('Delete variation'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'clear_all',
-          child: Row(
-            children: [
-              Icon(Icons.clear_all, size: 18),
-              SizedBox(width: 8),
-              Text('Clear all analysis'),
-            ],
-          ),
-        ),
-      ],
-    ).then((action) {
-      if (action == 'delete') {
-        _pgnWidgetController.deleteAnalysisNode(nodeId);
-      } else if (action == 'clear_all') {
-        _pgnWidgetController.clearEphemeralMoves();
-      }
-      _reclaimFocus();
-    });
   }
 
   @override
@@ -684,6 +657,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         _controller.filePath != null ? p.basename(_controller.filePath!) : '';
     return AppBar(
       titleSpacing: 16,
+      leading: !_controller.showOpeningTree &&
+              !_controller.isSolitaireMode &&
+              _controller.hasTreeReturnPosition
+          ? IconButton(
+              onPressed: _controller.returnToTreePosition,
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Back to opening-tree position',
+            )
+          : null,
       title: Row(
         children: [
           const Text('PGN Viewer'),
@@ -837,10 +819,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 position: _controller.currentPosition,
                 flipped: _controller.boardFlipped,
                 onMove: (move) => _controller.onBoardMove(move.san),
+                // In solitaire, moves are allowed while guessing and again
+                // once the game completes (free exploration of the annotated
+                // game); only opponent auto-play locks the board.
                 enableUserMoves: !_controller.isSolitaireMode ||
-                    solitaire.waitingForUser,
+                    solitaire.waitingForUser ||
+                    solitaire.isComplete,
               ),
-              if (showFeedback)
+              // Only wrong guesses get an overlay; a correct guess just plays
+              // out on the board (the green popup was noise).
+              if (showFeedback &&
+                  solitaire.feedback == SolitaireFeedback.incorrect)
                 Positioned(
                   top: 8,
                   left: 0,
@@ -852,59 +841,15 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: solitaire.feedback == SolitaireFeedback.correct
-                            ? Colors.green.withValues(alpha: 0.85)
-                            : Colors.red.withValues(alpha: 0.85),
+                        color: Colors.red.withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        solitaire.feedback == SolitaireFeedback.correct
-                            ? 'Correct!'
-                            : 'Incorrect — try again',
-                        style: const TextStyle(
+                      child: const Text(
+                        'Incorrect — try again',
+                        style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (_controller.isSolitaireMode && solitaire.isComplete)
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black54,
-                    child: Center(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                'Game Complete!',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                '${solitaire.correctFirstTry}/${solitaire.totalUserMoves} first-try'
-                                '${solitaire.revealedCount > 0 ? ', ${solitaire.revealedCount} revealed' : ''}',
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Guess annotations saved to PGN',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-                              ),
-                              const SizedBox(height: 16),
-                              FilledButton(
-                                onPressed: _controller.nextGame,
-                                child: const Text('Next Game'),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ),
@@ -922,62 +867,65 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     if (_controller.showOpeningTree) {
       return PgnOpeningTreePanel(controller: _controller);
     }
+    // Solitaire is a pure guessing exercise: no Analysis tab (and no engine).
+    final showTabs = !_controller.isSolitaireMode;
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: TabBar(
-                controller: _tabController,
-                tabs: [
-                  const Tab(text: 'Game'),
-                  Tab(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Analysis'),
-                        if (_analysisController.isAnalyzing) ...[
-                          const SizedBox(width: 6),
-                          const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(strokeWidth: 1.5),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
+        if (showTabs)
+          Row(
             children: [
-              _buildGameTab(),
-              GameAnalysisTab(
-                analysisController: _analysisController,
-                pgnController: _pgnWidgetController,
-                currentPly: _controller.currentPly,
-                variationDepth: _pgnWidgetController.variationDepth,
-                gamePgnText: _controller.filteredGames.isNotEmpty
-                    ? _controller
-                        .filteredGames[_controller.currentGameIndex].pgnText
-                    : null,
-                onAnnotatedMovetext: _controller.persistMoveComments,
-                onUserNavigation: () {
-                  _controller.stopAutoPlay();
-                  _reclaimFocus();
-                },
-                onAnalysisComplete: _controller.isSolitaireMode
-                    ? () => _controller.detectSolitaireTrophies()
-                    : null,
-                detectedTrophies: _controller.lastDetectedTrophies,
+              Expanded(
+                child: TabBar(
+                  controller: _tabController,
+                  tabs: [
+                    const Tab(text: 'Game'),
+                    Tab(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('Analysis'),
+                          if (_analysisController.isAnalyzing) ...[
+                            const SizedBox(width: 6),
+                            const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 1.5),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
+        Expanded(
+          child: showTabs
+              ? TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildGameTab(),
+                    GameAnalysisTab(
+                      analysisController: _analysisController,
+                      pgnController: _pgnWidgetController,
+                      currentPly: _controller.currentPly,
+                      variationDepth: _pgnWidgetController.variationDepth,
+                      gamePgnText: _controller.filteredGames.isNotEmpty
+                          ? _controller
+                              .filteredGames[_controller.currentGameIndex]
+                              .pgnText
+                          : null,
+                      onAnnotatedMovetext: _controller.persistMoveComments,
+                      onUserNavigation: () {
+                        _controller.stopAutoPlay();
+                        _reclaimFocus();
+                      },
+                    ),
+                  ],
+                )
+              : _buildGameTab(),
         ),
         if (_controller.filteredGames.isNotEmpty)
           GameNavBar(
@@ -1123,6 +1071,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             onLineMoveTapped: _controller.onEngineLineMoveTapped,
           ),
         if (_controller.isSolitaireMode) _buildSolitaireStatusBar(),
+        if (_controller.isSolitaireMode && _controller.solitaire.isComplete)
+          _buildSolitaireCompleteBanner(),
         const Divider(height: 1),
         if (_editMode) _buildEditModeBar(),
         Expanded(
@@ -1131,7 +1081,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             pgnText: game.pgnText,
             controller: _pgnWidgetController,
             onPositionChanged: _controller.onPositionChanged,
-            onAnalysisNodeAction: _showAnalysisNodeMenu,
             onCommentsChanged: _controller.persistMoveComments,
             editMode: _editMode,
             protectOriginal: _protectOriginal,
@@ -1141,6 +1090,42 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           ),
         ),
       ],
+    );
+  }
+
+  /// Compact end-of-game strip shown above the movetext instead of a modal
+  /// overlay: the user is left freely browsing their fully annotated game.
+  Widget _buildSolitaireCompleteBanner() {
+    final s = _controller.solitaire;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: Colors.green.withValues(alpha: 0.12),
+      child: Row(
+        children: [
+          const Icon(Icons.flag, size: 16, color: Colors.green),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Complete — ${s.correctFirstTry}/${s.totalUserMoves} first-try'
+              '${s.revealedCount > 0 ? ', ${s.revealedCount} revealed' : ''}'
+              '. Guess notes saved; browse and annotate freely.',
+              style: const TextStyle(fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.tonal(
+            onPressed: _controller.nextGame,
+            style: FilledButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              textStyle: const TextStyle(fontSize: 12),
+            ),
+            child: const Text('Next game (N)'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1207,7 +1192,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       ),
       itemBuilder: (_) {
         final currentDelay = _controller.solitaire.revealDelaySec;
-        final currentThreshold = _controller.trophyThresholdCp;
         return [
           const PopupMenuItem(
             enabled: false,
@@ -1236,43 +1220,12 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 ],
               ),
             ),
-          const PopupMenuDivider(),
-          const PopupMenuItem(
-            enabled: false,
-            height: 32,
-            child: Text('Trophy threshold',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-          ),
-          for (final cp in [10, 20, 30, 50, 100])
-            PopupMenuItem(
-              value: 'trophy_$cp',
-              height: 36,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 20,
-                    child: cp == currentThreshold
-                        ? Icon(Icons.check, size: 16,
-                            color: Theme.of(context).colorScheme.primary)
-                        : null,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '+${(cp / 100).toStringAsFixed(1)} pawns',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
         ];
       },
       onSelected: (value) {
         if (value.startsWith('delay_')) {
           final sec = int.parse(value.substring(6));
           _controller.setSolitaireRevealDelay(sec);
-        } else if (value.startsWith('trophy_')) {
-          final cp = int.parse(value.substring(7));
-          _controller.setTrophyThreshold(cp);
         }
         _reclaimFocus();
       },
@@ -1310,13 +1263,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               value: _protectOriginal,
               onChanged: (v) {
                 if (v == false) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                          'Changes to the original PGN will be saved to the file.'),
-                      duration: Duration(seconds: 3),
-                    ),
-                  );
+                  showAppSnackBar(context,
+                      'Changes to the original PGN will be saved to the file.');
                 }
                 setState(() => _protectOriginal = v ?? true);
               },
