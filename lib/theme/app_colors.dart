@@ -119,11 +119,13 @@ abstract final class AppColors {
   static const pgnEphemeral = Color(0xFF7A8FA8);
   static const pgnEphemeralMuted = Color(0xFF5A6578);
 
-  /// Default SAN in editable PGN panes (soft, readable on dark surfaces).
-  static const pgnMove = Color(0xFFB8C8D8);
+  /// Default SAN in editable PGN panes. Bright (~14:1 on [surface]) so the
+  /// movetext stays readable in glare/sunlight at small sizes.
+  static const pgnMove = Color(0xFFDDE6EF);
 
-  /// Move numbers (`1.` / `2...`) — dim, never bold.
-  static const pgnMoveNumber = onSurfaceDim;
+  /// Move numbers (`1.` / `2...`) — dimmer than moves to keep hierarchy, but
+  /// still ~6.7:1 on [surface] (the old #757575 was ~4:1, unreadable in sun).
+  static const pgnMoveNumber = Color(0xFF9AA0A6);
 
   /// Current navigation position — the "you are here" accent. Used as the
   /// bright border/glow around the highlighted move pill.
@@ -142,19 +144,20 @@ abstract final class AppColors {
   static const pgnMoveSelectedBg = Color(0xFF1565C0);
 
   /// Saved sideline / variation text and brackets. A clearly-teal, readable
-  /// tone (8.2:1) so sidelines read as "alternate line", not "disabled".
-  static const pgnVariation = Color(0xFF8FB3AE);
+  /// tone (~10.7:1) so sidelines read as "alternate line", not "disabled".
+  static const pgnVariation = Color(0xFFA9CFC9);
 
   /// On-the-fly analysis moves (distinct from repertoire, not orange).
-  static const pgnEphemeralMove = infoMuted;
+  /// Brighter than [infoMuted] (~7.5:1 vs 5.5:1) for small-text legibility.
+  static const pgnEphemeralMove = Color(0xFF93A9C4);
 
   /// Fill of the current *ephemeral* (analysis) node pill — a brighter slate
   /// (2.9:1) that stays legible with [pgnMoveCurrentFg] text.
   static const pgnEphemeralBg = Color(0xFF42607D);
 
   /// Inline move comments — lifted off the old flat gray to a readable tone
-  /// (10:1) so even the alpha-dimmed blockquote/bracket/FEN variants clear AA.
-  static const pgnComment = Color(0xFFBDBDBD);
+  /// (~11:1) so even the alpha-dimmed blockquote/bracket/FEN variants clear AA.
+  static const pgnComment = Color(0xFFCCCCCC);
 
   /// Solid, near-black fill for bordered comment blocks. Replaces the old
   /// translucent gray wash (which muddied to ~#232323) with a clean panel that

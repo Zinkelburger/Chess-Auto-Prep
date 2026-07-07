@@ -36,6 +36,9 @@ class PgnSliceDialog extends StatefulWidget {
   /// Precomputed FEN → game-index map for instant position lookups.
   final Map<String, List<int>>? fenIndex;
 
+  /// One-click player presets (e.g. "Kasparov as White") shown at the top.
+  final List<({String label, HeaderFilterConfig filter})> presets;
+
   const PgnSliceDialog({
     super.key,
     required this.allGames,
@@ -43,6 +46,7 @@ class PgnSliceDialog extends StatefulWidget {
     required this.onApply,
     this.initialConfig,
     this.fenIndex,
+    this.presets = const [],
   });
 
   @override
@@ -112,6 +116,43 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
     _filters.reset();
   }
 
+  Widget _buildQuickPresets() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Quick Presets',
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: Colors.grey[300],
+          ),
+        ),
+        const SizedBox(height: 8),
+        ListenableBuilder(
+          listenable: _filters,
+          builder: (context, _) => Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              for (final preset in widget.presets)
+                FilterChip(
+                  label: Text(preset.label,
+                      style: const TextStyle(fontSize: 12)),
+                  selected: _filters.hasPresetHeaderFilter(
+                      preset.filter.field, preset.filter.value),
+                  onSelected: (_) => _filters.togglePresetHeaderFilter(
+                      preset.filter.field, preset.filter.value),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -123,6 +164,10 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.presets.isNotEmpty) ...[
+                _buildQuickPresets(),
+                const Divider(),
+              ],
               PositionFilter(
                 controller: _filters,
                 currentFen: widget.currentFen,

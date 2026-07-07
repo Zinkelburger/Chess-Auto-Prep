@@ -49,11 +49,16 @@ class AppMessages {
 }
 
 /// Show a styled SnackBar. Use [isError] for persistent error notifications
-/// that require the user to dismiss them.
+/// that require the user to dismiss them. All snackbars carry a close icon so
+/// they can be dismissed before the timeout; pass [actionLabel]/[onAction] for
+/// an inline action (e.g. "Open", "Undo").
 void showAppSnackBar(
   BuildContext context,
   String message, {
   bool isError = false,
+  String? actionLabel,
+  VoidCallback? onAction,
+  Duration? duration,
 }) {
   final screenWidth = MediaQuery.of(context).size.width;
   ScaffoldMessenger.of(context).clearSnackBars();
@@ -61,14 +66,17 @@ void showAppSnackBar(
     SnackBar(
       content: Text(
         message,
-        textAlign: TextAlign.center,
+        textAlign: actionLabel == null ? TextAlign.center : TextAlign.start,
       ),
       width: screenWidth < 500 ? screenWidth * 0.85 : 400,
-      duration:
-          isError ? const Duration(days: 365) : const Duration(seconds: 3),
+      duration: duration ??
+          (isError ? const Duration(days: 365) : const Duration(seconds: 3)),
       backgroundColor: isError ? AppColors.dangerSurface : null,
-      showCloseIcon: isError,
+      showCloseIcon: true,
       closeIconColor: Colors.white70,
+      action: actionLabel != null && onAction != null
+          ? SnackBarAction(label: actionLabel, onPressed: onAction)
+          : null,
     ),
   );
 }

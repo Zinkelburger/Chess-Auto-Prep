@@ -1,6 +1,8 @@
 /// Lightweight model wrapping a single parsed game + its raw text for rewrite.
 library;
 
+import '../utils/pgn_date_utils.dart';
+
 class PgnGameEntry {
   final Map<String, String> headers;
   String pgnText; // full single-game PGN (headers + moves)
@@ -23,7 +25,7 @@ class PgnGameEntry {
         wElo != null && wElo.isNotEmpty && wElo != '?' ? '$w ($wElo)' : w;
     final bStr =
         bElo != null && bElo.isNotEmpty && bElo != '?' ? '$b ($bElo)' : b;
-    final d = headers['Date'] ?? '';
-    return '$wStr vs $bStr  $d';
+    final d = formatPgnDate(headers['Date']);
+    return d.isEmpty ? '$wStr vs $bStr' : '$wStr vs $bStr  $d';
   }
 }

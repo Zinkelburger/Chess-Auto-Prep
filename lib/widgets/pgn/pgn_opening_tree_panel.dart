@@ -124,6 +124,7 @@ class PgnOpeningTreePanel extends StatelessWidget {
               onGoBack: controller.onTreeGoBack,
               onGoForward: controller.onTreeGoForward,
               currentMoveSequence: controller.treeCurrentMoveSequence,
+              wdlPerspective: controller.wdlPerspective,
             ),
           ),
           _TreeGamesList(controller: controller),

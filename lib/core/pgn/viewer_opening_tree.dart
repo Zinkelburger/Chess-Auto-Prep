@@ -66,6 +66,10 @@ class ViewerOpeningTree {
   int _generation = 0;
   List<String> treeCurrentMoveSequence = [];
 
+  /// Tree cursor saved when a game is opened from the games-at-position list,
+  /// so the user can jump back to the position they were exploring.
+  List<String>? _savedMoveSequence;
+
   static const _maxCacheEntries = 500;
   final Map<String, List<int>> _positionGameCache = {};
 
@@ -74,10 +78,48 @@ class ViewerOpeningTree {
     openingTree = null;
     showOpeningTree = false;
     treeCurrentMoveSequence = [];
+    _savedMoveSequence = null;
   }
 
   /// Drop the built tree (e.g. after re-slicing); a rebuild follows if shown.
-  void clearTree() => openingTree = null;
+  /// The saved return position is dropped too — it belongs to the old slice.
+  void clearTree() {
+    openingTree = null;
+    _savedMoveSequence = null;
+  }
+
+  /// Whether a return position saved by [snapshotCursor] is available.
+  bool get hasSavedPosition => _savedMoveSequence != null;
+
+  /// Remember the current tree cursor before leaving the tree for a game.
+  void snapshotCursor() {
+    if (openingTree == null) return;
+    _savedMoveSequence = List.of(treeCurrentMoveSequence);
+  }
+
+  void clearSavedPosition() => _savedMoveSequence = null;
+
+  /// Re-open the tree at the position saved by [snapshotCursor], restoring
+  /// both the tree cursor and the board. Rebuilds the tree first if needed.
+  Future<void> restoreSavedPosition() async {
+    final seq = _savedMoveSequence;
+    if (seq == null) return;
+    _savedMoveSequence = null;
+    showOpeningTree = true;
+    onChanged();
+    if (openingTree == null) {
+      await rebuild();
+      if (!isActive() || openingTree == null) return;
+    }
+    openingTree!.reset();
+    for (final move in seq) {
+      if (!openingTree!.makeMove(move)) break;
+    }
+    treeCurrentMoveSequence = openingTree!.currentNode.getMovePath();
+    _updatePositionFromTree();
+    onChanged();
+    onReclaimFocus?.call();
+  }
 
   /// Hide the tree without notifying (the caller drives the follow-up reload).
   void hide() => showOpeningTree = false;

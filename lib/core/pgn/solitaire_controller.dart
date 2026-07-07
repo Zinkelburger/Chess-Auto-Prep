@@ -22,6 +22,19 @@ class SolitaireGuess {
   });
 
   bool get firstTry => wrongAttempts.isEmpty && !wasRevealed;
+
+  /// Human-readable annotation appended to the move's PGN comment when the
+  /// game completes: "1st try", "Revealed", or "Tried: e5, d5 (3 tries)".
+  String get note {
+    if (wasRevealed) {
+      return wrongAttempts.isEmpty
+          ? 'Revealed'
+          : 'Tried: ${wrongAttempts.join(", ")} then revealed';
+    }
+    if (firstTry) return '1st try';
+    final tries = wrongAttempts.length + 1;
+    return 'Tried: ${wrongAttempts.join(", ")} ($tries tries)';
+  }
 }
 
 /// Manages solitaire chess mode: the user guesses moves from a loaded PGN game
@@ -305,45 +318,6 @@ class SolitaireController extends ChangeNotifier {
     String normalize(String s) =>
         s.replaceAll(RegExp(r'[+#?!]'), '').trim().toLowerCase();
     return normalize(san) == normalize(expectedSan);
-  }
-
-  /// Build a PGN movetext string annotated with guess comments.
-  ///
-  /// User-side moves get comments: `{1st try}`, `{Revealed}`, or
-  /// `{Tried: e5, d5 (3 tries)}`.
-  String buildGuessPgn(List<String> mainLineMoves) {
-    final guessMap = <int, SolitaireGuess>{};
-    for (final g in _guessLog) {
-      guessMap[g.ply] = g;
-    }
-
-    final buf = StringBuffer();
-    for (int i = 0; i < mainLineMoves.length; i++) {
-      final moveNum = (i ~/ 2) + 1;
-      if (i % 2 == 0) {
-        if (i > 0) buf.write(' ');
-        buf.write('$moveNum.');
-      }
-      buf.write(' ${mainLineMoves[i]}');
-
-      final guess = guessMap[i];
-      if (guess != null) {
-        if (guess.wasRevealed) {
-          if (guess.wrongAttempts.isEmpty) {
-            buf.write(' {Revealed}');
-          } else {
-            buf.write(' {Tried: ${guess.wrongAttempts.join(", ")} then revealed}');
-          }
-        } else if (guess.firstTry) {
-          buf.write(' {1st try}');
-        } else {
-          final tries = guess.wrongAttempts.length + 1;
-          buf.write(' {Tried: ${guess.wrongAttempts.join(", ")} ($tries tries)}');
-        }
-      }
-    }
-    if (buf.isNotEmpty) buf.write(' *');
-    return buf.toString();
   }
 
   void _cancelTimers() {

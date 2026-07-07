@@ -181,6 +181,56 @@ class _StudyScreenState extends State<StudyScreen> {
     _study.addChapter(name, startingFen: startingFen);
   }
 
+  /// Open the board editor to set/replace the current chapter's starting
+  /// position. Existing moves are rooted in the old position, so replacing
+  /// it clears them (after confirmation).
+  Future<void> _editChapterPosition() async {
+    if (_study.chapterHasMoves) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Replace starting position?'),
+          content: Text(
+              'Chapter "${_study.chapter.name}" already has moves; setting a '
+              'new starting position will clear them.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Replace')),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    if (!mounted) return;
+    final position = await BoardEditorDialog.show(
+      context,
+      initialFen: _study.currentPosition.fen,
+      actionLabel: 'Set chapter position',
+    );
+    if (position == null) return;
+    _study.setChapterStartingPosition(position.fen);
+  }
+
+  /// Load the current chapter into the PGN viewer and quiz the whole line
+  /// via solitaire ("a study is positions we get quizzed on").
+  Future<void> _trainChapter() async {
+    if (!_study.chapterHasMoves) {
+      showAppSnackBar(context, 'This chapter has no moves to train yet.',
+          isError: true);
+      return;
+    }
+    await _study.flushSave();
+    if (!mounted) return;
+    context.read<AppState>().switchToSolitaireTraining(
+          pgn: _study.chapterPgn(),
+          asWhite: !_study.flipped,
+        );
+  }
+
   Future<void> _renameChapter() async {
     final name =
         await _promptName('Rename chapter', initial: _study.chapter.name);
@@ -229,6 +279,16 @@ class _StudyScreenState extends State<StudyScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 20),
+            tooltip: 'Board editor — set chapter starting position',
+            onPressed: _editChapterPosition,
+          ),
+          IconButton(
+            icon: const Icon(Icons.school_outlined, size: 20),
+            tooltip: 'Train this chapter (solitaire)',
+            onPressed: _trainChapter,
+          ),
           IconButton(
             icon: const Icon(Icons.swap_vert, size: 20),
             tooltip: 'Flip board (F)',
@@ -301,24 +361,26 @@ class _StudyScreenState extends State<StudyScreen> {
             },
           ),
         ),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, size: 18),
-          tooltip: 'Manage studies',
-          onSelected: (action) {
-            switch (action) {
-              case 'new':
-                _newStudy();
-              case 'delete':
-                _deleteCurrentStudy();
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'new', child: Text('New study…')),
-            if (current.filePath != null)
+        IconButton(
+          icon: const Icon(Icons.add, size: 20),
+          tooltip: 'New study',
+          onPressed: _newStudy,
+        ),
+        if (current.filePath != null)
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, size: 18),
+            tooltip: 'Manage studies',
+            onSelected: (action) {
+              switch (action) {
+                case 'delete':
+                  _deleteCurrentStudy();
+              }
+            },
+            itemBuilder: (_) => [
               const PopupMenuItem(
                   value: 'delete', child: Text('Delete study…')),
-          ],
-        ),
+            ],
+          ),
       ],
     );
   }
@@ -389,15 +451,23 @@ class _StudyScreenState extends State<StudyScreen> {
                   },
                 ),
               ),
+              IconButton(
+                icon: const Icon(Icons.add, size: 18),
+                tooltip: 'New chapter',
+                visualDensity: VisualDensity.compact,
+                onPressed: _addChapter,
+              ),
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, size: 18),
                 tooltip: 'Manage chapters',
                 onSelected: (action) {
                   switch (action) {
-                    case 'add':
-                      _addChapter();
+                    case 'train':
+                      _trainChapter();
                     case 'add_from_position':
                       _addChapter(fromPosition: true);
+                    case 'set_position':
+                      _editChapterPosition();
                     case 'rename':
                       _renameChapter();
                     case 'delete':
@@ -405,10 +475,15 @@ class _StudyScreenState extends State<StudyScreen> {
                   }
                 },
                 itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'add', child: Text('New chapter…')),
+                  PopupMenuItem(
+                      value: 'train', child: Text('Train this chapter')),
+                  PopupMenuDivider(),
                   PopupMenuItem(
                       value: 'add_from_position',
                       child: Text('New chapter from position…')),
+                  PopupMenuItem(
+                      value: 'set_position',
+                      child: Text('Set starting position…')),
                   PopupMenuItem(
                       value: 'rename', child: Text('Rename chapter…')),
                   PopupMenuItem(

@@ -16,9 +16,7 @@ import '../models/opening_tree.dart';
 import '../models/pgn_filter_models.dart';
 import '../models/pgn_game_entry.dart';
 export '../models/pgn_game_entry.dart';
-import '../models/solitaire_trophy.dart';
 import '../services/default_pgn_service.dart';
-import '../services/engine/stockfish_pool.dart';
 import '../services/game_analysis_controller.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/solitaire_trophy_service.dart';
@@ -151,6 +149,35 @@ List<String> buildMetadataOutput(
   return results;
 }
 
+/// Detect the player a whole collection is "about" by scanning every game's
+/// White/Black headers. Counts by surname (text before the first comma) so
+/// "Kasparov, Garry" and "Kasparov, G." pool together. Returns the surname
+/// when one player appears in ≥80% of the games.
+String? detectFileProtagonist(List<PgnGameEntry> games) {
+  if (games.length < 2) return null;
+  final counts = <String, int>{};
+  for (final g in games) {
+    final seen = <String>{};
+    for (final key in const ['White', 'Black']) {
+      final name = (g.headers[key] ?? '').trim();
+      if (name.isEmpty || name == '?') continue;
+      final surname = name.split(',').first.trim();
+      if (surname.isEmpty || !seen.add(surname)) continue;
+      counts[surname] = (counts[surname] ?? 0) + 1;
+    }
+  }
+  String? best;
+  var bestCount = 0;
+  counts.forEach((name, c) {
+    if (c > bestCount) {
+      best = name;
+      bestCount = c;
+    }
+  });
+  if (bestCount < (games.length * 0.8).ceil()) return null;
+  return best;
+}
+
 String? detectProtagonistFrom(List<PgnGameEntry> games) {
   if (games.length < 2) return null;
   final sample = games.take(math.min(4, games.length));
@@ -228,6 +255,48 @@ class PgnViewerController extends ChangeNotifier {
   bool hasActiveFilters = false;
 
   SliceConfig activeSliceConfig = const SliceConfig.empty();
+
+  /// Surname of the player the loaded collection is about (null when mixed).
+  /// Drives the one-click "«Player» as White/Black" slice presets.
+  String? sliceProtagonist;
+
+  /// When the whole file has the protagonist on one side only ("all Kasparov
+  /// black games"), that side; null when they play both colors.
+  Side? protagonistFixedSide;
+
+  /// Coloring for tree win/draw/loss stats: player-POV green/red when we know
+  /// whose games the current slice shows, neutral white/black otherwise.
+  WdlPerspective get wdlPerspective {
+    final p = sliceProtagonist;
+    if (p != null) {
+      for (final h in activeSliceConfig.headerFilters) {
+        if (h.value != p || h.mode == MatchMode.notContains) continue;
+        if (h.field == 'White') return WdlPerspective.playerIsWhite;
+        if (h.field == 'Black') return WdlPerspective.playerIsBlack;
+      }
+      if (protagonistFixedSide == Side.white) {
+        return WdlPerspective.playerIsWhite;
+      }
+      if (protagonistFixedSide == Side.black) {
+        return WdlPerspective.playerIsBlack;
+      }
+    }
+    return WdlPerspective.whiteBlack;
+  }
+
+  void _detectProtagonist(List<PgnGameEntry> entries) {
+    sliceProtagonist = detectFileProtagonist(entries);
+    protagonistFixedSide = null;
+    final p = sliceProtagonist;
+    if (p == null) return;
+    var asWhite = 0, asBlack = 0;
+    for (final g in entries) {
+      if ((g.headers['White'] ?? '').split(',').first.trim() == p) asWhite++;
+      if ((g.headers['Black'] ?? '').split(',').first.trim() == p) asBlack++;
+    }
+    if (asWhite > 0 && asBlack == 0) protagonistFixedSide = Side.white;
+    if (asBlack > 0 && asWhite == 0) protagonistFixedSide = Side.black;
+  }
   List<int>? _activeSliceIndices;
 
   int currentGameIndex = 0;
@@ -289,14 +358,9 @@ class PgnViewerController extends ChangeNotifier {
   bool get isSolitaireMode => solitaire.active;
 
   static const _revealDelayKey = 'solitaire_reveal_delay_sec';
-  static const _trophyThresholdKey = 'solitaire_trophy_threshold_cp';
 
-  int trophyThresholdCp = 20;
-
-  /// Trophies detected after the most recent analysis run (reset per game).
-  List<SolitaireTrophy> lastDetectedTrophies = [];
-
-  /// All-time trophy count (cached from service).
+  /// All-time trophy count (cached from service; earned in older sessions —
+  /// solitaire no longer detects new ones, but the cabinet stays viewable).
   int totalTrophyCount = 0;
 
   GameSortMode sortMode = GameSortMode.fileOrder;
@@ -428,6 +492,7 @@ class PgnViewerController extends ChangeNotifier {
     isLoading = false;
     filePath = path;
     allGames = entries;
+    _detectProtagonist(entries);
     filteredGames = List.of(entries);
     hasActiveFilters = false;
     activeSliceConfig = const SliceConfig.empty();
@@ -485,6 +550,7 @@ class PgnViewerController extends ChangeNotifier {
     isLoading = false;
     filePath = null;
     allGames = entries;
+    _detectProtagonist(entries);
     filteredGames = List.of(entries);
     hasActiveFilters = false;
     activeSliceConfig = const SliceConfig.empty();
@@ -829,6 +895,52 @@ class PgnViewerController extends ChangeNotifier {
         sequencePattern: newSequencePattern,
         sequenceGap: newSequenceGap);
 
+    await recomputeAndApplyConfig(newConfig);
+  }
+
+  /// One-click slice presets derived from [sliceProtagonist].
+  List<({String label, HeaderFilterConfig filter})> get slicePresets {
+    final p = sliceProtagonist;
+    if (p == null) return const [];
+    return [
+      (
+        label: '$p as White',
+        filter:
+            HeaderFilterConfig(field: 'White', mode: MatchMode.contains, value: p),
+      ),
+      (
+        label: '$p as Black',
+        filter:
+            HeaderFilterConfig(field: 'Black', mode: MatchMode.contains, value: p),
+      ),
+    ];
+  }
+
+  bool isPresetActive(HeaderFilterConfig filter) => activeSliceConfig
+      .headerFilters
+      .any((h) => h.field == filter.field && h.value == filter.value);
+
+  /// Apply a preset header filter, replacing any other White/Black filter on
+  /// the same player (so "as White" ↔ "as Black" swap rather than stack) while
+  /// keeping position/sequence filters.
+  Future<void> applySlicePreset(HeaderFilterConfig filter) async {
+    final newHeaders = activeSliceConfig.headerFilters
+        .where((h) =>
+            !((h.field == 'White' || h.field == 'Black') &&
+                h.value == filter.value))
+        .toList()
+      ..add(filter);
+    await recomputeAndApplyConfig(SliceConfig(
+      positionInput: activeSliceConfig.positionInput,
+      headerFilters: newHeaders,
+      sequencePattern: activeSliceConfig.sequencePattern,
+      sequenceGap: activeSliceConfig.sequenceGap,
+    ));
+  }
+
+  /// Recompute matches for [newConfig] and apply them (shared by chip removal
+  /// and presets).
+  Future<void> recomputeAndApplyConfig(SliceConfig newConfig) async {
     if (newConfig.isEmpty) {
       resetFilters();
       return;
@@ -844,16 +956,8 @@ class PgnViewerController extends ChangeNotifier {
     if (!isActive()) return;
 
     isLoading = false;
-    filteredGames = indices.map((i) => allGames[i]).toList();
-    hasActiveFilters = filteredGames.length != allGames.length;
-    activeSliceConfig = newConfig;
-    _activeSliceIndices = List<int>.from(indices);
-    currentGameIndex = 0;
-    _viewerTree.clearTree();
-    notifyListeners();
-    persistSliceConfig(newConfig);
-    if (showOpeningTree) _viewerTree.rebuild();
-    loadCurrentGame();
+    notifyListeners(); // applySlice may early-return on identical config
+    applySlice(indices, newConfig);
   }
 
   Future<void> persistSliceConfig(SliceConfig config) async {
@@ -921,10 +1025,16 @@ class PgnViewerController extends ChangeNotifier {
 
   // ── Unified navigation (mode-aware) ──
 
+  // Solitaire allows browsing the revealed region: the PGN widget caps all
+  // mainline navigation at the revealed frontier, so back/forward/home/end
+  // can delegate to it directly. clearEphemeralMoves is skipped there — it
+  // would wipe the wrong-attempt variations recorded during play.
+
   void navigateBack() {
-    if (isSolitaireMode) return;
     stopAutoPlay();
-    if (showOpeningTree) {
+    if (isSolitaireMode) {
+      pgnWidgetController.goBack();
+    } else if (showOpeningTree) {
       _viewerTree.goBack();
     } else {
       pgnWidgetController.goBack();
@@ -932,9 +1042,10 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void navigateForward() {
-    if (isSolitaireMode) return;
     stopAutoPlay();
-    if (showOpeningTree) {
+    if (isSolitaireMode) {
+      pgnWidgetController.goForward();
+    } else if (showOpeningTree) {
       _viewerTree.goForward();
     } else {
       pgnWidgetController.goForward();
@@ -942,9 +1053,10 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void navigateToStart() {
-    if (isSolitaireMode) return;
     stopAutoPlay();
-    if (showOpeningTree) {
+    if (isSolitaireMode) {
+      pgnWidgetController.goToMainLineIndex(0);
+    } else if (showOpeningTree) {
       _viewerTree.resetToStart();
     } else {
       pgnWidgetController.clearEphemeralMoves();
@@ -953,9 +1065,11 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void navigateToEnd() {
-    if (isSolitaireMode) return;
     stopAutoPlay();
-    if (showOpeningTree) {
+    if (isSolitaireMode) {
+      // Back to the guessing frontier (the widget caps at revealedPly).
+      pgnWidgetController.goToMainLineIndex(solitaire.revealedPly);
+    } else if (showOpeningTree) {
       _viewerTree.goToEnd();
     } else {
       final len = pgnWidgetController.mainLineLength;
@@ -995,7 +1109,6 @@ class PgnViewerController extends ChangeNotifier {
   Future<void> loadSolitaireSettings() async {
     final prefs = await SharedPreferences.getInstance();
     solitaire.revealDelaySec = prefs.getInt(_revealDelayKey) ?? 60;
-    trophyThresholdCp = prefs.getInt(_trophyThresholdKey) ?? 20;
     final trophies = await SolitaireTrophyService.instance.loadAll();
     totalTrophyCount = trophies.length;
   }
@@ -1007,13 +1120,6 @@ class PgnViewerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setTrophyThreshold(int cp) async {
-    trophyThresholdCp = cp;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_trophyThresholdKey, cp);
-    notifyListeners();
-  }
-
   void _startSolitaire() {
     if (filteredGames.isEmpty) return;
     stopAutoPlay();
@@ -1021,7 +1127,9 @@ class PgnViewerController extends ChangeNotifier {
     pgnWidgetController.goToMainLineIndex(0);
 
     solitaire.onAdvancePosition = () {
-      pgnWidgetController.goForward();
+      // Jump to the frontier rather than stepping forward: the user may have
+      // navigated back into the revealed region when an advance fires.
+      pgnWidgetController.goToMainLineIndex(solitaire.revealedPly);
       notifyListeners();
     };
     solitaire.onResetPosition = () {
@@ -1048,16 +1156,16 @@ class PgnViewerController extends ChangeNotifier {
     );
   }
 
-  /// Build annotated PGN movetext with solitaire guess comments.
-  String buildSolitaireGuessPgn() {
-    return solitaire.buildGuessPgn(pgnWidgetController.mainLineMoves);
-  }
-
-  /// Inject solitaire guess annotations into the current game's PGN movetext.
+  /// Append solitaire guess notes ("1st try", "Tried: …") to the guessed
+  /// moves' comments via the PGN widget's serializer, so the game's own
+  /// annotations and variations survive intact.
   void _injectGuessComments() {
     if (filteredGames.isEmpty || filePath == null) return;
-    final guessMovetext = buildSolitaireGuessPgn();
-    persistMoveComments(guessMovetext);
+    final notes = <int, String>{};
+    for (final g in solitaire.guessLog) {
+      notes[g.ply] = g.note;
+    }
+    pgnWidgetController.addGuessAnnotations(notes);
   }
 
   void revealCurrentMove() {
@@ -1068,120 +1176,59 @@ class PgnViewerController extends ChangeNotifier {
     solitaire.revealMove(moveHistory[mainIdx]);
   }
 
+  /// Guards against re-injecting guess notes on every notify after the game
+  /// completes (which would double-append and clobber later comment edits).
+  bool _solitaireGuessesSaved = false;
+
   void _onSolitaireChanged() {
-    if (solitaire.isComplete) {
+    if (solitaire.isComplete && !_solitaireGuessesSaved) {
+      _solitaireGuessesSaved = true;
       _injectGuessComments();
+    } else if (!solitaire.isComplete) {
+      _solitaireGuessesSaved = false;
     }
     notifyListeners();
   }
 
   void _handleSolitaireMove(String san) {
+    // Only a move played at the frontier counts as a guess. Anywhere else —
+    // browsing the revealed region, inside a variation, or after completion —
+    // it's exploratory analysis recorded as the user's own variation.
+    if (solitaire.isComplete ||
+        pgnWidgetController.inVariation ||
+        pgnWidgetController.mainLineIndex != solitaire.revealedPly) {
+      pgnWidgetController.addEphemeralMove(san);
+      return;
+    }
+
     final mainIdx = solitaire.revealedPly;
     final moveHistory = pgnWidgetController.mainLineMoves;
     if (mainIdx >= moveHistory.length) return;
 
     final expectedSan = moveHistory[mainIdx];
-    solitaire.handleMove(san, currentPosition, expectedSan);
-  }
-
-  /// After analysis completes, scan solitaire guess log for wrong attempts
-  /// that beat the GM's move by [trophyThresholdCp] or more. Awards trophies.
-  ///
-  /// Returns the number of new trophies detected.
-  Future<int> detectSolitaireTrophies() async {
-    final guessLog = solitaire.guessLog;
-    final evals = analysisController.evals;
-    if (guessLog.isEmpty || evals.isEmpty) return 0;
-
-    final evalByPly = <int, MoveEval>{};
-    for (final e in evals) {
-      evalByPly[e.ply] = e;
+    final correct = solitaire.handleMove(san, currentPosition, expectedSan);
+    if (!correct) {
+      // Show the wrong attempt live as a variation at its ply.
+      pgnWidgetController.recordVariationMove(san);
     }
-
-    final game = filteredGames.isNotEmpty
-        ? filteredGames[currentGameIndex]
-        : null;
-    final gameLabel = game != null ? game.label : '';
-    final headers = game?.headers ?? <String, String>{};
-    final gamePgn = game?.pgnText ?? '';
-    final userIsWhite = solitaire.userIsWhite;
-
-    final pool = StockfishPool.instance;
-    final depth = analysisController.depth;
-
-    final newTrophies = <SolitaireTrophy>[];
-
-    try {
-      await pool.ensureWorkers();
-
-      for (final guess in guessLog) {
-        if (guess.wrongAttempts.isEmpty) continue;
-
-        final gmEval = evalByPly[guess.ply + 1];
-        if (gmEval == null) continue;
-
-        final fen = gmEval.fenBefore;
-        final gmCp = gmEval.effectiveCp;
-
-        for (final wrongSan in guess.wrongAttempts) {
-          try {
-            final pos = Chess.fromSetup(Setup.parseFen(fen));
-            final move = pos.parseSan(wrongSan);
-            if (move == null) continue;
-            final afterPos = pos.play(move);
-            final result = await pool.evaluateFen(afterPos.fen, depth);
-
-            // Normalize to White's perspective (same as MoveEval.effectiveCp)
-            final isWhiteToMoveAfter = afterPos.turn == Side.white;
-            final userCpWhiteNorm =
-                isWhiteToMoveAfter ? result.effectiveCp : -result.effectiveCp;
-
-            // Advantage from the guessing side's perspective
-            final advantage = userIsWhite
-                ? (userCpWhiteNorm - gmCp)
-                : (gmCp - userCpWhiteNorm);
-
-            if (advantage >= trophyThresholdCp) {
-              newTrophies.add(SolitaireTrophy(
-                id: '${DateTime.now().microsecondsSinceEpoch}_${guess.ply}_$wrongSan',
-                date: DateTime.now(),
-                fen: fen,
-                userMove: wrongSan,
-                gmMove: guess.expectedSan,
-                userEvalCp: userCpWhiteNorm,
-                gmEvalCp: gmCp,
-                advantageCp: advantage,
-                gameLabel: gameLabel,
-                headers: Map<String, String>.from(headers),
-                pgn: gamePgn,
-              ));
-            }
-          } catch (e) {
-            debugPrint('Trophy eval failed for $wrongSan: $e');
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Trophy detection failed: $e');
-    }
-
-    if (newTrophies.isNotEmpty) {
-      await SolitaireTrophyService.instance.addTrophies(newTrophies);
-      totalTrophyCount = SolitaireTrophyService.instance.count;
-    }
-    lastDetectedTrophies = newTrophies;
-    notifyListeners();
-    return newTrophies.length;
   }
 
   List<int> gamesAtTreePosition() => _viewerTree.gamesAtTreePosition();
 
   void loadGameFromTree(int filteredIndex) {
+    _viewerTree.snapshotCursor();
     _viewerTree.hide();
     currentGameIndex = filteredIndex;
     notifyListeners();
     loadCurrentGame();
   }
+
+  /// True when a tree position saved by [loadGameFromTree] can be returned to.
+  bool get hasTreeReturnPosition => _viewerTree.hasSavedPosition;
+
+  /// Re-open the opening tree at the position explored before the last
+  /// [loadGameFromTree], restoring the tree cursor and the board.
+  Future<void> returnToTreePosition() => _viewerTree.restoreSavedPosition();
 
   String? defaultExportFileName() {
     if (filePath == null) return null;
