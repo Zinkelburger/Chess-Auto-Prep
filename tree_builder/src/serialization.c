@@ -48,6 +48,8 @@ static cJSON* node_to_cjson(const TreeNode *node, const SerializationOptions *op
     /* Probabilities */
     cJSON_AddNumberToObject(obj, "move_probability", node->move_probability);
     cJSON_AddNumberToObject(obj, "cumulative_probability", node->cumulative_probability);
+    if (node->search_priority >= 0.0)
+        cJSON_AddNumberToObject(obj, "search_priority", node->search_priority);
     
     /* Optional FEN */
     if (opts->include_fen && node->fen[0]) {
@@ -381,6 +383,11 @@ static TreeNode* cjson_to_node(cJSON *obj, TreeNode *parent,
     cJSON *cumul = cJSON_GetObjectItem(obj, "cumulative_probability");
     if (cumul && cJSON_IsNumber(cumul)) {
         node->cumulative_probability = cumul->valuedouble;
+    }
+
+    cJSON *spri = cJSON_GetObjectItem(obj, "search_priority");
+    if (spri && cJSON_IsNumber(spri)) {
+        node->search_priority = spri->valuedouble;
     }
     
     /* Parse engine eval */

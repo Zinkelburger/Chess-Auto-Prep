@@ -2,12 +2,18 @@
  * tree.h - Opening Tree Builder
  *
  * Builds and manages the complete opening tree structure in a single
- * interleaved BFS (FIFO queue) so shallow plies finish before deeper
- * work; branches are still pruned immediately by eval window at each node.
+ * interleaved frontier build.  Best-first (default): a priority queue on
+ * search priority (reach probability × our-alternative discount) expands
+ * the likeliest lines first and deepest — an anytime algorithm under any
+ * node budget.  FIFO BFS (best_first = false): classic level order.
+ * Branches are pruned immediately by eval window at each node either way.
  *
  * At OUR-move nodes:     Stockfish MultiPV → eval-loss filter → enqueue children
- * At OPPONENT nodes:     single source — pure Maia (default) or pure
- *                        Lichess (`maia_only = false`) → enqueue children
+ *                        (incumbent keeps parent priority; alternatives ×
+ *                        our_alt_discount)
+ * At OPPONENT nodes:     single source — pure Maia (default) or Lichess
+ *                        (`maia_only = false`, optionally λ-smoothed with
+ *                        a Maia Dirichlet prior) → enqueue children
  */
 
 #ifndef TREE_H
@@ -130,6 +136,55 @@ typedef struct TreeConfig {
     double min_probability;         /* Stop exploring below this cumul. probability */
     int max_depth;                  /* Maximum depth in ply */
     int max_nodes;                  /* Maximum total nodes (0 = unlimited) */
+
+    /* Frontier discipline.
+     *
+     * best_first: pop the frontier node with the highest search priority
+     * (reach probability × our-alternative discount) instead of FIFO level
+     * order.  Anytime: at any node budget the tree concentrates on the
+     * likeliest opponent lines, which also get searched deepest.  false =
+     * classic BFS (legacy).
+     *
+     * our_alt_discount: priority multiplier for non-incumbent our-move
+     * candidates (the incumbent — best eval at expansion time — inherits
+     * the parent's priority).  Lower = more budget on the repertoire spine,
+     * less on verifying alternatives.  Scheduling only; never affects
+     * expectimax or selection.
+     *
+     * maia_prior_games: Dirichlet prior weight λ (virtual games) blending
+     * DB opponent frequencies with Maia's policy:
+     *     p = (count + λ·maia) / (N + λ)
+     * Replaces the hard DB→Maia fallback cliff at sparsely covered
+     * positions.  0 disables smoothing. */
+    bool best_first;
+    double our_alt_discount;
+    double maia_prior_games;
+
+    /* Coverage guarantee (no silent holes).
+     *
+     * cover_min_prob: any opponent reply whose LOCAL (per-position)
+     * smoothed probability is at or above this floor must have a
+     * repertoire answer, even when its reach probability falls below
+     * min_probability or the mass/children budgets are exhausted.  Such
+     * our-turn nodes get a coverage-only expansion (evaluated answer, no
+     * subtree).  After the build a sweep answers or removes any our-turn
+     * leaf still lacking an answer, so no exported line ends on an
+     * unanswered opponent move.  0 disables (legacy: rare replies
+     * silently dropped). */
+    double cover_min_prob;
+
+    /* Preferred setup (consistency bias).
+     *
+     * setup_moves: space/comma-separated SAN moves of a system to play
+     * whenever sound (e.g. "Be3 Qd2 f3 O-O-O h4 Nh3" for the 150
+     * Attack).  Legal setup moves are injected as evaluated candidates
+     * at our-move nodes (same eval-loss window as MultiPV lines), and
+     * selection prefers a setup move within setup_tolerance_cp of the
+     * best child eval.  Expectimax values are untouched — the bias only
+     * constrains the argmax, so when the opponent makes consistency
+     * expensive the eval guard deviates automatically.  Empty = off. */
+    char setup_moves[256];
+    int setup_tolerance_cp;
 
     /* Engine (required for build) */
     struct EnginePool *engine_pool; /* Stockfish pool — must be non-NULL */
@@ -343,6 +398,22 @@ typedef struct {
 int score_our_move_children(TreeNode *node,
                             const struct RepertoireConfig *config,
                             ScoredChild *best_out);
+
+/**
+ * Coverage sweep — the no-silent-holes guarantee.
+ *
+ * Walks the tree for dangling our-turn leaves (an opponent move with no
+ * repertoire answer).  Leaves whose incoming move probability clears
+ * config->cover_min_prob get a coverage-only expansion (evaluated answer,
+ * no subtree); leaves that still have no answer anywhere — including via
+ * transposition — are removed so their mass returns to the expectimax
+ * tail term.  tree_build() runs this automatically; call it manually for
+ * trees built by other means (e.g. db-explorer after eval enrichment,
+ * when the engine pool in config is available).  explorer may be NULL
+ * when config->maia_only is true.
+ */
+void tree_coverage_sweep(Tree *tree, const TreeConfig *config,
+                         struct LichessExplorer *explorer);
 
 double win_probability(int cp);
 

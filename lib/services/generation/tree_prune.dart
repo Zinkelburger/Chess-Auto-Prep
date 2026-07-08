@@ -5,9 +5,8 @@
 /// with unit tests that construct trees directly.
 library;
 
-import 'dart:collection';
-
 import '../../models/build_tree_node.dart';
+import 'frontier_queue.dart';
 
 /// Remove every subtree whose root was flagged [PruneReason.evalTooLow],
 /// keeping the rest of the tree intact. Also drops the removed nodes from the
@@ -57,7 +56,7 @@ void propagateHigherCumP(
   BuildTreeNode canonical,
   double newCumP,
   double minProbability,
-  Queue<BuildTreeNode> queue,
+  FrontierQueue queue,
 ) {
   if (newCumP <= canonical.cumulativeProbability) return;
   final ratio = newCumP / canonical.cumulativeProbability;
@@ -69,10 +68,11 @@ void _propagateCumPRecursive(
   BuildTreeNode node,
   double ratio,
   double minProbability,
-  Queue<BuildTreeNode> queue,
+  FrontierQueue queue,
 ) {
   for (final child in node.children) {
     child.cumulativeProbability *= ratio;
+    if (child.searchPriority >= 0.0) child.searchPriority *= ratio;
     if (child.children.isNotEmpty) {
       _propagateCumPRecursive(child, ratio, minProbability, queue);
     } else if (!child.explored &&

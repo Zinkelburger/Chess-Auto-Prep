@@ -69,6 +69,7 @@ void main() {
       t.e4e5nf3.isRepertoireMove = true;
       t.e4c5nf3.isRepertoireMove = true;
       t.e4c5.cumulativeProbability = 0.001; // below default 0.01
+      t.e4c5.moveProbability = 0.001; // below the coverage floor too
 
       final extractor = LineExtractor(config: _config());
       final lines = extractor.extract(t.toTree());
@@ -76,6 +77,24 @@ void main() {
       // Only the e5 branch should remain
       expect(lines.length, 1);
       expect(lines.single.movesSan[1], 'e5');
+    });
+
+    test('keeps coverage-floored children below minProbability', () {
+      final t = StandardTree();
+      t.e4.isRepertoireMove = true;
+      t.e4e5nf3.isRepertoireMove = true;
+      t.e4c5nf3.isRepertoireMove = true;
+      // Deep-but-rare line: reach probability below the floor, yet the
+      // move itself is popular locally — the coverage floor guarantees it
+      // an answer, so its line must be exported.
+      t.e4c5.cumulativeProbability = 0.001;
+      t.e4c5.moveProbability = 0.35;
+
+      final extractor = LineExtractor(config: _config());
+      final lines = extractor.extract(t.toTree());
+
+      expect(lines.length, 2);
+      expect(lines.map((l) => l.movesSan[1]).toSet(), {'e5', 'c5'});
     });
 
     test('produces 0 lines when no repertoire marks exist', () {

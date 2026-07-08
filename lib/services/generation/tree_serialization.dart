@@ -40,6 +40,9 @@ Map<String, dynamic> _nodeToJson(BuildTreeNode node) {
 
   obj['move_probability'] = node.moveProbability;
   obj['cumulative_probability'] = node.cumulativeProbability;
+  if (node.searchPriority >= 0.0) {
+    obj['search_priority'] = node.searchPriority;
+  }
 
   if (node.fen.isNotEmpty) obj['fen'] = node.fen;
 
@@ -187,6 +190,10 @@ BuildTreeNode _nodeFromJson(
     cumulativeProbability:
         (obj['cumulative_probability'] as num?)?.toDouble() ?? 1.0,
   );
+
+  if (obj.containsKey('search_priority')) {
+    node.searchPriority = (obj['search_priority'] as num).toDouble();
+  }
 
   if (obj.containsKey('engine_eval_cp')) {
     node.engineEvalCp = (obj['engine_eval_cp'] as num).toInt();

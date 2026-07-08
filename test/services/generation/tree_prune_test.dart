@@ -3,7 +3,7 @@
 // pruning and cumulative-probability propagation by constructing
 // BuildTree/BuildTreeNode structures directly (no engine/network/service).
 
-import 'dart:collection';
+import 'package:chess_auto_prep/services/generation/frontier_queue.dart';
 
 import 'package:chess_auto_prep/models/build_tree_node.dart';
 import 'package:chess_auto_prep/services/generation/tree_prune.dart';
@@ -121,17 +121,17 @@ void main() {
       final canonical = _node(cumP: 0.5);
       final child = _node(cumP: 0.25);
       canonical.children.add(child);
-      final queue = Queue<BuildTreeNode>();
+      final queue = FrontierQueue(bestFirst: false);
 
       propagateHigherCumP(canonical, 0.5, 0.01, queue);
       expect(canonical.cumulativeProbability, 0.5);
       expect(child.cumulativeProbability, 0.25);
-      expect(queue, isEmpty);
+      expect(queue.isEmpty, isTrue);
 
       propagateHigherCumP(canonical, 0.3, 0.01, queue);
       expect(canonical.cumulativeProbability, 0.5);
       expect(child.cumulativeProbability, 0.25);
-      expect(queue, isEmpty);
+      expect(queue.isEmpty, isTrue);
     });
 
     test('scales node and descendants by the same ratio', () {
@@ -140,7 +140,7 @@ void main() {
       final grandchild = _node(cumP: 0.05);
       child.children.add(grandchild);
       canonical.children.add(child);
-      final queue = Queue<BuildTreeNode>();
+      final queue = FrontierQueue(bestFirst: false);
 
       // newCumP 0.4 over 0.2 → ratio 2.0
       propagateHigherCumP(canonical, 0.4, 0.01, queue);
@@ -155,7 +155,7 @@ void main() {
       final leafBig = _node(san: 'big', cumP: 0.06);
       final leafSmall = _node(san: 'small', cumP: 0.005);
       canonical.children.addAll([leafBig, leafSmall]);
-      final queue = Queue<BuildTreeNode>();
+      final queue = FrontierQueue(bestFirst: false);
 
       // ratio 2.0 → leafBig 0.12 (>= 0.01), leafSmall 0.01 (>= 0.01)
       propagateHigherCumP(canonical, 0.2, 0.01, queue);
@@ -168,11 +168,11 @@ void main() {
       final explored = _node(san: 'explored', cumP: 0.06, explored: true);
       final tooSmall = _node(san: 'tiny', cumP: 0.001);
       canonical.children.addAll([explored, tooSmall]);
-      final queue = Queue<BuildTreeNode>();
+      final queue = FrontierQueue(bestFirst: false);
 
       // ratio 2.0 → explored 0.12 (but explored), tooSmall 0.002 (< 0.01)
       propagateHigherCumP(canonical, 0.2, 0.01, queue);
-      expect(queue, isEmpty);
+      expect(queue.isEmpty, isTrue);
     });
 
     test('internal nodes are scaled but never queued', () {
@@ -180,7 +180,7 @@ void main() {
       final internal = _node(san: 'internal', cumP: 0.08);
       internal.children.add(_node(san: 'leaf', cumP: 0.04));
       canonical.children.add(internal);
-      final queue = Queue<BuildTreeNode>();
+      final queue = FrontierQueue(bestFirst: false);
 
       propagateHigherCumP(canonical, 0.2, 0.01, queue);
       expect(internal.cumulativeProbability, closeTo(0.16, 1e-12));

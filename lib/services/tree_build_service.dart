@@ -1,28 +1,39 @@
 /// Two-phase tree builder — builds a persistent [BuildTree] with engine
 /// evaluations on every node, matching the C tree_builder algorithm.
 ///
-/// Phase 1 (this service): BFS build (FIFO queue) with constant MultiPV at
-/// each ply our-move nodes, single-source opponent moves (Maia OR Lichess),
-/// eval-window pruning, and transposition detection — matches C tree_builder.
+/// Phase 1 (this service): frontier-driven build with constant MultiPV at
+/// our-move nodes, single-source opponent moves (Maia OR Lichess with an
+/// optional Maia Dirichlet prior), eval-window pruning, and transposition
+/// detection — matches C tree_builder.
+///
+/// Frontier discipline (config.bestFirst):
+///   - Best-first (default): pop the frontier node with the highest search
+///     priority — reach probability, discounted at non-incumbent our-move
+///     alternatives.  Anytime: at any node budget the tree concentrates on
+///     the likeliest opponent lines, which also get searched deepest.
+///   - FIFO: classic level-order BFS (legacy behavior).
 ///
 /// Phase 2 (separate calculators): ease, expectimax, and repertoire
-/// selection run on the completed tree.
+/// selection run on the completed tree.  Search priorities never feed
+/// phase 2 — they shape which nodes exist, not how they are valued.
 library;
 
 import 'dart:async';
-import 'dart:collection' show Queue;
 
 import 'package:flutter/foundation.dart';
 
 import '../models/build_tree_node.dart';
 import '../models/explorer_response.dart';
-import '../utils/chess_utils.dart' show playUciMove, uciToSan;
+import '../utils/chess_utils.dart' show playUciMove, sanToUci, uciToSan;
 import '../utils/fen_utils.dart';
 import 'engine/stockfish_pool.dart';
 import 'engine/engine_lifecycle.dart';
 import 'eval/chessdb_api_provider.dart';
 import 'generation/fen_map.dart';
+import 'generation/frontier_queue.dart';
 import 'generation/generation_config.dart';
+import 'generation/opponent_prior.dart';
+import 'generation/setup_bias.dart';
 import 'generation/pgn_freq_map.dart';
 import 'generation/tree_build_progress.dart';
 import 'generation/tree_eval_resolver.dart';
@@ -181,6 +192,16 @@ class TreeBuildService {
         isCancelled: isCancelled,
         onProgress: onProgress,
       );
+      // Skipped on hard cancel (_isBuilding false): the tree stays resumable
+      // and the sweep would only throw away resumable frontier leaves.
+      if (_isBuilding) {
+        await _coverageSweep(
+          tree: tree,
+          config: cfg,
+          fenMap: fenMap,
+          onProgress: onProgress,
+        );
+      }
     } finally {
       fenMap.clear();
       await _evalResolver.teardownProviders();
@@ -317,9 +338,10 @@ class TreeBuildService {
       root.totalGames = rootFreq.reachCount;
     }
     root.cumulativeProbability = 1.0;
+    root.searchPriority = 1.0;
 
     final fenMap = FenMap();
-    final queue = Queue<BuildTreeNode>();
+    final queue = FrontierQueue(bestFirst: config.bestFirst);
     queue.add(root);
 
     while (_isBuilding && !isCancelled() && queue.isNotEmpty) {
@@ -331,7 +353,7 @@ class TreeBuildService {
       final node = queue.removeFirst();
       if (node.explored) continue;
 
-      _processDbExplorerNode(
+      await _processDbExplorerNode(
         tree: tree,
         node: node,
         freqMap: freqMap,
@@ -368,6 +390,16 @@ class TreeBuildService {
           isCancelled: isCancelled,
           onProgress: onProgress,
         );
+        // After enrichment the engine is available, so holes where the
+        // user's games ran out can get an engine answer.
+        if (_isBuilding) {
+          await _coverageSweep(
+            tree: tree,
+            config: config,
+            fenMap: fenMap,
+            onProgress: onProgress,
+          );
+        }
       } finally {
         fenMap.clear();
         await _evalResolver.teardownProviders();
@@ -383,15 +415,15 @@ class TreeBuildService {
     return tree;
   }
 
-  void _processDbExplorerNode({
+  Future<void> _processDbExplorerNode({
     required BuildTree tree,
     required BuildTreeNode node,
     required PgnFreqMap freqMap,
     required TreeBuildConfig config,
     required FenMap fenMap,
-    required Queue<BuildTreeNode> queue,
+    required FrontierQueue queue,
     required void Function(BuildProgress) onProgress,
-  }) {
+  }) async {
     if (node.ply >= config.maxPly) {
       node.explored = true;
       return;
@@ -431,9 +463,18 @@ class TreeBuildService {
     fenMap.putCanonical(node.fen, node);
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
+    final basePri = effectiveSearchPriority(node);
+
+    int reach = pos.reachCount;
+    if (reach == 0) {
+      reach = pos.moves.fold(0, (sum, m) => sum + m.count);
+    }
 
     if (isOurMove) {
-      // Our move: add all moves from the frequency map
+      // Our move: add all moves from the frequency map.  Search priority
+      // follows the DB frequency share so best-first explores our popular
+      // moves first — cumulative probability stays undiscounted (our moves
+      // are a choice, not chance).
       for (final m in pos.moves) {
         if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) break;
 
@@ -452,31 +493,46 @@ class TreeBuildService {
 
         child.moveProbability = 1.0;
         child.cumulativeProbability = node.cumulativeProbability;
+        child.searchPriority =
+            reach > 0 ? basePri * (m.count / reach) : basePri;
         queue.add(child);
       }
     } else {
-      // Opponent move: filter by min-games and min-prob
-      final filtered = freqMap.filteredMoves(
-        pos,
-        minGames: config.dbMinGames,
-        minProb: config.dbMinProb,
-      );
-
-      int reach = pos.reachCount;
-      if (reach == 0) {
-        reach = pos.moves.fold(0, (sum, m) => sum + m.count);
-      }
+      // Opponent move: smoothed DB frequencies (Maia Dirichlet prior when
+      // coverage is sparse), else raw frequencies with min-games/min-prob.
       if (reach == 0) {
         node.explored = true;
         return;
       }
 
-      for (final m in filtered) {
-        if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) break;
+      final maiaPolicy = await _maiaPolicyForSmoothing(node.fen, reach, config);
+      final smoothing = maiaPolicy.isNotEmpty;
 
-        final prob = m.count / reach;
+      final candidates = smoothOpponentMoves(
+        observed: [
+          for (final m in pos.moves)
+            ObservedMove(uci: m.uci, san: m.san, games: m.count),
+        ],
+        totalGames: reach,
+        maiaPolicy: maiaPolicy,
+        priorGames: smoothing ? config.maiaPriorGames : 0.0,
+      );
+
+      for (final m in candidates) {
+        final prob = m.probability;
         final newCumul = node.cumulativeProbability * prob;
-        if (newCumul < config.minProbability) continue;
+        // Coverage floor: see _addOpponentChildrenFromLichess.
+        final covered =
+            config.coverMinProb > 0.0 && prob >= config.coverMinProb;
+        if (!covered) {
+          if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) {
+            break;
+          }
+          // The prior replaces the min-games noise filter when smoothing.
+          if (!smoothing && m.games < config.dbMinGames) continue;
+          if (m.probability < config.dbMinProb) continue;
+          if (newCumul < config.minProbability) continue;
+        }
 
         final childFen = playUciMove(node.fen, m.uci);
         if (childFen == null) continue;
@@ -493,6 +549,7 @@ class TreeBuildService {
 
         child.moveProbability = prob;
         child.cumulativeProbability = newCumul;
+        child.searchPriority = basePri * prob;
         queue.add(child);
       }
     }
@@ -655,7 +712,7 @@ class TreeBuildService {
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
   }) async {
-    final queue = Queue<BuildTreeNode>();
+    final queue = FrontierQueue(bestFirst: config.bestFirst);
 
     final fastResume = tree.totalNodes > 1 && tree.root.children.isNotEmpty;
     if (fastResume) {
@@ -664,10 +721,20 @@ class TreeBuildService {
         _log('No frontier positions to expand');
         return;
       }
-      frontier.sort((a, b) => a.ply.compareTo(b.ply));
+      // Legacy trees carry no priorities; reach probability is the natural
+      // fallback (equals the priority when no alt-discount applied).
+      for (final n in frontier) {
+        if (n.searchPriority < 0.0) {
+          n.searchPriority = n.cumulativeProbability;
+        }
+      }
+      if (!config.bestFirst) {
+        frontier.sort((a, b) => a.ply.compareTo(b.ply));
+      }
       queue.addAll(frontier);
       _progress.initForResume(minFrontierPly: minPly);
     } else {
+      tree.root.searchPriority = 1.0;
       queue.add(tree.root);
     }
 
@@ -697,7 +764,7 @@ class TreeBuildService {
     required FenMap fenMap,
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
-    required Queue<BuildTreeNode> queue,
+    required FrontierQueue queue,
   }) async {
     if (!_isBuilding || isCancelled()) return;
 
@@ -707,20 +774,48 @@ class TreeBuildService {
       if (!_isBuilding || isCancelled()) return;
     }
 
+    final isOurMove = node.isWhiteToMove == config.playAsWhite;
+
+    // Coverage floor: an our-turn node owes the opponent's last move an
+    // answer whenever that move's LOCAL probability clears coverMinProb —
+    // even below the search floor, past maxPly, or past the node budget.
+    // Such nodes get a coverage-only expansion: evaluated answer, no subtree.
+    final owesAnswer = isOurMove &&
+        node.ply > 0 &&
+        node.children.isEmpty &&
+        config.coverMinProb > 0.0 &&
+        node.moveProbability >= config.coverMinProb;
+    var coverageOnly = false;
+
     if (node.ply >= config.maxPly) {
-      if (!node.hasEngineEval && config.usesStockfish) {
-        await _evalResolver.ensureEval(
-          node,
-          config,
-          fenMap: fenMap,
-          pool: _pool,
-        );
+      if (!owesAnswer) {
+        if (!node.hasEngineEval && config.usesStockfish) {
+          await _evalResolver.ensureEval(
+            node,
+            config,
+            fenMap: fenMap,
+            pool: _pool,
+          );
+        }
+        node.explored = true;
+        return;
       }
-      node.explored = true;
-      return;
+      coverageOnly = true;
     }
-    if (node.cumulativeProbability < config.minProbability) return;
-    if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) return;
+    // Discounted our-move alternatives whose priority fell below the floor
+    // are not worth budget (searchPriority ≤ cumulativeProbability always).
+    final belowFloor = node.cumulativeProbability < config.minProbability ||
+        (config.bestFirst &&
+            node.searchPriority >= 0.0 &&
+            node.searchPriority < config.minProbability);
+    if (belowFloor && !coverageOnly) {
+      if (!owesAnswer) return;
+      coverageOnly = true;
+    }
+    if (config.maxNodes > 0 && tree.totalNodes >= config.maxNodes) {
+      if (!owesAnswer) return;
+      coverageOnly = true;
+    }
 
     _progress.emitProgress(
       tree,
@@ -742,8 +837,6 @@ class TreeBuildService {
       return;
     }
     if (node.explored) return;
-
-    final isOurMove = node.isWhiteToMove == config.playAsWhite;
 
     // Opponent-move nodes: ensure eval + window prune BEFORE expansion.
     // Our-move nodes skip this in stockfish mode — eval comes from MultiPV.
@@ -803,6 +896,7 @@ class TreeBuildService {
           isCancelled: isCancelled,
           onProgress: onProgress,
           queue: queue,
+          coverageOnly: coverageOnly,
         );
       } else {
         await _buildOurMove(
@@ -813,6 +907,7 @@ class TreeBuildService {
           isCancelled: isCancelled,
           onProgress: onProgress,
           queue: queue,
+          coverageOnly: coverageOnly,
         );
       }
     } else {
@@ -842,7 +937,8 @@ class TreeBuildService {
     required TreeBuildConfig config,
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
-    required Queue<BuildTreeNode> queue,
+    required FrontierQueue queue,
+    bool coverageOnly = false,
   }) async {
     if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
       _log('Maia unavailable — cannot run maiaDbExplore mode');
@@ -936,9 +1032,124 @@ class TreeBuildService {
       );
     }
 
+    await _injectSetupCandidates(
+      tree: tree,
+      node: node,
+      config: config,
+      bestCpWhite: bestCpWhite,
+      onProgress: onProgress,
+    );
+
+    _assignOurMovePriorities(node, config);
+
+    // Coverage-only: the answer is the deliverable — children stay
+    // unexplored leaves so a future resume with more budget can deepen them.
+    if (coverageOnly) return;
+
     for (final child in List.of(node.children)) {
       if (!_isBuilding || isCancelled()) break;
       queue.add(child);
+    }
+  }
+
+  /// Preferred-setup candidate injection: quiet system moves (h4, Nh3, ...)
+  /// are often missing from Maia/MultiPV top-N, so the selection tie-break
+  /// would have nothing to choose.  Evaluate any legal setup move not
+  /// already a candidate and add it, subject to the same eval-loss window
+  /// as regular candidates.  [bestCpWhite] is the best candidate eval in
+  /// white-POV centipawns (null = no reference, window not applied).
+  Future<void> _injectSetupCandidates({
+    required BuildTree tree,
+    required BuildTreeNode node,
+    required TreeBuildConfig config,
+    required int? bestCpWhite,
+    required void Function(BuildProgress) onProgress,
+  }) async {
+    final setup = parseSetupMoves(config.setupMoves);
+    if (setup.isEmpty) return;
+    final whiteToMove = isWhiteToMove(node.fen);
+
+    for (final san in setup) {
+      final uci = sanToUci(node.fen, san);
+      if (uci == null) continue; // not legal here (or already played)
+      final childFen = playUciMove(node.fen, uci);
+      if (childFen == null) continue;
+      if (node.children.any((c) => c.fen == childFen || c.moveUci == uci)) {
+        continue; // already a candidate
+      }
+
+      // Child eval: Stockfish when available, else the DB eval chain
+      // (matches how each build mode evaluates regular candidates).
+      final int childCpWhite;
+      final int evalDepthUsed;
+      if (config.usesStockfish && _pool.workerCount > 0) {
+        final result = await _pool.evaluateFen(childFen, config.evalDepth);
+        _stats.sfMultipvCalls++;
+        final childIsWhite = isWhiteToMove(childFen);
+        childCpWhite =
+            childIsWhite ? result.effectiveCp : -result.effectiveCp;
+        evalDepthUsed = config.evalDepth;
+      } else {
+        final dbEval =
+            await _evalResolver.lookupDbEvalWhite(childFen, config);
+        if (dbEval == null) continue;
+        childCpWhite = dbEval.$1;
+        evalDepthUsed = dbEval.$2;
+      }
+
+      if (bestCpWhite != null) {
+        final evalLoss = whiteToMove
+            ? bestCpWhite - childCpWhite
+            : childCpWhite - bestCpWhite;
+        if (evalLoss > config.maxEvalLossCp) continue;
+      }
+
+      final child = _makeChild(
+        parent: node,
+        fen: childFen,
+        san: uciToSan(node.fen, uci),
+        uci: uci,
+        tree: tree,
+      );
+      if (child == null) continue;
+
+      child.moveProbability = 1.0;
+      child.cumulativeProbability = node.cumulativeProbability;
+      final childIsWhite = isWhiteToMove(childFen);
+      child.engineEvalCp = childIsWhite ? childCpWhite : -childCpWhite;
+      _evalResolver.cacheEvalWhite(childFen, childCpWhite, evalDepthUsed);
+
+      _progress.emitProgress(
+        tree,
+        child.ply,
+        child.fen,
+        onProgress,
+        config.maxPly,
+        buildSw: _buildSw,
+      );
+    }
+  }
+
+  /// Best-first priorities at an our-move node: the incumbent (best eval for
+  /// us at expansion time) inherits the parent's priority; alternatives are
+  /// discounted so they stay shallow unless the mainline budget runs out.
+  void _assignOurMovePriorities(BuildTreeNode node, TreeBuildConfig config) {
+    if (node.children.isEmpty) return;
+    final basePri = effectiveSearchPriority(node);
+
+    BuildTreeNode? incumbent;
+    var bestCp = 0;
+    for (final child in node.children) {
+      final cp = child.evalForUs(config.playAsWhite);
+      if (incumbent == null || cp > bestCp) {
+        bestCp = cp;
+        incumbent = child;
+      }
+    }
+    for (final child in node.children) {
+      child.searchPriority = identical(child, incumbent)
+          ? basePri
+          : basePri * config.ourAltDiscount;
     }
   }
 
@@ -951,7 +1162,8 @@ class TreeBuildService {
     required FenMap fenMap,
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
-    required Queue<BuildTreeNode> queue,
+    required FrontierQueue queue,
+    bool coverageOnly = false,
   }) async {
     final mpvCount = node.ply == 0
         ? (config.ourMultipv >= 10 ? config.ourMultipv : 10)
@@ -1080,6 +1292,14 @@ class TreeBuildService {
       );
     }
 
+    await _injectSetupCandidates(
+      tree: tree,
+      node: node,
+      config: config,
+      bestCpWhite: bestCp,
+      onProgress: onProgress,
+    );
+
     // Populate maia_frequency on our-move children.  C gates this on
     // `populate_maia_frequency` (novelty > 0 || find_traps); Dart always
     // populates when Maia is available since the data is useful for both
@@ -1106,6 +1326,12 @@ class TreeBuildService {
       }
     }
 
+    _assignOurMovePriorities(node, config);
+
+    // Coverage-only: the answer is the deliverable — children stay
+    // unexplored leaves so a future resume with more budget can deepen them.
+    if (coverageOnly) return;
+
     for (final child in List.of(node.children)) {
       if (!_isBuilding || isCancelled()) break;
       queue.add(child);
@@ -1121,7 +1347,7 @@ class TreeBuildService {
     required FenMap fenMap,
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
-    required Queue<BuildTreeNode> queue,
+    required FrontierQueue queue,
   }) async {
     if (config.maiaOnly) {
       await _addOpponentChildrenFromMaia(
@@ -1170,6 +1396,32 @@ class TreeBuildService {
     }
   }
 
+  /// Maia policy for Dirichlet smoothing, or empty when smoothing is off,
+  /// Maia is unavailable, or [totalGames] is large enough that the prior's
+  /// weight would be negligible (saves the inference).
+  Future<Map<String, double>> _maiaPolicyForSmoothing(
+    String fen,
+    int totalGames,
+    TreeBuildConfig config,
+  ) async {
+    if (!smoothingWorthwhile(totalGames, config.maiaPriorGames)) {
+      return const {};
+    }
+    if (!MaiaFactory.isAvailable || MaiaFactory.instance == null) {
+      return const {};
+    }
+    try {
+      final sw = Stopwatch()..start();
+      final result = await MaiaFactory.instance!.evaluate(fen, config.maiaElo);
+      _stats.maiaEvals++;
+      _stats.maiaTotalMs += sw.elapsedMilliseconds;
+      return result.policy;
+    } catch (e) {
+      _log('Maia prior lookup failed: $e');
+      return const {};
+    }
+  }
+
   Future<void> _addOpponentChildrenFromLichess({
     required BuildTree tree,
     required BuildTreeNode node,
@@ -1184,28 +1436,65 @@ class TreeBuildService {
     final totalD = response.moves.fold(0, (s, m) => s + m.draws);
     node.setLichessStats(totalW, totalB, totalD);
 
+    // λ-smoothing: blend DB counts with Maia's policy so sparsely covered
+    // positions degrade continuously toward Maia instead of trusting the
+    // frequencies from a handful of games (or falling off a hard cliff).
+    final maiaPolicy = await _maiaPolicyForSmoothing(
+      node.fen,
+      response.totalGames,
+      config,
+    );
+    final smoothing = maiaPolicy.isNotEmpty;
+
+    final candidates = smoothOpponentMoves(
+      observed: [
+        for (final m in response.moves)
+          ObservedMove(
+            uci: m.uci,
+            san: m.san,
+            games: m.total,
+            whiteWins: m.white,
+            blackWins: m.black,
+            draws: m.draws,
+          ),
+      ],
+      totalGames: response.totalGames,
+      maiaPolicy: maiaPolicy,
+      priorGames: smoothing ? config.maiaPriorGames : 0.0,
+    );
+
     int childrenAdded = 0;
     double massCovered = 0.0;
     final massTarget = config.oppMassTarget;
+    final basePri = effectiveSearchPriority(node);
 
-    for (final move in response.moves) {
-      if (move.total < config.minGames) continue;
-      if (config.oppMaxChildren > 0 && childrenAdded >= config.oppMaxChildren) {
-        break;
-      }
-      if (massTarget > 0.0 && massCovered >= massTarget) break;
-
-      final prob = move.playFraction;
+    for (final move in candidates) {
+      final prob = move.probability;
       final newCumul = node.cumulativeProbability * prob;
-      if (newCumul < config.minProbability) continue;
+      // Coverage floor: replies at/above coverMinProb local probability must
+      // exist in the tree regardless of budget cutoffs — they'll receive at
+      // least a coverage-only answer instead of becoming a silent hole.
+      final covered =
+          config.coverMinProb > 0.0 && prob >= config.coverMinProb;
+      if (!covered) {
+        // The prior replaces the min-games noise filter when smoothing.
+        if (!smoothing && move.games < config.minGames) continue;
+        if (config.oppMaxChildren > 0 &&
+            childrenAdded >= config.oppMaxChildren) {
+          break;
+        }
+        if (massTarget > 0.0 && massCovered >= massTarget) break;
+        if (newCumul < config.minProbability) continue;
+      }
 
       final childFen = playUciMove(node.fen, move.uci);
       if (childFen == null) continue;
 
+      final san = move.san.isNotEmpty ? move.san : uciToSan(node.fen, move.uci);
       final child = _makeChild(
         parent: node,
         fen: childFen,
-        san: move.san,
+        san: san,
         uci: move.uci,
         tree: tree,
       );
@@ -1213,7 +1502,10 @@ class TreeBuildService {
 
       child.moveProbability = prob;
       child.cumulativeProbability = newCumul;
-      child.setLichessStats(move.white, move.black, move.draws);
+      child.searchPriority = basePri * prob;
+      if (move.games > 0) {
+        child.setLichessStats(move.whiteWins, move.blackWins, move.draws);
+      }
       childrenAdded++;
       massCovered += prob;
 
@@ -1268,18 +1560,24 @@ class TreeBuildService {
     int childrenAdded = 0;
     double massCovered = 0.0;
     final massTarget = config.oppMassTarget;
+    final basePri = effectiveSearchPriority(node);
 
     for (final entry in sortedMoves) {
       final uci = entry.key;
       final prob = entry.value;
-      if (prob < config.maiaMinProb) continue;
-      if (config.oppMaxChildren > 0 && childrenAdded >= config.oppMaxChildren) {
-        break;
-      }
-      if (massTarget > 0.0 && massCovered >= massTarget) break;
-
       final newCumul = node.cumulativeProbability * prob;
-      if (newCumul < config.minProbability) continue;
+      // Coverage floor: see _addOpponentChildrenFromLichess.
+      final covered =
+          config.coverMinProb > 0.0 && prob >= config.coverMinProb;
+      if (!covered) {
+        if (prob < config.maiaMinProb) continue;
+        if (config.oppMaxChildren > 0 &&
+            childrenAdded >= config.oppMaxChildren) {
+          break;
+        }
+        if (massTarget > 0.0 && massCovered >= massTarget) break;
+        if (newCumul < config.minProbability) continue;
+      }
 
       final childFen = playUciMove(node.fen, uci);
       if (childFen == null) continue;
@@ -1296,6 +1594,7 @@ class TreeBuildService {
 
       child.moveProbability = prob;
       child.cumulativeProbability = newCumul;
+      child.searchPriority = basePri * prob;
       childrenAdded++;
       massCovered += prob;
 
@@ -1362,6 +1661,7 @@ class TreeBuildService {
 
     child.moveProbability = prob;
     child.cumulativeProbability = node.cumulativeProbability * prob;
+    child.searchPriority = effectiveSearchPriority(node) * prob;
     child.engineInjected = true;
 
     _progress.emitProgress(
@@ -1372,6 +1672,145 @@ class TreeBuildService {
       config.maxPly,
       buildSw: _buildSw,
     );
+  }
+
+  // ── Coverage sweep: no silent holes ─────────────────────────────────────
+
+  /// End-of-build guarantee: every our-turn node in the final tree has at
+  /// least one answer, carries an explicit pruneReason, or transposes to an
+  /// answered position.  Dangling our-turn leaves (left by the node budget,
+  /// the search floor, or maxPly parity) whose incoming opponent move clears
+  /// [TreeBuildConfig.coverMinProb] get a coverage-only expansion; the rest
+  /// are removed so their mass returns honestly to the expectimax tail term
+  /// instead of ending exported lines on an unanswered opponent move.
+  ///
+  /// Returns the number of holes closed (answered + removed).
+  Future<int> _coverageSweep({
+    required BuildTree tree,
+    required TreeBuildConfig config,
+    required FenMap fenMap,
+    required void Function(BuildProgress) onProgress,
+  }) async {
+    if (config.coverMinProb <= 0.0) return 0;
+
+    final dangling = <BuildTreeNode>[];
+    void collect(BuildTreeNode node) {
+      for (final child in node.children) {
+        collect(child);
+      }
+      if (node.ply == 0 || node.children.isNotEmpty) return;
+      if (node.isWhiteToMove != config.playAsWhite) return; // tail-covered
+      if (node.pruneReason != PruneReason.none) return; // explicit prune
+      dangling.add(node);
+    }
+
+    collect(tree.root);
+    if (dangling.isEmpty) return 0;
+
+    // One expansion per position: group duplicates so the answer lands on
+    // the canonical node and transposition leaves resolve through it.
+    final groups = <String, List<BuildTreeNode>>{};
+    for (final n in dangling) {
+      (groups[canonicalizeFen(n.fen)] ??= []).add(n);
+    }
+
+    int answered = 0;
+    int removed = 0;
+    final throwawayQueue = FrontierQueue(bestFirst: false);
+
+    for (final group in groups.values) {
+      if (!_isBuilding) break;
+
+      final canonical = fenMap.getCanonical(group.first.fen);
+      if (canonical != null && !group.contains(canonical)) {
+        // The position lives elsewhere in the tree: answered there, or
+        // explicitly pruned there — these leaves resolve via transposition.
+        if (canonical.children.isNotEmpty ||
+            canonical.pruneReason != PruneReason.none) {
+          continue;
+        }
+      }
+
+      // Representative: the registered canonical when it dangles here,
+      // else the most-reachable member (registered for future resolution).
+      final rep = (canonical != null && group.contains(canonical))
+          ? canonical
+          : (group..sort((a, b) =>
+              b.cumulativeProbability.compareTo(a.cumulativeProbability)))
+              .first;
+      fenMap.putCanonical(rep.fen, rep);
+
+      // The hole is worth answering if any path into this position carries
+      // an opponent move at/above the coverage floor.
+      var maxProb = 0.0;
+      for (final n in group) {
+        if (n.moveProbability > maxProb) maxProb = n.moveProbability;
+      }
+      for (final t in fenMap.getTranspositions(rep.fen)) {
+        if (t.moveProbability > maxProb) maxProb = t.moveProbability;
+      }
+
+      if (maxProb >= config.coverMinProb) {
+        if (config.buildMode == BuildMode.maiaDbExplore) {
+          await _evalResolver.ensureEval(
+            rep,
+            config,
+            fenMap: fenMap,
+            pool: _pool,
+            dbOnly: true,
+          );
+          await _buildOurMoveMaiaDb(
+            tree: tree,
+            node: rep,
+            config: config,
+            isCancelled: () => !_isBuilding,
+            onProgress: onProgress,
+            queue: throwawayQueue,
+            coverageOnly: true,
+          );
+        } else if (_pool.workerCount > 0) {
+          await _buildOurMove(
+            tree: tree,
+            node: rep,
+            config: config,
+            fenMap: fenMap,
+            isCancelled: () => !_isBuilding,
+            onProgress: onProgress,
+            queue: throwawayQueue,
+            coverageOnly: true,
+          );
+        }
+        rep.explored = true;
+        if (rep.children.isNotEmpty) {
+          answered++;
+          continue; // duplicates resolve via transposition
+        }
+        // Now explicitly flagged (eval window) — keep, it's not silent.
+        if (rep.pruneReason != PruneReason.none) continue;
+      }
+
+      // Below the floor, or the expansion produced no answer: remove the
+      // whole equivalence group so no line ends on an unanswered move.
+      for (final n in group) {
+        _removeLeaf(tree, n);
+        removed++;
+      }
+    }
+
+    if (answered > 0 || removed > 0) {
+      _log('Coverage sweep: $answered holes answered, '
+          '$removed uncovered leaves removed');
+    }
+    return answered + removed;
+  }
+
+  void _removeLeaf(BuildTree tree, BuildTreeNode node) {
+    final parent = node.parent;
+    if (parent == null) return;
+    if (parent.children.remove(node)) {
+      tree.nodeIndex.remove(node.nodeId);
+      tree.totalNodes--;
+    }
   }
 
   // ── Prune eval-too-low (post-build cleanup) ────────────────────────────
