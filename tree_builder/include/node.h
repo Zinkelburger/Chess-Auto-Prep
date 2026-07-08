@@ -143,6 +143,14 @@ typedef struct TreeNode {
      * -1.0 means not set. */
     double maia_frequency;
 
+    /* Best-first frontier priority: reach probability, discounted at
+     * non-incumbent our-move alternatives (× our_alt_discount).  Unlike
+     * cumulative_probability this is a search-scheduling signal only —
+     * it never feeds expectimax or repertoire selection.  -1.0 means
+     * not set (legacy trees); consumers fall back to
+     * cumulative_probability. */
+    double search_priority;
+
     /* Engine PV continuation: opponent reply stashed from MultiPV line 0
      * on the our-move child (opponent-to-move position).  Consumed when
      * this node is expanded; injected as a child if Maia/Lichess omit it. */

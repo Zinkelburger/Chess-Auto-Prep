@@ -145,6 +145,155 @@ void main() {
       expect(_markedOurMoves(tree).map((n) => n.moveSan), ['e4']);
     });
 
+    test('coverage floor: rare-but-popular reply below minProbability '
+        'still gets a repertoire answer', () {
+      BuildTree makeTree() {
+        final root = _node(
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          san: '',
+          uci: '',
+          ply: 0,
+          isWhiteToMove: true,
+        );
+        final e4 = _node(
+          fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+          san: 'e4',
+          uci: 'e2e4',
+          ply: 1,
+          isWhiteToMove: false,
+          expectimax: 0.7,
+          evalCp: -35,
+        );
+        // Deep sideline: reach probability below the 0.01 floor, but the
+        // reply itself is played 20% of the time locally.
+        final rare = _node(
+          fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+          san: 'c5',
+          uci: 'c7c5',
+          ply: 2,
+          isWhiteToMove: true,
+          expectimax: 0.6,
+          evalCp: 30,
+          cumulativeProbability: 0.001,
+        )..moveProbability = 0.20;
+        final answer = _node(
+          fen: 'rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+          san: 'Nf3',
+          uci: 'g1f3',
+          ply: 3,
+          isWhiteToMove: false,
+          expectimax: 0.6,
+          evalCp: -30,
+          cumulativeProbability: 0.001,
+        );
+        root.children.add(e4);
+        e4.children.add(rare);
+        rare.children.add(answer);
+        e4.parent = root;
+        rare.parent = e4;
+        answer.parent = rare;
+        return BuildTree(root: root);
+      }
+
+      const base = TreeBuildConfig(
+        startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        playAsWhite: true,
+        minProbability: 0.01,
+      );
+
+      // Coverage floor active (default 0.05 < 0.20): answer is selected.
+      final covered = makeTree();
+      RepertoireSelector(
+        config: base,
+        ecaCalc: ExpectimaxCalculator(config: base),
+      ).select(covered);
+      expect(
+        _markedOurMoves(covered).map((n) => n.moveSan),
+        contains('Nf3'),
+      );
+
+      // Coverage floor disabled: legacy prune drops the sideline.
+      final uncovered = makeTree();
+      final legacy = base.copyWith(coverMinProb: 0.0);
+      RepertoireSelector(
+        config: legacy,
+        ecaCalc: ExpectimaxCalculator(config: legacy),
+      ).select(uncovered);
+      expect(
+        _markedOurMoves(uncovered).map((n) => n.moveSan),
+        isNot(contains('Nf3')),
+      );
+    });
+
+    test('preferred setup: tie-break within tolerance, deviate beyond it',
+        () {
+      // Root (our turn, White): e4 has the better expectimax, h4 is the
+      // setup move.  Within tolerance → h4 preferred; beyond → e4 stands.
+      BuildTree makeTree({required int h4Cp}) {
+        final root = _node(
+          fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+          san: '',
+          uci: '',
+          ply: 0,
+          isWhiteToMove: true,
+        );
+        final e4 = _node(
+          fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+          san: 'e4',
+          uci: 'e2e4',
+          ply: 1,
+          isWhiteToMove: false,
+          expectimax: 0.72,
+          evalCp: -35, // +35 for White (STM-relative)
+        );
+        final h4 = _node(
+          fen: 'rnbqkbnr/pppppppp/8/8/7P/8/PPPPPPP1/RNBQKBNR b KQkq - 0 1',
+          san: 'h4',
+          uci: 'h2h4',
+          ply: 1,
+          isWhiteToMove: false,
+          expectimax: 0.60,
+          evalCp: -h4Cp, // h4Cp for White
+        );
+        root.children.addAll([e4, h4]);
+        e4.parent = root;
+        h4.parent = root;
+        return BuildTree(root: root);
+      }
+
+      const config = TreeBuildConfig(
+        startFen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        playAsWhite: true,
+        setupMoves: 'h4 Nh3',
+        setupToleranceCp: 30,
+      );
+
+      // h4 loses 20cp vs e4 (within 30cp tolerance) → setup move chosen.
+      final within = makeTree(h4Cp: 15);
+      RepertoireSelector(
+        config: config,
+        ecaCalc: ExpectimaxCalculator(config: config),
+      ).select(within);
+      expect(_markedOurMoves(within).map((n) => n.moveSan), ['h4']);
+
+      // h4 loses 75cp (beyond tolerance) → eval guard deviates to e4.
+      final beyond = makeTree(h4Cp: -40);
+      RepertoireSelector(
+        config: config,
+        ecaCalc: ExpectimaxCalculator(config: config),
+      ).select(beyond);
+      expect(_markedOurMoves(beyond).map((n) => n.moveSan), ['e4']);
+
+      // No setup configured → plain expectimax pick.
+      final off = makeTree(h4Cp: 15);
+      final plain = config.copyWith(setupMoves: '');
+      RepertoireSelector(
+        config: plain,
+        ecaCalc: ExpectimaxCalculator(config: plain),
+      ).select(off);
+      expect(_markedOurMoves(off).map((n) => n.moveSan), ['e4']);
+    });
+
     test('select is idempotent — running twice produces same markings', () {
       final tree = _twoBranchTree();
       final config = const TreeBuildConfig(

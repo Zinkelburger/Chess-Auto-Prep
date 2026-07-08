@@ -1,12 +1,19 @@
 /**
  * tree.c - Opening Tree Implementation
  *
- * Single interleaved BFS (FIFO queue).  At our-move nodes Stockfish
- * MultiPV finds candidates and the eval-loss filter prunes immediately.
- * At opponent-move nodes we use exactly one distribution source — Maia's
- * policy head (default) or the Lichess explorer — with no blending,
- * no renormalization, and a tail term in the expectimax pass to
- * account for uncovered probability mass.  Branching budgets are
+ * Single interleaved frontier build — best-first by default (max-heap on
+ * search priority = reach probability × our-alternative discount), FIFO
+ * BFS when best_first is off.  Best-first makes the build anytime: at any
+ * node budget the tree concentrates on the likeliest opponent lines, and
+ * likely lines get searched deeper than rare sidelines.  At our-move
+ * nodes Stockfish MultiPV finds candidates and the eval-loss filter
+ * prunes immediately.  At opponent-move nodes the distribution source is
+ * Maia's policy head (default) or the Lichess explorer; explorer
+ * frequencies are optionally λ-smoothed with a Maia Dirichlet prior
+ * (p = (count + λ·maia)/(N + λ)) so sparse positions degrade continuously
+ * toward Maia instead of trusting noise.  Probabilities are never
+ * renormalized — a tail term in the expectimax pass accounts for
+ * uncovered probability mass.  Branching budgets are
  * stable across the tree: non-root our-move nodes use the configured
  * `our_multipv`, the root widens to at least 10 lines so the opening
  * position can try more offbeat ideas, and opponent-side caps
@@ -126,6 +133,13 @@ TreeConfig tree_config_default(void) {
         .min_probability = 0.0001,
         .max_depth = 20,
         .max_nodes = 0,
+
+        .best_first = true,
+        .our_alt_discount = 0.25,
+        .maia_prior_games = 30.0,
+        .cover_min_prob = 0.05,
+        .setup_moves = "",
+        .setup_tolerance_cp = 30,
 
         .engine_pool = NULL,
         .db = NULL,
@@ -523,13 +537,33 @@ static bool query_maia_cached(const TreeConfig *config, const char *fen,
 }
 
 
-/* ========== Interleaved build (BFS queue) ========== */
+/* ========== Interleaved build (frontier queue) ========== */
 
+/* Frontier ordering priority.  Legacy nodes (or nodes created before
+ * priorities existed) carry -1; fall back to reach probability, which is
+ * what the priority degenerates to with no our-alternative discount. */
+static double node_search_priority(const TreeNode *n) {
+    return n->search_priority >= 0.0 ? n->search_priority
+                                     : n->cumulative_probability;
+}
+
+/* True when a should be popped before b (heap mode). */
+static bool frontier_before(const TreeNode *a, const TreeNode *b) {
+    double pa = node_search_priority(a);
+    double pb = node_search_priority(b);
+    if (pa != pb) return pa > pb;
+    if (a->depth != b->depth) return a->depth < b->depth;
+    return a->node_id < b->node_id;
+}
+
+/* FIFO ring (classic BFS) or binary max-heap on search priority
+ * (best-first).  In heap mode `head` stays 0 and buf[0..tail) is the heap. */
 typedef struct BuildQueue {
     TreeNode **buf;
     size_t head;
     size_t tail;
     size_t cap;
+    bool heap;
 } BuildQueue;
 
 static void build_queue_init(BuildQueue *q) {
@@ -537,11 +571,40 @@ static void build_queue_init(BuildQueue *q) {
     q->head = 0;
     q->tail = 0;
     q->cap = 0;
+    q->heap = false;
 }
 
 static void build_queue_free(BuildQueue *q) {
     free(q->buf);
     build_queue_init(q);
+}
+
+static void build_queue_sift_up(BuildQueue *q, size_t i) {
+    while (i > 0) {
+        size_t parent = (i - 1) / 2;
+        if (!frontier_before(q->buf[i], q->buf[parent])) break;
+        TreeNode *tmp = q->buf[i];
+        q->buf[i] = q->buf[parent];
+        q->buf[parent] = tmp;
+        i = parent;
+    }
+}
+
+static void build_queue_sift_down(BuildQueue *q, size_t i) {
+    for (;;) {
+        size_t left = 2 * i + 1;
+        size_t right = left + 1;
+        size_t best = i;
+        if (left < q->tail && frontier_before(q->buf[left], q->buf[best]))
+            best = left;
+        if (right < q->tail && frontier_before(q->buf[right], q->buf[best]))
+            best = right;
+        if (best == i) return;
+        TreeNode *tmp = q->buf[i];
+        q->buf[i] = q->buf[best];
+        q->buf[best] = tmp;
+        i = best;
+    }
 }
 
 static bool build_queue_push(BuildQueue *q, TreeNode *n) {
@@ -553,10 +616,20 @@ static bool build_queue_push(BuildQueue *q, TreeNode *n) {
         q->cap = new_cap;
     }
     q->buf[q->tail++] = n;
+    if (q->heap)
+        build_queue_sift_up(q, q->tail - 1);
     return true;
 }
 
 static TreeNode *build_queue_pop(BuildQueue *q) {
+    if (q->heap) {
+        if (q->tail == 0) return NULL;
+        TreeNode *top = q->buf[0];
+        q->buf[0] = q->buf[--q->tail];
+        if (q->tail > 0)
+            build_queue_sift_down(q, 0);
+        return top;
+    }
     for (;;) {
         if (q->head >= q->tail)
             return NULL;
@@ -583,6 +656,10 @@ static void resume_prepare_frontier(Tree *tree, TreeNode *node, FenMap *fmap,
                                     BuildQueue *q, size_t *frontier_count,
                                     int *min_frontier_depth) {
     if (!node) return;
+    /* Legacy trees carry no priorities; reach probability is the natural
+     * fallback (equals the priority when no alt-discount was applied). */
+    if (node->search_priority < 0.0)
+        node->search_priority = node->cumulative_probability;
     if (node->children_count > 0) {
         if (!node->explored) {
             if (build_queue_push(q, node)) {
@@ -620,8 +697,10 @@ static int compare_node_depth(const void *a, const void *b) {
     return 0;
 }
 
-/** Restore BFS level order after DFS frontier collection on resume. */
+/** Restore BFS level order after DFS frontier collection on resume.
+ *  No-op in heap mode — the heap already orders by priority. */
 static void build_queue_sort_by_depth(BuildQueue *q) {
+    if (q->heap) return;
     size_t len = q->tail - q->head;
     if (len > 1)
         qsort(q->buf + q->head, len, sizeof(TreeNode *), compare_node_depth);
@@ -629,6 +708,9 @@ static void build_queue_sort_by_depth(BuildQueue *q) {
 
 /** Append all children in sibling order (matches former DFS order). */
 static void build_queue_push_children(BuildQueue *q, Tree *tree, TreeNode *node) {
+    /* q == NULL → coverage-only expansion: the answer is the deliverable;
+     * children stay unexplored leaves so a resume can deepen them later. */
+    if (!q) return;
     if (!tree->is_building) return;
     for (size_t i = 0; i < node->children_count; i++) {
         if (!tree->is_building) break;
@@ -883,6 +965,8 @@ static void propagate_cumP_recursive(TreeNode *node, double ratio,
     for (size_t i = 0; i < node->children_count; i++) {
         TreeNode *child = node->children[i];
         child->cumulative_probability *= ratio;
+        if (child->search_priority >= 0.0)
+            child->search_priority *= ratio;
         if (child->children_count > 0) {
             propagate_cumP_recursive(child, ratio, min_prob, q);
         } else if (q && !child->explored &&
@@ -915,6 +999,32 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
                                  LichessExplorer *explorer, BuildQueue *q);
 
 #define PV_INJECT_EPSILON 0.01
+
+/* Best-first priorities at an our-move node: the incumbent (best eval for
+ * us at expansion time) inherits the parent's priority; alternatives are
+ * discounted so they stay shallow unless the mainline budget runs out. */
+static void assign_our_move_priorities(TreeNode *node,
+                                       const TreeConfig *config) {
+    if (node->children_count == 0) return;
+    double base_pri = node_search_priority(node);
+
+    TreeNode *incumbent = NULL;
+    int best_cp = 0;
+    for (size_t i = 0; i < node->children_count; i++) {
+        TreeNode *child = node->children[i];
+        int cp = node_eval_for_us(child, config->play_as_white);
+        if (!incumbent || cp > best_cp) {
+            best_cp = cp;
+            incumbent = child;
+        }
+    }
+    for (size_t i = 0; i < node->children_count; i++) {
+        TreeNode *child = node->children[i];
+        child->search_priority = (child == incumbent)
+            ? base_pri
+            : base_pri * config->our_alt_discount;
+    }
+}
 
 static bool child_has_move_uci(const TreeNode *node, const char *uci) {
     for (size_t i = 0; i < node->children_count; i++) {
@@ -970,6 +1080,7 @@ static void maybe_inject_pv_continuation(Tree *tree, TreeNode *node,
 
     child->move_probability = prob;
     child->cumulative_probability = node->cumulative_probability * prob;
+    child->search_priority = node_search_priority(node) * prob;
     child->engine_injected = true;
 
     emit_build_progress(tree, config, false);
@@ -1065,6 +1176,7 @@ static void build_our_move_maia_db(Tree *tree, TreeNode *node,
         emit_build_progress(tree, config, false);
     }
 
+    assign_our_move_priorities(node, config);
     build_queue_push_children(q, tree, node);
 }
 
@@ -1280,6 +1392,67 @@ static void build_our_move(Tree *tree, TreeNode *node,
         emit_build_progress(tree, config, false);
     }
 
+    /* 4b. Preferred-setup candidate injection: quiet system moves (h4,
+     * Nh3, ...) are often missing from MultiPV top-N, so the selection
+     * tie-break would have nothing to choose.  Evaluate any legal setup
+     * move not already a candidate, subject to the same eval-loss window
+     * as regular candidates. */
+    if (config->setup_moves[0] && config->engine_pool) {
+        char tok_buf[sizeof(config->setup_moves)];
+        snprintf(tok_buf, sizeof(tok_buf), "%s", config->setup_moves);
+        char *save = NULL;
+        for (char *tok = strtok_r(tok_buf, " ,", &save); tok;
+             tok = strtok_r(NULL, " ,", &save)) {
+            char uci[MAX_MOVE_LENGTH];
+            if (!san_to_uci(node->fen, tok, uci, sizeof(uci)))
+                continue; /* not legal here (or already played) */
+
+            char child_fen[MAX_FEN_LENGTH];
+            if (!apply_uci(node->fen, uci, child_fen, MAX_FEN_LENGTH))
+                continue;
+            bool dup = false;
+            for (size_t c = 0; c < node->children_count; c++) {
+                if (strcmp(node->children[c]->move_uci, uci) == 0 ||
+                    strcmp(node->children[c]->fen, child_fen) == 0) {
+                    dup = true;
+                    break;
+                }
+            }
+            if (dup) continue;
+
+            int child_cp_stm; /* child position, child-STM POV */
+            struct timespec t0;
+            clock_gettime(CLOCK_MONOTONIC, &t0);
+            bool eval_ok = engine_pool_evaluate(config->engine_pool,
+                                                child_fen, &child_cp_stm);
+            node->sf_ms += elapsed_ms(&t0);
+            STATS_INC(config, sf_single_calls);
+            if (!eval_ok) continue;
+
+            /* Same axis as best_cp (parent STM). */
+            int our_cp = -child_cp_stm;
+            if (best_cp - our_cp > config->max_eval_loss_cp) continue;
+
+            const char *san = tok;
+            if (uci_to_san(node->fen, uci, our_san_buf,
+                           sizeof(our_san_buf)))
+                san = our_san_buf;
+
+            TreeNode *child = make_child(node, child_fen, san, uci, tree);
+            if (!child) continue;
+            child->move_probability = 1.0;
+            child->cumulative_probability = node->cumulative_probability;
+            node_set_eval(child, child_cp_stm);
+            if (config->db)
+                rdb_put_eval(config->db, child_fen, child_cp_stm,
+                             config->eval_depth);
+            added++;
+            emit_event(config, "setup_inject", node->depth, "our",
+                       "san=%s cp=%d", san, our_cp);
+            emit_build_progress(tree, config, false);
+        }
+    }
+
     /* 5. Populate maia_frequency for novelty scoring.
      * Gated on `populate_maia_frequency` so builds that won't use novelty
      * (the common case: novelty_weight == 0) don't pay one Maia inference
@@ -1304,7 +1477,8 @@ static void build_our_move(Tree *tree, TreeNode *node,
         }
     }
 
-    /* 6. Enqueue children for breadth-first continuation */
+    /* 6. Enqueue children for continuation */
+    assign_our_move_priorities(node, config);
     maybe_batch_prefetch_cdbdirect(config, node);
     build_queue_push_children(q, tree, node);
 }
@@ -1354,16 +1528,23 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
         for (int i = 0; i < maia_resp.move_count; i++) {
             const char *uci = maia_resp.moves[i].uci;
             double prob = maia_resp.moves[i].probability;
-            if (prob < config->maia_min_prob) continue;
-
-            if (config->opp_max_children > 0 &&
-                children_added >= config->opp_max_children)
-                break;
-            if (mass_target > 0.0 && mass_covered >= mass_target)
-                break;
-
             double new_cumul = node->cumulative_probability * prob;
-            if (new_cumul < config->min_probability) continue;
+
+            /* Coverage floor: replies at/above cover_min_prob local
+             * probability must exist in the tree regardless of budget
+             * cutoffs — they'll get at least a coverage-only answer
+             * instead of becoming a silent hole. */
+            bool covered = config->cover_min_prob > 0.0 &&
+                           prob >= config->cover_min_prob;
+            if (!covered) {
+                if (prob < config->maia_min_prob) continue;
+                if (config->opp_max_children > 0 &&
+                    children_added >= config->opp_max_children)
+                    break;
+                if (mass_target > 0.0 && mass_covered >= mass_target)
+                    break;
+                if (new_cumul < config->min_probability) continue;
+            }
 
             char child_fen[MAX_FEN_LENGTH];
             if (!apply_uci(node->fen, uci, child_fen, MAX_FEN_LENGTH))
@@ -1378,6 +1559,7 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
 
             child->move_probability = prob;
             child->cumulative_probability = new_cumul;
+            child->search_priority = node_search_priority(node) * prob;
             children_added++;
             mass_covered += prob;
 
@@ -1415,33 +1597,143 @@ static void build_opponent_move(Tree *tree, TreeNode *node,
         uint64_t total = response.total_games;
         if (total == 0) return;
 
-        for (size_t i = 0; i < response.move_count; i++) {
+        /* λ-smoothing with a Maia prior: blend DB counts with Maia's
+         * policy so sparsely covered positions degrade continuously
+         * toward Maia instead of trusting frequencies from a handful of
+         * games.  p = (count + λ·maia) / (N + λ).  Skipped when the
+         * position has enough games that the prior's weight would be
+         * negligible (saves the inference). */
+        MaiaResponse prior_resp;
+        bool have_prior = false;
+        double lambda = 0.0;
+        if (config->maia && config->maia_prior_games > 0.0 &&
+            (double)total < 100.0 * config->maia_prior_games) {
+            double maia_t = 0;
+            if (query_maia_cached(config, node->fen, &prior_resp, &maia_t) &&
+                prior_resp.success && prior_resp.move_count > 0) {
+                node->maia_ms += maia_t;
+                have_prior = true;
+                lambda = config->maia_prior_games;
+                maia_resp_for_inject = prior_resp;
+                have_maia_for_inject = true;
+            }
+        }
+        double denom = (double)total + lambda;
+
+        /* Candidate set: DB moves plus (when smoothing) Maia-only moves. */
+        typedef struct {
+            char uci[MAX_MOVE_LENGTH];
+            const char *san;      /* NULL → derive from UCI */
+            double prob;
+            uint64_t games;
+            uint64_t ww, bw, dr;
+        } OppCand;
+        OppCand cands[MAX_EXPLORER_MOVES + MAIA_MAX_MOVES];
+        int n_cands = 0;
+
+        for (size_t i = 0; i < response.move_count &&
+                           n_cands < MAX_EXPLORER_MOVES; i++) {
             ExplorerMove *move = &response.moves[i];
             uint64_t games = move->white_wins + move->draws + move->black_wins;
-            if (games < (uint64_t)config->min_games) continue;
+            /* The prior replaces the min-games noise filter when smoothing;
+             * the coverage floor overrides it for locally popular replies. */
+            if (!have_prior && games < (uint64_t)config->min_games) {
+                double raw = (double)games / (double)total;
+                if (!(config->cover_min_prob > 0.0 &&
+                      raw >= config->cover_min_prob))
+                    continue;
+            }
 
-            if (config->opp_max_children > 0 &&
-                children_added >= config->opp_max_children)
-                break;
-            if (mass_target > 0.0 && mass_covered >= mass_target)
-                break;
+            double prior = have_prior
+                ? maia_prob_for_uci(&prior_resp, move->uci) : -1.0;
+            if (prior < 0.0) prior = 0.0;
 
-            double prob = (double)games / (double)total;
+            OppCand *c = &cands[n_cands++];
+            snprintf(c->uci, sizeof(c->uci), "%s", move->uci);
+            c->san = move->san;
+            c->prob = ((double)games + lambda * prior) / denom;
+            c->games = games;
+            c->ww = move->white_wins;
+            c->bw = move->black_wins;
+            c->dr = move->draws;
+        }
+
+        if (have_prior) {
+            for (int i = 0; i < prior_resp.move_count &&
+                            n_cands < (int)(MAX_EXPLORER_MOVES +
+                                            MAIA_MAX_MOVES); i++) {
+                const char *uci = prior_resp.moves[i].uci;
+                bool in_db = false;
+                for (size_t j = 0; j < response.move_count; j++) {
+                    if (strcmp(response.moves[j].uci, uci) == 0) {
+                        in_db = true;
+                        break;
+                    }
+                }
+                if (in_db) continue;
+                double p = lambda * prior_resp.moves[i].probability / denom;
+                if (p <= 0.0) continue;
+
+                OppCand *c = &cands[n_cands++];
+                snprintf(c->uci, sizeof(c->uci), "%s", uci);
+                c->san = NULL;
+                c->prob = p;
+                c->games = 0;
+                c->ww = c->bw = c->dr = 0;
+            }
+        }
+
+        /* Insertion sort by smoothed probability, descending (n is small). */
+        for (int i = 1; i < n_cands; i++) {
+            OppCand key = cands[i];
+            int j = i - 1;
+            while (j >= 0 && cands[j].prob < key.prob) {
+                cands[j + 1] = cands[j];
+                j--;
+            }
+            cands[j + 1] = key;
+        }
+
+        double base_pri = node_search_priority(node);
+
+        for (int i = 0; i < n_cands; i++) {
+            OppCand *cand = &cands[i];
+            double prob = cand->prob;
             double new_cumul = node->cumulative_probability * prob;
-            if (new_cumul < config->min_probability) continue;
+
+            /* Coverage floor: see the Maia path above. */
+            bool covered = config->cover_min_prob > 0.0 &&
+                           prob >= config->cover_min_prob;
+            if (!covered) {
+                if (config->opp_max_children > 0 &&
+                    children_added >= config->opp_max_children)
+                    break;
+                if (mass_target > 0.0 && mass_covered >= mass_target)
+                    break;
+                if (new_cumul < config->min_probability) continue;
+            }
 
             char child_fen[MAX_FEN_LENGTH];
-            if (!apply_uci(node->fen, move->uci, child_fen, MAX_FEN_LENGTH))
+            if (!apply_uci(node->fen, cand->uci, child_fen, MAX_FEN_LENGTH))
                 continue;
 
-            TreeNode *child = make_child(node, child_fen, move->san,
-                                          move->uci, tree);
+            const char *san = cand->san;
+            if (!san || !san[0]) {
+                if (uci_to_san(node->fen, cand->uci, san_buf, sizeof(san_buf)))
+                    san = san_buf;
+                else
+                    san = cand->uci;
+            }
+
+            TreeNode *child = make_child(node, child_fen, san,
+                                          cand->uci, tree);
             if (!child) continue;
 
             child->move_probability = prob;
             child->cumulative_probability = new_cumul;
-            node_set_lichess_stats(child, move->white_wins,
-                                   move->black_wins, move->draws);
+            child->search_priority = base_pri * prob;
+            if (cand->games > 0)
+                node_set_lichess_stats(child, cand->ww, cand->bw, cand->dr);
             children_added++;
             mass_covered += prob;
 
@@ -1491,24 +1783,62 @@ static void build_process_node(Tree *tree, TreeNode *node,
                                LichessExplorer *explorer, BuildQueue *q) {
     if (!tree->is_building) return;
 
+    bool is_our_move_early = (node->is_white_to_move == config->play_as_white);
+
+    /* Coverage floor: an our-turn node owes the opponent's last move an
+     * answer whenever that move's LOCAL probability clears cover_min_prob —
+     * even below the search floor, past max_depth, or past the node budget.
+     * Such nodes get a coverage-only expansion: evaluated answer, no
+     * subtree (children are built but not enqueued). */
+    bool owes_answer = is_our_move_early &&
+                       node->depth > 0 &&
+                       node->children_count == 0 &&
+                       config->cover_min_prob > 0.0 &&
+                       node->move_probability >= config->cover_min_prob;
+    bool coverage_only = false;
+
     if (node->depth >= config->max_depth) {
-        /* Mark explored so progress/resume don't treat terminal leaves as
-         * pending work when the build reaches the configured depth cap. */
-        node->explored = true;
-        emit_event(config, "skip", node->depth, "-", "reason=max_depth");
-        note_depth_work_done(node->depth);
-        return;
+        if (!owes_answer) {
+            /* Mark explored so progress/resume don't treat terminal leaves
+             * as pending work when the build reaches the depth cap. */
+            node->explored = true;
+            emit_event(config, "skip", node->depth, "-", "reason=max_depth");
+            note_depth_work_done(node->depth);
+            return;
+        }
+        coverage_only = true;
     }
-    if (node->cumulative_probability < config->min_probability) {
-        emit_event(config, "skip", node->depth, "-",
-                   "reason=min_prob cum_prob=%.6f", node->cumulative_probability);
-        note_depth_work_done(node->depth);
-        return;
+    if (!coverage_only &&
+        node->cumulative_probability < config->min_probability) {
+        if (!owes_answer) {
+            emit_event(config, "skip", node->depth, "-",
+                       "reason=min_prob cum_prob=%.6f",
+                       node->cumulative_probability);
+            note_depth_work_done(node->depth);
+            return;
+        }
+        coverage_only = true;
+    }
+    /* Discounted our-move alternatives whose priority fell below the floor
+     * are not worth budget (search_priority ≤ cumulative_probability). */
+    if (!coverage_only &&
+        config->best_first && node->search_priority >= 0.0 &&
+        node->search_priority < config->min_probability) {
+        if (!owes_answer) {
+            emit_event(config, "skip", node->depth, "-",
+                       "reason=min_priority pri=%.6f", node->search_priority);
+            note_depth_work_done(node->depth);
+            return;
+        }
+        coverage_only = true;
     }
     if (config->max_nodes > 0 && tree->total_nodes >= (size_t)config->max_nodes) {
-        emit_event(config, "skip", node->depth, "-", "reason=max_nodes");
-        note_depth_work_done(node->depth);
-        return;
+        if (!owes_answer) {
+            emit_event(config, "skip", node->depth, "-", "reason=max_nodes");
+            note_depth_work_done(node->depth);
+            return;
+        }
+        coverage_only = true;
     }
 
     FenMap *fmap = (FenMap *)tree->expanded_fens;
@@ -1599,10 +1929,12 @@ static void build_process_node(Tree *tree, TreeNode *node,
     }
 
     if (is_our_move) {
+        /* Coverage-only: NULL queue → children built but not enqueued. */
+        BuildQueue *cq = coverage_only ? NULL : q;
         if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE)
-            build_our_move_maia_db(tree, node, config, explorer, q);
+            build_our_move_maia_db(tree, node, config, explorer, cq);
         else
-            build_our_move(tree, node, config, explorer, q);
+            build_our_move(tree, node, config, explorer, cq);
     } else
         build_opponent_move(tree, node, config, explorer, q);
 
@@ -1613,6 +1945,148 @@ static void build_process_node(Tree *tree, TreeNode *node,
     emit_event(config, "expanded", node->depth, nt,
                "children=%zu total=%zu", node->children_count, tree->total_nodes);
     note_depth_work_done(node->depth);
+}
+
+
+/* ── Preferred-setup matching ────────────────────────────────────────────
+ * Candidate SANs are matched against the space/comma-separated setup list
+ * ignoring check/mate/annotation suffixes on either side. */
+
+static bool san_matches_token(const char *san, const char *tok,
+                              size_t tok_len) {
+    size_t san_len = strlen(san);
+    while (san_len > 0 && strchr("+#!?", san[san_len - 1])) san_len--;
+    while (tok_len > 0 && strchr("+#!?", tok[tok_len - 1])) tok_len--;
+    return san_len == tok_len && strncmp(san, tok, san_len) == 0;
+}
+
+static bool setup_moves_contain(const char *setup_moves, const char *san) {
+    if (!setup_moves || !setup_moves[0] || !san || !san[0]) return false;
+    const char *p = setup_moves;
+    while (*p) {
+        while (*p == ' ' || *p == ',') p++;
+        if (!*p) break;
+        const char *start = p;
+        while (*p && *p != ' ' && *p != ',') p++;
+        if (san_matches_token(san, start, (size_t)(p - start))) return true;
+    }
+    return false;
+}
+
+static void remove_child_at(TreeNode *parent, size_t idx);
+
+/* ── Coverage sweep: no silent holes ─────────────────────────────────────
+ *
+ * End-of-build guarantee: every our-turn node in the final tree has at
+ * least one answer, carries an explicit prune_reason, or transposes to an
+ * answered position.  Dangling our-turn leaves (left by the node budget,
+ * the search floor, or max_depth parity) whose incoming opponent move
+ * clears cover_min_prob get a coverage-only expansion; the rest are
+ * removed so their mass returns honestly to the expectimax tail term
+ * instead of ending exported lines on an unanswered opponent move.
+ */
+
+static void coverage_collect_dangling(TreeNode *node, bool play_as_white,
+                                      TreeNode ***list, size_t *count,
+                                      size_t *cap) {
+    for (size_t i = 0; i < node->children_count; i++)
+        coverage_collect_dangling(node->children[i], play_as_white,
+                                  list, count, cap);
+    if (node->depth == 0 || node->children_count > 0) return;
+    if (node->is_white_to_move != play_as_white) return; /* tail-covered */
+    if (node->prune_reason != PRUNE_NONE) return;        /* flagged prune */
+    if (*count == *cap) {
+        size_t new_cap = *cap ? *cap * 2 : 256;
+        TreeNode **grown =
+            (TreeNode **)realloc(*list, new_cap * sizeof(TreeNode *));
+        if (!grown) return;
+        *list = grown;
+        *cap = new_cap;
+    }
+    (*list)[(*count)++] = node;
+}
+
+/* Does any member of this node's equivalence ring have children? */
+static bool ring_has_answer(const TreeNode *node) {
+    const TreeNode *equiv = node->next_equivalent;
+    while (equiv && equiv != node) {
+        if (equiv->children_count > 0) return true;
+        equiv = equiv->next_equivalent;
+    }
+    return false;
+}
+
+void tree_coverage_sweep(Tree *tree, const TreeConfig *config,
+                         LichessExplorer *explorer) {
+    if (!tree || !tree->root || !config) return;
+    if (config->cover_min_prob <= 0.0) return;
+
+    FenMap *fmap = (FenMap *)tree->expanded_fens;
+    TreeNode **dangling = NULL;
+    size_t n_dangling = 0, cap = 0;
+    coverage_collect_dangling(tree->root, config->play_as_white,
+                              &dangling, &n_dangling, &cap);
+    if (n_dangling == 0) {
+        free(dangling);
+        return;
+    }
+
+    size_t answered = 0, removed = 0;
+
+    /* Pass 1: answer holes whose incoming opponent move clears the floor. */
+    for (size_t i = 0; i < n_dangling; i++) {
+        TreeNode *n = dangling[i];
+        if (n->move_probability < config->cover_min_prob) continue;
+
+        TreeNode *canonical = fmap ? fen_map_get(fmap, n->fen) : NULL;
+        if (canonical && canonical != n &&
+            (canonical->children_count > 0 ||
+             canonical->prune_reason != PRUNE_NONE))
+            continue; /* resolves via transposition */
+        if (ring_has_answer(n)) continue;
+
+        if (fmap && !canonical) fen_map_put(fmap, n->fen, n);
+
+        if (config->build_mode == BUILD_MODE_MAIA_DB_EXPLORE)
+            build_our_move_maia_db(tree, n, config, explorer, NULL);
+        else
+            build_our_move(tree, n, config, explorer, NULL);
+        n->explored = true;
+        if (n->children_count > 0) answered++;
+    }
+
+    /* Pass 2: remove leaves that still have no answer anywhere — no line
+     * may end on an unanswered opponent move. */
+    for (size_t i = 0; i < n_dangling; i++) {
+        TreeNode *n = dangling[i];
+        if (n->children_count > 0) continue;
+        if (n->prune_reason != PRUNE_NONE) continue; /* flagged in pass 1 */
+
+        TreeNode *canonical = fmap ? fen_map_get(fmap, n->fen) : NULL;
+        if (canonical && canonical != n && canonical->children_count > 0)
+            continue;
+        if (ring_has_answer(n)) continue;
+
+        TreeNode *parent = n->parent;
+        if (!parent) continue;
+        for (size_t c = 0; c < parent->children_count; c++) {
+            if (parent->children[c] == n) {
+                remove_child_at(parent, c);
+                node_destroy(n); /* unlinks from equivalence ring */
+                removed++;
+                break;
+            }
+        }
+    }
+
+    if (answered > 0 || removed > 0) {
+        tree->total_nodes = node_count_subtree(tree->root);
+        printf("  Coverage sweep: %zu holes answered, %zu uncovered leaves "
+               "removed\n", answered, removed);
+        emit_event(config, "coverage_sweep", 0, "-",
+                   "answered=%zu removed=%zu", answered, removed);
+    }
+    free(dangling);
 }
 
 
@@ -1681,6 +2155,9 @@ bool tree_build(Tree *tree, const char *start_fen,
 
     BuildQueue bq;
     build_queue_init(&bq);
+    bq.heap = tree->config.best_first;
+    if (tree->root->search_priority < 0.0)
+        tree->root->search_priority = 1.0;
 
     bool fast_resume = tree->root && tree->total_nodes > 1 &&
                        tree->root->children_count > 0;
@@ -1750,6 +2227,12 @@ bool tree_build(Tree *tree, const char *start_fen,
         emit_build_summary(tree, &tree->config);
     }
     build_queue_free(&bq);
+
+    /* No-silent-holes guarantee.  Skipped on interrupt (is_building false):
+     * the tree stays resumable and the sweep would only throw away
+     * resumable frontier leaves. */
+    if (tree->is_building)
+        tree_coverage_sweep(tree, &tree->config, explorer);
 
     fen_map_destroy((FenMap *)tree->expanded_fens);
     tree->expanded_fens = NULL;
@@ -2062,6 +2545,38 @@ int score_our_move_children(TreeNode *node,
     }
 
     TreeNode *winner = best_filtered ? best_filtered : best_any;
+
+    /* Preferred-setup tie-break: within setup_tolerance_cp (clamped to
+     * max_eval_loss_cp) of the best child eval, prefer a move that
+     * advances the user's system.  Expectimax values are untouched — the
+     * bias only constrains the argmax, so when consistency would cost
+     * real eval no setup move qualifies and the normal winner stands. */
+    if (winner && config->setup_moves[0] && best_child_cp > -100000 &&
+        !setup_moves_contain(config->setup_moves, winner->move_san)) {
+        int tol = config->setup_tolerance_cp < config->max_eval_loss_cp
+                  ? config->setup_tolerance_cp
+                  : config->max_eval_loss_cp;
+        TreeNode *setup_pick = NULL;
+        double best_score = -2.0;
+        for (size_t i = 0; i < node->children_count; i++) {
+            TreeNode *child = node->children[i];
+            if (!child->has_engine_eval) continue;
+            if (!setup_moves_contain(config->setup_moves, child->move_san))
+                continue;
+            int cp_us = node_eval_for_us(child, config->play_as_white);
+            if (cp_us < best_child_cp - tol) continue;
+            /* Among qualifying setup moves, keep the objective's favorite. */
+            double score = child->has_expectimax
+                ? child->expectimax_value
+                : cp_us / 10000.0;
+            if (score > best_score) {
+                best_score = score;
+                setup_pick = child;
+            }
+        }
+        if (setup_pick) winner = setup_pick;
+    }
+
     best_out->child = winner;
     best_out->expectimax_value = winner ? winner->expectimax_value : -1.0;
     return passing;

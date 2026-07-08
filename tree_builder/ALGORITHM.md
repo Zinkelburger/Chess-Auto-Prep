@@ -3,17 +3,54 @@
 ## Overview
 
 The tree builder generates chess opening repertoires through a single
-interleaved BFS (FIFO queue) that builds the tree and evaluates positions
-simultaneously:
+interleaved frontier build — **best-first by default** (`--best-first`, a
+max-heap on search priority = reach probability × our-alternative discount;
+`--bfs` restores FIFO level order) — that builds the tree and evaluates
+positions simultaneously:
 
-1. **Building** the move tree breadth-first by querying Lichess Explorer, Maia,
-   and Stockfish together — engine MultiPV for our-move candidates, Lichess DB
-   + Maia supplement for opponent responses, with eval-window pruning at every
-   node
+1. **Building** the move tree frontier-first by querying Lichess Explorer, Maia,
+   and Stockfish together — engine MultiPV for our-move candidates (the
+   incumbent keeps its parent's priority, alternatives are discounted by
+   `--alt-discount`, default 0.25), Lichess DB frequencies optionally
+   λ-smoothed with a Maia Dirichlet prior (`--maia-prior`, default 30:
+   `p = (count + λ·maia)/(N + λ)`) for opponent responses, with eval-window
+   pruning at every node.  Best-first makes the build anytime: at any
+   `--max-nodes` budget the tree concentrates on the likeliest opponent
+   lines, which also get searched deepest.
 2. Computing **expectimax values** — propagating practical win probabilities
    bottom-up through the tree
 3. **Selecting** repertoire moves using expectimax values
 4. Extracting complete lines and exporting to JSON/PGN
+
+Two guarantees harden the output (both on by default):
+
+- **Coverage floor / no silent holes** (`--cover-min-prob`, default 0.05):
+  probability cutoffs decide search *depth*, never whether a popular reply
+  *exists*.  Opponent replies at/above the floor (LOCAL smoothed
+  probability) are forced into the tree past every budget cutoff; the
+  resulting our-turn nodes get a coverage-only expansion (evaluated answer,
+  no subtree — children built but not enqueued).  After the build,
+  `tree_coverage_sweep()` answers any remaining dangling our-turn leaf
+  above the floor and removes the rest, so no exported line ends on an
+  unanswered opponent move; removed mass returns to the expectimax tail
+  term.  Selection/extraction honor coverage-floored children below
+  `min_probability`.
+- **Final verification** (`--verify` / `--no-verify`, `--verify-depth`,
+  default auto = eval depth + 6, at least 20): after selection,
+  `repertoire_verify()` batch re-evaluates every selected move at the
+  verify depth; moves losing more than `--max-eval-loss` against the best
+  deep-checked sibling are demoted, evals are written back, and selection
+  re-runs (up to 3 passes).  The exported repertoire carries the guarantee
+  that no selected move loses more than the threshold at that depth.
+
+Optionally, a **preferred setup** (`--setup "Be3 Qd2 f3 O-O-O h4 Nh3"`,
+`--setup-tolerance`, default 30cp) biases selection toward a consistent
+system: legal setup moves are injected as evaluated candidates during the
+build (same eval-loss window as MultiPV lines), and
+`score_our_move_children()` prefers a setup move within the tolerance of
+the best child eval.  Expectimax values are untouched — the bias only
+constrains the argmax, so the eval guard deviates automatically when the
+opponent makes consistency expensive.
 
 ---
 

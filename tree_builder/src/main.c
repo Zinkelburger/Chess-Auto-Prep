@@ -754,6 +754,24 @@ static void print_usage(const char *prog_name) {
     printf("Opponent-move selection:\n");
     printf("  --opp-max-children <N> Max opponent responses per position [default: 6]\n");
     printf("  --opp-mass <0-1>       Mass target at every depth [default: 0.95]\n");
+    printf("  --best-first / --bfs   Frontier order: priority (default) or FIFO level order\n");
+    printf("  --alt-discount <0-1>   Priority multiplier for non-best our-move candidates [default: 0.25]\n");
+    printf("  --maia-prior <N>       Dirichlet prior weight (virtual games) blending DB\n");
+    printf("                         frequencies with Maia; 0 disables [default: 30]\n");
+    printf("  --cover-min-prob <0-1> No-silent-holes floor: opponent replies at/above this\n");
+    printf("                         local probability always get a repertoire answer;\n");
+    printf("                         0 disables [default: 0.05]\n");
+    printf("  --verify / --no-verify Deep-recheck every selected move after selection and\n");
+    printf("                         replace moves losing > max-eval-loss at the verify\n");
+    printf("                         depth [default: verify]\n");
+    printf("  --verify-depth <N>     Stockfish depth for verification; 0 = auto\n");
+    printf("                         (eval depth + 6, at least 20) [default: auto]\n");
+    printf("  --setup \"<SAN...>\"     Preferred setup to play whenever sound, e.g.\n");
+    printf("                         \"Be3 Qd2 f3 O-O-O h4 Nh3\": legal setup moves are\n");
+    printf("                         evaluated as candidates and selection prefers them\n");
+    printf("                         within the tolerance [default: off]\n");
+    printf("  --setup-tolerance <cp> Max eval loss vs best move for a setup move to be\n");
+    printf("                         preferred [default: 30]\n");
     printf("  --maia-only            Use Maia for opponent moves [default]\n");
     printf("  --lichess              Use Lichess API for opponent moves instead\n");
     printf("  --maia-model <path>    Path to maia3_simplified.onnx [default: auto-detect]\n");
@@ -1259,6 +1277,20 @@ int main(int argc, char *argv[]) {
     int opp_max_children_arg = -1;
     double opp_mass_target_arg = -1.0;
 
+    /* Frontier discipline overrides (-1 = use defaults) */
+    int best_first_arg = -1;        /* 1 = best-first (default), 0 = FIFO BFS */
+    double alt_discount_arg = -1.0;
+    double maia_prior_arg = -1.0;
+
+    /* Coverage / verification overrides (-1 = use defaults) */
+    double cover_min_prob_arg = -1.0;
+    int verify_arg = -1;            /* 1 = verify (default), 0 = skip */
+    int verify_depth_arg = -1;      /* 0/unset = auto (eval_depth+6, min 20) */
+
+    /* Preferred-setup overrides */
+    const char *setup_moves_arg = NULL;
+    int setup_tolerance_arg = -1;
+
     /* Eval window overrides */
     int min_eval_arg = -99999;
     int max_eval_arg = -99999;
@@ -1304,6 +1336,17 @@ int main(int argc, char *argv[]) {
         /* Opponent-move */
         {"opp-max-children", required_argument, 0, 2010},
         {"opp-mass",         required_argument, 0, 2011},
+        /* Frontier discipline */
+        {"best-first",       no_argument,       0, 2050},
+        {"bfs",              no_argument,       0, 2051},
+        {"alt-discount",     required_argument, 0, 2052},
+        {"maia-prior",       required_argument, 0, 2053},
+        {"cover-min-prob",   required_argument, 0, 2054},
+        {"verify",           no_argument,       0, 2055},
+        {"no-verify",        no_argument,       0, 2056},
+        {"verify-depth",     required_argument, 0, 2057},
+        {"setup",            required_argument, 0, 2058},
+        {"setup-tolerance",  required_argument, 0, 2059},
         /* Eval window */
         {"min-eval",         required_argument, 0, 2020},
         {"max-eval",         required_argument, 0, 2021},
@@ -1415,6 +1458,56 @@ int main(int argc, char *argv[]) {
             case 2011:
                 if (!parse_double(optarg, "opp-mass", &opp_mass_target_arg)) return 1;
                 cli_exp.opp_mass = true;
+                break;
+            /* Frontier discipline */
+            case 2050: best_first_arg = 1; break;
+            case 2051: best_first_arg = 0; break;
+            case 2052:
+                if (!parse_double(optarg, "alt-discount", &alt_discount_arg)) return 1;
+                if (alt_discount_arg < 0 || alt_discount_arg > 1) {
+                    fprintf(stderr, "Error: --alt-discount must be in [0, 1]\n");
+                    return 1;
+                }
+                break;
+            case 2053:
+                if (!parse_double(optarg, "maia-prior", &maia_prior_arg)) return 1;
+                if (maia_prior_arg < 0) {
+                    fprintf(stderr, "Error: --maia-prior must be >= 0\n");
+                    return 1;
+                }
+                break;
+            /* Coverage / verification */
+            case 2054:
+                if (!parse_double(optarg, "cover-min-prob",
+                                  &cover_min_prob_arg)) return 1;
+                if (cover_min_prob_arg < 0 || cover_min_prob_arg > 1) {
+                    fprintf(stderr,
+                            "Error: --cover-min-prob must be in [0, 1]\n");
+                    return 1;
+                }
+                break;
+            case 2055: verify_arg = 1; break;
+            case 2056: verify_arg = 0; break;
+            case 2057:
+                if (!parse_int(optarg, "verify-depth", &verify_depth_arg))
+                    return 1;
+                if (verify_depth_arg < 0 || verify_depth_arg > 60) {
+                    fprintf(stderr,
+                            "Error: --verify-depth must be in [0, 60]\n");
+                    return 1;
+                }
+                break;
+            /* Preferred setup */
+            case 2058: setup_moves_arg = optarg; break;
+            case 2059:
+                if (!parse_int(optarg, "setup-tolerance",
+                               &setup_tolerance_arg))
+                    return 1;
+                if (setup_tolerance_arg < 0 || setup_tolerance_arg > 500) {
+                    fprintf(stderr,
+                            "Error: --setup-tolerance must be in [0, 500]\n");
+                    return 1;
+                }
                 break;
             /* Eval window */
             case 2020:
@@ -2310,6 +2403,13 @@ int main(int argc, char *argv[]) {
                 .db_min_games = db_min_games,
                 .db_min_prob = db_min_prob,
                 .max_nodes = 0,
+                .best_first = best_first_arg != 0,
+                .maia = maia,
+                .maia_elo = maia_elo,
+                .maia_prior_games =
+                    maia_prior_arg >= 0.0 ? maia_prior_arg : 30.0,
+                .cover_min_prob =
+                    cover_min_prob_arg >= 0.0 ? cover_min_prob_arg : 0.05,
             };
 
             clock_gettime(CLOCK_MONOTONIC, &build_start);
@@ -2356,6 +2456,8 @@ int main(int argc, char *argv[]) {
             if (min_eval_arg != -99999) config.min_eval_cp = min_eval_arg;
             if (max_eval_arg != -99999) config.max_eval_cp = max_eval_arg;
             config.relative_eval = relative_eval;
+            if (cover_min_prob_arg >= 0.0)
+                config.cover_min_prob = cover_min_prob_arg;
             memset(&build_stats, 0, sizeof(build_stats));
             config.stats = &build_stats;
             tree->config = config;
@@ -2405,6 +2507,12 @@ int main(int argc, char *argv[]) {
                     return 1;
                 }
             }
+
+            /* No-silent-holes guarantee: with evals enriched and the
+             * engine available, answer dangling our-turn leaves
+             * (positions where the PGN games ran out) or remove them. */
+            if (!g_interrupted)
+                tree_coverage_sweep(tree, &config, NULL);
 
             tree_recalculate_probabilities(tree);
         } else {
@@ -2495,6 +2603,17 @@ int main(int argc, char *argv[]) {
             config.maia_elo = maia_elo;
             config.maia_min_prob = maia_min_prob;
         }
+
+        /* Frontier discipline */
+        if (best_first_arg >= 0) config.best_first = best_first_arg != 0;
+        if (alt_discount_arg >= 0.0) config.our_alt_discount = alt_discount_arg;
+        if (maia_prior_arg >= 0.0) config.maia_prior_games = maia_prior_arg;
+        if (cover_min_prob_arg >= 0.0) config.cover_min_prob = cover_min_prob_arg;
+        if (setup_moves_arg)
+            snprintf(config.setup_moves, sizeof(config.setup_moves), "%s",
+                     setup_moves_arg);
+        if (setup_tolerance_arg >= 0)
+            config.setup_tolerance_cp = setup_tolerance_arg;
 
         /* Only run Maia at our-move nodes for novelty scoring if we're
          * actually going to use it.  With novelty_weight == 0 and no
@@ -2769,6 +2888,20 @@ int main(int argc, char *argv[]) {
     if (max_eval_loss_arg >= 0) rep_config.max_eval_loss_cp = max_eval_loss_arg;
     if (opp_max_children_arg >= 0) rep_config.max_candidates_per_position = opp_max_children_arg;
     rep_config.relative_eval = relative_eval;
+    if (cover_min_prob_arg >= 0.0)
+        rep_config.cover_min_prob = cover_min_prob_arg;
+    else if (tree->config.cover_min_prob > 0.0)
+        rep_config.cover_min_prob = tree->config.cover_min_prob;
+    /* else: keep repertoire_config_default() (freqmap trees don't fill
+     * tree->config) */
+    if (setup_moves_arg)
+        snprintf(rep_config.setup_moves, sizeof(rep_config.setup_moves),
+                 "%s", setup_moves_arg);
+    else
+        snprintf(rep_config.setup_moves, sizeof(rep_config.setup_moves),
+                 "%s", tree->config.setup_moves);
+    if (setup_tolerance_arg >= 0)
+        rep_config.setup_tolerance_cp = setup_tolerance_arg;
     if (repertoire_name)
         strncpy(rep_config.name, repertoire_name, sizeof(rep_config.name) - 1);
 
@@ -2778,6 +2911,50 @@ int main(int argc, char *argv[]) {
     );
 
     if (verbose) progress_line_clear();
+
+    /* Final verification: deep re-check of every selected move (opt-out
+     * via --no-verify).  Demotions update node evals in place, so
+     * re-running generate_repertoire selects around them; the new spine
+     * is then re-verified, up to 3 passes. */
+    if (result && verify_arg != 0 && engine_pool && !g_interrupted) {
+        int verify_depth = verify_depth_arg > 0
+            ? verify_depth_arg
+            : (eval_depth + 6 < 20 ? 20 : eval_depth + 6);
+        printf("  Verifying repertoire at depth %d...\n", verify_depth);
+        int total_demotions = 0;
+        int total_evals = 0;
+        for (int pass = 1; pass <= 3 && !g_interrupted; pass++) {
+            int evals = 0;
+            int demoted = repertoire_verify(tree, engine_pool, &rep_config,
+                                            verify_depth, &evals);
+            total_evals += evals;
+            if (demoted < 0) {
+                fprintf(stderr, "  Warning: verification unavailable\n");
+                break;
+            }
+            if (demoted == 0) {
+                printf("  Verification pass %d: all %s moves within "
+                       "%dcp at depth %d (%d evals)\n",
+                       pass, pass == 1 ? "selected" : "re-selected",
+                       rep_config.max_eval_loss_cp, verify_depth,
+                       total_evals);
+                break;
+            }
+            total_demotions += demoted;
+            printf("  Verification pass %d: %d demotion(s) — "
+                   "re-selecting...\n", pass, demoted);
+            repertoire_result_free(result);
+            result = generate_repertoire(
+                tree, db, engine_pool, &rep_config,
+                verbose ? pipeline_progress : NULL
+            );
+            if (verbose) progress_line_clear();
+            if (!result) break;
+        }
+        if (total_demotions > 0)
+            printf("  Verification: %d move(s) demoted and replaced\n",
+                   total_demotions);
+    }
 
     if (result)
         repertoire_print_summary(result);

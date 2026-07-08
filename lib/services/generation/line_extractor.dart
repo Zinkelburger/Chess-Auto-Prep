@@ -228,7 +228,14 @@ class LineExtractor {
         }
       } else {
         for (final child in resolved.children) {
-          if (child.cumulativeProbability < config.minProbability) continue;
+          // Coverage-floored children sit below the reach-probability floor
+          // but carry a guaranteed answer — export their lines too.
+          final covered = config.coverMinProb > 0.0 &&
+              child.moveProbability >= config.coverMinProb;
+          if (!covered &&
+              child.cumulativeProbability < config.minProbability) {
+            continue;
+          }
           pushedAny = true;
           _extractDfs(
             node: child,

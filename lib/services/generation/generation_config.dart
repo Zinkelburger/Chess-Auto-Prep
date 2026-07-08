@@ -59,6 +59,66 @@ class TreeBuildConfig {
   final int maxPly;
   final int maxNodes;
 
+  // ── Frontier discipline ──
+  /// Best-first expansion: pop the frontier node with the highest search
+  /// priority (reach probability × our-alternative discount) instead of FIFO
+  /// level order.  Makes the build an anytime algorithm — at any node budget
+  /// the tree is concentrated on the likeliest opponent lines, and likely
+  /// lines get searched deeper than rare sidelines.
+  final bool bestFirst;
+
+  /// Priority multiplier applied to non-incumbent our-move candidates
+  /// (the incumbent — best eval at expansion time — inherits the parent's
+  /// priority unchanged).  Lower = spend less of the budget verifying
+  /// alternatives, more on deepening the current repertoire spine.
+  /// Only affects expansion order/depth, never expectimax or selection.
+  final double ourAltDiscount;
+
+  /// Dirichlet prior weight (λ, in virtual games) for smoothing DB opponent
+  /// move frequencies with Maia's policy:
+  ///   p = (count + λ·maiaP) / (N + λ)
+  /// Replaces the hard DB→Maia fallback cliff at sparsely covered positions.
+  /// 0 disables smoothing (raw frequencies + hard fallback).
+  final double maiaPriorGames;
+
+  // ── Coverage guarantee ──
+  /// No-silent-holes floor: any opponent reply whose LOCAL (per-position)
+  /// smoothed probability is at or above this value must have a repertoire
+  /// answer, even when its reach probability falls below [minProbability] or
+  /// the mass/children budgets are exhausted.  Such nodes get a coverage-only
+  /// expansion (one evaluated answer, no subtree).  At the end of the build,
+  /// any our-turn leaf still lacking an answer is either coverage-expanded
+  /// (local prob ≥ floor) or removed from the tree so uncovered mass is
+  /// honestly returned to the expectimax tail term.  0 disables the floor
+  /// (legacy behavior: rare replies silently dropped).
+  final double coverMinProb;
+
+  // ── Final verification pass ──
+  /// Re-evaluate every selected repertoire move at [resolvedVerifyDepth]
+  /// after selection.  Moves whose deep eval loses more than [maxEvalLossCp]
+  /// against the best deep sibling are demoted and selection re-runs, so the
+  /// exported repertoire carries a depth guarantee instead of trusting the
+  /// shallower build-time evals.
+  final bool verifyFinal;
+
+  /// Stockfish depth for the verification pass. 0 = auto
+  /// (max(evalDepth + 6, 20)).
+  final int verifyDepth;
+
+  // ── Preferred setup (consistency bias) ──
+  /// Space/comma-separated SAN moves of a system to play whenever sound
+  /// (e.g. "Be3 Qd2 f3 O-O-O h4 Nh3" for the 150 Attack).  Legal setup
+  /// moves are injected as candidates at our-move nodes, and selection
+  /// prefers a setup move within [setupToleranceCp] of the best child
+  /// eval.  Expectimax values are untouched — the bias only constrains
+  /// the argmax, so when the opponent makes consistency expensive the
+  /// eval guard deviates automatically.  Empty disables.
+  final String setupMoves;
+
+  /// Max centipawns a setup move may lose vs the best child eval and
+  /// still be preferred by selection.
+  final int setupToleranceCp;
+
   // ── Build algorithm ──
   final BuildMode buildMode;
 
@@ -135,6 +195,14 @@ class TreeBuildConfig {
     this.minProbability = 0.0001,
     this.maxPly = 20,
     this.maxNodes = 0,
+    this.bestFirst = true,
+    this.ourAltDiscount = 0.25,
+    this.maiaPriorGames = 30.0,
+    this.coverMinProb = 0.05,
+    this.verifyFinal = true,
+    this.verifyDepth = 0,
+    this.setupMoves = '',
+    this.setupToleranceCp = 30,
     this.buildMode = BuildMode.stockfishExpectimax,
     this.evalDepth = kDefaultGenerationEvalDepth,
     this.engineThreads = 0,
@@ -186,6 +254,14 @@ class TreeBuildConfig {
       minProbability: (json['min_probability'] as num?)?.toDouble() ?? 0.0001,
       maxPly: (json['max_depth'] as num?)?.toInt() ?? 20,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
+      bestFirst: json['best_first'] as bool? ?? true,
+      ourAltDiscount: (json['our_alt_discount'] as num?)?.toDouble() ?? 0.25,
+      maiaPriorGames: (json['maia_prior_games'] as num?)?.toDouble() ?? 30.0,
+      coverMinProb: (json['cover_min_prob'] as num?)?.toDouble() ?? 0.05,
+      verifyFinal: json['verify_final'] as bool? ?? true,
+      verifyDepth: (json['verify_depth'] as num?)?.toInt() ?? 0,
+      setupMoves: json['setup_moves'] as String? ?? '',
+      setupToleranceCp: (json['setup_tolerance_cp'] as num?)?.toInt() ?? 30,
       buildMode: _parseBuildMode(json['build_mode'] as String?),
       evalDepth:
           (json['eval_depth'] as num?)?.toInt() ?? kDefaultGenerationEvalDepth,
@@ -279,6 +355,10 @@ class TreeBuildConfig {
   String get engineResourceLabel =>
       '$resolvedEngineThreads thread${resolvedEngineThreads == 1 ? '' : 's'}';
 
+  /// Verification depth with the 0 = auto rule applied.
+  int get resolvedVerifyDepth =>
+      verifyDepth > 0 ? verifyDepth : (evalDepth + 6 < 20 ? 20 : evalDepth + 6);
+
   /// Minimum depth required from external eval sources.
   int get effectiveMinEvalDepth =>
       minAcceptableEvalDepth > 0 ? minAcceptableEvalDepth : evalDepth;
@@ -292,6 +372,14 @@ class TreeBuildConfig {
         'min_probability': minProbability,
         'max_depth': maxPly,
         'max_nodes': maxNodes,
+        'best_first': bestFirst,
+        'our_alt_discount': ourAltDiscount,
+        'maia_prior_games': maiaPriorGames,
+        'cover_min_prob': coverMinProb,
+        'verify_final': verifyFinal,
+        'verify_depth': verifyDepth,
+        'setup_moves': setupMoves,
+        'setup_tolerance_cp': setupToleranceCp,
         'build_mode': buildMode.name,
         'eval_depth': evalDepth,
         'engine_threads': resolvedEngineThreads,
@@ -339,6 +427,14 @@ class TreeBuildConfig {
     double? minProbability,
     int? maxPly,
     int? maxNodes,
+    bool? bestFirst,
+    double? ourAltDiscount,
+    double? maiaPriorGames,
+    double? coverMinProb,
+    bool? verifyFinal,
+    int? verifyDepth,
+    String? setupMoves,
+    int? setupToleranceCp,
     BuildMode? buildMode,
     int? evalDepth,
     int? engineThreads,
@@ -385,6 +481,14 @@ class TreeBuildConfig {
       minProbability: minProbability ?? this.minProbability,
       maxPly: maxPly ?? this.maxPly,
       maxNodes: maxNodes ?? this.maxNodes,
+      bestFirst: bestFirst ?? this.bestFirst,
+      ourAltDiscount: ourAltDiscount ?? this.ourAltDiscount,
+      maiaPriorGames: maiaPriorGames ?? this.maiaPriorGames,
+      coverMinProb: coverMinProb ?? this.coverMinProb,
+      verifyFinal: verifyFinal ?? this.verifyFinal,
+      verifyDepth: verifyDepth ?? this.verifyDepth,
+      setupMoves: setupMoves ?? this.setupMoves,
+      setupToleranceCp: setupToleranceCp ?? this.setupToleranceCp,
       buildMode: buildMode ?? this.buildMode,
       evalDepth: evalDepth ?? this.evalDepth,
       engineThreads: engineThreads ?? this.engineThreads,

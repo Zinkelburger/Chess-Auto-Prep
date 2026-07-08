@@ -9,6 +9,7 @@
 #include "database.h"
 #include "engine_pool.h"
 #include "eval_chain.h"
+#include "maia.h"
 #include "progress_line.h"
 
 #include <stdlib.h>
@@ -17,16 +18,35 @@
 
 extern volatile int g_interrupted;
 
+/* Frontier ordering priority — see node.h search_priority. */
+static double db_node_priority(const TreeNode *n) {
+    return n->search_priority >= 0.0 ? n->search_priority
+                                     : n->cumulative_probability;
+}
+
+static bool db_frontier_before(const TreeNode *a, const TreeNode *b) {
+    double pa = db_node_priority(a);
+    double pb = db_node_priority(b);
+    if (pa != pb) return pa > pb;
+    if (a->depth != b->depth) return a->depth < b->depth;
+    return a->node_id < b->node_id;
+}
+
+/* FIFO ring (classic BFS) or binary max-heap on search priority
+ * (best-first).  In heap mode `head` stays 0 and items[0..tail) is the
+ * heap. */
 typedef struct DbBuildQueue {
     TreeNode **items;
     size_t head;
     size_t tail;
     size_t capacity;
+    bool heap;
 } DbBuildQueue;
 
-static bool db_queue_init(DbBuildQueue *q) {
+static bool db_queue_init(DbBuildQueue *q, bool heap) {
     q->capacity = 256;
     q->head = q->tail = 0;
+    q->heap = heap;
     q->items = (TreeNode **)calloc(q->capacity, sizeof(TreeNode *));
     return q->items != NULL;
 }
@@ -52,14 +72,52 @@ static bool db_queue_grow(DbBuildQueue *q) {
     return true;
 }
 
+static void db_queue_sift_up(DbBuildQueue *q, size_t i) {
+    while (i > 0) {
+        size_t parent = (i - 1) / 2;
+        if (!db_frontier_before(q->items[i], q->items[parent])) break;
+        TreeNode *tmp = q->items[i];
+        q->items[i] = q->items[parent];
+        q->items[parent] = tmp;
+        i = parent;
+    }
+}
+
+static void db_queue_sift_down(DbBuildQueue *q, size_t i) {
+    for (;;) {
+        size_t left = 2 * i + 1;
+        size_t right = left + 1;
+        size_t best = i;
+        if (left < q->tail && db_frontier_before(q->items[left], q->items[best]))
+            best = left;
+        if (right < q->tail && db_frontier_before(q->items[right], q->items[best]))
+            best = right;
+        if (best == i) return;
+        TreeNode *tmp = q->items[i];
+        q->items[i] = q->items[best];
+        q->items[best] = tmp;
+        i = best;
+    }
+}
+
 static bool db_queue_push(DbBuildQueue *q, TreeNode *node) {
     if (q->tail >= q->capacity && !db_queue_grow(q))
         return false;
     q->items[q->tail++] = node;
+    if (q->heap)
+        db_queue_sift_up(q, q->tail - 1);
     return true;
 }
 
 static TreeNode *db_queue_pop(DbBuildQueue *q) {
+    if (q->heap) {
+        if (q->tail == 0) return NULL;
+        TreeNode *top = q->items[0];
+        q->items[0] = q->items[--q->tail];
+        if (q->tail > 0)
+            db_queue_sift_down(q, 0);
+        return top;
+    }
     if (q->head >= q->tail) return NULL;
     return q->items[q->head++];
 }
@@ -98,6 +156,8 @@ static bool propagate_cumP_recursive(TreeNode *node, double ratio,
     for (size_t i = 0; i < node->children_count; i++) {
         TreeNode *child = node->children[i];
         child->cumulative_probability *= ratio;
+        if (child->search_priority >= 0.0)
+            child->search_priority *= ratio;
         if (child->children_count > 0) {
             if (!propagate_cumP_recursive(child, ratio, min_prob, q))
                 return false;
@@ -123,6 +183,13 @@ static bool expand_our_move(Tree *tree, TreeNode *node,
                             const DbBuildConfig *cfg, DbBuildQueue *q) {
     char san_buf[MAX_MOVE_LENGTH];
 
+    uint64_t reach = pos->reach_count;
+    if (reach == 0) {
+        for (int i = 0; i < pos->move_count; i++)
+            reach += pos->moves[i].count;
+    }
+    double base_pri = db_node_priority(node);
+
     for (int i = 0; i < pos->move_count; i++) {
         if (cfg->max_nodes > 0 &&
             tree->total_nodes >= (size_t)cfg->max_nodes)
@@ -143,20 +210,30 @@ static bool expand_our_move(Tree *tree, TreeNode *node,
 
         child->move_probability = 1.0;
         child->cumulative_probability = node->cumulative_probability;
+        /* Priority follows the DB frequency share so best-first explores
+         * our popular moves first — cumulative probability stays
+         * undiscounted (our moves are a choice, not chance). */
+        child->search_priority = reach > 0
+            ? base_pri * ((double)m->count / (double)reach)
+            : base_pri;
         if (!db_queue_push(q, child))
             return false;
     }
     return true;
 }
 
+/* One opponent candidate with a (possibly λ-smoothed) probability. */
+typedef struct {
+    char uci[8];
+    char san[16];
+    double prob;
+    uint64_t games;
+} DbOppCand;
+
 static bool expand_opponent_move(Tree *tree, TreeNode *node,
                                  const PgnFreqPosition *pos,
                                  const DbBuildConfig *cfg, DbBuildQueue *q) {
     char san_buf[MAX_MOVE_LENGTH];
-    PgnFreqMove filtered[MAX_CHILDREN];
-    int n_filtered = pgn_freq_filtered_moves(pos, cfg->db_min_games,
-                                             cfg->db_min_prob,
-                                             filtered, MAX_CHILDREN);
 
     uint64_t reach = pos->reach_count;
     if (reach == 0) {
@@ -165,15 +242,104 @@ static bool expand_opponent_move(Tree *tree, TreeNode *node,
     }
     if (reach == 0) return true;
 
-    for (int i = 0; i < n_filtered; i++) {
-        if (cfg->max_nodes > 0 &&
-            tree->total_nodes >= (size_t)cfg->max_nodes)
-            break;
+    /* λ-smoothing with a Maia prior (see tree_db_build.h).  Skipped when
+     * the position has enough games that the prior's weight would be
+     * negligible (saves the inference). */
+    MaiaResponse prior_resp;
+    bool have_prior = false;
+    double lambda = 0.0;
+    if (cfg->maia && cfg->maia_prior_games > 0.0 &&
+        (double)reach < 100.0 * cfg->maia_prior_games) {
+        if (maia_evaluate(cfg->maia, node->fen, cfg->maia_elo, &prior_resp) &&
+            prior_resp.success && prior_resp.move_count > 0) {
+            have_prior = true;
+            lambda = cfg->maia_prior_games;
+        }
+    }
+    double denom = (double)reach + lambda;
 
-        const PgnFreqMove *m = &filtered[i];
-        double prob = (double)m->count / (double)reach;
+    DbOppCand cands[MAX_CHILDREN + MAIA_MAX_MOVES];
+    int n_cands = 0;
+
+    for (int i = 0; i < pos->move_count && n_cands < MAX_CHILDREN; i++) {
+        const PgnFreqMove *m = &pos->moves[i];
+        /* The prior replaces the min-games noise filter when smoothing;
+         * the coverage floor overrides it for locally popular replies. */
+        if (!have_prior && (int)m->count < cfg->db_min_games) {
+            double raw = (double)m->count / (double)reach;
+            if (!(cfg->cover_min_prob > 0.0 && raw >= cfg->cover_min_prob))
+                continue;
+        }
+
+        double prior = 0.0;
+        if (have_prior) {
+            for (int j = 0; j < prior_resp.move_count; j++) {
+                if (strcmp(prior_resp.moves[j].uci, m->uci) == 0) {
+                    prior = prior_resp.moves[j].probability;
+                    break;
+                }
+            }
+        }
+
+        DbOppCand *c = &cands[n_cands++];
+        snprintf(c->uci, sizeof(c->uci), "%s", m->uci);
+        snprintf(c->san, sizeof(c->san), "%s", m->san);
+        c->prob = ((double)m->count + lambda * prior) / denom;
+        c->games = m->count;
+    }
+
+    if (have_prior) {
+        for (int i = 0; i < prior_resp.move_count &&
+                        n_cands < MAX_CHILDREN + MAIA_MAX_MOVES; i++) {
+            const char *uci = prior_resp.moves[i].uci;
+            bool in_db = false;
+            for (int j = 0; j < pos->move_count; j++) {
+                if (strcmp(pos->moves[j].uci, uci) == 0) {
+                    in_db = true;
+                    break;
+                }
+            }
+            if (in_db) continue;
+            double p = lambda * prior_resp.moves[i].probability / denom;
+            if (p <= 0.0) continue;
+
+            DbOppCand *c = &cands[n_cands++];
+            snprintf(c->uci, sizeof(c->uci), "%s", uci);
+            c->san[0] = '\0';
+            c->prob = p;
+            c->games = 0;
+        }
+    }
+
+    /* Insertion sort by smoothed probability, descending (n is small). */
+    for (int i = 1; i < n_cands; i++) {
+        DbOppCand key = cands[i];
+        int j = i - 1;
+        while (j >= 0 && cands[j].prob < key.prob) {
+            cands[j + 1] = cands[j];
+            j--;
+        }
+        cands[j + 1] = key;
+    }
+
+    double base_pri = db_node_priority(node);
+
+    for (int i = 0; i < n_cands; i++) {
+        const DbOppCand *m = &cands[i];
+        double prob = m->prob;
         double new_cumul = node->cumulative_probability * prob;
-        if (new_cumul < cfg->min_probability) continue;
+
+        /* Coverage floor: replies at/above cover_min_prob local
+         * probability must exist regardless of budget cutoffs. */
+        bool covered = cfg->cover_min_prob > 0.0 &&
+                       prob >= cfg->cover_min_prob;
+        if (!covered) {
+            if (cfg->max_nodes > 0 &&
+                tree->total_nodes >= (size_t)cfg->max_nodes)
+                break;
+            if (prob < cfg->db_min_prob) continue;
+            if (new_cumul < cfg->min_probability) continue;
+        }
 
         char child_fen[MAX_FEN_LENGTH];
         if (!apply_uci(node->fen, m->uci, child_fen, MAX_FEN_LENGTH))
@@ -189,6 +355,7 @@ static bool expand_opponent_move(Tree *tree, TreeNode *node,
 
         child->move_probability = prob;
         child->cumulative_probability = new_cumul;
+        child->search_priority = base_pri * prob;
         if (!db_queue_push(q, child))
             return false;
     }
@@ -276,12 +443,13 @@ bool tree_build_from_freqmap(Tree *tree, const PgnFreqMap *freq,
         tree->root->total_games = root_pos->reach_count;
     tree->root->explored = false;
     tree->root->cumulative_probability = 1.0;
+    tree->root->search_priority = 1.0;
 
     FenMap *fmap = fen_map_create();
     if (!fmap) return false;
 
     DbBuildQueue q;
-    if (!db_queue_init(&q)) {
+    if (!db_queue_init(&q, cfg->best_first)) {
         fen_map_destroy(fmap);
         return false;
     }

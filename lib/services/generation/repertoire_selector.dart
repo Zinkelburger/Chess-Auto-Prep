@@ -10,11 +10,15 @@ import '../eval/eval_canonicalize.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
+import 'setup_bias.dart';
 
 class RepertoireSelector {
   final TreeBuildConfig config;
   final ExpectimaxCalculator ecaCalc;
   final FenMap? fenMap;
+
+  /// Normalized preferred-setup SAN set (empty = bias off).
+  late final Set<String> _setupMoves = parseSetupMoves(config.setupMoves);
 
   RepertoireSelector({
     required this.config,
@@ -29,8 +33,8 @@ class RepertoireSelector {
   }
 
   int _selectRecursive(BuildTreeNode node, Set<String> visited) {
-    if (node.ply >= config.maxPly) return 0;
-    if (node.cumulativeProbability < config.minProbability) return 0;
+    if (node.ply >= config.maxPly && node.children.isEmpty) return 0;
+    if (!_selectable(node)) return 0;
 
     // Transposition resolution: if this node is a childless transposition
     // leaf, redirect to the canonical node that has the real subtree
@@ -64,7 +68,7 @@ class RepertoireSelector {
       }
     } else {
       for (final child in resolved.children) {
-        if (child.cumulativeProbability < config.minProbability) continue;
+        if (!_selectable(child)) continue;
         count += _selectRecursive(child, visited);
       }
     }
@@ -73,19 +77,74 @@ class RepertoireSelector {
     return count;
   }
 
+  /// Coverage-aware probability guard: nodes below the reach-probability
+  /// floor still get repertoire moves when the coverage floor forced them
+  /// into the tree (their local move probability clears coverMinProb).
+  bool _selectable(BuildTreeNode node) {
+    if (node.cumulativeProbability >= config.minProbability) return true;
+    return config.coverMinProb > 0.0 &&
+        node.moveProbability >= config.coverMinProb;
+  }
+
   ScoredChild? _pickOurMove(BuildTreeNode node) {
-    switch (config.selectionMode) {
-      case SelectionMode.engineOnly:
-        return _pickByEngineEval(node);
-      case SelectionMode.dbWinRateOnly:
-        return _pickByDbWinRate(node);
-      case SelectionMode.expectimax:
-        return ecaCalc.scoreOurMoveChildren(node);
-      case SelectionMode.playable:
-        return _pickByPlayability(node);
-      case SelectionMode.trappy:
-        return _pickByOpponentCpl(node);
+    final winner = switch (config.selectionMode) {
+      SelectionMode.engineOnly => _pickByEngineEval(node),
+      SelectionMode.dbWinRateOnly => _pickByDbWinRate(node),
+      SelectionMode.expectimax => ecaCalc.scoreOurMoveChildren(node),
+      SelectionMode.playable => _pickByPlayability(node),
+      SelectionMode.trappy => _pickByOpponentCpl(node),
+    };
+    return _applySetupBias(node, winner);
+  }
+
+  /// Preferred-setup tie-break: within [TreeBuildConfig.setupToleranceCp]
+  /// of the best child eval, prefer a move that advances the user's
+  /// system.  Expectimax values are untouched — this only constrains the
+  /// argmax, so when consistency would cost real eval (e.g. ...Ng4
+  /// hitting the Be3 bishop) no setup move qualifies and the normal
+  /// winner stands.
+  ScoredChild? _applySetupBias(BuildTreeNode node, ScoredChild? winner) {
+    if (winner == null || _setupMoves.isEmpty) return winner;
+    if (_setupMoves.contains(normalizeSetupSan(winner.child.moveSan))) {
+      return winner;
     }
+
+    int bestCp = kWorstEvalCp;
+    for (final child in node.children) {
+      if (!child.hasEngineEval) continue;
+      final cp = child.evalForUs(config.playAsWhite);
+      if (cp > bestCp) bestCp = cp;
+    }
+    if (bestCp == kWorstEvalCp) return winner;
+
+    // Never prefer a setup move the eval-loss guard would reject.
+    final tolerance = config.setupToleranceCp < config.maxEvalLossCp
+        ? config.setupToleranceCp
+        : config.maxEvalLossCp;
+
+    BuildTreeNode? setupPick;
+    var bestScore = double.negativeInfinity;
+    for (final child in node.children) {
+      if (!child.hasEngineEval) continue;
+      if (!_setupMoves.contains(normalizeSetupSan(child.moveSan))) continue;
+      if (child.evalForUs(config.playAsWhite) < bestCp - tolerance) {
+        continue;
+      }
+      // Among qualifying setup moves, keep the objective's favorite.
+      final score = child.hasExpectimax
+          ? child.expectimaxValue
+          : child.evalForUs(config.playAsWhite) / 10000.0;
+      if (score > bestScore) {
+        bestScore = score;
+        setupPick = child;
+      }
+    }
+
+    if (setupPick == null) return winner;
+    return ScoredChild(
+      child: setupPick,
+      expectimaxValue: setupPick.expectimaxValue,
+    );
   }
 
   /// Engine-only: pick the child with the best engine eval for us,

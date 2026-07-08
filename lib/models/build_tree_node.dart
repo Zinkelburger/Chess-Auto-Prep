@@ -58,6 +58,13 @@ class BuildTreeNode implements MoveTreeNodeView {
   /// Only decreases on opponent moves.
   double cumulativeProbability;
 
+  /// Best-first frontier priority: reach probability discounted at our-move
+  /// alternatives (non-incumbent candidates get × ourAltDiscount).  Unlike
+  /// [cumulativeProbability] this is a search-scheduling signal only — it
+  /// never feeds expectimax or selection.  -1.0 means not set (legacy trees);
+  /// consumers fall back to [cumulativeProbability].
+  double searchPriority = -1.0;
+
   // Lichess stats
   int whiteWins = 0;
   int blackWins = 0;

@@ -57,6 +57,19 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       TextEditingController(text: '0.80');
   final TextEditingController _leafConfidenceCtrl =
       TextEditingController(text: '1.0');
+  final TextEditingController _ourAltDiscountCtrl =
+      TextEditingController(text: '0.25');
+  final TextEditingController _maiaPriorGamesCtrl =
+      TextEditingController(text: '30');
+  final TextEditingController _coverMinProbCtrl =
+      TextEditingController(text: '0.05');
+  final TextEditingController _verifyDepthCtrl =
+      TextEditingController(text: '0');
+  final TextEditingController _setupMovesCtrl = TextEditingController();
+  final TextEditingController _setupToleranceCtrl =
+      TextEditingController(text: '30');
+  bool _bestFirst = true;
+  bool _verifyFinal = true;
 
   final List<String> _pgnFilePaths = [];
   final TextEditingController _dbMinGamesCtrl =
@@ -127,6 +140,14 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     _oppMaxChildrenCtrl.text = config.oppMaxChildren.toString();
     _oppMassTargetCtrl.text = config.oppMassTarget.toString();
     _leafConfidenceCtrl.text = config.leafConfidence.toString();
+    _ourAltDiscountCtrl.text = config.ourAltDiscount.toString();
+    _maiaPriorGamesCtrl.text = config.maiaPriorGames.toString();
+    _coverMinProbCtrl.text = config.coverMinProb.toString();
+    _verifyDepthCtrl.text = config.verifyDepth.toString();
+    _setupMovesCtrl.text = config.setupMoves;
+    _setupToleranceCtrl.text = config.setupToleranceCp.toString();
+    _bestFirst = config.bestFirst;
+    _verifyFinal = config.verifyFinal;
     _dbMinGamesCtrl.text = config.dbMinGames.toString();
     _dbMinProbCtrl.text = config.dbMinProb.toString();
     _minEloCtrl.text = config.minElo.toString();
@@ -173,6 +194,12 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     _oppMaxChildrenCtrl.dispose();
     _oppMassTargetCtrl.dispose();
     _leafConfidenceCtrl.dispose();
+    _ourAltDiscountCtrl.dispose();
+    _maiaPriorGamesCtrl.dispose();
+    _coverMinProbCtrl.dispose();
+    _verifyDepthCtrl.dispose();
+    _setupMovesCtrl.dispose();
+    _setupToleranceCtrl.dispose();
     super.dispose();
   }
 
@@ -300,6 +327,20 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
+      bestFirst: _bestFirst,
+      ourAltDiscount:
+          (double.tryParse(_ourAltDiscountCtrl.text.trim()) ?? 0.25)
+              .clamp(0.0, 1.0),
+      maiaPriorGames:
+          double.tryParse(_maiaPriorGamesCtrl.text.trim()) ?? 30.0,
+      coverMinProb: (double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0.05)
+          .clamp(0.0, 1.0),
+      verifyFinal: _verifyFinal,
+      verifyDepth:
+          (int.tryParse(_verifyDepthCtrl.text.trim()) ?? 0).clamp(0, 40),
+      setupMoves: _setupMovesCtrl.text.trim(),
+      setupToleranceCp:
+          (int.tryParse(_setupToleranceCtrl.text.trim()) ?? 30).clamp(0, 500),
       useLichessDb: _lichessDbOverride != null,
       useMasters: _lichessDbOverride == LichessDatabase.masters,
       speeds: _lichessSpeeds.join(','),
@@ -656,6 +697,63 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                   _numField(_leafConfidenceCtrl, 'Leaf Confidence (0-1)',
                       tooltip:
                           'Trust in engine eval at leaves; lower blends toward 0.5'),
+                  _numField(_ourAltDiscountCtrl, 'Alt Discount (0-1)',
+                      tooltip:
+                          'Best-first priority multiplier for our non-best candidates.\n'
+                          'Lower = more budget on the mainline, less on alternatives.'),
+                  _numField(_maiaPriorGamesCtrl, 'Maia Prior (games)',
+                      tooltip:
+                          'Dirichlet prior weight λ blending DB opponent frequencies\n'
+                          'with Maia: p = (count + λ·maia) / (N + λ). 0 disables.'),
+                  _numField(_coverMinProbCtrl, 'Cover Min Prob (0-1)',
+                      tooltip:
+                          'No-silent-holes floor: every opponent reply at/above this\n'
+                          'local probability gets a repertoire answer, even in lines\n'
+                          'the search budget would otherwise skip. 0 disables.'),
+                  _numField(_verifyDepthCtrl, 'Verify Depth (0=auto)',
+                      tooltip:
+                          'Stockfish depth for the final verification pass.\n'
+                          '0 = automatic (eval depth + 6, at least 20).'),
+                  _numField(_setupToleranceCtrl, 'Setup Tolerance (cp)',
+                      tooltip:
+                          'Max centipawns a preferred-setup move may lose vs the\n'
+                          'best candidate and still be chosen for consistency.'),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _setupMovesCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Preferred Setup (SAN moves)',
+                  hintText: 'e.g. Be3 Qd2 f3 O-O-O h4 Nh3',
+                  helperText:
+                      'System to play whenever sound: legal setup moves are '
+                      'evaluated as candidates, and selection prefers them '
+                      'within the tolerance. Empty = off.',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _toggleSwitch('Best-First Search', _bestFirst, (v) {
+                    setState(() => _bestFirst = v);
+                  },
+                      tooltip:
+                          'Expand the most-reachable positions first (anytime build:\n'
+                          'likely lines get explored deepest at any node budget).\n'
+                          'Off = classic level-order BFS.'),
+                  const SizedBox(width: 16),
+                  _toggleSwitch('Verify Final Output', _verifyFinal, (v) {
+                    setState(() => _verifyFinal = v);
+                  },
+                      tooltip:
+                          'Re-check every selected repertoire move at the verify\n'
+                          'depth after selection; moves that lose more than Max Eval\n'
+                          'Loss vs a deep-checked alternative are replaced. Gives the\n'
+                          'export a depth guarantee at the cost of extra engine time.'),
                 ],
               ),
               const SizedBox(height: 8),

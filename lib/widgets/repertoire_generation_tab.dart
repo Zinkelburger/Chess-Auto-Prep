@@ -13,6 +13,8 @@ import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../services/generation/line_extractor.dart';
 import '../services/generation/repertoire_selector.dart';
+import '../services/generation/repertoire_verifier.dart';
+import '../services/engine/stockfish_pool.dart';
 import '../services/generation/trap_extractor.dart';
 import '../services/generation/tree_ease.dart';
 import '../services/generation/tree_my_ease.dart';
@@ -509,7 +511,44 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
         ecaCalc: ecaCalc,
         fenMap: fenMap,
       );
-      final selectedCount = selector.select(tree);
+      var selectedCount = selector.select(tree);
+
+      // Phase 2.5: deep verification of the selected repertoire (opt-out).
+      if (config.verifyFinal && config.needsStockfish && !_shouldStop) {
+        if (mounted) {
+          _setStatus(
+            'Phase 2.5: Verifying repertoire '
+            '(depth ${config.resolvedVerifyDepth})...',
+          );
+        }
+        try {
+          if (StockfishPool.instance.workerCount == 0) {
+            await StockfishPool.instance
+                .prepareForTreeBuild(config.resolvedEngineThreads);
+          }
+          final verifier = RepertoireVerifier(config: config);
+          final report = await verifier.verify(
+            tree,
+            fenMap: fenMap,
+            ecaCalc: ecaCalc,
+            isCancelled: () => _shouldStop,
+            onStatus: (s) {
+              if (mounted) _setStatus(s);
+            },
+          );
+          if (report.selectedCount >= 0) {
+            selectedCount = report.selectedCount;
+          }
+          for (final d in report.demotions) {
+            debugPrint('Verification demotion @ ${d.fen}: $d');
+          }
+          if (mounted) _setStatus(report.summary);
+        } catch (e) {
+          // Verification is best-effort on engine failures; the build-time
+          // evals still stand.
+          debugPrint('Verification pass failed: $e');
+        }
+      }
 
       // Re-sort children and rebuild metadata now that repertoire flags are set.
       tree.sortAllChildren();

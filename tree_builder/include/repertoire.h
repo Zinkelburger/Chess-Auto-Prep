@@ -42,6 +42,19 @@ typedef struct RepertoireConfig {
     double min_probability;         /* Stop exploring below this cumul. probability */
     int min_games;                  /* Minimum games to consider a line */
 
+    /* Coverage floor (must match TreeConfig.cover_min_prob): opponent
+     * replies whose LOCAL move probability clears this floor were forced
+     * into the tree by the build's coverage guarantee even when their
+     * reach probability is below min_probability — selection and line
+     * extraction must not re-prune them.  0 disables. */
+    double cover_min_prob;
+
+    /* Preferred setup (see TreeConfig.setup_moves): selection prefers a
+     * setup move within setup_tolerance_cp of the best child eval
+     * (clamped to max_eval_loss_cp).  Empty = off. */
+    char setup_moves[256];
+    int setup_tolerance_cp;
+
     /* Engine settings */
     int eval_depth;                 /* Depth for engine evaluation */
     
@@ -178,6 +191,25 @@ typedef struct {
  * @return Config with sensible defaults
  */
 RepertoireConfig repertoire_config_default(void);
+
+/**
+ * Final verification pass — deep engine re-check of the selected repertoire.
+ *
+ * Re-evaluates every selected move's resulting position at verify_depth
+ * (batched across the pool) and updates node evals in place.  Moves whose
+ * deep eval loses more than max_eval_loss_cp against the best deep-checked
+ * sibling are counted as demotions.  When the return value is > 0 the
+ * caller should re-run generate_repertoire(): with the updated evals,
+ * selection avoids the demoted moves, and another verify pass checks the
+ * new spine.  Never adds or removes tree nodes, so the build's coverage
+ * guarantees are preserved.
+ *
+ * Returns the demotion count, or -1 on failure (no engine, bad args).
+ * evals_run (optional) receives the number of deep evaluations performed.
+ */
+int repertoire_verify(struct Tree *tree, struct EnginePool *engine_pool,
+                      const RepertoireConfig *config,
+                      int verify_depth, int *evals_run);
 
 /**
  * Generate a complete repertoire from a tree

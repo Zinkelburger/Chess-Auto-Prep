@@ -21,6 +21,28 @@ String uciToSan(String fen, String uci) {
   }
 }
 
+/// Convert a SAN move to standard UCI in the position given by [fen].
+///
+/// Returns `null` when the SAN is not legal in the position.  Castling is
+/// emitted in the king→destination convention (see [toStandardUci]).
+String? sanToUci(String fen, String san) {
+  try {
+    final position = Chess.fromSetup(Setup.parseFen(fen));
+    final move = position.parseSan(san);
+    if (move == null) return null;
+    if (move is NormalMove) {
+      final uci = toStandardUci(position, move.from, move.to);
+      final promotion = move.promotion;
+      return promotion != null
+          ? '$uci${roleChar(promotion).toLowerCase()}'
+          : uci;
+    }
+    return move.uci;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Format a PV continuation (skip the first move) as SAN text.
 ///
 /// Returns at most [maxMoves] SAN tokens joined by spaces.

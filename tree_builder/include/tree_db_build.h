@@ -20,6 +20,24 @@ typedef struct DbBuildConfig {
     int db_min_games;      /* default 5 */
     double db_min_prob;    /* default 0.05 */
     int max_nodes;         /* 0 = unlimited */
+
+    /* Frontier discipline (see TreeConfig in tree.h for semantics). */
+    bool best_first;           /* priority frontier vs FIFO BFS */
+
+    /* Optional Maia Dirichlet prior for opponent frequencies:
+     *   p = (count + λ·maia) / (N + λ),  λ = maia_prior_games
+     * NULL maia or λ = 0 disables smoothing (raw frequencies +
+     * db_min_games / db_min_prob filters). */
+    struct MaiaContext *maia;
+    int maia_elo;
+    double maia_prior_games;
+
+    /* Coverage floor (see TreeConfig.cover_min_prob): opponent replies
+     * at/above this LOCAL smoothed probability are added regardless of
+     * db_min_prob / db_min_games / reach-probability cutoffs.  Our-turn
+     * holes are answered or removed later by tree_coverage_sweep()
+     * (after eval enrichment, when the engine is available).  0 = off. */
+    double cover_min_prob;
 } DbBuildConfig;
 
 /** BFS tree build from a merged PGN frequency map. */
