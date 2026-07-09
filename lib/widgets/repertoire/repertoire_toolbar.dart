@@ -4,15 +4,15 @@ import '../../constants/ui_breakpoints.dart';
 import '../../screens/settings_screen.dart';
 import '../../theme/app_colors.dart';
 import '../app_mode_menu_button.dart';
-import '../shortcut_tooltip.dart';
 import '../layout/board_zone.dart';
 
 /// App bar for the repertoire screen: title, generation status, and actions.
 ///
 /// Actions are grouped by workflow, not by feature:
 /// - the title doubles as the repertoire switcher,
-/// - "Generate ▾" is the single entry point for adding lines (generate,
-///   build from games, import PGN),
+/// - a pick-then-run control ([RepertoireActionRunner]) is the single entry
+///   point for every repertoire action (generate, build from games, import
+///   PGN, audit): a dropdown chooses the action, a "Run" button fires it,
 /// - Train is the primary (filled) action,
 /// - everything occasional lives in the trailing overflow menu.
 class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
@@ -61,11 +61,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   bool get _titleIsSwitcher =>
       showSelectRepertoireAction && onSelectRepertoire != null;
 
-  bool get _hasAddSources =>
-      onBuildFromGames != null ||
-      onImportPgnFile != null ||
-      onImportPgnPaste != null;
-
   @override
   Widget build(BuildContext context) {
     return AppBar(
@@ -83,15 +78,14 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             isPaused: isGenerationPaused,
             onTap: onOpenGeneration,
           ),
-        if (onOpenGeneration != null)
-          RepertoireAddLinesButton(
+        if (onOpenGeneration != null || onOpenAudit != null)
+          RepertoireActionRunner(
             onGenerate: onOpenGeneration,
             onBuildFromGames: onBuildFromGames,
             onImportPgnFile: onImportPgnFile,
             onImportPgnPaste: onImportPgnPaste,
-            showMenu: _hasAddSources,
+            onOpenAudit: onOpenAudit,
           ),
-        if (onOpenAudit != null) RepertoireAuditButton(onPressed: onOpenAudit),
         if (showTrainButton && onTrainRepertoire != null)
           RepertoireTrainButton(
             onPressed: generationLocked ? null : onTrainRepertoire,
@@ -270,103 +264,131 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
   }
 }
 
-/// Split button: "Generate" as the default action, with a dropdown listing
-/// the other ways to add lines (from games, import file, paste PGN).
-class RepertoireAddLinesButton extends StatelessWidget {
-  const RepertoireAddLinesButton({
+/// A repertoire action the user can pick from the runner dropdown.
+class _RepAction {
+  const _RepAction(
+    this.id,
+    this.label,
+    this.icon,
+    this.onRun, {
+    this.shortcut,
+  });
+
+  final String id;
+  final String label;
+  final IconData icon;
+  final VoidCallback onRun;
+
+  /// Keyboard shortcut hint shown in the menu (the handler lives in
+  /// [RepertoireShortcuts]); null when the action has no shortcut.
+  final String? shortcut;
+}
+
+/// Pick-then-run control for repertoire actions (generate, add lines, audit).
+///
+/// A dropdown selects *which* action; a separate "Run" button executes it.
+/// Splitting the picker from the trigger means opening the menu can never fire
+/// a heavy action (e.g. Generate) by accident — the failure mode of the old
+/// split button.
+class RepertoireActionRunner extends StatefulWidget {
+  const RepertoireActionRunner({
     super.key,
-    required this.onGenerate,
+    this.onGenerate,
     this.onBuildFromGames,
     this.onImportPgnFile,
     this.onImportPgnPaste,
-    this.showMenu = true,
+    this.onOpenAudit,
   });
 
   final VoidCallback? onGenerate;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
-  final bool showMenu;
+  final VoidCallback? onOpenAudit;
+
+  @override
+  State<RepertoireActionRunner> createState() => _RepertoireActionRunnerState();
+}
+
+class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
+  String? _selectedId;
+
+  List<_RepAction> get _actions => [
+        if (widget.onGenerate != null)
+          _RepAction('generate', 'Generate', Icons.auto_awesome,
+              widget.onGenerate!,
+              shortcut: 'G'),
+        if (widget.onBuildFromGames != null)
+          _RepAction('from_games', 'From my games',
+              Icons.download_for_offline_outlined, widget.onBuildFromGames!),
+        if (widget.onImportPgnFile != null)
+          _RepAction('import_pgn_file', 'Import PGN file', Icons.file_open,
+              widget.onImportPgnFile!,
+              shortcut: 'I'),
+        if (widget.onImportPgnPaste != null)
+          _RepAction('import_pgn_paste', 'Paste PGN', Icons.paste,
+              widget.onImportPgnPaste!),
+        if (widget.onOpenAudit != null)
+          _RepAction('audit', 'Audit for gaps', Icons.policy_outlined,
+              widget.onOpenAudit!,
+              shortcut: 'A'),
+      ];
 
   @override
   Widget build(BuildContext context) {
+    final actions = _actions;
+    if (actions.isEmpty) return const SizedBox.shrink();
+
+    // Keep the selection valid as the available actions change.
+    var selectedId = _selectedId;
+    if (selectedId == null || !actions.any((a) => a.id == selectedId)) {
+      selectedId = actions.first.id;
+    }
+    final selected = actions.firstWhere((a) => a.id == selectedId);
+
+    final theme = Theme.of(context);
     final compact =
         MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
 
-    final menuItems = <PopupMenuEntry<String>>[
-      if (compact)
-        const PopupMenuItem(
-          value: 'generate',
-          child: ListTile(
-            leading: Icon(Icons.auto_awesome, size: 20),
-            title: Text('Generate'),
-            trailing:
-                Text('G', style: TextStyle(fontSize: 12, color: Colors.grey)),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      if (onBuildFromGames != null)
-        const PopupMenuItem(
-          value: 'from_games',
-          child: ListTile(
-            leading: Icon(Icons.download_for_offline_outlined, size: 20),
-            title: Text('From my games'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      if (onImportPgnFile != null)
-        const PopupMenuItem(
-          value: 'import_pgn_file',
-          child: ListTile(
-            leading: Icon(Icons.file_open, size: 20),
-            title: Text('Import PGN file'),
-            trailing:
-                Text('I', style: TextStyle(fontSize: 12, color: Colors.grey)),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      if (onImportPgnPaste != null)
-        const PopupMenuItem(
-          value: 'import_pgn_paste',
-          child: ListTile(
-            leading: Icon(Icons.paste, size: 20),
-            title: Text('Paste PGN'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-    ];
-
-    void onSelected(String value) {
-      switch (value) {
-        case 'generate':
-          onGenerate?.call();
-        case 'from_games':
-          onBuildFromGames?.call();
-        case 'import_pgn_file':
-          onImportPgnFile?.call();
-        case 'import_pgn_paste':
-          onImportPgnPaste?.call();
-      }
-    }
-
-    if (compact) {
-      // One toolbar slot: sparkles icon opens the full add-lines menu.
-      return Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: Center(
-          child: PopupMenuButton<String>(
-            icon: const Icon(Icons.auto_awesome, size: 20),
-            tooltip: 'Add lines',
-            onSelected: onSelected,
-            itemBuilder: (_) => menuItems,
-          ),
-        ),
-      );
-    }
+    final dropdown = DropdownButtonHideUnderline(
+      child: DropdownButton<String>(
+        value: selectedId,
+        isDense: true,
+        borderRadius: BorderRadius.circular(8),
+        onChanged: (value) => setState(() => _selectedId = value),
+        selectedItemBuilder: (_) => [
+          for (final a in actions)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(a.icon, size: 18),
+                const SizedBox(width: 6),
+                Text(a.label),
+              ],
+            ),
+        ],
+        items: [
+          for (final a in actions)
+            DropdownMenuItem(
+              value: a.id,
+              child: Row(
+                children: [
+                  Icon(a.icon, size: 20),
+                  const SizedBox(width: 10),
+                  Text(a.label),
+                  if (a.shortcut != null) ...[
+                    const SizedBox(width: 12),
+                    Text(
+                      a.shortcut!,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
 
     return Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -374,24 +396,31 @@ class RepertoireAddLinesButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ShortcutTooltip(
-              description: 'Generate repertoire',
-              shortcut: 'G',
-              child: TextButton.icon(
-                onPressed: onGenerate,
-                icon: const Icon(Icons.auto_awesome, size: 18),
-                label: const Text('Generate'),
+            Tooltip(
+              message: 'Choose action',
+              waitDuration: const Duration(milliseconds: 600),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: theme.dividerColor),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: dropdown,
               ),
             ),
-            if (showMenu)
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.arrow_drop_down, size: 20),
-                tooltip: 'More ways to add lines',
-                padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 28, minHeight: 28),
-                onSelected: onSelected,
-                itemBuilder: (_) => menuItems,
+            const SizedBox(width: 6),
+            if (compact)
+              IconButton.filledTonal(
+                tooltip: 'Run ${selected.label}',
+                onPressed: selected.onRun,
+                iconSize: 18,
+                icon: const Icon(Icons.play_arrow),
+              )
+            else
+              FilledButton.tonalIcon(
+                onPressed: selected.onRun,
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: const Text('Run'),
               ),
           ],
         ),
@@ -427,30 +456,6 @@ class RepertoireTrainButton extends StatelessWidget {
                 icon: const Icon(Icons.school, size: 18),
                 label: const Text('Train'),
               ),
-      ),
-    );
-  }
-}
-
-class RepertoireAuditButton extends StatelessWidget {
-  const RepertoireAuditButton({
-    super.key,
-    required this.onPressed,
-  });
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Center(
-        child: ShortcutIconButton(
-          description: 'Audit repertoire',
-          shortcut: 'A',
-          onPressed: onPressed,
-          icon: const Icon(Icons.policy_outlined, size: 20),
-        ),
       ),
     );
   }
