@@ -57,10 +57,10 @@ abstract class StorageService {
 
   // ── Tactics set management ───────────────────────────────────────────────
 
-  /// Lists all `.csv` files in the tactics-sets directory.
+  /// Lists all `.pgn` set files in the tactics-sets directory.
   ///
-  /// Each entry contains the file path, display name, position count, and
-  /// last-modified timestamp.
+  /// Each entry contains the file path, display name, position (game) count,
+  /// and last-modified timestamp.
   Future<List<TacticsSetMetadata>> listTacticsSets();
 
   /// Returns the absolute path for a tactics-set file with the given [name].
@@ -69,10 +69,16 @@ abstract class StorageService {
   /// Deletes the tactics-set file with the given [name].  No-op if missing.
   Future<void> deleteTacticsSet(String name);
 
-  /// One-time migration: if no set files exist yet and the legacy root-level
-  /// `tactics_positions.csv` does, move its content into [defaultSetName] and
-  /// rename the legacy file to `.bak` (kept as a rollback).  Returns `true`
-  /// if a migration ran.
+  /// Lists legacy `.csv` set files still in the tactics-sets directory
+  /// (pre-PGN installs).  The database converts these to `.pgn` on load.
+  Future<List<({String name, String path})>> listLegacyTacticsCsvSets();
+
+  /// One-time migration: if no set files exist yet (neither `.pgn` nor
+  /// legacy `.csv`) and the legacy root-level `tactics_positions.csv` does,
+  /// move its content into a `.csv` set file named [defaultSetName] and
+  /// rename the legacy file to `.bak` (kept as a rollback).  The database's
+  /// CSV→PGN set migration then converts it.  Returns `true` if a migration
+  /// ran.
   Future<bool> migrateLegacyTacticsCsv(String defaultSetName);
 
   // ── Domain-specific helpers ──────────────────────────────────────────────

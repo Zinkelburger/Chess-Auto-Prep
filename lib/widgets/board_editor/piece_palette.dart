@@ -26,13 +26,22 @@ class PiecePalette extends StatelessWidget {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _paletteRow(context, Side.white),
-            const SizedBox(height: 4),
-            _paletteRow(context, Side.black),
-          ],
+        // Lighter backdrop than the app background so the black pieces
+        // stand out.
+        return Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _paletteRow(context, Side.white),
+              const SizedBox(height: 4),
+              _paletteRow(context, Side.black),
+            ],
+          ),
         );
       },
     );

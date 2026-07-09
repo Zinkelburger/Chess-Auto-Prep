@@ -35,18 +35,35 @@ class _StudyScreenState extends State<StudyScreen> {
   final FocusNode _focusNode = FocusNode();
   final GlobalKey<MoveInputWidgetState> _moveInputKey = GlobalKey();
 
+  /// Inline study rename (click the name in the app bar).
+  bool _editingName = false;
+  final TextEditingController _nameEditController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _study = context.read<StudyController>();
     _study.addListener(_onStudyChanged);
     _study.refreshStudyList();
+
+    // "Edit set in Study" hook: open the pending file (may live outside the
+    // studies directory, e.g. a tactics set).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final appState = context.read<AppState>();
+      final path = appState.pendingStudyPath;
+      if (path != null) {
+        appState.pendingStudyPath = null;
+        _study.openStudy(path);
+      }
+    });
   }
 
   @override
   void dispose() {
     _study.removeListener(_onStudyChanged);
     _focusNode.dispose();
+    _nameEditController.dispose();
     super.dispose();
   }
 
@@ -142,6 +159,28 @@ class _StudyScreenState extends State<StudyScreen> {
     }
   }
 
+  void _startNameEdit() {
+    _nameEditController.text = _study.doc.name;
+    _nameEditController.selection = TextSelection(
+        baseOffset: 0, extentOffset: _nameEditController.text.length);
+    setState(() => _editingName = true);
+  }
+
+  Future<void> _commitNameEdit() async {
+    if (!_editingName) return;
+    setState(() => _editingName = false);
+    final safe = _nameEditController.text
+        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .trim();
+    if (safe.isEmpty || safe == _study.doc.name) return;
+    try {
+      await _study.renameStudy(safe);
+    } on ArgumentError catch (e) {
+      if (mounted) showAppSnackBar(context, e.message as String, isError: true);
+    }
+  }
+
   Future<void> _deleteCurrentStudy() async {
     final path = _study.doc.filePath;
     if (path == null) return;
@@ -215,19 +254,37 @@ class _StudyScreenState extends State<StudyScreen> {
     _study.setChapterStartingPosition(position.fen);
   }
 
-  /// Load the current chapter into the PGN viewer and quiz the whole line
-  /// via solitaire ("a study is positions we get quizzed on").
-  Future<void> _trainChapter() async {
-    if (!_study.chapterHasMoves) {
-      showAppSnackBar(context, 'This chapter has no moves to train yet.',
+  /// Review this study (or just the current chapter) as flashcards in the
+  /// Tactics trainer: each chapter becomes one card (starting FEN → mainline,
+  /// comments shown as the note), optionally with every variation expanded
+  /// into an extra card starting at its branch point.  Review stats write
+  /// back into this file's headers.
+  Future<void> _review(
+      {required bool wholeStudy, required bool includeVariations}) async {
+    final path = _study.doc.filePath;
+    if (path == null) {
+      showAppSnackBar(context, 'Save the study first (create it by name).',
+          isError: true);
+      return;
+    }
+    final hasMoves = wholeStudy
+        ? _study.doc.chapters.any((c) => c.tree.roots.isNotEmpty)
+        : _study.chapterHasMoves;
+    if (!hasMoves) {
+      showAppSnackBar(
+          context,
+          wholeStudy
+              ? 'No chapters with moves to review yet.'
+              : 'This chapter has no moves to review yet.',
           isError: true);
       return;
     }
     await _study.flushSave();
     if (!mounted) return;
-    context.read<AppState>().switchToSolitaireTraining(
-          pgn: _study.chapterPgn(),
-          asWhite: !_study.flipped,
+    context.read<AppState>().switchToTacticsReview(
+          path: path,
+          gameIndex: wholeStudy ? null : _study.chapterIndex,
+          includeVariations: includeVariations,
         );
   }
 
@@ -284,10 +341,24 @@ class _StudyScreenState extends State<StudyScreen> {
             tooltip: 'Board editor — set chapter starting position',
             onPressed: _editChapterPosition,
           ),
-          IconButton(
-            icon: const Icon(Icons.school_outlined, size: 20),
-            tooltip: 'Train this chapter (solitaire)',
-            onPressed: _trainChapter,
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.style_outlined, size: 20),
+            tooltip: 'Review as flashcards',
+            onSelected: (action) => _review(
+              wholeStudy: action.startsWith('study'),
+              includeVariations: action.endsWith('vars'),
+            ),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'chapter', child: Text('Review chapter')),
+              PopupMenuItem(
+                  value: 'chapter_vars',
+                  child: Text('Review chapter + variations')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'study', child: Text('Review study')),
+              PopupMenuItem(
+                  value: 'study_vars',
+                  child: Text('Review study + variations')),
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.swap_vert, size: 20),
@@ -334,32 +405,78 @@ class _StudyScreenState extends State<StudyScreen> {
   Widget _buildStudyPicker() {
     final theme = Theme.of(context);
     final current = _study.doc;
+    // A file opened from outside the studies directory ("Edit set in
+    // Study") is not in availableStudies and keeps its own name.
+    final knownPaths = _study.availableStudies.map((s) => s.filePath).toSet();
+    final isExternal =
+        current.filePath != null && !knownPaths.contains(current.filePath);
+    final canRename = current.filePath != null && !isExternal;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 260),
-          child: DropdownButton<String>(
-            value: current.filePath,
-            hint: Text(current.name, style: theme.textTheme.bodyMedium),
-            isDense: true,
-            underline: const SizedBox.shrink(),
-            items: [
-              for (final study in _study.availableStudies)
-                DropdownMenuItem(
-                  value: study.filePath,
+        if (_editingName)
+          SizedBox(
+            width: 220,
+            child: Focus(
+              onKeyEvent: (node, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.escape) {
+                  setState(() => _editingName = false); // cancel
+                  _focusNode.requestFocus();
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              onFocusChange: (focused) {
+                if (!focused) _commitNameEdit();
+              },
+              child: TextField(
+                controller: _nameEditController,
+                autofocus: true,
+                style: theme.textTheme.bodyMedium,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                ),
+                onSubmitted: (_) => _commitNameEdit(),
+              ),
+            ),
+          )
+        else
+          Tooltip(
+            message: canRename ? 'Click to rename' : '',
+            child: InkWell(
+              onTap: canRename ? _startNameEdit : null,
+              borderRadius: BorderRadius.circular(4),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 260),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                   child: Text(
-                    study.name,
+                    isExternal ? '${current.name} (set)' : current.name,
+                    style: theme.textTheme.bodyMedium,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-            ],
-            onChanged: (path) {
-              if (path != null && path != current.filePath) {
-                _study.openStudy(path);
-              }
-            },
+              ),
+            ),
           ),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.arrow_drop_down, size: 22),
+          tooltip: 'Switch study',
+          onSelected: (path) {
+            if (path != current.filePath) _study.openStudy(path);
+          },
+          itemBuilder: (_) => [
+            for (final study in _study.availableStudies)
+              PopupMenuItem(
+                value: study.filePath,
+                child: Text(study.name, overflow: TextOverflow.ellipsis),
+              ),
+          ],
         ),
         IconButton(
           icon: const Icon(Icons.add, size: 20),
@@ -411,8 +528,6 @@ class _StudyScreenState extends State<StudyScreen> {
               onMove: (move) => _study.playSan(move.san),
             ),
           ),
-          const SizedBox(height: 8),
-          InlineEngineBar(fen: _study.currentPosition.fen),
         ],
       ),
     );
@@ -422,6 +537,9 @@ class _StudyScreenState extends State<StudyScreen> {
     final theme = Theme.of(context);
     return Column(
       children: [
+        // Engine on top of the side pane — same spot as the PGN viewer.
+        InlineEngineBar(fen: _study.currentPosition.fen),
+        const Divider(height: 1),
         // Chapter bar
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
@@ -462,8 +580,8 @@ class _StudyScreenState extends State<StudyScreen> {
                 tooltip: 'Manage chapters',
                 onSelected: (action) {
                   switch (action) {
-                    case 'train':
-                      _trainChapter();
+                    case 'review':
+                      _review(wholeStudy: false, includeVariations: false);
                     case 'add_from_position':
                       _addChapter(fromPosition: true);
                     case 'set_position':
@@ -476,7 +594,7 @@ class _StudyScreenState extends State<StudyScreen> {
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(
-                      value: 'train', child: Text('Train this chapter')),
+                      value: 'review', child: Text('Review this chapter')),
                   PopupMenuDivider(),
                   PopupMenuItem(
                       value: 'add_from_position',

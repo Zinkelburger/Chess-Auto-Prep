@@ -40,13 +40,21 @@ class AppState extends ChangeNotifier {
   /// by the tactics panel on activation.
   String? pendingPuzzleSeedFen;
 
-  /// PGN content pending solitaire training in the PGN viewer ("Train this
-  /// chapter" in Study mode). Consumed by the viewer screen on activation.
-  String? pendingSolitairePgn;
+  /// PGN file to open as an external puzzle set ("Review as flashcards" in
+  /// Study mode).  Set before switching to tactics mode; consumed by the
+  /// tactics panel on activation.
+  String? pendingReviewPgnPath;
 
-  /// Board orientation for the pending solitaire session (true = user guesses
-  /// White's moves).
-  bool pendingSolitaireAsWhite = true;
+  /// Restrict the pending review to one PGN game (chapter) index;
+  /// null = the whole file.
+  int? pendingReviewGameIndex;
+
+  /// Whether the pending review expands variations into extra cards.
+  bool pendingReviewIncludeVariations = false;
+
+  /// PGN file to open for editing in Study mode ("Edit set in Study" in
+  /// Tactics mode).  Consumed by the study screen on activation.
+  String? pendingStudyPath;
 
   AppMode get currentMode => _currentMode;
   Position get currentPosition => _currentPosition;
@@ -79,12 +87,27 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Switch to the PGN viewer and start solitaire on [pgn] ("Train this
-  /// chapter" in Study mode).
-  void switchToSolitaireTraining({required String pgn, required bool asWhite}) {
-    pendingSolitairePgn = pgn;
-    pendingSolitaireAsWhite = asWhite;
-    _currentMode = AppMode.pgnViewer;
+  /// Switch to tactics mode reviewing the PGN file at [path] as a puzzle set
+  /// ("Review as flashcards" in Study mode).  [gameIndex] restricts the
+  /// review to one chapter; [includeVariations] expands variations into
+  /// extra cards.
+  void switchToTacticsReview({
+    required String path,
+    int? gameIndex,
+    bool includeVariations = false,
+  }) {
+    pendingReviewPgnPath = path;
+    pendingReviewGameIndex = gameIndex;
+    pendingReviewIncludeVariations = includeVariations;
+    _currentMode = AppMode.tactics;
+    notifyListeners();
+  }
+
+  /// Switch to Study mode with the PGN file at [path] opened for editing
+  /// ("Edit set in Study" in Tactics mode).
+  void switchToStudyEdit({required String path}) {
+    pendingStudyPath = path;
+    _currentMode = AppMode.study;
     notifyListeners();
   }
 

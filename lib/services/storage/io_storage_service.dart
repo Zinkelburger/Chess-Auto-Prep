@@ -176,12 +176,14 @@ class IOStorageService implements StorageService {
     final dir = await AppPaths.tacticsSetsDirectory(create: true);
     final entries = <TacticsSetMetadata>[];
     await for (final entity in dir.list()) {
-      if (!entity.path.toLowerCase().endsWith('.csv')) continue;
+      if (!entity.path.toLowerCase().endsWith('.pgn')) continue;
       final stat = await entity.stat();
+      final content = await readTextFile(File(entity.path));
       entries.add(TacticsSetMetadata(
         filePath: entity.path,
         name: p.basenameWithoutExtension(entity.path),
-        positionCount: await _countCsvDataRows(File(entity.path)),
+        positionCount:
+            content.trim().isEmpty ? 0 : pgn.countPgnGames(content),
         lastModified: stat.modified,
       ));
     }
@@ -190,24 +192,10 @@ class IOStorageService implements StorageService {
     return entries;
   }
 
-  /// Non-empty line count minus the header row.  Cheap approximation used
-  /// for the set picker; the database parses rows properly on load.
-  Future<int> _countCsvDataRows(File file) async {
-    try {
-      final content = await readTextFile(file);
-      final lines =
-          content.split('\n').where((l) => l.trim().isNotEmpty).length;
-      return lines > 0 ? lines - 1 : 0;
-    } catch (e) {
-      log.e('Error counting rows in ${file.path}: $e');
-      return 0;
-    }
-  }
-
   @override
   Future<String> tacticsSetPath(String name) async {
     final dir = await AppPaths.tacticsSetsDirectory(create: true);
-    return p.join(dir.path, '$name.csv');
+    return p.join(dir.path, '$name.pgn');
   }
 
   @override
@@ -216,10 +204,22 @@ class IOStorageService implements StorageService {
   }
 
   @override
+  Future<List<({String name, String path})>> listLegacyTacticsCsvSets() async {
+    final dir = await AppPaths.tacticsSetsDirectory(create: true);
+    final entries = <({String name, String path})>[];
+    await for (final entity in dir.list()) {
+      if (!entity.path.toLowerCase().endsWith('.csv')) continue;
+      entries.add(
+          (name: p.basenameWithoutExtension(entity.path), path: entity.path));
+    }
+    return entries;
+  }
+
+  @override
   Future<bool> migrateLegacyTacticsCsv(String defaultSetName) async {
     try {
-      final existingSets = await listTacticsSets();
-      if (existingSets.isNotEmpty) return false;
+      if ((await listTacticsSets()).isNotEmpty) return false;
+      if ((await listLegacyTacticsCsvSets()).isNotEmpty) return false;
 
       final legacyFile = await _getFile(_tacticsCsvFileName);
       if (!await legacyFile.exists()) return false;
@@ -227,7 +227,9 @@ class IOStorageService implements StorageService {
       final content = await readTextFile(legacyFile);
       if (content.trim().isEmpty) return false;
 
-      await writeFile(await tacticsSetPath(defaultSetName), content);
+      // Land it as a .csv set; the database's CSV→PGN migration converts it.
+      final dir = await AppPaths.tacticsSetsDirectory(create: true);
+      await writeFile(p.join(dir.path, '$defaultSetName.csv'), content);
       await legacyFile.rename('${legacyFile.path}.bak');
       log.i('Migrated legacy tactics CSV into set "$defaultSetName"');
       return true;

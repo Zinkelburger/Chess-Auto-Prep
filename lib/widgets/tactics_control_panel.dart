@@ -126,6 +126,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         _appStateRef = appState;
         appState.addListener(_onAppStateForPuzzleSeed);
         _consumePendingPuzzleSeed(appState);
+        _consumePendingReviewPath(appState);
       }
     });
 
@@ -245,7 +246,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   void _onAppStateForPuzzleSeed() {
     final appState = _appStateRef;
-    if (appState != null) _consumePendingPuzzleSeed(appState);
+    if (appState != null) {
+      _consumePendingPuzzleSeed(appState);
+      _consumePendingReviewPath(appState);
+    }
   }
 
   void _consumePendingPuzzleSeed(AppState appState) {
@@ -255,6 +259,40 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // Defer navigation out of the notify/build phase.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _openPuzzleCreator(seedFen: seed);
+    });
+  }
+
+  /// "Review as puzzles" hook: open a study (or any PGN file) as an
+  /// external set.  Stats save back into the file's headers; content edits
+  /// belong in Study mode.
+  void _consumePendingReviewPath(AppState appState) {
+    final path = appState.pendingReviewPgnPath;
+    if (path == null || !mounted) return;
+    final gameIndex = appState.pendingReviewGameIndex;
+    final includeVariations = appState.pendingReviewIncludeVariations;
+    appState.pendingReviewPgnPath = null;
+    appState.pendingReviewGameIndex = null;
+    appState.pendingReviewIncludeVariations = false;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      _session.endSession();
+      final count = await _database.openExternalSet(
+        path,
+        gameIndex: gameIndex,
+        includeVariations: includeVariations,
+      );
+      if (!mounted) return;
+      _resetBoardToStart();
+      setState(() {});
+      showAppSnackBar(
+        context,
+        count > 0
+            ? 'Reviewing "${_database.activeSetName}" as puzzles '
+                '($count position${count == 1 ? '' : 's'}).'
+            : 'No reviewable chapters in "${_database.activeSetName}" — '
+                'chapters need moves to train.',
+        isError: count == 0,
+      );
     });
   }
 
@@ -442,6 +480,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   _renameActiveSet();
                 case 'delete':
                   _deleteActiveSet();
+                case 'edit_study':
+                  _editActiveSetInStudy();
                 case 'export_csv':
                   _exportActiveSet(TacticsExportFormat.csv);
                 case 'export_pgn':
@@ -450,20 +490,33 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   _importIntoActiveSet();
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'new', child: Text('New set…')),
-              PopupMenuItem(value: 'rename', child: Text('Rename set…')),
-              PopupMenuItem(value: 'delete', child: Text('Delete set…')),
-              PopupMenuDivider(),
-              PopupMenuItem(
-                  value: 'export_csv',
-                  child: Text('Export set (CSV, lossless)…')),
-              PopupMenuItem(
-                  value: 'export_pgn',
-                  child: Text('Export set (PGN, shareable)…')),
-              PopupMenuItem(
-                  value: 'import', child: Text('Import puzzles into set…')),
-            ],
+            itemBuilder: (_) {
+              // An external set (a study reviewed as puzzles) is not a file
+              // this mode owns: renaming/deleting/importing act on named set
+              // files, so they are hidden for it.  Content edits happen in
+              // Study mode for both kinds.
+              final external = _database.isExternalSet;
+              return [
+                const PopupMenuItem(value: 'new', child: Text('New set…')),
+                if (!external) ...const [
+                  PopupMenuItem(value: 'rename', child: Text('Rename set…')),
+                  PopupMenuItem(value: 'delete', child: Text('Delete set…')),
+                ],
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                    value: 'edit_study',
+                    child: Text('Edit set in Study…')),
+                const PopupMenuItem(
+                    value: 'export_pgn', child: Text('Export set (PGN)…')),
+                const PopupMenuItem(
+                    value: 'export_csv',
+                    child: Text('Export set (CSV, legacy)…')),
+                if (!external)
+                  const PopupMenuItem(
+                      value: 'import',
+                      child: Text('Import puzzles into set…')),
+              ];
+            },
           ),
         ],
       ),
@@ -493,8 +546,24 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     return proceed ?? false;
   }
 
+  /// Open the active set's PGN file in Study mode for rich editing
+  /// (variations, comments, board editor).  Same file, different view.
+  Future<void> _editActiveSetInStudy() async {
+    final path = await _database.activeSetFilePath();
+    if (!await StorageFactory.instance.fileExists(path)) {
+      if (mounted) {
+        showAppSnackBar(
+            context, 'This set has no file yet — add a puzzle first.',
+            isError: true);
+      }
+      return;
+    }
+    if (!mounted) return;
+    context.read<AppState>().switchToStudyEdit(path: path);
+  }
+
   Future<void> _switchSet(String name) async {
-    if (name == _database.activeSetName) return;
+    if (name == _database.activeSetName && !_database.isExternalSet) return;
     if (!await _confirmEndSession()) return;
     _session.endSession();
     await _database.switchSet(name);
@@ -899,7 +968,22 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
   }
 
+  /// External sets (studies under review) only persist *stats* back to
+  /// their file — structural changes (delete/edit/clear) would silently
+  /// revert on reload, so they are redirected to Study mode.
+  bool _blockStructuralEditOnExternalSet() {
+    if (!_database.isExternalSet) return false;
+    showAppSnackBar(
+      context,
+      'This is a study under review — edit its content in Study mode '
+      '(set menu → Edit set in Study).',
+      isError: true,
+    );
+    return true;
+  }
+
   Future<void> _batchDeleteTactics(List<int> sortedDescIndices) async {
+    if (_blockStructuralEditOnExternalSet()) return;
     final count = sortedDescIndices.length;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -941,6 +1025,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _deleteTactic(int index) async {
+    if (_blockStructuralEditOnExternalSet()) return;
     final pos = _database.positions[index];
     final confirmed = await showDialog<bool>(
       context: context,
@@ -970,6 +1055,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   void _confirmClearDatabase() async {
+    if (_blockStructuralEditOnExternalSet()) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1002,6 +1088,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   Future<void> _showEditDialog(int index) async {
+    if (_blockStructuralEditOnExternalSet()) return;
     final updated = await TacticsEditDialog.show(
       context,
       position: _database.positions[index],

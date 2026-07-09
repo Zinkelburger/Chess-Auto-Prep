@@ -107,6 +107,27 @@ class StudyController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Rename the current study — moves its file to `<newName>.pgn`.  Only
+  /// studies inside the studies directory can be renamed (an external file
+  /// opened via "Edit set in Study" keeps its own name; rename the set in
+  /// Tactics mode instead).  Throws [ArgumentError] when the name is taken.
+  Future<void> renameStudy(String newName) async {
+    final oldPath = _doc.filePath;
+    if (oldPath == null) return;
+    if (!availableStudies.any((s) => s.filePath == oldPath)) return;
+    final storage = StorageFactory.instance;
+    final newPath = await storage.studyFilePath(newName);
+    if (newPath == oldPath) return;
+    if (await storage.fileExists(newPath)) {
+      throw ArgumentError('A study named "$newName" already exists');
+    }
+    await flushSave();
+    await storage.renameFile(oldPath, newPath);
+    _doc.filePath = newPath;
+    _doc.name = newName;
+    await refreshStudyList();
+  }
+
   Future<void> deleteStudy(String path) async {
     await StorageFactory.instance.deleteFile(path);
     if (_doc.filePath == path) {
@@ -180,9 +201,6 @@ class StudyController extends ChangeNotifier {
 
   /// Whether the current chapter has any moves (something to train).
   bool get chapterHasMoves => tree.roots.isNotEmpty;
-
-  /// The current chapter serialized as a standalone PGN game.
-  String chapterPgn() => chapter.toPgn();
 
   void deleteChapter(int index) {
     if (_doc.chapters.length <= 1) return; // keep at least one
