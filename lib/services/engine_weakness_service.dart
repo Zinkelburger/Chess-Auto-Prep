@@ -2,8 +2,8 @@
 /// "weaknesses" — positions the player reaches frequently that are
 /// objectively bad according to the engine.
 ///
-/// Uses [StockfishPool] for worker management with fixed 64 MB hash
-/// per worker.
+/// Uses [StockfishPool] for worker management with a fixed per-worker hash
+/// (see [kPoolHashPerWorkerMb]).
 library;
 
 import 'package:flutter/foundation.dart';
@@ -74,19 +74,17 @@ class EngineWeaknessService {
     final total = positions.length;
     final results = <EngineWeaknessResult>[];
     final failedPositions = <String>[];
-    int nextIndex = 0;
     int completed = 0;
     int failedCount = 0;
 
     onProgress?.call(0, total);
 
-    Future<void> evalPosition(int idx) async {
-      final entry = positions[idx];
+    Future<void> evalPosition(EvalWorker worker, _PositionToEval entry) async {
       final node = entry.node;
       final fullFen = expandFen(node.fen);
 
       try {
-        final eval = await _pool.evaluateFen(fullFen, depth);
+        final eval = await worker.evaluateFen(fullFen, depth);
         if (_cancelled) return;
 
         final whiteToMove = isWhiteToMove(fullFen);
@@ -136,18 +134,11 @@ class EngineWeaknessService {
       onProgress?.call(completed, total);
     }
 
-    final concurrency = _pool.workerCount.clamp(1, positions.length);
-    Future<void> workerLoop() async {
-      while (!_cancelled) {
-        final idx = nextIndex++;
-        if (idx >= positions.length) return;
-        await evalPosition(idx);
-      }
-    }
-
-    await Future.wait([
-      for (int i = 0; i < concurrency; i++) workerLoop(),
-    ]);
+    await _pool.forEachParallel<_PositionToEval>(
+      positions,
+      evalPosition,
+      stopWhen: () => _cancelled,
+    );
 
     if (!_cancelled && results.isEmpty && failedCount > 0) {
       throw Exception(
