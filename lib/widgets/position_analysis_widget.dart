@@ -12,16 +12,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
-import 'package:provider/provider.dart';
 
-import '../core/app_state.dart';
 import '../models/position_analysis.dart';
 import '../models/opening_tree.dart';
 import '../utils/fen_utils.dart';
 import '../widgets/fen_list_widget.dart';
 import '../widgets/games_list_widget.dart';
 import '../widgets/opening_tree_widget.dart';
-import 'board_editor/board_editor_dialog.dart';
 import 'chess_board_widget.dart';
 import 'pgn_viewer_widget.dart';
 import 'pgn_with_engine.dart';
@@ -158,63 +155,21 @@ class _PositionAnalysisWidgetState extends State<PositionAnalysisWidget>
   }
 
   Widget _buildBoardPane() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 4, left: 8, right: 8),
-          child: Wrap(
-            alignment: WrapAlignment.end,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              TextButton.icon(
-                icon: const Icon(Icons.extension, size: 16),
-                label: const Text('Make puzzle'),
-                onPressed: () {
-                  context.read<AppState>().switchToPuzzleCreator(
-                        seedFen: (_currentBoard ?? _startingPosition).fen,
-                      );
-                },
-              ),
-              TextButton.icon(
-                icon: const Icon(Icons.dashboard_customize, size: 16),
-                label: const Text('Set up position'),
-                onPressed: _openBoardEditor,
-              ),
-            ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: AspectRatio(
+          aspectRatio: 1.0,
+          child: ChessBoardWidget(
+            position: _currentBoard ?? _startingPosition,
+            flipped: widget.playerIsWhite != null
+                ? !widget.playerIsWhite!
+                : false,
+            onMove: _onBoardMove,
           ),
         ),
-        Expanded(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: AspectRatio(
-                aspectRatio: 1.0,
-                child: ChessBoardWidget(
-                  position: _currentBoard ?? _startingPosition,
-                  flipped: widget.playerIsWhite != null
-                      ? !widget.playerIsWhite!
-                      : false,
-                  onMove: _onBoardMove,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
-  }
-
-  /// Open the board editor seeded with the current position; navigating to
-  /// the result keeps the board/FEN-list/PGN panes in sync (games list will
-  /// simply be empty for an off-tree position).
-  Future<void> _openBoardEditor() async {
-    final position = await BoardEditorDialog.show(
-      context,
-      initialFen: (_currentBoard ?? _startingPosition).fen,
-    );
-    if (position == null || !mounted) return;
-    widget.openingTree?.navigateToFen(position.fen);
-    _navigateTo(position.fen);
   }
 
   Widget _buildStackedPanels() {

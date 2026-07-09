@@ -189,7 +189,8 @@ class _EngineWeaknessConfigDialogState
                   Padding(
                     padding: const EdgeInsets.only(left: 48, top: 4),
                     child: Text(
-                      'Last downloaded ${widget.playerInfo!.downloadTimeAgo}',
+                      'Last downloaded ${widget.playerInfo!.downloadTimeAgo}'
+                      ' · fetched ${widget.playerInfo!.rangeDescription}',
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.grey[500],

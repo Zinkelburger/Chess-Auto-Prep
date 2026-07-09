@@ -225,7 +225,7 @@ class _PlayerSelectionScreenState extends State<PlayerSelectionScreen> {
                       children: [
                         Icon(Icons.refresh, size: 20),
                         SizedBox(width: 12),
-                        Text('Re-download'),
+                        Text('Re-download (last 6 months)'),
                       ],
                     ),
                   ),
