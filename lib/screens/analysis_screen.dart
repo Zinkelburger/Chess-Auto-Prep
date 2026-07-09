@@ -8,6 +8,8 @@ library;
 ///
 /// Layout: toolbar row  ➜  three-panel [PositionAnalysisWidget].
 
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -17,7 +19,6 @@ import '../models/position_analysis.dart';
 import '../utils/fen_utils.dart';
 import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
-import '../services/pgn_parsing_service.dart';
 import '../services/engine_weakness_service.dart';
 import '../services/unified_analysis_builder.dart';
 import '../widgets/engine_weakness_dialog.dart';
@@ -36,8 +37,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   final AnalysisGamesService _gamesService = AnalysisGamesService();
 
   AnalysisPlayerInfo? _currentPlayer;
+
+  // Displayed colour's analysis/tree, plus both colours kept in memory so a
+  // colour switch is an instant swap instead of a rebuild.
   PositionAnalysis? _positionAnalysis;
   OpeningTree? _openingTree;
+  PositionAnalysis? _whiteAnalysis;
+  PositionAnalysis? _blackAnalysis;
   OpeningTree? _whiteTree;
   OpeningTree? _blackTree;
   bool _isAnalyzing = false;
@@ -150,8 +156,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             if (selection.isEmpty) return;
             final chosen = selection.first;
             if (chosen != _playerIsWhite) {
-              setState(() => _playerIsWhite = chosen);
-              _loadColorAnalysis();
+              _selectColor(chosen);
             }
           },
           style: const ButtonStyle(
@@ -224,7 +229,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       openingTree: _openingTree,
       playerIsWhite: _playerIsWhite,
       isLoading: _isAnalyzing,
-      onAnalyze: _loadColorAnalysis,
+      onAnalyze: _analyzeBothColors,
       hasEvals: _hasEvals,
     );
   }
@@ -255,15 +260,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       _cancelEvalAnalysis();
       setState(() {
         _currentPlayer = result;
-        _positionAnalysis = null;
-        _openingTree = null;
-        _whiteTree = null;
-        _blackTree = null;
-        _playerIsWhite = true;
-        _engineEvals = [];
+        _resetAnalysisState();
       });
       await _analyzeBothColors();
     }
+  }
+
+  /// Clear all per-player analysis state (both colours + evals).
+  void _resetAnalysisState() {
+    _positionAnalysis = null;
+    _openingTree = null;
+    _whiteAnalysis = null;
+    _blackAnalysis = null;
+    _whiteTree = null;
+    _blackTree = null;
+    _playerIsWhite = true;
+    _engineEvals = [];
   }
 
   // ── Re-download games ───────────────────────────────────────────
@@ -340,12 +352,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
       setState(() {
         _currentPlayer = updated;
-        _positionAnalysis = null;
-        _openingTree = null;
-        _whiteTree = null;
-        _blackTree = null;
-        _playerIsWhite = true;
-        _engineEvals = [];
+        _resetAnalysisState();
       });
 
       return true;
@@ -520,6 +527,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   // ── Analysis ─────────────────────────────────────────────────────
 
+  /// Switch the displayed colour. Both colours are kept in memory after a
+  /// build, so this is normally an instant swap; the rebuild fallback only
+  /// runs if the last build never completed.
+  void _selectColor(bool isWhite) {
+    setState(() {
+      _playerIsWhite = isWhite;
+      _positionAnalysis = isWhite ? _whiteAnalysis : _blackAnalysis;
+      _openingTree = isWhite ? _whiteTree : _blackTree;
+    });
+    if (_positionAnalysis == null && !_isAnalyzing) {
+      _analyzeBothColors();
+    } else {
+      _mergeEvalsIntoAnalysis();
+    }
+  }
+
   Future<void> _analyzeBothColors() async {
     final player = _currentPlayer;
     if (player == null) return;
@@ -532,97 +555,62 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     });
 
     try {
-      final pgnList = await _loadPgnList(player);
-      if (pgnList == null) return;
+      final pgnPath = await _gamesService.analysisPgnPath(
+          player.platform, player.username);
+      final whiteCachePath = await _gamesService.cachedAnalysisPath(
+          player.platform, player.username, true);
+      final blackCachePath = await _gamesService.cachedAnalysisPath(
+          player.platform, player.username, false);
 
-      if (mounted) {
-        setState(() => _analysisPhase = 'Analyzing as White');
+      if (!await File(pgnPath).exists()) {
+        if (mounted) {
+          _showError(
+            'No games found. Please re-download games for this player.',
+          );
+          setState(() => _isAnalyzing = false);
+        }
+        return;
       }
 
-      // Launch both colours concurrently in separate isolates.
-      // Only White reports progress (Black runs silently in background).
-      final whiteFuture =
-          _buildAnalysis(player, pgnList, true, onProgress: _onBuildProgress);
-      final blackFuture = _buildAnalysis(player, pgnList, false);
-
-      final (whiteAnalysis, whiteTree) = await whiteFuture;
-
-      if (mounted) {
-        setState(() {
-          _positionAnalysis = whiteAnalysis;
-          _openingTree = whiteTree;
-          _whiteTree = whiteTree;
-          _playerIsWhite = true;
-          _isAnalyzing = true;
-          _analysisPhase = 'Analyzing as Black';
-          _analysisCurrent = 0;
-          _analysisTotal = 0;
-        });
-      }
-
-      // Load saved engine evals and merge while Black finishes.
-      await _loadEngineEvals();
-
-      final (_, blackTree) = await blackFuture;
-      if (mounted) {
-        setState(() {
-          _blackTree = blackTree;
-          _isAnalyzing = false;
-          _analysisPhase = '';
-          _analysisCurrent = 0;
-          _analysisTotal = 0;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        _showError('Failed to analyze positions: $e');
-        setState(() {
-          _isAnalyzing = false;
-          _analysisPhase = '';
-        });
-      }
-    }
-  }
-
-  Future<void> _loadColorAnalysis() async {
-    final player = _currentPlayer;
-    if (player == null) return;
-
-    final colorName = _playerIsWhite ? 'White' : 'Black';
-    setState(() {
-      _isAnalyzing = true;
-      _analysisPhase = 'Analyzing as $colorName';
-      _analysisCurrent = 0;
-      _analysisTotal = 0;
-    });
-
-    try {
-      final pgnList = await _loadPgnList(player);
-      if (pgnList == null) return;
-
-      final (analysis, tree) = await _buildAnalysis(
-        player,
-        pgnList,
-        _playerIsWhite,
-        onProgress: _onBuildProgress,
+      // Fast path: both colours restored from the stat-validated disk cache.
+      var bundle = await UnifiedAnalysisBuilder.loadCachedBundle(
+        pgnFilePath: pgnPath,
+        whiteCachePath: whiteCachePath,
+        blackCachePath: blackCachePath,
       );
 
-      if (mounted) {
-        setState(() {
-          _positionAnalysis = analysis;
-          _openingTree = tree;
-          if (_playerIsWhite) {
-            _whiteTree = tree;
-          } else {
-            _blackTree = tree;
-          }
-          _isAnalyzing = false;
-          _analysisPhase = '';
-          _analysisCurrent = 0;
-          _analysisTotal = 0;
-        });
-        _mergeEvalsIntoAnalysis();
+      // Slow path: one isolate reads the file and builds both colours in a
+      // single pass, persisting the cache for next time.
+      if (bundle == null) {
+        if (mounted) {
+          setState(() => _analysisPhase = 'Analyzing games');
+        }
+        bundle = await UnifiedAnalysisBuilder.buildBothInIsolate(
+          pgnFilePath: pgnPath,
+          username: player.username,
+          onProgress: _onBuildProgress,
+          whiteCachePath: whiteCachePath,
+          blackCachePath: blackCachePath,
+        );
       }
+
+      if (!mounted) return;
+      final result = bundle;
+      setState(() {
+        _whiteAnalysis = result.whiteAnalysis;
+        _blackAnalysis = result.blackAnalysis;
+        _whiteTree = result.whiteTree;
+        _blackTree = result.blackTree;
+        _positionAnalysis = _playerIsWhite ? _whiteAnalysis : _blackAnalysis;
+        _openingTree = _playerIsWhite ? _whiteTree : _blackTree;
+        _isAnalyzing = false;
+        _analysisPhase = '';
+        _analysisCurrent = 0;
+        _analysisTotal = 0;
+      });
+
+      // Merge previously computed engine evals into the displayed analysis.
+      await _loadEngineEvals();
     } catch (e) {
       if (mounted) {
         _showError('Failed to analyze positions: $e');
@@ -632,33 +620,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         });
       }
     }
-  }
-
-  Future<List<String>?> _loadPgnList(AnalysisPlayerInfo player) async {
-    final pgns = await _gamesService.loadAnalysisGames(
-      player.platform,
-      player.username,
-    );
-    if (pgns == null || pgns.isEmpty) {
-      if (mounted) {
-        _showError(
-          'No games found. Please re-download games for this player.',
-        );
-        setState(() => _isAnalyzing = false);
-      }
-      return null;
-    }
-
-    final pgnList = splitPgnIntoGames(pgns);
-    if (pgnList.isEmpty) {
-      if (mounted) {
-        _showError('No valid games found in downloaded data.');
-        setState(() => _isAnalyzing = false);
-      }
-      return null;
-    }
-
-    return pgnList;
   }
 
   void _onBuildProgress(int current, int total) {
@@ -668,34 +629,6 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _analysisTotal = total;
       });
     }
-  }
-
-  Future<(PositionAnalysis, OpeningTree)> _buildAnalysis(
-    AnalysisPlayerInfo player,
-    List<String> pgnList,
-    bool isWhite, {
-    void Function(int current, int total)? onProgress,
-  }) async {
-    final (analysis, tree) = await UnifiedAnalysisBuilder.buildInIsolate(
-      pgnList: pgnList,
-      username: player.username,
-      isWhite: isWhite,
-      onProgress: onProgress,
-    );
-
-    // Cache the FEN-map analysis for fast reload next time.
-    try {
-      await _gamesService.saveCachedAnalysis(
-        player.platform,
-        player.username,
-        isWhite,
-        analysis.toJson(),
-      );
-    } catch (e) {
-      debugPrint('[AnalysisScreen] Failed to persist/load analysis: $e');
-    }
-
-    return (analysis, tree);
   }
 
   void _showError(String message) {

@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../models/analysis_player_info.dart';
 import 'lichess_api_client.dart';
 import 'pgn_parsing_service.dart';
+import '../utils/atomic_file.dart';
 import '../utils/file_text_reader.dart';
 import 'storage/app_paths.dart';
 
@@ -17,28 +18,6 @@ import 'storage/app_paths.dart';
 ///   • `<key>.json` – [AnalysisPlayerInfo] metadata
 ///   • `<key>_white_analysis.json` / `<key>_black_analysis.json` – cached analysis
 class AnalysisGamesService {
-  Future<void> _writeAtomically(File target, String content) async {
-    final parent = target.parent;
-    if (!await parent.exists()) {
-      await parent.create(recursive: true);
-    }
-    final tmp = File(
-      p.join(
-        parent.path,
-        '.${p.basename(target.path)}.${DateTime.now().microsecondsSinceEpoch}.tmp',
-      ),
-    );
-    await tmp.writeAsString(content, flush: true);
-    try {
-      await tmp.rename(target.path);
-    } on FileSystemException {
-      if (await target.exists()) {
-        await target.delete();
-      }
-      await tmp.rename(target.path);
-    }
-  }
-
   /// Resolve (and create if needed) the on-disk directory for analysis data.
   Future<Directory> _getAnalysisDirectory() async {
     return AppPaths.analysisGamesDirectory(create: true);
@@ -218,7 +197,7 @@ class AnalysisGamesService {
     final gameCount = countPgnGames(pgns);
 
     // Write PGN.
-    await _writeAtomically(File(p.join(directory.path, '$key.pgn')), pgns);
+    await writeTextFileAtomically(File(p.join(directory.path, '$key.pgn')), pgns);
 
     // Write metadata.
     final info = AnalysisPlayerInfo(
@@ -229,7 +208,7 @@ class AnalysisGamesService {
       downloadedAt: DateTime.now(),
       gameCount: gameCount,
     );
-    await _writeAtomically(
+    await writeTextFileAtomically(
       File(p.join(directory.path, '$key.json')),
       json.encode(info.toJson()),
     );
@@ -240,15 +219,39 @@ class AnalysisGamesService {
     return info;
   }
 
+  String _playerKey(String platform, String username) {
+    return AnalysisPlayerInfo(platform: platform, username: username)
+        .playerKey;
+  }
+
+  /// Absolute path of the raw PGN file for [username] on [platform].
+  ///
+  /// Exposed so the analysis build isolate can read the file itself instead
+  /// of the UI thread loading and splitting the whole corpus.
+  Future<String> analysisPgnPath(String platform, String username) async {
+    final directory = await _getAnalysisDirectory();
+    return p.join(directory.path, '${_playerKey(platform, username)}.pgn');
+  }
+
+  /// Absolute path of the cached-analysis file for one colour, written and
+  /// read by [UnifiedAnalysisBuilder]'s isolate entry points.
+  Future<String> cachedAnalysisPath(
+    String platform,
+    String username,
+    bool isWhite,
+  ) async {
+    final directory = await _getAnalysisDirectory();
+    final colour = isWhite ? 'white' : 'black';
+    return p.join(
+      directory.path,
+      '${_playerKey(platform, username)}_${colour}_analysis.json',
+    );
+  }
+
   /// Load the raw PGN for [username] on [platform]. Returns `null` on miss.
   Future<String?> loadAnalysisGames(String platform, String username) async {
     try {
-      final directory = await _getAnalysisDirectory();
-      final key = AnalysisPlayerInfo(
-        platform: platform,
-        username: username,
-      ).playerKey;
-      final file = File(p.join(directory.path, '$key.pgn'));
+      final file = File(await analysisPgnPath(platform, username));
       return await file.exists() ? readTextFile(file) : null;
     } catch (_) {
       return null;
@@ -259,24 +262,29 @@ class AnalysisGamesService {
   Future<List<AnalysisPlayerInfo>> getAllCachedPlayers() async {
     try {
       final directory = await _getAnalysisDirectory();
-      final players = <AnalysisPlayerInfo>[];
+      final metadataFiles = <File>[
+        await for (final entity in directory.list())
+          if (entity is File &&
+              entity.path.endsWith('.json') &&
+              !entity.path.contains('_analysis.json'))
+            entity,
+      ];
 
-      await for (final entity in directory.list()) {
-        if (entity is File &&
-            entity.path.endsWith('.json') &&
-            !entity.path.contains('_analysis.json')) {
+      final players = (await Future.wait(
+        metadataFiles.map((file) async {
           try {
-            final content = await entity.readAsString();
-            players.add(
-              AnalysisPlayerInfo.fromJson(
-                json.decode(content) as Map<String, dynamic>,
-              ),
+            final content = await file.readAsString();
+            return AnalysisPlayerInfo.fromJson(
+              json.decode(content) as Map<String, dynamic>,
             );
           } catch (_) {
             // Skip corrupt metadata files.
+            return null;
           }
-        }
-      }
+        }),
+      ))
+          .whereType<AnalysisPlayerInfo>()
+          .toList();
 
       players.sort((a, b) {
         final aDate = a.downloadedAt;
@@ -312,61 +320,17 @@ class AnalysisGamesService {
   }
 
   // ── Analysis cache ─────────────────────────────────────────────────
-
-  /// Persist computed analysis for a player + colour.
-  Future<void> saveCachedAnalysis(
-    String platform,
-    String username,
-    bool isWhite,
-    Map<String, dynamic> analysisData,
-  ) async {
-    final directory = await _getAnalysisDirectory();
-    final key = AnalysisPlayerInfo(
-      platform: platform,
-      username: username,
-    ).playerKey;
-    final colour = isWhite ? 'white' : 'black';
-
-    await _writeAtomically(
-      File(p.join(directory.path, '${key}_${colour}_analysis.json')),
-      json.encode(analysisData),
-    );
-  }
-
-  /// Load cached analysis for a player + colour. Returns `null` on miss.
-  Future<Map<String, dynamic>?> loadCachedAnalysis(
-    String platform,
-    String username,
-    bool isWhite,
-  ) async {
-    try {
-      final directory = await _getAnalysisDirectory();
-      final key = AnalysisPlayerInfo(
-        platform: platform,
-        username: username,
-      ).playerKey;
-      final colour = isWhite ? 'white' : 'black';
-      final file =
-          File(p.join(directory.path, '${key}_${colour}_analysis.json'));
-
-      if (!await file.exists()) return null;
-      return json.decode(await file.readAsString()) as Map<String, dynamic>;
-    } catch (_) {
-      return null;
-    }
-  }
+  //
+  // The cache files themselves are written and read by
+  // [UnifiedAnalysisBuilder]'s isolate entry points (via
+  // [cachedAnalysisPath]) so the JSON work never touches the UI thread;
+  // this service only handles invalidation.
 
   /// Remove cached analysis for both colours (e.g. after a re-download).
   Future<void> clearCachedAnalysis(String platform, String username) async {
-    final directory = await _getAnalysisDirectory();
-    final key = AnalysisPlayerInfo(
-      platform: platform,
-      username: username,
-    ).playerKey;
-
-    for (final colour in ['white', 'black']) {
+    for (final isWhite in [true, false]) {
       final file =
-          File(p.join(directory.path, '${key}_${colour}_analysis.json'));
+          File(await cachedAnalysisPath(platform, username, isWhite));
       if (await file.exists()) await file.delete();
     }
   }
@@ -385,7 +349,7 @@ class AnalysisGamesService {
       username: username,
     ).playerKey;
 
-    await _writeAtomically(
+    await writeTextFileAtomically(
       File(p.join(directory.path, '${key}_engine_evals.json')),
       json.encode(evals),
     );

@@ -8,30 +8,13 @@ import 'dart:io' as io;
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 import '../models/repertoire_line.dart';
+import '../utils/atomic_file.dart';
 import '../utils/file_text_reader.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'pgn_parsing_service.dart' as pgn;
 import 'storage/storage_factory.dart';
 
 class RepertoireService {
-  Future<void> _writeAtomically(io.File target, String content) async {
-    final parent = target.parent;
-    if (!await parent.exists()) {
-      await parent.create(recursive: true);
-    }
-    final tmp =
-        io.File('${target.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
-    await tmp.writeAsString(content, flush: true);
-    try {
-      await tmp.rename(target.path);
-    } on io.FileSystemException {
-      if (await target.exists()) {
-        await target.delete();
-      }
-      await tmp.rename(target.path);
-    }
-  }
-
   /// Parses a repertoire PGN file and extracts all trainable lines.
   ///
   /// If [trainingColor] is provided ('white' or 'black') it is used directly;
@@ -412,7 +395,7 @@ class RepertoireService {
 
     mutate(games, matchIndex);
 
-    await _writeAtomically(file, _reassembleDocument(document.preamble, games));
+    await writeTextFileAtomically(file, _reassembleDocument(document.preamble, games));
     return true;
   }
 
@@ -585,7 +568,7 @@ class RepertoireService {
     }
     sections.addAll(games);
     final updated = '${sections.join('\n\n').trimRight()}\n';
-    await _writeAtomically(file, updated);
+    await writeTextFileAtomically(file, updated);
     return (success: true, updatedContent: updated);
   }
 

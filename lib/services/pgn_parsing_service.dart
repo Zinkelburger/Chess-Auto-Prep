@@ -41,8 +41,19 @@ List<String> splitPgnIntoGames(String content) {
   final games = <String>[];
   final lines = content.split('\n');
 
-  var currentGame = '';
+  // A StringBuffer keeps accumulation linear; the old `currentGame += line`
+  // re-copied the whole game on every line, which made splitting large
+  // multi-game files superlinear (same issue countPgnGamesFast works around).
+  final currentGame = StringBuffer();
   var inGame = false;
+
+  void flushGame() {
+    final text = currentGame.toString();
+    if (text.trim().isNotEmpty) {
+      games.add(text);
+    }
+    currentGame.clear();
+  }
 
   for (final line in lines) {
     final trimmedLine = line.trim();
@@ -55,25 +66,23 @@ List<String> splitPgnIntoGames(String content) {
     }
 
     if (trimmedLine.startsWith('[Event')) {
-      if (inGame && currentGame.trim().isNotEmpty) {
-        games.add(currentGame);
+      if (inGame) {
+        flushGame();
       }
-      currentGame = '$line\n';
+      currentGame.write('$line\n');
       inGame = true;
     } else if (inGame) {
-      currentGame += '$line\n';
+      currentGame.write('$line\n');
     } else if (trimmedLine.isNotEmpty) {
-      if (!inGame) {
-        currentGame =
-            '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n';
-        inGame = true;
-      }
-      currentGame += '$line\n';
+      currentGame.write(
+          '[Event "Repertoire Line"]\n[White "Training"]\n[Black "Me"]\n\n');
+      inGame = true;
+      currentGame.write('$line\n');
     }
   }
 
-  if (inGame && currentGame.trim().isNotEmpty) {
-    games.add(currentGame);
+  if (inGame) {
+    flushGame();
   }
 
   return games;

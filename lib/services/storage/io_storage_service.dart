@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import '../../utils/atomic_file.dart';
 import '../../utils/file_text_reader.dart';
 import '../../models/repertoire_metadata.dart';
 import '../../models/tactics_set_metadata.dart';
@@ -54,32 +55,6 @@ class IOStorageService implements StorageService {
     return AppPaths.documentsFile(path);
   }
 
-  /// Best-effort atomic replace: write to a temp file, then rename.
-  Future<void> _writeAtomically(File target, String content) async {
-    final parent = target.parent;
-    if (!await parent.exists()) {
-      await parent.create(recursive: true);
-    }
-
-    final tmp = File(
-      p.join(
-        parent.path,
-        '.${p.basename(target.path)}.${DateTime.now().microsecondsSinceEpoch}.tmp',
-      ),
-    );
-
-    await tmp.writeAsString(content, flush: true);
-
-    try {
-      await tmp.rename(target.path);
-    } on FileSystemException {
-      if (await target.exists()) {
-        await target.delete();
-      }
-      await tmp.rename(target.path);
-    }
-  }
-
   // ── Generic file I/O ─────────────────────────────────────────────────────
 
   @override
@@ -95,7 +70,7 @@ class IOStorageService implements StorageService {
 
   @override
   Future<void> writeFile(String path, String content) async {
-    await _writeAtomically(await _resolveFile(path), content);
+    await writeTextFileAtomically(await _resolveFile(path), content);
   }
 
   @override
@@ -290,7 +265,7 @@ class IOStorageService implements StorageService {
   Future<void> saveTacticsCsv(String csvContent) async {
     try {
       final file = await _getFile(_tacticsCsvFileName);
-      await _writeAtomically(file, csvContent);
+      await writeTextFileAtomically(file, csvContent);
     } catch (e) {
       log.e('Error saving tactics CSV: $e');
     }
@@ -314,7 +289,7 @@ class IOStorageService implements StorageService {
   Future<void> saveAnalyzedGameIds(List<String> ids) async {
     try {
       final file = await _getFile(_analyzedGamesFileName);
-      await _writeAtomically(file, ids.join('\n'));
+      await writeTextFileAtomically(file, ids.join('\n'));
     } catch (e) {
       log.e('Error saving analyzed game IDs: $e');
     }
@@ -337,7 +312,7 @@ class IOStorageService implements StorageService {
   Future<void> saveImportedPgns(String pgnContent) async {
     try {
       final file = await _getFile(_importedGamesFileName);
-      await _writeAtomically(file, pgnContent);
+      await writeTextFileAtomically(file, pgnContent);
     } catch (e) {
       log.e('Error saving imported PGNs: $e');
     }
@@ -366,7 +341,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoirePgn(String filename, String content) async {
     try {
       final file = await _getFile(filename);
-      await _writeAtomically(file, content);
+      await writeTextFileAtomically(file, content);
     } catch (e) {
       log.e('Error saving repertoire PGN: $e');
     }
@@ -389,7 +364,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoireReviewsCsv(String csvContent) async {
     try {
       final file = await _getFile(_repertoireReviewsFileName);
-      await _writeAtomically(file, csvContent);
+      await writeTextFileAtomically(file, csvContent);
     } catch (e) {
       log.e('Error saving repertoire reviews CSV: $e');
     }
@@ -412,7 +387,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoireReviewHistoryCsv(String csvContent) async {
     try {
       final file = await _getFile(_repertoireReviewHistoryFileName);
-      await _writeAtomically(file, csvContent);
+      await writeTextFileAtomically(file, csvContent);
     } catch (e) {
       log.e('Error saving repertoire review history CSV: $e');
     }
@@ -435,7 +410,7 @@ class IOStorageService implements StorageService {
   Future<void> saveRepertoireMoveProgressCsv(String csvContent) async {
     try {
       final file = await _getFile(_repertoireMoveProgressFileName);
-      await _writeAtomically(file, csvContent);
+      await writeTextFileAtomically(file, csvContent);
     } catch (e) {
       log.e('Error saving repertoire move progress CSV: $e');
     }
