@@ -6,6 +6,7 @@ import '../../core/repertoire_controller.dart';
 import '../../models/repertoire_line.dart';
 import '../../services/training/training_phase.dart';
 import '../../services/training/training_session_controller.dart';
+import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../../widgets/chess_board_widget.dart';
 import 'move_input_widget.dart';
 
@@ -154,6 +155,9 @@ class _MoveLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isOpponent = display.isOpponentMove;
+    // Scraped PGNs carry engine tokens and stray double spaces — show prose only.
+    final comment =
+        display.comment == null ? '' : filterDisplayComment(display.comment!);
     final sideLabel = display.isWhiteMove ? "White's" : "Black's";
     final headerText = isOpponent
         ? '$sideLabel move ${display.notation}'
@@ -172,12 +176,10 @@ class _MoveLine extends StatelessWidget {
             fontSize: 14,
           ),
         ),
-        if (showComment &&
-            display.comment != null &&
-            display.comment!.isNotEmpty) ...[
+        if (showComment && comment.isNotEmpty) ...[
           const SizedBox(height: 6),
           Text(
-            display.comment!,
+            comment,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
               height: 1.4,
