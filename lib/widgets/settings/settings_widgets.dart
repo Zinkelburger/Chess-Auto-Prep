@@ -218,6 +218,10 @@ class SettingsSliderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Clamp defensively: persisted values (or a machine with fewer cores than
+    // when prefs were written) can fall outside [min, max], and Slider asserts
+    // on out-of-range values and on divisions == 0.
+    final clamped = value.clamp(min, max);
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
@@ -228,11 +232,11 @@ class SettingsSliderTile extends StatelessWidget {
           ),
           Expanded(
             child: Slider(
-              value: value.toDouble(),
+              value: clamped.toDouble(),
               min: min.toDouble(),
               max: max.toDouble(),
-              divisions: divisions ?? (max - min),
-              label: '$value',
+              divisions: divisions ?? (max > min ? max - min : 1),
+              label: '$clamped',
               onChanged: (v) => onChanged(v.round()),
             ),
           ),

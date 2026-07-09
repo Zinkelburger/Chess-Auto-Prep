@@ -34,6 +34,7 @@ import '../widgets/layout/repertoire_status_bar.dart';
 import '../widgets/repertoire_list_body.dart';
 import '../widgets/repertoire_lines_browser.dart';
 import '../constants/ui_breakpoints.dart';
+import '../widgets/repertoire/repertoire_empty_state.dart';
 import '../widgets/repertoire/repertoire_toolbar.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/repertoire/repertoire_shortcuts.dart';
@@ -114,6 +115,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   bool get _isDraftActive => _draftController.isActive;
 
   String? _lastRepertoireId;
+
+  /// Session-sticky: once the empty-state cards are dismissed (explicitly or
+  /// by playing a move), show the normal tools column even at the root.
+  bool _emptyStateDismissed = false;
 
   final FocusNode _focusNode = FocusNode();
   final GlobalKey _linesPreviewStackKey = GlobalKey();
@@ -276,6 +281,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         _ephemeralFen = null;
       }
 
+      // Once the user starts playing moves, keep the tools column for the
+      // rest of the session — the empty-state cards must not pop back in
+      // when they navigate to the root position.
+      if (_controller.currentMoveSequence.isNotEmpty) {
+        _emptyStateDismissed = true;
+      }
+
       if (_controller.currentRepertoire != null && !_controller.isLoading) {
         final currentId = _controller.currentRepertoire!.filePath;
         if (currentId != _lastRepertoireId) {
@@ -284,6 +296,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           _boardFlipped = !_controller.isRepertoireWhite;
           _generationController.clearTree();
           _coverageController.clear();
+          _emptyStateDismissed = false;
           EngineSettings.instance.probabilityStartMoves = _controller.rootMoves;
           _loadTraps(currentId);
           newRepertoireId = currentId;
@@ -691,8 +704,28 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     );
   }
 
+  /// Empty repertoire, nothing in flight, and no moves played yet: the tab
+  /// contents would all be blank, so show the add-lines entry points instead.
+  /// Sticky once dismissed (see [_emptyStateDismissed]) so the layout doesn't
+  /// flip back and forth as the user navigates.
+  bool get _showEmptyState =>
+      !_emptyStateDismissed &&
+      _controller.repertoireLines.isEmpty &&
+      _controller.currentMoveSequence.isEmpty &&
+      !_generationController.isGenerating &&
+      !_isDraftActive;
+
   /// Unified right pane: tabs + nav. Engine bars live inside PGN tab only.
   Widget _buildToolsColumn() {
+    if (_showEmptyState) {
+      return RepertoireEmptyState(
+        onGenerate: _openGenerationDialog,
+        onBuildFromGames: _buildFromGames,
+        onImportPgnFile: _importPgnFromFile,
+        onImportPgnPaste: _importPgnFromPaste,
+        onDismiss: () => setState(() => _emptyStateDismissed = true),
+      );
+    }
     return Column(
       children: [
         _buildToolsTabBar(),

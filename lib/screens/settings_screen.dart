@@ -1,6 +1,11 @@
 /// Centralized settings screen accessible from the app bar.
 ///
-/// Groups all persistent engine configuration in a single scrollable view.
+/// Holds machine-level configuration only: engine resources and the offline
+/// eval database. Analysis behavior (depth, MultiPV, expectimax tuning, panel
+/// visibility) lives on the gear next to each analysis surface — see
+/// analysis_settings_sheet.dart — so every knob sits where its effect is
+/// visible.
+///
 /// Uses [ListenableBuilder] so it always reflects the latest singleton state,
 /// even if another UI surface mutates [EngineSettings] concurrently.
 library;
@@ -10,7 +15,6 @@ import 'package:provider/provider.dart';
 
 import '../models/engine_settings.dart';
 import '../models/eval_database_settings.dart';
-import '../models/settings_enums.dart';
 import '../services/engine/engine_lifecycle.dart';
 import '../utils/system_info.dart';
 import '../widgets/eval_database_settings_panel.dart';
@@ -25,19 +29,6 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   final _engine = EngineSettings.instance;
-  late final TextEditingController _probStartCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _probStartCtrl = TextEditingController(text: _engine.probabilityStartMoves);
-  }
-
-  @override
-  void dispose() {
-    _probStartCtrl.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,18 +50,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               // ── Engine ───────────────────────────────────
               _buildEngineSection(cores),
-              const SizedBox(height: 8),
-
-              // ── Opponent Model ───────────────────────────
-              _buildOpponentModelSection(),
-              const SizedBox(height: 8),
-
-              // ── Expectimax ───────────────────────────────
-              _buildExpectimaxSection(),
-              const SizedBox(height: 8),
-
-              // ── Cumulative Probability ───────────────────
-              _buildProbabilitySection(),
               const SizedBox(height: 8),
 
               // ── Database ─────────────────────────────────
@@ -138,30 +117,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onChanged: (v) => _engine.workers = v,
         ),
         SettingsSliderTile(
-          label: 'Search depth',
-          tooltip: 'Search depth per position. Higher = more accurate.',
-          value: _engine.depth,
-          min: 1,
-          max: 40,
-          onChanged: (v) => _engine.depth = v,
-        ),
-        SettingsSliderTile(
-          label: 'MultiPV',
-          tooltip: 'How many top moves Stockfish evaluates in parallel.',
-          value: _engine.multiPv,
-          min: 1,
-          max: 10,
-          onChanged: (v) => _engine.multiPv = v,
-        ),
-        SettingsSliderTile(
-          label: 'Max analysis moves',
-          tooltip: 'Maximum total moves displayed in the analysis table.',
-          value: _engine.maxAnalysisMoves,
-          min: 3,
-          max: 20,
-          onChanged: (v) => _engine.maxAnalysisMoves = v,
-        ),
-        SettingsSliderTile(
           label: 'Inline threads (PGN viewer)',
           tooltip: 'Threads for the single-process inline engine bar.',
           value: _engine.inlineThreads,
@@ -179,120 +134,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           divisions: 18,
           onChanged: (v) => _engine.maiaElo = v,
         ),
-        SettingsSwitchTile(
-          label: 'Show Stockfish analysis',
-          tooltip: 'Run Stockfish in the background to evaluate moves.',
-          value: _engine.showStockfish,
-          onChanged: (v) => _engine.showStockfish = v,
-        ),
-        // Panel/column visibility toggles live on the PGN analysis settings
-        // sheet only — see analysis_settings_sheet.dart.
-      ],
-    );
-  }
-
-  // ── Opponent model section ─────────────────────────────────────────────────
-
-  Widget _buildOpponentModelSection() {
-    return SettingsGroup(
-      title: 'Opponent Model',
-      icon: Icons.people,
-      children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Mothballed: only Maia prediction source available.
-              SettingsDropdown<OpponentProbabilityMode>(
-                label: 'Prediction source',
-                tooltip: 'Maia: neural net trained on human games.',
-                value: _engine.opponentProbabilityMode,
-                items: const [
-                  (OpponentProbabilityMode.maia, 'Maia neural net'),
-                ],
-                onChanged: (v) {
-                  if (v != null) _engine.opponentProbabilityMode = v;
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Expectimax section ─────────────────────────────────────────────────────
-
-  Widget _buildExpectimaxSection() {
-    return SettingsGroup(
-      title: 'On-the-fly Expectimax',
-      icon: Icons.analytics,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: Text(
-            'Live expectimax in the repertoire analysis dock — not used during '
-            'main tree generation (see Engine Depth on the Generation tab).',
+            'Search depth, number of lines, expectimax tuning, and panel '
+            'visibility live on the gear (⚙) next to each analysis panel.',
             style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-          ),
-        ),
-        SettingsSliderTile(
-          label: 'On-the-fly search depth',
-          tooltip:
-              'Max plies to search from the current position when the position '
-              'is not already in the generated tree.',
-          value: _engine.onTheFlyMaxDepth,
-          min: 1,
-          max: 12,
-          onChanged: (v) => _engine.onTheFlyMaxDepth = v,
-        ),
-        SettingsSliderTile(
-          label: 'On-the-fly eval depth',
-          tooltip: 'Stockfish search depth for leaf evaluations during live '
-              'expectimax (default 12). Separate from Engine Depth on the '
-              'Generation tab.',
-          value: _engine.expectimaxEvalDepth,
-          min: 6,
-          max: 20,
-          onChanged: (v) => _engine.expectimaxEvalDepth = v,
-        ),
-        SettingsSliderTile(
-          label: 'Our MultiPV',
-          tooltip: 'Candidate moves for our side at each node.',
-          value: _engine.expectimaxOurMultipv,
-          min: 1,
-          max: 8,
-          onChanged: (v) => _engine.expectimaxOurMultipv = v,
-        ),
-        SettingsSliderTile(
-          label: 'Max eval loss (cp)',
-          tooltip: 'Prune opponent moves losing more than this.',
-          value: _engine.expectimaxMaxEvalLoss,
-          min: 20,
-          max: 300,
-          divisions: 28,
-          onChanged: (v) => _engine.expectimaxMaxEvalLoss = v,
-        ),
-      ],
-    );
-  }
-
-  // ── Cumulative probability section ─────────────────────────────────────────
-
-  Widget _buildProbabilitySection() {
-    return SettingsGroup(
-      title: 'Cumulative Line Probability',
-      icon: Icons.timeline,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: SettingsTextFieldRow(
-            label: 'Starting position (moves)',
-            tooltip: 'Enter opening moves (e.g. "1. e4 e5 2. Nf3") so the '
-                'cumulative % starts at 100% from that position.',
-            controller: _probStartCtrl,
-            onSubmitted: (v) => _engine.probabilityStartMoves = v.trim(),
           ),
         ),
       ],
@@ -327,8 +174,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             builder: (ctx) => AlertDialog(
               title: const Text('Reset Settings'),
               content: const Text(
-                'Reset all engine, opponent, expectimax, probability, and '
-                'database settings to factory defaults?',
+                'Reset all engine, analysis, and database settings to '
+                'factory defaults?',
               ),
               actions: [
                 TextButton(
@@ -339,7 +186,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onPressed: () async {
                     _engine.resetToDefaults();
                     await EvalDatabaseSettings.instance.resetToDefaults();
-                    _probStartCtrl.text = _engine.probabilityStartMoves;
                     if (ctx.mounted) Navigator.pop(ctx);
                   },
                   child: const Text('Reset'),
