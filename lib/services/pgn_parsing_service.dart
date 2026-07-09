@@ -100,6 +100,46 @@ int countPgnGames(String pgnContent) {
   return splitPgnIntoGames(stripBom(pgnContent)).length;
 }
 
+/// Fast game count for list/metadata display.
+///
+/// Counts `[Event ` headers at line starts by scanning the string in place,
+/// without accumulating per-game substrings the way [splitPgnIntoGames] does
+/// (its repeated `currentGame += line` is superlinear, so counting a library
+/// of large PGNs that way is what makes the picker screens sluggish).
+///
+/// All repertoire / study / tactics files this app writes are `[Event`-
+/// delimited, so the count is exact for them; header-less move-only text is
+/// still reported as a single game, matching [splitPgnIntoGames].
+int countPgnGamesFast(String pgnContent) {
+  final content = stripBom(pgnContent);
+  const marker = '[Event ';
+  var count = 0;
+  var from = 0;
+  while (true) {
+    final idx = content.indexOf(marker, from);
+    if (idx < 0) break;
+    // Only headers that begin a line (start of file or just after a newline)
+    // start a new game — mirrors `trimmedLine.startsWith('[Event')`.
+    if (idx == 0 || content[idx - 1] == '\n') count++;
+    from = idx + marker.length;
+  }
+  if (count > 0) return count;
+
+  // No headers: header-less move text counts as one game if it has any
+  // non-comment, non-blank content.
+  for (final line in content.split('\n')) {
+    final t = line.trim();
+    if (t.isEmpty ||
+        t.startsWith('//') ||
+        t.startsWith('{') ||
+        t.startsWith('%')) {
+      continue;
+    }
+    return 1;
+  }
+  return 0;
+}
+
 // ── Position replay ──────────────────────────────────────────────────────────
 
 /// Determines the starting [Position] for a parsed PGN game.
