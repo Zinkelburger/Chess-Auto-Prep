@@ -202,6 +202,11 @@ String setPvInComment(String comment, List<String> pv) {
 // ---------------------------------------------------------------------------
 
 final _clkRe = RegExp(r'\[%clk [^\]]+\]');
+
+/// Catch-all for any `[%tag ...]` annotation token (e.g. Lichess `[%cal]`
+/// arrows / `[%csl]` circles) so scraped PGNs never leak raw tokens into
+/// displayed prose.
+final _anyPgnTokenRe = RegExp(r'\[%[a-zA-Z]+[^\]]*\]');
 final _scoreArrowRe = RegExp(r'\([+-]?\d+\.?\d*\s*[→-]\s*[+-]?\d+\.?\d*\)');
 final _classificationRe = RegExp(
     r'(Inaccuracy|Mistake|Blunder|Good move|Excellent move|Best move)\.[^.]*\.');
@@ -221,6 +226,7 @@ String filterDisplayComment(String comment) {
   comment = comment.replaceAll(importanceCommentRe, '');
   comment = comment.replaceAll(pvCommentRe, '');
   comment = comment.replaceAll(maiaTopCommentRe, '');
+  comment = comment.replaceAll(_anyPgnTokenRe, '');
   comment = comment.replaceAll(_scoreArrowRe, '');
   comment = comment.replaceAll(_classificationRe, '');
   comment = comment.replaceAll(_wasBestRe, '');
@@ -302,6 +308,7 @@ String stripEngineTokens(String comment) {
   comment = comment.replaceAll(importanceCommentRe, '');
   comment = comment.replaceAll(pvCommentRe, '');
   comment = comment.replaceAll(maiaTopCommentRe, '');
+  comment = comment.replaceAll(_anyPgnTokenRe, '');
   comment = comment.replaceAll(_scoreArrowRe, '');
   comment = comment.replaceAll(_classificationRe, '');
   comment = comment.replaceAll(_wasBestRe, '');

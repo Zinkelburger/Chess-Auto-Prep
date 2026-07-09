@@ -54,7 +54,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   final FocusNode _focusNode = FocusNode(debugLabel: 'PgnViewerScreen');
 
   bool _editMode = false;
-  bool _protectOriginal = true;
 
   @override
   void initState() {
@@ -420,12 +419,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   void _toggleEditMode() {
-    setState(() {
-      _editMode = !_editMode;
-      if (_editMode) {
-        _protectOriginal = true; // always reset on activation
-      }
-    });
+    setState(() => _editMode = !_editMode);
   }
 
   Future<void> _openGameSearch() async {
@@ -685,12 +679,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       ),
       actions: [
         if (_controller.filteredGames.isNotEmpty) ...[
+          // Study modes: opening tree, amend, solitaire.
           if (!_controller.isSolitaireMode) ...[
-            IconButton(
-              onPressed: _exportSlice,
-              icon: const Icon(Icons.file_upload_outlined, size: 20),
-              tooltip: 'Export filtered games (Ctrl+E)',
-            ),
             IconButton(
               onPressed: _controller.toggleOpeningTree,
               icon: Icon(
@@ -710,8 +700,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 color:
                     _editMode ? Theme.of(context).colorScheme.primary : null,
               ),
-              tooltip: 'Edit PGN — annotate & extend the mainline, '
-                  'saved to disk (A)',
+              tooltip: 'Amend game — moves, marks & comments '
+                  'are saved to the file (A)',
             ),
           ],
           IconButton(
@@ -725,19 +715,29 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             ),
             tooltip: 'Solitaire mode (Shift+S)',
           ),
-          IconButton(
-            onPressed: _controller.toggleBoardFlipped,
-            icon: const Icon(Icons.swap_vert, size: 20),
-            tooltip: 'Flip board (F)',
-          ),
-          if (_controller.totalTrophyCount > 0)
+          if (_controller.isSolitaireMode &&
+              _controller.totalTrophyCount > 0)
             IconButton(
               onPressed: () => _showTrophyCabinet(),
               icon: const Icon(Icons.emoji_events, size: 20, color: Colors.amber),
               tooltip: 'Trophies (${_controller.totalTrophyCount})',
             ),
+          _actionDivider(),
+          // Board view: flip, perspective.
+          IconButton(
+            onPressed: _controller.toggleBoardFlipped,
+            icon: const Icon(Icons.swap_vert, size: 20),
+            tooltip: 'Flip board (F)',
+          ),
           if (!_controller.isSolitaireMode) ...[
             PgnPerspectiveButton(controller: _controller),
+            _actionDivider(),
+            // File / misc: export, overflow.
+            IconButton(
+              onPressed: _exportSlice,
+              icon: const Icon(Icons.file_upload_outlined, size: 20),
+              tooltip: 'Export filtered games (Ctrl+E)',
+            ),
             PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, size: 20),
             tooltip: 'More actions',
@@ -785,6 +785,21 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         ],
         const AppModeMenuButton(),
       ],
+    );
+  }
+
+  /// Thin vertical separator between app-bar action groups.
+  Widget _actionDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: SizedBox(
+        height: 22,
+        child: VerticalDivider(
+          width: 1,
+          thickness: 1,
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.5),
+        ),
+      ),
     );
   }
 
@@ -1065,9 +1080,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             pgnText: game.pgnText,
             controller: _pgnWidgetController,
             onPositionChanged: _controller.onPositionChanged,
-            onCommentsChanged: _controller.persistMoveComments,
+            // Bound to this game object: the annotation panel debounces its
+            // saves, which may flush after the user switches games.
+            onCommentsChanged: (movetext) =>
+                _controller.persistMoveCommentsFor(game, movetext),
             editMode: _editMode,
-            protectOriginal: _protectOriginal,
             revealedPly: _controller.isSolitaireMode
                 ? _controller.solitaire.revealedPly
                 : null,
@@ -1233,7 +1250,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           Icon(Icons.edit, size: 14, color: Colors.amber[600]),
           const SizedBox(width: 6),
           Text(
-            'Edit Mode',
+            'Amending',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -1241,26 +1258,16 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             ),
           ),
           const SizedBox(width: 12),
-          SizedBox(
-            height: 20,
-            child: Checkbox(
-              value: _protectOriginal,
-              onChanged: (v) {
-                if (v == false) {
-                  showAppSnackBar(context,
-                      'Changes to the original PGN will be saved to the file.');
-                }
-                setState(() => _protectOriginal = v ?? true);
-              },
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          Expanded(
+            child: Text(
+              'Moves you play are saved to the file · '
+              'click any move, then comment or glyph it below',
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
           ),
-          Text(
-            'Protect original',
-            style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-          ),
-          const Spacer(),
+          const SizedBox(width: 8),
           TextButton.icon(
             onPressed: _toggleEditMode,
             icon: Icon(Icons.close, size: 14, color: Colors.grey[500]),

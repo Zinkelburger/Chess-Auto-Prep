@@ -1,8 +1,8 @@
 /// Movetext rendering for the PGN viewer.
 ///
 /// Renders the mainline + sideline variations + inline/prose comments as a
-/// flowing `Wrap` of `RichText`, plus the edit-mode annotation toolbar and
-/// inline comment editor. Extracted from `pgn_viewer_widget.dart`
+/// flowing `Wrap` of `RichText`, plus the inline comment editor
+/// (right-click → Comment). Extracted from `pgn_viewer_widget.dart`
 /// as a pure leaf view: it takes the move history, the per-ply variation tree,
 /// the current navigation/edit state, and callbacks — it owns no state of its
 /// own (the inline editor keeps its own [TextEditingController]).
@@ -27,8 +27,6 @@ import '../../utils/pgn_comment_utils.dart'
         CommentMove,
         RichSegment,
         RichSegmentType,
-        NagInfo,
-        kMoveNags,
         kSanCorePattern,
         nagSymbol,
         nagColor;
@@ -49,17 +47,19 @@ class PgnMovetextView extends StatelessWidget {
   /// Path into the current variation (empty = on the mainline).
   final List<MoveNode> analysisPath;
 
-  /// Mainline index selected for annotation (edit mode), or null.
-  final int? selectedMoveIndex;
-
   /// Mainline index whose comment is being edited inline, or null.
   final int? editingCommentIndex;
 
-  /// Whether the viewer is in edit mode (annotation toolbar + context menu).
-  final bool editMode;
-
   /// Whether comments can be edited (click a move to edit its comment).
   final bool canEditComments;
+
+  /// Opt-in book-PGN comment formatting (Chessable/Forward Chess exports):
+  /// `@@...@@` rich segments, double-space paragraph breaks, and bordered
+  /// comment blocks. Off by default because ordinary PGNs (e.g. Lichess study
+  /// exports) use stray double spaces inside prose, which this mode would
+  /// misread as paragraph breaks. When off, every comment renders as plain
+  /// flowing prose (moves written in the prose stay clickable when legal).
+  final bool bookFormatting;
 
   /// Starting fullmove number from the FEN (defaults to 1).
   final int startingMoveNumber;
@@ -73,13 +73,9 @@ class PgnMovetextView extends StatelessWidget {
   final Position? startPosition;
 
   final ValueChanged<int> onMainLineMoveClicked;
-  final ValueChanged<int> onSelectMoveForAnnotation;
   final void Function(int moveIndex, Offset globalPosition) onShowMoveContextMenu;
-  final ValueChanged<int> onStartEditingComment;
-  final void Function(int moveIndex, int nagId) onToggleNag;
   final void Function(int moveIndex, String text) onSaveComment;
   final VoidCallback onCancelEditingComment;
-  final VoidCallback onDismissAnnotation;
   final void Function(MoveNode node, int branchPly) onGoToAnalysisNode;
 
   /// Right-click on a variation node (copy line / add to study / delete menu).
@@ -121,21 +117,16 @@ class PgnMovetextView extends StatelessWidget {
     required this.variationsByPly,
     required this.mainLineIndex,
     required this.analysisPath,
-    required this.selectedMoveIndex,
     required this.editingCommentIndex,
-    required this.editMode,
     required this.canEditComments,
+    this.bookFormatting = false,
     this.startingMoveNumber = 1,
     this.startingWhiteTurn = true,
     this.startPosition,
     required this.onMainLineMoveClicked,
-    required this.onSelectMoveForAnnotation,
     required this.onShowMoveContextMenu,
-    required this.onStartEditingComment,
-    required this.onToggleNag,
     required this.onSaveComment,
     required this.onCancelEditingComment,
-    required this.onDismissAnnotation,
     required this.onGoToAnalysisNode,
     this.onShowVariationContextMenu,
     this.revealedPly,
@@ -200,9 +191,14 @@ class PgnMovetextView extends StatelessWidget {
     // Game-level comments (before any moves) — common in book PGNs
     if (game != null && game!.comments.isNotEmpty) {
       for (final comment in game!.comments) {
-        final w = _buildCommentWidget(comment,
+        final rendered = _renderComment(comment,
             anchorPos: _posAt(prefix, 0), anchorPly: 0);
-        if (w != null) children.add(w);
+        if (rendered.block != null) {
+          flushSpans();
+          children.add(rendered.block!);
+        } else if (rendered.spans.isNotEmpty) {
+          spans.addAll(rendered.spans);
+        }
       }
     }
 
@@ -224,11 +220,13 @@ class PgnMovetextView extends StatelessWidget {
       if (moveData.startingComments != null &&
           moveData.startingComments!.isNotEmpty) {
         for (final sc in moveData.startingComments!) {
-          final w = _buildCommentWidget(sc,
+          final rendered = _renderComment(sc,
               anchorPos: _posAt(prefix, i), anchorPly: i);
-          if (w != null) {
+          if (rendered.block != null) {
             flushSpans();
-            children.add(w);
+            children.add(rendered.block!);
+          } else if (rendered.spans.isNotEmpty) {
+            spans.addAll(rendered.spans);
           }
         }
       }
@@ -272,13 +270,8 @@ class PgnMovetextView extends StatelessWidget {
       final isCurrentMove = i == mainLineIndex - 1 && analysisPath.isEmpty;
       final hasBranch = variationsByPly.containsKey(i + 1);
 
-      final inEditMode = editMode;
-      final isSelected = inEditMode && selectedMoveIndex == i;
-
-      // Determine move color: in edit mode, NAG color takes priority
-      final moveNag = (inEditMode &&
-              moveData.nags != null &&
-              moveData.nags!.isNotEmpty)
+      // Determine move color: NAG color takes priority
+      final moveNag = (moveData.nags != null && moveData.nags!.isNotEmpty)
           ? moveData.nags!.firstWhere((n) => n >= 1 && n <= 6, orElse: () => 0)
           : 0;
       final nagMoveColor = moveNag > 0 ? nagColor(moveNag) : null;
@@ -288,10 +281,8 @@ class PgnMovetextView extends StatelessWidget {
           : (nagMoveColor ??
               (hasBranch ? AppColors.lichessDb : AppColors.info));
 
-      // Build SAN + NAG text
-      final nagSuffix = (inEditMode &&
-              moveData.nags != null &&
-              moveData.nags!.isNotEmpty)
+      // Build SAN + NAG text (always shown — annotations survive view mode)
+      final nagSuffix = (moveData.nags != null && moveData.nags!.isNotEmpty)
           ? moveData.nags!.where((n) => n >= 1 && n <= 6).map(nagSymbol).join()
           : '';
 
@@ -301,30 +292,20 @@ class PgnMovetextView extends StatelessWidget {
           baseline: TextBaseline.alphabetic,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () {
-              onMainLineMoveClicked(i);
-              if (inEditMode) onSelectMoveForAnnotation(i);
-            },
+            onTap: () => onMainLineMoveClicked(i),
             onSecondaryTapDown: (details) =>
                 onShowMoveContextMenu(i, details.globalPosition),
             child: Container(
               key: isCurrentMove ? currentMoveKey : null,
               padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
               decoration: BoxDecoration(
-                color: isCurrentMove
-                    ? AppColors.pgnMoveCurrentBg
-                    : (isSelected
-                        ? AppColors.pgnMoveCurrentBg.withValues(alpha: 0.5)
-                        : null),
+                color: isCurrentMove ? AppColors.pgnMoveCurrentBg : null,
                 borderRadius: BorderRadius.circular(3),
                 // Always reserve the 1px border so highlighting a move never
                 // resizes it (which would reflow wrapped variation lines).
                 border: isCurrentMove
                     ? Border.all(color: AppColors.pgnMoveCurrent, width: 1)
-                    : (isSelected
-                        ? Border.all(
-                            color: moveColor.withValues(alpha: 0.6), width: 1)
-                        : Border.all(color: Colors.transparent, width: 1)),
+                    : Border.all(color: Colors.transparent, width: 1),
               ),
               child: Text.rich(
                 TextSpan(children: [
@@ -360,18 +341,6 @@ class PgnMovetextView extends StatelessWidget {
       );
 
       spans.add(const TextSpan(text: ' '));
-
-      // Annotation toolbar (edit mode only)
-      if (isSelected && editingCommentIndex != i) {
-        flushSpans();
-        children.add(_AnnotationToolbar(
-          moveIndex: i,
-          currentNags: moveData.nags ?? [],
-          onToggleNag: (nagId) => onToggleNag(i, nagId),
-          onComment: () => onStartEditingComment(i),
-          onDismiss: onDismissAnnotation,
-        ));
-      }
 
       // Inline comment editor
       if (editingCommentIndex == i) {
@@ -420,30 +389,36 @@ class PgnMovetextView extends StatelessWidget {
     );
   }
 
-  /// Build an appropriate widget for a raw comment string.
-  /// Uses the rich Chessable renderer when markers are present, otherwise
-  /// renders prose with inline clickable moves. Returns null if the comment is
-  /// empty after filtering.
-  Widget? _buildCommentWidget(String raw,
+  /// Render a comment as plain flowing prose: engine tokens stripped, all
+  /// whitespace collapsed, no paragraph or block structure. Moves written in
+  /// the prose stay clickable when they are legal from the anchor position.
+  List<InlineSpan> _plainCommentSpans(String raw,
       {Position? anchorPos, int anchorPly = 0}) {
-    if (hasChessableFormatting(raw)) {
-      final segments = parseRichComment(raw);
-      if (segments.isNotEmpty) {
-        return _buildRichCommentBlock(segments,
-            anchorPos: anchorPos, anchorPly: anchorPly);
-      }
+    final filtered = filterDisplayComment(raw);
+    if (filtered.isEmpty) return const [];
+    const proseStyle = TextStyle(
+      fontSize: 14,
+      height: 1.5,
+      color: AppColors.pgnComment,
+    );
+    if (anchorPos != null && onPlayInlineLine != null) {
+      return _buildProseSpans(filtered, anchorPos, anchorPly, proseStyle);
     }
-    final tokens = parseCommentTokens(stripEngineTokens(raw));
-    if (tokens.isEmpty) return null;
-    return _proseContainer(_buildTokenParagraphs(tokens,
-        anchorPos: anchorPos, anchorPly: anchorPly));
+    return [TextSpan(text: '$filtered ', style: proseStyle)];
   }
 
   /// Decide how to render a mainline-move comment: a flowing inline span list
   /// for short single-paragraph prose, or a bordered block for anything with
-  /// embedded moves, Chessable markers, or multiple paragraphs.
+  /// embedded moves, Chessable markers, or multiple paragraphs. Without
+  /// [bookFormatting], always plain flowing prose.
   ({Widget? block, List<InlineSpan> spans}) _renderComment(String raw,
       {Position? anchorPos, int anchorPly = 0}) {
+    if (!bookFormatting) {
+      return (
+        block: null,
+        spans: _plainCommentSpans(raw, anchorPos: anchorPos, anchorPly: anchorPly)
+      );
+    }
     if (hasChessableFormatting(raw)) {
       final segments = parseRichComment(raw);
       if (segments.isNotEmpty) {
@@ -589,6 +564,9 @@ class PgnMovetextView extends StatelessWidget {
       height: 1.4,
       color: AppColors.pgnComment,
     );
+    if (!bookFormatting) {
+      return [TextSpan(text: '$filtered ', style: proseStyle)];
+    }
     final spans = <InlineSpan>[];
     for (final t in parseCommentTokens(stripEngineTokens(filtered))) {
       if (t is CommentMove) {
@@ -1025,6 +1003,11 @@ class PgnMovetextView extends StatelessWidget {
     final isCurrentNode =
         analysisPath.isNotEmpty && analysisPath.last.id == node.id;
 
+    // Variation moves show their NAG glyphs too (e.g. "Nf3!?").
+    final nodeNagSuffix = (node.nags != null && node.nags!.isNotEmpty)
+        ? node.nags!.where((n) => n >= 1 && n <= 6).map(nagSymbol).join()
+        : '';
+
     spans.add(
       WidgetSpan(
         alignment: PlaceholderAlignment.baseline,
@@ -1056,17 +1039,35 @@ class PgnMovetextView extends StatelessWidget {
                     borderRadius: BorderRadius.circular(3),
                     border: Border.all(color: Colors.transparent, width: 1),
                   ),
-            child: Text(
-              node.san,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                color: isCurrentNode ? AppColors.pgnMoveCurrentFg : moveColor,
-                fontWeight: FontWeight.normal,
-                decoration: isCurrentNode ? null : TextDecoration.underline,
-                decorationColor: AppColors.onSurfaceDim.withValues(alpha: 0.45),
-                decorationStyle: TextDecorationStyle.dotted,
-              ),
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                  text: node.san,
+                  style: TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 14,
+                    color:
+                        isCurrentNode ? AppColors.pgnMoveCurrentFg : moveColor,
+                    fontWeight: FontWeight.normal,
+                    decoration:
+                        isCurrentNode ? null : TextDecoration.underline,
+                    decorationColor:
+                        AppColors.onSurfaceDim.withValues(alpha: 0.45),
+                    decorationStyle: TextDecorationStyle.dotted,
+                  ),
+                ),
+                if (nodeNagSuffix.isNotEmpty)
+                  TextSpan(
+                    text: nodeNagSuffix,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: nagColor(node.nags!
+                          .firstWhere((n) => n >= 1 && n <= 6)),
+                    ),
+                  ),
+              ]),
             ),
           ),
         ),
@@ -1113,144 +1114,6 @@ class PgnMovetextView extends StatelessWidget {
     }
 
     return spans;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Annotation toolbar widget (edit mode)
-// ---------------------------------------------------------------------------
-class _AnnotationToolbar extends StatelessWidget {
-  final int moveIndex;
-  final List<int> currentNags;
-  final ValueChanged<int> onToggleNag;
-  final VoidCallback onComment;
-  final VoidCallback onDismiss;
-
-  const _AnnotationToolbar({
-    required this.moveIndex,
-    required this.currentNags,
-    required this.onToggleNag,
-    required this.onComment,
-    required this.onDismiss,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.grey.withValues(alpha: 0.25),
-          width: 0.5,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final nag in kMoveNags)
-            _NagButton(
-              nag: nag,
-              isActive: currentNags.contains(nag.id),
-              onTap: () => onToggleNag(nag.id),
-            ),
-          const SizedBox(width: 4),
-          Container(
-            width: 1,
-            height: 22,
-            color: Colors.grey.withValues(alpha: 0.3),
-          ),
-          const SizedBox(width: 4),
-          _ToolbarIconButton(
-            icon: Icons.comment_outlined,
-            tooltip: 'Comment',
-            onTap: onComment,
-          ),
-          const SizedBox(width: 2),
-          _ToolbarIconButton(
-            icon: Icons.close,
-            tooltip: 'Dismiss',
-            onTap: onDismiss,
-            color: Colors.grey[600],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NagButton extends StatelessWidget {
-  final NagInfo nag;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _NagButton({
-    required this.nag,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: nag.name,
-      waitDuration: const Duration(milliseconds: 400),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          decoration: BoxDecoration(
-            color: isActive ? nag.color.withValues(alpha: 0.2) : null,
-            borderRadius: BorderRadius.circular(4),
-            border: isActive
-                ? Border.all(color: nag.color.withValues(alpha: 0.6), width: 1)
-                : null,
-          ),
-          child: Text(
-            nag.symbol,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'monospace',
-              color: isActive ? nag.color : Colors.grey[400],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ToolbarIconButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-  final Color? color;
-
-  const _ToolbarIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      waitDuration: const Duration(milliseconds: 400),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Icon(icon, size: 18, color: color ?? Colors.grey[400]),
-        ),
-      ),
-    );
   }
 }
 

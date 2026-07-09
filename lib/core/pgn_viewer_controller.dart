@@ -808,7 +808,14 @@ class PgnViewerController extends ChangeNotifier {
 
   void persistMoveComments(String updatedPgnMovetext) {
     if (filteredGames.isEmpty || filePath == null) return;
-    final game = filteredGames[currentGameIndex];
+    persistMoveCommentsFor(filteredGames[currentGameIndex], updatedPgnMovetext);
+  }
+
+  /// Like [persistMoveComments] but bound to a specific [game] object, so
+  /// debounced edits that flush after the user has switched games still patch
+  /// the game they were typed on.
+  void persistMoveCommentsFor(PgnGameEntry game, String updatedPgnMovetext) {
+    if (filePath == null) return;
 
     final headerEnd = RegExp(r'\]\s*\n').allMatches(game.pgnText).last;
     final headerPart = game.pgnText.substring(0, headerEnd.end);

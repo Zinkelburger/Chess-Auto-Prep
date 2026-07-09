@@ -237,7 +237,7 @@ class GameNavBar extends StatelessWidget {
             ),
             const SizedBox(width: 16),
             ShortcutTooltip(
-              description: 'Annotate',
+              description: 'Amend game',
               shortcut: 'A',
               child: IconButton(
                 onPressed: onToggleEditMode,
