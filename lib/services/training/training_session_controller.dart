@@ -14,6 +14,7 @@ import '../../models/repertoire_review_entry.dart'
 import '../../models/repertoire_review_history_entry.dart';
 import '../../models/training_settings.dart';
 import '../../widgets/chess_board_widget.dart';
+import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../generation/tree_my_ease.dart' show computeLinePlayability;
 import '../generation/tree_serialization.dart' show deserializeTree;
 import '../line_metrics_helpers.dart' show walkTreeForLine;
@@ -85,6 +86,18 @@ class TrainingSessionController extends ChangeNotifier {
   /// True when opponent move has a comment and we're waiting for Next click.
   bool opponentWaitingForAck = false;
 
+  /// Move index where active training begins. Moves before it are auto-played
+  /// as an intro when [TrainingSettings.skipToFirstComment] is on.
+  int trainingStartIndex = 0;
+
+  /// True while the pre-comment intro moves are auto-playing on the board.
+  bool playingIntro = false;
+
+  /// Bumped on every line start (and dispose) so in-flight async pacing
+  /// (intro playback, move-feedback delays) aborts instead of clobbering the
+  /// new line's state.
+  int _lineGeneration = 0;
+
   /// Called whenever a new line session begins (including auto-next).
   VoidCallback? onLineStarted;
 
@@ -118,6 +131,7 @@ class TrainingSessionController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _lineGeneration++;
     _learnTimer?.cancel();
     session.removeListener(_onSessionChanged);
     session.dispose();
@@ -290,16 +304,82 @@ class TrainingSessionController extends ChangeNotifier {
     opponentWaitingForAck = false;
     currentPairOpponent = null;
     currentPairUser = null;
+    _lineGeneration++;
+    playingIntro = false;
+    trainingStartIndex = settings.skipToFirstComment ? _firstCommentIndex() : 0;
     notifyListeners();
     onLineStarted?.call();
 
-    Future.microtask(() {
+    Future.microtask(() async {
+      if (!await _playIntroMoves()) return;
       if (phase == TrainingPhase.learning) {
-        advanceLearnPhase();
+        await advanceLearnPhase();
       } else {
-        advanceDrillPhase();
+        await advanceDrillPhase();
       }
     });
+  }
+
+  /// First move index (within the effective line length) whose comment has
+  /// displayable prose. Returns 0 when no move qualifies, so the whole line
+  /// is trained as before.
+  int _firstCommentIndex() {
+    if (currentLine == null) return 0;
+    for (int i = 0; i < currentLineLength; i++) {
+      final comment = currentLine!.comments[i.toString()];
+      if (comment != null && filterDisplayComment(comment).isNotEmpty) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  /// Auto-plays the moves before [trainingStartIndex] so the user watches the
+  /// line take shape instead of drilling rote opening moves. Returns false if
+  /// a new line (or dispose) interrupted playback.
+  Future<bool> _playIntroMoves() async {
+    if (trainingStartIndex <= 0 || currentLine == null) return true;
+    final generation = _lineGeneration;
+
+    playingIntro = true;
+    waitingForUser = false;
+    notifyListeners();
+
+    for (int i = 0; i < trainingStartIndex; i++) {
+      await Future.delayed(Duration(milliseconds: settings.introSpeedMs));
+      if (generation != _lineGeneration) return false;
+
+      final san = currentLine!.moves[i];
+      if (session.position.parseSan(san) == null) {
+        error = 'Invalid move in line: $san';
+        playingIntro = false;
+        notifyListeners();
+        return false;
+      }
+      session.playMove(san);
+      final isUser = _isUserMove(i);
+      final display = _buildMoveDisplay(i, isOpponent: !isUser);
+      if (isUser) {
+        currentPairUser = display;
+      } else {
+        currentPairOpponent = display;
+        currentPairUser = null;
+      }
+      currentMoveIndex = i + 1;
+      notifyListeners();
+    }
+
+    await Future.delayed(Duration(milliseconds: settings.introSpeedMs));
+    if (generation != _lineGeneration) return false;
+
+    playingIntro = false;
+    feedback = null;
+    currentAnnotation = null;
+    // Keep the opponent move as context for the first trained move; the
+    // advance methods overwrite it when the next move is the opponent's.
+    currentPairUser = null;
+    notifyListeners();
+    return true;
   }
 
   void nextLine() => rebuildQueueAndAdvance();
@@ -310,6 +390,7 @@ class TrainingSessionController extends ChangeNotifier {
 
   Future<void> advanceLearnPhase() async {
     if (currentLine == null) return;
+    final generation = _lineGeneration;
     if (currentMoveIndex >= currentLineLength) {
       session.clearMoveHistory();
       if (currentLine!.startPosition.fen != Chess.initial.fen) {
@@ -325,7 +406,10 @@ class TrainingSessionController extends ChangeNotifier {
       currentPairUser = null;
       waitingForUser = false;
       notifyListeners();
-      Future.microtask(advanceDrillPhase);
+      Future.microtask(() async {
+        if (!await _playIntroMoves()) return;
+        await advanceDrillPhase();
+      });
       return;
     }
 
@@ -356,6 +440,7 @@ class TrainingSessionController extends ChangeNotifier {
         notifyListeners();
       } else {
         await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+        if (generation != _lineGeneration) return;
         currentMoveIndex++;
         await advanceLearnPhase();
       }
@@ -373,6 +458,7 @@ class TrainingSessionController extends ChangeNotifier {
         );
       } else {
         await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+        if (generation != _lineGeneration) return;
         currentMoveIndex++;
         await advanceLearnPhase();
       }
@@ -392,6 +478,7 @@ class TrainingSessionController extends ChangeNotifier {
 
   Future<void> handleLearnQuizMove(CompletedMove move) async {
     if (currentLine == null) return;
+    final generation = _lineGeneration;
     final expectedSan = currentLine!.moves[currentMoveIndex];
     final isCorrect = isCorrectUserMove(move, expectedSan);
 
@@ -401,15 +488,21 @@ class TrainingSessionController extends ChangeNotifier {
       waitingForUser = false;
       feedback = 'Correct!';
       notifyListeners();
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+      if (generation != _lineGeneration) return;
       currentMoveIndex++;
       await advanceLearnPhase();
     } else {
+      // Input stays off while the correction animates so a second answer
+      // can't interleave with it; 'Try again' below re-enables it.
+      waitingForUser = false;
       feedback = 'Wrong — the move is $expectedSan';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 1200));
+      if (generation != _lineGeneration) return;
       session.playMove(expectedSan);
       await Future.delayed(const Duration(milliseconds: 800));
+      if (generation != _lineGeneration) return;
       session.goBack();
       feedback = 'Try again';
       waitingForUser = true;
@@ -431,6 +524,7 @@ class TrainingSessionController extends ChangeNotifier {
 
   Future<void> advanceDrillPhase() async {
     if (currentLine == null) return;
+    final generation = _lineGeneration;
     final limit = effectiveLineLength;
 
     while (currentMoveIndex < limit) {
@@ -438,15 +532,24 @@ class TrainingSessionController extends ChangeNotifier {
         _prepareDrillMove(currentMoveIndex);
         return;
       } else {
-        await _playOpponentMove(currentMoveIndex);
+        _playOpponentMove(currentMoveIndex);
         if (opponentWaitingForAck) return;
         currentMoveIndex++;
+        if (currentMoveIndex >= limit) {
+          // Let the final opponent move register on the board before the
+          // results panel replaces the card.
+          await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+          if (generation != _lineGeneration) return;
+        }
       }
     }
     _onLineComplete();
   }
 
-  Future<void> _playOpponentMove(int moveIndex) async {
+  /// Plays the opponent reply with no trailing delay: the reply and the next
+  /// "Your move" prompt land in the same frame. Pacing happens while the
+  /// user's answered pair is still on screen (see [handleUserMove]).
+  void _playOpponentMove(int moveIndex) {
     if (currentLine == null) return;
     final san = currentLine!.moves[moveIndex];
     final move = session.position.parseSan(san);
@@ -464,8 +567,6 @@ class TrainingSessionController extends ChangeNotifier {
     final annotation = currentLine!.comments[moveIndex.toString()];
     currentAnnotation = annotation;
     notifyListeners();
-
-    await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
   }
 
   void _prepareDrillMove(int moveIndex) {
@@ -489,6 +590,7 @@ class TrainingSessionController extends ChangeNotifier {
       return;
     }
 
+    final generation = _lineGeneration;
     final expectedSan = currentLine!.moves[currentMoveIndex];
     final isCorrect = isCorrectUserMove(move, expectedSan);
 
@@ -503,7 +605,11 @@ class TrainingSessionController extends ChangeNotifier {
       notifyListeners();
 
       currentMoveIndex++;
-      await Future.delayed(Duration(milliseconds: settings.moveSpeedMs ~/ 2));
+      // Hold the completed pair + "Correct!" for the full pause, then swap
+      // to the opponent's reply and next prompt in one update — no cleared
+      // or opponent-only frames in between.
+      await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+      if (generation != _lineGeneration) return;
       _clearPair();
       await advanceDrillPhase();
     } else {
@@ -511,18 +617,22 @@ class TrainingSessionController extends ChangeNotifier {
       lineHadMistake = true;
       wrongMoveIndices.add(currentMoveIndex);
 
+      // Input off immediately so a second answer can't interleave with the
+      // correction that plays out below.
+      waitingForUser = false;
       feedback = 'Wrong — the move was $expectedSan';
       notifyListeners();
       await Future.delayed(const Duration(milliseconds: 1200));
+      if (generation != _lineGeneration) return;
 
       final display = _buildMoveDisplay(currentMoveIndex, isOpponent: false);
       session.playMove(expectedSan);
-      waitingForUser = false;
       currentPairUser = display;
       currentAnnotation = null;
       notifyListeners();
       currentMoveIndex++;
       await Future.delayed(Duration(milliseconds: settings.moveSpeedMs));
+      if (generation != _lineGeneration) return;
       _clearPair();
       await advanceDrillPhase();
     }
@@ -585,6 +695,7 @@ class TrainingSessionController extends ChangeNotifier {
   }
 
   Future<void> handleReplayMove(CompletedMove move) async {
+    final generation = _lineGeneration;
     final targetMoveIndex = wrongMoveIndices[replayIndex];
     final expectedSan = currentLine!.moves[targetMoveIndex];
     final isCorrect = isCorrectUserMove(move, expectedSan);
@@ -597,6 +708,7 @@ class TrainingSessionController extends ChangeNotifier {
       notifyListeners();
       replayIndex++;
       await Future.delayed(const Duration(milliseconds: 500));
+      if (generation != _lineGeneration) return;
       setupReplayPosition();
     } else {
       updateMoveProgress(currentLine!, targetMoveIndex, wasCorrect: false);

@@ -175,6 +175,44 @@ class TrainingSettingsPanel extends StatelessWidget {
               onSettingsChanged();
             },
           ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text('Skip ahead to the first comment',
+                style: theme.textTheme.titleSmall),
+            subtitle: const Text(
+              'Auto-play the opening moves before the first commented '
+              'move instead of quizzing them, so you watch the line take '
+              'shape. Training starts at the first comment.',
+            ),
+            value: settings.skipToFirstComment,
+            onChanged: (v) {
+              settings.skipToFirstComment = v;
+              settings.save();
+              onSettingsChanged();
+            },
+          ),
+          if (settings.skipToFirstComment) ...[
+            const SizedBox(height: 8),
+            Text('Intro playback speed', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 4),
+            Text(
+              'Delay between auto-played opening moves. '
+              '${settings.introSpeedMs}ms',
+              style: theme.textTheme.bodySmall,
+            ),
+            Slider(
+              value: settings.introSpeedMs.toDouble(),
+              min: 200,
+              max: 2000,
+              divisions: 18,
+              label: '${settings.introSpeedMs}ms',
+              onChanged: (v) {
+                settings.introSpeedMs = v.round();
+                settings.save();
+                onSettingsChanged();
+              },
+            ),
+          ],
           const SizedBox(height: 24),
           Text('Move speed', style: theme.textTheme.titleSmall),
           const SizedBox(height: 4),

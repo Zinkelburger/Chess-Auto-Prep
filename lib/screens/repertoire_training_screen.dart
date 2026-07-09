@@ -376,6 +376,7 @@ class _RepertoireTrainingScreenState extends State<RepertoireTrainingScreen>
                     currentMoveIndex: _training.currentMoveIndex,
                     waitingForUser: _training.waitingForUser,
                     isWhiteLine: _training.isWhiteLine,
+                    playingIntro: _training.playingIntro,
                     moveDifficulty: _training.moveDifficulty,
                     onLearnAcknowledged: _training.learnAcknowledged,
                     onOpponentAcknowledged: _training.opponentAcknowledged,
