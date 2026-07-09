@@ -110,7 +110,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // edit, rating) repaints the panel without each call site having to
     // remember to setState.
     _database.addListener(_onDbChanged);
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
 
     _form = TacticsImportForm(defaultCores: EngineSettings.instance.workers);
     _form.addListener(_onFormChanged);
@@ -135,16 +135,19 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       }
     });
 
-    // Listen for tab changes to enter/exit analysis mode
+    // Listen for tab changes to enter/exit analysis mode. Wait for the tab
+    // animation to settle: flipping the mode notifies AppState, which rebuilds
+    // the whole tactics screen (board pane, import form, browse list) — doing
+    // that on the same frame the animation starts is what made switching tabs
+    // visibly janky.
     _tabController.addListener(() {
-      if (mounted) {
-        final appState = context.read<AppState>();
-        if (_tabController.index == 1) {
-          appState.enterAnalysisMode();
-          _focusNode.requestFocus();
-        } else {
-          appState.exitAnalysisMode();
-        }
+      if (!mounted || _tabController.indexIsChanging) return;
+      final appState = context.read<AppState>();
+      if (_tabController.index != 0) {
+        appState.enterAnalysisMode();
+        _focusNode.requestFocus();
+      } else {
+        appState.exitAnalysisMode();
       }
     });
 
@@ -412,11 +415,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           if (_database.isExternalSet) _buildReviewBanner(),
           TabBar(
             controller: _tabController,
-            tabs: [
-              const Tab(text: 'Tactic'),
-              Tab(
-                text: _session.currentPosition != null ? 'PGN' : 'Browse',
-              ),
+            tabs: const [
+              Tab(text: 'Tactic'),
+              Tab(text: 'PGN'),
+              Tab(text: 'Browse'),
             ],
           ),
           Expanded(
@@ -424,9 +426,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               controller: _tabController,
               children: [
                 _buildTacticTab(),
-                _session.currentPosition != null
-                    ? _buildAnalysisTab()
-                    : _buildBrowseTab(),
+                _buildAnalysisTab(),
+                _buildBrowseTab(),
               ],
             ),
           ),
@@ -627,6 +628,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                       _loadCurrentPosition(_session.skipPosition()),
                   onAutoAdvanceChanged: _session.setAutoAdvance,
                   onCopyFen: _copyFen,
+                  onEdit: _database.isExternalSet ? null : _editCurrentTactic,
                   onSetRating: (rating) {
                     _session.setRating(rating);
                     setState(() {});
@@ -672,7 +674,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onStartSession: _onStartSession,
                   clearDatabaseEnabled: !_import.isImporting,
                   onClearDatabase: _confirmClearDatabase,
-                  onBrowseTactics: () => _tabController.animateTo(1),
+                  onBrowseTactics: () => _tabController.animateTo(2),
                   fetchMode: _form.fetchMode,
                   onFetchModeChanged: _form.setFetchMode,
                   sinceDays: _form.sinceDays,
@@ -794,6 +796,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       final setup = _session.selectPosition(pos);
       if (setup != null) _applyPositionSetup(setup);
       _syncPgnToCurrentTactic();
+      // Land on the Tactic tab so the loaded puzzle is front and center;
+      // Browse stays one tab away instead of being replaced by the PGN view.
+      _tabController.animateTo(0);
       _focusNode.requestFocus();
     } catch (e) {
       debugPrint('Load position failed: $e');
@@ -868,15 +873,34 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   Future<void> _showEditDialog(int index) async {
     if (_blockStructuralEditOnExternalSet()) return;
+    final original = _database.positions[index];
     final updated = await TacticsEditDialog.show(
       context,
-      position: _database.positions[index],
+      position: original,
       index: index,
     );
 
     if (updated != null && mounted) {
+      final wasCurrent = _session.currentPosition?.fen == original.fen;
       await _database.updatePositionAt(index, updated);
+      if (wasCurrent && mounted) {
+        // The tactic on the board was edited (possibly its FEN or solution):
+        // re-select it so the board and puzzle state reflect the new data.
+        final setup = _session.selectPosition(updated);
+        if (setup != null) _applyPositionSetup(setup);
+        _syncPgnToCurrentTactic();
+      }
     }
+  }
+
+  /// Edit the tactic currently loaded on the board (from the training panel's
+  /// edit button). Resolves the database index by FEN.
+  void _editCurrentTactic() {
+    final current = _session.currentPosition;
+    if (current == null) return;
+    final index = _database.positions.indexWhere((p) => p.fen == current.fen);
+    if (index < 0) return;
+    _showEditDialog(index);
   }
 
   /// Reset the board to the standard starting position (used when returning
