@@ -1,6 +1,9 @@
+import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/tactics_position.dart';
+import '../chess_board_widget.dart';
 import 'puzzle_stats_display.dart';
 
 /// How positions are sorted in the browse list.
@@ -56,15 +59,38 @@ class TacticsBrowsePanel extends StatefulWidget {
 }
 
 class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
+  static const String _showBoardsPrefKey = 'tactics_browse_show_boards';
+
   // Mistake-type filters (all enabled by default).
   final Set<String> _enabledTypes = {'??', '?', '?!', 'custom'};
   TacticsStatusFilter _statusFilter = TacticsStatusFilter.all;
   TacticsBrowseSort _sort = TacticsBrowseSort.newest;
   int _minRating = 0; // 0 = show all ratings
 
+  /// Show a small board preview next to each tactic.
+  bool _showBoards = true;
+
   // Multi-select state.
   bool _selectMode = false;
   final Set<int> _selected = {};
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((prefs) {
+      if (!mounted) return;
+      final saved = prefs.getBool(_showBoardsPrefKey);
+      if (saved != null && saved != _showBoards) {
+        setState(() => _showBoards = saved);
+      }
+    });
+  }
+
+  void _setShowBoards(bool value) {
+    setState(() => _showBoards = value);
+    SharedPreferences.getInstance()
+        .then((prefs) => prefs.setBool(_showBoardsPrefKey, value));
+  }
 
   List<int> _buildVisibleIndices() {
     final positions = widget.positions;
@@ -153,6 +179,8 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
           statusFilter: _statusFilter,
           sort: _sort,
           minRating: _minRating,
+          showBoards: _showBoards,
+          onShowBoardsChanged: _setShowBoards,
           selectMode: _selectMode,
           selectedCount: _selected.length,
           onToggleType: (type) => setState(() {
@@ -189,7 +217,7 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
           onCreatePuzzle: widget.onCreatePuzzle,
         ),
         const Divider(height: 1),
-        const TacticsBrowseHeader(),
+        TacticsBrowseHeader(showBoards: _showBoards),
         const Divider(height: 1),
         Expanded(
           child: ListView.builder(
@@ -202,13 +230,16 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
                 index: realIndex,
                 isSelected:
                     widget.selectedFen != null && widget.selectedFen == pos.fen,
+                showBoard: _showBoards,
+                // Plain click edits; the play button loads it for training.
                 onTap: _selectMode
                     ? () => setState(() {
                           _selected.contains(realIndex)
                               ? _selected.remove(realIndex)
                               : _selected.add(realIndex);
                         })
-                    : () => widget.onSelectTactic(realIndex),
+                    : () => widget.onEditTactic(realIndex),
+                onTrain: () => widget.onSelectTactic(realIndex),
                 onDelete: () => widget.onDeleteTactic(realIndex),
                 onEdit: () => widget.onEditTactic(realIndex),
                 onSetRating: widget.onSetRating != null
@@ -226,7 +257,10 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
 }
 
 class TacticsBrowseHeader extends StatelessWidget {
-  const TacticsBrowseHeader({super.key});
+  const TacticsBrowseHeader({super.key, this.showBoards = false});
+
+  /// Match the leading space of the rows (board preview + action buttons).
+  final bool showBoards;
 
   static const _headerStyle = TextStyle(
     fontWeight: FontWeight.bold,
@@ -236,22 +270,23 @@ class TacticsBrowseHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Row(
         children: [
-          SizedBox(width: 72),
-          SizedBox(width: 32, child: Text('Type', style: _headerStyle)),
-          SizedBox(width: 8),
-          SizedBox(width: 80, child: Text('Rating', style: _headerStyle)),
-          SizedBox(width: 8),
-          Expanded(flex: 3, child: Text('Game', style: _headerStyle)),
-          SizedBox(width: 8),
-          Expanded(flex: 2, child: Text('Context', style: _headerStyle)),
-          SizedBox(width: 8),
-          Expanded(flex: 2, child: Text('Played → Best', style: _headerStyle)),
-          SizedBox(width: 8),
-          SizedBox(
+          SizedBox(width: showBoards ? 168 : 100),
+          const SizedBox(width: 32, child: Text('Type', style: _headerStyle)),
+          const SizedBox(width: 8),
+          const SizedBox(width: 80, child: Text('Rating', style: _headerStyle)),
+          const SizedBox(width: 8),
+          const Expanded(flex: 3, child: Text('Game', style: _headerStyle)),
+          const SizedBox(width: 8),
+          const Expanded(flex: 2, child: Text('Context', style: _headerStyle)),
+          const SizedBox(width: 8),
+          const Expanded(
+              flex: 2, child: Text('Played → Best', style: _headerStyle)),
+          const SizedBox(width: 8),
+          const SizedBox(
               width: 60,
               child: Text('Stats',
                   style: _headerStyle, textAlign: TextAlign.right)),
@@ -268,22 +303,30 @@ class TacticsBrowseRow extends StatelessWidget {
     required this.index,
     required this.isSelected,
     required this.onTap,
+    this.onTrain,
     required this.onDelete,
     required this.onEdit,
     this.onSetRating,
     this.selectMode = false,
     this.checked = false,
+    this.showBoard = false,
   });
 
   final TacticsPosition position;
   final int index;
   final bool isSelected;
   final VoidCallback onTap;
+
+  /// Loads this tactic onto the board for training. Hidden when null.
+  final VoidCallback? onTrain;
   final VoidCallback onDelete;
   final VoidCallback onEdit;
   final ValueChanged<int>? onSetRating;
   final bool selectMode;
   final bool checked;
+
+  /// Show a small board preview of the position.
+  final bool showBoard;
 
   @override
   Widget build(BuildContext context) {
@@ -312,6 +355,10 @@ class TacticsBrowseRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           child: Row(
             children: [
+              if (showBoard) ...[
+                _BoardThumbnail(fen: position.fen),
+                const SizedBox(width: 8),
+              ],
               if (selectMode)
                 Checkbox(
                   value: checked,
@@ -320,19 +367,29 @@ class TacticsBrowseRow extends StatelessWidget {
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 )
               else ...[
+                if (onTrain != null)
+                  IconButton(
+                    onPressed: onTrain,
+                    icon: const Icon(Icons.play_arrow,
+                        size: 18, color: Colors.green),
+                    tooltip: 'Train this tactic',
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    padding: EdgeInsets.zero,
+                  ),
                 IconButton(
-                  onPressed: onDelete,
-                  icon: Icon(Icons.close,
-                      size: 16, color: Colors.red.withValues(alpha: 0.6)),
-                  tooltip: 'Delete tactic',
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit, size: 16),
+                  tooltip: 'Edit tactic',
                   constraints:
                       const BoxConstraints(minWidth: 32, minHeight: 32),
                   padding: EdgeInsets.zero,
                 ),
                 IconButton(
-                  onPressed: onEdit,
-                  icon: const Icon(Icons.edit, size: 16),
-                  tooltip: 'Edit tactic',
+                  onPressed: onDelete,
+                  icon: Icon(Icons.close,
+                      size: 16, color: Colors.red.withValues(alpha: 0.6)),
+                  tooltip: 'Delete tactic',
                   constraints:
                       const BoxConstraints(minWidth: 32, minHeight: 32),
                   padding: EdgeInsets.zero,
@@ -400,6 +457,41 @@ class TacticsBrowseRow extends StatelessWidget {
   }
 }
 
+/// Small static board preview for a browse row, oriented so the side to move
+/// is at the bottom (same perspective as training).
+class _BoardThumbnail extends StatelessWidget {
+  const _BoardThumbnail({required this.fen});
+
+  final String fen;
+
+  static const double _size = 60;
+
+  @override
+  Widget build(BuildContext context) {
+    final Position position;
+    try {
+      position = Chess.fromSetup(Setup.parseFen(fen));
+    } catch (_) {
+      return const SizedBox(
+        width: _size,
+        height: _size,
+        child: Icon(Icons.broken_image_outlined, size: 20, color: Colors.grey),
+      );
+    }
+    return SizedBox(
+      width: _size,
+      height: _size,
+      child: IgnorePointer(
+        child: ChessBoardWidget(
+          position: position,
+          flipped: position.turn == Side.black,
+          enableUserMoves: false,
+        ),
+      ),
+    );
+  }
+}
+
 class _BrowseFilterBar extends StatelessWidget {
   const _BrowseFilterBar({
     required this.totalCount,
@@ -408,6 +500,8 @@ class _BrowseFilterBar extends StatelessWidget {
     required this.statusFilter,
     required this.sort,
     required this.minRating,
+    required this.showBoards,
+    required this.onShowBoardsChanged,
     required this.selectMode,
     required this.selectedCount,
     required this.onToggleType,
@@ -427,6 +521,8 @@ class _BrowseFilterBar extends StatelessWidget {
   final TacticsStatusFilter statusFilter;
   final TacticsBrowseSort sort;
   final int minRating;
+  final bool showBoards;
+  final ValueChanged<bool> onShowBoardsChanged;
   final bool selectMode;
   final int selectedCount;
   final ValueChanged<String> onToggleType;
@@ -453,6 +549,29 @@ class _BrowseFilterBar extends StatelessWidget {
                 '$visibleCount / $totalCount tactics',
                 style:
                     const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const SizedBox(width: 12),
+              InkWell(
+                onTap: () => onShowBoardsChanged(!showBoards),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: showBoards,
+                        onChanged: (v) => onShowBoardsChanged(v ?? false),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text('Show board previews',
+                        style: TextStyle(fontSize: 12)),
+                  ],
+                ),
               ),
               const Spacer(),
               if (selectMode) ...[

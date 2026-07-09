@@ -25,6 +25,7 @@ class TacticsTrainingPanel extends StatelessWidget {
     required this.onSkipPosition,
     required this.onAutoAdvanceChanged,
     required this.onCopyFen,
+    this.onEdit,
     required this.onSetRating,
     this.solutionSanMoves = const [],
     this.solutionStartPly = 0,
@@ -47,6 +48,9 @@ class TacticsTrainingPanel extends StatelessWidget {
   final VoidCallback onSkipPosition;
   final ValueChanged<bool> onAutoAdvanceChanged;
   final VoidCallback onCopyFen;
+
+  /// Opens the edit dialog for this tactic. Hidden when null (external sets).
+  final VoidCallback? onEdit;
   final ValueChanged<int> onSetRating;
   final List<String> solutionSanMoves;
   final int solutionStartPly;
@@ -74,7 +78,7 @@ class TacticsTrainingPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TacticsPositionInfo(position: position, engine: engine),
+        TacticsPositionInfo(position: position, engine: engine, onEdit: onEdit),
         const SizedBox(height: 16),
         Row(
           children: [
@@ -393,10 +397,14 @@ class TacticsPositionInfo extends StatelessWidget {
     super.key,
     required this.position,
     required this.engine,
+    this.onEdit,
   });
 
   final TacticsPosition position;
   final TacticsEngine engine;
+
+  /// Opens the edit dialog for this tactic. Hidden when null.
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -405,12 +413,28 @@ class TacticsPositionInfo extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          pos.positionContext,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                pos.positionContext,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+            if (onEdit != null)
+              IconButton(
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit, size: 16),
+                tooltip: 'Edit this tactic',
+                visualDensity: VisualDensity.compact,
+                constraints:
+                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+              ),
+          ],
         ),
         const SizedBox(height: 12),
         Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}',
