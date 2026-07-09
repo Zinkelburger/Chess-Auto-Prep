@@ -10,11 +10,13 @@ import 'tactics_export_import_stub.dart'
 
 /// Export file format for a puzzle set.
 enum TacticsExportFormat {
-  /// Lossless: full 20-column CSV including review stats.
+  /// Legacy: full 20-column CSV including review stats (the pre-PGN
+  /// storage format, kept for older tooling).
   csv,
 
-  /// Interchange: one PGN game per puzzle (FEN + solution mainline + note).
-  /// Human-readable and viewable in any chess GUI, but drops stats.
+  /// The native set format: one PGN game per puzzle (FEN + solution
+  /// mainline + note), with stats and provenance as custom headers.
+  /// Lossless, human-readable, and viewable in any chess GUI.
   pgn,
 }
 
@@ -29,8 +31,8 @@ class TacticsExportImport {
 
   TacticsExportImport(this._database);
 
-  /// Read the active set's raw CSV content from storage.
-  Future<String?> _readActiveSetCsv() async {
+  /// Read the active set's raw file content from storage.
+  Future<String?> _readActiveSetFile() async {
     final storage = StorageFactory.instance;
     return storage
         .readFile(await storage.tacticsSetPath(_database.activeSetName));
@@ -39,25 +41,21 @@ class TacticsExportImport {
   /// Export the active set to a file that users can share/save.
   /// On mobile: opens the share sheet.  On desktop: save-file picker.
   Future<void> exportTactics({
-    TacticsExportFormat format = TacticsExportFormat.csv,
+    TacticsExportFormat format = TacticsExportFormat.pgn,
   }) async {
     try {
       final setName = _database.activeSetName;
+      if (_database.positions.isEmpty) {
+        throw Exception('No tactics data to export');
+      }
       final String content;
       final String filename;
 
       switch (format) {
         case TacticsExportFormat.csv:
-          final csvContent = await _readActiveSetCsv();
-          if (csvContent == null || csvContent.isEmpty) {
-            throw Exception('No tactics data to export');
-          }
-          content = csvContent;
+          content = TacticsDatabase.encodeCsv(_database.positions);
           filename = '$setName.csv';
         case TacticsExportFormat.pgn:
-          if (_database.positions.isEmpty) {
-            throw Exception('No tactics data to export');
-          }
           final result = encodePuzzlesToPgn(setName, _database.positions);
           if (result.encoded == 0) {
             throw Exception('No exportable puzzles in this set');
@@ -119,18 +117,14 @@ class TacticsExportImport {
 
   Future<TacticsImportResult> _importCsv(String csvContent,
       {required bool replace}) async {
+    // Parse rows through the tolerant CSV path (the set file itself is PGN).
+    final parsed = TacticsDatabase.parseCsv(csvContent);
     if (replace) {
-      // Replace the active set's CSV content wholesale, then reload.
-      final storage = StorageFactory.instance;
-      await storage.writeFile(
-          await storage.tacticsSetPath(_database.activeSetName), csvContent);
-      final count = await _database.loadPositions();
-      return (imported: count, warnings: const <String>[]);
+      await _database.importAndSave(parsed.positions);
+      return (imported: parsed.positions.length, warnings: parsed.warnings);
     }
 
-    // Merge: parse rows through the tolerant CSV path in a scratch load.
     final before = _database.positions.length;
-    final parsed = TacticsDatabase.parseCsv(csvContent);
     await _database.addPositions(parsed.positions);
     return (
       imported: _database.positions.length - before,
@@ -155,7 +149,7 @@ class TacticsExportImport {
 
   /// Get statistics about stored tactics
   Future<Map<String, dynamic>> getTacticsStats() async {
-    final csvContent = await _readActiveSetCsv();
+    final csvContent = await _readActiveSetFile();
     final fileExists = csvContent != null && csvContent.isNotEmpty;
 
     final stats = <String, dynamic>{

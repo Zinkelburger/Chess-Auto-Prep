@@ -64,7 +64,12 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
     super.initState();
     _creator = PuzzleCreatorController(initialFen: widget.initialFen);
     _creator.addListener(_onChanged);
-    _targetSet = widget.database.activeSetName;
+    // An external set (study under review) is not a named set the creator
+    // can append to; fall back to a real set.
+    _targetSet = widget.database.isExternalSet
+        ? (widget.database.availableSets.firstOrNull?.name ??
+            TacticsDatabase.defaultSetName)
+        : widget.database.activeSetName;
   }
 
   @override

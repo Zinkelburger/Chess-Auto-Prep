@@ -7,9 +7,15 @@ import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import '../models/tactics_set_metadata.dart';
 import 'storage/storage_factory.dart';
+import 'tactics_pgn_codec.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
 /// Manages tactical positions and review data.
+///
+/// Sets are stored as multi-game PGN files (`tactics_sets/<name>.pgn`) via
+/// the lossless codec in `tactics_pgn_codec.dart`; legacy CSV sets are
+/// converted on first load.  A set may also be an *external* PGN file (e.g.
+/// a study opened for flashcard review) — see [openExternalSet].
 ///
 /// This is a [ChangeNotifier]: every mutation of the observable state
 /// (the [positions] list, [analyzedGameIds], session stats) calls
@@ -33,6 +39,23 @@ class TacticsDatabase extends ChangeNotifier {
   String _activeSetName = defaultSetName;
   String get activeSetName => _activeSetName;
 
+  /// When non-null, the active set is an external PGN file at this absolute
+  /// path (e.g. a study reviewed as flashcards) instead of a named set in
+  /// the sets directory.  Stats write back into that file's headers.
+  String? _activeSetPath;
+  String? get activeSetPath => _activeSetPath;
+  bool get isExternalSet => _activeSetPath != null;
+
+  /// Decode options for the active external set (see [openExternalSet]):
+  /// restrict to one PGN game (chapter) and/or expand variations into cards.
+  int? _externalGameIndex;
+  bool _externalIncludeVariations = false;
+
+  /// Absolute path of the file backing the active set.
+  Future<String> activeSetFilePath() async =>
+      _activeSetPath ??
+      await StorageFactory.instance.tacticsSetPath(_activeSetName);
+
   /// Metadata for every set on disk (for the set picker).
   List<TacticsSetMetadata> availableSets = [];
 
@@ -49,11 +72,12 @@ class TacticsDatabase extends ChangeNotifier {
   /// Settings for the current session (kept for mid-session rating logic).
   TacticsSessionSettings _sessionSettings = const TacticsSessionSettings();
 
-  /// Load positions for the active set from its CSV file.
+  /// Load positions for the active set from its PGN file.
   ///
   /// On first call this also migrates a legacy root-level
-  /// `tactics_positions.csv` into the [defaultSetName] set and restores the
-  /// last active set name from preferences.
+  /// `tactics_positions.csv` into the [defaultSetName] set, converts any
+  /// legacy per-set CSV files to PGN, and restores the last active set name
+  /// from preferences.
   Future<int> loadPositions() async {
     await _pendingWrite;
     positions.clear();
@@ -62,6 +86,7 @@ class TacticsDatabase extends ChangeNotifier {
     try {
       final storage = StorageFactory.instance;
       await storage.migrateLegacyTacticsCsv(defaultSetName);
+      await _migrateCsvSetsToPgn();
       final restoredNow = !_activeSetRestored;
       await _restoreActiveSetName();
       availableSets = await storage.listTacticsSets();
@@ -70,6 +95,7 @@ class TacticsDatabase extends ChangeNotifier {
       // Only on the prefs-restore load: an explicitly chosen set (switchSet /
       // createSet) may legitimately have no file until its first save.
       if (restoredNow &&
+          !isExternalSet &&
           availableSets.isNotEmpty &&
           !availableSets.any((s) => s.name == _activeSetName)) {
         _activeSetName = availableSets.any((s) => s.name == defaultSetName)
@@ -77,37 +103,30 @@ class TacticsDatabase extends ChangeNotifier {
             : availableSets.first.name;
       }
 
-      final content =
-          await storage.readFile(await storage.tacticsSetPath(_activeSetName));
+      final content = await storage.readFile(await activeSetFilePath());
 
-      if (content == null || content.isEmpty) {
-        // No CSV found, try to load analyzed games list (legacy or empty state)
+      if (content == null || content.trim().isEmpty) {
+        // No set file yet — load analyzed games list (legacy or empty state).
         await _loadAnalyzedGameIds();
         notifyListeners();
         return 0;
       }
 
-      final rows = Csv().decode(content);
-
-      if (rows.isEmpty) {
-        await _loadAnalyzedGameIds();
-        notifyListeners();
-        return 0;
+      // External files (studies) may hold chapters from the standard start;
+      // our own set files always carry [FEN].
+      final decoded = decodePuzzlesFromPgn(
+        content,
+        requireFen: !isExternalSet,
+        includeVariations: isExternalSet && _externalIncludeVariations,
+        onlyGame: isExternalSet ? _externalGameIndex : null,
+      );
+      for (final warning in decoded.errors) {
+        log.w('Set "$_activeSetName": $warning');
       }
-
-      // Skip header row
-      for (int i = 1; i < rows.length; i++) {
-        try {
-          final position = _createPositionFromRow(rows[i]);
-          if (position != null) {
-            positions.add(position);
-            // Track game IDs from positions
-            if (position.gameId.isNotEmpty) {
-              analyzedGameIds.add(position.gameId);
-            }
-          }
-        } catch (e) {
-          log.e('Error parsing position row $i: $e');
+      for (final position in decoded.puzzles) {
+        positions.add(position);
+        if (position.gameId.isNotEmpty) {
+          analyzedGameIds.add(position.gameId);
         }
       }
 
@@ -126,10 +145,39 @@ class TacticsDatabase extends ChangeNotifier {
     }
   }
 
+  /// Convert legacy `.csv` set files (pre-PGN installs) to `.pgn`.  The CSV
+  /// is renamed to `.csv.bak` after a successful conversion; a name that
+  /// already has a `.pgn` file is left alone.
+  Future<void> _migrateCsvSetsToPgn() async {
+    final storage = StorageFactory.instance;
+    for (final legacy in await storage.listLegacyTacticsCsvSets()) {
+      try {
+        final pgnPath = await storage.tacticsSetPath(legacy.name);
+        if (await storage.fileExists(pgnPath)) continue;
+        final content = await storage.readFile(legacy.path);
+        if (content == null) continue;
+        final parsed = parseCsv(content);
+        for (final warning in parsed.warnings) {
+          log.w('CSV set "${legacy.name}": $warning');
+        }
+        final encoded = encodePuzzlesToPgn(legacy.name, parsed.positions);
+        await storage.writeFile(pgnPath, encoded.pgn);
+        await storage.renameFile(legacy.path, '${legacy.path}.bak');
+        log.i(
+            'Converted tactics set "${legacy.name}" from CSV to PGN (${parsed.positions.length} positions)');
+      } catch (e) {
+        log.e('Error converting CSV set "${legacy.name}": $e');
+      }
+    }
+  }
+
   /// Restore the active set name from preferences (first load only).
   Future<void> _restoreActiveSetName() async {
     if (_activeSetRestored) return;
     _activeSetRestored = true;
+    // An explicit external selection (openExternalSet before any load)
+    // must not be clobbered by the remembered named set.
+    if (isExternalSet) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getString(_activeSetPrefsKey);
@@ -142,6 +190,9 @@ class TacticsDatabase extends ChangeNotifier {
   }
 
   Future<void> _persistActiveSetName() async {
+    // External sets (arbitrary PGN paths) are not remembered across runs;
+    // the next launch reopens the last *named* set.
+    if (isExternalSet) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_activeSetPrefsKey, _activeSetName);
@@ -162,14 +213,40 @@ class TacticsDatabase extends ChangeNotifier {
   /// set, then loads [name].  Any active session queue is discarded (its
   /// indices refer to the old set's positions).
   Future<void> switchSet(String name) async {
-    if (name == _activeSetName) return;
+    if (name == _activeSetName && !isExternalSet) return;
     await _pendingWrite;
+    _activeSetPath = null;
+    _externalGameIndex = null;
+    _externalIncludeVariations = false;
     _activeSetName = name;
     _sessionQueue = [];
     _sessionQueueIndex = 0;
     currentSession = ReviewSession();
     await _persistActiveSetName();
     await loadPositions();
+  }
+
+  /// Open an arbitrary PGN file (e.g. a study) as the active set for
+  /// flashcard review.  Review stats write back into that file's custom
+  /// headers.  [gameIndex] restricts the set to one game/chapter;
+  /// [includeVariations] expands variations into extra (stat-less) cards.
+  /// Returns the number of loaded puzzles.
+  Future<int> openExternalSet(
+    String path, {
+    String? displayName,
+    int? gameIndex,
+    bool includeVariations = false,
+  }) async {
+    await _pendingWrite;
+    _activeSetPath = path;
+    _externalGameIndex = gameIndex;
+    _externalIncludeVariations = includeVariations;
+    _activeSetName = displayName ??
+        path.split('/').last.replaceAll(RegExp(r'\.pgn$', caseSensitive: false), '');
+    _sessionQueue = [];
+    _sessionQueueIndex = 0;
+    currentSession = ReviewSession();
+    return loadPositions();
   }
 
   /// Create a new empty set and switch to it.  Throws [ArgumentError] if a
@@ -180,7 +257,7 @@ class TacticsDatabase extends ChangeNotifier {
     if (await storage.fileExists(path)) {
       throw ArgumentError('A set named "$name" already exists');
     }
-    await storage.writeFile(path, _encodeCsv(const []));
+    await storage.writeFile(path, '');
     await switchSet(name);
   }
 
@@ -209,7 +286,7 @@ class TacticsDatabase extends ChangeNotifier {
     await _pendingWrite;
     await StorageFactory.instance.deleteTacticsSet(name);
     availableSets = await StorageFactory.instance.listTacticsSets();
-    if (_activeSetName == name) {
+    if (_activeSetName == name && !isExternalSet) {
       _activeSetName = availableSets.isNotEmpty
           ? availableSets.first.name
           : defaultSetName;
@@ -305,23 +382,9 @@ class TacticsDatabase extends ChangeNotifier {
     return (positions: positions, warnings: warnings);
   }
 
-  /// Create a TacticsPosition from a CSV row.
-  TacticsPosition? _createPositionFromRow(List<dynamic> row) {
-    if (row.length < 17) {
-      log.w('Row too short: ${row.length} fields');
-      return null;
-    }
-
-    try {
-      return TacticsPosition.fromCsv(row);
-    } catch (e) {
-      log.e('Error creating position from row: $e');
-      return null;
-    }
-  }
-
   /// Encode [rows] as the tactics CSV format (header + data rows).
-  static String _encodeCsv(List<TacticsPosition> rows) {
+  /// Kept for the legacy CSV export path; PGN is the storage format.
+  static String encodeCsv(List<TacticsPosition> rows) {
     final List<List<dynamic>> csvData = [
       // Header row — must match toCsvRow() column order exactly.
       [
@@ -350,17 +413,43 @@ class TacticsDatabase extends ChangeNotifier {
     return Csv().encode(csvData);
   }
 
-  /// Save positions back to the active set's CSV.
+  /// Save positions back to the active set's PGN file.
+  ///
+  /// Named sets are fully rewritten (they are flat puzzle files owned by the
+  /// trainer).  External sets (studies) are *patched*: only the stat headers
+  /// change, so variations and annotations survive — structural edits to a
+  /// study belong in Study mode.
   Future<void> savePositions() async {
     // Capture the target set now: a switchSet() while this write is queued
     // must not redirect the old set's data into the new file.
     final setName = _activeSetName;
+    final externalPath = _activeSetPath;
+    final snapshot = List<TacticsPosition>.of(positions);
     await _enqueueWrite(() async {
       try {
         final storage = StorageFactory.instance;
-        await storage.writeFile(
-            await storage.tacticsSetPath(setName), _encodeCsv(positions));
-        log.i('Saved ${positions.length} tactics positions to set "$setName"');
+        if (externalPath != null) {
+          final existing = await storage.readFile(externalPath);
+          if (existing == null) {
+            log.e('External set file vanished: $externalPath');
+            return;
+          }
+          await storage.writeFile(
+              externalPath, patchStatsInPgn(existing, snapshot));
+        } else {
+          final encoded = encodePuzzlesToPgn(setName, snapshot);
+          if (encoded.fallback > 0) {
+            log.w(
+                '${encoded.fallback} position(s) stored with raw [CorrectLine] fallback');
+          }
+          if (encoded.dropped > 0) {
+            log.w(
+                '${encoded.dropped} position(s) with unparsable FEN dropped on save');
+          }
+          await storage.writeFile(
+              await storage.tacticsSetPath(setName), encoded.pgn);
+        }
+        log.i('Saved ${snapshot.length} tactics positions to set "$setName"');
       } catch (e) {
         log.e('Error saving positions: $e');
       }
@@ -566,17 +655,14 @@ class TacticsDatabase extends ChangeNotifier {
     final content = await storage.readFile(path);
 
     final existing = <TacticsPosition>[];
-    if (content != null && content.isNotEmpty) {
-      final rows = Csv().decode(content);
-      for (int i = 1; i < rows.length; i++) {
-        final parsed = _createPositionFromRow(rows[i]);
-        if (parsed != null) existing.add(parsed);
-      }
+    if (content != null && content.trim().isNotEmpty) {
+      existing.addAll(decodePuzzlesFromPgn(content).puzzles);
     }
     if (existing.any((p) => p.fen == position.fen)) return false;
 
     existing.add(position);
-    await storage.writeFile(path, _encodeCsv(existing));
+    await storage.writeFile(
+        path, encodePuzzlesToPgn(setName, existing).pgn);
     await refreshSetList();
     return true;
   }

@@ -57,6 +57,11 @@ class TacticsTrainingPanel extends StatelessWidget {
 
   bool get _useNextLabel => positionSolved || showSolution;
 
+  /// The puzzle's note (annotation / mistake analysis) is the flashcard
+  /// "back": revealed once the puzzle is solved or the solution shown.
+  bool get _showNote =>
+      (positionSolved || showSolution) && position.mistakeAnalysis.trim().isNotEmpty;
+
   Color _feedbackColor() {
     if (feedback.contains('Correct')) return Colors.green;
     return Colors.red;
@@ -176,6 +181,10 @@ class TacticsTrainingPanel extends StatelessWidget {
           ),
           if (showSolution) const SizedBox(height: 8),
         ],
+        if (_showNote) ...[
+          _NoteCard(note: position.mistakeAnalysis),
+          const SizedBox(height: 8),
+        ],
         _buildPlayedMoves(),
         if (showSolution)
           Container(
@@ -288,6 +297,41 @@ class TacticsTrainingPanel extends StatelessWidget {
       onMoveTapped: onSolutionMoveTapped != null
           ? (idx) => onSolutionMoveTapped!(san, idx)
           : null,
+    );
+  }
+}
+
+/// The puzzle's annotation, shown after solving (flashcard back).
+class _NoteCard extends StatelessWidget {
+  const _NoteCard({required this.note});
+
+  final String note;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.sticky_note_2_outlined,
+              size: 18, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              note.trim(),
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -86,9 +86,9 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
     // Apply sort.
     switch (_sort) {
       case TacticsBrowseSort.newest:
-        break; // CSV order is newest-last; reverse for newest-first display.
+        break; // File order is newest-last; reverse for newest-first display.
       case TacticsBrowseSort.oldest:
-        // CSV order is already oldest-first; keep as-is.
+        // File order is already oldest-first; keep as-is.
         return indices;
       case TacticsBrowseSort.worstSuccess:
         indices.sort((a, b) {

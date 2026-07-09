@@ -90,24 +90,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   void _onAppStateChanged() {
     final appState = context.read<AppState>();
     if (appState.currentMode == AppMode.pgnViewer) {
-      final pendingPgn = appState.pendingSolitairePgn;
-      if (pendingPgn != null) {
-        appState.pendingSolitairePgn = null;
-        _startSolitaireTraining(pendingPgn, appState.pendingSolitaireAsWhite);
-      }
       _reclaimFocus();
     }
-  }
-
-  /// "Train this chapter" hand-off from Study mode: load the chapter PGN and
-  /// drop straight into solitaire with the requested orientation.
-  Future<void> _startSolitaireTraining(String pgn, bool asWhite) async {
-    if (_controller.isSolitaireMode) _controller.toggleSolitaire();
-    await _controller.loadPgnContent(pgn);
-    if (!mounted || _controller.errorMessage != null) return;
-    _controller.setPerspective(Perspective(
-        mode: asWhite ? PerspectiveMode.white : PerspectiveMode.black));
-    if (!_controller.isSolitaireMode) _controller.toggleSolitaire();
   }
 
   void _onAnalysisUpdate() {
