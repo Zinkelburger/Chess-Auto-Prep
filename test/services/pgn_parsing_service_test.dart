@@ -131,6 +131,34 @@ void main() {
     });
   });
 
+  group('countPgnGamesFast', () {
+    // The fast counter powers the list/picker screens; it must agree with the
+    // authoritative [countPgnGames] on the shapes the app actually writes.
+    const fixtures = <String, String>{
+      'blank-separated':
+          '[Event "G1"]\n1. e4 *\n\n[Event "G2"]\n1. d4 *\n\n[Event "G3"]\n1. c4 *\n',
+      'back-to-back':
+          '[Event "L1"]\n1. e4 *\n[Event "L2"]\n1. d4 *\n[Event "L3"]\n1. c4 *\n',
+      'brace-preamble': '{Build stats}\n[Event "L1"]\n1. e4 *\n[Event "L2"]\n1. d4 *\n',
+      'comment-preamble': '// My Repertoire\n// Color: White\n\n[Event "L1"]\n1. e4 *\n',
+      'header-less': '1. e4 e5 2. Nf3 *\n',
+      'empty': '',
+      'blank-only': '\n\n  \n',
+      'comment-only': '// just a note\n',
+    };
+
+    fixtures.forEach((name, pgn) {
+      test('matches countPgnGames for $name', () {
+        expect(countPgnGamesFast(pgn), countPgnGames(pgn));
+      });
+    });
+
+    test('handles a leading BOM like countPgnGames', () {
+      const pgn = '﻿[Event "G1"]\n1. e4 *\n\n[Event "G2"]\n1. d4 *';
+      expect(countPgnGamesFast(pgn), countPgnGames(pgn));
+    });
+  });
+
   group('extractRepertoireColor', () {
     test('finds White', () {
       expect(extractRepertoireColor('// Color: White\n[Event ""]'), 'white');
