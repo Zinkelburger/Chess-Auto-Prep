@@ -13,6 +13,8 @@ import '../services/coherence_service.dart';
 import '../services/generation/fen_map.dart';
 import '../services/generation/generation_config.dart';
 import '../theme/app_colors.dart';
+import '../utils/lines_filter_helpers.dart' show isPlaceholderLineTitle;
+import '../utils/pgn_utils.dart' as pgn_utils;
 import 'analysis/analysis_settings_sheet.dart';
 import 'layout/edit_main_zone.dart';
 import 'repertoire_analysis_dock.dart';
@@ -224,10 +226,20 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
     );
   }
 
+  /// Title of the selected line (its PGN Event header, falling back to the
+  /// display name), or null when composing a new line.
+  String? _selectedLineTitle() {
+    final line = widget.controller.selectedPgnLine;
+    if (line == null) return null;
+    final event = pgn_utils.extractEventTitle(line.fullPgn);
+    return isPlaceholderLineTitle(event) ? line.name : event;
+  }
+
   Widget _buildPgnEditor() {
     return EditMainZone(
       tree: widget.tree,
       currentPath: widget.currentPath,
+      lineTitle: _selectedLineTitle(),
       onJump: widget.onJump,
       onCommentChanged: widget.onCommentChanged,
       onDelete: widget.onDelete,

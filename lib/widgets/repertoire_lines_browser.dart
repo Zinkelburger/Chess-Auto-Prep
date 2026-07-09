@@ -84,7 +84,10 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
 
   List<RepertoireLine> _filteredLines = [];
   Map<String, List<RepertoireLine>> _groupedLines = {};
-  final Set<String> _expandedGroups = {};
+
+  /// Groups the user explicitly collapsed. Everything else renders expanded,
+  /// so lines are visible without any clicking.
+  final Set<String> _collapsedGroups = {};
 
   bool _showOnlyMatchingPosition = true;
   LineSortBy _sortBy = LineSortBy.name;
@@ -175,7 +178,6 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     void apply() {
       _filteredLines = result.filtered;
       _groupedLines = result.grouped;
-      _expandedGroups.addAll(result.groupsToExpand);
     }
 
     if (rebuild) {
@@ -204,10 +206,10 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
 
   void _toggleGroup(String groupName) {
     setState(() {
-      if (_expandedGroups.contains(groupName)) {
-        _expandedGroups.remove(groupName);
+      if (_collapsedGroups.contains(groupName)) {
+        _collapsedGroups.remove(groupName);
       } else {
-        _expandedGroups.add(groupName);
+        _collapsedGroups.add(groupName);
       }
     });
   }
@@ -260,7 +262,9 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
             scrollController: _scrollController,
             filteredLines: _filteredLines,
             groupedLines: _groupedLines,
-            expandedGroups: _expandedGroups,
+            expandedGroups: _groupedLines.keys
+                .where((g) => !_collapsedGroups.contains(g))
+                .toSet(),
             onToggleGroup: _toggleGroup,
             isExpanded: widget.isExpanded,
             currentMoveSequence: widget.currentMoveSequence,
