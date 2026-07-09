@@ -97,6 +97,19 @@ class TacticsPosition {
   /// Calculate success rate for this position - matches Python property
   double get successRate => reviewCount > 0 ? successCount / reviewCount : 0.0;
 
+  /// [gameDate] (PGN `YYYY.MM.DD`) parsed as a date, or `null` when absent
+  /// or a placeholder like `????.??.??`.
+  DateTime? get gameDateTime {
+    final match =
+        RegExp(r'^(\d{4})\.(\d{2})\.(\d{2})$').firstMatch(gameDate.trim());
+    if (match == null) return null;
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return DateTime(year, month, day);
+  }
+
   /// Get the best move (first move in correct line) - for backward compatibility
   String get bestMove => correctLine.isNotEmpty ? correctLine.first : 'unknown';
 

@@ -25,7 +25,12 @@ class TacticsSessionSettings {
     this.includeOneStar = false,
     this.skipReviewed = false,
     this.mistakeTypes = const {'??', '?', customMistakeType},
+    this.maxAgeDays = defaultMaxAgeDays,
   });
+
+  /// Default recency window: positions from games older than this are
+  /// filtered out ("auto-expired") unless the user widens the window.
+  static const int defaultMaxAgeDays = 14;
 
   /// Marker mistake-type for manually created puzzles (they have no
   /// engine-graded blunder classification).
@@ -49,13 +54,32 @@ class TacticsSessionSettings {
   /// Which mistake types to include. Subset of `{'??', '?', '?!'}`.
   final Set<String> mistakeTypes;
 
+  /// Only include positions from games played within the last [maxAgeDays]
+  /// days. `null` means all time. Custom puzzles and positions without a
+  /// parseable game date are never age-filtered (curation isn't
+  /// recency-driven, and an unknown date shouldn't hide a puzzle).
+  final int? maxAgeDays;
+
   /// Returns `true` when [pos] should be included in a session with these
   /// settings.
   bool accepts(TacticsPosition pos) {
     if (!includeOneStar && pos.rating == 1) return false;
     if (skipReviewed && pos.reviewCount > 0) return false;
     if (!mistakeTypes.contains(pos.mistakeType)) return false;
+    if (!_withinAgeWindow(pos)) return false;
     return true;
+  }
+
+  bool _withinAgeWindow(TacticsPosition pos) {
+    final days = maxAgeDays;
+    if (days == null) return true;
+    if (pos.mistakeType == customMistakeType) return true;
+    final played = pos.gameDateTime;
+    if (played == null) return true;
+    final now = DateTime.now();
+    final cutoff = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: days - 1));
+    return !played.isBefore(cutoff);
   }
 
   /// Count how many positions in [all] pass the filter.
@@ -67,6 +91,8 @@ class TacticsSessionSettings {
     bool? includeOneStar,
     bool? skipReviewed,
     Set<String>? mistakeTypes,
+    int? maxAgeDays,
+    bool clearMaxAgeDays = false,
   }) {
     return TacticsSessionSettings(
       order: order ?? this.order,
@@ -74,6 +100,7 @@ class TacticsSessionSettings {
       includeOneStar: includeOneStar ?? this.includeOneStar,
       skipReviewed: skipReviewed ?? this.skipReviewed,
       mistakeTypes: mistakeTypes ?? this.mistakeTypes,
+      maxAgeDays: clearMaxAgeDays ? null : (maxAgeDays ?? this.maxAgeDays),
     );
   }
 
@@ -83,6 +110,9 @@ class TacticsSessionSettings {
   static const _keySkipReviewed = 'tactics_session.skip_reviewed';
   static const _keyMistakeTypes = 'tactics_session.mistake_types';
   static const _keyCustomTypeMigrated = 'tactics_session.custom_type_migrated';
+
+  /// Stored value for [maxAgeDays]; 0 encodes "all time" (null).
+  static const _keyMaxAgeDays = 'tactics_session.max_age_days';
 
   /// Load saved session settings, falling back to defaults for any missing key.
   static Future<TacticsSessionSettings> load() async {
@@ -102,6 +132,7 @@ class TacticsSessionSettings {
       await prefs.setBool(_keyCustomTypeMigrated, true);
     }
 
+    final storedMaxAge = prefs.getInt(_keyMaxAgeDays);
     return TacticsSessionSettings(
       order: TacticsSessionOrder.fromStorage(prefs.getString(_keyOrder)),
       groupByGame: prefs.getBool(_keyGroupByGame) ?? defaults.groupByGame,
@@ -110,6 +141,9 @@ class TacticsSessionSettings {
       skipReviewed: prefs.getBool(_keySkipReviewed) ?? defaults.skipReviewed,
       mistakeTypes:
           storedTypes != null ? storedTypes.toSet() : defaults.mistakeTypes,
+      maxAgeDays: storedMaxAge == null
+          ? defaults.maxAgeDays
+          : (storedMaxAge <= 0 ? null : storedMaxAge),
     );
   }
 
@@ -120,5 +154,6 @@ class TacticsSessionSettings {
     await prefs.setBool(_keyIncludeOneStar, includeOneStar);
     await prefs.setBool(_keySkipReviewed, skipReviewed);
     await prefs.setStringList(_keyMistakeTypes, mistakeTypes.toList());
+    await prefs.setInt(_keyMaxAgeDays, maxAgeDays ?? 0);
   }
 }

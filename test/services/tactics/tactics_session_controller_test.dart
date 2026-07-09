@@ -1,18 +1,22 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:chess_auto_prep/models/tactics_position.dart';
+import 'package:chess_auto_prep/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/services/tactics/tactics_session_controller.dart';
 import 'package:chess_auto_prep/services/tactics_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-TacticsPosition _samplePosition({List<String> line = const ['e4']}) {
+TacticsPosition _samplePosition({
+  List<String> line = const ['e4'],
+  int fullmove = 1,
+}) {
   return TacticsPosition(
-    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 $fullmove',
     gameWhite: 'A',
     gameBlack: 'B',
     gameResult: '1-0',
     gameDate: '2024.01.01',
-    gameId: 'g1',
+    gameId: 'g$fullmove',
     positionContext: 'Move 1 — White to play',
     userMove: 'd4',
     correctLine: line,
@@ -20,6 +24,9 @@ TacticsPosition _samplePosition({List<String> line = const ['e4']}) {
     mistakeAnalysis: 'test',
   );
 }
+
+/// Fixed old fixture dates need the recency filter off.
+const _allTime = TacticsSessionSettings(maxAgeDays: null);
 
 /// Ignore delayed UI callbacks so assertions see immediate state.
 void _noopSchedule(Duration _, VoidCallback __) {}
@@ -227,6 +234,121 @@ void main() {
       );
 
       expect(analysisMove, isNull);
+    });
+  });
+
+  group('session outcomes and recap', () {
+    void solve(TacticsSessionController session) {
+      session.processMoveAttempt(
+        moveUci: 'e2e4',
+        boardFen: session.currentTacticFen!,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+    }
+
+    void fail(TacticsSessionController session) {
+      session.processMoveAttempt(
+        moveUci: 'd2d4',
+        boardFen: session.currentTacticFen!,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+    }
+
+    test('per-puzzle outcomes feed the recap and the retry list', () {
+      final db = TacticsDatabase();
+      db.positions.add(_samplePosition(fullmove: 1));
+      db.positions.add(_samplePosition(fullmove: 2));
+      final session =
+          TacticsSessionController(database: db)..autoAdvance = false;
+
+      expect(session.startSession(_allTime), isNotNull);
+      solve(session);
+      final solvedFen = session.currentPosition!.fen;
+
+      expect(session.skipPosition(), isNotNull);
+      fail(session);
+      final failedFen = session.currentPosition!.fen;
+
+      expect(session.skipPosition(), isNull, reason: 'queue exhausted');
+      expect(session.outcomeCount(SessionPuzzleOutcome.correct), 1);
+      expect(session.outcomeCount(SessionPuzzleOutcome.incorrect), 1);
+      expect(session.outcomeCount(SessionPuzzleOutcome.unattempted), 0);
+      expect(session.sessionOutcomes[solvedFen], SessionPuzzleOutcome.correct);
+      expect(session.sessionMistakes.map((p) => p.fen), [failedFen]);
+    });
+
+    test('the first outcome wins: solving after a failure stays a failure',
+        () {
+      final db = TacticsDatabase();
+      db.positions.add(_samplePosition());
+      final session =
+          TacticsSessionController(database: db)..autoAdvance = false;
+
+      session.startSession(_allTime);
+      fail(session);
+      solve(session);
+
+      expect(session.sessionOutcomes[session.currentPosition!.fen],
+          SessionPuzzleOutcome.incorrect);
+      expect(session.sessionMistakes, hasLength(1));
+    });
+
+    test('a puzzle navigated past without an attempt counts as unattempted',
+        () {
+      final db = TacticsDatabase();
+      db.positions.add(_samplePosition(fullmove: 1));
+      db.positions.add(_samplePosition(fullmove: 2));
+      final session =
+          TacticsSessionController(database: db)..autoAdvance = false;
+
+      session.startSession(_allTime);
+      expect(session.skipPosition(), isNotNull);
+      expect(session.skipPosition(), isNull);
+
+      expect(session.outcomeCount(SessionPuzzleOutcome.unattempted), 2);
+      expect(session.sessionMistakes, hasLength(2));
+    });
+
+    test('startRetrySession queues the mistakes and resets outcomes', () {
+      final db = TacticsDatabase();
+      db.positions.add(_samplePosition(fullmove: 1));
+      db.positions.add(_samplePosition(fullmove: 2));
+      final session =
+          TacticsSessionController(database: db)..autoAdvance = false;
+
+      session.startSession(_allTime);
+      fail(session);
+      final failedFen = session.currentPosition!.fen;
+      session.skipPosition();
+      solve(session);
+      session.skipPosition();
+
+      final setup = session.startRetrySession(session.sessionMistakes);
+      expect(setup, isNotNull);
+      expect(db.sessionQueueLength, 1);
+      expect(session.currentPosition!.fen, failedFen);
+      expect(session.sessionOutcomes,
+          {failedFen: SessionPuzzleOutcome.unattempted});
+    });
+
+    test('auto-advance past the last puzzle fires onSessionCompleted', () {
+      final db = TacticsDatabase();
+      db.positions.add(_samplePosition());
+      final session = TacticsSessionController(database: db);
+      var completed = false;
+      session.onSessionCompleted = () => completed = true;
+
+      session.startSession(_allTime);
+      session.processMoveAttempt(
+        moveUci: 'e2e4',
+        boardFen: session.currentTacticFen!,
+        schedule: _immediateSchedule,
+        isMounted: () => true,
+      );
+
+      expect(completed, isTrue);
     });
   });
 

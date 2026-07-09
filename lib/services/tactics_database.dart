@@ -2,20 +2,20 @@ import 'dart:math';
 
 import 'package:csv/csv.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
-import '../models/tactics_set_metadata.dart';
 import 'storage/storage_factory.dart';
 import 'tactics_pgn_codec.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
 /// Manages tactical positions and review data.
 ///
-/// Sets are stored as multi-game PGN files (`tactics_sets/<name>.pgn`) via
-/// the lossless codec in `tactics_pgn_codec.dart`; legacy CSV sets are
-/// converted on first load.  A set may also be an *external* PGN file (e.g.
-/// a study opened for flashcard review) — see [openExternalSet].
+/// Tactics mode owns a single database — the mistakes mined from the user's
+/// own games — stored as a multi-game PGN file
+/// (`tactics_sets/<defaultSetName>.pgn`) via the lossless codec in
+/// `tactics_pgn_codec.dart`; legacy CSV files are converted on first load.
+/// An *external* PGN file (e.g. a study opened for flashcard review) can be
+/// loaded temporarily instead — see [openExternalSet] / [closeExternalSet].
 ///
 /// This is a [ChangeNotifier]: every mutation of the observable state
 /// (the [positions] list, [analyzedGameIds], session stats) calls
@@ -23,11 +23,8 @@ import 'package:chess_auto_prep/utils/log.dart';
 /// each call site remembering to `setState`. Mutate the data only through the
 /// methods on this class — never poke [positions] directly from the UI.
 class TacticsDatabase extends ChangeNotifier {
-  /// Name of the set legacy single-file installs migrate into.
+  /// Name of the single set file backing the tactics database.
   static const String defaultSetName = 'Default';
-
-  /// SharedPreferences key remembering the last active set across launches.
-  static const String _activeSetPrefsKey = 'tactics_active_set';
 
   List<TacticsPosition> positions = [];
   Set<String> analyzedGameIds = {}; // Track which games have been analyzed
@@ -35,7 +32,8 @@ class TacticsDatabase extends ChangeNotifier {
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
 
-  /// The named set currently loaded into [positions].
+  /// Display name of what's loaded into [positions]: [defaultSetName] for
+  /// the tactics database, or the external file's name during a review.
   String _activeSetName = defaultSetName;
   String get activeSetName => _activeSetName;
 
@@ -56,11 +54,8 @@ class TacticsDatabase extends ChangeNotifier {
       _activeSetPath ??
       await StorageFactory.instance.tacticsSetPath(_activeSetName);
 
-  /// Metadata for every set on disk (for the set picker).
-  List<TacticsSetMetadata> availableSets = [];
-
-  /// Whether the active-set name has been restored from prefs this run.
-  bool _activeSetRestored = false;
+  /// Whether the one-time named-set → studies migration ran this launch.
+  bool _setsMigrated = false;
 
   /// The filtered + ordered queue for the active session.
   /// `null` when no session is active.
@@ -76,8 +71,8 @@ class TacticsDatabase extends ChangeNotifier {
   ///
   /// On first call this also migrates a legacy root-level
   /// `tactics_positions.csv` into the [defaultSetName] set, converts any
-  /// legacy per-set CSV files to PGN, and restores the last active set name
-  /// from preferences.
+  /// legacy per-set CSV files to PGN, and moves leftover named sets from the
+  /// multi-set era into the studies directory.
   Future<int> loadPositions() async {
     await _pendingWrite;
     positions.clear();
@@ -87,21 +82,7 @@ class TacticsDatabase extends ChangeNotifier {
       final storage = StorageFactory.instance;
       await storage.migrateLegacyTacticsCsv(defaultSetName);
       await _migrateCsvSetsToPgn();
-      final restoredNow = !_activeSetRestored;
-      await _restoreActiveSetName();
-      availableSets = await storage.listTacticsSets();
-
-      // If the *remembered* set vanished (deleted externally), fall back.
-      // Only on the prefs-restore load: an explicitly chosen set (switchSet /
-      // createSet) may legitimately have no file until its first save.
-      if (restoredNow &&
-          !isExternalSet &&
-          availableSets.isNotEmpty &&
-          !availableSets.any((s) => s.name == _activeSetName)) {
-        _activeSetName = availableSets.any((s) => s.name == defaultSetName)
-            ? defaultSetName
-            : availableSets.first.name;
-      }
+      await _migrateNamedSetsToStudies();
 
       final content = await storage.readFile(await activeSetFilePath());
 
@@ -171,60 +152,35 @@ class TacticsDatabase extends ChangeNotifier {
     }
   }
 
-  /// Restore the active set name from preferences (first load only).
-  Future<void> _restoreActiveSetName() async {
-    if (_activeSetRestored) return;
-    _activeSetRestored = true;
-    // An explicit external selection (openExternalSet before any load)
-    // must not be clobbered by the remembered named set.
-    if (isExternalSet) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final stored = prefs.getString(_activeSetPrefsKey);
-      if (stored != null && stored.isNotEmpty) {
-        _activeSetName = stored;
+  /// One-time cleanup from the multi-set era: tactics mode now owns a single
+  /// database (the [defaultSetName] set), so any other set file is moved into
+  /// the studies directory, where it stays reachable — studies are the
+  /// curated-collection concept and can be reviewed as flashcards from
+  /// Study mode.
+  Future<void> _migrateNamedSetsToStudies() async {
+    if (_setsMigrated) return;
+    _setsMigrated = true;
+    final storage = StorageFactory.instance;
+    for (final set in await storage.listTacticsSets()) {
+      if (set.name == defaultSetName) continue;
+      try {
+        var targetName = set.name;
+        var suffix = 1;
+        while (
+            await storage.fileExists(await storage.studyFilePath(targetName))) {
+          suffix++;
+          targetName = '${set.name} (tactics${suffix > 2 ? ' $suffix' : ''})';
+        }
+        await storage.renameFile(
+            set.filePath, await storage.studyFilePath(targetName));
+        log.i('Moved tactics set "${set.name}" to studies as "$targetName"');
+      } catch (e) {
+        log.e('Error moving tactics set "${set.name}" to studies: $e');
       }
-    } catch (e) {
-      log.e('Error restoring active tactics set: $e');
     }
   }
 
-  Future<void> _persistActiveSetName() async {
-    // External sets (arbitrary PGN paths) are not remembered across runs;
-    // the next launch reopens the last *named* set.
-    if (isExternalSet) return;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_activeSetPrefsKey, _activeSetName);
-    } catch (e) {
-      log.e('Error persisting active tactics set: $e');
-    }
-  }
-
-  // ── Set management ─────────────────────────────────────────────────────
-
-  /// Re-scan the sets directory (e.g. after external changes).
-  Future<void> refreshSetList() async {
-    availableSets = await StorageFactory.instance.listTacticsSets();
-    notifyListeners();
-  }
-
-  /// Switch to another named set: waits for pending writes to the current
-  /// set, then loads [name].  Any active session queue is discarded (its
-  /// indices refer to the old set's positions).
-  Future<void> switchSet(String name) async {
-    if (name == _activeSetName && !isExternalSet) return;
-    await _pendingWrite;
-    _activeSetPath = null;
-    _externalGameIndex = null;
-    _externalIncludeVariations = false;
-    _activeSetName = name;
-    _sessionQueue = [];
-    _sessionQueueIndex = 0;
-    currentSession = ReviewSession();
-    await _persistActiveSetName();
-    await loadPositions();
-  }
+  // ── External review (study flashcards) ─────────────────────────────────
 
   /// Open an arbitrary PGN file (e.g. a study) as the active set for
   /// flashcard review.  Review stats write back into that file's custom
@@ -249,55 +205,20 @@ class TacticsDatabase extends ChangeNotifier {
     return loadPositions();
   }
 
-  /// Create a new empty set and switch to it.  Throws [ArgumentError] if a
-  /// set with that name already exists.
-  Future<void> createSet(String name) async {
-    final storage = StorageFactory.instance;
-    final path = await storage.tacticsSetPath(name);
-    if (await storage.fileExists(path)) {
-      throw ArgumentError('A set named "$name" already exists');
-    }
-    await storage.writeFile(path, '');
-    await switchSet(name);
-  }
-
-  /// Rename a set (the active one keeps its contents loaded).  Throws
-  /// [ArgumentError] if the target name is taken.
-  Future<void> renameSet(String oldName, String newName) async {
-    if (oldName == newName) return;
-    final storage = StorageFactory.instance;
-    final oldPath = await storage.tacticsSetPath(oldName);
-    final newPath = await storage.tacticsSetPath(newName);
-    if (await storage.fileExists(newPath)) {
-      throw ArgumentError('A set named "$newName" already exists');
-    }
+  /// Leave an external review and return to the tactics database.  Waits for
+  /// pending stat writes to the external file first.  No-op when no external
+  /// set is active.
+  Future<void> closeExternalSet() async {
+    if (!isExternalSet) return;
     await _pendingWrite;
-    await storage.renameFile(oldPath, newPath);
-    if (_activeSetName == oldName) {
-      _activeSetName = newName;
-      await _persistActiveSetName();
-    }
-    await refreshSetList();
-  }
-
-  /// Delete a set's file.  Deleting the active set clears the in-memory
-  /// positions and switches to another set (or an empty [defaultSetName]).
-  Future<void> deleteSetByName(String name) async {
-    await _pendingWrite;
-    await StorageFactory.instance.deleteTacticsSet(name);
-    availableSets = await StorageFactory.instance.listTacticsSets();
-    if (_activeSetName == name && !isExternalSet) {
-      _activeSetName = availableSets.isNotEmpty
-          ? availableSets.first.name
-          : defaultSetName;
-      _sessionQueue = [];
-      _sessionQueueIndex = 0;
-      currentSession = ReviewSession();
-      await _persistActiveSetName();
-      await loadPositions();
-    } else {
-      notifyListeners();
-    }
+    _activeSetPath = null;
+    _externalGameIndex = null;
+    _externalIncludeVariations = false;
+    _activeSetName = defaultSetName;
+    _sessionQueue = [];
+    _sessionQueueIndex = 0;
+    currentSession = ReviewSession();
+    await loadPositions();
   }
 
   /// Load analyzed game IDs from storage
@@ -380,37 +301,6 @@ class TacticsDatabase extends ChangeNotifier {
       }
     }
     return (positions: positions, warnings: warnings);
-  }
-
-  /// Encode [rows] as the tactics CSV format (header + data rows).
-  /// Kept for the legacy CSV export path; PGN is the storage format.
-  static String encodeCsv(List<TacticsPosition> rows) {
-    final List<List<dynamic>> csvData = [
-      // Header row — must match toCsvRow() column order exactly.
-      [
-        'fen',
-        'game_white',
-        'game_black',
-        'game_result',
-        'game_date',
-        'game_id',
-        'game_url',
-        'position_context',
-        'user_move',
-        'correct_line',
-        'mistake_type',
-        'mistake_analysis',
-        'review_count',
-        'success_count',
-        'last_reviewed',
-        'time_to_solve',
-        'hints_used',
-        'opponent_best_response',
-        'rating',
-      ],
-      for (final pos in rows) pos.toCsvRow(),
-    ];
-    return Csv().encode(csvData);
   }
 
   /// Save positions back to the active set's PGN file.
@@ -527,6 +417,20 @@ class TacticsDatabase extends ChangeNotifier {
     sessionPositionIndex = _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
   }
 
+  /// Start a session over exactly [subset], in the given order — e.g.
+  /// "Retry mistakes" from the session recap.  Positions are matched by FEN
+  /// against the loaded database; unknown FENs are skipped.
+  void startSessionWithPositions(List<TacticsPosition> subset) {
+    currentSession = ReviewSession();
+    _sessionQueue = <int>[];
+    for (final pos in subset) {
+      final idx = positions.indexWhere((p) => p.fen == pos.fen);
+      if (idx != -1 && !_sessionQueue.contains(idx)) _sessionQueue.add(idx);
+    }
+    _sessionQueueIndex = 0;
+    sessionPositionIndex = _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
+  }
+
   /// Number of positions in the current session queue.
   int get sessionQueueLength => _sessionQueue.length;
 
@@ -538,28 +442,30 @@ class TacticsDatabase extends ChangeNotifier {
     final queueIdx = _sessionQueue.indexOf(positionIndex);
     if (queueIdx == -1) return;
     _sessionQueue.removeAt(queueIdx);
-    if (_sessionQueueIndex >= _sessionQueue.length &&
+    if (queueIdx < _sessionQueueIndex) {
+      _sessionQueueIndex--;
+    } else if (_sessionQueueIndex >= _sessionQueue.length &&
         _sessionQueue.isNotEmpty) {
-      _sessionQueueIndex = 0;
+      _sessionQueueIndex = _sessionQueue.length - 1;
     }
   }
 
   /// Advance to the next position in the session queue.  Returns the index
-  /// into [positions], or `null` when the queue is exhausted.
+  /// into [positions], or `null` when the last position has been reached —
+  /// the session is over (no wrap-around).
   int? nextSessionPosition() {
     if (_sessionQueue.isEmpty) return null;
-    _sessionQueueIndex = (_sessionQueueIndex + 1) % _sessionQueue.length;
+    if (_sessionQueueIndex >= _sessionQueue.length - 1) return null;
+    _sessionQueueIndex++;
     sessionPositionIndex = _sessionQueue[_sessionQueueIndex];
     return sessionPositionIndex;
   }
 
-  /// Go to the previous position in the session queue.
+  /// Go to the previous position in the session queue, stopping at the first
+  /// position (no wrap-around).
   int? previousSessionPosition() {
     if (_sessionQueue.isEmpty) return null;
-    _sessionQueueIndex--;
-    if (_sessionQueueIndex < 0) {
-      _sessionQueueIndex = _sessionQueue.length - 1;
-    }
+    if (_sessionQueueIndex > 0) _sessionQueueIndex--;
     sessionPositionIndex = _sessionQueue[_sessionQueueIndex];
     return sessionPositionIndex;
   }
@@ -637,48 +543,43 @@ class TacticsDatabase extends ChangeNotifier {
     await _saveAnalyzedGameIds();
   }
 
-  /// Add [position] to the set named [setName].
+  /// Add [position] to the tactics database (the [defaultSetName] file).
   ///
-  /// For the active set this is [addPosition].  For any other set it is a
-  /// write-through: load that set's CSV, dedupe by FEN, append, write back —
-  /// without disturbing the in-memory active set.  Returns `true` when the
-  /// position was added (`false` = duplicate FEN).
-  Future<bool> addPositionToSet(String setName, TacticsPosition position) async {
-    if (setName == _activeSetName) {
-      final before = positions.length;
-      await addPosition(position);
-      return positions.length > before;
-    }
+  /// Normally this is [addPosition]; during an external review the loaded
+  /// positions belong to the study file, so the puzzle is written through
+  /// to the database's own file on disk instead (an external save only
+  /// patches stat headers and would silently drop a new position).
+  /// Returns `true` when added (`false` = duplicate FEN).
+  Future<bool> addPositionToDatabase(TacticsPosition position) async {
+    if (!isExternalSet) return addPosition(position);
 
     final storage = StorageFactory.instance;
-    final path = await storage.tacticsSetPath(setName);
+    final path = await storage.tacticsSetPath(defaultSetName);
     final content = await storage.readFile(path);
-
     final existing = <TacticsPosition>[];
     if (content != null && content.trim().isNotEmpty) {
       existing.addAll(decodePuzzlesFromPgn(content).puzzles);
     }
     if (existing.any((p) => p.fen == position.fen)) return false;
-
     existing.add(position);
     await storage.writeFile(
-        path, encodePuzzlesToPgn(setName, existing).pgn);
-    await refreshSetList();
+        path, encodePuzzlesToPgn(defaultSetName, existing).pgn);
     return true;
   }
 
-  /// Add a single position (for streaming/live import)
-  Future<void> addPosition(TacticsPosition position) async {
+  /// Add a single position (streaming import, puzzle creator).  Returns
+  /// `true` when the position was added (`false` = duplicate FEN).
+  Future<bool> addPosition(TacticsPosition position) async {
     // Check for duplicates by FEN
-    if (!positions.any((p) => p.fen == position.fen)) {
-      positions.add(position);
-      if (position.gameId.isNotEmpty) {
-        analyzedGameIds.add(position.gameId);
-      }
-      notifyListeners();
-      await savePositions();
-      await _saveAnalyzedGameIds();
+    if (positions.any((p) => p.fen == position.fen)) return false;
+    positions.add(position);
+    if (position.gameId.isNotEmpty) {
+      analyzedGameIds.add(position.gameId);
     }
+    notifyListeners();
+    await savePositions();
+    await _saveAnalyzedGameIds();
+    return true;
   }
 
   /// Add multiple positions incrementally (for streaming/live import)

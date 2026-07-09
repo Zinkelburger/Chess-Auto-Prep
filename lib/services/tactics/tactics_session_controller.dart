@@ -40,6 +40,11 @@ class TacticsPositionSetup {
 typedef TacticsSchedule = void Function(Duration delay, VoidCallback action);
 typedef TacticsIsMounted = bool Function();
 
+/// How a single puzzle went within a session (first outcome wins; puzzles
+/// navigated past without an attempt — including after revealing the
+/// solution — stay [unattempted]).
+enum SessionPuzzleOutcome { correct, incorrect, unattempted }
+
 class TacticsSessionController extends ChangeNotifier {
   TacticsSessionController({
     TacticsDatabase? database,
@@ -63,6 +68,11 @@ class TacticsSessionController extends ChangeNotifier {
   /// A user move was accepted and advanced the solution line.
   VoidCallback? onUserMoveAccepted;
 
+  /// Auto-advance ran past the last queued puzzle — the session is over.
+  /// (Manual navigation reports completion through [skipPosition] returning
+  /// `null` instead.)
+  VoidCallback? onSessionCompleted;
+
   TacticsPosition? currentPosition;
   bool positionSolved = false;
   bool attemptRecorded = false;
@@ -73,6 +83,11 @@ class TacticsSessionController extends ChangeNotifier {
   int currentMoveIndex = 0;
   String? currentTacticFen;
   bool waitingForOpponent = false;
+
+  /// Per-puzzle outcomes for the current (or just-finished) session, keyed
+  /// by FEN in the order the puzzles were shown.  Cleared when a new session
+  /// starts — not by [endSession], so the recap can still read it.
+  final Map<String, SessionPuzzleOutcome> sessionOutcomes = {};
 
   DateTime? _startTime;
 
@@ -108,8 +123,43 @@ class TacticsSessionController extends ChangeNotifier {
     TacticsSessionSettings settings = const TacticsSessionSettings(),
   ]) {
     database.startSession(settings);
+    sessionOutcomes.clear();
     if (database.sessionQueueLength == 0) return null;
     return showCurrentPosition();
+  }
+
+  /// Start a session over exactly [subset] (e.g. "Retry mistakes" from the
+  /// recap) and load the first position.
+  TacticsPositionSetup? startRetrySession(List<TacticsPosition> subset) {
+    database.startSessionWithPositions(subset);
+    sessionOutcomes.clear();
+    if (database.sessionQueueLength == 0) return null;
+    return showCurrentPosition();
+  }
+
+  /// Puzzles from the last session that weren't solved outright (failed or
+  /// navigated past), in the order they were shown.
+  List<TacticsPosition> get sessionMistakes {
+    final mistakes = <TacticsPosition>[];
+    for (final entry in sessionOutcomes.entries) {
+      if (entry.value == SessionPuzzleOutcome.correct) continue;
+      final index = database.positions.indexWhere((p) => p.fen == entry.key);
+      if (index != -1) mistakes.add(database.positions[index]);
+    }
+    return mistakes;
+  }
+
+  /// Count of session puzzles with the given [outcome].
+  int outcomeCount(SessionPuzzleOutcome outcome) =>
+      sessionOutcomes.values.where((o) => o == outcome).length;
+
+  void _recordOutcome(SessionPuzzleOutcome outcome) {
+    final fen = currentPosition?.fen;
+    if (fen == null) return;
+    // First outcome wins; a revisited puzzle keeps its original result.
+    if (sessionOutcomes[fen] == SessionPuzzleOutcome.unattempted) {
+      sessionOutcomes[fen] = outcome;
+    }
   }
 
   /// Load the position at [database.sessionPositionIndex].
@@ -123,6 +173,8 @@ class TacticsSessionController extends ChangeNotifier {
 
     final position = database.positions[database.sessionPositionIndex];
 
+    sessionOutcomes.putIfAbsent(
+        position.fen, () => SessionPuzzleOutcome.unattempted);
     currentPosition = position;
     positionSolved = false;
     attemptRecorded = false;
@@ -148,9 +200,11 @@ class TacticsSessionController extends ChangeNotifier {
     return showCurrentPosition();
   }
 
+  /// Advance to the next puzzle.  Returns `null` when the queue is exhausted
+  /// — the session is over and the caller should show the recap.
   TacticsPositionSetup? skipPosition() {
     if (database.sessionQueueLength == 0) return null;
-    database.nextSessionPosition();
+    if (database.nextSessionPosition() == null) return null;
     return showCurrentPosition();
   }
 
@@ -372,6 +426,7 @@ class TacticsSessionController extends ChangeNotifier {
 
     if (!attemptRecorded) {
       attemptRecorded = true;
+      _recordOutcome(SessionPuzzleOutcome.correct);
       database
           .recordAttempt(currentPosition!, TacticsResult.correct, timeTaken)
           .then((_) {
@@ -383,7 +438,11 @@ class TacticsSessionController extends ChangeNotifier {
       schedule(const Duration(milliseconds: 1500), () {
         if (!isMounted() || !positionSolved) return;
         final setup = skipPosition();
-        if (setup != null) onPositionSetup?.call(setup);
+        if (setup != null) {
+          onPositionSetup?.call(setup);
+        } else {
+          onSessionCompleted?.call();
+        }
       });
     }
   }
@@ -399,6 +458,7 @@ class TacticsSessionController extends ChangeNotifier {
 
     if (!attemptRecorded && currentPosition != null) {
       attemptRecorded = true;
+      _recordOutcome(SessionPuzzleOutcome.incorrect);
       database
           .recordAttempt(
         currentPosition!,

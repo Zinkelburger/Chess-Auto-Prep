@@ -6,9 +6,14 @@ import '../../models/tactics_position.dart';
 import '../../models/tactics_session_settings.dart';
 import '../../services/tactics/tactics_import_coordinator.dart';
 import '../../services/tactics_import_service.dart';
-import '../common/since_date_picker.dart';
 
-/// Import controls and session start UI when no tactic is active.
+/// Tactics home screen when no puzzle is active: an always-visible Import
+/// Games card (usernames front and center, engine knobs behind a gear
+/// dialog), then the Practice card with the start button at the bottom.
+///
+/// Layout rule: the structure is static. Sections never collapse, reorder,
+/// or appear/disappear in reaction to typing — only transient status
+/// (import progress, resume-analysis) may come and go.
 class TacticsImportPanel extends StatefulWidget {
   const TacticsImportPanel({
     super.key,
@@ -36,11 +41,12 @@ class TacticsImportPanel extends StatefulWidget {
     this.clearDatabaseEnabled = true,
     required this.fetchMode,
     required this.onFetchModeChanged,
-    required this.sinceDate,
-    required this.onSinceDateChanged,
+    required this.sinceDays,
+    required this.onSinceDaysChanged,
     this.pendingGameCount = 0,
     this.totalStoredGames = 0,
     this.onResumeAnalysis,
+    this.onFetchNew,
   });
 
   final String? importStatus;
@@ -67,11 +73,14 @@ class TacticsImportPanel extends StatefulWidget {
   final bool clearDatabaseEnabled;
   final TacticsImportMode fetchMode;
   final ValueChanged<TacticsImportMode> onFetchModeChanged;
-  final DateTime? sinceDate;
-  final ValueChanged<DateTime?> onSinceDateChanged;
+  final int sinceDays;
+  final ValueChanged<int> onSinceDaysChanged;
   final int pendingGameCount;
   final int totalStoredGames;
   final VoidCallback? onResumeAnalysis;
+
+  /// Fetch new games from every configured source (the sync-row refresh).
+  final VoidCallback? onFetchNew;
 
   @override
   State<TacticsImportPanel> createState() => _TacticsImportPanelState();
@@ -80,16 +89,20 @@ class TacticsImportPanel extends StatefulWidget {
 class _TacticsImportPanelState extends State<TacticsImportPanel> {
   var _settings = const TacticsSessionSettings();
 
+  final _sinceDaysController = TextEditingController();
+  final _sinceDaysFocus = FocusNode();
+
   int get _matchingCount => _settings.countMatching(widget.positions);
 
   @override
   void initState() {
     super.initState();
-    // The Import buttons enable/disable based on whether a username is present,
-    // so rebuild as the user types. (Controllers are owned by the parent; we
-    // only add/remove listeners here, never dispose them.)
+    // The Import buttons enable/disable based on whether a username is
+    // present, so rebuild as the user types. (Controllers are owned by the
+    // parent; we only add/remove listeners here, never dispose them.)
     widget.lichessUserController.addListener(_onUsernameChanged);
     widget.chessComUserController.addListener(_onUsernameChanged);
+    _sinceDaysController.text = '${widget.sinceDays}';
     // Restore the user's last-used session settings.
     TacticsSessionSettings.load().then((saved) {
       if (mounted) setState(() => _settings = saved);
@@ -97,9 +110,22 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
   }
 
   @override
+  void didUpdateWidget(TacticsImportPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reflect externally restored prefs into the days field, but never fight
+    // the user while they're typing in it.
+    if (!_sinceDaysFocus.hasFocus &&
+        int.tryParse(_sinceDaysController.text) != widget.sinceDays) {
+      _sinceDaysController.text = '${widget.sinceDays}';
+    }
+  }
+
+  @override
   void dispose() {
     widget.lichessUserController.removeListener(_onUsernameChanged);
     widget.chessComUserController.removeListener(_onUsernameChanged);
+    _sinceDaysController.dispose();
+    _sinceDaysFocus.dispose();
     super.dispose();
   }
 
@@ -120,6 +146,9 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
               width: 360,
               child: _SessionSettingsForm(
                 settings: draft,
+                showCustomType: _presentMistakeTypes.contains(
+                  TacticsSessionSettings.customMistakeType,
+                ),
                 onChanged: (s) => setDialogState(() => draft = s),
               ),
             ),
@@ -143,6 +172,274 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
     );
   }
 
+  @override
+  Widget build(BuildContext context) {
+    final positionCount = widget.positions.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (widget.importStatus != null) ...[
+          TacticsImportStatusBanner(
+            status: widget.importStatus!,
+            isImporting: widget.isImporting,
+            hasActiveImport: widget.activeImport != null,
+            onCancelImport: widget.onCancelImport,
+            onDismiss: widget.onDismissImportStatus,
+          ),
+          const SizedBox(height: 16),
+        ],
+        _buildImportCard(),
+        const SizedBox(height: 12),
+        if (widget.pendingGameCount > 0 && !widget.isImporting)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: widget.onResumeAnalysis,
+                icon: const Icon(Icons.play_arrow, size: 20),
+                label: Text(
+                  'Resume Analysis — '
+                  '${widget.pendingGameCount} game${widget.pendingGameCount == 1 ? '' : 's'} remaining',
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.all(14),
+                  side: BorderSide(color: Colors.orange.shade400),
+                  foregroundColor: Colors.orange.shade300,
+                ),
+              ),
+            ),
+          ),
+        _buildStartCard(positionCount),
+        const SizedBox(height: 8),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 16,
+          runSpacing: 8,
+          children: [
+            _conditionalTooltip(
+              message: positionCount == 0 ? 'No tactics to browse' : null,
+              child: TextButton.icon(
+                onPressed: positionCount > 0 ? widget.onBrowseTactics : null,
+                icon: const Icon(Icons.list_alt, size: 16),
+                label: const Text('Browse Tactics'),
+              ),
+            ),
+            _conditionalTooltip(
+              message: positionCount == 0
+                  ? 'No positions in database'
+                  : widget.isImporting
+                  ? 'Import in progress'
+                  : null,
+              child: TextButton.icon(
+                onPressed: widget.clearDatabaseEnabled && positionCount > 0
+                    ? widget.onClearDatabase
+                    : null,
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Clear Database'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Start card ─────────────────────────────────────────────────────────
+
+  Widget _buildStartCard(int positionCount) {
+    final matchingCount = _matchingCount;
+
+    // A single helper line under the button; exactly one variant renders so
+    // the card height stays stable.
+    // Only shown when the user needs to act (or wait); no hint in the
+    // ordinary ready state — the button's "(N ready)" already says it all.
+    String? hint;
+    Color hintColor = Colors.grey[400]!;
+    if (positionCount == 0) {
+      hint = 'No tactics yet — import your games above to get started.';
+    } else if (matchingCount == 0) {
+      hint =
+          'All $positionCount positions are filtered out — '
+          'loosen the filters.';
+      hintColor = Colors.orange[300]!;
+    } else if (widget.isImporting) {
+      hint = 'Import is running — new tactics are added as they\'re found.';
+      hintColor = Colors.green[400]!;
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Practice', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            _buildFilterSummaryRow(),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: matchingCount > 0
+                    ? () => widget.onStartSession(_settings)
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.all(16),
+                  backgroundColor: Colors.green[700],
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.play_arrow),
+                label: Text(
+                  'Start Practice Session ($matchingCount ready)',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            if (hint != null) ...[
+              const SizedBox(height: 6),
+              Text(hint, style: TextStyle(fontSize: 12, color: hintColor)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _recencyLabel(int? maxAgeDays) => switch (maxAgeDays) {
+    null => 'All time',
+    1 => 'Today',
+    final d => 'Last $d days',
+  };
+
+  static const _mistakeTypeNames = {
+    '??': 'Blunders',
+    '?': 'Mistakes',
+    '?!': 'Inaccuracies',
+    TacticsSessionSettings.customMistakeType: 'Custom puzzles',
+  };
+
+  /// Mistake types that actually occur in the current database.
+  Set<String> get _presentMistakeTypes => {
+    for (final pos in widget.positions) pos.mistakeType,
+  };
+
+  String get _mistakeTypesLabel {
+    // Only talk about types the database actually has — mentioning "Custom
+    // puzzles" when there are none just confuses. With an empty database,
+    // fall back to the standard three.
+    final present = _presentMistakeTypes;
+    final relevant = present.isEmpty
+        ? (_mistakeTypeNames.keys.toSet()
+            ..remove(TacticsSessionSettings.customMistakeType))
+        : present;
+    final selected = [
+      for (final entry in _mistakeTypeNames.entries)
+        if (relevant.contains(entry.key) &&
+            _settings.mistakeTypes.contains(entry.key))
+          entry.value,
+    ];
+    if (selected.isEmpty) return 'No mistake types selected';
+    if (selected.length == relevant.length && relevant.length >= 3) {
+      return 'All mistake types';
+    }
+    return selected.join(', ');
+  }
+
+  /// One plain-text summary of the active session filter plus a single,
+  /// clearly-labeled button that opens the settings dialog.
+  Widget _buildFilterSummaryRow() {
+    final summary =
+        '${_recencyLabel(_settings.maxAgeDays)} · $_mistakeTypesLabel';
+    return Row(
+      children: [
+        Icon(Icons.filter_alt_outlined, size: 14, color: Colors.grey[500]),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            summary,
+            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        TextButton.icon(
+          onPressed: _showSessionSettingsDialog,
+          icon: const Icon(Icons.tune, size: 16),
+          label: const Text('Filters…'),
+          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+        ),
+      ],
+    );
+  }
+
+  // ── Import Games (always visible) ──────────────────────────────────────
+
+  Widget _buildImportCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Import Games',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings_outlined, size: 20),
+                    tooltip: 'Engine settings…',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _showEngineSettingsDialog,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Fetch your games and turn your mistakes into puzzles.',
+                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+              ),
+              const SizedBox(height: 14),
+              _buildImportSourceRow(
+                userController: widget.lichessUserController,
+                userLabel: 'Lichess Username',
+                onUsernameChanged: (v) =>
+                    context.read<AppState>().setLichessUsername(v),
+                onImport: widget.onImportLichess,
+              ),
+              const SizedBox(height: 12),
+              _buildImportSourceRow(
+                userController: widget.chessComUserController,
+                userLabel: 'Chess.com Username',
+                onUsernameChanged: (v) =>
+                    context.read<AppState>().setChesscomUsername(v),
+                onImport: widget.onImportChessCom,
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 16),
+              _buildFetchModeSection(),
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              _buildAutoFetchSection(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// A single import-source row: username field and an Import button
   /// (enabled only when no import is in progress and fields are valid).
   Widget _buildImportSourceRow({
@@ -152,16 +449,12 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
     required VoidCallback onImport,
   }) {
     // Enablement mirrors the real preconditions the import action checks:
-    // a username is required, fields must be valid, no import already running,
-    // and "since date" mode needs a date. A leftover status banner is purely
-    // informational and must NOT block a new import.
+    // a username is required, fields must be valid, and no import may
+    // already be running. A leftover status banner is purely informational
+    // and must NOT block a new import.
     final hasUsername = userController.text.trim().isNotEmpty;
-    final dateMissing = widget.fetchMode == TacticsImportMode.sinceDate &&
-        widget.sinceDate == null;
-    final canImport = hasUsername &&
-        widget.importFieldsValid &&
-        !widget.isImporting &&
-        !dateMissing;
+    final canImport =
+        hasUsername && widget.importFieldsValid && !widget.isImporting;
 
     String? disabledReason;
     if (!canImport) {
@@ -169,10 +462,8 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
         disabledReason = 'Import already in progress';
       } else if (!hasUsername) {
         disabledReason = 'Enter a username first';
-      } else if (!widget.importFieldsValid) {
-        disabledReason = 'Fix invalid fields above';
       } else {
-        disabledReason = 'Select a date first';
+        disabledReason = 'Fix the engine settings (gear icon above)';
       }
     }
 
@@ -206,9 +497,53 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
     final isRecent = widget.fetchMode == TacticsImportMode.recent;
     final isSince = !isRecent;
 
+    Color dimmed(bool active) => active ? Colors.grey[400]! : Colors.grey[700]!;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _FetchModeRow(
+          selected: isSince,
+          onTap: () => widget.onFetchModeChanged(TacticsImportMode.sinceDate),
+          child: Row(
+            children: [
+              Text(
+                'Games from the last',
+                style: TextStyle(fontSize: 13, color: dimmed(isSince)),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 56,
+                child: TextField(
+                  controller: _sinceDaysController,
+                  focusNode: _sinceDaysFocus,
+                  enabled: isSince,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (value) {
+                    final days = int.tryParse(value);
+                    if (days != null && days > 0) {
+                      widget.onSinceDaysChanged(days);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'days',
+                style: TextStyle(fontSize: 13, color: dimmed(isSince)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
         _FetchModeRow(
           selected: isRecent,
           onTap: () => widget.onFetchModeChanged(TacticsImportMode.recent),
@@ -230,22 +565,9 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
               const SizedBox(width: 8),
               Text(
                 'most recent per source',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: isRecent ? Colors.grey[400] : Colors.grey[700],
-                ),
+                style: TextStyle(fontSize: 13, color: dimmed(isRecent)),
               ),
             ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        _FetchModeRow(
-          selected: isSince,
-          onTap: () => widget.onFetchModeChanged(TacticsImportMode.sinceDate),
-          child: SinceDatePicker(
-            date: widget.sinceDate,
-            onChanged: widget.onSinceDateChanged,
-            enabled: isSince,
           ),
         ),
       ],
@@ -255,282 +577,164 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
   Widget _buildAutoFetchSection() {
     final appState = context.read<AppState>();
 
+    String syncedLabel(String source, DateTime? last) =>
+        '$source: ${last != null ? 'last synced ${_formatDate(last)}' : 'never synced'}';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          borderRadius: BorderRadius.circular(4),
-          onTap: () => appState.setTacticsAutoFetch(!appState.tacticsAutoFetch),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: Checkbox(
-                    value: appState.tacticsAutoFetch,
-                    onChanged: (v) =>
-                        appState.setTacticsAutoFetch(v ?? false),
-                    visualDensity: VisualDensity.compact,
+        Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: () =>
+                    appState.setTacticsAutoFetch(!appState.tacticsAutoFetch),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: Checkbox(
+                          value: appState.tacticsAutoFetch,
+                          onChanged: (v) =>
+                              appState.setTacticsAutoFetch(v ?? false),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Flexible(
+                        child: Text(
+                          'Auto-fetch on startup',
+                          style: TextStyle(fontSize: 13),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                const Text('Auto-fetch new games on startup',
-                    style: TextStyle(fontSize: 13)),
-              ],
+              ),
             ),
+            _conditionalTooltip(
+              message: widget.isImporting ? 'Import in progress' : null,
+              child: TextButton.icon(
+                onPressed: widget.isImporting ? null : widget.onFetchNew,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Re-fetch'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                syncedLabel('Lichess', appState.lichessLastFetch),
+                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              ),
+              Text(
+                syncedLabel('Chess.com', appState.chesscomLastFetch),
+                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              ),
+            ],
           ),
         ),
-        if (appState.lichessLastFetch != null ||
-            appState.chesscomLastFetch != null) ...[
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 32),
+      ],
+    );
+  }
+
+  /// Engine tuning for import analysis — per-machine knobs most users never
+  /// touch, so they live behind the gear icon instead of on the main page.
+  ///
+  /// Validation state (`depthError`/`coresError`) lives in the parent; the
+  /// `setDialogState` after each validator call re-reads it once the parent
+  /// has rebuilt this panel with the new error props.
+  Future<void> _showEngineSettingsDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Engine Settings'),
+          content: SizedBox(
+            width: 300,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (appState.lichessLastFetch != null)
-                  Text(
-                    'Lichess: last synced ${_formatDate(appState.lichessLastFetch!)}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                Text(
+                  'Used when analyzing imported games. Higher depth finds '
+                  'better lines but is slower.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: widget.stockfishDepthController,
+                  decoration: InputDecoration(
+                    labelText: 'Stockfish depth',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    errorText: widget.depthError,
                   ),
-                if (appState.chesscomLastFetch != null)
-                  Text(
-                    'Chess.com: last synced ${_formatDate(appState.chesscomLastFetch!)}',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) {
+                    widget.onValidateDepth(v);
+                    setDialogState(() {});
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: widget.coresController,
+                  enabled: TacticsImportService.isParallelAvailable,
+                  decoration: InputDecoration(
+                    labelText: 'CPU cores',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    errorText: widget.coresError,
                   ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) {
+                    widget.onValidateCores(v);
+                    setDialogState(() {});
+                  },
+                ),
               ],
             ),
           ),
-        ],
-      ],
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   static String _formatDate(DateTime date) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final positionCount = widget.positions.length;
-    final matchingCount = _matchingCount;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (widget.importStatus != null) ...[
-          TacticsImportStatusBanner(
-            status: widget.importStatus!,
-            isImporting: widget.isImporting,
-            hasActiveImport: widget.activeImport != null,
-            onCancelImport: widget.onCancelImport,
-            onDismiss: widget.onDismissImportStatus,
-          ),
-          const SizedBox(height: 16),
-        ],
-        if (widget.pendingGameCount > 0 && !widget.isImporting)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: widget.onResumeAnalysis,
-                icon: const Icon(Icons.play_arrow, size: 20),
-                label: Text(
-                  'Resume Analysis \u2014 '
-                  '${widget.pendingGameCount} game${widget.pendingGameCount == 1 ? '' : 's'} remaining',
-                ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.all(14),
-                  side: BorderSide(color: Colors.orange.shade400),
-                  foregroundColor: Colors.orange.shade300,
-                ),
-              ),
-            ),
-          ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Import Games',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 520),
-                  child: Column(
-                    children: [
-                      _buildImportSourceRow(
-                        userController: widget.lichessUserController,
-                        userLabel: 'Lichess Username',
-                        onUsernameChanged: (v) =>
-                            context.read<AppState>().setLichessUsername(v),
-                        onImport: widget.onImportLichess,
-                      ),
-                      const SizedBox(height: 12),
-                      _buildImportSourceRow(
-                        userController: widget.chessComUserController,
-                        userLabel: 'Chess.com Username',
-                        onUsernameChanged: (v) =>
-                            context.read<AppState>().setChesscomUsername(v),
-                        onImport: widget.onImportChessCom,
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(height: 1),
-                      const SizedBox(height: 16),
-                      _buildFetchModeSection(),
-                      const SizedBox(height: 16),
-                      const Divider(height: 1),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 140,
-                            child: TextField(
-                              controller: widget.stockfishDepthController,
-                              decoration: InputDecoration(
-                                labelText: 'Stockfish Depth',
-                                border: const OutlineInputBorder(),
-                                isDense: true,
-                                errorText: widget.depthError,
-                              ),
-                              keyboardType: TextInputType.number,
-                              onChanged: widget.onValidateDepth,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 100,
-                            child: TextField(
-                              controller: widget.coresController,
-                              enabled: TacticsImportService.isParallelAvailable,
-                              decoration: InputDecoration(
-                                labelText: 'Cores',
-                                border: const OutlineInputBorder(),
-                                isDense: true,
-                                errorText: widget.coresError,
-                              ),
-                              keyboardType: TextInputType.number,
-                              onChanged: widget.onValidateCores,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(height: 1),
-                      const SizedBox(height: 12),
-                      _buildAutoFetchSection(),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (positionCount > 0) ...[
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: matchingCount > 0
-                  ? () => widget.onStartSession(_settings)
-                  : null,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: widget.isImporting
-                    ? Colors.green[700]
-                    : Theme.of(context).colorScheme.primaryContainer,
-              ),
-              icon: Icon(
-                  widget.isImporting ? Icons.play_circle : Icons.play_arrow),
-              label: Text(
-                widget.isImporting
-                    ? 'Start Training Now ($matchingCount ready)'
-                    : 'Start Practice Session ($matchingCount ready)',
-                style:
-                    const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-          if (matchingCount == 0) ...[
-            const SizedBox(height: 6),
-            Text(
-              positionCount == 1
-                  ? 'The only position is filtered out — adjust Session Settings.'
-                  : 'All $positionCount positions are filtered out — adjust Session Settings.',
-              style: TextStyle(fontSize: 12, color: Colors.orange[300]),
-            ),
-          ],
-        ],
-        if (widget.isImporting && positionCount > 0) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.green),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.green, size: 16),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'You can start training now! New tactics will be added as they\'re found.',
-                    style: TextStyle(fontSize: 12, color: Colors.green),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        const SizedBox(height: 8),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 16,
-          runSpacing: 8,
-          children: [
-            _conditionalTooltip(
-              message: positionCount == 0
-                  ? 'No positions in database'
-                  : widget.isImporting
-                      ? 'Import in progress'
-                      : null,
-              child: TextButton.icon(
-                onPressed: widget.clearDatabaseEnabled && positionCount > 0
-                    ? widget.onClearDatabase
-                    : null,
-                icon: const Icon(Icons.delete_outline, size: 16),
-                label: const Text('Clear Database'),
-              ),
-            ),
-            _conditionalTooltip(
-              message: positionCount == 0 ? 'No tactics to browse' : null,
-              child: TextButton.icon(
-                onPressed: positionCount > 0 ? widget.onBrowseTactics : null,
-                icon: const Icon(Icons.list_alt, size: 16),
-                label: const Text('Browse Tactics'),
-              ),
-            ),
-            if (positionCount > 0)
-              TextButton.icon(
-                onPressed: _showSessionSettingsDialog,
-                icon: const Icon(Icons.tune, size: 16),
-                label: const Text('Session Settings'),
-              ),
-          ],
-        ),
-      ],
-    );
   }
 }
 
@@ -545,7 +749,8 @@ Widget _conditionalTooltip({required String? message, required Widget child}) {
 }
 
 /// A selectable row: tapping anywhere selects the mode. The active row gets a
-/// primary-colored left border accent; the inactive row dims.
+/// primary-colored left border accent; the inactive row dims. (Andrew prefers
+/// this fade look over radio buttons — don't "fix" it.)
 class _FetchModeRow extends StatelessWidget {
   const _FetchModeRow({
     required this.selected,
@@ -583,14 +788,21 @@ class _FetchModeRow extends StatelessWidget {
   }
 }
 
-/// Session settings form (order, mistake-type filter, 1-star toggle).
+/// Session settings form (recency window, order, mistake-type filter,
+/// 1-star toggle).
 class _SessionSettingsForm extends StatelessWidget {
   const _SessionSettingsForm({
     required this.settings,
+    required this.showCustomType,
     required this.onChanged,
   });
 
   final TacticsSessionSettings settings;
+
+  /// Whether the database contains any custom puzzles; the checkbox is
+  /// hidden otherwise so the dialog only offers choices that exist.
+  final bool showCustomType;
+
   final ValueChanged<TacticsSessionSettings> onChanged;
 
   static const _orderLabels = {
@@ -600,16 +812,50 @@ class _SessionSettingsForm extends StatelessWidget {
     TacticsSessionOrder.random: 'Random',
   };
 
+  /// Recency presets: days back, or null for all time.
+  static const _agePresets = <(int?, String)>[
+    (1, 'Today'),
+    (2, '2 days'),
+    (7, '7 days'),
+    (14, '14 days'),
+    (null, 'All time'),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        Text(
+          'From games in the last:',
+          style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final (days, label) in _agePresets)
+              ChoiceChip(
+                label: Text(label, style: const TextStyle(fontSize: 12)),
+                selected: settings.maxAgeDays == days,
+                visualDensity: VisualDensity.compact,
+                onSelected: (_) => onChanged(
+                  days == null
+                      ? settings.copyWith(clearMaxAgeDays: true)
+                      : settings.copyWith(maxAgeDays: days),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
         Row(
           children: [
-            Text('Order:',
-                style: TextStyle(fontSize: 13, color: Colors.grey[300])),
+            Text(
+              'Order:',
+              style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+            ),
             const SizedBox(width: 8),
             DropdownButton<TacticsSessionOrder>(
               value: settings.order,
@@ -618,10 +864,7 @@ class _SessionSettingsForm extends StatelessWidget {
               style: const TextStyle(fontSize: 13),
               items: [
                 for (final entry in _orderLabels.entries)
-                  DropdownMenuItem(
-                    value: entry.key,
-                    child: Text(entry.value),
-                  ),
+                  DropdownMenuItem(value: entry.key, child: Text(entry.value)),
               ],
               onChanged: (v) {
                 if (v != null) onChanged(settings.copyWith(order: v));
@@ -631,51 +874,50 @@ class _SessionSettingsForm extends StatelessWidget {
         ),
         _MistakeTypeCheckbox(
           label: 'Group by game',
-          type: '',
           selected: settings.groupByGame,
           onChanged: (v) => onChanged(settings.copyWith(groupByGame: v)),
         ),
         const SizedBox(height: 12),
-        Text('Include:',
-            style: TextStyle(fontSize: 13, color: Colors.grey[300])),
+        Text(
+          'Mistake types to include:',
+          style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+        ),
         _MistakeTypeCheckbox(
           label: 'Blunders (??)',
-          type: '??',
           selected: settings.mistakeTypes.contains('??'),
           onChanged: (v) => _toggleMistakeType('??', v),
         ),
         _MistakeTypeCheckbox(
           label: 'Mistakes (?)',
-          type: '?',
           selected: settings.mistakeTypes.contains('?'),
           onChanged: (v) => _toggleMistakeType('?', v),
         ),
         _MistakeTypeCheckbox(
           label: 'Inaccuracies (?!)',
-          type: '?!',
           selected: settings.mistakeTypes.contains('?!'),
           onChanged: (v) => _toggleMistakeType('?!', v),
         ),
-        _MistakeTypeCheckbox(
-          label: 'Custom puzzles',
-          type: TacticsSessionSettings.customMistakeType,
-          selected: settings.mistakeTypes
-              .contains(TacticsSessionSettings.customMistakeType),
-          onChanged: (v) =>
-              _toggleMistakeType(TacticsSessionSettings.customMistakeType, v),
-        ),
+        if (showCustomType)
+          _MistakeTypeCheckbox(
+            label: 'Custom puzzles',
+            selected: settings.mistakeTypes.contains(
+              TacticsSessionSettings.customMistakeType,
+            ),
+            onChanged: (v) =>
+                _toggleMistakeType(TacticsSessionSettings.customMistakeType, v),
+          ),
         const SizedBox(height: 8),
-        Text('Filter:',
-            style: TextStyle(fontSize: 13, color: Colors.grey[300])),
+        Text(
+          'Options:',
+          style: TextStyle(fontSize: 13, color: Colors.grey[300]),
+        ),
         _MistakeTypeCheckbox(
           label: 'Unreviewed only',
-          type: '',
           selected: settings.skipReviewed,
           onChanged: (v) => onChanged(settings.copyWith(skipReviewed: v)),
         ),
         _MistakeTypeCheckbox(
           label: 'Exclude 1-star rated',
-          type: '',
           selected: !settings.includeOneStar,
           onChanged: (v) => onChanged(settings.copyWith(includeOneStar: !v)),
         ),
@@ -697,13 +939,11 @@ class _SessionSettingsForm extends StatelessWidget {
 class _MistakeTypeCheckbox extends StatelessWidget {
   const _MistakeTypeCheckbox({
     required this.label,
-    required this.type,
     required this.selected,
     required this.onChanged,
   });
 
   final String label;
-  final String type;
   final bool selected;
   final ValueChanged<bool> onChanged;
 
@@ -771,13 +1011,17 @@ class TacticsImportStatusBanner extends StatelessWidget {
             children: [
               if (isImporting)
                 const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2)),
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               if (isImporting) const SizedBox(width: 12),
               if (!isImporting)
-                Icon(Icons.check_circle_outline,
-                    size: 16, color: Colors.green[400]),
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 16,
+                  color: Colors.green[400],
+                ),
               if (!isImporting) const SizedBox(width: 8),
               Expanded(child: Text(status)),
               if (hasActiveImport)

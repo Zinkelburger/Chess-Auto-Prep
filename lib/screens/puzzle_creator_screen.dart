@@ -1,5 +1,5 @@
 /// Manual puzzle creation flow: set up a position, play the solution,
-/// annotate, and save into a chosen puzzle set.
+/// annotate, and save into the tactics database.
 ///
 /// Pushed as a route from the Tactics panel (or via the cross-mode
 /// "Make puzzle from this position" hooks).  Receives the *live*
@@ -56,7 +56,6 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
   final _whiteCtrl = TextEditingController();
   final _blackCtrl = TextEditingController();
   int _rating = 0;
-  late String _targetSet;
   bool _saving = false;
 
   @override
@@ -64,12 +63,6 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
     super.initState();
     _creator = PuzzleCreatorController(initialFen: widget.initialFen);
     _creator.addListener(_onChanged);
-    // An external set (study under review) is not a named set the creator
-    // can append to; fall back to a real set.
-    _targetSet = widget.database.isExternalSet
-        ? (widget.database.availableSets.firstOrNull?.name ??
-            TacticsDatabase.defaultSetName)
-        : widget.database.activeSetName;
   }
 
   @override
@@ -86,12 +79,6 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
     if (mounted) setState(() {});
   }
 
-  List<String> get _setNames {
-    final names = widget.database.availableSets.map((s) => s.name).toList();
-    if (!names.contains(_targetSet)) names.insert(0, _targetSet);
-    return names;
-  }
-
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
@@ -102,14 +89,13 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
         gameWhite: _whiteCtrl.text.trim(),
         gameBlack: _blackCtrl.text.trim(),
       );
-      final added =
-          await widget.database.addPositionToSet(_targetSet, puzzle);
+      final added = await widget.database.addPositionToDatabase(puzzle);
       if (!mounted) return;
       if (added) {
         Navigator.of(context).pop(puzzle);
       } else {
         showAppSnackBar(
-            context, 'A puzzle with this position already exists in "$_targetSet".',
+            context, 'A puzzle with this position already exists.',
             isError: true);
       }
     } finally {
@@ -332,27 +318,6 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
                   onPressed: () => setState(
                       () => _rating = star == _rating ? 0 : star),
                 ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Text('Save to set', style: theme.textTheme.labelLarge),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButton<String>(
-                  value: _targetSet,
-                  isExpanded: true,
-                  isDense: true,
-                  items: [
-                    for (final name in _setNames)
-                      DropdownMenuItem(value: name, child: Text(name)),
-                  ],
-                  onChanged: (name) {
-                    if (name != null) setState(() => _targetSet = name);
-                  },
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 16),
