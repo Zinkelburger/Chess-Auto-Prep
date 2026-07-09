@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:dartchess/dartchess.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_state.dart';
 import '../core/repertoire_controller.dart';
@@ -107,7 +108,21 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   final CoverageController _coverageController = CoverageController();
 
   late final TabController _toolsTabController;
+
+  /// Wide layout only: PGN | Tree tabs (the Lines/Draft surface lives in the
+  /// side panel instead of a tab).
+  late final TabController _wideTabController;
   bool _showTrapsInLinesTab = false;
+
+  /// Wide layout only: whether the Lines side panel is collapsed to a strip.
+  static const _kLinesPanelCollapsed = 'repertoire.lines_panel_collapsed';
+  bool _linesPanelCollapsed = false;
+
+  /// Wide layout only: user-dragged Lines side panel width. Null until the
+  /// user drags the divider; falls back to the proportional default.
+  static const _kLinesPanelWidth = 'repertoire.lines_panel_width';
+  static const double _kLinesPanelMinWidth = 220.0;
+  double? _linesPanelWidth;
 
   // ── Build-from-games draft session (inline in the Lines/Draft tab) ──
   final GamesDraftController _draftController = GamesDraftController();
@@ -129,6 +144,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     super.initState();
 
     _toolsTabController = TabController(length: 3, vsync: this);
+    _wideTabController = TabController(length: 2, vsync: this);
+    _loadLinesPanelPref();
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
     _generationController.addListener(_onGenerationChanged);
@@ -151,6 +168,56 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     if (_isCompactLayout == isCompact) return;
     _isCompactLayout = isCompact;
     setState(() {});
+  }
+
+  Future<void> _loadLinesPanelPref() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _linesPanelCollapsed = prefs.getBool(_kLinesPanelCollapsed) ?? false;
+        _linesPanelWidth = prefs.getDouble(_kLinesPanelWidth);
+      });
+    } catch (e) {
+      log.w('Failed to load lines panel pref', name: 'RepertoireScreen', error: e);
+    }
+  }
+
+  Future<void> _saveLinesPanelPref() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kLinesPanelCollapsed, _linesPanelCollapsed);
+    } catch (e) {
+      log.w('Failed to save lines panel pref', name: 'RepertoireScreen', error: e);
+    }
+  }
+
+  void _setLinesPanelCollapsed(bool collapsed) {
+    if (_linesPanelCollapsed == collapsed) return;
+    setState(() => _linesPanelCollapsed = collapsed);
+    _saveLinesPanelPref();
+  }
+
+  Future<void> _saveLinesPanelWidth() async {
+    final width = _linesPanelWidth;
+    if (width == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_kLinesPanelWidth, width);
+    } catch (e) {
+      log.w('Failed to save lines panel width',
+          name: 'RepertoireScreen', error: e);
+    }
+  }
+
+  /// Bring the Lines/Draft surface into view: the second tab when compact,
+  /// the side panel (expanding it if collapsed) when wide.
+  void _showLinesSurface() {
+    if (_isCompactLayout) {
+      _toolsTabController.animateTo(1);
+    } else {
+      _setLinesPanelCollapsed(false);
+    }
   }
 
   void _openBottomPane(BottomPaneTab tab) {
@@ -351,6 +418,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       _auditController.saveProgress(_repertoireFilePath);
     }
     _toolsTabController.dispose();
+    _wideTabController.dispose();
     _focusNode.dispose();
     _boardPreview.dispose();
     _draftController.removeListener(_onDraftChanged);
@@ -526,9 +594,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           onImportPgnFile: _importPgnFromFile,
           onToggleExpectimax: InlineExpectimaxBar.toggle,
           onToggleLinesTab: () {
-            _toolsTabController.animateTo(
-              _toolsTabController.index == 1 ? 0 : 1,
-            );
+            if (_isCompactLayout) {
+              _toolsTabController.animateTo(
+                _toolsTabController.index == 1 ? 0 : 1,
+              );
+            } else {
+              _setLinesPanelCollapsed(!_linesPanelCollapsed);
+            }
           },
           onCollapseBottomPane: () {
             final pane = _bottomPaneKey.currentState;
@@ -642,13 +714,58 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Widget _buildWideLayout() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildBoardZone(),
-        _verticalZoneDivider(),
-        Expanded(child: _buildToolsColumn()),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final defaultWidth =
+            (constraints.maxWidth * 0.24).clamp(260.0, 400.0).toDouble();
+        final maxWidth = (constraints.maxWidth * 0.45)
+            .clamp(_kLinesPanelMinWidth, constraints.maxWidth)
+            .toDouble();
+        final panelWidth = (_linesPanelWidth ?? defaultWidth)
+            .clamp(_kLinesPanelMinWidth, maxWidth)
+            .toDouble();
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildBoardZone(),
+            _verticalZoneDivider(),
+            Expanded(child: _buildWideToolsColumn()),
+            if (!_showEmptyState) ...[
+              if (_linesPanelCollapsed)
+                _verticalZoneDivider()
+              else
+                _buildLinesPanelDragHandle(maxWidth),
+              _buildLinesSidePanel(panelWidth),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  /// Divider between the PGN tools column and the Lines side panel; drag it
+  /// to resize the panel.
+  Widget _buildLinesPanelDragHandle(double maxWidth) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeLeftRight,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragUpdate: (details) {
+          final box = context.findRenderObject() as RenderBox?;
+          if (box == null) return;
+          // Panel spans from the handle to the right edge of the screen body.
+          final localX = box.globalToLocal(details.globalPosition).dx;
+          final newWidth = (box.size.width - localX)
+              .clamp(_kLinesPanelMinWidth, maxWidth)
+              .toDouble();
+          setState(() => _linesPanelWidth = newWidth);
+        },
+        onHorizontalDragEnd: (_) => _saveLinesPanelWidth(),
+        child: SizedBox(
+          width: 7,
+          child: Center(child: Container(width: 1, color: Colors.grey[700])),
+        ),
+      ),
     );
   }
 
@@ -715,7 +832,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       !_generationController.isGenerating &&
       !_isDraftActive;
 
-  /// Unified right pane: tabs + nav. Engine bars live inside PGN tab only.
+  /// Compact-layout tools pane: PGN | Lines/Draft | Tree tabs + nav.
+  /// Engine bars live inside PGN tab only.
   Widget _buildToolsColumn() {
     if (_showEmptyState) {
       return RepertoireEmptyState(
@@ -742,6 +860,122 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         ),
         _buildNavControls(),
       ],
+    );
+  }
+
+  /// Wide-layout tools column: PGN and Tree tabs only — the Lines/Draft
+  /// surface lives in the side panel to the right instead of a tab.
+  Widget _buildWideToolsColumn() {
+    if (_showEmptyState) {
+      return RepertoireEmptyState(
+        onGenerate: _openGenerationDialog,
+        onBuildFromGames: _buildFromGames,
+        onImportPgnFile: _importPgnFromFile,
+        onImportPgnPaste: _importPgnFromPaste,
+        onDismiss: () => setState(() => _emptyStateDismissed = true),
+      );
+    }
+    return Column(
+      children: [
+        TabBar(
+          controller: _wideTabController,
+          tabs: [_buildPgnTabLabel(), _buildTreeTabLabel()],
+          labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+          indicatorSize: TabBarIndicatorSize.label,
+          dividerHeight: 1,
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _wideTabController,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              _buildPgnTabWithEngines(),
+              _buildTreeTabContent(),
+            ],
+          ),
+        ),
+        _buildNavControls(),
+      ],
+    );
+  }
+
+  /// Wide-layout side panel hosting the Lines/Draft surface so lines stay
+  /// clickable while the PGN editor is visible. Collapses to a thin strip.
+  Widget _buildLinesSidePanel(double width) {
+    final theme = Theme.of(context);
+    if (_linesPanelCollapsed) {
+      return InkWell(
+        onTap: () => _setLinesPanelCollapsed(false),
+        child: SizedBox(
+          width: 28,
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              Tooltip(
+                message: 'Show lines (L)',
+                child: Icon(Icons.keyboard_double_arrow_left,
+                    size: 16, color: theme.hintColor),
+              ),
+              const SizedBox(height: 12),
+              RotatedBox(
+                quarterTurns: 1,
+                child: Text(
+                  _isDraftActive
+                      ? 'Draft'
+                      : 'Lines (${_controller.repertoireLines.length})',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: _isDraftActive ? AppColors.warning : theme.hintColor,
+                    fontWeight: _isDraftActive ? FontWeight.w600 : null,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: width,
+      child: Column(
+        children: [
+          SizedBox(
+            height: 30,
+            child: Row(
+              children: [
+                const SizedBox(width: 8),
+                Icon(
+                  _isDraftActive ? Icons.download_done : Icons.list_alt,
+                  size: 14,
+                  color: _isDraftActive ? AppColors.warning : null,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _isDraftActive
+                      ? 'Draft'
+                      : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _isDraftActive ? AppColors.warning : null,
+                    fontWeight: _isDraftActive ? FontWeight.w600 : null,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.keyboard_double_arrow_right, size: 16),
+                  onPressed: () => _setLinesPanelCollapsed(true),
+                  tooltip: 'Hide lines (L)',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(child: _buildSecondTabContent()),
+        ],
+      ),
     );
   }
 
@@ -847,17 +1081,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return TabBar(
       controller: _toolsTabController,
       tabs: [
-        const Tab(
-          height: 30,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.article_outlined, size: 14),
-              SizedBox(width: 4),
-              Text('PGN', style: TextStyle(fontSize: 12)),
-            ],
-          ),
-        ),
+        _buildPgnTabLabel(),
         Tab(
           height: 30,
           child: Row(
@@ -882,21 +1106,39 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             ],
           ),
         ),
-        const Tab(
-          height: 30,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.account_tree_outlined, size: 14),
-              SizedBox(width: 4),
-              Text('Tree', style: TextStyle(fontSize: 12)),
-            ],
-          ),
-        ),
+        _buildTreeTabLabel(),
       ],
       labelPadding: const EdgeInsets.symmetric(horizontal: 12),
       indicatorSize: TabBarIndicatorSize.label,
       dividerHeight: 1,
+    );
+  }
+
+  Widget _buildPgnTabLabel() {
+    return const Tab(
+      height: 30,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.article_outlined, size: 14),
+          SizedBox(width: 4),
+          Text('PGN', style: TextStyle(fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTreeTabLabel() {
+    return const Tab(
+      height: 30,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.account_tree_outlined, size: 14),
+          SizedBox(width: 4),
+          Text('Tree', style: TextStyle(fontSize: 12)),
+        ],
+      ),
     );
   }
 
@@ -1205,7 +1447,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       },
       onImportPgnFile: _importPgnFromFile,
       onImportPgnPaste: _importPgnFromPaste,
-      onViewInLines: () => _toolsTabController.animateTo(1),
+      onViewInLines: _showLinesSurface,
       onReload: _reloadRepertoire,
       generatedTree: _generationController.generatedTree,
       treeConfig: _generationController.generatedTreeConfig,
@@ -1335,8 +1577,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         final fp = _controller.currentRepertoire?.filePath;
         if (fp != null) _loadTraps(fp);
       }
-      if (justFinished && _toolsTabController.index != 1) {
-        _toolsTabController.animateTo(1);
+      if (justFinished) {
+        _showLinesSurface();
       }
     }
 
@@ -1374,8 +1616,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       appState.setLichessUsername(config.username);
     }
 
-    // Switch to the Lines/Draft tab and show progress inline.
-    _toolsTabController.animateTo(1);
+    // Bring the Lines/Draft surface into view and show progress inline.
+    _showLinesSurface();
     final error = await _draftController.build(
       config: config,
       repertoire: _controller.tree,
@@ -1393,7 +1635,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _selectLine(RepertoireLine line) {
     _controller.loadPgnLine(line);
-    _toolsTabController.animateTo(0);
+    // Bring the PGN editor into view; in the wide layout the lines panel
+    // stays put so the user can keep clicking between lines.
+    if (_isCompactLayout) {
+      _toolsTabController.animateTo(0);
+    } else {
+      _wideTabController.animateTo(0);
+    }
   }
 
   Future<void> _renameLine(RepertoireLine line, String newTitle) async {

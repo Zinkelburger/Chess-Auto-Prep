@@ -14,6 +14,8 @@ import 'package:flutter/material.dart';
 
 import '../../models/move_tree.dart';
 import '../../theme/app_colors.dart';
+import 'comment_editor.dart';
+import 'comment_prose_spans.dart';
 import '../../utils/chess_utils.dart' show coordsAtPly;
 import '../../utils/pgn_comment_utils.dart'
     show
@@ -134,8 +136,6 @@ class PgnMovetextView extends StatelessWidget {
     this.onPlayInlineLine,
     this.activeInlineLine,
   });
-
-  static String _filterComment(String comment) => filterDisplayComment(comment);
 
   /// A bare SAN move core (no move number, check/annotation glyphs), used to
   /// pre-filter prose words before the (more expensive) legality check.
@@ -345,7 +345,7 @@ class PgnMovetextView extends StatelessWidget {
       // Inline comment editor
       if (editingCommentIndex == i) {
         flushSpans();
-        children.add(_CommentEditor(
+        children.add(PgnCommentEditor(
           initialText: _rawComment(moveData),
           onSave: (text) => onSaveComment(i, text),
           onCancel: onCancelEditingComment,
@@ -550,33 +550,8 @@ class PgnMovetextView extends StatelessWidget {
   /// proportional font, embedded moves in monospace. Unlike mainline comments
   /// these are non-interactive — we don't track a board position to anchor
   /// their moves to — so the moves are rendered as plain monospace text.
-  List<InlineSpan> _variationCommentSpans(String rawComment) {
-    final filtered = _filterComment(rawComment);
-    if (filtered.isEmpty) return const [];
-    const proseStyle = TextStyle(
-      fontSize: 13.5,
-      height: 1.4,
-      color: AppColors.pgnComment,
-    );
-    const moveStyle = TextStyle(
-      fontFamily: 'monospace',
-      fontSize: 13.5,
-      height: 1.4,
-      color: AppColors.pgnComment,
-    );
-    if (!bookFormatting) {
-      return [TextSpan(text: '$filtered ', style: proseStyle)];
-    }
-    final spans = <InlineSpan>[];
-    for (final t in parseCommentTokens(stripEngineTokens(filtered))) {
-      if (t is CommentMove) {
-        spans.add(TextSpan(text: '${t.display} ', style: moveStyle));
-      } else if (t is CommentProse) {
-        spans.add(TextSpan(text: '${t.text} ', style: proseStyle));
-      }
-    }
-    return spans;
-  }
+  List<InlineSpan> _variationCommentSpans(String rawComment) =>
+      commentProseSpans(rawComment, bookFormatting: bookFormatting);
 
   /// Split a prose string into flowing text + clickable chips for any word that
   /// parses as a *legal* SAN move from [anchorPos]. The legality check filters
@@ -1117,81 +1092,3 @@ class PgnMovetextView extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Inline comment editor widget
-// ---------------------------------------------------------------------------
-class _CommentEditor extends StatefulWidget {
-  final String initialText;
-  final ValueChanged<String> onSave;
-  final VoidCallback onCancel;
-
-  const _CommentEditor({
-    required this.initialText,
-    required this.onSave,
-    required this.onCancel,
-  });
-
-  @override
-  State<_CommentEditor> createState() => _CommentEditorState();
-}
-
-class _CommentEditorState extends State<_CommentEditor> {
-  late TextEditingController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialText);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              autofocus: true,
-              maxLines: null,
-              style: TextStyle(fontSize: 13, color: Colors.grey[200]),
-              decoration: InputDecoration(
-                isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                border: InputBorder.none,
-                hintText: 'Comment',
-                hintStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-              onSubmitted: (v) => widget.onSave(v),
-            ),
-          ),
-          IconButton(
-            onPressed: () => widget.onSave(_controller.text),
-            icon: Icon(Icons.check, size: 18, color: Colors.grey[400]),
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-          ),
-          IconButton(
-            onPressed: widget.onCancel,
-            icon: Icon(Icons.close, size: 18, color: Colors.grey[500]),
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-          ),
-        ],
-      ),
-    );
-  }
-}

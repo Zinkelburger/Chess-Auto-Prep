@@ -95,6 +95,104 @@ class _HeaderSection extends StatelessWidget {
     required this.onMetricsFilterChanged,
   });
 
+  /// Sort and metrics-filter live behind this dialog: the browser often sits
+  /// in a ~280px side panel where rows of chips overflow, so only the search
+  /// box and the position toggle stay inline.
+  void _openSortFilterDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        var localSort = sortBy;
+        var localFilter = metricsFilter;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Sort and Filter Lines'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Sort lines by',
+                        style: Theme.of(context).textTheme.titleSmall),
+                    RadioGroup<LineSortBy>(
+                      groupValue: localSort,
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setDialogState(() => localSort = v);
+                        onSortByChanged(v);
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final (label, value) in const [
+                            ('Name', LineSortBy.name),
+                            ('Quality', LineSortBy.quality),
+                            ('Playability', LineSortBy.playability),
+                            ('Traps', LineSortBy.traps),
+                            ('Coherence', LineSortBy.coherence),
+                            ('Length', LineSortBy.length),
+                          ])
+                            RadioListTile<LineSortBy>(
+                              title: Text(label),
+                              value: value,
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Show only lines with',
+                        style: Theme.of(context).textTheme.titleSmall),
+                    RadioGroup<LineMetricsFilter>(
+                      groupValue: localFilter,
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setDialogState(() => localFilter = v);
+                        onMetricsFilterChanged(v);
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final (label, value) in const [
+                            ('Everything', LineMetricsFilter.all),
+                            ('Hard moves', LineMetricsFilter.hardMoves),
+                            ('Traps', LineMetricsFilter.trappy),
+                            ('Low coherence', LineMetricsFilter.lowCoherence),
+                          ])
+                            RadioListTile<LineMetricsFilter>(
+                              title: Text(label),
+                              value: value,
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Done'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String get _metricsFilterLabel => switch (metricsFilter) {
+        LineMetricsFilter.all => '',
+        LineMetricsFilter.hardMoves => 'Hard moves',
+        LineMetricsFilter.trappy => 'Traps',
+        LineMetricsFilter.lowCoherence => 'Low coherence',
+      };
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -108,59 +206,10 @@ class _HeaderSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.library_books, size: 20, color: Colors.grey[400]),
-              const SizedBox(width: 8),
-              Text(
-                'Repertoire Lines',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[200],
-                ),
-              ),
-              const Spacer(),
-              if (onCoveragePressed != null) ...[
-                FilledButton.icon(
-                  onPressed: isCoverageRunning ? null : onCoveragePressed,
-                  icon: isCoverageRunning
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.analytics_outlined, size: 16),
-                  label: Text(
-                    isCoverageRunning ? 'Analyzing...' : 'Coverage',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              FilterChip(
-                label: const Text('Current Position'),
-                selected: showOnlyMatchingPosition,
-                onSelected: onShowOnlyMatchingPositionChanged,
-                labelStyle: const TextStyle(fontSize: 11),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
           TextField(
             controller: searchController,
             decoration: InputDecoration(
-              hintText:
-                  'Search by name, moves (e.g., "1.e4 e5" or "Sicilian")...',
+              hintText: 'Search by name or moves...',
               hintStyle: TextStyle(color: Colors.grey[500], fontSize: 12),
               prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey[500]),
               suffixIcon: searchController.text.isNotEmpty
@@ -193,158 +242,60 @@ class _HeaderSection extends StatelessWidget {
             style: const TextStyle(fontSize: 13),
           ),
           const SizedBox(height: 8),
-          Row(
+          // Wrap, not Row: the browser must survive narrow side-panel widths
+          // without overflowing.
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text('Sort: ',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[400])),
-              _SortChip(
-                  label: 'Name',
-                  value: LineSortBy.name,
-                  sortBy: sortBy,
-                  onChanged: onSortByChanged),
-              const SizedBox(width: 4),
-              _SortChip(
-                  label: 'Quality',
-                  value: LineSortBy.quality,
-                  sortBy: sortBy,
-                  onChanged: onSortByChanged),
-              const SizedBox(width: 4),
-              _SortChip(
-                  label: 'Playability',
-                  value: LineSortBy.playability,
-                  sortBy: sortBy,
-                  onChanged: onSortByChanged),
-              const SizedBox(width: 4),
-              _SortChip(
-                  label: 'Traps',
-                  value: LineSortBy.traps,
-                  sortBy: sortBy,
-                  onChanged: onSortByChanged),
-              const SizedBox(width: 4),
-              _SortChip(
-                  label: 'Coherence',
-                  value: LineSortBy.coherence,
-                  sortBy: sortBy,
-                  onChanged: onSortByChanged),
-              const SizedBox(width: 4),
-              _SortChip(
-                  label: 'Length',
-                  value: LineSortBy.length,
-                  sortBy: sortBy,
-                  onChanged: onSortByChanged),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Text('Filter: ',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[400])),
-              _MetricsFilterChip(
-                  label: 'All',
-                  value: LineMetricsFilter.all,
-                  metricsFilter: metricsFilter,
-                  onChanged: onMetricsFilterChanged),
-              const SizedBox(width: 4),
-              _MetricsFilterChip(
-                  label: 'Hard moves',
-                  value: LineMetricsFilter.hardMoves,
-                  metricsFilter: metricsFilter,
-                  onChanged: onMetricsFilterChanged),
-              const SizedBox(width: 4),
-              _MetricsFilterChip(
-                  label: 'Trappy',
-                  value: LineMetricsFilter.trappy,
-                  metricsFilter: metricsFilter,
-                  onChanged: onMetricsFilterChanged),
-              const SizedBox(width: 4),
-              _MetricsFilterChip(
-                  label: 'Low coherence',
-                  value: LineMetricsFilter.lowCoherence,
-                  metricsFilter: metricsFilter,
-                  onChanged: onMetricsFilterChanged),
+              FilterChip(
+                label: const Text('Current Position'),
+                selected: showOnlyMatchingPosition,
+                onSelected: onShowOnlyMatchingPositionChanged,
+                labelStyle: const TextStyle(fontSize: 11),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                visualDensity: VisualDensity.compact,
+              ),
+              ActionChip(
+                avatar: Icon(Icons.tune, size: 14, color: Colors.grey[400]),
+                label: const Text('Sort & Filter'),
+                labelStyle: const TextStyle(fontSize: 11),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                visualDensity: VisualDensity.compact,
+                onPressed: () => _openSortFilterDialog(context),
+              ),
+              // Active advanced filter stays visible (and removable) even
+              // though the knob itself lives in the dialog.
+              if (metricsFilter != LineMetricsFilter.all)
+                InputChip(
+                  label: Text('Only: $_metricsFilterLabel'),
+                  labelStyle: const TextStyle(fontSize: 11),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  visualDensity: VisualDensity.compact,
+                  selected: true,
+                  onDeleted: () =>
+                      onMetricsFilterChanged(LineMetricsFilter.all),
+                ),
+              if (onCoveragePressed != null)
+                ActionChip(
+                  avatar: isCoverageRunning
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(Icons.analytics_outlined,
+                          size: 14, color: Colors.grey[400]),
+                  label: Text(isCoverageRunning ? 'Analyzing...' : 'Coverage'),
+                  labelStyle: const TextStyle(fontSize: 11),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: isCoverageRunning ? null : onCoveragePressed,
+                ),
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SortChip extends StatelessWidget {
-  final String label;
-  final LineSortBy value;
-  final LineSortBy sortBy;
-  final ValueChanged<LineSortBy> onChanged;
-
-  const _SortChip({
-    required this.label,
-    required this.value,
-    required this.sortBy,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isSelected = sortBy == value;
-    return GestureDetector(
-      onTap: () => onChanged(value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.info : Colors.grey[800],
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? Colors.white : Colors.grey[400],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MetricsFilterChip extends StatelessWidget {
-  final String label;
-  final LineMetricsFilter value;
-  final LineMetricsFilter metricsFilter;
-  final ValueChanged<LineMetricsFilter> onChanged;
-
-  const _MetricsFilterChip({
-    required this.label,
-    required this.value,
-    required this.metricsFilter,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isSelected = metricsFilter == value;
-    return GestureDetector(
-      onTap: () {
-        if (isSelected && value != LineMetricsFilter.all) {
-          onChanged(LineMetricsFilter.all);
-        } else {
-          onChanged(value);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.pgnMainLine : Colors.grey[800],
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            color: isSelected ? Colors.white : Colors.grey[400],
-          ),
-        ),
       ),
     );
   }
