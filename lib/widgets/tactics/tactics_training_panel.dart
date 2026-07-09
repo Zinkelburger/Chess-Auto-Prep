@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/tactics_position.dart';
 import '../../services/tactics_engine.dart';
+import '../../utils/pgn_comment_utils.dart' show filterDisplayComment;
 import '../clickable_move_line.dart';
 import '../shortcut_tooltip.dart';
 
@@ -60,7 +61,8 @@ class TacticsTrainingPanel extends StatelessWidget {
   /// The puzzle's note (annotation / mistake analysis) is the flashcard
   /// "back": revealed once the puzzle is solved or the solution shown.
   bool get _showNote =>
-      (positionSolved || showSolution) && position.mistakeAnalysis.trim().isNotEmpty;
+      (positionSolved || showSolution) &&
+      filterDisplayComment(position.mistakeAnalysis).isNotEmpty;
 
   Color _feedbackColor() {
     if (feedback.contains('Correct')) return Colors.green;
@@ -326,7 +328,9 @@ class _NoteCard extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              note.trim(),
+              // Notes come from scraped PGN comments — strip engine tokens and
+              // collapse stray double spaces into readable prose.
+              filterDisplayComment(note),
               style: theme.textTheme.bodyMedium,
             ),
           ),
