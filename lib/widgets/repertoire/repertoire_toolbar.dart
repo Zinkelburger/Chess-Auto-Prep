@@ -8,6 +8,13 @@ import '../shortcut_tooltip.dart';
 import '../layout/board_zone.dart';
 
 /// App bar for the repertoire screen: title, generation status, and actions.
+///
+/// Actions are grouped by workflow, not by feature:
+/// - the title doubles as the repertoire switcher,
+/// - "Generate ▾" is the single entry point for adding lines (generate,
+///   build from games, import PGN),
+/// - Train is the primary (filled) action,
+/// - everything occasional lives in the trailing overflow menu.
 class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   const RepertoireToolbar({
     super.key,
@@ -51,23 +58,40 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
+  bool get _titleIsSwitcher =>
+      showSelectRepertoireAction && onSelectRepertoire != null;
+
+  bool get _hasAddSources =>
+      onBuildFromGames != null ||
+      onImportPgnFile != null ||
+      onImportPgnPaste != null;
+
   @override
   Widget build(BuildContext context) {
     return AppBar(
       titleSpacing: 16,
-      title: title,
+      title: _titleIsSwitcher
+          ? RepertoireSwitcherTitle(
+              title: title,
+              onTap: generationLocked ? null : onSelectRepertoire,
+            )
+          : title,
       actions: [
         BoardZoneControls(trapNavigation: trapNavigation),
-        if (onOpenGeneration != null)
-          RepertoireGenerateButton(onPressed: onOpenGeneration),
-        if (onBuildFromGames != null)
-          RepertoireFromGamesButton(onPressed: onBuildFromGames),
-        if (onOpenAudit != null) RepertoireAuditButton(onPressed: onOpenAudit),
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
             onTap: onOpenGeneration,
           ),
+        if (onOpenGeneration != null)
+          RepertoireAddLinesButton(
+            onGenerate: onOpenGeneration,
+            onBuildFromGames: onBuildFromGames,
+            onImportPgnFile: onImportPgnFile,
+            onImportPgnPaste: onImportPgnPaste,
+            showMenu: _hasAddSources,
+          ),
+        if (onOpenAudit != null) RepertoireAuditButton(onPressed: onOpenAudit),
         if (showTrainButton && onTrainRepertoire != null)
           RepertoireTrainButton(
             onPressed: generationLocked ? null : onTrainRepertoire,
@@ -77,10 +101,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           tooltip: 'More actions',
           onSelected: (value) {
             switch (value) {
-              case 'import_pgn_file':
-                onImportPgnFile?.call();
-              case 'import_pgn_paste':
-                onImportPgnPaste?.call();
               case 'switch_color':
                 onSwitchColor?.call();
               case 'settings':
@@ -88,28 +108,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             }
           },
           itemBuilder: (_) => [
-            if (onImportPgnFile != null)
-              const PopupMenuItem(
-                value: 'import_pgn_file',
-                child: ListTile(
-                  leading: Icon(Icons.file_open, size: 20),
-                  title: Text('Import from file'),
-                  trailing: Text('I',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            if (onImportPgnPaste != null)
-              const PopupMenuItem(
-                value: 'import_pgn_paste',
-                child: ListTile(
-                  leading: Icon(Icons.paste, size: 20),
-                  title: Text('Paste PGN'),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
             if (isWhiteRepertoire != null && onSwitchColor != null)
               PopupMenuItem(
                 value: 'switch_color',
@@ -137,12 +135,47 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ],
         ),
-        if (showSelectRepertoireAction && onSelectRepertoire != null)
-          RepertoireSelectButton(
-            onPressed: generationLocked ? null : onSelectRepertoire,
-          ),
         const AppModeMenuButton(),
       ],
+    );
+  }
+}
+
+/// Title wrapper that doubles as the repertoire switcher.
+class RepertoireSwitcherTitle extends StatelessWidget {
+  const RepertoireSwitcherTitle({
+    super.key,
+    required this.title,
+    required this.onTap,
+  });
+
+  final Widget title;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Switch repertoire',
+      waitDuration: const Duration(milliseconds: 600),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(child: title),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.arrow_drop_down,
+                size: 20,
+                color: onTap == null ? Colors.grey[700] : Colors.grey[400],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -237,105 +270,131 @@ class RepertoireGenerationStatusChip extends StatelessWidget {
   }
 }
 
-class RepertoireGenerateButton extends StatelessWidget {
-  const RepertoireGenerateButton({
+/// Split button: "Generate" as the default action, with a dropdown listing
+/// the other ways to add lines (from games, import file, paste PGN).
+class RepertoireAddLinesButton extends StatelessWidget {
+  const RepertoireAddLinesButton({
     super.key,
-    required this.onPressed,
+    required this.onGenerate,
+    this.onBuildFromGames,
+    this.onImportPgnFile,
+    this.onImportPgnPaste,
+    this.showMenu = true,
   });
 
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final compact =
-        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Center(
-        child: compact
-            ? ShortcutIconButton(
-                description: 'Generate repertoire',
-                shortcut: 'G',
-                onPressed: onPressed,
-                icon: const Icon(Icons.auto_awesome),
-              )
-            : ShortcutTooltip(
-                description: 'Generate repertoire',
-                shortcut: 'G',
-                child: TextButton.icon(
-                  onPressed: onPressed,
-                  icon: const Icon(Icons.auto_awesome, size: 18),
-                  label: const Text('Generate'),
-                ),
-              ),
-      ),
-    );
-  }
-}
-
-class RepertoireFromGamesButton extends StatelessWidget {
-  const RepertoireFromGamesButton({
-    super.key,
-    required this.onPressed,
-  });
-
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final compact =
-        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Center(
-        child: compact
-            ? IconButton(
-                tooltip: 'Build repertoire from my games',
-                onPressed: onPressed,
-                icon: const Icon(Icons.download_for_offline_outlined),
-              )
-            : Tooltip(
-                message: 'Download your games and build a draft repertoire '
-                    'from the lines you actually play',
-                child: TextButton.icon(
-                  onPressed: onPressed,
-                  icon: const Icon(Icons.download_for_offline_outlined,
-                      size: 18),
-                  label: const Text('From Games'),
-                ),
-              ),
-      ),
-    );
-  }
-}
-
-class RepertoireSelectButton extends StatelessWidget {
-  const RepertoireSelectButton({
-    super.key,
-    required this.onPressed,
-  });
-
-  final VoidCallback? onPressed;
+  final VoidCallback? onGenerate;
+  final VoidCallback? onBuildFromGames;
+  final VoidCallback? onImportPgnFile;
+  final VoidCallback? onImportPgnPaste;
+  final bool showMenu;
 
   @override
   Widget build(BuildContext context) {
     final compact =
         MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
 
+    final menuItems = <PopupMenuEntry<String>>[
+      if (compact)
+        const PopupMenuItem(
+          value: 'generate',
+          child: ListTile(
+            leading: Icon(Icons.auto_awesome, size: 20),
+            title: Text('Generate'),
+            trailing:
+                Text('G', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      if (onBuildFromGames != null)
+        const PopupMenuItem(
+          value: 'from_games',
+          child: ListTile(
+            leading: Icon(Icons.download_for_offline_outlined, size: 20),
+            title: Text('From my games'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      if (onImportPgnFile != null)
+        const PopupMenuItem(
+          value: 'import_pgn_file',
+          child: ListTile(
+            leading: Icon(Icons.file_open, size: 20),
+            title: Text('Import PGN file'),
+            trailing:
+                Text('I', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      if (onImportPgnPaste != null)
+        const PopupMenuItem(
+          value: 'import_pgn_paste',
+          child: ListTile(
+            leading: Icon(Icons.paste, size: 20),
+            title: Text('Paste PGN'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+    ];
+
+    void onSelected(String value) {
+      switch (value) {
+        case 'generate':
+          onGenerate?.call();
+        case 'from_games':
+          onBuildFromGames?.call();
+        case 'import_pgn_file':
+          onImportPgnFile?.call();
+        case 'import_pgn_paste':
+          onImportPgnPaste?.call();
+      }
+    }
+
+    if (compact) {
+      // One toolbar slot: sparkles icon opens the full add-lines menu.
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: Center(
+          child: PopupMenuButton<String>(
+            icon: const Icon(Icons.auto_awesome, size: 20),
+            tooltip: 'Add lines',
+            onSelected: onSelected,
+            itemBuilder: (_) => menuItems,
+          ),
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Center(
-        child: compact
-            ? IconButton(
-                tooltip: 'Select repertoire',
-                onPressed: onPressed,
-                icon: const Icon(Icons.library_books),
-              )
-            : TextButton.icon(
-                onPressed: onPressed,
-                icon: const Icon(Icons.library_books),
-                label: const Text('Select Repertoire'),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ShortcutTooltip(
+              description: 'Generate repertoire',
+              shortcut: 'G',
+              child: TextButton.icon(
+                onPressed: onGenerate,
+                icon: const Icon(Icons.auto_awesome, size: 18),
+                label: const Text('Generate'),
               ),
+            ),
+            if (showMenu)
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.arrow_drop_down, size: 20),
+                tooltip: 'More ways to add lines',
+                padding: EdgeInsets.zero,
+                constraints:
+                    const BoxConstraints(minWidth: 28, minHeight: 28),
+                onSelected: onSelected,
+                itemBuilder: (_) => menuItems,
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -357,14 +416,15 @@ class RepertoireTrainButton extends StatelessWidget {
       padding: const EdgeInsets.only(right: 8),
       child: Center(
         child: compact
-            ? IconButton(
+            ? IconButton.filled(
                 tooltip: 'Train repertoire',
                 onPressed: onPressed,
+                iconSize: 18,
                 icon: const Icon(Icons.school),
               )
-            : TextButton.icon(
+            : FilledButton.icon(
                 onPressed: onPressed,
-                icon: const Icon(Icons.school),
+                icon: const Icon(Icons.school, size: 18),
                 label: const Text('Train'),
               ),
       ),
@@ -382,27 +442,15 @@ class RepertoireAuditButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compact =
-        MediaQuery.sizeOf(context).width < kToolbarCompactBreakpoint;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Center(
-        child: compact
-            ? ShortcutIconButton(
-                description: 'Audit repertoire',
-                shortcut: 'A',
-                onPressed: onPressed,
-                icon: const Icon(Icons.policy_outlined),
-              )
-            : ShortcutTooltip(
-                description: 'Audit repertoire',
-                shortcut: 'A',
-                child: TextButton.icon(
-                  onPressed: onPressed,
-                  icon: const Icon(Icons.policy_outlined, size: 18),
-                  label: const Text('Audit'),
-                ),
-              ),
+        child: ShortcutIconButton(
+          description: 'Audit repertoire',
+          shortcut: 'A',
+          onPressed: onPressed,
+          icon: const Icon(Icons.policy_outlined, size: 20),
+        ),
       ),
     );
   }

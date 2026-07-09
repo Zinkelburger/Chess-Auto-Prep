@@ -413,14 +413,20 @@ class EngineSettings with ChangeNotifier {
   Future<void> loadFromPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _workers = prefs.getInt('${_prefix}workers') ??
-          (systemCores ~/ 2).clamp(1, systemCores);
-      _depth = prefs.getInt('${_prefix}depth') ?? kDefaultDepth;
-      _multiPv = prefs.getInt('${_prefix}multi_pv') ?? kDefaultMultiPv;
+      // Clamp persisted ints to their valid ranges: prefs written by an older
+      // build (or on a machine with more cores) may fall outside them, and
+      // out-of-range values crash the settings sliders.
+      int loadInt(String key, int def, int min, int max) =>
+          (prefs.getInt('$_prefix$key') ?? def).clamp(min, max);
+
+      _workers = loadInt(
+          'workers', (systemCores ~/ 2).clamp(1, systemCores), 1, systemCores);
+      _depth = loadInt('depth', kDefaultDepth, kMinDepth, kMaxDepth);
+      _multiPv = loadInt('multi_pv', kDefaultMultiPv, kMinMultiPv, kMaxMultiPv);
       _inlineThreads =
-          prefs.getInt('${_prefix}inline_threads') ?? kDefaultInlineThreads;
-      _maxAnalysisMoves = prefs.getInt('${_prefix}max_analysis_moves') ??
-          kDefaultMaxAnalysisMoves;
+          loadInt('inline_threads', kDefaultInlineThreads, 1, systemCores);
+      _maxAnalysisMoves = loadInt('max_analysis_moves', kDefaultMaxAnalysisMoves,
+          kMinMaxAnalysisMoves, kMaxMaxAnalysisMoves);
       _showStockfish =
           prefs.getBool('${_prefix}show_stockfish') ?? kDefaultShowStockfish;
       _showMaia = prefs.getBool('${_prefix}show_maia') ?? kDefaultShowMaia;
@@ -439,28 +445,32 @@ class EngineSettings with ChangeNotifier {
           kDefaultExplorerSpeeds;
       _explorerRatings = prefs.getString('${_prefix}explorer_ratings') ??
           kDefaultExplorerRatings;
-      _maiaElo = prefs.getInt('${_prefix}maia_elo') ?? kDefaultMaiaElo;
+      _maiaElo = loadInt('maia_elo', kDefaultMaiaElo, kMinMaiaElo, kMaxMaiaElo);
       _candidateSourceOur = CandidateSource.fromStorageKey(
           prefs.getString('${_prefix}candidate_source_our') ?? 'maia');
       _candidateSourceOpp = CandidateSource.fromStorageKey(
           prefs.getString('${_prefix}candidate_source_opp') ?? 'maia');
-      _stockfishTopN =
-          prefs.getInt('${_prefix}stockfish_top_n') ?? kDefaultStockfishTopN;
-      _onTheFlyMaxDepth = prefs.getInt('${_prefix}on_the_fly_max_depth') ??
-          kDefaultOnTheFlyMaxDepth;
-      _expectimaxOurMultipv =
-          prefs.getInt('${_prefix}exp_our_multipv') ?? kDefaultExpOurMultipv;
-      _expectimaxOppMaxChildren =
-          prefs.getInt('${_prefix}exp_opp_max_children') ??
-              kDefaultExpOppMaxChildren;
+      _stockfishTopN = loadInt('stockfish_top_n', kDefaultStockfishTopN,
+          kMinStockfishTopN, kMaxStockfishTopN);
+      _onTheFlyMaxDepth = loadInt('on_the_fly_max_depth',
+          kDefaultOnTheFlyMaxDepth, kMinOnTheFlyMaxDepth, kMaxOnTheFlyMaxDepth);
+      _expectimaxOurMultipv = loadInt('exp_our_multipv', kDefaultExpOurMultipv,
+          kMinExpOurMultipv, kMaxExpOurMultipv);
+      _expectimaxOppMaxChildren = loadInt(
+          'exp_opp_max_children',
+          kDefaultExpOppMaxChildren,
+          kMinExpOppMaxChildren,
+          kMaxExpOppMaxChildren);
       _expectimaxOppMassTarget =
-          prefs.getDouble('${_prefix}exp_opp_mass') ?? kDefaultExpOppMassTarget;
+          (prefs.getDouble('${_prefix}exp_opp_mass') ?? kDefaultExpOppMassTarget)
+              .clamp(kMinExpOppMassTarget, kMaxExpOppMassTarget);
       _expectimaxMinProb =
-          prefs.getDouble('${_prefix}exp_min_prob') ?? kDefaultExpMinProb;
-      _expectimaxMaxEvalLoss =
-          prefs.getInt('${_prefix}exp_max_eval_loss') ?? kDefaultExpMaxEvalLoss;
-      _expectimaxEvalDepth =
-          prefs.getInt('${_prefix}exp_eval_depth') ?? kDefaultExpEvalDepth;
+          (prefs.getDouble('${_prefix}exp_min_prob') ?? kDefaultExpMinProb)
+              .clamp(kMinExpMinProb, kMaxExpMinProb);
+      _expectimaxMaxEvalLoss = loadInt('exp_max_eval_loss',
+          kDefaultExpMaxEvalLoss, kMinExpMaxEvalLoss, kMaxExpMaxEvalLoss);
+      _expectimaxEvalDepth = loadInt('exp_eval_depth', kDefaultExpEvalDepth,
+          kMinExpEvalDepth, kMaxExpEvalDepth);
       _probabilityStartMoves =
           prefs.getString('${_prefix}probability_start_moves') ?? '';
       _mutedAnalysisColumns

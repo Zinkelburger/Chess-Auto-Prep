@@ -171,6 +171,15 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
               max: kMaxMultiPv,
               onChanged: (v) => _settings.multiPv = v,
             ),
+            if (_isFull)
+              SettingsIntSpec(
+                label: 'Max table moves',
+                tooltip: 'Maximum total moves displayed in the analysis table.',
+                value: _settings.maxAnalysisMoves,
+                min: kMinMaxAnalysisMoves,
+                max: kMaxMaxAnalysisMoves,
+                onChanged: (v) => _settings.maxAnalysisMoves = v,
+              ),
           ],
         ),
       ),
@@ -262,6 +271,13 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
               value: _settings.showMaia,
               onChanged: (v) => _settings.showMaia = v,
             ),
+            SettingsSwitchRow(
+              label: 'Stockfish evals in move table',
+              tooltip: 'Run Stockfish to evaluate candidate moves in the '
+                  'move table. Turn off to rely on Maia/database only.',
+              value: _settings.showStockfish,
+              onChanged: (v) => _settings.showStockfish = v,
+            ),
             // Mothballed: Lichess Explorer DB column hidden.
             // SettingsSwitchRow(
             //   label: 'Show DB % column',
@@ -279,7 +295,7 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
       alignment: Alignment.centerLeft,
       child: TextButton.icon(
         icon: const Icon(Icons.settings_outlined, size: 18),
-        label: const Text('Open Settings for engine, opponent, and database'),
+        label: const Text('Open Settings for engine resources and database'),
         onPressed: () {
           Navigator.pop(context);
           Navigator.push(
