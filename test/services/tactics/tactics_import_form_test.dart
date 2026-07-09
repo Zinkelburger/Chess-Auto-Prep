@@ -6,12 +6,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('defaults: 20 recent games, depth 15, given cores', () {
+  test('defaults: last 14 days, 20 recent games, depth 15, given cores', () {
     final form = TacticsImportForm(defaultCores: 4);
     expect(form.count, 20);
     expect(form.depth, 15);
     expect(form.cores, 4);
-    expect(form.fetchMode, TacticsImportMode.recent);
+    expect(form.fetchMode, TacticsImportMode.sinceDate);
+    expect(form.sinceDays, 14);
     expect(form.fieldsValid, isTrue);
     form.dispose();
   });
@@ -21,6 +22,7 @@ void main() {
     form.lichessUser.text = '  someone  ';
     form.fetchCount.text = '50';
     form.depthText.text = '18';
+    form.setFetchMode(TacticsImportMode.recent);
 
     final params = form.paramsFor(TacticsImportSource.lichess);
     expect(params.username, 'someone', reason: 'trimmed');
@@ -31,17 +33,18 @@ void main() {
     form.dispose();
   });
 
-  test('paramsFor in since-date mode passes the date and caps games', () {
+  test('paramsFor in since-days mode passes the cutoff and caps games', () {
     final form = TacticsImportForm();
     form.chessComUser.text = 'player';
-    final date = DateTime(2026, 1, 1);
-    form.setFetchMode(TacticsImportMode.sinceDate);
-    form.setSinceDate(date);
+    form.setSinceDays(7);
 
     final params = form.paramsFor(TacticsImportSource.chessCom);
     expect(params.username, 'player');
     expect(params.mode, TacticsImportMode.sinceDate);
-    expect(params.since, date);
+    // Today counts as day 1, so the cutoff is 6 midnights back.
+    final now = DateTime.now();
+    expect(params.since,
+        DateTime(now.year, now.month, now.day).subtract(const Duration(days: 6)));
     expect(params.maxGames, 200);
     form.dispose();
   });
@@ -74,12 +77,14 @@ void main() {
     form.dispose();
   });
 
-  test('prefs round-trip restores count/depth/cores', () async {
+  test('prefs round-trip restores count/depth/cores/mode/sinceDays', () async {
     SharedPreferences.setMockInitialValues({});
     final form = TacticsImportForm();
     form.fetchCount.text = '77';
     form.depthText.text = '21';
     form.coresText.text = '3';
+    form.setFetchMode(TacticsImportMode.recent);
+    form.setSinceDays(30);
     await form.savePrefs();
     form.dispose();
 
@@ -88,6 +93,8 @@ void main() {
     expect(restored.fetchCount.text, '77');
     expect(restored.depthText.text, '21');
     expect(restored.coresText.text, '3');
+    expect(restored.fetchMode, TacticsImportMode.recent);
+    expect(restored.sinceDays, 30);
     restored.dispose();
   });
 }

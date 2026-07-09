@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:chess_auto_prep/models/tactics_position.dart';
+import 'package:chess_auto_prep/models/tactics_session_settings.dart';
 import 'package:chess_auto_prep/services/storage/storage_factory.dart';
 import 'package:chess_auto_prep/services/tactics_database.dart';
+import 'package:csv/csv.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -45,6 +47,25 @@ TacticsPosition _pos(String fen) {
   );
 }
 
+/// Legacy tactics-CSV content (header + rows) for seeding migration inputs;
+/// mirrors the format the app used to write before PGN storage.
+String _csv(List<TacticsPosition> rows) {
+  return Csv().encode([
+    [
+      'fen', 'game_white', 'game_black', 'game_result', 'game_date',
+      'game_id', 'game_url', 'position_context', 'user_move', 'correct_line',
+      'mistake_type', 'mistake_analysis', 'review_count', 'success_count',
+      'last_reviewed', 'time_to_solve', 'hints_used',
+      'opponent_best_response', 'rating',
+    ],
+    for (final pos in rows) pos.toCsvRow(),
+  ]);
+}
+
+/// Session settings that don't depend on today's date (the fixtures use a
+/// fixed old game date).
+const _allTime = TacticsSessionSettings(maxAgeDays: null);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -65,12 +86,13 @@ void main() {
       File(p.join(tempDir.path, 'tactics_sets', '$name.pgn'));
   File setCsvFile(String name) =>
       File(p.join(tempDir.path, 'tactics_sets', '$name.csv'));
+  File studyFile(String name) =>
+      File(p.join(tempDir.path, 'studies', '$name.pgn'));
 
   group('legacy migration', () {
     test('legacy root CSV becomes the Default set as PGN', () async {
       await legacyCsvFile().create(recursive: true);
-      await legacyCsvFile()
-          .writeAsString(TacticsDatabase.encodeCsv([_pos(_fen(1))]));
+      await legacyCsvFile().writeAsString(_csv([_pos(_fen(1))]));
 
       final db = TacticsDatabase();
       final count = await db.loadPositions();
@@ -83,29 +105,8 @@ void main() {
       expect(await File('${legacyCsvFile().path}.bak').exists(), isTrue);
     });
 
-    test('legacy per-set CSV files convert to PGN and are renamed .bak',
-        () async {
-      SharedPreferences.setMockInitialValues(
-          {'tactics_active_set': 'Classical'});
-      await setCsvFile('Classical').create(recursive: true);
-      await setCsvFile('Classical').writeAsString(
-          TacticsDatabase.encodeCsv([_pos(_fen(1)), _pos(_fen(2))]));
-
-      final db = TacticsDatabase();
-      final count = await db.loadPositions();
-
-      expect(count, 2);
-      expect(db.activeSetName, 'Classical');
-      expect(db.positions.map((p0) => p0.fen), [_fen(1), _fen(2)]);
-      expect(await setFile('Classical').exists(), isTrue);
-      expect(await setCsvFile('Classical').exists(), isFalse);
-      expect(
-          await File('${setCsvFile('Classical').path}.bak').exists(), isTrue);
-    });
-
     test('CSV conversion preserves review stats and mistake metadata',
         () async {
-      SharedPreferences.setMockInitialValues({'tactics_active_set': 'Stats'});
       final seeded = _pos(_fen(3)).copyWith(
         reviewCount: 5,
         successCount: 4,
@@ -113,9 +114,8 @@ void main() {
         opponentBestResponse: 'e5',
         lastReviewed: DateTime.utc(2026, 7, 1),
       );
-      await setCsvFile('Stats').create(recursive: true);
-      await setCsvFile('Stats')
-          .writeAsString(TacticsDatabase.encodeCsv([seeded]));
+      await legacyCsvFile().create(recursive: true);
+      await legacyCsvFile().writeAsString(_csv([seeded]));
 
       final db = TacticsDatabase();
       await db.loadPositions();
@@ -129,6 +129,26 @@ void main() {
       expect(out.userMove, 'd4');
       expect(out.mistakeType, '??');
       expect(out.mistakeAnalysis, 'test');
+    });
+
+    test(
+        'legacy per-set CSV converts to PGN and lands in the studies '
+        'directory (multi-set era cleanup)', () async {
+      await setCsvFile('Classical').create(recursive: true);
+      await setCsvFile('Classical')
+          .writeAsString(_csv([_pos(_fen(1)), _pos(_fen(2))]));
+
+      final db = TacticsDatabase();
+      final count = await db.loadPositions();
+
+      expect(count, 0, reason: 'the tactics database itself stays empty');
+      expect(db.activeSetName, TacticsDatabase.defaultSetName);
+      expect(await setCsvFile('Classical').exists(), isFalse);
+      expect(
+          await File('${setCsvFile('Classical').path}.bak').exists(), isTrue);
+      expect(await setFile('Classical').exists(), isFalse,
+          reason: 'moved out of tactics_sets');
+      expect(await studyFile('Classical').exists(), isTrue);
     });
 
     test('fresh install loads empty Default set without creating files',
@@ -155,66 +175,95 @@ void main() {
     });
   });
 
-  group('set CRUD', () {
-    test('createSet switches to a new empty set and lists both', () async {
+  group('multi-set era cleanup', () {
+    test('non-Default set files are moved into studies on load', () async {
+      final db = TacticsDatabase();
+      await db.addPosition(_pos(_fen(1))); // creates Default.pgn
+      final defaultContent =
+          await setFile(TacticsDatabase.defaultSetName).readAsString();
+      await setFile('Extra').writeAsString(defaultContent);
+
+      final db2 = TacticsDatabase();
+      await db2.loadPositions();
+
+      expect(await setFile('Extra').exists(), isFalse);
+      expect(await studyFile('Extra').exists(), isTrue);
+      expect(await studyFile('Extra').readAsString(), defaultContent,
+          reason: 'moved verbatim — nothing is lost');
+      expect(await setFile(TacticsDatabase.defaultSetName).exists(), isTrue,
+          reason: 'the database file itself stays put');
+    });
+
+    test('a name collision in studies gets a suffix', () async {
+      final db = TacticsDatabase();
+      await db.addPosition(_pos(_fen(1)));
+      final content =
+          await setFile(TacticsDatabase.defaultSetName).readAsString();
+      await setFile('Extra').writeAsString(content);
+      await studyFile('Extra').create(recursive: true);
+      await studyFile('Extra').writeAsString('existing study');
+
+      final db2 = TacticsDatabase();
+      await db2.loadPositions();
+
+      expect(await studyFile('Extra').readAsString(), 'existing study',
+          reason: 'never overwrites an existing study');
+      expect(await studyFile('Extra (tactics)').exists(), isTrue);
+    });
+
+    test('a stale remembered-set preference is ignored', () async {
+      SharedPreferences.setMockInitialValues({'tactics_active_set': 'Ghost'});
       final db = TacticsDatabase();
       await db.addPosition(_pos(_fen(1)));
 
-      await db.createSet('Classical');
+      final db2 = TacticsDatabase();
+      await db2.loadPositions();
 
-      expect(db.activeSetName, 'Classical');
-      expect(db.positions, isEmpty);
-      expect(db.availableSets.map((s) => s.name),
-          containsAll(['Default', 'Classical']));
+      expect(db2.activeSetName, TacticsDatabase.defaultSetName);
+      expect(db2.positions.single.fen, _fen(1));
     });
+  });
 
-    test('createSet rejects duplicate names', () async {
-      final db = TacticsDatabase();
-      await db.createSet('Classical');
-      await expectLater(db.createSet('Classical'), throwsArgumentError);
-    });
-
-    test('switchSet round-trips positions per set', () async {
-      final db = TacticsDatabase();
-      await db.addPosition(_pos(_fen(1)));
-      await db.createSet('Classical');
-      await db.addPosition(_pos(_fen(2)));
-
-      await db.switchSet(TacticsDatabase.defaultSetName);
-      expect(db.positions.single.fen, _fen(1));
-
-      await db.switchSet('Classical');
-      expect(db.positions.single.fen, _fen(2));
-    });
-
-    test('renameSet renames the file and keeps the active set loaded',
+  group('session queue', () {
+    test('the queue does not wrap: next past the end reports exhaustion',
         () async {
       final db = TacticsDatabase();
-      await db.createSet('Old');
       await db.addPosition(_pos(_fen(1)));
+      await db.addPosition(_pos(_fen(2)));
 
-      await db.renameSet('Old', 'New');
+      db.startSession(_allTime);
+      expect(db.sessionQueueLength, 2);
+      final first = db.sessionPositionIndex;
 
-      expect(db.activeSetName, 'New');
-      expect(db.positions.single.fen, _fen(1));
-      expect(await setFile('New').exists(), isTrue);
-      expect(await setFile('Old').exists(), isFalse);
+      expect(db.nextSessionPosition(), isNotNull);
+      final last = db.sessionPositionIndex;
+      expect(db.nextSessionPosition(), isNull,
+          reason: 'past the last puzzle — session over');
+      expect(db.sessionPositionIndex, last, reason: 'stays on the last');
+
+      expect(db.previousSessionPosition(), first);
+      expect(db.previousSessionPosition(), first,
+          reason: 'previous stops at the first puzzle');
     });
 
-    test('deleteSetByName removes the file and falls back to another set',
+    test('startSessionWithPositions queues exactly the subset, in order',
         () async {
       final db = TacticsDatabase();
       await db.addPosition(_pos(_fen(1)));
-      await db.createSet('Doomed');
       await db.addPosition(_pos(_fen(2)));
+      await db.addPosition(_pos(_fen(3)));
 
-      await db.deleteSetByName('Doomed');
+      db.startSessionWithPositions(
+          [db.positions[2], db.positions[0], _pos(_fen(99))]);
 
-      expect(await setFile('Doomed').exists(), isFalse);
-      expect(db.activeSetName, TacticsDatabase.defaultSetName);
-      expect(db.positions.single.fen, _fen(1));
+      expect(db.sessionQueueLength, 2, reason: 'unknown FEN skipped');
+      expect(db.sessionPositionIndex, 2);
+      expect(db.nextSessionPosition(), 0);
+      expect(db.nextSessionPosition(), isNull);
     });
+  });
 
+  group('tactics database persistence', () {
     test('review stats round-trip through the PGN set file', () async {
       final db = TacticsDatabase();
       await db.addPosition(_pos(_fen(1)));
@@ -229,6 +278,17 @@ void main() {
       expect(out.successCount, 1);
       expect(out.rating, 4);
       expect(out.lastReviewed, isNotNull);
+    });
+
+    test('listTacticsSets reports position counts', () async {
+      final db = TacticsDatabase();
+      await db.addPosition(_pos(_fen(1)));
+      await db.addPosition(_pos(_fen(2)));
+
+      final sets = await StorageFactory.instance.listTacticsSets();
+      final defaultSet =
+          sets.singleWhere((s) => s.name == TacticsDatabase.defaultSetName);
+      expect(defaultSet.positionCount, 2);
     });
   });
 
@@ -247,12 +307,12 @@ void main() {
 
     test('opens chapters as puzzles, including standard-start ones',
         () async {
-      final studyFile = File(p.join(tempDir.path, 'studies', 'My study.pgn'));
-      await studyFile.create(recursive: true);
-      await studyFile.writeAsString(studyPgn);
+      final study = studyFile('My study');
+      await study.create(recursive: true);
+      await study.writeAsString(studyPgn);
 
       final db = TacticsDatabase();
-      final count = await db.openExternalSet(studyFile.path);
+      final count = await db.openExternalSet(study.path);
 
       expect(count, 2);
       expect(db.isExternalSet, isTrue);
@@ -264,15 +324,15 @@ void main() {
 
     test('recordAttempt patches stats into the study without flattening it',
         () async {
-      final studyFile = File(p.join(tempDir.path, 'studies', 'My study.pgn'));
-      await studyFile.create(recursive: true);
-      await studyFile.writeAsString(studyPgn);
+      final study = studyFile('My study');
+      await study.create(recursive: true);
+      await study.writeAsString(studyPgn);
 
       final db = TacticsDatabase();
-      await db.openExternalSet(studyFile.path);
+      await db.openExternalSet(study.path);
       await db.recordAttempt(db.positions[0], TacticsResult.correct, 3.0);
 
-      final saved = await studyFile.readAsString();
+      final saved = await study.readAsString();
       expect(saved, contains('[ReviewCount "1"]'));
       expect(saved, contains('[SuccessCount "1"]'));
       // The variation and comment survive the write.
@@ -281,48 +341,35 @@ void main() {
 
       // Reopening sees the stats.
       final db2 = TacticsDatabase();
-      await db2.openExternalSet(studyFile.path);
+      await db2.openExternalSet(study.path);
       expect(db2.positions[0].reviewCount, 1);
     });
 
-    test('switching back to a named set clears the external state', () async {
+    test('closeExternalSet returns to the tactics database', () async {
       final db = TacticsDatabase();
       await db.addPosition(_pos(_fen(1)));
 
-      final studyFile = File(p.join(tempDir.path, 'studies', 'S.pgn'));
-      await studyFile.create(recursive: true);
-      await studyFile.writeAsString(studyPgn);
-      await db.openExternalSet(studyFile.path);
+      final study = studyFile('S');
+      await study.create(recursive: true);
+      await study.writeAsString(studyPgn);
+      await db.openExternalSet(study.path);
       expect(db.isExternalSet, isTrue);
 
-      await db.switchSet(TacticsDatabase.defaultSetName);
+      await db.closeExternalSet();
       expect(db.isExternalSet, isFalse);
+      expect(db.activeSetName, TacticsDatabase.defaultSetName);
       expect(db.positions.single.fen, _fen(1));
     });
-  });
 
-  group('active-set persistence', () {
-    test('active set survives a new database instance', () async {
+    test('an external set is never the loaded set on a fresh instance',
+        () async {
       final db = TacticsDatabase();
       await db.addPosition(_pos(_fen(1)));
-      await db.createSet('Classical');
-      await db.addPosition(_pos(_fen(2)));
 
-      final db2 = TacticsDatabase();
-      await db2.loadPositions();
-
-      expect(db2.activeSetName, 'Classical');
-      expect(db2.positions.single.fen, _fen(2));
-    });
-
-    test('an external set is not remembered as the active set', () async {
-      final db = TacticsDatabase();
-      await db.addPosition(_pos(_fen(1))); // Default becomes remembered
-
-      final studyFile = File(p.join(tempDir.path, 'studies', 'S.pgn'));
-      await studyFile.create(recursive: true);
-      await studyFile.writeAsString('[Event "C"]\n\n1. e4 *\n');
-      await db.openExternalSet(studyFile.path);
+      final study = studyFile('S');
+      await study.create(recursive: true);
+      await study.writeAsString('[Event "C"]\n\n1. e4 *\n');
+      await db.openExternalSet(study.path);
 
       final db2 = TacticsDatabase();
       await db2.loadPositions();
@@ -330,33 +377,26 @@ void main() {
       expect(db2.isExternalSet, isFalse);
     });
 
-    test('vanished remembered set falls back to Default', () async {
-      SharedPreferences.setMockInitialValues({'tactics_active_set': 'Ghost'});
-      final db = TacticsDatabase();
-      await db.loadPositions(); // restores "Ghost" from prefs
-      await db.addPosition(_pos(_fen(1))); // creates Ghost.pgn
-      await db.switchSet(TacticsDatabase.defaultSetName);
-      await db.addPosition(_pos(_fen(2))); // creates Default.pgn
-      SharedPreferences.setMockInitialValues({'tactics_active_set': 'Ghost'});
-
-      // Delete Ghost's file externally, then reload with a fresh instance.
-      await setFile('Ghost').delete();
-      final db2 = TacticsDatabase();
-      await db2.loadPositions();
-
-      expect(db2.activeSetName, TacticsDatabase.defaultSetName);
-      expect(db2.positions.single.fen, _fen(2));
-    });
-
-    test('listTacticsSets reports position counts', () async {
+    test('addPositionToDatabase writes through to the database file during '
+        'a review', () async {
       final db = TacticsDatabase();
       await db.addPosition(_pos(_fen(1)));
-      await db.addPosition(_pos(_fen(2)));
 
-      final sets = await StorageFactory.instance.listTacticsSets();
-      final defaultSet =
-          sets.singleWhere((s) => s.name == TacticsDatabase.defaultSetName);
-      expect(defaultSet.positionCount, 2);
+      final study = studyFile('S');
+      await study.create(recursive: true);
+      await study.writeAsString(studyPgn);
+      await db.openExternalSet(study.path);
+
+      final added = await db.addPositionToDatabase(_pos(_fen(2)));
+      expect(added, isTrue);
+      expect(db.positions.map((p0) => p0.fen), isNot(contains(_fen(2))),
+          reason: 'the loaded review set is untouched');
+
+      await db.closeExternalSet();
+      expect(db.positions.map((p0) => p0.fen),
+          containsAll([_fen(1), _fen(2)]));
+      expect(await study.readAsString(), isNot(contains(_fen(2))),
+          reason: 'the study file is untouched');
     });
   });
 }

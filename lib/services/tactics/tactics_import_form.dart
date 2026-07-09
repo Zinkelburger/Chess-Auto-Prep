@@ -23,8 +23,13 @@ class TacticsImportForm extends ChangeNotifier {
   final TextEditingController depthText = TextEditingController(text: '15');
   final TextEditingController coresText;
 
-  TacticsImportMode fetchMode = TacticsImportMode.recent;
-  DateTime? sinceDate;
+  /// Default recency window for "games from the last N days" imports.
+  static const int defaultSinceDays = 14;
+
+  TacticsImportMode fetchMode = TacticsImportMode.sinceDate;
+
+  /// How far back the sinceDate mode reaches, in days.
+  int sinceDays = defaultSinceDays;
 
   // Validation: *Valid tracks logical state (immediate), *Error is the
   // displayed red text (debounced so it doesn't flash while typing).
@@ -54,13 +59,21 @@ class TacticsImportForm extends ChangeNotifier {
           ? lichessUser.text.trim()
           : chessComUser.text.trim();
 
+  /// Start of the sinceDate-mode window: midnight [sinceDays] days back
+  /// (counting today as day 1).
+  DateTime get sinceCutoff {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: sinceDays - 1));
+  }
+
   /// Import params for [source] from the current form values.
   TacticsImportParams paramsFor(TacticsImportSource source) =>
       TacticsImportParams(
         username: usernameFor(source),
         mode: fetchMode,
         maxGames: fetchMode == TacticsImportMode.recent ? count : 200,
-        since: fetchMode == TacticsImportMode.sinceDate ? sinceDate : null,
+        since: fetchMode == TacticsImportMode.sinceDate ? sinceCutoff : null,
         depth: depth,
         cores: cores,
       );
@@ -70,8 +83,8 @@ class TacticsImportForm extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setSinceDate(DateTime? date) {
-    sinceDate = date;
+  void setSinceDays(int days) {
+    sinceDays = days.clamp(1, 3650);
     notifyListeners();
   }
 
@@ -132,20 +145,31 @@ class TacticsImportForm extends ChangeNotifier {
   static const _prefImportCount = 'tactics_import.count';
   static const _prefImportDepth = 'tactics_import.depth';
   static const _prefImportCores = 'tactics_import.cores';
+  static const _prefImportMode = 'tactics_import.mode';
+  static const _prefImportSinceDays = 'tactics_import.since_days';
 
-  /// Restore the last-used fetch count / depth / cores into the form fields.
+  /// Restore the last-used import settings into the form fields.
   Future<void> loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     if (_disposed) return;
     final count = prefs.getInt(_prefImportCount);
     final depth = prefs.getInt(_prefImportDepth);
     final cores = prefs.getInt(_prefImportCores);
+    final mode = prefs.getString(_prefImportMode);
+    final days = prefs.getInt(_prefImportSinceDays);
     if (count != null) fetchCount.text = '$count';
     if (depth != null) depthText.text = '$depth';
     if (cores != null) coresText.text = '$cores';
+    if (mode != null) {
+      fetchMode = TacticsImportMode.values.firstWhere(
+        (m) => m.name == mode,
+        orElse: () => TacticsImportMode.sinceDate,
+      );
+    }
+    if (days != null && days > 0) sinceDays = days;
   }
 
-  /// Remember the current fetch count / depth / cores for next launch.
+  /// Remember the current import settings for next launch.
   Future<void> savePrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final count = int.tryParse(fetchCount.text);
@@ -154,6 +178,8 @@ class TacticsImportForm extends ChangeNotifier {
     if (count != null) await prefs.setInt(_prefImportCount, count);
     if (depth != null) await prefs.setInt(_prefImportDepth, depth);
     if (cores != null) await prefs.setInt(_prefImportCores, cores);
+    await prefs.setString(_prefImportMode, fetchMode.name);
+    await prefs.setInt(_prefImportSinceDays, sinceDays);
   }
 
   @override

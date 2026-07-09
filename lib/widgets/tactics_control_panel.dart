@@ -16,7 +16,6 @@ import '../services/tactics/tactics_session_controller.dart';
 import '../services/tactics/tactics_solution_pgn.dart';
 import '../screens/puzzle_creator_screen.dart';
 import '../services/tactics_database.dart';
-import '../services/tactics_export_import.dart';
 import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
@@ -28,6 +27,7 @@ import 'pgn_with_engine.dart';
 import 'tactics/tactics_browse_panel.dart';
 import 'tactics/tactics_edit_dialog.dart';
 import 'tactics/tactics_import_panel.dart';
+import 'tactics/tactics_session_recap.dart';
 import 'tactics/tactics_solution_navigator.dart';
 import 'tactics/tactics_training_panel.dart';
 import 'training/move_input_widget.dart';
@@ -70,6 +70,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   /// in multi-move puzzles (so we can refocus the move input).
   bool _wasWaitingForOpponent = false;
 
+  /// Show the end-of-session recap card in the Tactic tab (set when the
+  /// session queue is exhausted, cleared when a new session starts).
+  bool _showRecap = false;
+
   // Focus node for keyboard shortcuts during training
   final FocusNode _focusNode = FocusNode();
 
@@ -99,6 +103,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _session.onPositionSetup = _loadPositionSetup;
     _session.onAnalysisMove = _addMoveToAnalysis;
     _session.onUserMoveAccepted = _pgnViewerController.goForward;
+    _session.onSessionCompleted = _showSessionRecap;
     _session.addListener(_onSessionChanged);
     _import.addListener(_onImportChanged);
     // Reactive safety net: any database mutation (import streaming, delete,
@@ -276,6 +281,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       _session.endSession();
+      _showRecap = false;
       final count = await _database.openExternalSet(
         path,
         gameIndex: gameIndex,
@@ -319,6 +325,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _session.onPositionSetup = null;
     _session.onAnalysisMove = null;
     _session.onUserMoveAccepted = null;
+    _session.onSessionCompleted = null;
     _focusNode.dispose();
     _tabController.dispose();
     _form.removeListener(_onFormChanged);
@@ -402,7 +409,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       },
       child: Column(
         children: [
-          _buildSetPickerRow(),
+          if (_database.isExternalSet) _buildReviewBanner(),
           TabBar(
             controller: _tabController,
             tabs: [
@@ -428,99 +435,46 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     );
   }
 
-  // ── Set picker ─────────────────────────────────────────────────────────
+  // ── External review banner ─────────────────────────────────────────────
 
-  /// Names for the set dropdown: everything on disk plus the active set
-  /// (which may not have a file yet on a fresh install).
-  List<String> get _setNames {
-    final names = _database.availableSets.map((s) => s.name).toList();
-    if (!names.contains(_database.activeSetName)) {
-      names.insert(0, _database.activeSetName);
-    }
-    return names;
-  }
-
-  Widget _buildSetPickerRow() {
+  /// Shown while a study is open as flashcards: names what's being reviewed
+  /// and is the way back to the tactics database.
+  Widget _buildReviewBanner() {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 4, 0),
+    final count = _database.positions.length;
+    return Container(
+      width: double.infinity,
+      color: theme.colorScheme.surfaceContainerHighest,
+      padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
       child: Row(
         children: [
-          Icon(Icons.collections_bookmark,
+          Icon(Icons.school_outlined,
               size: 16, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Expanded(
-            child: DropdownButton<String>(
-              value: _database.activeSetName,
-              isExpanded: true,
-              isDense: true,
-              underline: const SizedBox.shrink(),
-              items: [
-                for (final name in _setNames)
-                  DropdownMenuItem(value: name, child: Text(name)),
-              ],
-              onChanged: (name) {
-                if (name != null) _switchSet(name);
-              },
+            child: Text(
+              'Reviewing "${_database.activeSetName}" — '
+              '$count card${count == 1 ? '' : 's'}',
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
             ),
           ),
-          Text(
-            '${_database.positions.length}',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, size: 18),
-            tooltip: 'Manage sets',
-            onSelected: (action) {
-              switch (action) {
-                case 'new':
-                  _createSet();
-                case 'rename':
-                  _renameActiveSet();
-                case 'delete':
-                  _deleteActiveSet();
-                case 'edit_study':
-                  _editActiveSetInStudy();
-                case 'export_csv':
-                  _exportActiveSet(TacticsExportFormat.csv);
-                case 'export_pgn':
-                  _exportActiveSet(TacticsExportFormat.pgn);
-                case 'import':
-                  _importIntoActiveSet();
-              }
-            },
-            itemBuilder: (_) {
-              // An external set (a study reviewed as puzzles) is not a file
-              // this mode owns: renaming/deleting/importing act on named set
-              // files, so they are hidden for it.  Content edits happen in
-              // Study mode for both kinds.
-              final external = _database.isExternalSet;
-              return [
-                const PopupMenuItem(value: 'new', child: Text('New set…')),
-                if (!external) ...const [
-                  PopupMenuItem(value: 'rename', child: Text('Rename set…')),
-                  PopupMenuItem(value: 'delete', child: Text('Delete set…')),
-                ],
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                    value: 'edit_study',
-                    child: Text('Edit set in Study…')),
-                const PopupMenuItem(
-                    value: 'export_pgn', child: Text('Export set (PGN)…')),
-                const PopupMenuItem(
-                    value: 'export_csv',
-                    child: Text('Export set (CSV, legacy)…')),
-                if (!external)
-                  const PopupMenuItem(
-                      value: 'import',
-                      child: Text('Import puzzles into set…')),
-              ];
-            },
+          TextButton(
+            onPressed: _exitExternalReview,
+            child: const Text('Exit review'),
           ),
         ],
       ),
     );
+  }
+
+  /// Leave the study review and return to the tactics database.
+  Future<void> _exitExternalReview() async {
+    if (!await _confirmEndSession()) return;
+    _session.endSession();
+    _showRecap = false;
+    await _database.closeExternalSet();
+    if (mounted) _resetBoardToStart();
   }
 
   /// Confirm ending an in-progress puzzle before an action that discards the
@@ -531,205 +485,18 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('End session?'),
-        content: const Text(
-            'Switching sets ends the current training session.'),
+        content: const Text('This ends the current training session.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Cancel')),
           ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('End & switch')),
+              child: const Text('End session')),
         ],
       ),
     );
     return proceed ?? false;
-  }
-
-  /// Open the active set's PGN file in Study mode for rich editing
-  /// (variations, comments, board editor).  Same file, different view.
-  Future<void> _editActiveSetInStudy() async {
-    final path = await _database.activeSetFilePath();
-    if (!await StorageFactory.instance.fileExists(path)) {
-      if (mounted) {
-        showAppSnackBar(
-            context, 'This set has no file yet — add a puzzle first.',
-            isError: true);
-      }
-      return;
-    }
-    if (!mounted) return;
-    context.read<AppState>().switchToStudyEdit(path: path);
-  }
-
-  Future<void> _switchSet(String name) async {
-    if (name == _database.activeSetName && !_database.isExternalSet) return;
-    if (!await _confirmEndSession()) return;
-    _session.endSession();
-    await _database.switchSet(name);
-    if (mounted) _resetBoardToStart();
-  }
-
-  /// Prompt for a set name; returns a filesystem-safe name or null.
-  Future<String?> _promptSetName(String title, {String? initial}) async {
-    final controller = TextEditingController(text: initial ?? '');
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Set name',
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-          onSubmitted: (value) => Navigator.pop(ctx, value),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, controller.text),
-              child: const Text('OK')),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (result == null) return null;
-    // Same sanitization as repertoire naming.
-    final safeName = result
-        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-        .replaceAll(RegExp(r'_+'), '_')
-        .trim();
-    if (safeName.isEmpty) {
-      if (mounted) {
-        showAppSnackBar(context, 'Invalid set name.', isError: true);
-      }
-      return null;
-    }
-    return safeName;
-  }
-
-  Future<void> _createSet() async {
-    final name = await _promptSetName('New puzzle set');
-    if (name == null) return;
-    if (!await _confirmEndSession()) return;
-    _session.endSession();
-    try {
-      await _database.createSet(name);
-      if (mounted) _resetBoardToStart();
-    } on ArgumentError catch (e) {
-      if (mounted) showAppSnackBar(context, e.message as String, isError: true);
-    }
-  }
-
-  Future<void> _renameActiveSet() async {
-    final oldName = _database.activeSetName;
-    final newName =
-        await _promptSetName('Rename set "$oldName"', initial: oldName);
-    if (newName == null || newName == oldName) return;
-    try {
-      await _database.renameSet(oldName, newName);
-    } on ArgumentError catch (e) {
-      if (mounted) showAppSnackBar(context, e.message as String, isError: true);
-    }
-  }
-
-  Future<void> _exportActiveSet(TacticsExportFormat format) async {
-    try {
-      await TacticsExportImport(_database).exportTactics(format: format);
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(context, 'Export failed: $e', isError: true);
-      }
-    }
-  }
-
-  Future<void> _importIntoActiveSet() async {
-    // Merge by default; offer replace for whole-set restores.
-    bool replace = false;
-    final proceed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Import into "${_database.activeSetName}"'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Pick a CSV (lossless) or PGN (shared set) file.\n'
-                'New puzzles are merged in; duplicates are skipped.',
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 8),
-              CheckboxListTile(
-                title: const Text('Replace set contents',
-                    style: TextStyle(fontSize: 13)),
-                value: replace,
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                onChanged: (v) =>
-                    setDialogState(() => replace = v ?? false),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
-            ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Choose file…')),
-          ],
-        ),
-      ),
-    );
-    if (proceed != true) return;
-
-    try {
-      final result =
-          await TacticsExportImport(_database).importTactics(replace: replace);
-      if (!mounted) return;
-      final warned = result.warnings.isEmpty
-          ? ''
-          : ' (${result.warnings.length} skipped)';
-      showAppSnackBar(
-          context, 'Imported ${result.imported} puzzle(s)$warned.');
-    } catch (e) {
-      if (mounted) {
-        showAppSnackBar(context, 'Import failed: $e', isError: true);
-      }
-    }
-  }
-
-  Future<void> _deleteActiveSet() async {
-    final name = _database.activeSetName;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Delete set "$name"?'),
-        content: Text(
-            'This permanently deletes the set and its ${_database.positions.length} puzzle(s).'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    _session.endSession();
-    await _database.deleteSetByName(name);
-    if (mounted) _resetBoardToStart();
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -870,6 +637,18 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onSolutionMoveTapped:
                       solutionSan.isNotEmpty ? _onSolutionLineMoveTapped : null,
                 )
+              else if (_showRecap)
+                TacticsSessionRecap(
+                  solved: _session.outcomeCount(SessionPuzzleOutcome.correct),
+                  failed: _session.outcomeCount(SessionPuzzleOutcome.incorrect),
+                  skipped:
+                      _session.outcomeCount(SessionPuzzleOutcome.unattempted),
+                  totalTimeSeconds: _session.currentSession.totalTime,
+                  onRetryMistakes: _session.sessionMistakes.isNotEmpty
+                      ? _retryMistakes
+                      : null,
+                  onDone: () => setState(() => _showRecap = false),
+                )
               else
                 TacticsImportPanel(
                   importStatus: _import.importStatus,
@@ -896,11 +675,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onBrowseTactics: () => _tabController.animateTo(1),
                   fetchMode: _form.fetchMode,
                   onFetchModeChanged: _form.setFetchMode,
-                  sinceDate: _form.sinceDate,
-                  onSinceDateChanged: _form.setSinceDate,
+                  sinceDays: _form.sinceDays,
+                  onSinceDaysChanged: _form.setSinceDays,
                   pendingGameCount: _import.pendingGameCount,
                   totalStoredGames: _import.totalStoredGames,
                   onResumeAnalysis: _resumeAnalysis,
+                  onFetchNew: _fetchNewGames,
                 ),
             ],
           ),
@@ -975,8 +755,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     if (!_database.isExternalSet) return false;
     showAppSnackBar(
       context,
-      'This is a study under review — edit its content in Study mode '
-      '(set menu → Edit set in Study).',
+      'This is a study under review — edit its content in Study mode.',
       isError: true,
     );
     return true;
@@ -1129,6 +908,18 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   Future<void> _importChessCom() =>
       _runImport(TacticsImportSource.chessCom, 'Chess.com');
 
+  /// Sync-row refresh: import from every source that has a username, one
+  /// after the other (the coordinator rejects concurrent imports).
+  Future<void> _fetchNewGames() async {
+    if (_form.lichessUser.text.trim().isNotEmpty) {
+      await _importLichess();
+    }
+    if (!mounted) return;
+    if (_form.chessComUser.text.trim().isNotEmpty) {
+      await _importChessCom();
+    }
+  }
+
   Future<void> _runImport(TacticsImportSource source, String platform) async {
     _form.savePrefs();
 
@@ -1177,12 +968,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   void _onStartSession(TacticsSessionSettings settings) {
     final setup = _session.startSession(settings);
     if (setup == null) return;
+    _showRecap = false;
     _loadPositionSetup(setup);
   }
 
   void _loadCurrentPosition(TacticsPositionSetup? setup) {
     if (setup == null) {
-      _sessionComplete();
+      _showSessionRecap();
       return;
     }
     _loadPositionSetup(setup);
@@ -1242,29 +1034,23 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
-  void _sessionComplete() {
+  /// The session queue is exhausted: end it and show the recap card.
+  /// (Falls back to the plain home panel when there's nothing to recap,
+  /// e.g. navigating off a browse-selected position with no session.)
+  void _showSessionRecap() {
+    final hadSession = _session.sessionOutcomes.isNotEmpty;
     _session.endSession();
     _resetBoardToStart();
+    setState(() => _showRecap = hadSession);
+  }
 
-    final session = _session.currentSession;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Session Complete'),
-        content: Text('Great work!\n\n'
-            'Positions attempted: ${session.positionsAttempted}\n'
-            'Correct: ${session.positionsCorrect}\n'
-            'Incorrect: ${session.positionsIncorrect}\n'
-            'Accuracy: ${(session.accuracy * 100).toStringAsFixed(1)}%'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+  /// "Retry mistakes" on the recap: new session over the failed/skipped
+  /// puzzles, in the order they were shown.
+  void _retryMistakes() {
+    final setup = _session.startRetrySession(_session.sessionMistakes);
+    if (setup == null) return;
+    setState(() => _showRecap = false);
+    _loadPositionSetup(setup);
   }
 
   void _showUsernameRequired(String platform) {

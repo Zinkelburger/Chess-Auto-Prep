@@ -200,7 +200,7 @@ class TacticsImportCoordinator extends ChangeNotifier {
           params: TacticsImportParams(
             username: username,
             mode: TacticsImportMode.sinceDate,
-            since: since ?? DateTime.now().subtract(const Duration(days: 7)),
+            since: since ?? DateTime.now().subtract(const Duration(days: 14)),
             depth: depth,
             cores: cores,
           ),
