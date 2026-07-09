@@ -12,6 +12,7 @@ import 'package:dartchess/dartchess.dart' hide File;
 
 import 'browser_extension_server.dart';
 import '../storage/app_paths.dart';
+import '../../utils/atomic_file.dart';
 import '../../utils/file_text_reader.dart';
 import '../pgn_parsing_service.dart';
 
@@ -23,28 +24,6 @@ BrowserExtensionServer createBrowserExtensionServer() =>
 class BrowserExtensionServerIO implements BrowserExtensionServer {
   HttpServer? _server;
   int? _port;
-
-  Future<void> _writeAtomically(File target, String content) async {
-    final parent = target.parent;
-    if (!await parent.exists()) {
-      await parent.create(recursive: true);
-    }
-    final tmp = File(
-      p.join(
-        parent.path,
-        '.${p.basename(target.path)}.${DateTime.now().microsecondsSinceEpoch}.tmp',
-      ),
-    );
-    await tmp.writeAsString(content, flush: true);
-    try {
-      await tmp.rename(target.path);
-    } on FileSystemException {
-      if (await target.exists()) {
-        await target.delete();
-      }
-      await tmp.rename(target.path);
-    }
-  }
 
   @override
   bool get isRunning => _server != null;
@@ -497,10 +476,10 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
 
     if (existingContent.isEmpty) {
       // Write directly
-      await _writeAtomically(file, pgnGame);
+      await writeTextFileAtomically(file, pgnGame);
     } else {
       // Append with separator
-      await _writeAtomically(file, '$existingContent\n\n$pgnGame');
+      await writeTextFileAtomically(file, '$existingContent\n\n$pgnGame');
     }
   }
 
