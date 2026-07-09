@@ -8,7 +8,6 @@ import '../constants/engine_defaults.dart';
 import '../models/tactics_position.dart';
 import 'tactics_engine.dart';
 import '../models/engine_settings.dart';
-import 'engine/eval_worker.dart';
 import 'engine/stockfish_pool.dart';
 import 'lichess_api_client.dart';
 import 'maia_factory.dart';
@@ -622,18 +621,18 @@ class TacticsImportService {
           '• Practice existing tactics positions');
     }
 
-    final numWorkers = math.min(pool.workerCount, gameTasks.length);
+    // The pool is a shared singleton; other features (e.g. tree generation)
+    // may have left workers configured with multiple UCI threads each.
+    // Tactics analysis wants throughput across many independent positions, so
+    // force one thread per worker: N single-threaded workers beat N/T
+    // multi-threaded ones and avoid CPU oversubscription.
+    await pool.reconfigureAllWorkers(1);
 
-    // Distribute games round-robin across workers.
-    final workerBatches =
-        List.generate(numWorkers, (_) => <Map<String, dynamic>>[]);
-    for (int i = 0; i < gameTasks.length; i++) {
-      workerBatches[i % numWorkers].add(gameTasks[i]);
-    }
+    final concurrency = math.min(pool.workerCount, gameTasks.length);
 
     progressCallback?.call(
       'Starting analysis: ${gameTasks.length} games '
-      'across $numWorkers workers...',
+      'across $concurrency workers...',
     );
 
     // ── Build lookup for original game order ─────────────────
@@ -642,64 +641,52 @@ class TacticsImportService {
       gameOrder[gameTasks[i]['gameId'] as String] = i;
     }
 
-    // ── Process each batch in parallel ───────────────────────
+    // ── Process games in parallel (dynamic work-stealing) ────
     final gamePositions = <String, List<TacticsPosition>>{};
     int completedGames = 0;
     int totalPositionsFound = 0;
 
-    final futures = <Future<void>>[];
-    for (final batch in workerBatches) {
-      if (batch.isEmpty) continue;
-      futures.add(() async {
-        final worker = await pool.acquire();
+    await pool.forEachParallel<Map<String, dynamic>>(
+      gameTasks,
+      (worker, task) async {
+        final gameText = task['gameText'] as String;
+        final gameId = task['gameId'] as String;
+
         try {
-          for (final task in batch) {
-            if (_cancelled) break;
+          final positions = await _analyzeGameWithWorker(
+            worker: worker,
+            gameText: gameText,
+            username: usernameLower,
+            depth: depth,
+            gameId: gameId,
+            maia: maia,
+            maiaElo: maiaElo,
+          );
+          if (_cancelled) return;
+          gamePositions[gameId] = positions;
+          totalPositionsFound += positions.length;
 
-            final gameText = task['gameText'] as String;
-            final gameId = task['gameId'] as String;
-
-            try {
-              final positions = await _analyzeGameWithWorker(
-                worker: worker,
-                gameText: gameText,
-                username: usernameLower,
-                depth: depth,
-                gameId: gameId,
-                maia: maia,
-                maiaElo: maiaElo,
-              );
-              if (_cancelled) break;
-              gamePositions[gameId] = positions;
-              totalPositionsFound += positions.length;
-
-              // Persist positions BEFORE marking game analyzed so a
-              // mid-analysis app close doesn't permanently skip this game.
-              if (positions.isNotEmpty && onPositionFound != null) {
-                for (final pos in positions) {
-                  await onPositionFound(pos);
-                }
-              }
-              await _database.markGameAnalyzed(gameId);
-            } catch (e) {
-              if (_cancelled) break;
-              if (kDebugMode) log.e('Error analyzing game $gameId: $e');
+          // Persist positions BEFORE marking game analyzed so a
+          // mid-analysis app close doesn't permanently skip this game.
+          if (positions.isNotEmpty && onPositionFound != null) {
+            for (final pos in positions) {
+              await onPositionFound(pos);
             }
-
-            completedGames++;
-
-            progressCallback?.call(
-              'Analyzed $completedGames/${gameTasks.length} games '
-              '($totalPositionsFound tactics found)...',
-            );
           }
-        } finally {
-          pool.release(worker);
+          await _database.markGameAnalyzed(gameId);
+        } catch (e) {
+          if (_cancelled) return;
+          if (kDebugMode) log.e('Error analyzing game $gameId: $e');
         }
-      }());
-    }
 
-    await Future.wait(futures);
+        completedGames++;
+        progressCallback?.call(
+          'Analyzed $completedGames/${gameTasks.length} games '
+          '($totalPositionsFound tactics found)...',
+        );
+      },
+      stopWhen: () => _cancelled,
+    );
 
     // ── Assemble results in original game order ──────────────
     final sortedGameIds = gamePositions.keys.toList()

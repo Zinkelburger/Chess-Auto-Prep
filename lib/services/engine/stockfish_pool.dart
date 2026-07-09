@@ -18,7 +18,7 @@ import 'eval_worker.dart';
 import 'stockfish_connection_factory.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
-export 'eval_worker.dart' show EvalResult;
+export 'eval_worker.dart' show EvalResult, EvalWorker;
 export '../../models/analysis/discovery_result.dart';
 
 /// Fixed hash per worker in MB.  128 MB gives comfortable headroom up to ~depth 25.
@@ -187,6 +187,40 @@ class StockfishPool {
   Future<List<EvalResult>> evaluateMany(List<String> fens, int depth) async {
     if (fens.isEmpty) return const [];
     return Future.wait(fens.map((f) => evaluateFen(f, depth)));
+  }
+
+  /// Process [items] in parallel across all workers using dynamic
+  /// work-stealing: each worker pulls the next item the moment it finishes
+  /// its previous one, so a single slow item never leaves other workers idle
+  /// (unlike static round-robin partitioning of the work up front).
+  ///
+  /// Runs up to [workerCount] tasks concurrently.  [task] is handed an
+  /// acquired worker — held for the whole call and released automatically —
+  /// plus one item.  Pass [stopWhen] to abort *remaining* items early (e.g.
+  /// on cancellation); items already in flight still run to completion.
+  Future<void> forEachParallel<T>(
+    List<T> items,
+    Future<void> Function(EvalWorker worker, T item) task, {
+    bool Function()? stopWhen,
+  }) async {
+    if (items.isEmpty) return;
+    final concurrency = workerCount.clamp(1, items.length);
+    var nextIndex = 0;
+
+    Future<void> loop() async {
+      final worker = await acquire();
+      try {
+        while (stopWhen == null || !stopWhen()) {
+          final idx = nextIndex++;
+          if (idx >= items.length) return;
+          await task(worker, items[idx]);
+        }
+      } finally {
+        release(worker);
+      }
+    }
+
+    await Future.wait([for (var i = 0; i < concurrency; i++) loop()]);
   }
 
   /// Run MultiPV discovery.  Acquires a worker for the duration.
