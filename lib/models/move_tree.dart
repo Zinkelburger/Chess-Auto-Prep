@@ -115,7 +115,10 @@ class MoveNode implements MoveTreeNodeView {
   final int id;
 
   /// `true` = user-added (ephemeral) analysis move; `false` = from PGN/repertoire.
-  final bool isEphemeral;
+  /// Mutable: amend mode promotes a scratch line to saved when the user
+  /// extends or annotates it (a saved edit under an ephemeral ancestor would
+  /// otherwise be silently dropped by the serializer).
+  bool isEphemeral;
 
   /// Ordered children.  `[0]` = mainline, `[1..]` = variations.
   final List<MoveNode> children;

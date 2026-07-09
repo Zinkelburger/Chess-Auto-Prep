@@ -14,6 +14,7 @@ import 'package:chess_auto_prep/utils/chess_utils.dart'
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
 import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';
+import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
 import 'package:chess_auto_prep/core/pgn/pgn_variation_extractor.dart';
 
@@ -145,10 +146,13 @@ class PgnViewerWidget extends StatefulWidget {
   final bool showStartEndButtons;
   final ValueChanged<String>? onCommentsChanged;
   final bool editMode;
-  final bool protectOriginal;
 
   /// When non-null, movetext hides moves at index >= this value.
   final int? revealedPly;
+
+  /// Opt-in book-PGN comment formatting (Chessable rich blocks, double-space
+  /// paragraph breaks). Off by default — see [PgnMovetextView.bookFormatting].
+  final bool bookFormatting;
 
   const PgnViewerWidget({
     super.key,
@@ -162,8 +166,8 @@ class PgnViewerWidget extends StatefulWidget {
     this.showStartEndButtons = true,
     this.onCommentsChanged,
     this.editMode = false,
-    this.protectOriginal = true,
     this.revealedPly,
+    this.bookFormatting = false,
   });
 
   @override
@@ -917,6 +921,9 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         final current = _analysisPath.last;
         final (node, _) =
             current.addChild(san, fenAfter, isEphemeral: !editing);
+        // A permanent move under ephemeral ancestors would be dropped by the
+        // serializer — promote the whole line to saved.
+        if (editing) _promoteNodeLineage(current);
         _analysisPath = [..._analysisPath, node];
       }
       _currentPosition = newPos;
@@ -1035,7 +1042,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   // ── Move comment editing ──
 
   int? _editingCommentIndex;
-  int? _selectedMoveIndex; // for annotation toolbar in edit mode
 
   /// The last movetext this widget emitted via [onCommentsChanged] (whitespace-
   /// normalized). Used so that when our own persisted edit flows back in as an
@@ -1048,6 +1054,125 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
 
   void _startEditingComment(int moveIndex) {
     setState(() => _editingCommentIndex = moveIndex);
+  }
+
+  // ── Amend-mode annotation panel ──
+
+  /// The variation node the amend panel targets, or null when on the mainline.
+  MoveNode? get _panelVariationTarget =>
+      _analysisPath.isNotEmpty ? _analysisPath.last : null;
+
+  /// The mainline move index the amend panel targets (the move the board
+  /// currently sits on), or -1 when off-mainline or at the game start.
+  int get _panelMainlineTarget =>
+      (_analysisPath.isEmpty && !_inlineActive) ? _mainLineIndex - 1 : -1;
+
+  String _moveLabelAt(int ply, String san) {
+    final coords = coordsAtPly(
+      ply: ply,
+      startFullmoves: _startPosition.fullmoves,
+      startWhiteToMove: _startPosition.turn == Side.white,
+    );
+    return '${coords.moveNumber}${coords.isWhite ? '.' : '...'}$san';
+  }
+
+  /// Mark [node] and every ancestor up to its variation root as saved
+  /// (non-ephemeral): the serializer drops ephemeral nodes wholesale, so an
+  /// annotation or permanent move under an ephemeral ancestor would silently
+  /// never reach the file.
+  void _promoteNodeLineage(MoveNode node) {
+    for (final roots in _variationsByPly.values) {
+      final path = _findPathToNode(node, roots);
+      if (path == null) continue;
+      for (final n in path) {
+        n.isEphemeral = false;
+      }
+      return;
+    }
+  }
+
+  void _togglePanelNodeNag(MoveNode node, int nagId) {
+    _promoteNodeLineage(node);
+    setState(() {
+      final nags = node.nags ?? [];
+      if (nags.contains(nagId)) {
+        nags.remove(nagId);
+      } else {
+        // Remove other move-quality NAGs (1-6) before adding
+        nags.removeWhere((n) => n >= 1 && n <= 6);
+        nags.add(nagId);
+      }
+      node.nags = nags.isEmpty ? null : nags;
+    });
+    _notifyCommentsChanged();
+  }
+
+  /// Set the comment on a variation [node]. Invoked by the annotation panel,
+  /// possibly as a debounce flush after navigation moved off [node] (or during
+  /// panel dispose) — hence the object binding and the `mounted` guard.
+  void _setPanelNodeComment(MoveNode node, String text) {
+    final trimmed = text.trim();
+    if (trimmed.isNotEmpty) _promoteNodeLineage(node);
+    node.comment = trimmed.isEmpty ? null : trimmed;
+    if (mounted) setState(() {});
+    _notifyCommentsChanged();
+  }
+
+  /// Mainline counterpart of [_setPanelNodeComment], bound to the move's
+  /// [PgnNodeData] so late flushes hit the move they were typed on.
+  void _setPanelMainlineComment(PgnNodeData moveData, String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      moveData.comments?.clear();
+    } else if (moveData.comments == null || moveData.comments!.isEmpty) {
+      moveData.comments = [trimmed];
+    } else {
+      moveData.comments![0] = trimmed;
+    }
+    if (mounted) setState(() {});
+    _notifyCommentsChanged();
+  }
+
+  Widget _buildAnnotationPanel() {
+    String? targetKey;
+    var label = '';
+    List<int> nags = const [];
+    var comment = '';
+    // Bound to the target at build time so a debounced comment flush that
+    // lands after the user navigated elsewhere still edits the right move.
+    ValueChanged<int> onToggleNag = (_) {};
+    ValueChanged<String> onCommentChanged = (_) {};
+
+    final node = _panelVariationTarget;
+    final mainIndex = _panelMainlineTarget;
+    if (node != null) {
+      targetKey = 'v${node.id}';
+      label =
+          _moveLabelAt(_activeBranchPly + _analysisPath.length - 1, node.san);
+      nags = node.nags ?? const [];
+      comment = node.comment ?? '';
+      onToggleNag = (nagId) => _togglePanelNodeNag(node, nagId);
+      onCommentChanged = (text) => _setPanelNodeComment(node, text);
+    } else if (mainIndex >= 0 && mainIndex < _moveHistory.length) {
+      targetKey = 'm$mainIndex';
+      final moveData = _moveHistory[mainIndex];
+      label = _moveLabelAt(mainIndex, moveData.san);
+      nags = moveData.nags ?? const [];
+      comment = (moveData.comments == null || moveData.comments!.isEmpty)
+          ? ''
+          : moveData.comments!.first;
+      onToggleNag = (nagId) => _toggleNag(mainIndex, nagId);
+      onCommentChanged = (text) => _setPanelMainlineComment(moveData, text);
+    }
+
+    return PgnAnnotationPanel(
+      targetKey: targetKey,
+      moveLabel: label,
+      nags: nags,
+      comment: comment,
+      onToggleNag: onToggleNag,
+      onCommentChanged: onCommentChanged,
+    );
   }
 
   void _saveComment(int moveIndex, String newComment) {
@@ -1114,16 +1239,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     _notifyCommentsChanged();
   }
 
-  void _selectMoveForAnnotation(int moveIndex) {
-    setState(() {
-      if (_selectedMoveIndex == moveIndex) {
-        _selectedMoveIndex = null;
-      } else {
-        _selectedMoveIndex = moveIndex;
-      }
-    });
-  }
-
   RelativeRect _menuPosition(Offset globalPosition) {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     return RelativeRect.fromRect(
@@ -1158,8 +1273,6 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   void _showMoveContextMenu(int moveIndex, Offset globalPosition) {
-    final protectOriginal = widget.protectOriginal;
-    final hasBranch = _variationsByPly.containsKey(moveIndex + 1);
     final line = _moveHistory.sublist(0, moveIndex + 1);
 
     showMenu<String>(
@@ -1169,19 +1282,9 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         _menuItem('copy_line', Icons.copy_outlined, 'Copy line PGN'),
         _menuItem('add_to_study', Icons.menu_book_outlined,
             'Add to study…'),
-        if (widget.editMode) ...[
-          const PopupMenuDivider(),
-          _menuItem('comment', Icons.comment_outlined, 'Comment'),
-          _menuItem('annotate', Icons.edit_note, 'Annotate'),
-          if (hasBranch) ...[
-            const PopupMenuDivider(),
-            _menuItem('promote', Icons.arrow_upward, 'Promote variation',
-                enabled: !protectOriginal),
-          ],
-          const PopupMenuDivider(),
-          _menuItem('delete', Icons.delete_outline, 'Delete move',
-              enabled: !protectOriginal, color: Colors.red),
-        ] else if (widget.onCommentsChanged != null) ...[
+        // In amend mode the bottom panel handles comments/glyphs; the inline
+        // editor stays for quick comments outside amend mode.
+        if (!widget.editMode && widget.onCommentsChanged != null) ...[
           const PopupMenuDivider(),
           _menuItem('comment', Icons.comment_outlined, 'Comment'),
         ],
@@ -1193,10 +1296,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         _addLineToStudy(line);
       } else if (action == 'comment') {
         _startEditingComment(moveIndex);
-      } else if (action == 'annotate') {
-        _selectMoveForAnnotation(moveIndex);
       }
-      // promote and delete require tree manipulation (future)
     });
   }
 
@@ -1487,71 +1587,73 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
             child: _buildGameHeader(context),
           ),
         Expanded(
-          child: SingleChildScrollView(
-            controller: _movetextScrollController,
-            padding: const EdgeInsets.all(8),
-            child: PgnMovetextView(
-              game: _game,
-              moveHistory: _moveHistory,
-              variationsByPly: _variationsByPly,
-              mainLineIndex: _mainLineIndex,
-              currentMoveKey: _currentMoveKey,
-              analysisPath: _analysisPath,
-              selectedMoveIndex: _selectedMoveIndex,
-              editingCommentIndex: _editingCommentIndex,
-              editMode: widget.editMode,
-              canEditComments: widget.onCommentsChanged != null,
-              startingMoveNumber: _startPosition.fullmoves,
-              startingWhiteTurn: _startPosition.turn == Side.white,
-              startPosition: _startPosition,
-              onMainLineMoveClicked: _onMainLineMoveClicked,
-              onSelectMoveForAnnotation: _selectMoveForAnnotation,
-              onShowMoveContextMenu: _showMoveContextMenu,
-              onStartEditingComment: _startEditingComment,
-              onToggleNag: _toggleNag,
-              onSaveComment: _saveComment,
-              onCancelEditingComment: _cancelEditingComment,
-              onDismissAnnotation: () =>
-                  setState(() => _selectedMoveIndex = null),
-              onGoToAnalysisNode: _goToAnalysisNode,
-              onShowVariationContextMenu: _showVariationContextMenu,
-              revealedPly: widget.revealedPly,
-              onPlayInlineLine: _playInlineLine,
-              activeInlineLine: _inlineActive
-                  ? (
-                      firstMoveNumber: _inlineFirstMoveNumber,
-                      firstIsWhite: _inlineFirstIsWhite,
-                      sans: _inlineSans,
-                      cursor: _inlineCursor,
-                      anchorFen: _inlineAnchorFen,
-                    )
-                  : null,
+          // SelectionArea lets the user drag-select movetext / comments and
+          // copy with Ctrl+C; move taps still hit the inner GestureDetectors.
+          child: SelectionArea(
+            child: SingleChildScrollView(
+              controller: _movetextScrollController,
+              padding: const EdgeInsets.all(8),
+              child: PgnMovetextView(
+                game: _game,
+                moveHistory: _moveHistory,
+                variationsByPly: _variationsByPly,
+                mainLineIndex: _mainLineIndex,
+                currentMoveKey: _currentMoveKey,
+                analysisPath: _analysisPath,
+                editingCommentIndex: _editingCommentIndex,
+                canEditComments: widget.onCommentsChanged != null,
+                bookFormatting: widget.bookFormatting,
+                startingMoveNumber: _startPosition.fullmoves,
+                startingWhiteTurn: _startPosition.turn == Side.white,
+                startPosition: _startPosition,
+                onMainLineMoveClicked: _onMainLineMoveClicked,
+                onShowMoveContextMenu: _showMoveContextMenu,
+                onSaveComment: _saveComment,
+                onCancelEditingComment: _cancelEditingComment,
+                onGoToAnalysisNode: _goToAnalysisNode,
+                onShowVariationContextMenu: _showVariationContextMenu,
+                revealedPly: widget.revealedPly,
+                onPlayInlineLine: _playInlineLine,
+                activeInlineLine: _inlineActive
+                    ? (
+                        firstMoveNumber: _inlineFirstMoveNumber,
+                        firstIsWhite: _inlineFirstIsWhite,
+                        sans: _inlineSans,
+                        cursor: _inlineCursor,
+                        anchorFen: _inlineAnchorFen,
+                      )
+                    : null,
+              ),
             ),
           ),
         ),
         ?_buildBranchChips(),
         if (_isInVariation)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 8, right: 8, top: 2),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+            child: SizedBox(
+              width: double.infinity,
               child: Tooltip(
                 message: 'Return to mainline (R)',
                 waitDuration: const Duration(milliseconds: 400),
-                child: OutlinedButton.icon(
+                child: FilledButton.tonalIcon(
                   onPressed: _returnToMainline,
-                  icon: const Icon(Icons.subdirectory_arrow_left, size: 16),
+                  icon: const Icon(Icons.subdirectory_arrow_left, size: 18),
                   label: const Text('Return to mainline'),
-                  style: OutlinedButton.styleFrom(
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        AppColors.pgnMainLine.withValues(alpha: 0.16),
                     foregroundColor: AppColors.pgnMainLine,
-                    side: BorderSide(
-                        color: AppColors.pgnMainLine.withValues(alpha: 0.6)),
-                    textStyle: const TextStyle(fontSize: 12),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
+                    textStyle: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(
+                          color:
+                              AppColors.pgnMainLine.withValues(alpha: 0.35)),
+                    ),
                   ),
                 ),
               ),
@@ -1583,6 +1685,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
             ],
           ),
         ),
+        if (widget.editMode && widget.onCommentsChanged != null)
+          _buildAnnotationPanel(),
       ],
     );
   }
