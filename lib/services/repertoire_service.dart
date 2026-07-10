@@ -421,8 +421,59 @@ class RepertoireService {
     String newGamePgn,
   ) {
     return _editLineInFile(filePath, lineId, (games, matchIndex) {
-      games[matchIndex] = newGamePgn.trimRight();
+      games[matchIndex] =
+          _mergeMissingHeaders(games[matchIndex], newGamePgn.trimRight());
     });
+  }
+
+  /// The PGN editor serializes only the standard headers, so carry over any
+  /// header the old game had that the new text lacks (LineID, review
+  /// metadata, CumProb, …). Dropping LineID would orphan the line: every
+  /// later lookup by id — rename, autosave, delete — silently fails.
+  String _mergeMissingHeaders(String oldGame, String newGame) {
+    final keyPattern = RegExp(r'^\[(\w+)\s+"[^"]*"\]$');
+
+    List<String> headerLines(String game) {
+      final result = <String>[];
+      for (final line in game.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) {
+          if (result.isNotEmpty) break;
+          continue;
+        }
+        if (keyPattern.hasMatch(trimmed)) {
+          result.add(trimmed);
+        } else {
+          break;
+        }
+      }
+      return result;
+    }
+
+    final newKeys = headerLines(newGame)
+        .map((h) => keyPattern.firstMatch(h)!.group(1)!)
+        .toSet();
+    final missing = headerLines(oldGame)
+        .where((h) => !newKeys.contains(keyPattern.firstMatch(h)!.group(1)!))
+        .toList();
+    if (missing.isEmpty) return newGame;
+
+    final lines = newGame.split('\n');
+    var lastHeader = -1;
+    for (int i = 0; i < lines.length; i++) {
+      final trimmed = lines[i].trim();
+      if (keyPattern.hasMatch(trimmed)) {
+        lastHeader = i;
+      } else if (trimmed.isNotEmpty) {
+        break;
+      }
+    }
+    if (lastHeader == -1) {
+      lines.insertAll(0, [...missing, '']);
+    } else {
+      lines.insertAll(lastHeader + 1, missing);
+    }
+    return lines.join('\n');
   }
 
   /// Removes a game identified by [lineId] from the PGN file on disk.

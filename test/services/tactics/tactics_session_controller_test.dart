@@ -397,4 +397,144 @@ void main() {
     expect(session.positionSolved, isTrue);
     expect(session.currentMoveIndex, 5);
   });
+
+  group('play source (session vs browse)', () {
+    TacticsDatabase threePositions() {
+      final db = TacticsDatabase();
+      db.positions.addAll([
+        _samplePosition(fullmove: 1),
+        _samplePosition(fullmove: 2),
+        _samplePosition(fullmove: 3),
+      ]);
+      return db;
+    }
+
+    test('startSession/selectPosition/endSession set playSource', () {
+      final db = threePositions();
+      final session = TacticsSessionController(database: db);
+
+      expect(session.playSource, TacticsPlaySource.none);
+      session.startSession(_allTime);
+      expect(session.playSource, TacticsPlaySource.session);
+      session.endSession();
+      expect(session.playSource, TacticsPlaySource.none);
+      session.selectPosition(db.positions.first);
+      expect(session.playSource, TacticsPlaySource.browse);
+    });
+
+    test('browse: previous/next walk the given queue in order', () {
+      final db = threePositions();
+      final session = TacticsSessionController(database: db);
+      // Queue in reversed order, starting from the middle item.
+      final queue = db.positions.reversed.toList();
+      session.selectPosition(queue[1], browseQueue: queue);
+      expect(session.currentPosition!.fen, queue[1].fen);
+
+      expect(session.skipPosition()!.fen, queue[2].fen);
+      expect(session.skipPosition(), isNull,
+          reason: 'walking past the end returns to the browse list');
+
+      session.selectPosition(queue[1], browseQueue: queue);
+      expect(session.previousPosition()!.fen, queue[0].fen);
+      expect(session.previousPosition(), isNull,
+          reason: 'walking past the start returns to the browse list');
+    });
+
+    test('browse play never touches session outcomes', () {
+      final db = threePositions();
+      final session = TacticsSessionController(database: db)
+        ..autoAdvance = false;
+      session.selectPosition(db.positions.first);
+      session.processMoveAttempt(
+        moveUci: 'e2e4',
+        boardFen: db.positions.first.fen,
+        schedule: _noopSchedule,
+        isMounted: () => true,
+      );
+      expect(session.positionSolved, isTrue);
+      expect(session.sessionOutcomes, isEmpty);
+    });
+
+    test('edit is locked at the unsolved session head, open elsewhere', () {
+      final db = threePositions();
+      final session = TacticsSessionController(database: db)
+        ..autoAdvance = false;
+
+      session.startSession(_allTime);
+      expect(session.canEditCurrent, isFalse,
+          reason: 'unsolved head of the session — editing reveals the answer');
+
+      session.showSolution = true;
+      expect(session.canEditCurrent, isTrue, reason: 'answer already shown');
+      session.showSolution = false;
+
+      session.skipPosition();
+      expect(session.canEditCurrent, isFalse, reason: 'new unsolved head');
+
+      session.previousPosition();
+      expect(session.canEditCurrent, isTrue,
+          reason: 'revisiting an already-seen puzzle');
+
+      session.skipPosition();
+      expect(session.canEditCurrent, isFalse,
+          reason: 'back at the furthest, still-unsolved puzzle');
+
+      session.endSession();
+      session.selectPosition(db.positions.first);
+      expect(session.canEditCurrent, isTrue,
+          reason: 'browse-launched play is always editable');
+    });
+
+    test('hasPrevious/hasNext gray the ends of the queue', () {
+      final db = threePositions();
+      final session = TacticsSessionController(database: db)
+        ..autoAdvance = false;
+
+      expect(session.hasPrevious, isFalse, reason: 'nothing loaded');
+      expect(session.hasNext, isFalse, reason: 'nothing loaded');
+
+      session.startSession(_allTime);
+      expect(session.hasPrevious, isFalse, reason: 'first session puzzle');
+      expect(session.hasNext, isTrue);
+      expect(session.isAtLastSessionPuzzle, isFalse);
+
+      session.skipPosition();
+      session.skipPosition();
+      expect(session.hasPrevious, isTrue);
+      expect(session.hasNext, isTrue,
+          reason: 'Next on the last session puzzle finishes the session');
+      expect(session.isAtLastSessionPuzzle, isTrue);
+
+      session.endSession();
+      final queue = db.positions.toList();
+      session.selectPosition(queue.first, browseQueue: queue);
+      expect(session.hasPrevious, isFalse, reason: 'first browse item');
+      expect(session.hasNext, isTrue);
+      expect(session.isAtLastSessionPuzzle, isFalse,
+          reason: 'browse walks are not sessions');
+
+      session.skipPosition();
+      session.skipPosition();
+      expect(session.hasPrevious, isTrue);
+      expect(session.hasNext, isFalse, reason: 'last browse item');
+    });
+
+    test('reloadCurrentPosition preserves the play source', () {
+      final db = threePositions();
+      final session = TacticsSessionController(database: db);
+
+      session.startSession(_allTime);
+      session.reloadCurrentPosition(session.currentPosition!);
+      expect(session.playSource, TacticsPlaySource.session);
+
+      session.endSession();
+      final queue = db.positions.toList();
+      session.selectPosition(queue[0], browseQueue: queue);
+      final edited = queue[0];
+      session.reloadCurrentPosition(edited);
+      expect(session.playSource, TacticsPlaySource.browse);
+      expect(session.skipPosition()!.fen, queue[1].fen,
+          reason: 'browse queue still walkable after an in-place edit');
+    });
+  });
 }

@@ -16,6 +16,7 @@ import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'pgn/comment_editor.dart';
 import 'pgn/comment_prose_spans.dart';
+import 'pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 
 class InteractivePgnEditor extends StatefulWidget {
@@ -152,7 +153,42 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     widget.onCommentChanged?.call(path, trimmed.isEmpty ? null : trimmed);
     widget.onDirty?.call();
     _scheduleAutoSave();
+    // The tree was mutated in place, so the identity-based widget cache
+    // would keep rendering the old comment.
+    _cachedMoveWidgets = null;
     setState(() => _editingCommentPath = null);
+  }
+
+  /// Comment committed from the persistent bottom annotation panel.
+  void _commitPanelComment(TreePath path, String text) {
+    final node = widget.tree.nodeAt(path);
+    if (node == null) return;
+    final trimmed = text.trim();
+    final normalized = trimmed.isEmpty ? null : trimmed;
+    if (node.comment == normalized) return;
+    widget.onCommentChanged?.call(path, normalized);
+    widget.onDirty?.call();
+    _cachedMoveWidgets = null;
+    _scheduleAutoSave();
+    if (mounted) setState(() {});
+  }
+
+  void _togglePanelNag(TreePath path, int nagId) {
+    final node = widget.tree.nodeAt(path);
+    if (node == null) return;
+    final nags = List<int>.of(node.nags ?? const []);
+    if (nags.contains(nagId)) {
+      nags.remove(nagId);
+    } else {
+      // Move NAGs ($1–$6) are mutually exclusive.
+      nags.removeWhere((n) => n >= 1 && n <= 6);
+      nags.add(nagId);
+    }
+    node.nags = nags.isEmpty ? null : nags;
+    widget.onDirty?.call();
+    _cachedMoveWidgets = null;
+    _scheduleAutoSave();
+    setState(() {});
   }
 
   void _deleteFromHere() {
@@ -402,10 +438,35 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 ),
               ),
             ),
+            if (_showTitleField) _buildAnnotationPanel(),
           ],
         ),
       ],
     );
+  }
+
+  /// Persistent annotation strip pinned below the move list: the move the
+  /// cursor sits on is always editable here, no right-click needed.
+  Widget _buildAnnotationPanel() {
+    final path = widget.currentPath;
+    final node = path.isEmpty ? null : widget.tree.nodeAt(path);
+    return PgnAnnotationPanel(
+      targetKey: node == null ? null : 'n${node.id}',
+      moveLabel: node == null ? '' : _moveLabelFor(path, node),
+      nags: node?.nags ?? const [],
+      comment: node?.comment ?? '',
+      onToggleNag: (nagId) => _togglePanelNag(path, nagId),
+      onCommentChanged: (text) => _commitPanelComment(path, text),
+    );
+  }
+
+  String _moveLabelFor(TreePath path, MoveNode node) {
+    final (startMoveNumber, startIsWhite) =
+        MoveTree.moveNumberFromFen(widget.tree.startingFen);
+    final ply = path.length - 1;
+    final isWhiteMove = startIsWhite ? ply.isEven : ply.isOdd;
+    final moveNumber = startMoveNumber + ((startIsWhite ? ply : ply + 1) ~/ 2);
+    return '$moveNumber${isWhiteMove ? '.' : '...'} ${node.san}';
   }
 
   Widget _buildMovesDisplay() {

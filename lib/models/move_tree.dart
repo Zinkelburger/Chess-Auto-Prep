@@ -470,6 +470,7 @@ class MoveTree {
     }
 
     buffer.write('${main.san} ');
+    _writeNags(buffer, main);
     if (main.comment != null && main.comment!.isNotEmpty) {
       buffer.write('{${_sanitizeComment(main.comment!)}} ');
     }
@@ -484,6 +485,7 @@ class MoveTree {
 
       final variant = siblings[i];
       buffer.write('${variant.san} ');
+      _writeNags(buffer, variant);
       if (variant.comment != null && variant.comment!.isNotEmpty) {
         buffer.write('{${_sanitizeComment(variant.comment!)}} ');
       }
@@ -496,6 +498,14 @@ class MoveTree {
 
     _writeNodes(
         buffer, main.children, isWhite ? moveNumber : moveNumber + 1, !isWhite);
+  }
+
+  static void _writeNags(StringBuffer buffer, MoveNode node) {
+    final nags = node.nags;
+    if (nags == null) return;
+    for (final nag in nags) {
+      buffer.write('\$$nag ');
+    }
   }
 
   static String _sanitizeComment(String comment) =>

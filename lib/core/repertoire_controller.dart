@@ -687,7 +687,10 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
           if (c.isNotEmpty) comments[i.toString()] = c;
         }
       }
-      _repertoireLines[idx] = RepertoireLine(
+      // Swap in a fresh list: consumers (lines browser) rebuild their
+      // display/search indexes only when the list identity changes.
+      final updated = List.of(_repertoireLines);
+      updated[idx] = RepertoireLine(
         id: old.id,
         name: old.name,
         moves: newMoves,
@@ -695,8 +698,11 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
         startPosition: service.extractStartPositionFromPgn(newPgn),
         fullPgn: newPgn,
         comments: comments,
+        headers: Map<String, String>.from(parsed.headers),
+        importance: old.importance,
       );
-      _selectedPgnLine = _repertoireLines[idx];
+      _repertoireLines = updated;
+      _selectedPgnLine = updated[idx];
     }
 
     notifyListeners();

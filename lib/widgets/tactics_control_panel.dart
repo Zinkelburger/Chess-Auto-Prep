@@ -103,14 +103,18 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     _session.onPositionSetup = _loadPositionSetup;
     _session.onAnalysisMove = _addMoveToAnalysis;
     _session.onUserMoveAccepted = _pgnViewerController.goForward;
-    _session.onSessionCompleted = _showSessionRecap;
+    _session.onSessionCompleted = _onQueueExhausted;
     _session.addListener(_onSessionChanged);
     _import.addListener(_onImportChanged);
     // Reactive safety net: any database mutation (import streaming, delete,
     // edit, rating) repaints the panel without each call site having to
     // remember to setState.
     _database.addListener(_onDbChanged);
-    _tabController = TabController(length: 3, vsync: this);
+    // Two tabs: Tactic, plus a second slot that is Browse while nothing is
+    // loaded and PGN analysis while a puzzle is on the board (a PGN tab with
+    // no puzzle is useless, and Browse is reachable from the puzzle via the
+    // back button / walking off either end of the browse queue).
+    _tabController = TabController(length: 2, vsync: this);
 
     _form = TacticsImportForm(defaultCores: EngineSettings.instance.workers);
     _form.addListener(_onFormChanged);
@@ -139,11 +143,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     // animation to settle: flipping the mode notifies AppState, which rebuilds
     // the whole tactics screen (board pane, import form, browse list) — doing
     // that on the same frame the animation starts is what made switching tabs
-    // visibly janky.
+    // visibly janky. Analysis mode only applies to the PGN view; switching to
+    // Browse (no puzzle loaded) must not touch AppState at all, or the full
+    // screen rebuilds under the freshly-built list.
     _tabController.addListener(() {
       if (!mounted || _tabController.indexIsChanging) return;
       final appState = context.read<AppState>();
-      if (_tabController.index != 0) {
+      if (_tabController.index != 0 && _session.hasActivePosition) {
         appState.enterAnalysisMode();
         _focusNode.requestFocus();
       } else {
@@ -415,10 +421,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
           if (_database.isExternalSet) _buildReviewBanner(),
           TabBar(
             controller: _tabController,
-            tabs: const [
-              Tab(text: 'Tactic'),
-              Tab(text: 'PGN'),
-              Tab(text: 'Browse'),
+            tabs: [
+              const Tab(text: 'Tactic'),
+              // Second slot: Browse when nothing is loaded, PGN analysis
+              // while a puzzle is on the board — never both.
+              Tab(text: _session.hasActivePosition ? 'PGN' : 'Browse'),
             ],
           ),
           Expanded(
@@ -426,8 +433,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
               controller: _tabController,
               children: [
                 _buildTacticTab(),
-                _buildAnalysisTab(),
-                _buildBrowseTab(),
+                if (_session.hasActivePosition)
+                  _buildAnalysisTab()
+                else
+                  _buildBrowseTab(),
               ],
             ),
           ),
@@ -537,13 +546,19 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return KeyEventResult.handled;
     }
 
+    // Mirror the button enablement: at the ends of the queue the shortcuts
+    // do nothing, same as the grayed-out Previous/Next.
     if (key == LogicalKeyboardKey.keyP && hasNoLetterModifiers) {
-      _loadCurrentPosition(_session.previousPosition());
+      if (_session.hasPrevious) {
+        _loadCurrentPosition(_session.previousPosition());
+      }
       return KeyEventResult.handled;
     }
 
     if (key == LogicalKeyboardKey.keyN && hasNoLetterModifiers) {
-      _loadCurrentPosition(_session.skipPosition());
+      if (_session.hasNext) {
+        _loadCurrentPosition(_session.skipPosition());
+      }
       return KeyEventResult.handled;
     }
 
@@ -622,13 +637,24 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onToggleSolution: () => _session.toggleSolution(),
                   onAnalyze: _onAnalyze,
                   onResetAnalysis: _resetAnalysis,
-                  onPreviousPosition: () =>
-                      _loadCurrentPosition(_session.previousPosition()),
-                  onSkipPosition: () =>
-                      _loadCurrentPosition(_session.skipPosition()),
+                  onPreviousPosition: _session.hasPrevious
+                      ? () => _loadCurrentPosition(_session.previousPosition())
+                      : null,
+                  onSkipPosition: _session.hasNext
+                      ? () => _loadCurrentPosition(_session.skipPosition())
+                      : null,
+                  isLastSessionPuzzle: _session.isAtLastSessionPuzzle,
                   onAutoAdvanceChanged: _session.setAutoAdvance,
                   onCopyFen: _copyFen,
-                  onEdit: _database.isExternalSet ? null : _editCurrentTactic,
+                  onBackToBrowse:
+                      _session.playSource == TacticsPlaySource.browse
+                          ? _returnToBrowse
+                          : null,
+                  // Editing is gated by the controller (locked at the unsolved
+                  // head of a session) and off entirely for external sets.
+                  onEdit: !_database.isExternalSet && _session.canEditCurrent
+                      ? _editCurrentTactic
+                      : null,
                   onSetRating: (rating) {
                     _session.setRating(rating);
                     setState(() {});
@@ -674,7 +700,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onStartSession: _onStartSession,
                   clearDatabaseEnabled: !_import.isImporting,
                   onClearDatabase: _confirmClearDatabase,
-                  onBrowseTactics: () => _tabController.animateTo(2),
+                  onBrowseTactics: () => _tabController.animateTo(1),
                   fetchMode: _form.fetchMode,
                   onFetchModeChanged: _form.setFetchMode,
                   sinceDays: _form.sinceDays,
@@ -736,7 +762,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     return TacticsBrowsePanel(
       positions: _database.positions,
       selectedFen: _session.currentPosition?.fen,
-      onSelectTactic: _selectTacticFromBrowse,
+      onSelectTactic: _playTacticFromBrowse,
       onDeleteTactic: _deleteTactic,
       onEditTactic: _showEditDialog,
       onClearAll: _confirmClearDatabase,
@@ -790,14 +816,19 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
-  void _selectTacticFromBrowse(int index) {
+  /// Play button on a browse row: load the tactic unscored, with
+  /// Previous/Next walking [visibleIndices] (the list as filtered/sorted at
+  /// click time) and the back button returning to the list.
+  void _playTacticFromBrowse(int index, List<int> visibleIndices) {
     final pos = _database.positions[index];
     try {
-      final setup = _session.selectPosition(pos);
+      final setup = _session.selectPosition(
+        pos,
+        browseQueue: [for (final i in visibleIndices) _database.positions[i]],
+      );
       if (setup != null) _applyPositionSetup(setup);
       _syncPgnToCurrentTactic();
-      // Land on the Tactic tab so the loaded puzzle is front and center;
-      // Browse stays one tab away instead of being replaced by the PGN view.
+      // Land on the Tactic tab so the loaded puzzle is front and center.
       _tabController.animateTo(0);
       _focusNode.requestFocus();
     } catch (e) {
@@ -806,6 +837,17 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         showAppSnackBar(context, AppMessages.loadPositionFailed, isError: true);
       }
     }
+  }
+
+  /// Leave a browse-launched puzzle and land back on the browse list
+  /// (the back button, or walking off either end of the browse queue).
+  void _returnToBrowse() {
+    _session.endSession();
+    _showRecap = false;
+    _resetBoardToStart();
+    setState(() {});
+    // With nothing loaded the second tab is Browse again.
+    _tabController.animateTo(1);
   }
 
   void _deleteTactic(int index) async {
@@ -885,8 +927,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       await _database.updatePositionAt(index, updated);
       if (wasCurrent && mounted) {
         // The tactic on the board was edited (possibly its FEN or solution):
-        // re-select it so the board and puzzle state reflect the new data.
-        final setup = _session.selectPosition(updated);
+        // reload it in place so the board and puzzle state reflect the new
+        // data without changing how it was launched (session vs browse).
+        final setup = _session.reloadCurrentPosition(updated);
         if (setup != null) _applyPositionSetup(setup);
         _syncPgnToCurrentTactic();
       }
@@ -998,10 +1041,20 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
   void _loadCurrentPosition(TacticsPositionSetup? setup) {
     if (setup == null) {
-      _showSessionRecap();
+      _onQueueExhausted();
       return;
     }
     _loadPositionSetup(setup);
+  }
+
+  /// Previous/Next/auto-advance walked off the end of the queue: a session
+  /// gets its recap, a browse walk just returns to the list.
+  void _onQueueExhausted() {
+    if (_session.playSource == TacticsPlaySource.browse) {
+      _returnToBrowse();
+    } else {
+      _showSessionRecap();
+    }
   }
 
   void _loadPositionSetup(TacticsPositionSetup setup) {

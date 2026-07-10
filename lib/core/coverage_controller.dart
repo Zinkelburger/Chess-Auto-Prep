@@ -27,11 +27,13 @@ class CoverageController extends ChangeNotifier {
   }
 
   /// Run coverage analysis. Returns the result, or null if the tree is null
-  /// or an error occurs. Progress is reported via [notifyListeners].
+  /// or an error occurs. Progress is reported via [notifyListeners] and,
+  /// when provided, [onProgress] (used to drive the jobs-pane card).
   Future<CoverageResult?> calculate({
     required CoverageConfig config,
     required OpeningTree tree,
     required bool isWhiteRepertoire,
+    void Function(String message, double? progress)? onProgress,
   }) async {
     _isRunning = true;
     _result = null;
@@ -56,6 +58,7 @@ class CoverageController extends ChangeNotifier {
           _progressMessage = message;
           _progress = prog;
           notifyListeners();
+          onProgress?.call(message, prog);
         },
       );
 

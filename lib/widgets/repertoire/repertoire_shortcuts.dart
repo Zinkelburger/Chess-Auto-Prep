@@ -15,9 +15,6 @@ class RepertoireShortcuts extends StatelessWidget {
     required this.focusNode,
     required this.onPasteFenFromClipboard,
     required this.onUndo,
-    required this.onOpenGeneration,
-    required this.onOpenAudit,
-    required this.onImportPgnFile,
     required this.onToggleExpectimax,
     required this.onToggleLinesTab,
     required this.onCollapseBottomPane,
@@ -31,6 +28,7 @@ class RepertoireShortcuts extends StatelessWidget {
     this.onNextFinding,
     this.onPrevFinding,
     this.onDismissFinding,
+    this.onFocusComment,
     this.autofocus = true,
     required this.child,
   });
@@ -40,9 +38,6 @@ class RepertoireShortcuts extends StatelessWidget {
 
   final VoidCallback onPasteFenFromClipboard;
   final VoidCallback onUndo;
-  final VoidCallback onOpenGeneration;
-  final VoidCallback onOpenAudit;
-  final VoidCallback onImportPgnFile;
   final VoidCallback onToggleExpectimax;
   final VoidCallback onToggleLinesTab;
 
@@ -75,6 +70,10 @@ class RepertoireShortcuts extends StatelessWidget {
   /// D — dismiss current finding in the audit findings panel.
   final bool Function()? onDismissFinding;
 
+  /// C — focus the annotation panel's comment field for the current move.
+  /// Return true if a comment field was focused.
+  final bool Function()? onFocusComment;
+
   final Widget child;
 
   void _invokeWhenNotTyping(VoidCallback action) {
@@ -89,21 +88,6 @@ class RepertoireShortcuts extends StatelessWidget {
     if (isTextInputFocused()) return KeyEventResult.ignored;
 
     final keyboard = HardwareKeyboard.instance;
-
-    if (event.logicalKey == LogicalKeyboardKey.keyG && hasNoLetterModifiers) {
-      onOpenGeneration();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyA && hasNoLetterModifiers) {
-      onOpenAudit();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyI && hasNoLetterModifiers) {
-      onImportPgnFile();
-      return KeyEventResult.handled;
-    }
 
     if (event.logicalKey == LogicalKeyboardKey.keyX && hasNoLetterModifiers) {
       onToggleExpectimax();
@@ -151,6 +135,12 @@ class RepertoireShortcuts extends StatelessWidget {
 
     if (event.logicalKey == LogicalKeyboardKey.keyD && hasNoLetterModifiers) {
       if (onDismissFinding != null && onDismissFinding!()) {
+        return KeyEventResult.handled;
+      }
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.keyC && hasNoLetterModifiers) {
+      if (onFocusComment != null && onFocusComment!()) {
         return KeyEventResult.handled;
       }
     }

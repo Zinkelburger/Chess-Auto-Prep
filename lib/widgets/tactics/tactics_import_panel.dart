@@ -499,75 +499,92 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
 
     Color dimmed(bool active) => active ? Colors.grey[400]! : Colors.grey[700]!;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    // The two fetch modes sit side by side on one line, both phrased the
+    // same way ("Last [N] days" / "Latest [N] games") so no separator word
+    // is needed. Each stays a tappable _FetchModeRow so the fade/left-accent
+    // selection look is preserved.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        _FetchModeRow(
-          selected: isSince,
-          onTap: () => widget.onFetchModeChanged(TacticsImportMode.sinceDate),
-          child: Row(
-            children: [
-              Text(
-                'Games from the last',
-                style: TextStyle(fontSize: 13, color: dimmed(isSince)),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 56,
-                child: TextField(
-                  controller: _sinceDaysController,
-                  focusNode: _sinceDaysFocus,
-                  enabled: isSince,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                  ),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) {
-                    final days = int.tryParse(value);
-                    if (days != null && days > 0) {
-                      widget.onSinceDaysChanged(days);
-                    }
-                  },
+        Expanded(
+          child: _FetchModeRow(
+            selected: isSince,
+            onTap: () =>
+                widget.onFetchModeChanged(TacticsImportMode.sinceDate),
+            child: Row(
+              children: [
+                Text(
+                  'Last',
+                  style: TextStyle(fontSize: 13, color: dimmed(isSince)),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'days',
-                style: TextStyle(fontSize: 13, color: dimmed(isSince)),
-              ),
-            ],
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 52,
+                  child: TextField(
+                    controller: _sinceDaysController,
+                    focusNode: _sinceDaysFocus,
+                    enabled: isSince,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                    onChanged: (value) {
+                      final days = int.tryParse(value);
+                      if (days != null && days > 0) {
+                        widget.onSinceDaysChanged(days);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'days',
+                  style: TextStyle(fontSize: 13, color: dimmed(isSince)),
+                ),
+              ],
+            ),
           ),
         ),
-        const SizedBox(height: 8),
-        _FetchModeRow(
-          selected: isRecent,
-          onTap: () => widget.onFetchModeChanged(TacticsImportMode.recent),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 72,
-                child: TextField(
-                  controller: widget.lichessCountController,
-                  enabled: isRecent,
-                  decoration: const InputDecoration(
-                    labelText: 'Games',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  keyboardType: TextInputType.number,
+        const SizedBox(width: 8),
+        Expanded(
+          child: _FetchModeRow(
+            selected: isRecent,
+            onTap: () => widget.onFetchModeChanged(TacticsImportMode.recent),
+            child: Row(
+              children: [
+                Text(
+                  'Latest',
+                  style: TextStyle(fontSize: 13, color: dimmed(isRecent)),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'most recent per source',
-                style: TextStyle(fontSize: 13, color: dimmed(isRecent)),
-              ),
-            ],
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 52,
+                  child: TextField(
+                    controller: widget.lichessCountController,
+                    enabled: isRecent,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'games',
+                  style: TextStyle(fontSize: 13, color: dimmed(isRecent)),
+                ),
+              ],
+            ),
           ),
         ),
       ],
