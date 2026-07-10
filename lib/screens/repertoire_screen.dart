@@ -39,6 +39,7 @@ import '../widgets/repertoire/repertoire_empty_state.dart';
 import '../widgets/repertoire/repertoire_toolbar.dart';
 import '../utils/keyboard_shortcut_utils.dart';
 import '../widgets/repertoire/repertoire_shortcuts.dart';
+import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/engine/inline_expectimax_bar.dart';
 import '../services/jobs/repertoire_job.dart';
@@ -589,9 +590,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           focusNode: _focusNode,
           onPasteFenFromClipboard: _pastePositionFromClipboard,
           onUndo: _performUndo,
-          onOpenGeneration: _openGenerationDialog,
-          onOpenAudit: _openAuditDialog,
-          onImportPgnFile: _importPgnFromFile,
           onToggleExpectimax: InlineExpectimaxBar.toggle,
           onToggleLinesTab: () {
             if (_isCompactLayout) {
@@ -627,6 +625,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             return true;
           },
           onToggleEngine: InlineEngineBar.toggleEngine,
+          onFocusComment: PgnAnnotationPanel.focusActive,
           onGoBack: _controller.goBack,
           onGoForward: _controller.goForward,
           onGoToPreviousTrap: () => TrapNavigationButtons.goToPreviousTrap(
@@ -943,7 +942,14 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             height: 30,
             child: Row(
               children: [
-                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.keyboard_double_arrow_right, size: 16),
+                  onPressed: () => _setLinesPanelCollapsed(true),
+                  tooltip: 'Hide lines (L)',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                ),
                 Icon(
                   _isDraftActive ? Icons.download_done : Icons.list_alt,
                   size: 14,
@@ -961,14 +967,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   ),
                 ),
                 const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.keyboard_double_arrow_right, size: 16),
-                  onPressed: () => _setLinesPanelCollapsed(true),
-                  tooltip: 'Hide lines (L)',
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
-                ),
               ],
             ),
           ),
@@ -1217,6 +1215,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           setState(() => _showInlineAuditConfig = false),
       onOpenGenerationDialog: _openGenerationDialog,
       onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
+      onOpenCoverageDialog: _showCoverageCalculator,
       onAuditingChanged: (auditing) {
         if (!mounted) return;
         _auditController.onAuditingChanged(
@@ -1732,6 +1731,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   Future<void> _showCoverageCalculator() async {
+    if (_coverageController.isRunning) {
+      _openBottomPane(BottomPaneTab.jobs);
+      return;
+    }
+
     final config = await showCoverageConfigDialog(context);
     if (config == null || !mounted) return;
 
@@ -1741,12 +1745,38 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       return;
     }
 
+    // Coverage runs as a first-class job so the run is visible in the
+    // Jobs pane alongside generation and audit.
+    final job = _jobManager.createJob(
+      type: JobType.coverage,
+      label: '${_controller.currentRepertoire?.name ?? 'Repertoire'} coverage',
+    );
+    job.updateStatus(JobStatus.running);
+    _openBottomPane(BottomPaneTab.jobs);
+
     try {
       final result = await _coverageController.calculate(
         config: config,
         tree: tree,
         isWhiteRepertoire: _controller.isRepertoireWhite,
+        onProgress: (message, progress) {
+          job.updateProgress(JobProgress(
+            fraction: progress ?? 0,
+            message: message,
+          ));
+        },
       );
+      if (result != null) {
+        job.updateProgress(JobProgress(
+          fraction: 1,
+          message:
+              '${result.coveragePercent.toStringAsFixed(1)}% covered, '
+              '${result.tooShallowLeaves.length} shallow, '
+              '${result.tooDeepLeaves.length} deep, '
+              '${result.unaccountedMoves.length} unaccounted',
+        ));
+      }
+      job.updateStatus(JobStatus.completed);
       if (result != null && mounted) {
         showAppSnackBar(
           context,
@@ -1757,6 +1787,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         );
       }
     } catch (e) {
+      job.fail('$e');
       if (mounted) {
         showAppSnackBar(context, 'Coverage analysis failed: $e');
       }

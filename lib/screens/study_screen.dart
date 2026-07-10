@@ -20,6 +20,7 @@ import '../widgets/board_editor/board_editor_dialog.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/engine/inline_engine_bar.dart';
 import '../widgets/interactive_pgn_editor.dart';
+import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/trainer_keyboard_scope.dart';
 import '../widgets/training/move_input_widget.dart';
 
@@ -105,6 +106,11 @@ class _StudyScreenState extends State<StudyScreen> {
     if (key == LogicalKeyboardKey.slash) {
       _moveInputKey.currentState?.focus();
       return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.keyC && hasNoLetterModifiers) {
+      if (PgnAnnotationPanel.focusActive()) {
+        return KeyEventResult.handled;
+      }
     }
     return KeyEventResult.ignored;
   }

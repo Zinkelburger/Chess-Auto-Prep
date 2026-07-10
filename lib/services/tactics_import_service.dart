@@ -70,9 +70,22 @@ class TacticsImportService {
     return 2 / (1 + math.exp(_multiplier * capped)) - 1;
   }
 
-  // Win percent for display purposes [0, 100]
-  double _winPercent(int centipawns) {
-    return 50 + 50 * _winningChances(centipawns);
+  /// Human-readable engine eval: pawns with sign ("+0.5", "-2.1") or mate
+  /// ("#3" delivering, "#-3" getting mated). Scores arrive in side-to-move
+  /// perspective; pass [negate] when that side is the opponent so the number
+  /// reads from the user's point of view.
+  static String _formatEval({
+    int? scoreCp,
+    int? scoreMate,
+    bool negate = false,
+  }) {
+    if (scoreMate != null) {
+      final mate = negate ? -scoreMate : scoreMate;
+      return '#$mate';
+    }
+    final cp = negate ? -(scoreCp ?? 0) : (scoreCp ?? 0);
+    final pawns = cp / 100.0;
+    return '${pawns >= 0 ? '+' : ''}${pawns.toStringAsFixed(1)}';
   }
 
   /// Count stored PGN games that have not yet been analyzed.
@@ -818,22 +831,23 @@ class TacticsImportService {
               ? _formatUciToSan(fenAfter, evalB.pv.first)
               : '';
 
-          final wpBefore = _winPercent(cpA);
-          final wpAfter = _winPercent(cpB);
           final mistakeType = isBlunder
               ? '??'
               : isMistake
                   ? '?'
                   : '?!';
-          final label = isBlunder
-              ? 'Blunder'
-              : isMistake
-                  ? 'Mistake'
-                  : 'Inaccuracy';
-          final analysis = '$label. Win chance dropped from '
-              '${wpBefore.toStringAsFixed(1)}% to '
-              '${wpAfter.toStringAsFixed(1)}% '
-              '(${delta.toStringAsFixed(1)}%). Best was $bestMoveSan.';
+          // Note shown as the flashcard back, deliberately terse:
+          // "h5 +0.5 → -2.1, Qf3 +0.5" — the played move with the eval arc,
+          // then the best move keeping the pre-move eval. Evals are from the
+          // user's perspective and mate-aware. No prose: the mistake label
+          // already shows as ??/?/?!, and wordier phrasings collided with
+          // filterDisplayComment's Lichess-classification stripper.
+          final evalBest = _formatEval(
+              scoreCp: evalA.scoreCp, scoreMate: evalA.scoreMate);
+          final evalAfterMove = _formatEval(
+              scoreCp: evalB.scoreCp, scoreMate: evalB.scoreMate, negate: true);
+          final analysis =
+              '$san $evalBest → $evalAfterMove, $bestMoveSan $evalBest';
 
           positions.add(TacticsPosition(
             fen: fenBefore,

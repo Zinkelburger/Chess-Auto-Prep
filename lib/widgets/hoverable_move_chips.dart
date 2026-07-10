@@ -1,19 +1,21 @@
-/// Inline move chips with hover-to-preview board functionality.
+/// Inline move text with hover-to-preview board functionality.
 ///
-/// Renders a list of SAN moves as compact chips/spans with move numbers.
-/// On hover, computes the FEN at that move and triggers a floating board
-/// preview via [BoardPreviewController].
+/// Renders a list of SAN moves with move numbers as a single [Text.rich]
+/// paragraph — one render object per line list, so hundreds of rows stay
+/// cheap to build. On hover, computes the FEN at that move and triggers a
+/// floating board preview via [BoardPreviewController].
 ///
 /// Used by: [LinesPreviewPanel], [LineItemRow], PGN Viewer line browser.
 library;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../core/board_preview_controller.dart';
 import '../utils/chess_utils.dart' show fenAfterMoves;
 
-/// Compact inline move chips with optional hover board preview.
-class HoverableMoveChips extends StatelessWidget {
+/// Compact inline move text with optional hover board preview.
+class HoverableMoveChips extends StatefulWidget {
   /// SAN moves to display.
   final List<String> moves;
 
@@ -42,7 +44,7 @@ class HoverableMoveChips extends StatelessWidget {
   /// Opaque tag identifying which pane owns the preview overlay.
   final Object? ownerTag;
 
-  /// Called when a move chip is tapped (index into [moves]).
+  /// Called when a move is tapped (index into [moves]).
   final ValueChanged<int>? onMoveTapped;
 
   const HoverableMoveChips({
@@ -60,140 +62,113 @@ class HoverableMoveChips extends StatelessWidget {
   });
 
   @override
+  State<HoverableMoveChips> createState() => _HoverableMoveChipsState();
+}
+
+class _HoverableMoveChipsState extends State<HoverableMoveChips> {
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+  }
+
+  TapGestureRecognizer? _tapRecognizerFor(int index) {
+    final onTap = widget.onMoveTapped;
+    if (onTap == null) return null;
+    final recognizer = TapGestureRecognizer()..onTap = () => onTap(index);
+    _recognizers.add(recognizer);
+    return recognizer;
+  }
+
+  void _onEnterMove(PointerEnterEvent event, int index) {
+    final fen = fenAfterMoves(widget.startFen, widget.moves, index);
+    widget.boardPreview!.setPreview(
+      fen,
+      moves: widget.moves.sublist(0, index + 1),
+      target: BoardPreviewTarget.floating,
+      // Anchor at the pointer, just below the hovered move text.
+      anchorGlobal: event.position + Offset(0, widget.fontSize),
+      ownerTag: widget.ownerTag,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final moves = widget.moves;
     if (moves.isEmpty) return const SizedBox.shrink();
+
+    _disposeRecognizers();
 
     final theme = Theme.of(context);
     final defaultColor = theme.colorScheme.onSurface.withValues(alpha: 0.7);
     final numColor = theme.colorScheme.onSurface.withValues(alpha: 0.45);
-    final hlColor = highlightColor ?? theme.colorScheme.primary;
+    final hlColor = widget.highlightColor ?? theme.colorScheme.primary;
 
-    final end = moves.length.clamp(0, maxMoves);
+    final hasHover = widget.boardPreview != null;
+    final hasTap = widget.onMoveTapped != null;
+    final end = moves.length.clamp(0, widget.maxMoves);
 
-    return Wrap(
-      spacing: 2,
-      runSpacing: 2,
-      children: [
-        for (int i = 0; i < end; i++) ...[
-          if ((startPly + i) % 2 == 0)
-            Text(
-              '${((startPly + i) ~/ 2) + 1}.',
-              style: TextStyle(
-                fontSize: fontSize,
-                color: numColor,
-                fontFamily: 'monospace',
-              ),
-            ),
-          _MoveChip(
-            san: moves[i],
-            index: i,
-            startFen: startFen,
-            moves: moves,
-            fontSize: fontSize,
-            isHighlighted: i < highlightDepth,
-            defaultColor: defaultColor,
-            highlightColor: hlColor,
-            boardPreview: boardPreview,
-            ownerTag: ownerTag,
-            onTap: onMoveTapped,
+    final spans = <InlineSpan>[];
+    for (int i = 0; i < end; i++) {
+      final ply = widget.startPly + i;
+      final isHighlighted = i < widget.highlightDepth;
+      // Move number is fused with the white move ("3.e4") so wrapping never
+      // separates them.
+      final numberPrefix = ply % 2 == 0 ? '${(ply ~/ 2) + 1}.' : '';
+      if (numberPrefix.isNotEmpty) {
+        spans.add(TextSpan(
+          text: numberPrefix,
+          style: TextStyle(
+            fontSize: widget.fontSize,
+            color: numColor,
+            fontFamily: 'monospace',
+            height: 1.5,
           ),
-        ],
-        if (moves.length > maxMoves)
-          Text(
-            '... +${moves.length - maxMoves}',
-            style: TextStyle(
-              fontSize: fontSize - 1,
-              color: numColor,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _MoveChip extends StatelessWidget {
-  final String san;
-  final int index;
-  final String startFen;
-  final List<String> moves;
-  final double fontSize;
-  final bool isHighlighted;
-  final Color defaultColor;
-  final Color highlightColor;
-  final BoardPreviewController? boardPreview;
-  final Object? ownerTag;
-  final ValueChanged<int>? onTap;
-
-  const _MoveChip({
-    required this.san,
-    required this.index,
-    required this.startFen,
-    required this.moves,
-    required this.fontSize,
-    required this.isHighlighted,
-    required this.defaultColor,
-    required this.highlightColor,
-    this.boardPreview,
-    this.ownerTag,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final hasHover = boardPreview != null;
-    final hasTap = onTap != null;
-
-    Widget chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-      decoration: isHighlighted
-          ? BoxDecoration(
-              color: highlightColor.withValues(alpha: 0.35),
-              borderRadius: BorderRadius.circular(2),
-            )
-          : null,
-      child: Text(
-        san,
+        ));
+      }
+      spans.add(TextSpan(
+        text: moves[i],
         style: TextStyle(
-          fontSize: fontSize,
+          fontSize: widget.fontSize,
           fontFamily: 'monospace',
-          color: isHighlighted ? highlightColor : defaultColor,
+          color: isHighlighted ? hlColor : defaultColor,
           fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
+          backgroundColor:
+              isHighlighted ? hlColor.withValues(alpha: 0.25) : null,
+          height: 1.5,
         ),
-      ),
-    );
+        recognizer: _tapRecognizerFor(i),
+        onEnter: hasHover ? (event) => _onEnterMove(event, i) : null,
+        onExit: hasHover ? (_) => widget.boardPreview!.clearPreview() : null,
+        mouseCursor:
+            hasTap ? SystemMouseCursors.click : MouseCursor.defer,
+      ));
+      if (i < end - 1) {
+        spans.add(const TextSpan(text: ' '));
+      }
+    }
 
-    if (!hasHover && !hasTap) return chip;
+    if (moves.length > widget.maxMoves) {
+      spans.add(TextSpan(
+        text: ' ... +${moves.length - widget.maxMoves}',
+        style: TextStyle(
+          fontSize: widget.fontSize - 1,
+          color: numColor,
+          fontStyle: FontStyle.italic,
+          height: 1.5,
+        ),
+      ));
+    }
 
-    return Builder(
-      builder: (anchorContext) {
-        return MouseRegion(
-          cursor: hasTap ? SystemMouseCursors.click : SystemMouseCursors.basic,
-          onEnter: hasHover
-              ? (_) {
-                  final box = anchorContext.findRenderObject() as RenderBox?;
-                  if (box == null) return;
-                  final anchor = box.localToGlobal(
-                    Offset(box.size.width / 2, box.size.height),
-                  );
-                  final fen = fenAfterMoves(startFen, moves, index);
-                  boardPreview!.setPreview(
-                    fen,
-                    moves: moves.sublist(0, index + 1),
-                    target: BoardPreviewTarget.floating,
-                    anchorGlobal: anchor,
-                    ownerTag: ownerTag,
-                  );
-                }
-              : null,
-          onExit: hasHover ? (_) => boardPreview!.clearPreview() : null,
-          child: GestureDetector(
-            onTap: hasTap ? () => onTap!(index) : null,
-            behavior: HitTestBehavior.opaque,
-            child: chip,
-          ),
-        );
-      },
-    );
+    return Text.rich(TextSpan(children: spans));
   }
 }

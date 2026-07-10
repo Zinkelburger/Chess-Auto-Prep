@@ -31,6 +31,7 @@ import '../widgets/fullscreen_game_view.dart';
 import '../widgets/game_analysis_tab.dart';
 import '../widgets/game_nav_bar.dart';
 import '../widgets/game_search_dialog.dart';
+import '../widgets/pgn/pgn_annotation_panel.dart';
 import '../widgets/pgn/pgn_opening_tree_panel.dart';
 import '../widgets/pgn/pgn_perspective_button.dart';
 import '../widgets/pgn/pgn_slice_chips.dart';
@@ -553,6 +554,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         !isPrimaryModifierPressed) {
       if (!_controller.showOpeningTree) _controller.toggleSolitaire();
       return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyC && hasNoLetterModifiers) {
+      // Jump into the annotation panel's comment field (amend mode only).
+      if (PgnAnnotationPanel.focusActive()) {
+        return KeyEventResult.handled;
+      }
     }
     return KeyEventResult.ignored;
   }

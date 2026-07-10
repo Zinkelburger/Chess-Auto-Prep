@@ -45,6 +45,18 @@ typedef TacticsIsMounted = bool Function();
 /// solution — stay [unattempted]).
 enum SessionPuzzleOutcome { correct, incorrect, unattempted }
 
+/// How the currently loaded puzzle was launched.
+///
+/// This single flag is the source of truth for everything that differs
+/// between the two ways of playing a tactic:
+///  * [session]  — "Start Practice Session": a scored queue with a recap at
+///    the end. Editing is locked at the unsolved head (it would reveal the
+///    answer); anything already seen is fair game.
+///  * [browse]   — the play button on a Browse row: unscored, Previous/Next
+///    walk the browse list as it was filtered/sorted at click time, and
+///    navigating past either end (or the back button) returns to the list.
+enum TacticsPlaySource { none, session, browse }
+
 class TacticsSessionController extends ChangeNotifier {
   TacticsSessionController({
     TacticsDatabase? database,
@@ -89,6 +101,18 @@ class TacticsSessionController extends ChangeNotifier {
   /// starts — not by [endSession], so the recap can still read it.
   final Map<String, SessionPuzzleOutcome> sessionOutcomes = {};
 
+  /// See [TacticsPlaySource] — how the loaded puzzle was launched.
+  TacticsPlaySource playSource = TacticsPlaySource.none;
+
+  /// Browse mode: the visible list (filter/sort applied) snapshotted when the
+  /// user hit play, and where we are in it. Previous/Next walk this queue.
+  List<TacticsPosition> _browseQueue = const [];
+  int _browseIndex = 0;
+
+  /// Furthest queue slot reached this session — anything before it has been
+  /// seen already, so revisiting it via Previous unlocks editing.
+  int _sessionFurthestSlot = 0;
+
   DateTime? _startTime;
 
   bool get hasActivePosition => currentPosition != null;
@@ -125,6 +149,8 @@ class TacticsSessionController extends ChangeNotifier {
     database.startSession(settings);
     sessionOutcomes.clear();
     if (database.sessionQueueLength == 0) return null;
+    playSource = TacticsPlaySource.session;
+    _sessionFurthestSlot = 0;
     return showCurrentPosition();
   }
 
@@ -134,6 +160,8 @@ class TacticsSessionController extends ChangeNotifier {
     database.startSessionWithPositions(subset);
     sessionOutcomes.clear();
     if (database.sessionQueueLength == 0) return null;
+    playSource = TacticsPlaySource.session;
+    _sessionFurthestSlot = 0;
     return showCurrentPosition();
   }
 
@@ -172,9 +200,17 @@ class TacticsSessionController extends ChangeNotifier {
     }
 
     final position = database.positions[database.sessionPositionIndex];
+    if (database.sessionQueuePosition > _sessionFurthestSlot) {
+      _sessionFurthestSlot = database.sessionQueuePosition;
+    }
 
     sessionOutcomes.putIfAbsent(
         position.fen, () => SessionPuzzleOutcome.unattempted);
+    return _loadPosition(position);
+  }
+
+  /// Reset all per-puzzle state and put [position] on the board.
+  TacticsPositionSetup _loadPosition(TacticsPosition position) {
     currentPosition = position;
     positionSolved = false;
     attemptRecorded = false;
@@ -194,15 +230,54 @@ class TacticsSessionController extends ChangeNotifier {
     );
   }
 
+  /// Whether Previous has anywhere to go — the button grays out otherwise
+  /// (the first puzzle of a session or a browse walk has no "previous").
+  bool get hasPrevious => switch (playSource) {
+        TacticsPlaySource.browse => _browseIndex > 0,
+        TacticsPlaySource.session => database.sessionQueuePosition > 0,
+        TacticsPlaySource.none => false,
+      };
+
+  /// Whether Skip/Next has anywhere to go. In a session this is always true
+  /// while a puzzle is loaded — at the last puzzle Next *finishes* the
+  /// session (recap). A browse walk at its last item has nothing next; the
+  /// back button is the way out.
+  bool get hasNext => switch (playSource) {
+        TacticsPlaySource.browse => _browseIndex < _browseQueue.length - 1,
+        TacticsPlaySource.session => true,
+        TacticsPlaySource.none => false,
+      };
+
+  /// True when a session sits on its final queued puzzle — Next will finish
+  /// the session rather than load another position (UI relabels it "Finish").
+  bool get isAtLastSessionPuzzle =>
+      playSource == TacticsPlaySource.session &&
+      database.sessionQueueLength > 0 &&
+      database.sessionQueuePosition == database.sessionQueueLength - 1;
+
+  /// Go back one puzzle. Session mode stops at the first position; browse
+  /// mode returns `null` past the first item — the caller should return to
+  /// the browse list.
   TacticsPositionSetup? previousPosition() {
+    if (playSource == TacticsPlaySource.browse) {
+      if (_browseIndex <= 0) return null;
+      _browseIndex--;
+      return _loadPosition(_browseQueue[_browseIndex]);
+    }
     if (database.sessionQueueLength == 0) return null;
     database.previousSessionPosition();
     return showCurrentPosition();
   }
 
   /// Advance to the next puzzle.  Returns `null` when the queue is exhausted
-  /// — the session is over and the caller should show the recap.
+  /// — the session is over (caller shows the recap) or the browse walk is
+  /// done (caller returns to the browse list).
   TacticsPositionSetup? skipPosition() {
+    if (playSource == TacticsPlaySource.browse) {
+      if (_browseIndex >= _browseQueue.length - 1) return null;
+      _browseIndex++;
+      return _loadPosition(_browseQueue[_browseIndex]);
+    }
     if (database.sessionQueueLength == 0) return null;
     if (database.nextSessionPosition() == null) return null;
     return showCurrentPosition();
@@ -215,24 +290,46 @@ class TacticsSessionController extends ChangeNotifier {
     refreshCurrentPosition();
   }
 
-  /// Browse: select a position without starting a scored session.
-  TacticsPositionSetup? selectPosition(TacticsPosition position) {
-    currentPosition = position;
-    positionSolved = false;
-    attemptRecorded = false;
-    _startTime = DateTime.now();
-    feedback = '';
-    showSolution = false;
-    currentMoveIndex = 0;
-    currentTacticFen = position.fen;
-    waitingForOpponent = false;
-    notifyListeners();
+  /// Browse: play [position] without starting a scored session.
+  ///
+  /// [browseQueue] is the browse list as displayed (filter/sort applied);
+  /// Previous/Next walk it from [position]'s slot. Defaults to just the one
+  /// position.
+  TacticsPositionSetup? selectPosition(
+    TacticsPosition position, {
+    List<TacticsPosition>? browseQueue,
+  }) {
+    playSource = TacticsPlaySource.browse;
+    _browseQueue = browseQueue == null || browseQueue.isEmpty
+        ? [position]
+        : browseQueue;
+    _browseIndex =
+        _browseQueue.indexWhere((p) => p.fen == position.fen).clamp(0, _browseQueue.length - 1);
+    return _loadPosition(_browseQueue[_browseIndex]);
+  }
 
-    final isWhiteToMove = position.positionContext.contains('White');
-    return TacticsPositionSetup(
-      fen: position.fen,
-      flipBoard: !isWhiteToMove,
-    );
+  /// Whether editing the loaded tactic is allowed right now.
+  ///
+  /// Editing shows the answer, so the unsolved puzzle at the head of a
+  /// session stays locked. Everything else is fair game: browse-launched
+  /// puzzles, solved/revealed ones, and earlier puzzles revisited via
+  /// Previous.
+  bool get canEditCurrent {
+    if (currentPosition == null) return false;
+    if (playSource != TacticsPlaySource.session) return true;
+    if (positionSolved || showSolution) return true;
+    return database.sessionQueuePosition < _sessionFurthestSlot;
+  }
+
+  /// The tactic on the board was edited: reload the [updated] version in
+  /// place without changing how it was launched (a session stays a session,
+  /// a browse walk stays a browse walk).
+  TacticsPositionSetup? reloadCurrentPosition(TacticsPosition updated) {
+    if (currentPosition == null) return null;
+    if (playSource == TacticsPlaySource.browse) {
+      _browseQueue = List.of(_browseQueue)..[_browseIndex] = updated;
+    }
+    return _loadPosition(updated);
   }
 
   /// Reset puzzle state for the current tactic (analysis reset / retry).
@@ -254,6 +351,9 @@ class TacticsSessionController extends ChangeNotifier {
 
   void endSession() {
     currentPosition = null;
+    playSource = TacticsPlaySource.none;
+    _browseQueue = const [];
+    _browseIndex = 0;
     notifyListeners();
   }
 

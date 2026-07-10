@@ -10,7 +10,7 @@ import 'package:flutter/foundation.dart';
 
 enum JobStatus { queued, running, paused, completed, cancelled, failed }
 
-enum JobType { generation, audit }
+enum JobType { generation, audit, coverage }
 
 // ── Progress snapshot ───────────────────────────────────────────────
 
@@ -104,6 +104,9 @@ class JobManager extends ChangeNotifier {
   RepertoireJob? get currentAuditJob =>
       _jobs.where((j) => j.type == JobType.audit && j.isActive).firstOrNull;
 
+  RepertoireJob? get currentCoverageJob =>
+      _jobs.where((j) => j.type == JobType.coverage && j.isActive).firstOrNull;
+
   /// Create and register a new job. Returns the job for further configuration.
   RepertoireJob createJob({
     required JobType type,
@@ -151,6 +154,11 @@ class JobManager extends ChangeNotifier {
     final audit = currentAuditJob;
     if (audit != null) {
       return audit.status == JobStatus.paused ? 'Audit: paused' : 'Auditing...';
+    }
+    final coverage = currentCoverageJob;
+    if (coverage != null) {
+      final pct = (coverage.progress.fraction * 100).toStringAsFixed(0);
+      return 'Coverage: $pct%';
     }
     return null;
   }

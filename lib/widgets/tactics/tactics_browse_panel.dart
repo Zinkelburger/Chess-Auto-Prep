@@ -44,7 +44,10 @@ class TacticsBrowsePanel extends StatefulWidget {
 
   final List<TacticsPosition> positions;
   final String? selectedFen;
-  final ValueChanged<int> onSelectTactic;
+
+  /// Play this tactic. [visibleIndices] is the whole list as currently
+  /// filtered/sorted, so Previous/Next during play can walk it in order.
+  final void Function(int index, List<int> visibleIndices) onSelectTactic;
   final ValueChanged<int> onDeleteTactic;
   final ValueChanged<int> onEditTactic;
   final VoidCallback onClearAll;
@@ -222,6 +225,9 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
         Expanded(
           child: ListView.builder(
             itemCount: visibleIndices.length,
+            // Fixed row height lets the list lay out without measuring every
+            // child — noticeably snappier with board previews on.
+            itemExtent: _showBoards ? 64 : 36,
             itemBuilder: (context, visIdx) {
               final realIndex = visibleIndices[visIdx];
               final pos = positions[realIndex];
@@ -239,7 +245,7 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
                               : _selected.add(realIndex);
                         })
                     : () => widget.onEditTactic(realIndex),
-                onTrain: () => widget.onSelectTactic(realIndex),
+                onTrain: () => widget.onSelectTactic(realIndex, visibleIndices),
                 onDelete: () => widget.onDeleteTactic(realIndex),
                 onEdit: () => widget.onEditTactic(realIndex),
                 onSetRating: widget.onSetRating != null
@@ -481,11 +487,15 @@ class _BoardThumbnail extends StatelessWidget {
     return SizedBox(
       width: _size,
       height: _size,
-      child: IgnorePointer(
-        child: ChessBoardWidget(
-          position: position,
-          flipped: position.turn == Side.black,
-          enableUserMoves: false,
+      // RepaintBoundary keeps the 64-square board raster out of the list's
+      // scroll repaints — without it every scrolled frame redraws each board.
+      child: RepaintBoundary(
+        child: IgnorePointer(
+          child: ChessBoardWidget(
+            position: position,
+            flipped: position.turn == Side.black,
+            enableUserMoves: false,
+          ),
         ),
       ),
     );

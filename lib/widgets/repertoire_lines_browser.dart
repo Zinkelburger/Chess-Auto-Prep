@@ -1,6 +1,6 @@
 /// Repertoire Lines Browser Widget
-/// A comprehensive view of all lines in a repertoire with filtering,
-/// grouping, detailed previews, and optional coverage annotations
+/// A flat, sortable table of all lines in a repertoire with search,
+/// toggle filters, per-line stats, and optional coverage annotations.
 library;
 
 import 'dart:async';
@@ -20,6 +20,7 @@ import 'package:chess_auto_prep/services/line_metrics_helpers.dart';
 import '../utils/lines_filter_helpers.dart';
 import 'lines/line_filter_controls.dart';
 import 'lines/line_metrics_panel.dart';
+import 'lines/line_table_layout.dart';
 import 'lines/lines_list_panel.dart';
 
 export '../utils/lines_filter_helpers.dart' show CoverageFilter;
@@ -30,6 +31,10 @@ class RepertoireLinesBrowser extends StatefulWidget {
   final Function(RepertoireLine line)? onLineSelected;
   final Function(RepertoireLine line, String newTitle)? onLineRenamed;
   final Function(RepertoireLine line)? onLineDeleted;
+
+  /// Starts a coverage analysis run (config dialog + run). Wired to the
+  /// "Run coverage analysis" prompt shown when a coverage filter is selected
+  /// before any analysis exists.
   final VoidCallback? onCoveragePressed;
   final bool isCoverageRunning;
   final bool isExpanded;
@@ -83,19 +88,16 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
   Timer? _searchDebounce;
 
   List<RepertoireLine> _filteredLines = [];
-  Map<String, List<RepertoireLine>> _groupedLines = {};
-
-  /// Groups the user explicitly collapsed. Everything else renders expanded,
-  /// so lines are visible without any clicking.
-  final Set<String> _collapsedGroups = {};
 
   bool _showOnlyMatchingPosition = true;
   LineSortBy _sortBy = LineSortBy.name;
+  bool _sortAscending = true;
   CoverageFilter _coverageFilter = CoverageFilter.all;
-  LineMetricsFilter _metricsFilter = LineMetricsFilter.all;
+  final Set<LineMetricsFilter> _metricsFilters = {};
 
   Map<String, LineCoverageInfo> _lineCoverage = {};
   Map<String, LineQualityInfo> _lineMetrics = {};
+  Map<String, LineDisplayData> _displayIndex = {};
 
   @override
   void initState() {
@@ -103,7 +105,8 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     _searchController.addListener(_onSearchChanged);
     _computeLineCoverage();
     _computeLineMetrics();
-    _filterAndGroupLines();
+    _displayIndex = buildLineDisplayIndex(widget.lines);
+    _applyFilters();
   }
 
   @override
@@ -118,11 +121,14 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     if (metricsChanged) {
       _computeLineMetrics();
     }
+    if (oldWidget.lines != widget.lines) {
+      _displayIndex = buildLineDisplayIndex(widget.lines);
+    }
     if (oldWidget.lines != widget.lines ||
         oldWidget.currentMoveSequence != widget.currentMoveSequence ||
         oldWidget.coverageResult != widget.coverageResult ||
         metricsChanged) {
-      _filterAndGroupLines();
+      _applyFilters();
     }
   }
 
@@ -138,7 +144,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      _filterAndGroupLines();
+      _applyFilters();
     });
   }
 
@@ -161,29 +167,26 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     );
   }
 
-  void _filterAndGroupLines({bool rebuild = true}) {
-    final result = filterSortAndGroupLines(
+  void _applyFilters({bool rebuild = true}) {
+    final filtered = filterAndSortLines(
       allLines: widget.lines,
       searchTerm: _searchController.text,
       showOnlyMatchingPosition: _showOnlyMatchingPosition,
       currentMoves: widget.currentMoveSequence,
       sortBy: _sortBy,
+      sortAscending: _sortAscending,
       coverageFilter: _coverageFilter,
-      metricsFilter: _metricsFilter,
+      metricsFilters: _metricsFilters,
       lineCoverage: _lineCoverage,
       lineMetrics: _lineMetrics,
       coverageResult: widget.coverageResult,
+      displayIndex: _displayIndex,
     );
 
-    void apply() {
-      _filteredLines = result.filtered;
-      _groupedLines = result.grouped;
-    }
-
     if (rebuild) {
-      setState(apply);
+      setState(() => _filteredLines = filtered);
     } else {
-      apply();
+      _filteredLines = filtered;
     }
   }
 
@@ -191,7 +194,7 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
       _searchController.text.isNotEmpty ||
       _showOnlyMatchingPosition ||
       _coverageFilter != CoverageFilter.all ||
-      _metricsFilter != LineMetricsFilter.all;
+      _metricsFilters.isNotEmpty;
 
   void _resetAllFilters() {
     _searchDebounce?.cancel();
@@ -199,89 +202,110 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
       _searchController.clear();
       _showOnlyMatchingPosition = false;
       _coverageFilter = CoverageFilter.all;
-      _metricsFilter = LineMetricsFilter.all;
-      _filterAndGroupLines(rebuild: false);
+      _metricsFilters.clear();
+      _applyFilters(rebuild: false);
     });
   }
 
-  void _toggleGroup(String groupName) {
+  /// First click on a stat column sorts "problems first"; a second click
+  /// on the same column reverses.
+  void _onSortChanged(LineSortBy sort) {
     setState(() {
-      if (_collapsedGroups.contains(groupName)) {
-        _collapsedGroups.remove(groupName);
+      if (_sortBy == sort) {
+        _sortAscending = !_sortAscending;
       } else {
-        _collapsedGroups.add(groupName);
+        _sortBy = sort;
+        _sortAscending = switch (sort) {
+          LineSortBy.name => true,
+          LineSortBy.moves => true,
+          // Low ease / low coherence are the lines needing work.
+          LineSortBy.ease => true,
+          LineSortBy.coherence => true,
+          // Most traps first; worst coverage first.
+          LineSortBy.traps => false,
+          LineSortBy.coverage => false,
+        };
       }
     });
+    _applyFilters();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        LineFilterControls(
-          searchController: _searchController,
-          showOnlyMatchingPosition: _showOnlyMatchingPosition,
-          onShowOnlyMatchingPositionChanged: (value) {
-            setState(() => _showOnlyMatchingPosition = value);
-            _filterAndGroupLines();
-          },
-          onCoveragePressed: widget.onCoveragePressed,
-          isCoverageRunning: widget.isCoverageRunning,
-          sortBy: _sortBy,
-          onSortByChanged: (value) {
-            setState(() => _sortBy = value);
-            _filterAndGroupLines();
-          },
-          metricsFilter: _metricsFilter,
-          onMetricsFilterChanged: (value) {
-            setState(() => _metricsFilter = value);
-            _filterAndGroupLines();
-          },
-          coverageResult: widget.coverageResult,
-          coverageFilter: _coverageFilter,
-          onCoverageFilterChanged: (filter) {
-            setState(() => _coverageFilter = filter);
-            _filterAndGroupLines();
-          },
-          lineCoverage: _lineCoverage,
-          totalLineCount: widget.lines.length,
-        ),
-        LineMetricsPanel(
-          showCoverageProgress: widget.isCoverageRunning,
-          coverageProgress: widget.coverageProgress,
-          coverageProgressMessage: widget.coverageProgressMessage,
-          coverageResult: widget.coverageResult,
-          lineCoverage: _lineCoverage,
-          filteredLines: _filteredLines,
-          groupedLines: _groupedLines,
-          currentMoveSequence: widget.currentMoveSequence,
-          onNavigateToPosition: widget.onNavigateToPosition,
-        ),
-        Expanded(
-          child: LinesListPanel(
-            scrollController: _scrollController,
-            filteredLines: _filteredLines,
-            groupedLines: _groupedLines,
-            expandedGroups: _groupedLines.keys
-                .where((g) => !_collapsedGroups.contains(g))
-                .toSet(),
-            onToggleGroup: _toggleGroup,
-            isExpanded: widget.isExpanded,
-            currentMoveSequence: widget.currentMoveSequence,
-            showCoverage: widget.coverageResult != null,
-            lineCoverage: _lineCoverage,
-            lineMetrics: _lineMetrics,
-            onLineSelected: widget.onLineSelected,
-            onLineRenamed: widget.onLineRenamed,
-            onLineDeleted: widget.onLineDeleted,
-            onNavigateToPosition: widget.onNavigateToPosition,
-            navigationStack: widget.navigationStack,
-            boardPreview: widget.boardPreview,
-            hasActiveFilters: _hasActiveFilters,
-            onResetFilters: _resetAllFilters,
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final layout = LineTableLayout.forWidth(constraints.maxWidth);
+        final needsCoverageRun = _coverageFilter != CoverageFilter.all &&
+            widget.coverageResult == null;
+
+        return Column(
+          children: [
+            LineFilterControls(
+              searchController: _searchController,
+              showOnlyMatchingPosition: _showOnlyMatchingPosition,
+              onShowOnlyMatchingPositionChanged: (value) {
+                setState(() => _showOnlyMatchingPosition = value);
+                _applyFilters();
+              },
+              metricsFilters: _metricsFilters,
+              onMetricsFilterToggled: (filter, active) {
+                setState(() {
+                  if (active) {
+                    _metricsFilters.add(filter);
+                  } else {
+                    _metricsFilters.remove(filter);
+                  }
+                });
+                _applyFilters();
+              },
+              coverageResult: widget.coverageResult,
+              coverageFilter: _coverageFilter,
+              onCoverageFilterChanged: (filter) {
+                setState(() => _coverageFilter = filter);
+                _applyFilters();
+              },
+              lineCoverage: _lineCoverage,
+              totalLineCount: widget.lines.length,
+            ),
+            LineMetricsPanel(
+              showCoverageProgress: widget.isCoverageRunning,
+              coverageProgress: widget.coverageProgress,
+              coverageProgressMessage: widget.coverageProgressMessage,
+              coverageResult: widget.coverageResult,
+              lineCoverage: _lineCoverage,
+              filteredLines: _filteredLines,
+              currentMoveSequence: widget.currentMoveSequence,
+              onNavigateToPosition: widget.onNavigateToPosition,
+            ),
+            Expanded(
+              child: LinesListPanel(
+                scrollController: _scrollController,
+                filteredLines: _filteredLines,
+                layout: layout,
+                sortBy: _sortBy,
+                sortAscending: _sortAscending,
+                onSortChanged: _onSortChanged,
+                currentMoveSequence: widget.currentMoveSequence,
+                showCoverage: widget.coverageResult != null,
+                lineCoverage: _lineCoverage,
+                lineMetrics: _lineMetrics,
+                displayIndex: _displayIndex,
+                onLineSelected: widget.onLineSelected,
+                onLineRenamed: widget.onLineRenamed,
+                onLineDeleted: widget.onLineDeleted,
+                onNavigateToPosition: widget.onNavigateToPosition,
+                navigationStack: widget.navigationStack,
+                boardPreview: widget.boardPreview,
+                hasActiveFilters: _hasActiveFilters,
+                onResetFilters: _resetAllFilters,
+                needsCoverageRun: needsCoverageRun,
+                isCoverageRunning: widget.isCoverageRunning,
+                onRunCoverage: widget.onCoveragePressed,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

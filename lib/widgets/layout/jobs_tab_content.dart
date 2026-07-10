@@ -35,6 +35,9 @@ class JobsTabContent extends StatelessWidget {
   /// Open the audit config (forceConfig) from the jobs list.
   final VoidCallback onOpenAuditConfig;
 
+  /// Open the coverage config dialog and start a coverage run.
+  final VoidCallback? onOpenCoverageDialog;
+
   // Audit lifecycle callbacks stay host-owned so they can guard on `mounted`
   // (the audit service reports asynchronously and may outlive this widget).
   final void Function(bool auditing) onAuditingChanged;
@@ -55,6 +58,7 @@ class JobsTabContent extends StatelessWidget {
     required this.onCloseInlineAuditConfig,
     required this.onOpenGenerationDialog,
     required this.onOpenAuditConfig,
+    this.onOpenCoverageDialog,
     required this.onAuditingChanged,
     required this.onAuditResultReady,
     required this.onAuditLiveFinding,
@@ -126,6 +130,7 @@ class JobsTabContent extends StatelessWidget {
         auditController: auditController,
         onOpenGenerationDialog: onOpenGenerationDialog,
         onOpenAuditDialog: onOpenAuditConfig,
+        onOpenCoverageDialog: onOpenCoverageDialog,
         onPauseAudit: auditController.pause,
         onResumeAudit: auditController.resume,
         onCancelAudit: () =>

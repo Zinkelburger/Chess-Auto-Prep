@@ -20,6 +20,7 @@ class JobsPanel extends StatelessWidget {
   final AuditSessionController auditController;
   final VoidCallback? onOpenGenerationDialog;
   final VoidCallback? onOpenAuditDialog;
+  final VoidCallback? onOpenCoverageDialog;
   final VoidCallback? onPauseGeneration;
   final VoidCallback? onResumeGeneration;
   final VoidCallback? onCancelGeneration;
@@ -35,6 +36,7 @@ class JobsPanel extends StatelessWidget {
     required this.auditController,
     this.onOpenGenerationDialog,
     this.onOpenAuditDialog,
+    this.onOpenCoverageDialog,
     this.onPauseGeneration,
     this.onResumeGeneration,
     this.onCancelGeneration,
@@ -66,6 +68,8 @@ class JobsPanel extends StatelessWidget {
           isAuditing &&
           job == auditController.currentJob) {
         activeCards.add(_buildAuditJobCard(context, job));
+      } else if (job.type == JobType.coverage) {
+        activeCards.add(_buildCoverageJobCard(context, job));
       } else {
         activeCards.add(_buildJobTile(context, job));
       }
@@ -137,6 +141,14 @@ class JobsPanel extends StatelessWidget {
                 icon: const Icon(Icons.policy_outlined, size: 16),
                 label: const Text('Audit'),
               ),
+              if (onOpenCoverageDialog != null) ...[
+                const SizedBox(width: 12),
+                OutlinedButton.icon(
+                  onPressed: onOpenCoverageDialog,
+                  icon: const Icon(Icons.analytics_outlined, size: 16),
+                  label: const Text('Coverage'),
+                ),
+              ],
             ],
           ),
         ],
@@ -237,6 +249,28 @@ class JobsPanel extends StatelessWidget {
     );
   }
 
+  Widget _buildCoverageJobCard(BuildContext context, RepertoireJob job) {
+    final accent = Theme.of(context).colorScheme.secondary;
+    return _ActiveJobCard(
+      icon: Icons.analytics_outlined,
+      accent: accent,
+      title: job.label,
+      subtitle: null,
+      phaseIcon: Icons.analytics_outlined,
+      phaseLabel: 'Analyzing coverage',
+      statsLine: job.progress.message.isNotEmpty
+          ? job.progress.message
+          : 'Starting analysis…',
+      elapsed: null,
+      resourceLabel: null,
+      progress: job.progress.fraction > 0 ? job.progress.fraction : null,
+      isPaused: false,
+      onPause: null,
+      onResume: null,
+      onCancel: null,
+    );
+  }
+
   TreeBuildConfig? _configFromJob(RepertoireJob job) {
     final snap = job.configSnapshot;
     if (snap == null) return null;
@@ -262,9 +296,11 @@ class JobsPanel extends StatelessWidget {
   }
 
   Widget _buildJobTile(BuildContext context, RepertoireJob job) {
-    final icon = job.type == JobType.generation
-        ? Icons.auto_awesome
-        : Icons.policy_outlined;
+    final icon = switch (job.type) {
+      JobType.generation => Icons.auto_awesome,
+      JobType.audit => Icons.policy_outlined,
+      JobType.coverage => Icons.analytics_outlined,
+    };
     final statusColor = switch (job.status) {
       JobStatus.running => Theme.of(context).colorScheme.primary,
       JobStatus.paused => Colors.orange,
@@ -422,24 +458,25 @@ class _ActiveJobCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isPaused)
+              if (isPaused && onResume != null)
                 TextButton(
                   onPressed: onResume,
                   child: const Text('Resume', style: TextStyle(fontSize: 11)),
                 )
-              else
+              else if (!isPaused && onPause != null)
                 TextButton(
                   onPressed: onPause,
                   child: const Text('Pause', style: TextStyle(fontSize: 11)),
                 ),
               ...?extraActions,
-              TextButton(
-                onPressed: onCancel,
-                child: const Text(
-                  'Cancel',
-                  style: TextStyle(fontSize: 11, color: AppColors.danger),
+              if (onCancel != null)
+                TextButton(
+                  onPressed: onCancel,
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(fontSize: 11, color: AppColors.danger),
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 8),

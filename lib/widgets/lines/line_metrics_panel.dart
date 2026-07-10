@@ -16,7 +16,6 @@ class LineMetricsPanel extends StatelessWidget {
   final Map<String, LineCoverageInfo> lineCoverage;
 
   final List<RepertoireLine> filteredLines;
-  final Map<String, List<RepertoireLine>> groupedLines;
   final List<String> currentMoveSequence;
   final void Function(List<String> moveSequence)? onNavigateToPosition;
 
@@ -28,7 +27,6 @@ class LineMetricsPanel extends StatelessWidget {
     this.coverageResult,
     required this.lineCoverage,
     required this.filteredLines,
-    required this.groupedLines,
     this.currentMoveSequence = const [],
     this.onNavigateToPosition,
   });
@@ -51,7 +49,6 @@ class LineMetricsPanel extends StatelessWidget {
           ),
         _StatsBar(
           filteredLines: filteredLines,
-          groupedLines: groupedLines,
           currentMoveSequence: currentMoveSequence,
         ),
       ],
@@ -274,12 +271,10 @@ class _CoverageStat extends StatelessWidget {
 
 class _StatsBar extends StatelessWidget {
   final List<RepertoireLine> filteredLines;
-  final Map<String, List<RepertoireLine>> groupedLines;
   final List<String> currentMoveSequence;
 
   const _StatsBar({
     required this.filteredLines,
-    required this.groupedLines,
     required this.currentMoveSequence,
   });
 
@@ -303,13 +298,6 @@ class _StatsBar extends StatelessWidget {
             Text(
               '$matchingCount at current position',
               style: const TextStyle(fontSize: 11, color: AppColors.lichessDb),
-            ),
-          ],
-          if (groupedLines.length > 1) ...[
-            Text(' • ', style: TextStyle(color: Colors.grey[600])),
-            Text(
-              '${groupedLines.length} groups',
-              style: TextStyle(fontSize: 11, color: Colors.grey[400]),
             ),
           ],
         ],

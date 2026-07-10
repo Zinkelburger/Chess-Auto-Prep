@@ -192,4 +192,55 @@ void main() {
       expect(lines[1].moves, ['e4', 'c5', 'Nf3']);
     });
   });
+
+  group('updateLineContent', () {
+    late Directory tempDir;
+    late RepertoireService service;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('repertoire_svc_test');
+      service = RepertoireService();
+    });
+
+    tearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    test('preserves headers the editor does not serialize', () async {
+      final filePath = '${tempDir.path}/line.pgn';
+      await File(filePath).writeAsString('''
+[Event "Old Title"]
+[White "Me"]
+[Black "Training"]
+[Result "*"]
+[LineID "line_abc123"]
+[LastReview "2026-07-01T00:00:00.000Z"]
+
+1. e4 e5 2. Nf3 *
+''');
+
+      // The editor writes only the standard headers, like MoveTree.toPgn.
+      final ok = await service.updateLineContent(
+        filePath,
+        'line_abc123',
+        '[Event "New Title"]\n[Date "2026.07.09"]\n[White "Me"]\n'
+        '[Black "Training"]\n[Result "*"]\n\n1. e4 e5 2. Nf3 Nc6',
+      );
+      expect(ok, isTrue);
+
+      final disk = await File(filePath).readAsString();
+      expect(disk, contains('[Event "New Title"]'));
+      expect(disk, contains('[LineID "line_abc123"]'));
+      expect(disk, contains('[LastReview "2026-07-01T00:00:00.000Z"]'));
+      expect(disk, isNot(contains('Old Title')));
+
+      // The line must still be findable by its id afterwards.
+      final renamed =
+          await service.updateLineTitle(filePath, 'line_abc123', 'Renamed');
+      expect(renamed, isTrue);
+      expect(await File(filePath).readAsString(), contains('[Event "Renamed"]'));
+    });
+  });
 }
