@@ -1,0 +1,41 @@
+# Flatpak manifest. Packages the already-built Flutter release bundle from
+# build/linux/x64/release/bundle, so run `flutter build linux --release`
+# (plus the CI dependency-bundling step for libcdbdirect) before building:
+#
+#   flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build \
+#       packaging/flatpak/com.example.chess_auto_prep.yml
+#   flatpak build-bundle flatpak-repo chess-auto-prep.flatpak com.example.chess_auto_prep
+app-id: com.example.chess_auto_prep
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: chess_auto_prep
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # Lichess/Chess.com game downloads and engine/network features.
+  - --share=network
+  # The app reads user-chosen paths (PGN imports, ChessDB data dirs) that it
+  # persists and reopens across sessions, which document portals don't cover.
+  - --filesystem=home
+modules:
+  - name: chess-auto-prep
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/chess-auto-prep /app/bin
+      - cp -r bundle/* /app/chess-auto-prep/
+      - ln -s /app/chess-auto-prep/chess_auto_prep /app/bin/chess_auto_prep
+      - install -Dm644 com.example.chess_auto_prep.desktop
+        /app/share/applications/com.example.chess_auto_prep.desktop
+      - install -Dm644 com.example.chess_auto_prep.png
+        /app/share/icons/hicolor/128x128/apps/com.example.chess_auto_prep.png
+    sources:
+      - type: dir
+        path: ../../build/linux/x64/release/bundle
+        dest: bundle
+      - type: file
+        path: ../../linux/com.example.chess_auto_prep.desktop
+      - type: file
+        path: ../../linux/com.example.chess_auto_prep.png
