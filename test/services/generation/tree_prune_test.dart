@@ -106,6 +106,30 @@ void main() {
       expect(tree.totalNodes, root.countSubtree());
     });
 
+    test('records removed subtree roots into removedLines', () {
+      final root = _node(san: '');
+      final keep = _node(san: 'keep');
+      final drop = _node(san: 'drop', cumP: 0.25, prune: PruneReason.evalTooLow);
+      drop.engineEvalCp = -180;
+      drop.pruneEvalCp = -180;
+      drop.children.add(_node(san: 'grandchild'));
+      root.children.addAll([keep, drop]);
+      final tree = _treeFrom(root);
+
+      final removed = <PrunedLine>[];
+      expect(pruneEvalTooLow(tree, removedLines: removed), 2);
+
+      // Only the subtree root is recorded, not its descendants.
+      expect(removed.length, 1);
+      final line = removed.single;
+      expect(line.nodeId, drop.nodeId);
+      expect(line.lineSan, 'drop');
+      expect(line.pruneEvalCp, -180);
+      expect(line.cumulativeProbability, 0.25);
+      expect(line.subtreeNodes, 2);
+      expect(line.toJson()['line_san'], 'drop');
+    });
+
     test('evalTooHigh and other reasons are NOT pruned', () {
       final root = _node(san: '');
       root.children.add(_node(san: 'high', prune: PruneReason.evalTooHigh));

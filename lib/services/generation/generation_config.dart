@@ -32,6 +32,26 @@ enum BuildMode {
   trapFinder,
 }
 
+// ── Search algorithm (frontier discipline + pruning preset) ─────────────
+
+/// How the Phase 1 frontier is ordered and how aggressively rare lines are
+/// pruned.  Expectimax valuation (Phase 2) is identical in both — the
+/// algorithm only shapes which nodes exist in the tree.
+enum SearchAlgorithm {
+  /// Exhaustive level-order BFS: every candidate above the probability
+  /// floor is explored at full MultiPV / full eval window.  Slowest but
+  /// leaves nothing on the table.
+  pure,
+
+  /// Best-first (highest reach-priority node expands next) plus pruning
+  /// that spends less effort on rarely-reached positions: our-move
+  /// alternatives below the priority floor are skipped, MultiPV and the
+  /// eval-loss window shrink in cold subtrees, and opponent fan-out is
+  /// capped harder.  The coverage floor ([TreeBuildConfig.coverMinProb])
+  /// is always honored, so Fast never creates silent holes.
+  fast,
+}
+
 /// Default engine thread count: half of logical cores, minimum 1.
 int defaultEngineThreads() {
   final cores = getLogicalCores();
@@ -59,13 +79,16 @@ class TreeBuildConfig {
   final int maxPly;
   final int maxNodes;
 
-  // ── Frontier discipline ──
-  /// Best-first expansion: pop the frontier node with the highest search
-  /// priority (reach probability × our-alternative discount) instead of FIFO
-  /// level order.  Makes the build an anytime algorithm — at any node budget
-  /// the tree is concentrated on the likeliest opponent lines, and likely
-  /// lines get searched deeper than rare sidelines.
-  final bool bestFirst;
+  // ── Frontier discipline + pruning preset ──
+  /// Pure = exhaustive FIFO BFS; Fast = best-first expansion with
+  /// priority-scaled pruning.  See [SearchAlgorithm].
+  final SearchAlgorithm searchAlgorithm;
+
+  /// Best-first frontier ordering (pop the highest search priority — reach
+  /// probability × our-alternative discount — instead of FIFO level order).
+  /// Makes the build an anytime algorithm: at any node budget the tree is
+  /// concentrated on the likeliest opponent lines.
+  bool get bestFirst => searchAlgorithm == SearchAlgorithm.fast;
 
   /// Priority multiplier applied to non-incumbent our-move candidates
   /// (the incumbent — best eval at expansion time — inherits the parent's
@@ -73,6 +96,15 @@ class TreeBuildConfig {
   /// alternatives, more on deepening the current repertoire spine.
   /// Only affects expansion order/depth, never expectimax or selection.
   final double ourAltDiscount;
+
+  /// Fast only: our-move alternatives more than this many centipawns behind
+  /// the incumbent stay as evaluated leaves — no subtree.  Selection still
+  /// sees them (leaf value from the static eval) and the verification pass
+  /// deep-checks whatever gets picked, so the insurance subtrees are only
+  /// grown for alternatives close enough to plausibly win the argmax.
+  /// 0 disables the gate.  Ignored under trappy selection, where
+  /// worse-eval moves are the point and need their subtrees searched.
+  final int fastAltGapCp;
 
   /// Dirichlet prior weight (λ, in virtual games) for smoothing DB opponent
   /// move frequencies with Maia's policy:
@@ -195,8 +227,9 @@ class TreeBuildConfig {
     this.minProbability = 0.0001,
     this.maxPly = 20,
     this.maxNodes = 0,
-    this.bestFirst = true,
+    this.searchAlgorithm = SearchAlgorithm.fast,
     this.ourAltDiscount = 0.25,
+    this.fastAltGapCp = 30,
     this.maiaPriorGames = 30.0,
     this.coverMinProb = 0.05,
     this.verifyFinal = true,
@@ -254,8 +287,12 @@ class TreeBuildConfig {
       minProbability: (json['min_probability'] as num?)?.toDouble() ?? 0.0001,
       maxPly: (json['max_depth'] as num?)?.toInt() ?? 20,
       maxNodes: (json['max_nodes'] as num?)?.toInt() ?? 0,
-      bestFirst: json['best_first'] as bool? ?? true,
+      searchAlgorithm: _parseSearchAlgorithm(
+        json['search_algorithm'] as String?,
+        legacyBestFirst: json['best_first'] as bool?,
+      ),
       ourAltDiscount: (json['our_alt_discount'] as num?)?.toDouble() ?? 0.25,
+      fastAltGapCp: (json['fast_alt_gap_cp'] as num?)?.toInt() ?? 30,
       maiaPriorGames: (json['maia_prior_games'] as num?)?.toDouble() ?? 30.0,
       coverMinProb: (json['cover_min_prob'] as num?)?.toDouble() ?? 0.05,
       verifyFinal: json['verify_final'] as bool? ?? true,
@@ -336,7 +373,11 @@ class TreeBuildConfig {
 
   /// Compact one-line summary for Jobs panel and status displays.
   String get summaryLabel {
-    final parts = <String>[buildModeLabel, '${maxPly}ply'];
+    final parts = <String>[
+      buildModeLabel,
+      searchAlgorithm == SearchAlgorithm.pure ? 'Pure' : 'Fast',
+      '${maxPly}ply',
+    ];
     if (usesStockfish) {
       parts.add('SF d$evalDepth');
     }
@@ -363,6 +404,74 @@ class TreeBuildConfig {
   int get effectiveMinEvalDepth =>
       minAcceptableEvalDepth > 0 ? minAcceptableEvalDepth : evalDepth;
 
+  // ── Fast Expectimax priority-scaled pruning ──
+  //
+  // Fast splits the tree into hot / warm / cold zones by reach priority.
+  // Hot nodes (opponent reaches them often) get the full configured search;
+  // warm ones lose one MultiPV line; cold ones (rarely reached — expectimax
+  // weighs them by reach probability, so eval noise there barely moves the
+  // root value) get minimum MultiPV, a halved eval-loss window, and halved
+  // opponent fan-out.  Pure ignores the zones entirely.
+
+  /// Reach-priority floor of the hot zone (full configured search).
+  static const double fastWarmPriority = 0.02;
+
+  /// Reach-priority floor of the warm zone; below this is cold.
+  static const double fastColdPriority = 0.002;
+
+  /// Fast only: cap on how many gap-qualifying our-move alternatives get a
+  /// subtree per node (the incumbent always does).  One strong alternative
+  /// is the insurance against a wrong incumbent judgment; a second covers
+  /// near-ties.  Beyond that, alternatives stay evaluated leaves.
+  static const int fastMaxExpandedAlts = 2;
+
+  /// Our-move MultiPV at a node with reach priority [priority].
+  int effectiveMultipv(double priority) {
+    if (searchAlgorithm == SearchAlgorithm.pure) return ourMultipv;
+    if (priority >= fastWarmPriority) return ourMultipv;
+    final reduced = priority >= fastColdPriority ? ourMultipv - 1 : 2;
+    return reduced.clamp(2, ourMultipv < 2 ? 2 : ourMultipv);
+  }
+
+  /// Max centipawns an our-move candidate may lose vs the best sibling and
+  /// still enter the tree, at reach priority [priority].
+  int effectiveMaxEvalLossCp(double priority) {
+    if (searchAlgorithm == SearchAlgorithm.pure) return maxEvalLossCp;
+    if (priority >= fastColdPriority) return maxEvalLossCp;
+    return (maxEvalLossCp / 2).round();
+  }
+
+  /// Opponent fan-out cap at reach priority [priority] (0 = unlimited).
+  /// Coverage-floor replies bypass this cap at the call sites, so the
+  /// no-silent-holes guarantee survives Fast pruning.
+  int effectiveOppMaxChildren(double priority) {
+    if (searchAlgorithm == SearchAlgorithm.pure) return oppMaxChildren;
+    if (priority >= fastColdPriority) return oppMaxChildren;
+    if (oppMaxChildren <= 0) return 3;
+    return oppMaxChildren <= 4 ? 2 : oppMaxChildren ~/ 2;
+  }
+
+  /// Whether an our-move alternative sitting [gapCp] behind the incumbent
+  /// gets a subtree, given [altsAlreadyExpanded] siblings already granted
+  /// one.  See [fastAltGapCp]; the incumbent itself never passes through
+  /// this gate.
+  bool expandAlternative({
+    required int gapCp,
+    required int altsAlreadyExpanded,
+  }) {
+    if (searchAlgorithm == SearchAlgorithm.pure) return true;
+    if (selectionMode == SelectionMode.trappy) return true;
+    if (fastAltGapCp <= 0) return true;
+    if (gapCp > fastAltGapCp) return false;
+    return altsAlreadyExpanded < fastMaxExpandedAlts;
+  }
+
+  /// Short label for the frontier/pruning algorithm.
+  String get searchAlgorithmLabel => switch (searchAlgorithm) {
+        SearchAlgorithm.pure => 'Pure Expectimax',
+        SearchAlgorithm.fast => 'Fast Expectimax',
+      };
+
   /// Convert a white-perspective centipawn score to "our" perspective.
   int toOurPerspective(int whiteCp) => playAsWhite ? whiteCp : -whiteCp;
 
@@ -372,8 +481,11 @@ class TreeBuildConfig {
         'min_probability': minProbability,
         'max_depth': maxPly,
         'max_nodes': maxNodes,
+        'search_algorithm': searchAlgorithm.name,
+        // Legacy key so older builds of the app can still read tree metadata.
         'best_first': bestFirst,
         'our_alt_discount': ourAltDiscount,
+        'fast_alt_gap_cp': fastAltGapCp,
         'maia_prior_games': maiaPriorGames,
         'cover_min_prob': coverMinProb,
         'verify_final': verifyFinal,
@@ -427,8 +539,9 @@ class TreeBuildConfig {
     double? minProbability,
     int? maxPly,
     int? maxNodes,
-    bool? bestFirst,
+    SearchAlgorithm? searchAlgorithm,
     double? ourAltDiscount,
+    int? fastAltGapCp,
     double? maiaPriorGames,
     double? coverMinProb,
     bool? verifyFinal,
@@ -481,8 +594,9 @@ class TreeBuildConfig {
       minProbability: minProbability ?? this.minProbability,
       maxPly: maxPly ?? this.maxPly,
       maxNodes: maxNodes ?? this.maxNodes,
-      bestFirst: bestFirst ?? this.bestFirst,
+      searchAlgorithm: searchAlgorithm ?? this.searchAlgorithm,
       ourAltDiscount: ourAltDiscount ?? this.ourAltDiscount,
+      fastAltGapCp: fastAltGapCp ?? this.fastAltGapCp,
       maiaPriorGames: maiaPriorGames ?? this.maiaPriorGames,
       coverMinProb: coverMinProb ?? this.coverMinProb,
       verifyFinal: verifyFinal ?? this.verifyFinal,
@@ -535,6 +649,21 @@ class TreeBuildConfig {
           minAcceptableEvalDepth ?? this.minAcceptableEvalDepth,
     );
   }
+}
+
+SearchAlgorithm _parseSearchAlgorithm(
+  String? value, {
+  bool? legacyBestFirst,
+}) {
+  switch (value) {
+    case 'pure':
+      return SearchAlgorithm.pure;
+    case 'fast':
+      return SearchAlgorithm.fast;
+  }
+  // Configs written before the algorithm enum carry only best_first.
+  if (legacyBestFirst == false) return SearchAlgorithm.pure;
+  return SearchAlgorithm.fast;
 }
 
 SelectionMode _parseSelectionMode(String? value) {

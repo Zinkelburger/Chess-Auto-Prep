@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../shortcut_tooltip.dart';
-
 /// Body shown in the tools column when the loaded repertoire has no lines
 /// yet: large tappable cards for each way of adding lines, so the entry
 /// points are discoverable without hunting through the toolbar.
@@ -55,7 +53,6 @@ class RepertoireEmptyState extends StatelessWidget {
                 _EmptyStateCard(
                   icon: Icons.auto_awesome,
                   title: 'Generate',
-                  shortcut: 'G',
                   description: 'Build lines with the engine and an opponent '
                       'model from the current position.',
                   onTap: onGenerate!,
@@ -72,7 +69,6 @@ class RepertoireEmptyState extends StatelessWidget {
                 _EmptyStateCard(
                   icon: Icons.file_open,
                   title: 'Import PGN file',
-                  shortcut: 'I',
                   description: 'Load lines from a PGN file on disk.',
                   onTap: onImportPgnFile!,
                 ),
@@ -109,19 +105,17 @@ class _EmptyStateCard extends StatelessWidget {
     required this.title,
     required this.description,
     required this.onTap,
-    this.shortcut,
   });
 
   final IconData icon;
   final String title;
   final String description;
-  final String? shortcut;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final card = Card(
+    return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
@@ -157,12 +151,6 @@ class _EmptyStateCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-    if (shortcut == null) return card;
-    return ShortcutTooltip(
-      description: title,
-      shortcut: shortcut!,
-      child: card,
     );
   }
 }

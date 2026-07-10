@@ -18,10 +18,18 @@ class TrapNavigationButtons extends StatelessWidget {
     super.key,
     required this.trapIndex,
     required this.controller,
+    this.onStartTour,
+    this.tourActive = false,
   });
 
   final TrapIndexService trapIndex;
   final RepertoireController controller;
+
+  /// Shows a "Tour" pill that starts the trap tour when set.
+  final VoidCallback? onStartTour;
+
+  /// Highlights the pill while the tour bar is open.
+  final bool tourActive;
 
   /// Move path used to resolve traps in the current line.
   ///
@@ -135,6 +143,29 @@ class TrapNavigationButtons extends StatelessWidget {
     return true;
   }
 
+  Widget _buildTourButton() {
+    if (onStartTour == null) return const SizedBox.shrink();
+    return ShortcutTooltip(
+      description:
+          tourActive ? 'Trap tour is open' : 'Tour every trap on the board',
+      shortcut: 'T',
+      child: FilledButton.icon(
+        onPressed: onStartTour,
+        icon: const Icon(Icons.tour, size: 16),
+        label: const Text('Tour'),
+        style: FilledButton.styleFrom(
+          foregroundColor: tourActive ? Colors.black : AppColors.warning,
+          backgroundColor: tourActive
+              ? AppColors.warning
+              : AppColors.warning.withValues(alpha: 0.15),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          textStyle:
+              const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -145,12 +176,18 @@ class TrapNavigationButtons extends StatelessWidget {
             findCurrentTrapIndex(traps, controller.currentMoveIndex);
 
         if (traps.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              '0 traps in line',
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-            ),
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '0 traps in line',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ),
+              _buildTourButton(),
+            ],
           );
         }
 
@@ -161,6 +198,8 @@ class TrapNavigationButtons extends StatelessWidget {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            _buildTourButton(),
+            const SizedBox(width: 4),
             ShortcutIconButton(
               description: 'Previous trap',
               shortcut: 'Shift+←',

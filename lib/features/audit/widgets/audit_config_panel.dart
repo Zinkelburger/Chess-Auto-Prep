@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../../../models/opening_tree.dart';
 import '../../../services/engine/engine_lifecycle.dart';
 import '../../../services/engine/stockfish_pool.dart';
+import '../../../widgets/engine/engine_gate.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
 import '../services/audit_config.dart';
@@ -145,6 +146,7 @@ class AuditConfigPanelState extends State<AuditConfigPanel> {
 
   Future<void> _startAudit() async {
     if (widget.openingTree == null) return;
+    if (!EngineGate.ensureAvailable(context)) return;
 
     final config = _buildConfig();
     widget.onConfigChanged?.call(config);

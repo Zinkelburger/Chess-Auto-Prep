@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import '../../constants/engine_defaults.dart';
 import '../../models/engine_settings.dart';
 import '../../screens/settings_screen.dart';
+import '../../services/engine/engine_lifecycle.dart';
 import '../../theme/app_colors.dart';
 import '../settings/settings_widgets.dart';
 
@@ -263,7 +264,14 @@ class _AnalysisSettingsSheetState extends State<_AnalysisSettingsSheet> {
               tooltip: 'Show the Expectimax panel — best practical lines '
                   'that account for likely human opponent replies.',
               value: _settings.showExpectimaxDock,
-              onChanged: (v) => _settings.showExpectimaxDock = v,
+              onChanged: (v) {
+                _settings.showExpectimaxDock = v;
+                // Explicitly enabling expectimax overrides the persisted
+                // engine kill switch — compute can't run without Stockfish.
+                if (v && EngineLifecycle.instance.state == EngineState.off) {
+                  EngineLifecycle.instance.toggleOn();
+                }
+              },
             ),
             SettingsSwitchRow(
               label: 'Show Maia % column',

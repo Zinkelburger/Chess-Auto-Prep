@@ -191,6 +191,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
 
   /// Replace current history with provided moves.
   void loadMoveHistory(List<String> moves) {
+    _annotatedLineLabel = null;
     _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
     _path = _tree.mainlineEndFrom(TreePath.empty);
     _syncOpeningTree();
@@ -199,6 +200,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
 
   /// Clear the current line.
   void clearMoveHistory() {
+    _annotatedLineLabel = null;
     _tree = MoveTree(startingFen: _tree.startingFen);
     _path = TreePath.empty;
     _syncOpeningTree();
@@ -215,6 +217,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
       _tree = MoveTree(startingFen: trimmedFen);
       _path = TreePath.empty;
       _selectedPgnLine = null;
+      _annotatedLineLabel = null;
       _syncOpeningTree();
       notifyListeners();
       return true;
@@ -239,6 +242,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
       _tree = MoveTree.fromMoves(moves, startingFen: effStart);
       _path = _tree.mainlineEndFrom(TreePath.empty);
       _selectedPgnLine = null;
+      _annotatedLineLabel = null;
       _syncOpeningTree();
       notifyListeners();
       return true;
@@ -251,6 +255,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
   /// Loads a specific PGN line for editing.
   void loadPgnLine(RepertoireLine line) {
     _selectedPgnLine = line;
+    _annotatedLineLabel = null;
     // Build from the full PGN so comments and variations survive — the same
     // comment-aware path the PGN viewer uses. Fall back to the flat SAN list
     // for lines that have no PGN text (e.g. synthesized suggestions).
@@ -265,8 +270,28 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
   /// Load a raw move sequence onto the board.
   void loadMoveSequence(List<String> moves) {
     _selectedPgnLine = null;
+    _annotatedLineLabel = null;
     _tree = MoveTree.fromMoves(moves, startingFen: _tree.startingFen);
     _path = _tree.mainlineEndFrom(TreePath.empty);
+    _syncOpeningTree();
+    notifyListeners();
+  }
+
+  /// Human-readable label for the loaded annotated line (e.g. "Trap #45").
+  /// Null whenever the tree came from a repertoire line or free navigation.
+  String? _annotatedLineLabel;
+  String? get annotatedLineLabel => _annotatedLineLabel;
+
+  /// Load a pre-built tree (e.g. an annotated trap line) and place the
+  /// cursor at [cursor], falling back to the mainline end when invalid.
+  /// [label] is surfaced as the PGN pane title while the tree is shown.
+  void loadAnnotatedTree(MoveTree tree, {TreePath? cursor, String? label}) {
+    _selectedPgnLine = null;
+    _annotatedLineLabel = label;
+    _tree = tree;
+    _path = cursor != null && tree.isValidPath(cursor)
+        ? cursor
+        : tree.mainlineEndFrom(TreePath.empty);
     _syncOpeningTree();
     notifyListeners();
   }
@@ -654,6 +679,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
 
     if (_selectedPgnLine?.id == line.id) {
       _selectedPgnLine = null;
+      _annotatedLineLabel = null;
       _tree = MoveTree(startingFen: _tree.startingFen);
       _path = TreePath.empty;
     }
@@ -709,6 +735,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     String title,
     String pgnContent, {
     bool updateTree = true,
+    bool notify = true,
   }) {
     if (updateTree) {
       final startFen = startingFen ?? kStandardStartFen;
@@ -729,7 +756,21 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
       );
     }
 
-    notifyListeners();
+    if (notify) notifyListeners();
+  }
+
+  /// Append many lines with a single listener notification — generation can
+  /// produce hundreds of lines and per-line notifies rebuild every listener
+  /// each time.
+  void appendNewLines(
+    Iterable<({List<String> moves, String title, String pgn})> entries,
+  ) {
+    var any = false;
+    for (final e in entries) {
+      appendNewLine(e.moves, e.title, e.pgn, notify: false);
+      any = true;
+    }
+    if (any) notifyListeners();
   }
 
   /// Extend an existing line after a one-click add.

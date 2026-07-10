@@ -58,9 +58,14 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final currentMode = appState.currentMode;
     final previousMode = _lastMode;
 
+    // Suspend/resume, not toggleOff/toggleOn: leaving the tab frees the
+    // engine but must not overwrite the user's persisted engine preference.
     if (previousMode == AppMode.repertoire &&
         currentMode != AppMode.repertoire) {
-      EngineLifecycle.instance.toggleOff();
+      EngineLifecycle.instance.suspend();
+    } else if (previousMode != AppMode.repertoire &&
+        currentMode == AppMode.repertoire) {
+      EngineLifecycle.instance.resume();
     }
 
     _lastMode = currentMode;
@@ -76,7 +81,9 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached) {
-      EngineLifecycle.instance.toggleOff();
+      // Kill engine processes on app close without persisting "off" —
+      // otherwise every clean exit disabled the engine for the next launch.
+      EngineLifecycle.instance.suspend();
     }
   }
 

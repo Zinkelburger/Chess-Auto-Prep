@@ -59,6 +59,8 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       TextEditingController(text: '1.0');
   final TextEditingController _ourAltDiscountCtrl =
       TextEditingController(text: '0.25');
+  final TextEditingController _fastAltGapCtrl =
+      TextEditingController(text: '30');
   final TextEditingController _maiaPriorGamesCtrl =
       TextEditingController(text: '30');
   final TextEditingController _coverMinProbCtrl =
@@ -68,7 +70,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
   final TextEditingController _setupMovesCtrl = TextEditingController();
   final TextEditingController _setupToleranceCtrl =
       TextEditingController(text: '30');
-  bool _bestFirst = true;
+  SearchAlgorithm _searchAlgorithm = SearchAlgorithm.fast;
   bool _verifyFinal = true;
 
   final List<String> _pgnFilePaths = [];
@@ -141,12 +143,13 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     _oppMassTargetCtrl.text = config.oppMassTarget.toString();
     _leafConfidenceCtrl.text = config.leafConfidence.toString();
     _ourAltDiscountCtrl.text = config.ourAltDiscount.toString();
+    _fastAltGapCtrl.text = config.fastAltGapCp.toString();
     _maiaPriorGamesCtrl.text = config.maiaPriorGames.toString();
     _coverMinProbCtrl.text = config.coverMinProb.toString();
     _verifyDepthCtrl.text = config.verifyDepth.toString();
     _setupMovesCtrl.text = config.setupMoves;
     _setupToleranceCtrl.text = config.setupToleranceCp.toString();
-    _bestFirst = config.bestFirst;
+    _searchAlgorithm = config.searchAlgorithm;
     _verifyFinal = config.verifyFinal;
     _dbMinGamesCtrl.text = config.dbMinGames.toString();
     _dbMinProbCtrl.text = config.dbMinProb.toString();
@@ -195,6 +198,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
     _oppMassTargetCtrl.dispose();
     _leafConfidenceCtrl.dispose();
     _ourAltDiscountCtrl.dispose();
+    _fastAltGapCtrl.dispose();
     _maiaPriorGamesCtrl.dispose();
     _coverMinProbCtrl.dispose();
     _verifyDepthCtrl.dispose();
@@ -248,17 +252,30 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
   /// Whether the current configuration is ready to start a build.
   bool get canStart => validateBeforeStart() == null;
 
+  /// PGN file paths for DB Explorer mode: the synced list when populated,
+  /// else whatever the sources panel currently holds (covers seeding races
+  /// where the panel state lands a frame later).
+  List<String> _effectivePgnPaths() {
+    if (_pgnFilePaths.isNotEmpty) return List.unmodifiable(_pgnFilePaths);
+    final sources = _pgnSourcesKey.currentState?.sources ?? const [];
+    return [
+      for (final s in sources)
+        if (s.filePath != null) s.filePath!,
+    ];
+  }
+
   /// Returns an error message when the current settings cannot start a build.
   String? validateBeforeStart() {
     if (_buildMode == BuildMode.trapFinder) {
       return '${_buildModeLabel(_buildMode)} is not yet available in the app.';
     }
-    if (_buildMode == BuildMode.dbExplorer && _pgnFilePaths.isEmpty) {
-      final sources = _pgnSourcesKey.currentState?.sources ?? [];
-      if (sources.isEmpty) {
-        return 'Add at least one PGN file first. Use the picker above to '
-            'attach .pgn files with your games.';
-      }
+    if (_buildMode == BuildMode.dbExplorer && _effectivePgnPaths().isEmpty) {
+      final sources = _pgnSourcesKey.currentState?.sources ?? const [];
+      return sources.isEmpty
+          ? 'Add at least one PGN file first. Use the picker above to '
+              'attach .pgn files with your games.'
+          : 'The added PGN sources have no local files. Re-add them as '
+              '.pgn files from disk.';
     }
     final evalSources = _evalSourcesKey.currentState;
     if (_buildMode == BuildMode.maiaDbExplore &&
@@ -303,7 +320,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       ),
       maxPly: int.tryParse(_maxPlyCtrl.text.trim()) ?? 20,
       buildMode: _buildMode,
-      pgnFilePaths: List.unmodifiable(_pgnFilePaths),
+      pgnFilePaths: _effectivePgnPaths(),
       dbMinGames: int.tryParse(_dbMinGamesCtrl.text.trim()) ?? 5,
       dbMinProb: double.tryParse(_dbMinProbCtrl.text.trim()) ?? 0.05,
       minElo: int.tryParse(_minEloCtrl.text.trim()) ?? 0,
@@ -327,10 +344,12 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       ourMultipv: int.tryParse(_multipvCtrl.text.trim()) ?? 4,
       oppMaxChildren: int.tryParse(_oppMaxChildrenCtrl.text.trim()) ?? 4,
       oppMassTarget: double.tryParse(_oppMassTargetCtrl.text.trim()) ?? 0.80,
-      bestFirst: _bestFirst,
+      searchAlgorithm: _searchAlgorithm,
       ourAltDiscount:
           (double.tryParse(_ourAltDiscountCtrl.text.trim()) ?? 0.25)
               .clamp(0.0, 1.0),
+      fastAltGapCp:
+          (int.tryParse(_fastAltGapCtrl.text.trim()) ?? 30).clamp(0, 500),
       maiaPriorGames:
           double.tryParse(_maiaPriorGamesCtrl.text.trim()) ?? 30.0,
       coverMinProb: (double.tryParse(_coverMinProbCtrl.text.trim()) ?? 0.05)
@@ -419,7 +438,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                 Expanded(
                   child: Text(
                     'Traps are automatically detected after building. '
-                    'Browse them in the Lines tab.',
+                    'Browse them in the Lines pane.',
                     style: TextStyle(fontSize: 11, color: Colors.amber[200]),
                   ),
                 ),
@@ -512,50 +531,133 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 8),
-              DropdownButtonFormField<SelectionMode>(
-                initialValue: _selectionMode,
-                decoration: const InputDecoration(
-                  labelText: 'Line Selection',
-                  border: OutlineInputBorder(),
+              _sectionHeader('Play style'),
+              TextField(
+                controller: _setupMovesCtrl,
+                decoration: InputDecoration(
+                  labelText: 'Preferred Setup (SAN moves)',
+                  hintText: 'e.g. Be3 Qd2 f3 O-O-O h4 Nh3',
+                  helperText:
+                      'System to play whenever sound: legal setup moves are '
+                      'evaluated as candidates, and selection prefers them '
+                      'within the tolerance. Empty = off.',
                   isDense: true,
+                  border: const OutlineInputBorder(),
+                  suffixIcon: Tooltip(
+                    message:
+                        'An unordered set — the moves can happen in any order.\n'
+                        'At each of our positions, every setup move that is\n'
+                        'legal there (once played, e.g. Be3, it stops being\n'
+                        'legal and drops out) is evaluated and added as a\n'
+                        'candidate if it stays within Max Eval Loss of the\n'
+                        'best move.\n'
+                        '\n'
+                        'Selection then prefers a setup move whose eval is\n'
+                        'within Setup Tolerance of the best candidate over\n'
+                        'the plain expectimax pick. Expectimax values are\n'
+                        'never modified — if the opponent makes the setup\n'
+                        'too costly, no move qualifies and the repertoire\n'
+                        'deviates automatically.',
+                    child: Icon(Icons.info_outline,
+                        size: 16, color: Colors.grey[500]),
+                  ),
                 ),
-                items: const [
-                  DropdownMenuItem(
-                    value: SelectionMode.expectimax,
-                    child: Text('Expectimax (recommended)'),
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              _numField(_setupToleranceCtrl, 'Setup Tolerance (cp)',
+                  tooltip:
+                      'Max centipawns a preferred-setup move may lose vs the\n'
+                      'best candidate and still be chosen for consistency.'),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _preferNovelties,
+                    onChanged: widget.isGenerating
+                        ? null
+                        : (v) => setState(() => _preferNovelties = v ?? false),
                   ),
-                  DropdownMenuItem(
-                    value: SelectionMode.engineOnly,
-                    child: Text('Engine Best Move'),
+                  GestureDetector(
+                    onTap: widget.isGenerating
+                        ? null
+                        : () => setState(
+                            () => _preferNovelties = !_preferNovelties),
+                    child: const Text(
+                      'Prefer novelties',
+                      style: TextStyle(fontSize: 13),
+                    ),
                   ),
-                  DropdownMenuItem(
-                    value: SelectionMode.dbWinRateOnly,
-                    child: Text('Database Win Rate'),
-                  ),
-                  DropdownMenuItem(
-                    value: SelectionMode.playable,
-                    child: Text('Balanced (strength + ease)'),
-                  ),
-                  DropdownMenuItem(
-                    value: SelectionMode.trappy,
-                    child: Text('Trappy (maximize opponent mistakes)'),
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: 'Favor less-played moves that are still sound.\n'
+                        'Uses Maia/Lichess frequency data to boost unusual lines.',
+                    child: Icon(Icons.info_outline,
+                        size: 16, color: Colors.grey[500]),
                   ),
                 ],
-                onChanged: widget.isGenerating
-                    ? null
-                    : (v) {
-                        if (v != null) setState(() => _selectionMode = v);
-                      },
+              ),
+              _sectionHeader('Line selection'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<SelectionMode>(
+                      initialValue: _selectionMode,
+                      decoration: const InputDecoration(
+                        labelText: 'Line Selection',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: SelectionMode.expectimax,
+                          child: Text('Expectimax (recommended)'),
+                        ),
+                        DropdownMenuItem(
+                          value: SelectionMode.engineOnly,
+                          child: Text('Engine Best Move'),
+                        ),
+                        DropdownMenuItem(
+                          value: SelectionMode.dbWinRateOnly,
+                          child: Text('Database Win Rate'),
+                        ),
+                        DropdownMenuItem(
+                          value: SelectionMode.playable,
+                          child: Text('Balanced (strength + ease)'),
+                        ),
+                        DropdownMenuItem(
+                          value: SelectionMode.trappy,
+                          child: Text('Trappy (maximize opponent mistakes)'),
+                        ),
+                      ],
+                      onChanged: widget.isGenerating
+                          ? null
+                          : (v) {
+                              if (v != null) {
+                                setState(() => _selectionMode = v);
+                              }
+                            },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message:
+                        'Separate from Build Mode: the build explores and\n'
+                        'evaluates candidate moves; line selection decides\n'
+                        'which candidate becomes your repertoire move at\n'
+                        'each position.',
+                    child: Icon(Icons.info_outline,
+                        size: 16, color: Colors.grey[500]),
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               Text(
                 _selectionModeDescription(),
                 style: const TextStyle(fontSize: 11, color: Colors.grey),
               ),
-              const SizedBox(height: 12),
-              Text('Thresholds', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 4),
+              _sectionHeader('Thresholds'),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -567,7 +669,14 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                   _numField(_maiaEloCtrl, 'Maia Elo'),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 8),
+              _toggleSwitch('Relative Eval', _relativeEval, (v) {
+                setState(() => _relativeEval = v);
+              },
+                  tooltip:
+                      'Thresholds are relative to the root eval (default).\n'
+                      'Turn off to use absolute centipawn limits from Min/Max Eval.'),
+              _sectionHeader('Opponent model'),
               Row(
                 children: [
                   const Text('Opponent moves: Maia',
@@ -600,37 +709,159 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                   ],
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
               Row(
                 children: [
-                  Checkbox(
-                    value: _preferNovelties,
-                    onChanged: widget.isGenerating
-                        ? null
-                        : (v) => setState(() => _preferNovelties = v ?? false),
-                  ),
-                  GestureDetector(
-                    onTap: widget.isGenerating
-                        ? null
-                        : () => setState(
-                            () => _preferNovelties = !_preferNovelties),
-                    child: const Text(
-                      'Prefer novelties',
-                      style: TextStyle(fontSize: 13),
-                    ),
-                  ),
+                  const Text('Opponent DB override',
+                      style: TextStyle(fontSize: 13)),
                   const SizedBox(width: 4),
                   Tooltip(
-                    message: 'Favor less-played moves that are still sound.\n'
-                        'Uses Maia/Lichess frequency data to boost unusual lines.',
+                    message:
+                        'Override Maia with a Lichess database for opponent\n'
+                        'move frequencies. Maia remains the fallback for\n'
+                        'positions with no database data.',
                     child: Icon(Icons.info_outline,
                         size: 16, color: Colors.grey[500]),
                   ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('None (Maia only)'),
+                    selected: _lichessDbOverride == null,
+                    onSelected: widget.isGenerating
+                        ? null
+                        : (_) => setState(() => _lichessDbOverride = null),
+                  ),
+                  const SizedBox(width: 4),
+                  ChoiceChip(
+                    label: const Text('Lichess DB'),
+                    selected: _lichessDbOverride != null,
+                    onSelected: widget.isGenerating
+                        ? null
+                        : (_) => setState(() =>
+                            _lichessDbOverride ??= LichessDatabase.lichess),
+                  ),
+                  const LichessDbInfoIcon(size: 14),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text('PGN export', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 4),
+              if (_lichessDbOverride != null) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: LichessDbSelector(
+                    database: _lichessDbOverride!,
+                    onDatabaseChanged: (db) => setState(() {
+                      final wasMasters =
+                          _lichessDbOverride == LichessDatabase.masters;
+                      final isMasters = db == LichessDatabase.masters;
+                      _lichessDbOverride = db;
+                      if (wasMasters != isMasters) {
+                        _lichessMinGamesCtrl.text = isMasters ? '4' : '10';
+                      }
+                    }),
+                    selectedSpeeds: _lichessSpeeds,
+                    onSpeedsChanged: (s) => setState(() {
+                      _lichessSpeeds
+                        ..clear()
+                        ..addAll(s);
+                    }),
+                    selectedRatings: _lichessRatings,
+                    onRatingsChanged: (r) => setState(() {
+                      _lichessRatings
+                        ..clear()
+                        ..addAll(r);
+                    }),
+                    minGamesController: _lichessMinGamesCtrl,
+                    enabled: !widget.isGenerating,
+                    compact: true,
+                  ),
+                ),
+              ],
+              _sectionHeader('Search tuning'),
+              DropdownButtonFormField<SearchAlgorithm>(
+                initialValue: _searchAlgorithm,
+                decoration: const InputDecoration(
+                  labelText: 'Search Algorithm',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                  helperText:
+                      'Fast: best-first with priority-scaled pruning — rare '
+                      'lines get a lighter search, coverage floor still '
+                      'guaranteed. Pure: exhaustive BFS, full search '
+                      'everywhere (slowest).',
+                  helperMaxLines: 4,
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: SearchAlgorithm.fast,
+                    child: Text('Fast Expectimax (recommended)'),
+                  ),
+                  DropdownMenuItem(
+                    value: SearchAlgorithm.pure,
+                    child: Text('Pure Expectimax (exhaustive)'),
+                  ),
+                ],
+                onChanged: widget.isGenerating
+                    ? null
+                    : (v) => setState(
+                          () => _searchAlgorithm = v ?? SearchAlgorithm.fast,
+                        ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _numField(_multipvCtrl, 'MultiPV',
+                      tooltip: 'Candidate moves evaluated per our-move node'),
+                  _numField(_oppMaxChildrenCtrl, 'Opp Max Children',
+                      tooltip:
+                          'Maximum opponent replies explored per position'),
+                  _numField(_oppMassTargetCtrl, 'Opp Mass Target',
+                      tooltip:
+                          'Stop adding opponent moves after this probability mass is covered'),
+                  _numField(_leafConfidenceCtrl, 'Leaf Confidence (0-1)',
+                      tooltip:
+                          'Trust in engine eval at leaves; lower blends toward 0.5'),
+                  _numField(_ourAltDiscountCtrl, 'Alt Discount (0-1)',
+                      tooltip:
+                          'Best-first priority multiplier for our non-best candidates.\n'
+                          'Lower = more budget on the mainline, less on alternatives.'),
+                  _numField(_fastAltGapCtrl, 'Alt Gap (cp)',
+                      tooltip:
+                          'Fast Expectimax only: our alternatives more than this\n'
+                          'many centipawns behind the best candidate stay as\n'
+                          'evaluated leaves instead of growing a subtree.\n'
+                          '0 disables. Ignored in trappy selection mode.'),
+                  _numField(_maiaPriorGamesCtrl, 'Maia Prior (games)',
+                      tooltip:
+                          'Dirichlet prior weight λ blending DB opponent frequencies\n'
+                          'with Maia: p = (count + λ·maia) / (N + λ). 0 disables.'),
+                  _numField(_coverMinProbCtrl, 'Cover Min Prob (0-1)',
+                      tooltip:
+                          'No-silent-holes floor: every opponent reply at/above this\n'
+                          'local probability gets a repertoire answer, even in lines\n'
+                          'the search budget would otherwise skip. 0 disables.'),
+                ],
+              ),
+              _sectionHeader('Verification'),
+              Row(
+                children: [
+                  _toggleSwitch('Verify Final Output', _verifyFinal, (v) {
+                    setState(() => _verifyFinal = v);
+                  },
+                      tooltip:
+                          'Re-check every selected repertoire move at the verify\n'
+                          'depth after selection; moves that lose more than Max Eval\n'
+                          'Loss vs a deep-checked alternative are replaced. Gives the\n'
+                          'export a depth guarantee at the cost of extra engine time.'),
+                  const SizedBox(width: 16),
+                  _numField(_verifyDepthCtrl, 'Verify Depth (0=auto)',
+                      tooltip:
+                          'Stockfish depth for the final verification pass.\n'
+                          '0 = automatic (eval depth + 6, at least 20).'),
+                ],
+              ),
+              _sectionHeader('PGN export'),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
@@ -680,161 +911,7 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
                           },
                   ),
                 ),
-              const SizedBox(height: 8),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _numField(_multipvCtrl, 'MultiPV',
-                      tooltip: 'Candidate moves evaluated per our-move node'),
-                  _numField(_oppMaxChildrenCtrl, 'Opp Max Children',
-                      tooltip:
-                          'Maximum opponent replies explored per position'),
-                  _numField(_oppMassTargetCtrl, 'Opp Mass Target',
-                      tooltip:
-                          'Stop adding opponent moves after this probability mass is covered'),
-                  _numField(_leafConfidenceCtrl, 'Leaf Confidence (0-1)',
-                      tooltip:
-                          'Trust in engine eval at leaves; lower blends toward 0.5'),
-                  _numField(_ourAltDiscountCtrl, 'Alt Discount (0-1)',
-                      tooltip:
-                          'Best-first priority multiplier for our non-best candidates.\n'
-                          'Lower = more budget on the mainline, less on alternatives.'),
-                  _numField(_maiaPriorGamesCtrl, 'Maia Prior (games)',
-                      tooltip:
-                          'Dirichlet prior weight λ blending DB opponent frequencies\n'
-                          'with Maia: p = (count + λ·maia) / (N + λ). 0 disables.'),
-                  _numField(_coverMinProbCtrl, 'Cover Min Prob (0-1)',
-                      tooltip:
-                          'No-silent-holes floor: every opponent reply at/above this\n'
-                          'local probability gets a repertoire answer, even in lines\n'
-                          'the search budget would otherwise skip. 0 disables.'),
-                  _numField(_verifyDepthCtrl, 'Verify Depth (0=auto)',
-                      tooltip:
-                          'Stockfish depth for the final verification pass.\n'
-                          '0 = automatic (eval depth + 6, at least 20).'),
-                  _numField(_setupToleranceCtrl, 'Setup Tolerance (cp)',
-                      tooltip:
-                          'Max centipawns a preferred-setup move may lose vs the\n'
-                          'best candidate and still be chosen for consistency.'),
-                ],
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _setupMovesCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Preferred Setup (SAN moves)',
-                  hintText: 'e.g. Be3 Qd2 f3 O-O-O h4 Nh3',
-                  helperText:
-                      'System to play whenever sound: legal setup moves are '
-                      'evaluated as candidates, and selection prefers them '
-                      'within the tolerance. Empty = off.',
-                  isDense: true,
-                  border: OutlineInputBorder(),
-                ),
-                style: const TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _toggleSwitch('Best-First Search', _bestFirst, (v) {
-                    setState(() => _bestFirst = v);
-                  },
-                      tooltip:
-                          'Expand the most-reachable positions first (anytime build:\n'
-                          'likely lines get explored deepest at any node budget).\n'
-                          'Off = classic level-order BFS.'),
-                  const SizedBox(width: 16),
-                  _toggleSwitch('Verify Final Output', _verifyFinal, (v) {
-                    setState(() => _verifyFinal = v);
-                  },
-                      tooltip:
-                          'Re-check every selected repertoire move at the verify\n'
-                          'depth after selection; moves that lose more than Max Eval\n'
-                          'Loss vs a deep-checked alternative are replaced. Gives the\n'
-                          'export a depth guarantee at the cost of extra engine time.'),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _toggleSwitch('Relative Eval', _relativeEval, (v) {
-                    setState(() => _relativeEval = v);
-                  },
-                      tooltip:
-                          'Thresholds are relative to the root eval (default).\n'
-                          'Turn off to use absolute centipawn limits from Min/Max Eval.'),
-                  const LichessDbInfoIcon(size: 14),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Text('Opponent DB override',
-                      style: TextStyle(fontSize: 13)),
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message:
-                        'Override Maia with a Lichess database for opponent\n'
-                        'move frequencies. Maia remains the fallback for\n'
-                        'positions with no database data.',
-                    child: Icon(Icons.info_outline,
-                        size: 16, color: Colors.grey[500]),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('None (Maia only)'),
-                    selected: _lichessDbOverride == null,
-                    onSelected: widget.isGenerating
-                        ? null
-                        : (_) => setState(() => _lichessDbOverride = null),
-                  ),
-                  const SizedBox(width: 4),
-                  ChoiceChip(
-                    label: const Text('Lichess DB'),
-                    selected: _lichessDbOverride != null,
-                    onSelected: widget.isGenerating
-                        ? null
-                        : (_) => setState(() =>
-                            _lichessDbOverride ??= LichessDatabase.lichess),
-                  ),
-                ],
-              ),
-              if (_lichessDbOverride != null) ...[
-                const SizedBox(height: 8),
-                Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: LichessDbSelector(
-                    database: _lichessDbOverride!,
-                    onDatabaseChanged: (db) => setState(() {
-                      final wasMasters =
-                          _lichessDbOverride == LichessDatabase.masters;
-                      final isMasters = db == LichessDatabase.masters;
-                      _lichessDbOverride = db;
-                      if (wasMasters != isMasters) {
-                        _lichessMinGamesCtrl.text = isMasters ? '4' : '10';
-                      }
-                    }),
-                    selectedSpeeds: _lichessSpeeds,
-                    onSpeedsChanged: (s) => setState(() {
-                      _lichessSpeeds
-                        ..clear()
-                        ..addAll(s);
-                    }),
-                    selectedRatings: _lichessRatings,
-                    onRatingsChanged: (r) => setState(() {
-                      _lichessRatings
-                        ..clear()
-                        ..addAll(r);
-                    }),
-                    minGamesController: _lichessMinGamesCtrl,
-                    enabled: !widget.isGenerating,
-                    compact: true,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               EvalSourcesSection(
                 key: _evalSourcesKey,
                 isGenerating: widget.isGenerating,
@@ -846,6 +923,11 @@ class GenerationConfigFormState extends State<GenerationConfigForm> {
       ],
     );
   }
+
+  Widget _sectionHeader(String title) => Padding(
+        padding: const EdgeInsets.only(top: 20, bottom: 8),
+        child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+      );
 
   Widget _numField(
     TextEditingController controller,

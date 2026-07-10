@@ -15,14 +15,11 @@ class RepertoireShortcuts extends StatelessWidget {
     required this.focusNode,
     required this.onPasteFenFromClipboard,
     required this.onUndo,
-    required this.onOpenGeneration,
-    required this.onOpenAudit,
-    required this.onImportPgnFile,
     required this.onToggleExpectimax,
     required this.onToggleLinesTab,
     required this.onCollapseBottomPane,
     required this.onFlip,
-    required this.onToggleTrapWalkthrough,
+    required this.onToggleTrapTour,
     required this.onToggleEngine,
     required this.onGoBack,
     required this.onGoForward,
@@ -40,9 +37,6 @@ class RepertoireShortcuts extends StatelessWidget {
 
   final VoidCallback onPasteFenFromClipboard;
   final VoidCallback onUndo;
-  final VoidCallback onOpenGeneration;
-  final VoidCallback onOpenAudit;
-  final VoidCallback onImportPgnFile;
   final VoidCallback onToggleExpectimax;
   final VoidCallback onToggleLinesTab;
 
@@ -52,9 +46,9 @@ class RepertoireShortcuts extends StatelessWidget {
 
   final VoidCallback onFlip;
 
-  /// Called on T when the current position is a trap.
+  /// Called on T to toggle the trap tour.
   /// Return true if the shortcut was handled.
-  final bool Function() onToggleTrapWalkthrough;
+  final bool Function() onToggleTrapTour;
 
   final VoidCallback onToggleEngine;
   final VoidCallback onGoBack;
@@ -66,10 +60,12 @@ class RepertoireShortcuts extends StatelessWidget {
   /// Called on Shift+Right before [onGoForward]. Return true if trap nav handled.
   final bool Function() onGoToNextTrap;
 
-  /// N — next finding in the audit findings panel.
+  /// N — next trap-tour stop when the tour is open, otherwise next finding
+  /// in the audit findings panel.
   final bool Function()? onNextFinding;
 
-  /// P — previous finding in the audit findings panel.
+  /// P — previous trap-tour stop when the tour is open, otherwise previous
+  /// finding in the audit findings panel.
   final bool Function()? onPrevFinding;
 
   /// D — dismiss current finding in the audit findings panel.
@@ -89,21 +85,6 @@ class RepertoireShortcuts extends StatelessWidget {
     if (isTextInputFocused()) return KeyEventResult.ignored;
 
     final keyboard = HardwareKeyboard.instance;
-
-    if (event.logicalKey == LogicalKeyboardKey.keyG && hasNoLetterModifiers) {
-      onOpenGeneration();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyA && hasNoLetterModifiers) {
-      onOpenAudit();
-      return KeyEventResult.handled;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyI && hasNoLetterModifiers) {
-      onImportPgnFile();
-      return KeyEventResult.handled;
-    }
 
     if (event.logicalKey == LogicalKeyboardKey.keyX && hasNoLetterModifiers) {
       onToggleExpectimax();
@@ -127,7 +108,7 @@ class RepertoireShortcuts extends StatelessWidget {
     }
 
     if (event.logicalKey == LogicalKeyboardKey.keyT && hasNoLetterModifiers) {
-      if (onToggleTrapWalkthrough()) {
+      if (onToggleTrapTour()) {
         return KeyEventResult.handled;
       }
     }

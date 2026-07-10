@@ -11,6 +11,7 @@ import 'engine_move_row.dart';
 import '../../services/analysis_service.dart';
 import '../../services/engine/engine_lifecycle.dart';
 import '../../services/eval_cache.dart';
+import 'engine_gate.dart';
 import '../../services/maia_factory.dart';
 import '../../services/probability_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
@@ -117,9 +118,12 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   EngineState? _lastLifecycleState;
   bool _analysisScheduled = false;
 
-  /// Whether analysis should run right now.
+  /// Whether analysis should run right now. Generation owns the engine, so
+  /// the pane goes dormant (and shows [EngineBusyNotice]) while it runs.
   bool get _isActive =>
-      widget.isActive && EngineLifecycle.instance.state != EngineState.off;
+      widget.isActive &&
+      EngineLifecycle.instance.state != EngineState.off &&
+      !EngineGate.isLocked;
 
   bool get _engineEnabled => EngineLifecycle.instance.state != EngineState.off;
 
@@ -508,7 +512,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           _buildSettingsBar(),
           const Divider(height: 1),
         ],
-        if (_engineEnabled) ...[
+        if (EngineGate.isLocked)
+          const Expanded(child: EngineBusyNotice())
+        else if (_engineEnabled) ...[
           Expanded(child: _buildUnifiedMoveTable()),
           EnginePaneFooter(
             settings: _settings,
@@ -532,7 +538,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       child: Row(
         children: [
           Expanded(
-            child: _engineEnabled
+            child: _engineEnabled && !EngineGate.isLocked
                 ? ListenableBuilder(
                     listenable: _analysis.poolStatus,
                     builder: (context, _) {

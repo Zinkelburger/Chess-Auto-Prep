@@ -19,6 +19,7 @@ class TrapsTabContent extends StatelessWidget {
   final bool hasRepertoire;
 
   final void Function(TrapLineInfo trap) onTrapSelected;
+  final void Function(TrapLineInfo trap, int ply)? onTrapMoveSelected;
   final VoidCallback onStartTour;
   final VoidCallback onDiscoverTraps;
   final VoidCallback onOpenGeneration;
@@ -32,6 +33,7 @@ class TrapsTabContent extends StatelessWidget {
     required this.boardPreview,
     required this.hasRepertoire,
     required this.onTrapSelected,
+    this.onTrapMoveSelected,
     required this.onStartTour,
     required this.onDiscoverTraps,
     required this.onOpenGeneration,
@@ -101,6 +103,7 @@ class TrapsTabContent extends StatelessWidget {
       metrics: trapIndex?.metrics,
       repertoireLineMoves: repertoireLineMoves,
       onTrapSelected: onTrapSelected,
+      onTrapMoveSelected: onTrapMoveSelected,
       onStartTour: onStartTour,
     );
   }

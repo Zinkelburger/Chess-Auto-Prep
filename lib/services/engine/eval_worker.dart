@@ -47,7 +47,11 @@ class EvalWorker {
   final EngineConnection engine;
   late final StreamSubscription _sub;
 
-  Completer<void>? _readyCompleter;
+  /// Pending `isready` handshakes, completed FIFO as each `readyok` arrives.
+  /// A queue (not a single completer) so overlapping handshakes — e.g.
+  /// [setThreads] from pool reconfiguration racing an [evaluateFen] — can
+  /// never orphan an awaiter.
+  final List<Completer<void>> _readyQueue = [];
 
   // ── Single eval state ──
   Completer<EvalResult>? _evalCompleter;
@@ -74,17 +78,32 @@ class EvalWorker {
         _evalCompleter = null;
         _discoveryCompleter?.completeError(error);
         _discoveryCompleter = null;
+        _failReadyQueue(error);
       },
     );
+  }
+
+  /// Send `isready` and wait for the matching `readyok`.
+  Future<void> _syncReady() {
+    final c = Completer<void>();
+    _readyQueue.add(c);
+    engine.sendCommand('isready');
+    return c.future;
+  }
+
+  void _failReadyQueue(Object error) {
+    final pending = List.of(_readyQueue);
+    _readyQueue.clear();
+    for (final c in pending) {
+      if (!c.isCompleted) c.completeError(error);
+    }
   }
 
   Future<void> init({int hashMb = 128, int threads = 1}) async {
     await engine.waitForReady();
     await _applyThreads(threads);
     engine.sendCommand('setoption name Hash value $hashMb');
-    _readyCompleter = Completer<void>();
-    engine.sendCommand('isready');
-    await _readyCompleter!.future;
+    await _syncReady();
   }
 
   int _currentThreads = 1;
@@ -94,9 +113,7 @@ class EvalWorker {
     if (threads < 1) threads = 1;
     if (_currentThreads == threads) return;
     await _applyThreads(threads);
-    _readyCompleter = Completer<void>();
-    engine.sendCommand('isready');
-    await _readyCompleter!.future;
+    await _syncReady();
   }
 
   Future<void> _applyThreads(int threads) async {
@@ -119,9 +136,7 @@ class EvalWorker {
     _discoveryOnProgress = onProgress;
 
     engine.sendCommand('setoption name MultiPV value $multiPv');
-    _readyCompleter = Completer<void>();
-    engine.sendCommand('isready');
-    await _readyCompleter!.future;
+    await _syncReady();
 
     // Set up completer AFTER readyok drains any stale bestmove from stop()
     _discoveryCompleter = Completer<DiscoveryResult>();
@@ -133,9 +148,7 @@ class EvalWorker {
 
     // Reset to single PV for subsequent evals
     engine.sendCommand('setoption name MultiPV value 1');
-    _readyCompleter = Completer<void>();
-    engine.sendCommand('isready');
-    await _readyCompleter!.future;
+    await _syncReady();
     _discoveryOnProgress = null;
 
     return result;
@@ -153,9 +166,7 @@ class EvalWorker {
     // Drain any stale output (bestmove) from a previous stop/search.
     // readyok is guaranteed to arrive AFTER all pending output.
     engine.sendCommand('stop');
-    _readyCompleter = Completer<void>();
-    engine.sendCommand('isready');
-    await _readyCompleter!.future;
+    await _syncReady();
 
     // Pipeline is clean — safe to set up the new eval.
     _evalCompleter = Completer<EvalResult>();
@@ -188,8 +199,10 @@ class EvalWorker {
     if (line.isEmpty) return;
 
     if (line == 'readyok') {
-      _readyCompleter?.complete();
-      _readyCompleter = null;
+      if (_readyQueue.isNotEmpty) {
+        final c = _readyQueue.removeAt(0);
+        if (!c.isCompleted) c.complete();
+      }
       return;
     }
 
@@ -304,6 +317,7 @@ class EvalWorker {
 
   void dispose() {
     stop();
+    _failReadyQueue(StateError('Worker disposed'));
     _sub.cancel();
     try {
       engine.sendCommand('quit');

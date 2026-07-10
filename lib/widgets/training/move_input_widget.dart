@@ -101,6 +101,10 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
     super.dispose();
   }
 
+  /// Whether the text field currently owns keyboard focus (used by panel
+  /// shortcut handlers to tell "typing a move" apart from other text fields).
+  bool get hasFocus => _focusNode.hasFocus;
+
   /// Focus the text field programmatically (e.g. after opponent moves).
   void focus() {
     if (_focusNode.canRequestFocus) _focusNode.requestFocus();

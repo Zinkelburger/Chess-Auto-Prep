@@ -64,6 +64,11 @@ class TacticsDatabase extends ChangeNotifier {
   /// Index into [_sessionQueue].
   int _sessionQueueIndex = 0;
 
+  /// Furthest queue index reached this session (the "head"). Navigating back
+  /// with Previous doesn't lower it, so `_sessionQueueIndex < head` means the
+  /// user is reviewing an already-seen puzzle.
+  int _sessionMaxQueueIndex = 0;
+
   /// Settings for the current session (kept for mid-session rating logic).
   TacticsSessionSettings _sessionSettings = const TacticsSessionSettings();
 
@@ -201,6 +206,7 @@ class TacticsDatabase extends ChangeNotifier {
         path.split('/').last.replaceAll(RegExp(r'\.pgn$', caseSensitive: false), '');
     _sessionQueue = [];
     _sessionQueueIndex = 0;
+    _sessionMaxQueueIndex = 0;
     currentSession = ReviewSession();
     return loadPositions();
   }
@@ -217,6 +223,7 @@ class TacticsDatabase extends ChangeNotifier {
     _activeSetName = defaultSetName;
     _sessionQueue = [];
     _sessionQueueIndex = 0;
+    _sessionMaxQueueIndex = 0;
     currentSession = ReviewSession();
     await loadPositions();
   }
@@ -414,6 +421,7 @@ class TacticsDatabase extends ChangeNotifier {
     }
 
     _sessionQueueIndex = 0;
+    _sessionMaxQueueIndex = 0;
     sessionPositionIndex = _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
   }
 
@@ -428,6 +436,7 @@ class TacticsDatabase extends ChangeNotifier {
       if (idx != -1 && !_sessionQueue.contains(idx)) _sessionQueue.add(idx);
     }
     _sessionQueueIndex = 0;
+    _sessionMaxQueueIndex = 0;
     sessionPositionIndex = _sessionQueue.isNotEmpty ? _sessionQueue.first : 0;
   }
 
@@ -436,6 +445,11 @@ class TacticsDatabase extends ChangeNotifier {
 
   /// Current 0-based position within the session queue.
   int get sessionQueuePosition => _sessionQueueIndex;
+
+  /// True while the user has navigated back below the session head — i.e.
+  /// the shown puzzle was already completed or skipped this session.
+  bool get isViewingPastSessionPuzzle =>
+      _sessionQueue.isNotEmpty && _sessionQueueIndex < _sessionMaxQueueIndex;
 
   /// Remove a position (by index into [positions]) from the live session queue.
   void removeFromSessionQueue(int positionIndex) {
@@ -448,6 +462,10 @@ class TacticsDatabase extends ChangeNotifier {
         _sessionQueue.isNotEmpty) {
       _sessionQueueIndex = _sessionQueue.length - 1;
     }
+    if (queueIdx < _sessionMaxQueueIndex) _sessionMaxQueueIndex--;
+    if (_sessionMaxQueueIndex < _sessionQueueIndex) {
+      _sessionMaxQueueIndex = _sessionQueueIndex;
+    }
   }
 
   /// Advance to the next position in the session queue.  Returns the index
@@ -457,6 +475,9 @@ class TacticsDatabase extends ChangeNotifier {
     if (_sessionQueue.isEmpty) return null;
     if (_sessionQueueIndex >= _sessionQueue.length - 1) return null;
     _sessionQueueIndex++;
+    if (_sessionQueueIndex > _sessionMaxQueueIndex) {
+      _sessionMaxQueueIndex = _sessionQueueIndex;
+    }
     sessionPositionIndex = _sessionQueue[_sessionQueueIndex];
     return sessionPositionIndex;
   }

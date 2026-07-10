@@ -7,8 +7,10 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/tactics_position.dart';
+import '../../utils/app_messages.dart';
 
 class TacticsEditDialog extends StatefulWidget {
   final TacticsPosition position;
@@ -59,6 +61,18 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
     super.dispose();
   }
 
+  Future<void> _copyToClipboard(String text, String message) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (mounted) showAppSnackBar(context, message);
+    } catch (_) {
+      if (mounted) {
+        showAppSnackBar(context, AppMessages.clipboardWriteFailed,
+            isError: true);
+      }
+    }
+  }
+
   void _save() {
     final updated = widget.position.copyWith(
       correctLine: _correctLineCtrl.text
@@ -93,6 +107,30 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
               if (pos.reviewCount > 0)
                 _readOnlyField('Stats',
                     '${pos.successCount}/${pos.reviewCount} (${(pos.successRate * 100).toStringAsFixed(0)}%)'),
+              const SizedBox(height: 8),
+              // One-click export for reusing the puzzle elsewhere.
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(pos.fen, 'FEN copied.'),
+                    icon: const Icon(Icons.copy, size: 14),
+                    label: const Text('Copy FEN'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(
+                      _correctLineCtrl.text
+                          .split('|')
+                          .map((s) => s.trim())
+                          .where((s) => s.isNotEmpty)
+                          .join(' '),
+                      'Moves copied.',
+                    ),
+                    icon: const Icon(Icons.copy, size: 14),
+                    label: const Text('Copy moves'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               const Text('Editable fields',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),

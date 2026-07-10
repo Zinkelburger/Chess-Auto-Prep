@@ -26,6 +26,7 @@ class TacticsTrainingPanel extends StatelessWidget {
     required this.onAutoAdvanceChanged,
     required this.onCopyFen,
     required this.onSetRating,
+    this.onEdit,
     this.solutionSanMoves = const [],
     this.solutionStartPly = 0,
     this.activeSolutionMoveIndex,
@@ -48,6 +49,10 @@ class TacticsTrainingPanel extends StatelessWidget {
   final ValueChanged<bool> onAutoAdvanceChanged;
   final VoidCallback onCopyFen;
   final ValueChanged<int> onSetRating;
+
+  /// When non-null the puzzle is an already-seen one (reached via Previous)
+  /// and an edit button is shown in the top-right corner.
+  final VoidCallback? onEdit;
   final List<String> solutionSanMoves;
   final int solutionStartPly;
   final int? activeSolutionMoveIndex;
@@ -74,7 +79,20 @@ class TacticsTrainingPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        TacticsPositionInfo(position: position, engine: engine),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TacticsPositionInfo(position: position, engine: engine),
+            ),
+            if (onEdit != null)
+              IconButton(
+                tooltip: 'Edit puzzle (copy FEN / moves)',
+                icon: const Icon(Icons.edit_outlined, size: 20),
+                onPressed: onEdit,
+              ),
+          ],
+        ),
         const SizedBox(height: 16),
         Row(
           children: [
@@ -127,7 +145,7 @@ class TacticsTrainingPanel extends StatelessWidget {
             Expanded(
               child: shortcutTooltip(
                 description: 'Previous position',
-                shortcut: 'P',
+                shortcut: 'P or ↑',
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -141,7 +159,7 @@ class TacticsTrainingPanel extends StatelessWidget {
             Expanded(
               child: shortcutTooltip(
                 description: _useNextLabel ? 'Next position' : 'Skip position',
-                shortcut: 'N',
+                shortcut: 'S or ↓',
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
