@@ -27,6 +27,10 @@ class TrapsBrowser extends StatefulWidget {
   final List<String> currentMoveSequence;
   final BoardPreviewController? boardPreview;
   final void Function(TrapLineInfo trap)? onTrapSelected;
+
+  /// Tap on a specific move inside the expanded detail card — load the trap
+  /// line and jump to that ply.
+  final void Function(TrapLineInfo trap, int ply)? onTrapMoveSelected;
   final TrapRepertoireMetrics? metrics;
   final VoidCallback? onStartTour;
 
@@ -40,6 +44,7 @@ class TrapsBrowser extends StatefulWidget {
     this.currentMoveSequence = const [],
     this.boardPreview,
     this.onTrapSelected,
+    this.onTrapMoveSelected,
     this.metrics,
     this.onStartTour,
     this.repertoireLineMoves = const [],
@@ -81,11 +86,15 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
     return widget.traps.where(_isTrapInRepertoire).toList();
   }
 
+  static int _expectedGainCp(TrapLineInfo trap) =>
+      (trap.evalDiffCp * trap.popularProb).round();
+
   List<TrapLineInfo> get _sortedTraps {
     final sorted = List<TrapLineInfo>.from(_filteredTraps);
     switch (_sortBy) {
-      case 'trap':
-        sorted.sort((a, b) => b.trapScore.compareTo(a.trapScore));
+      case 'expected':
+        sorted.sort(
+            (a, b) => _expectedGainCp(b).compareTo(_expectedGainCp(a)));
       case 'reach':
         sorted.sort((a, b) => b.cumulativeProb.compareTo(a.cumulativeProb));
       case 'eval':
@@ -145,17 +154,21 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 ),
               ),
               if (widget.onStartTour != null && count > 0) ...[
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: widget.onStartTour,
-                  icon: const Icon(Icons.tour, size: 14),
-                  label:
-                      const Text('Tour traps', style: TextStyle(fontSize: 11)),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: AppColors.warning,
+                const SizedBox(width: 10),
+                Tooltip(
+                  message: 'Walk through every trap on the board, '
+                      'one at a time (T)',
+                  child: FilledButton.icon(
+                    onPressed: widget.onStartTour,
+                    icon: const Icon(Icons.tour, size: 16),
+                    label: const Text('Start Trap Tour'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.warning,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      textStyle: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ],
@@ -183,7 +196,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               const SizedBox(width: 4),
               _buildSortChip('Most Common', 'reach'),
               const SizedBox(width: 4),
-              _buildSortChip('Trap %', 'trap'),
+              _buildSortChip('Expected Gain', 'expected'),
               const SizedBox(width: 4),
               _buildSortChip('Surplus', 'surplus'),
             ],
@@ -390,14 +403,17 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               runSpacing: 4,
               children: [
                 _buildStatBadge(
-                  '+${trap.evalDiffCp}cp gain',
-                  AppColors.evalPositive,
-                  tooltip: 'Centipawn advantage when opponent blunders',
+                  '${(trap.popularProb * 100).toStringAsFixed(0)}% fall in',
+                  _trapScoreColor(trap.trapScore),
+                  tooltip:
+                      'Share of opponents who play ${trap.popularMove} here',
                 ),
                 _buildStatBadge(
-                  '${(trap.trapScore * 100).toStringAsFixed(0)}% trap',
-                  _trapScoreColor(trap.trapScore),
-                  tooltip: 'Trap score: likelihood × severity',
+                  '+${_expectedGainCp(trap)}cp expected',
+                  AppColors.evalPositive,
+                  tooltip: 'Expected gain: +${trap.evalDiffCp}cp × '
+                      '${(trap.popularProb * 100).toStringAsFixed(0)}% '
+                      'chance they play ${trap.popularMove}',
                 ),
                 _buildStatBadge(
                   '+${(trap.trickSurplus * 100).toStringAsFixed(1)}% surplus',
@@ -415,6 +431,9 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 index: index,
                 boardPreview: widget.boardPreview!,
                 onShowPath: () => widget.onTrapSelected?.call(trap),
+                onMoveTapped: widget.onTrapMoveSelected == null
+                    ? null
+                    : (ply) => widget.onTrapMoveSelected!(trap, ply),
               ),
             ],
           ],

@@ -292,17 +292,39 @@ class BuildProgress {
   final int elapsedMs;
   final double? nodesPerMinute;
 
-  /// Deepest ply being worked on.
+  /// Deepest ply being worked on (FIFO: current BFS layer; best-first:
+  /// deepest ply reached so far).
   final int currentDepth;
 
-  /// Nodes at [currentDepth] that have not been expanded yet.
+  /// Nodes at [currentDepth] that have not been expanded yet (FIFO only).
   final int unexploredAtDepth;
 
-  /// Total nodes at [currentDepth] (explored + unexplored).
+  /// Total nodes at [currentDepth] (explored + unexplored; FIFO only).
   final int totalAtDepth;
 
-  /// Estimated seconds to finish all unexplored nodes at [currentDepth].
+  /// Estimated seconds to finish all unexplored nodes at [currentDepth]
+  /// (FIFO only — best-first never completes depth layers in order).
   final int? etaDepthSeconds;
+
+  /// Whether the build pops the frontier best-first (Fast Expectimax).
+  final bool bestFirst;
+
+  /// Frontier nodes still queued for expansion.
+  final int frontierSize;
+
+  /// Monotone 0–1 progress of the popped-priority descent toward the
+  /// search floor (best-first only, log scale).  Null in FIFO mode.
+  final double? priorityProgress;
+
+  /// Whole-run ETA from the recent [priorityProgress] descent rate
+  /// (best-first only).
+  final int? etaRunSeconds;
+
+  /// Per-ply node counts, index = ply.  Empty when not computed.
+  final List<int> depthTotals;
+
+  /// Per-ply explored-node counts, aligned with [depthTotals].
+  final List<int> depthExplored;
 
   const BuildProgress({
     required this.totalNodes,
@@ -314,6 +336,12 @@ class BuildProgress {
     this.unexploredAtDepth = 0,
     this.totalAtDepth = 0,
     this.etaDepthSeconds,
+    this.bestFirst = false,
+    this.frontierSize = 0,
+    this.priorityProgress,
+    this.etaRunSeconds,
+    this.depthTotals = const [],
+    this.depthExplored = const [],
   });
 }
 
@@ -356,4 +384,36 @@ class BuildStats {
 
   int transpositionEvalHits = 0;
   int extEvalSubtreeSkips = 0;
+
+  Map<String, dynamic> toJson() => {
+        'lichess_queries': lichessQueries,
+        'lichess_cache_hits': lichessCacheHits,
+        'lichess_total_ms': lichessTotalMs.round(),
+        'maia_evals': maiaEvals,
+        'maia_total_ms': maiaTotalMs.round(),
+        'sf_multipv_calls': sfMultipvCalls,
+        'sf_multipv_ms': sfMultipvMs.round(),
+        'sf_single_calls': sfSingleCalls,
+        'sf_single_ms': sfSingleMs.round(),
+        'sf_batch_calls': sfBatchCalls,
+        'sf_batch_ms': sfBatchMs.round(),
+        'db_eval_hits': dbEvalHits,
+        'db_eval_misses': dbEvalMisses,
+        'db_explorer_hits': dbExplorerHits,
+        'db_explorer_misses': dbExplorerMisses,
+        'local_chessdb_hits': localChessDbHits,
+        'local_chessdb_misses': localChessDbMisses,
+        'local_chessdb_shallow': localChessDbShallow,
+        'local_chessdb_hard_misses': localChessDbHardMisses,
+        'cdbdirect_hits': cdbDirectHits,
+        'cdbdirect_misses': cdbDirectMisses,
+        'cdbdirect_shallow': cdbDirectShallow,
+        'cdbdirect_hard_misses': cdbDirectHardMisses,
+        'chessdb_api_hits': chessDbApiHits,
+        'chessdb_api_misses': chessDbApiMisses,
+        'chessdb_api_shallow': chessDbApiShallow,
+        'chessdb_api_quota_blocked': chessDbApiQuotaBlocked,
+        'transposition_eval_hits': transpositionEvalHits,
+        'ext_eval_subtree_skips': extEvalSubtreeSkips,
+      };
 }

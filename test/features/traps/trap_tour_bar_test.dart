@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
-import 'package:chess_auto_prep/features/traps/widgets/trap_walkthrough.dart';
+import 'package:chess_auto_prep/features/traps/widgets/trap_tour_bar.dart';
 
 TrapLineInfo _trap(List<String> moves, {double surplus = 0.1, String? fen}) {
   return TrapLineInfo(
@@ -22,7 +22,7 @@ TrapLineInfo _trap(List<String> moves, {double surplus = 0.1, String? fen}) {
 }
 
 void main() {
-  group('TrapWalkthrough', () {
+  group('TrapTourBar', () {
     test('sortedTraps orders by trick surplus descending', () {
       final traps = [
         _trap(['e4'], surplus: 0.05),
@@ -30,18 +30,18 @@ void main() {
         _trap(['c4'], surplus: 0.12),
       ];
 
-      final sorted = TrapWalkthrough.sortedTraps(traps);
+      final sorted = TrapTourBar.sortedTraps(traps);
       expect(sorted.map((t) => t.movesSan.first).toList(), ['d4', 'c4', 'e4']);
     });
 
     test('indexOfTrap finds trap by moves', () {
       final a = _trap(['e4', 'e5'], fen: 'fen-a');
       final b = _trap(['d4', 'd5'], fen: 'fen-b');
-      final sorted = TrapWalkthrough.sortedTraps([a, b]);
+      final sorted = TrapTourBar.sortedTraps([a, b]);
 
-      expect(TrapWalkthrough.indexOfTrap(sorted, b), 1);
-      expect(TrapWalkthrough.sameTrap(a, a), isTrue);
-      expect(TrapWalkthrough.sameTrap(a, b), isFalse);
+      expect(TrapTourBar.indexOfTrap(sorted, b), 1);
+      expect(TrapTourBar.sameTrap(a, a), isTrue);
+      expect(TrapTourBar.sameTrap(a, b), isFalse);
     });
 
     test('TrapIndexService.allTraps exposes load order', () {

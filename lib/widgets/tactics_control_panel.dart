@@ -20,6 +20,7 @@ import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
 import '../utils/fen_utils.dart';
 import '../utils/keyboard_shortcut_utils.dart';
+import 'engine/engine_gate.dart';
 import 'engine/inline_engine_bar.dart';
 import 'trainer_keyboard_scope.dart';
 import 'pgn_viewer_widget.dart';
@@ -114,6 +115,10 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
     _form = TacticsImportForm(defaultCores: EngineSettings.instance.workers);
     _form.addListener(_onFormChanged);
+    // Pending/resume only considers games inside the fetch window — older
+    // fetched-but-unanalyzed games are expired, not nagged about forever.
+    _import.pendingSinceProvider = () => _form.sinceCutoff;
+    _lastPendingCutoff = _form.sinceCutoff;
 
     // Initialize the form from AppState and reset board
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -204,8 +209,18 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     if (mounted) setState(() {});
   }
 
+  /// Last window cutoff the pending count was computed against.
+  DateTime? _lastPendingCutoff;
+
   void _onFormChanged() {
     if (mounted) setState(() {});
+    // The fetch window moved (days field edited) — recount pending games
+    // against it so the resume banner tracks the visible setting.
+    final cutoff = _form.sinceCutoff;
+    if (cutoff != _lastPendingCutoff) {
+      _lastPendingCutoff = cutoff;
+      unawaited(_import.refreshPendingCount());
+    }
   }
 
   void _onDbChanged() {
@@ -382,13 +397,24 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         }
       },
     );
+
+    // Same automatic pass: finish games fetched earlier but never analyzed
+    // (a stopped or interrupted run), within the same recency window.
+    if (!mounted) return;
+    await _import.refreshPendingCount(
+      lichessUsername: appState.lichessUsername,
+      chesscomUsername: appState.chesscomUsername,
+    );
+    if (!mounted || _import.pendingGameCount == 0) return;
+    await _resumeAnalysis();
   }
 
   @override
   Widget build(BuildContext context) {
     // holdsFocus: the panel keeps keyboard focus for its navigation shortcuts
-    // (arrows, p/n/j/a/e) and hands focus to the move input when typing is
-    // wanted. Space bubbles to _handleKeyEvent to toggle the solution.
+    // and hands focus to the move input when typing is wanted. Keys that can
+    // never appear in a move (Space, ↑/↓, p/s/j) bubble to _handleKeyEvent
+    // even while typing; move-alphabet keys (n/a/e, ←/→) work only unfocused.
     return TrainerKeyboardScope(
       holdsFocus: true,
       focusNode: _focusNode,
@@ -506,14 +532,43 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
 
     final key = event.logicalKey;
 
-    // Space always toggles solution, even when move input is focused
-    // (Space can never be part of a chess move SAN).
+    // "Typing a move" is not "typing text": a move can only contain
+    // a-h / 1-8 / K Q R B N / o-0 / x / '-', so keys outside that alphabet
+    // (Space, ↑/↓, P, S, J) stay live while the move input is focused.
+    // Any *other* focused text field (engine bar, import form) still
+    // swallows everything.
+    final typingMove =
+        TacticsControlPanel.moveInputKey.currentState?.hasFocus ?? false;
+    if (isTextInputFocused() && !typingMove) {
+      return KeyEventResult.ignored;
+    }
+
     if (key == LogicalKeyboardKey.space) {
       _session.toggleSolution();
       return KeyEventResult.handled;
     }
 
-    if (isTextInputFocused()) {
+    if ((key == LogicalKeyboardKey.keyP || key == LogicalKeyboardKey.arrowUp) &&
+        hasNoLetterModifiers) {
+      _loadCurrentPosition(_session.previousPosition());
+      return KeyEventResult.handled;
+    }
+
+    if ((key == LogicalKeyboardKey.keyS ||
+            key == LogicalKeyboardKey.arrowDown) &&
+        hasNoLetterModifiers) {
+      _loadCurrentPosition(_session.skipPosition());
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.keyJ && hasNoLetterModifiers) {
+      _session.setAutoAdvance(!_session.autoAdvance);
+      return KeyEventResult.handled;
+    }
+
+    // Everything below overlaps with move letters (n/a/e) or caret editing
+    // (←/→), so it only fires when the move input is not focused.
+    if (typingMove) {
       return KeyEventResult.ignored;
     }
 
@@ -536,18 +591,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       return KeyEventResult.handled;
     }
 
-    if (key == LogicalKeyboardKey.keyP && hasNoLetterModifiers) {
-      _loadCurrentPosition(_session.previousPosition());
-      return KeyEventResult.handled;
-    }
-
     if (key == LogicalKeyboardKey.keyN && hasNoLetterModifiers) {
       _loadCurrentPosition(_session.skipPosition());
-      return KeyEventResult.handled;
-    }
-
-    if (key == LogicalKeyboardKey.keyJ && hasNoLetterModifiers) {
-      _session.setAutoAdvance(!_session.autoAdvance);
       return KeyEventResult.handled;
     }
 
@@ -627,6 +672,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                       _loadCurrentPosition(_session.skipPosition()),
                   onAutoAdvanceChanged: _session.setAutoAdvance,
                   onCopyFen: _copyFen,
+                  // Edit only surfaces on already-seen puzzles (below the
+                  // session head) so it can't spoil an unsolved one; external
+                  // sets are stat-only and edited in Study mode.
+                  onEdit: _session.isViewingPastPuzzle &&
+                          !_database.isExternalSet
+                      ? _editCurrentTactic
+                      : null,
                   onSetRating: (rating) {
                     _session.setRating(rating);
                     setState(() {});
@@ -866,6 +918,16 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     }
   }
 
+  /// Edit the puzzle currently shown in the trainer (reached via Previous).
+  Future<void> _editCurrentTactic() async {
+    final current = _session.currentPosition;
+    if (current == null) return;
+    final index = _database.positions.indexWhere((p) => p.fen == current.fen);
+    if (index == -1) return;
+    await _showEditDialog(index);
+    _session.refreshCurrentPosition();
+  }
+
   Future<void> _showEditDialog(int index) async {
     if (_blockStructuralEditOnExternalSet()) return;
     final updated = await TacticsEditDialog.show(
@@ -921,6 +983,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
   }
 
   Future<void> _runImport(TacticsImportSource source, String platform) async {
+    // Imports analyze every game with Stockfish — refuse while generation
+    // holds the engine.
+    if (!EngineGate.ensureAvailable(context)) return;
     _form.savePrefs();
 
     try {
@@ -955,6 +1020,7 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         chesscomUsername: appState.chesscomUsername,
         depth: _form.depth,
         cores: _form.cores,
+        since: _form.sinceCutoff,
       );
     } catch (e) {
       debugPrint('Resume analysis failed: $e');

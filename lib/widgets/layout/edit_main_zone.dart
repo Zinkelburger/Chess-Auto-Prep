@@ -38,6 +38,7 @@ class EditMainZone extends StatelessWidget {
     this.onViewInLines,
     this.trapIndex,
     this.boardPreview,
+    this.ephemeralTitle,
   });
 
   final MoveTree tree;
@@ -57,6 +58,10 @@ class EditMainZone extends StatelessWidget {
   final VoidCallback? onViewInLines;
   final TrapIndexService? trapIndex;
   final BoardPreviewController? boardPreview;
+
+  /// Read-only header shown instead of the title field for ephemeral lines
+  /// (e.g. "Trap #45 · Sicilian Defense").
+  final String? ephemeralTitle;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +84,7 @@ class EditMainZone extends StatelessWidget {
       onViewInLines: onViewInLines,
       trapIndex: trapIndex,
       boardPreview: boardPreview,
+      ephemeralTitle: ephemeralTitle,
     );
   }
 }

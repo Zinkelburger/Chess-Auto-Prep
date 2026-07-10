@@ -35,6 +35,13 @@ class ExpectimaxLinesPane extends StatefulWidget {
   final bool onTheFlyMode;
   final VoidCallback? onOpenSettings;
 
+  /// Why on-the-fly compute is not running (e.g. engine off).  Shown instead
+  /// of a fake "Computing…" spinner when the service is idle.
+  final String? notRunningReason;
+
+  /// Restarts on-the-fly compute after an error or timeout.
+  final VoidCallback? onRetry;
+
   /// Embedded beside engine pane — no bottom PV depth controls.
   final bool compact;
 
@@ -52,6 +59,8 @@ class ExpectimaxLinesPane extends StatefulWidget {
     this.progressiveSnapshot,
     this.onTheFlyMode = false,
     this.onOpenSettings,
+    this.notRunningReason,
+    this.onRetry,
     this.compact = false,
   });
 
@@ -167,34 +176,21 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     final prog = widget.progressiveSnapshot;
     final isComputing = prog?.isComputing ?? false;
 
-    // On-the-fly mode with no snapshot yet — show computing state.
-    if (widget.onTheFlyMode && prog == null) {
-      return _buildComputingState(
-        const OnTheFlyProgressiveLines(
-          lines: [],
-          targetMaxDepth: 5,
-          isComputing: true,
-        ),
-      );
-    }
-
-    if (!_useProgressive && widget.tree == null) {
+    if (!_useProgressive && widget.tree == null && !widget.onTheFlyMode) {
       return _buildNoTreeState(isComputing: isComputing);
     }
 
     if (_displayLines.isEmpty) {
-      if (prog?.errorMessage != null && !isComputing) {
+      // Only claim "Computing" when the service actually is — a fake
+      // spinner hides "engine off", errors, and stuck runs.
+      if (isComputing) {
+        return _buildComputingState(prog!);
+      }
+      if (prog?.errorMessage != null) {
         return _buildErrorState(prog!.errorMessage!);
       }
-      if (isComputing || widget.onTheFlyMode) {
-        return _buildComputingState(
-          prog ??
-              const OnTheFlyProgressiveLines(
-                lines: [],
-                targetMaxDepth: 5,
-                isComputing: true,
-              ),
-        );
+      if (widget.onTheFlyMode) {
+        return _buildIdleState();
       }
       return _buildNoDataState();
     }
@@ -252,6 +248,63 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                   message,
                   style: TextStyle(color: Colors.grey[500], fontSize: 11),
                 ),
+                if (widget.onRetry != null) ...[
+                  const SizedBox(height: 6),
+                  OutlinedButton.icon(
+                    onPressed: widget.onRetry,
+                    icon: const Icon(Icons.refresh, size: 14),
+                    label: const Text('Retry', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// On-the-fly mode, no lines, and nothing running — say why instead of
+  /// pretending to compute.
+  Widget _buildIdleState() {
+    final reason = widget.notRunningReason;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.pause_circle_outline, size: 18, color: Colors.grey[500]),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reason ?? 'Expectimax not running',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                ),
+                if (widget.onRetry != null) ...[
+                  const SizedBox(height: 6),
+                  OutlinedButton.icon(
+                    onPressed: widget.onRetry,
+                    icon: const Icon(Icons.play_arrow, size: 14),
+                    label:
+                        const Text('Compute', style: TextStyle(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -299,15 +352,9 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
   }
 
   Widget _buildNoTreeState({bool isComputing = false}) {
-    if (isComputing || widget.onTheFlyMode) {
-      return _buildComputingState(
-        widget.progressiveSnapshot ??
-            const OnTheFlyProgressiveLines(
-              lines: [],
-              targetMaxDepth: 5,
-              isComputing: true,
-            ),
-      );
+    final prog = widget.progressiveSnapshot;
+    if (isComputing && prog != null) {
+      return _buildComputingState(prog);
     }
     return Center(
       child: Padding(

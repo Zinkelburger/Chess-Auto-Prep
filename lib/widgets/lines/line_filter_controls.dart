@@ -98,7 +98,7 @@ class _HeaderSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: Border(
@@ -108,50 +108,66 @@ class _HeaderSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // Wrap instead of Row: at narrow pane widths the controls flow onto
+          // their own line rather than overflowing.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
             children: [
-              Icon(Icons.library_books, size: 20, color: Colors.grey[400]),
-              const SizedBox(width: 8),
-              Text(
-                'Repertoire Lines',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[200],
-                ),
-              ),
-              const Spacer(),
-              if (onCoveragePressed != null) ...[
-                FilledButton.icon(
-                  onPressed: isCoverageRunning ? null : onCoveragePressed,
-                  icon: isCoverageRunning
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.analytics_outlined, size: 16),
-                  label: Text(
-                    isCoverageRunning ? 'Analyzing...' : 'Coverage',
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  style: FilledButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.library_books, size: 20, color: Colors.grey[400]),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Repertoire Lines',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[200],
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              FilterChip(
-                label: const Text('Current Position'),
-                selected: showOnlyMatchingPosition,
-                onSelected: onShowOnlyMatchingPositionChanged,
-                labelStyle: const TextStyle(fontSize: 11),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                visualDensity: VisualDensity.compact,
+                ],
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (onCoveragePressed != null) ...[
+                    FilledButton.icon(
+                      onPressed: isCoverageRunning ? null : onCoveragePressed,
+                      icon: isCoverageRunning
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.analytics_outlined, size: 16),
+                      label: Text(
+                        isCoverageRunning ? 'Analyzing...' : 'Coverage',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      style: FilledButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  FilterChip(
+                    label: const Text('Current Position'),
+                    selected: showOnlyMatchingPosition,
+                    onSelected: onShowOnlyMatchingPositionChanged,
+                    labelStyle: const TextStyle(fontSize: 11),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ],
               ),
             ],
           ),
@@ -159,8 +175,7 @@ class _HeaderSection extends StatelessWidget {
           TextField(
             controller: searchController,
             decoration: InputDecoration(
-              hintText:
-                  'Search by name, moves (e.g., "1.e4 e5" or "Sicilian")...',
+              hintText: 'Search name or moves ("1.e4 e5", "Sicilian")...',
               hintStyle: TextStyle(color: Colors.grey[500], fontSize: 12),
               prefixIcon: Icon(Icons.search, size: 18, color: Colors.grey[500]),
               suffixIcon: searchController.text.isNotEmpty
@@ -193,7 +208,10 @@ class _HeaderSection extends StatelessWidget {
             style: const TextStyle(fontSize: 13),
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 4,
+            runSpacing: 4,
             children: [
               Text('Sort: ',
                   style: TextStyle(fontSize: 11, color: Colors.grey[400])),
@@ -202,31 +220,26 @@ class _HeaderSection extends StatelessWidget {
                   value: LineSortBy.name,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
-              const SizedBox(width: 4),
               _SortChip(
                   label: 'Quality',
                   value: LineSortBy.quality,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
-              const SizedBox(width: 4),
               _SortChip(
                   label: 'Playability',
                   value: LineSortBy.playability,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
-              const SizedBox(width: 4),
               _SortChip(
                   label: 'Traps',
                   value: LineSortBy.traps,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
-              const SizedBox(width: 4),
               _SortChip(
                   label: 'Coherence',
                   value: LineSortBy.coherence,
                   sortBy: sortBy,
                   onChanged: onSortByChanged),
-              const SizedBox(width: 4),
               _SortChip(
                   label: 'Length',
                   value: LineSortBy.length,
@@ -235,7 +248,10 @@ class _HeaderSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Row(
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 4,
+            runSpacing: 4,
             children: [
               Text('Filter: ',
                   style: TextStyle(fontSize: 11, color: Colors.grey[400])),
@@ -244,19 +260,16 @@ class _HeaderSection extends StatelessWidget {
                   value: LineMetricsFilter.all,
                   metricsFilter: metricsFilter,
                   onChanged: onMetricsFilterChanged),
-              const SizedBox(width: 4),
               _MetricsFilterChip(
                   label: 'Hard moves',
                   value: LineMetricsFilter.hardMoves,
                   metricsFilter: metricsFilter,
                   onChanged: onMetricsFilterChanged),
-              const SizedBox(width: 4),
               _MetricsFilterChip(
                   label: 'Trappy',
                   value: LineMetricsFilter.trappy,
                   metricsFilter: metricsFilter,
                   onChanged: onMetricsFilterChanged),
-              const SizedBox(width: 4),
               _MetricsFilterChip(
                   label: 'Low coherence',
                   value: LineMetricsFilter.lowCoherence,

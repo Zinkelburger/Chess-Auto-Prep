@@ -5,6 +5,9 @@
 /// line roll-in as each candidate finishes each depth.
 library;
 
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../models/build_tree_node.dart';
@@ -52,6 +55,13 @@ class _MoveLineState {
 class OnTheFlyExpectimaxService extends ChangeNotifier {
   final TreeBuildService _buildService = TreeBuildService();
   final EngineSettings _settings = EngineSettings.instance;
+
+  /// Depth-1 pass runs at a reduced eval depth so first lines appear fast.
+  static const int _firstPassMaxEvalDepth = 10;
+
+  /// Watchdog per depth pass — surfaces an error instead of spinning forever
+  /// if the pool or an engine worker stalls.
+  static const Duration _depthPassTimeout = Duration(seconds: 60);
 
   final Map<String, _CachedSubtree> _cache = {};
   final Map<String, _MoveLineState> _moveLines = {};
@@ -200,6 +210,11 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
         maxPly: depth,
         dbSettings: dbSettings,
         buildMode: buildMode,
+        // First pass at reduced depth so lines show up within seconds;
+        // later passes refine at the configured depth.
+        evalDepth: depth == 1
+            ? math.min(_settings.expectimaxEvalDepth, _firstPassMaxEvalDepth)
+            : _settings.expectimaxEvalDepth,
       );
       final activeConfig = config;
 
@@ -216,7 +231,8 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       }
 
       try {
-        tree = await _buildService.build(
+        tree = await _buildService
+            .build(
           config: activeConfig,
           existingTree: tree,
           onProgress: (progress) {
@@ -243,7 +259,24 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
           },
           isCancelled: () =>
               _runGeneration != generation || _state != OnTheFlyState.computing,
-        );
+        )
+            // Watchdog: a stalled pool/worker must surface as an error, not
+            // an eternal spinner.  The orphaned build unwinds via isCancelled
+            // once state leaves `computing` below.
+            .timeout(_depthPassTimeout);
+      } on TimeoutException {
+        if (_runGeneration == generation && _state == OnTheFlyState.computing) {
+          debugPrint('[OnTheFlyExpectimax] Build TIMED OUT at depth $depth '
+              'after ${_depthPassTimeout.inSeconds}s');
+          _lastError = 'Timed out at depth $depth after '
+              '${_depthPassTimeout.inSeconds}s — engine may be busy or stuck. '
+              'Toggle expectimax to retry.';
+          _state =
+              _moveLines.isEmpty ? OnTheFlyState.idle : OnTheFlyState.ready;
+          _computingDepth = null;
+          notifyListeners();
+        }
+        return;
       } catch (e, st) {
         if (_runGeneration == generation && _state == OnTheFlyState.computing) {
           debugPrint(
@@ -446,6 +479,7 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
     required int maxPly,
     required EvalDatabaseSettings dbSettings,
     required BuildMode buildMode,
+    required int evalDepth,
   }) {
     return TreeBuildConfig(
       startFen: fen,
@@ -453,10 +487,14 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       maxPly: maxPly,
       maxNodes: 800 * maxPly,
       buildMode: buildMode,
-      engineThreads: _settings.workers.clamp(1, 4),
+      // 1 UCI thread per worker: parallelism comes from the pool's multiple
+      // workers.  Anything >1 makes prepareForTreeBuild reconfigure workers
+      // the interactive engine pane may be using (and leaves the whole pool
+      // oversubscribed afterwards).
+      engineThreads: 1,
       minProbability: _settings.expectimaxMinProb,
       maxEvalLossCp: _settings.expectimaxMaxEvalLoss,
-      evalDepth: _settings.expectimaxEvalDepth,
+      evalDepth: evalDepth,
       maiaElo: _settings.maiaElo,
       enableCdbDirect: dbSettings.enableCdbDirect,
       cdbDirectPath: dbSettings.cdbDirectPath,

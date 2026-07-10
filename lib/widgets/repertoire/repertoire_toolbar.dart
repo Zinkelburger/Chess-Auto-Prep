@@ -270,18 +270,13 @@ class _RepAction {
     this.id,
     this.label,
     this.icon,
-    this.onRun, {
-    this.shortcut,
-  });
+    this.onRun,
+  );
 
   final String id;
   final String label;
   final IconData icon;
   final VoidCallback onRun;
-
-  /// Keyboard shortcut hint shown in the menu (the handler lives in
-  /// [RepertoireShortcuts]); null when the action has no shortcut.
-  final String? shortcut;
 }
 
 /// Pick-then-run control for repertoire actions (generate, add lines, audit).
@@ -316,22 +311,19 @@ class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
   List<_RepAction> get _actions => [
         if (widget.onGenerate != null)
           _RepAction('generate', 'Generate', Icons.auto_awesome,
-              widget.onGenerate!,
-              shortcut: 'G'),
+              widget.onGenerate!),
         if (widget.onBuildFromGames != null)
           _RepAction('from_games', 'From my games',
               Icons.download_for_offline_outlined, widget.onBuildFromGames!),
         if (widget.onImportPgnFile != null)
           _RepAction('import_pgn_file', 'Import PGN file', Icons.file_open,
-              widget.onImportPgnFile!,
-              shortcut: 'I'),
+              widget.onImportPgnFile!),
         if (widget.onImportPgnPaste != null)
           _RepAction('import_pgn_paste', 'Paste PGN', Icons.paste,
               widget.onImportPgnPaste!),
         if (widget.onOpenAudit != null)
           _RepAction('audit', 'Audit for gaps', Icons.policy_outlined,
-              widget.onOpenAudit!,
-              shortcut: 'A'),
+              widget.onOpenAudit!),
       ];
 
   @override
@@ -376,13 +368,6 @@ class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
                   Icon(a.icon, size: 20),
                   const SizedBox(width: 10),
                   Text(a.label),
-                  if (a.shortcut != null) ...[
-                    const SizedBox(width: 12),
-                    Text(
-                      a.shortcut!,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
                 ],
               ),
             ),

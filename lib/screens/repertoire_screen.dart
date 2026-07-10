@@ -28,6 +28,7 @@ import 'package:file_picker/file_picker.dart';
 import '../services/storage/storage_factory.dart';
 import '../widgets/pgn_import_dialog.dart';
 import '../widgets/repertoire_generation_tab.dart';
+import '../widgets/generation/generation_lock_overlay.dart';
 import '../widgets/layout/board_zone.dart';
 import '../widgets/layout/bottom_pane.dart';
 import '../widgets/layout/repertoire_status_bar.dart';
@@ -46,10 +47,11 @@ import '../features/audit/services/audit_board_annotations.dart';
 import '../features/audit/widgets/audit_findings_panel.dart';
 import '../features/audit/widgets/ephemeral_finding_bar.dart';
 import '../features/traps/widgets/trap_navigation_buttons.dart';
-import '../features/traps/widgets/trap_walkthrough.dart';
+import '../features/traps/widgets/trap_tour_bar.dart';
 import '../features/traps/widgets/traps_tab_content.dart';
 import '../widgets/engine/floating_board_preview.dart';
 import '../features/traps/services/trap_index_service.dart';
+import '../features/traps/services/trap_line_builder.dart';
 import 'package:chess_auto_prep/features/traps/models/trap_line_info.dart';
 import '../services/generation/trap_extractor.dart';
 import '../services/games_library/games_library_service.dart';
@@ -100,16 +102,20 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   List<TrapLineInfo> _traps = [];
   TrapIndexService? _trapIndex;
-  bool _trapWalkthroughVisible = false;
-  TrapLineInfo? _trapWalkthroughInitialTrap;
-  int _trapWalkthroughSession = 0;
+  bool _trapTourVisible = false;
+  TrapLineInfo? _trapTourInitialTrap;
+  final GlobalKey<TrapTourBarState> _trapTourKey =
+      GlobalKey<TrapTourBarState>();
 
   final CoverageController _coverageController = CoverageController();
 
   late final TabController _toolsTabController;
   bool _showTrapsInLinesTab = false;
 
-  // ── Build-from-games draft session (inline in the Lines/Draft tab) ──
+  /// Lines pane docked right of the PGN/Tree tabs; collapses to a thin rail.
+  bool _linesPaneCollapsed = false;
+
+  // ── Build-from-games draft session (inline in the Lines/Draft pane) ──
   final GamesDraftController _draftController = GamesDraftController();
 
   bool get _isDraftActive => _draftController.isActive;
@@ -128,7 +134,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   void initState() {
     super.initState();
 
-    _toolsTabController = TabController(length: 3, vsync: this);
+    _toolsTabController = TabController(length: 2, vsync: this);
     _controller = RepertoireController();
     _controller.addListener(_onRepertoireChanged);
     _generationController.addListener(_onGenerationChanged);
@@ -150,6 +156,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   void _updateCompactLayout(bool isCompact) {
     if (_isCompactLayout == isCompact) return;
     _isCompactLayout = isCompact;
+    // Narrow windows can't afford a permanent side pane; wide ones can.
+    _linesPaneCollapsed = isCompact;
     setState(() {});
   }
 
@@ -297,6 +305,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           _generationController.clearTree();
           _coverageController.clear();
           _emptyStateDismissed = false;
+          // A tour from the previous repertoire's traps makes no sense here.
+          _trapTourVisible = false;
+          _trapTourInitialTrap = null;
           EngineSettings.instance.probabilityStartMoves = _controller.rootMoves;
           _loadTraps(currentId);
           newRepertoireId = currentId;
@@ -521,16 +532,15 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           focusNode: _focusNode,
           onPasteFenFromClipboard: _pastePositionFromClipboard,
           onUndo: _performUndo,
-          onOpenGeneration: _openGenerationDialog,
-          onOpenAudit: _openAuditDialog,
-          onImportPgnFile: _importPgnFromFile,
           onToggleExpectimax: InlineExpectimaxBar.toggle,
           onToggleLinesTab: () {
-            _toolsTabController.animateTo(
-              _toolsTabController.index == 1 ? 0 : 1,
-            );
+            setState(() => _linesPaneCollapsed = !_linesPaneCollapsed);
           },
           onCollapseBottomPane: () {
+            if (_trapTourVisible) {
+              _closeTrapTour();
+              return true;
+            }
             final pane = _bottomPaneKey.currentState;
             if (pane != null && !pane.isCollapsed) {
               _closeBottomPane();
@@ -539,18 +549,14 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             return false;
           },
           onFlip: () => setState(() => _boardFlipped = !_boardFlipped),
-          onToggleTrapWalkthrough: () {
+          onToggleTrapTour: () {
             final trapIndex = _trapIndex;
-            if (trapIndex == null ||
-                trapIndex.trapAtFen(_controller.fen) == null) {
-              return false;
-            }
-            if (_trapWalkthroughVisible) {
-              _closeTrapWalkthrough();
+            if (trapIndex == null || _traps.isEmpty) return false;
+            if (_trapTourVisible) {
+              _closeTrapTour();
             } else {
-              _openTrapWalkthrough(
-                startTrap: trapIndex.trapAtFen(_controller.fen),
-              );
+              // Start at the trap under the cursor when there is one.
+              _openTrapTour(startTrap: trapIndex.trapAtFen(_controller.fen));
             }
             return true;
           },
@@ -566,6 +572,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             controller: _controller,
           ),
           onNextFinding: () {
+            // While the trap tour is open, N/P belong to the tour.
+            if (_trapTourVisible) {
+              _trapTourKey.currentState?.next();
+              return true;
+            }
             final pane = _bottomPaneKey.currentState;
             if (pane == null ||
                 pane.isCollapsed ||
@@ -575,6 +586,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             return _findingsPanelKey.currentState?.selectNext() ?? false;
           },
           onPrevFinding: () {
+            if (_trapTourVisible) {
+              _trapTourKey.currentState?.previous();
+              return true;
+            }
             final pane = _bottomPaneKey.currentState;
             if (pane == null ||
                 pane.isCollapsed ||
@@ -594,30 +609,57 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           },
           child: Column(
             children: [
+              // Paused builds free the tab and the engine; a slim banner
+              // keeps resume/cancel in reach.
+              if (_generationController.isGenerating &&
+                  _generationController.isPaused)
+                GenerationPausedBanner(
+                  onResume: _generationController.resumeBuild,
+                  onCancel: _generationController.cancelBuild,
+                ),
               Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isCompact = constraints.maxWidth < kCompactBreakpoint;
-                    if (isCompact != _isCompactLayout) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) _updateCompactLayout(isCompact);
-                      });
-                    }
-                    if (isCompact) {
-                      return _buildCompactLayout();
-                    }
-                    return _buildWideLayout();
-                  },
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isCompact =
+                            constraints.maxWidth < kCompactBreakpoint;
+                        if (isCompact != _isCompactLayout) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) _updateCompactLayout(isCompact);
+                          });
+                        }
+                        if (isCompact) {
+                          return _buildCompactLayout();
+                        }
+                        return _buildWideLayout();
+                      },
+                    ),
+                    // Lock the whole tab (board, PGN editor, engine panes)
+                    // while a build actively runs; the bottom pane and status
+                    // bar stay reachable below for job progress.
+                    if (_generationController.isGenerating &&
+                        !_generationController.isPaused)
+                      GenerationLockOverlay(
+                        statusText: _generationController.progressStatus,
+                        canPause: _generationController.canPause,
+                        isCancelling: _generationController.isCancelling,
+                        onPause: _generationController.pauseBuild,
+                        onCancel: _generationController.cancelBuild,
+                      ),
+                  ],
                 ),
               ),
-              if (_trapWalkthroughVisible && _trapIndex != null)
-                TrapWalkthrough(
-                  key: ValueKey(_trapWalkthroughSession),
+              if (_trapTourVisible && _trapIndex != null)
+                TrapTourBar(
+                  key: _trapTourKey,
                   trapIndex: _trapIndex!,
-                  controller: _controller,
-                  boardPreview: _boardPreview,
-                  initialTrap: _trapWalkthroughInitialTrap,
-                  onClose: _closeTrapWalkthrough,
+                  initialTrap: _trapTourInitialTrap,
+                  onClose: _closeTrapTour,
+                  // Each stop loads the annotated trap line into the PGN
+                  // tab, where the moves are clickable.
+                  onShowTrap: _showTrapLine,
                 ),
               _buildBottomPane(),
               RepertoireStatusBar(
@@ -677,12 +719,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             fen: _ephemeralFen ?? _controller.fen,
             positionFromFen: _positionFromFen,
             boardFlipped: _boardFlipped,
-            isGenerating: _generationController.isGenerating,
-            isGenerationPaused: _generationController.isPaused,
             onMove: _handleMove,
-            onPause: _generationController.pauseBuild,
-            onResume: _generationController.resumeBuild,
-            onCancel: _generationController.cancelBuild,
             annotations: buildAuditBoardAnnotations(
               result: _auditController.result,
               currentFen: _controller.fen,
@@ -715,7 +752,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       !_generationController.isGenerating &&
       !_isDraftActive;
 
-  /// Unified right pane: tabs + nav. Engine bars live inside PGN tab only.
+  /// Unified right pane: PGN/Tree tabs + nav, with the Lines pane docked on
+  /// the right (collapsible to a thin rail via »). Engine bars live inside
+  /// the PGN tab only.
   Widget _buildToolsColumn() {
     if (_showEmptyState) {
       return RepertoireEmptyState(
@@ -726,28 +765,117 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onDismiss: () => setState(() => _emptyStateDismissed = true),
       );
     }
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildToolsTabBar(),
         Expanded(
-          child: TabBarView(
-            controller: _toolsTabController,
-            physics: const NeverScrollableScrollPhysics(),
+          flex: 3,
+          child: Column(
             children: [
-              _buildPgnTabWithEngines(),
-              _buildSecondTabContent(),
-              _buildTreeTabContent(),
+              _buildToolsTabBar(),
+              Expanded(
+                child: TabBarView(
+                  controller: _toolsTabController,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildPgnTabWithEngines(),
+                    _buildTreeTabContent(),
+                  ],
+                ),
+              ),
+              _buildNavControls(),
             ],
           ),
         ),
-        _buildNavControls(),
+        VerticalDivider(
+            width: 1, thickness: 1, color: Theme.of(context).dividerColor),
+        if (_linesPaneCollapsed)
+          _buildCollapsedLinesRail()
+        else
+          Expanded(flex: 2, child: _buildLinesPane()),
       ],
     );
   }
 
-  /// Second tools tab: normally the Lines list, but it becomes the Draft
+  /// Thin clickable rail shown when the Lines pane is collapsed.
+  Widget _buildCollapsedLinesRail() {
+    final label = _isDraftActive
+        ? 'Draft'
+        : 'Lines (${_controller.repertoireLines.length})';
+    return InkWell(
+      onTap: () => setState(() => _linesPaneCollapsed = false),
+      child: SizedBox(
+        width: 26,
+        child: Column(
+          children: [
+            const SizedBox(height: 6),
+            Tooltip(
+              message: 'Expand lines pane',
+              child: Icon(Icons.keyboard_double_arrow_left,
+                  size: 16, color: Colors.grey[500]),
+            ),
+            const SizedBox(height: 10),
+            RotatedBox(
+              quarterTurns: 1,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color:
+                      _isDraftActive ? AppColors.warning : Colors.grey[500],
+                  fontWeight: _isDraftActive ? FontWeight.w600 : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinesPane() {
+    return Column(
+      children: [
+        SizedBox(
+          height: 30,
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.keyboard_double_arrow_right, size: 16),
+                padding: EdgeInsets.zero,
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Collapse lines pane',
+                onPressed: () => setState(() => _linesPaneCollapsed = true),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                _isDraftActive ? Icons.download_done : Icons.list_alt,
+                size: 14,
+                color: _isDraftActive ? AppColors.warning : null,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _isDraftActive
+                    ? 'Draft'
+                    : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _isDraftActive ? AppColors.warning : null,
+                  fontWeight: _isDraftActive ? FontWeight.w600 : null,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        Expanded(child: _buildLinesPaneContent()),
+      ],
+    );
+  }
+
+  /// Lines pane body: normally the Lines list, but it becomes the Draft
   /// review surface while a build-from-games session is active.
-  Widget _buildSecondTabContent() {
+  Widget _buildLinesPaneContent() {
     if (_draftController.isBuilding) {
       return Center(
         child: Column(
@@ -846,8 +974,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   Widget _buildToolsTabBar() {
     return TabBar(
       controller: _toolsTabController,
-      tabs: [
-        const Tab(
+      tabs: const [
+        Tab(
           height: 30,
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -859,30 +987,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           ),
         ),
         Tab(
-          height: 30,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _isDraftActive ? Icons.download_done : Icons.list_alt,
-                size: 14,
-                color: _isDraftActive ? AppColors.warning : null,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _isDraftActive
-                    ? 'Draft'
-                    : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _isDraftActive ? AppColors.warning : null,
-                  fontWeight: _isDraftActive ? FontWeight.w600 : null,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const Tab(
           height: 30,
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1150,20 +1254,19 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return Container(width: 1, color: Colors.grey[700]);
   }
 
-  void _openTrapWalkthrough({TrapLineInfo? startTrap}) {
+  void _openTrapTour({TrapLineInfo? startTrap}) {
     if (_trapIndex == null || _traps.isEmpty) return;
     setState(() {
-      _trapWalkthroughVisible = true;
-      _trapWalkthroughInitialTrap = startTrap;
-      _trapWalkthroughSession++;
+      _trapTourVisible = true;
+      _trapTourInitialTrap = startTrap;
     });
   }
 
-  void _closeTrapWalkthrough() {
-    if (!_trapWalkthroughVisible) return;
+  void _closeTrapTour() {
+    if (!_trapTourVisible) return;
     setState(() {
-      _trapWalkthroughVisible = false;
-      _trapWalkthroughInitialTrap = null;
+      _trapTourVisible = false;
+      _trapTourInitialTrap = null;
     });
   }
 
@@ -1183,6 +1286,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return TrapNavigationButtons(
       trapIndex: trapIndex,
       controller: _controller,
+      onStartTour: _openTrapTour,
+      tourActive: _trapTourVisible,
     );
   }
 
@@ -1205,7 +1310,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       },
       onImportPgnFile: _importPgnFromFile,
       onImportPgnPaste: _importPgnFromPaste,
-      onViewInLines: () => _toolsTabController.animateTo(1),
+      onViewInLines: () => setState(() => _linesPaneCollapsed = false),
       onReload: _reloadRepertoire,
       generatedTree: _generationController.generatedTree,
       treeConfig: _generationController.generatedTreeConfig,
@@ -1217,6 +1322,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       isGenerationPaused: _generationController.isPaused,
       embedAnalysisDock: false,
       trapIndex: _trapIndex,
+      ephemeralTitle: _controller.annotatedLineLabel,
     );
   }
 
@@ -1292,13 +1398,42 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           _controller.repertoireLines.map((l) => l.moves).toList(),
       boardPreview: _boardPreview,
       hasRepertoire: _repertoireFilePath != null,
-      onTrapSelected: (trap) {
-        _controller.loadMoveSequence(trap.movesSan);
-      },
-      onStartTour: _openTrapWalkthrough,
+      onTrapSelected: _showTrapLine,
+      onTrapMoveSelected: (trap, ply) => _showTrapLine(trap, ply: ply),
+      onStartTour: _openTrapTour,
       onDiscoverTraps: _discoverTrapsFromRepertoire,
       onOpenGeneration: _openGenerationDialog,
     );
+  }
+
+  /// Load a trap as an annotated, explorable line: the path to the trap as
+  /// mainline, opponent replies (with play rates and our punish) as
+  /// continuations, cursor at the trap position — or at [ply] when given.
+  /// Always lands in the PGN tab so the line is clickable right away.
+  void _showTrapLine(TrapLineInfo trap, {int? ply}) {
+    final built = TrapLineBuilder.build(trap);
+    if (built == null) {
+      // Stale/corrupt trap file: fall back to the bare sequence.
+      _controller.loadMoveSequence(trap.movesSan);
+      _toolsTabController.animateTo(0);
+      return;
+    }
+    _controller.loadAnnotatedTree(
+      built.tree,
+      cursor: built.cursor,
+      label: _trapTitle(trap),
+    );
+    if (ply != null) _controller.jumpToMoveIndex(ply);
+    _toolsTabController.animateTo(0);
+  }
+
+  /// "Trap #N · Opening" — N is the trap's rank in tour order (trick
+  /// surplus), so the browser, tour bar, and PGN title all agree.
+  String _trapTitle(TrapLineInfo trap) {
+    final idx = TrapTourBar.indexOfTrap(TrapTourBar.sortedTraps(_traps), trap);
+    final number = idx >= 0 ? 'Trap #${idx + 1}' : 'Trap';
+    final opening = trap.openingName;
+    return opening != null ? '$number · $opening' : number;
   }
 
   void _onGenerationChanged() {
@@ -1324,6 +1459,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     final justFinished = !ctrl.isGenerating && _wasGenerating;
     _wasGenerating = ctrl.isGenerating;
 
+    if (justFinished && ctrl.lastError != null) {
+      showAppSnackBar(context, ctrl.lastError!, isError: true);
+    }
+
     if (!ctrl.isGenerating) {
       // Prefer the in-memory bundle's trap index (consistent with the tree we
       // just built); fall back to disk for previously-saved repertoires.
@@ -1335,8 +1474,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         final fp = _controller.currentRepertoire?.filePath;
         if (fp != null) _loadTraps(fp);
       }
-      if (justFinished && _toolsTabController.index != 1) {
-        _toolsTabController.animateTo(1);
+      if (justFinished) {
+        _linesPaneCollapsed = false;
       }
     }
 
@@ -1374,8 +1513,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       appState.setLichessUsername(config.username);
     }
 
-    // Switch to the Lines/Draft tab and show progress inline.
-    _toolsTabController.animateTo(1);
+    // Reveal the Lines/Draft pane and show progress inline.
+    setState(() => _linesPaneCollapsed = false);
     final error = await _draftController.build(
       config: config,
       repertoire: _controller.tree,
@@ -1388,7 +1527,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   void _onDraftChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    // A draft opening from any entry point should always be visible.
+    if (_draftController.isActive) _linesPaneCollapsed = false;
+    setState(() {});
   }
 
   void _selectLine(RepertoireLine line) {
@@ -1522,6 +1664,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       lines: _controller.repertoireLines,
       playAsWhite: _controller.isRepertoireWhite,
     );
+    // Remove first: _runCoherence fires on every generation notify, and
+    // duplicate registrations would stack up between coherence updates.
+    cs.removeListener(_onCoherenceUpdated);
     cs.addListener(_onCoherenceUpdated);
   }
 

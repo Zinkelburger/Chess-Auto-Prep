@@ -23,14 +23,16 @@ class MaiaService {
 
   OrtSession? _session;
   bool _isInitialized = false;
-  bool _isLoading = false;
+  Future<void>? _initFuture;
 
   MaiaService._internal();
 
-  Future<void> initialize() async {
-    if (_isInitialized || _isLoading) return;
-    _isLoading = true;
+  /// Idempotent: concurrent callers share one load, and a failed load is
+  /// latched (not retried per evaluate) — model assets don't appear at
+  /// runtime, and re-loading the ONNX buffer on every call is expensive.
+  Future<void> initialize() => _initFuture ??= _doInitialize();
 
+  Future<void> _doInitialize() async {
     try {
       await MaiaTensor.init();
 
@@ -46,8 +48,6 @@ class MaiaService {
       log.i('Maia-3 model initialized successfully');
     } catch (e) {
       log.e('Failed to initialize Maia-3: $e');
-    } finally {
-      _isLoading = false;
     }
   }
 
@@ -204,5 +204,6 @@ class MaiaService {
   void dispose() {
     _session?.release();
     _isInitialized = false;
+    _initFuture = null;
   }
 }

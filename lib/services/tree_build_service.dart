@@ -6,12 +6,19 @@
 /// optional Maia Dirichlet prior), eval-window pruning, and transposition
 /// detection — matches C tree_builder.
 ///
-/// Frontier discipline (config.bestFirst):
-///   - Best-first (default): pop the frontier node with the highest search
-///     priority — reach probability, discounted at non-incumbent our-move
-///     alternatives.  Anytime: at any node budget the tree concentrates on
-///     the likeliest opponent lines, which also get searched deepest.
-///   - FIFO: classic level-order BFS (legacy behavior).
+/// Search algorithm (config.searchAlgorithm):
+///   - Fast Expectimax (default): best-first frontier — pop the node with
+///     the highest search priority (reach probability, discounted at
+///     non-incumbent our-move alternatives) — plus priority-scaled pruning:
+///     alternatives below the priority floor are skipped, MultiPV and the
+///     eval-loss window shrink in cold subtrees, opponent fan-out is capped
+///     harder, and our-move alternatives more than fastAltGapCp behind the
+///     incumbent stay evaluated leaves instead of growing subtrees.
+///     Anytime: at any node budget the tree concentrates on the
+///     likeliest opponent lines, which also get searched deepest.  The
+///     coverage floor is always honored (no silent holes).
+///   - Pure Expectimax: classic level-order BFS, full configured search at
+///     every node above the probability floor.
 ///
 /// Phase 2 (separate calculators): ease, expectimax, and repertoire
 /// selection run on the completed tree.  Search priorities never feed
@@ -19,8 +26,7 @@
 library;
 
 import 'dart:async';
-
-import 'package:flutter/foundation.dart';
+import 'dart:convert';
 
 import '../models/build_tree_node.dart';
 import '../models/explorer_response.dart';
@@ -35,11 +41,24 @@ import 'generation/generation_config.dart';
 import 'generation/opponent_prior.dart';
 import 'generation/setup_bias.dart';
 import 'generation/pgn_freq_map.dart';
+import 'generation/run_debug_dump.dart';
 import 'generation/tree_build_progress.dart';
+import 'jobs/generation_phase.dart';
 import 'generation/tree_eval_resolver.dart';
 import 'generation/tree_prune.dart';
 import 'maia_factory.dart';
 import 'maia_service.dart';
+
+/// Thrown when a build is cancelled before it can produce a usable tree
+/// (e.g. during PGN parsing).  Callers treat this as a normal cancellation,
+/// not a failure.
+class BuildCancelledException implements Exception {
+  final String message;
+  const BuildCancelledException(this.message);
+
+  @override
+  String toString() => message;
+}
 
 class TreeBuildService {
   final StockfishPool _pool = StockfishPool.instance;
@@ -55,10 +74,17 @@ class TreeBuildService {
   Completer<void>? _pauseCompleter;
   int _nextNodeId = 1;
 
-  late BuildStats _stats;
+  BuildStats _stats = BuildStats();
   Stopwatch _buildSw = Stopwatch();
 
   final TreeBuildProgressTracker _progress = TreeBuildProgressTracker();
+
+  /// Full log of the most recent run, kept for the end-of-run debug dump.
+  final RunDebugLog runLog = RunDebugLog();
+
+  /// Eval-too-low lines removed by the post-build prune of the most recent
+  /// [build] run (they no longer exist in the returned tree).
+  List<PrunedLine> lastPrunedTooLow = const [];
 
   BuildStats get buildStats => _stats;
   ChessDbApiProvider? get chessDbApiProvider =>
@@ -75,41 +101,68 @@ class TreeBuildService {
 
   bool get isPaused => _isPaused;
 
+  /// Pause is honored at every async loop in the build (BFS, eval
+  /// enrichment, coverage sweep) via [waitIfPaused] — not only Phase 1.
   void pauseBuild() {
-    if (!_isBuilding || _isPaused) return;
+    if (_isPaused) return;
     _isPaused = true;
     _pauseCompleter = Completer<void>();
-    _buildSw.stop();
+    if (_buildSw.isRunning) _buildSw.stop();
   }
 
   void resumeBuild() {
     if (!_isPaused) return;
     _isPaused = false;
-    _buildSw.start();
+    if (_isBuilding) _buildSw.start();
     _pauseCompleter?.complete();
     _pauseCompleter = null;
   }
 
+  /// Blocks while the build is paused.  Loops that can yield safely call
+  /// this at the top of each iteration so pause takes effect promptly.
+  Future<void> waitIfPaused() async {
+    while (_isPaused && _pauseCompleter != null) {
+      await _pauseCompleter!.future;
+    }
+  }
+
   void _log(String msg) {
-    if (kDebugMode) debugPrint('[TreeBuild] $msg');
+    runLog.add('[TreeBuild] $msg');
   }
 
   // ── Public API ─────────────────────────────────────────────────────────
 
+  /// Phase 1 build.  [isCancelled] is the hard-cancel signal (the tree stays
+  /// resumable, downstream phases are skipped).  [finishNow] stops BFS
+  /// expansion but still runs the coverage sweep and post-build prune, so the
+  /// caller can proceed to selection on a hole-free partial tree.
   Future<BuildTree> build({
     required TreeBuildConfig config,
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
+    bool Function()? finishNow,
     BuildTree? existingTree,
   }) async {
+    if (_isBuilding) {
+      throw StateError('A tree build is already running');
+    }
+    finishNow ??= () => false;
     _stats = BuildStats();
     _evalResolver.stats = _stats;
     _buildSw = Stopwatch()..start();
-    _progress.reset(buildStartTotalNodes: 0);
+    _progress.reset(
+      buildStartTotalNodes: 0,
+      bestFirst: config.bestFirst,
+      minProbability: config.minProbability,
+    );
+    runLog.clear();
+    lastPrunedTooLow = const [];
 
     var cfg = config;
     _isPaused = false;
     _pauseCompleter = null;
+    _log('Build start: resume=${existingTree != null}, '
+        'config=${jsonEncode(cfg.toJson())}');
 
     await Future.wait([
       if (cfg.usesStockfish &&
@@ -180,7 +233,11 @@ class TreeBuildService {
       }
     }
 
-    _progress.reset(buildStartTotalNodes: tree.totalNodes);
+    _progress.reset(
+      buildStartTotalNodes: tree.totalNodes,
+      bestFirst: cfg.bestFirst,
+      minProbability: cfg.minProbability,
+    );
 
     final fenMap = FenMap();
 
@@ -190,11 +247,14 @@ class TreeBuildService {
         config: cfg,
         fenMap: fenMap,
         isCancelled: isCancelled,
+        finishNow: finishNow,
         onProgress: onProgress,
       );
       // Skipped on hard cancel (_isBuilding false): the tree stays resumable
       // and the sweep would only throw away resumable frontier leaves.
-      if (_isBuilding) {
+      // Finish-now DOES sweep — the caller proceeds to selection, so the
+      // partial tree must carry the no-silent-holes guarantee.
+      if (_isBuilding && !isCancelled()) {
         await _coverageSweep(
           tree: tree,
           config: cfg,
@@ -207,18 +267,23 @@ class TreeBuildService {
       await _evalResolver.teardownProviders();
     }
 
-    final pruned = pruneEvalTooLow(tree);
+    final prunedLines = <PrunedLine>[];
+    final pruned = pruneEvalTooLow(tree, removedLines: prunedLines);
+    lastPrunedTooLow = prunedLines;
     if (pruned > 0) {
-      _log('Pruned $pruned eval-too-low nodes');
+      _log('Pruned $pruned eval-too-low nodes '
+          '(${prunedLines.length} subtree roots)');
     }
 
-    tree.buildComplete = _isBuilding;
+    // Complete = frontier exhausted (neither cancelled nor finished early).
+    tree.buildComplete = _isBuilding && !finishNow();
     _isBuilding = false;
     _buildSw.stop();
 
     _log('Build complete: ${tree.totalNodes} nodes, '
         'ply ${tree.maxPlyReached}, '
         '${_buildSw.elapsedMilliseconds}ms');
+    _log('Stats: ${jsonEncode(_stats.toJson())}');
 
     return tree;
   }
@@ -237,26 +302,43 @@ class TreeBuildService {
   /// Build a tree by parsing PGN files into a frequency map, then BFS-
   /// expanding from the root using move frequencies.  Matches C
   /// `tree_build_from_freqmap` + `tree_enrich_evals`.
+  ///
+  /// [finishNow] stops the BFS expansion early but does NOT skip eval
+  /// enrichment or the coverage sweep — a finished-early tree still gets
+  /// evals so downstream selection has something to work with.  Throws
+  /// [BuildCancelledException] when hard-cancelled during PGN parsing.
   Future<BuildTree> buildFromPgnFreqMap({
     required TreeBuildConfig config,
     required bool Function() isCancelled,
     required void Function(BuildProgress) onProgress,
-    void Function(String status)? onStatusChanged,
+    bool Function()? finishNow,
+    void Function(String status, GenerationPhase phase)? onStatusChanged,
     String? startMoves,
   }) async {
+    if (_isBuilding) {
+      throw StateError('A tree build is already running');
+    }
+    finishNow ??= () => false;
     _stats = BuildStats();
     _evalResolver.stats = _stats;
     _buildSw = Stopwatch()..start();
-    _progress.reset(buildStartTotalNodes: 0);
+    _progress.reset(
+      buildStartTotalNodes: 0,
+      bestFirst: config.bestFirst,
+      minProbability: config.minProbability,
+    );
+    runLog.clear();
+    lastPrunedTooLow = const [];
     _isPaused = false;
     _pauseCompleter = null;
+    _log('DB Explorer start: config=${jsonEncode(config.toJson())}');
 
     if (config.pgnFilePaths.isEmpty) {
       throw StateError('DB Explorer requires at least one PGN file.');
     }
 
     // Phase 0: Parse PGN files into frequency map (isolate)
-    onStatusChanged?.call('Parsing PGN files...');
+    onStatusChanged?.call('Parsing PGN files...', GenerationPhase.parsingPgn);
     final hasStartMoves = startMoves != null && startMoves.isNotEmpty;
     final pgnCustomFen =
         !_fenKeysEqual(config.startFen, kDefaultStartFen);
@@ -279,7 +361,7 @@ class TreeBuildService {
 
     if (isCancelled()) {
       _buildSw.stop();
-      throw StateError('Cancelled during PGN parsing.');
+      throw const BuildCancelledException('Cancelled during PGN parsing.');
     }
 
     _log('Freq map: ${freqStats.totalGames} games, '
@@ -312,6 +394,7 @@ class TreeBuildService {
     onStatusChanged?.call(
       'Building tree from ${freqStats.totalGames} games, '
       '${freqStats.positions} positions...',
+      GenerationPhase.buildingTree,
     );
 
     _nextNodeId = 1;
@@ -344,14 +427,20 @@ class TreeBuildService {
     final queue = FrontierQueue(bestFirst: config.bestFirst);
     queue.add(root);
 
-    while (_isBuilding && !isCancelled() && queue.isNotEmpty) {
-      if (_isPaused && _pauseCompleter != null) {
-        await _pauseCompleter!.future;
-        if (!_isBuilding || isCancelled()) break;
-      }
+    while (_isBuilding &&
+        !isCancelled() &&
+        !finishNow() &&
+        queue.isNotEmpty) {
+      await waitIfPaused();
+      if (!_isBuilding || isCancelled()) break;
 
       final node = queue.removeFirst();
       if (node.explored) continue;
+      _progress.onDequeue(
+        node.ply,
+        priority: effectiveSearchPriority(node),
+        frontierSize: queue.length,
+      );
 
       await _processDbExplorerNode(
         tree: tree,
@@ -364,14 +453,18 @@ class TreeBuildService {
       );
     }
 
-    tree.buildComplete = _isBuilding && !isCancelled();
+    tree.buildComplete = _isBuilding && !isCancelled() && !finishNow();
 
     _log('DB Explorer tree: ${tree.totalNodes} nodes, '
         'ply ${tree.maxPlyReached}');
 
-    // Phase 1.5: Eval enrichment
+    // Phase 1.5: Eval enrichment.  Runs on finish-now too — a tree without
+    // evals is useless to the selection phases downstream.
     if (_isBuilding && !isCancelled()) {
-      onStatusChanged?.call('Enriching evals (${tree.totalNodes} nodes)...');
+      onStatusChanged?.call(
+        'Enriching evals (${tree.totalNodes} nodes)...',
+        GenerationPhase.enrichingEvals,
+      );
 
       await _evalResolver.evalCache.init();
       await _evalResolver.initProviders(config);
@@ -392,7 +485,7 @@ class TreeBuildService {
         );
         // After enrichment the engine is available, so holes where the
         // user's games ran out can get an engine answer.
-        if (_isBuilding) {
+        if (_isBuilding && !isCancelled()) {
           await _coverageSweep(
             tree: tree,
             config: config,
@@ -411,6 +504,7 @@ class TreeBuildService {
 
     _log('DB Explorer complete: ${tree.totalNodes} nodes, '
         '${_buildSw.elapsedMilliseconds}ms');
+    _log('Stats: ${jsonEncode(_stats.toJson())}');
 
     return tree;
   }
@@ -428,7 +522,13 @@ class TreeBuildService {
       node.explored = true;
       return;
     }
-    if (node.cumulativeProbability < config.minProbability) {
+    // Fast: our-move sidelines whose frequency-share priority fell below
+    // the floor are not worth expanding (priority ≤ cumulativeProbability).
+    final belowFloor = node.cumulativeProbability < config.minProbability ||
+        (config.bestFirst &&
+            node.searchPriority >= 0.0 &&
+            node.searchPriority < config.minProbability);
+    if (belowFloor) {
       node.explored = true;
       return;
     }
@@ -592,6 +692,7 @@ class TreeBuildService {
     // Phase 1: external eval sources (cache + cdbdirect + ChessDB)
     int enriched = 0;
     for (final node in noEval) {
+      await waitIfPaused();
       if (isCancelled()) return;
 
       final gotEval = await _evalResolver.ensureEval(
@@ -617,24 +718,23 @@ class TreeBuildService {
 
     _log('External eval enrichment: $enriched / ${noEval.length} resolved');
 
-    // Phase 2: Stockfish batch for remaining
+    // Phase 2: Stockfish batch for remaining — one eval per unique FEN,
+    // propagated to every node sharing that position.
     final stillNeed = noEval.where((n) => !n.hasEngineEval).toList();
     if (stillNeed.isNotEmpty && _pool.workerCount > 0) {
       _log('Stockfish enrichment: ${stillNeed.length} nodes remaining');
 
-      // Deduplicate by FEN
-      final uniqueFens = <String>{};
-      final toEval = <BuildTreeNode>[];
+      final byFen = <String, List<BuildTreeNode>>{};
       for (final node in stillNeed) {
-        if (uniqueFens.add(node.fen)) {
-          toEval.add(node);
-        }
+        (byFen[node.fen] ??= []).add(node);
       }
 
-      for (int i = 0; i < toEval.length; i++) {
+      int i = 0;
+      for (final group in byFen.values) {
+        await waitIfPaused();
         if (isCancelled()) return;
 
-        final node = toEval[i];
+        final node = group.first;
         await _evalResolver.ensureEval(
           node,
           config,
@@ -642,16 +742,13 @@ class TreeBuildService {
           pool: _pool,
         );
 
-        // Propagate eval to other nodes with the same FEN
         if (node.hasEngineEval) {
-          for (final other in stillNeed) {
-            if (!other.hasEngineEval && other.fen == node.fen) {
-              other.engineEvalCp = node.engineEvalCp;
-            }
+          for (final other in group.skip(1)) {
+            other.engineEvalCp = node.engineEvalCp;
           }
         }
 
-        if (i % _stockfishEvalProgressInterval == 0) {
+        if (i++ % _stockfishEvalProgressInterval == 0) {
           _progress.emitProgress(
             tree,
             node.ply,
@@ -710,6 +807,7 @@ class TreeBuildService {
     required TreeBuildConfig config,
     required FenMap fenMap,
     required bool Function() isCancelled,
+    required bool Function() finishNow,
     required void Function(BuildProgress) onProgress,
   }) async {
     final queue = FrontierQueue(bestFirst: config.bestFirst);
@@ -738,13 +836,18 @@ class TreeBuildService {
       queue.add(tree.root);
     }
 
-    while (_isBuilding && !isCancelled() && queue.isNotEmpty) {
-      if (_isPaused && _pauseCompleter != null) {
-        await _pauseCompleter!.future;
-        if (!_isBuilding || isCancelled()) return;
-      }
+    while (_isBuilding &&
+        !isCancelled() &&
+        !finishNow() &&
+        queue.isNotEmpty) {
+      await waitIfPaused();
+      if (!_isBuilding || isCancelled()) return;
       final node = queue.removeFirst();
-      _progress.onDequeue(node.ply);
+      _progress.onDequeue(
+        node.ply,
+        priority: effectiveSearchPriority(node),
+        frontierSize: queue.length,
+      );
       await _processBuildNode(
         tree: tree,
         node: node,
@@ -769,10 +872,8 @@ class TreeBuildService {
     if (!_isBuilding || isCancelled()) return;
 
     // Pause gate: if paused, wait until resumed or cancelled
-    if (_isPaused && _pauseCompleter != null) {
-      await _pauseCompleter!.future;
-      if (!_isBuilding || isCancelled()) return;
-    }
+    await waitIfPaused();
+    if (!_isBuilding || isCancelled()) return;
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
 
@@ -824,7 +925,6 @@ class TreeBuildService {
       onProgress,
       config.maxPly,
       buildSw: _buildSw,
-      fromDequeue: true,
     );
 
     // Resume: fully expanded in a prior session — enqueue children only.
@@ -968,7 +1068,7 @@ class TreeBuildService {
         config.maiaElo,
       );
     } catch (e) {
-      _log('Maia eval failed: $e');
+      _log('Maia eval failed @ ${node.fen}: $e');
       return;
     }
     _stats.maiaEvals++;
@@ -978,7 +1078,9 @@ class TreeBuildService {
     final sortedMoves = maiaResult.policy.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    final maxCandidates = config.ourMultipv.clamp(1, 16);
+    // Fast: candidate count shrinks with reach priority, like MultiPV.
+    final maxCandidates =
+        config.effectiveMultipv(effectiveSearchPriority(node)).clamp(1, 16);
     final bestCpWhite = node.hasEngineEval
         ? (node.isWhiteToMove ? node.engineEvalCp! : -node.engineEvalCp!)
         : null;
@@ -1040,13 +1142,15 @@ class TreeBuildService {
       onProgress: onProgress,
     );
 
-    _assignOurMovePriorities(node, config);
+    final incumbent = _assignOurMovePriorities(node, config);
 
     // Coverage-only: the answer is the deliverable — children stay
     // unexplored leaves so a future resume with more budget can deepen them.
     if (coverageOnly) return;
 
-    for (final child in List.of(node.children)) {
+    // Fast: only the incumbent and gap-qualifying alternatives grow
+    // subtrees; the rest stay evaluated leaves for selection.
+    for (final child in _ourChildrenToExpand(node, incumbent, config)) {
       if (!_isBuilding || isCancelled()) break;
       queue.add(child);
     }
@@ -1133,8 +1237,12 @@ class TreeBuildService {
   /// Best-first priorities at an our-move node: the incumbent (best eval for
   /// us at expansion time) inherits the parent's priority; alternatives are
   /// discounted so they stay shallow unless the mainline budget runs out.
-  void _assignOurMovePriorities(BuildTreeNode node, TreeBuildConfig config) {
-    if (node.children.isEmpty) return;
+  /// Returns the incumbent (null when the node has no children).
+  BuildTreeNode? _assignOurMovePriorities(
+    BuildTreeNode node,
+    TreeBuildConfig config,
+  ) {
+    if (node.children.isEmpty) return null;
     final basePri = effectiveSearchPriority(node);
 
     BuildTreeNode? incumbent;
@@ -1151,6 +1259,63 @@ class TreeBuildService {
           ? basePri
           : basePri * config.ourAltDiscount;
     }
+    return incumbent;
+  }
+
+  /// Fast alternative gating: which our-move children deserve a subtree.
+  ///
+  /// The incumbent always expands.  Alternatives expand only while within
+  /// [TreeBuildConfig.fastAltGapCp] of the incumbent's eval, best first, at
+  /// most [TreeBuildConfig.fastMaxExpandedAlts] of them — a move 30+cp
+  /// behind only wins the argmax if deep search flips the ordering by more
+  /// than the gap, which the verification pass would catch anyway.  Gated
+  /// children stay evaluated leaves: selection still sees them, and a
+  /// resume with more budget may deepen them.
+  ///
+  /// Everything expands under Pure (exhaustive by contract), under trappy
+  /// selection (worse-eval moves are the point and need searched subtrees),
+  /// and for preferred-setup candidates (the setup bias needs them alive).
+  List<BuildTreeNode> _ourChildrenToExpand(
+    BuildTreeNode node,
+    BuildTreeNode? incumbent,
+    TreeBuildConfig config,
+  ) {
+    final children = List.of(node.children);
+    if (config.searchAlgorithm == SearchAlgorithm.pure ||
+        config.selectionMode == SelectionMode.trappy ||
+        config.fastAltGapCp <= 0 ||
+        incumbent == null ||
+        !incumbent.hasEngineEval) {
+      return children;
+    }
+
+    final setupSans = parseSetupMoves(config.setupMoves).toSet();
+    final incumbentCp = incumbent.evalForUs(config.playAsWhite);
+    final alts = [
+      for (final c in children)
+        if (!identical(c, incumbent)) c,
+    ]..sort((a, b) => b
+        .evalForUs(config.playAsWhite)
+        .compareTo(a.evalForUs(config.playAsWhite)));
+
+    final expand = <BuildTreeNode>[incumbent];
+    var altsTaken = 0;
+    for (final alt in alts) {
+      if (setupSans.contains(alt.moveSan)) {
+        expand.add(alt);
+        continue;
+      }
+      if (!alt.hasEngineEval) continue;
+      final gapCp = incumbentCp - alt.evalForUs(config.playAsWhite);
+      if (config.expandAlternative(
+        gapCp: gapCp,
+        altsAlreadyExpanded: altsTaken,
+      )) {
+        expand.add(alt);
+        altsTaken++;
+      }
+    }
+    return expand;
   }
 
   // ── Our move: Stockfish MultiPV → eval filter → enqueue children ───────
@@ -1165,9 +1330,12 @@ class TreeBuildService {
     required FrontierQueue queue,
     bool coverageOnly = false,
   }) async {
+    // Fast: MultiPV shrinks with reach priority; Pure: constant.  Root
+    // always gets a wide sweep — everything descends from it.
+    final nodePriority = effectiveSearchPriority(node);
     final mpvCount = node.ply == 0
         ? (config.ourMultipv >= 10 ? config.ourMultipv : 10)
-        : config.ourMultipv;
+        : config.effectiveMultipv(nodePriority);
     final whiteToMove = isWhiteToMove(node.fen);
 
     final sw = Stopwatch()..start();
@@ -1221,14 +1389,18 @@ class TreeBuildService {
       node.setLichessStats(totalW, totalB, totalD);
     }
 
-    // Filter candidates by eval loss (direction depends on STM)
+    // Filter candidates by eval loss (direction depends on STM).  Fast
+    // halves the window at cold nodes; the root keeps the full window.
     final bestCp = discovery.lines.first.effectiveCp;
+    final evalLossWindow = node.ply == 0
+        ? config.maxEvalLossCp
+        : config.effectiveMaxEvalLossCp(nodePriority);
 
     for (final line in discovery.lines) {
       if (line.moveUci.isEmpty) continue;
       final evalLoss =
           whiteToMove ? bestCp - line.effectiveCp : line.effectiveCp - bestCp;
-      if (evalLoss > config.maxEvalLossCp) continue;
+      if (evalLoss > evalLossWindow) continue;
 
       final childFen = playUciMove(node.fen, line.moveUci);
       if (childFen == null) continue;
@@ -1326,13 +1498,15 @@ class TreeBuildService {
       }
     }
 
-    _assignOurMovePriorities(node, config);
+    final incumbent = _assignOurMovePriorities(node, config);
 
     // Coverage-only: the answer is the deliverable — children stay
     // unexplored leaves so a future resume with more budget can deepen them.
     if (coverageOnly) return;
 
-    for (final child in List.of(node.children)) {
+    // Fast: only the incumbent and gap-qualifying alternatives grow
+    // subtrees; the rest stay evaluated leaves for selection.
+    for (final child in _ourChildrenToExpand(node, incumbent, config)) {
       if (!_isBuilding || isCancelled()) break;
       queue.add(child);
     }
@@ -1417,7 +1591,7 @@ class TreeBuildService {
       _stats.maiaTotalMs += sw.elapsedMilliseconds;
       return result.policy;
     } catch (e) {
-      _log('Maia prior lookup failed: $e');
+      _log('Maia prior lookup failed @ $fen: $e');
       return const {};
     }
   }
@@ -1467,6 +1641,9 @@ class TreeBuildService {
     double massCovered = 0.0;
     final massTarget = config.oppMassTarget;
     final basePri = effectiveSearchPriority(node);
+    // Fast halves the fan-out at cold nodes; coverage-floor replies bypass
+    // the cap below, so no silent holes are introduced.
+    final maxChildren = config.effectiveOppMaxChildren(basePri);
 
     for (final move in candidates) {
       final prob = move.probability;
@@ -1479,8 +1656,7 @@ class TreeBuildService {
       if (!covered) {
         // The prior replaces the min-games noise filter when smoothing.
         if (!smoothing && move.games < config.minGames) continue;
-        if (config.oppMaxChildren > 0 &&
-            childrenAdded >= config.oppMaxChildren) {
+        if (maxChildren > 0 && childrenAdded >= maxChildren) {
           break;
         }
         if (massTarget > 0.0 && massCovered >= massTarget) break;
@@ -1537,7 +1713,7 @@ class TreeBuildService {
         config.maiaElo,
       );
     } catch (e) {
-      _log('Maia eval failed: $e');
+      _log('Maia eval failed @ ${node.fen}: $e');
       return;
     }
     _stats.maiaEvals++;
@@ -1561,6 +1737,8 @@ class TreeBuildService {
     double massCovered = 0.0;
     final massTarget = config.oppMassTarget;
     final basePri = effectiveSearchPriority(node);
+    // Fast halves the fan-out at cold nodes (coverage floor still bypasses).
+    final maxChildren = config.effectiveOppMaxChildren(basePri);
 
     for (final entry in sortedMoves) {
       final uci = entry.key;
@@ -1571,8 +1749,7 @@ class TreeBuildService {
           config.coverMinProb > 0.0 && prob >= config.coverMinProb;
       if (!covered) {
         if (prob < config.maiaMinProb) continue;
-        if (config.oppMaxChildren > 0 &&
-            childrenAdded >= config.oppMaxChildren) {
+        if (maxChildren > 0 && childrenAdded >= maxChildren) {
           break;
         }
         if (massTarget > 0.0 && massCovered >= massTarget) break;
@@ -1719,6 +1896,7 @@ class TreeBuildService {
     final throwawayQueue = FrontierQueue(bestFirst: false);
 
     for (final group in groups.values) {
+      await waitIfPaused();
       if (!_isBuilding) break;
 
       final canonical = fenMap.getCanonical(group.first.fen);
