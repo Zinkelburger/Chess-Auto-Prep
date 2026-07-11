@@ -425,6 +425,16 @@ class TreeBuildConfig {
   /// near-ties.  Beyond that, alternatives stay evaluated leaves.
   static const int fastMaxExpandedAlts = 2;
 
+  /// Root nodes always get at least this wide a MultiPV sweep regardless of
+  /// the configured [ourMultipv] — every line in the repertoire descends
+  /// from the root, so a narrow first fan-out can never be recovered later.
+  static const int rootMultipvFloor = 10;
+
+  /// Hard cap on candidate our-moves considered at a single node, whatever
+  /// the source (MultiPV lines, Maia policy entries).  Bounds engine work
+  /// and keeps pathological policy outputs from exploding the tree.
+  static const int maxOurCandidates = 16;
+
   /// Our-move MultiPV at a node with reach priority [priority].
   int effectiveMultipv(double priority) {
     if (searchAlgorithm == SearchAlgorithm.pure) return ourMultipv;
@@ -432,6 +442,11 @@ class TreeBuildConfig {
     final reduced = priority >= fastColdPriority ? ourMultipv - 1 : 2;
     return reduced.clamp(2, ourMultipv < 2 ? 2 : ourMultipv);
   }
+
+  /// Our-move MultiPV at the root: the configured width, floored at
+  /// [rootMultipvFloor].
+  int get rootMultipv =>
+      ourMultipv >= rootMultipvFloor ? ourMultipv : rootMultipvFloor;
 
   /// Max centipawns an our-move candidate may lose vs the best sibling and
   /// still enter the tree, at reach priority [priority].
