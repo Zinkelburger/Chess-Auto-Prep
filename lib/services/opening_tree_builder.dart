@@ -5,16 +5,9 @@ import 'package:dartchess/dartchess.dart';
 import '../models/opening_tree.dart';
 import 'package:chess_auto_prep/utils/log.dart';
 
-class OpeningTreeBuilder {
-  /// Common player name patterns used in repertoire files
-  static const _repertoirePlayerPatterns = [
-    'repertoire',
-    'training',
-    'me',
-    'player',
-    'study',
-  ];
+import 'pgn_tree_core.dart';
 
+class OpeningTreeBuilder {
   static Future<OpeningTree> buildTree({
     required List<String> pgnList,
     required String username,
@@ -167,13 +160,6 @@ class OpeningTreeBuilder {
     return tree.toTransferJson();
   }
 
-  /// Check if a player name matches any known repertoire player pattern
-  static bool _isRepertoirePlayer(String playerName) {
-    final lowerName = playerName.toLowerCase();
-    return _repertoirePlayerPatterns
-        .any((pattern) => lowerName.contains(pattern));
-  }
-
   static void _processGame(
     OpeningTree tree,
     PgnGame<PgnNodeData> game,
@@ -183,85 +169,31 @@ class OpeningTreeBuilder {
     bool strictPlayerMatching,
   ) {
     // 1. Safe Header Access
-    final white = (game.headers['White'] ?? '').toLowerCase();
-    final black = (game.headers['Black'] ?? '').toLowerCase();
+    final white = game.headers['White'] ?? '';
+    final black = game.headers['Black'] ?? '';
     final result = game.headers['Result'] ?? '*';
 
-    bool isUserWhiteInGame;
-
-    if (!strictPlayerMatching) {
-      // In Repertoire Mode, we don't filter by name.
-      // We assume the userIsWhiteFilter dictates the perspective.
-      // If no filter, we assume White perspective for stats (arbitrary but consistent).
-      isUserWhiteInGame = userIsWhiteFilter ?? true;
-    } else {
-      // 2. Identify User - match by username OR any repertoire player pattern
-      final whiteIsUser =
-          white.contains(usernameLower) || _isRepertoirePlayer(white);
-      final blackIsUser =
-          black.contains(usernameLower) || _isRepertoirePlayer(black);
-
-      // For repertoire files, if neither matches, try to infer from userIsWhiteFilter
-      if (whiteIsUser && !blackIsUser) {
-        isUserWhiteInGame = true;
-      } else if (blackIsUser && !whiteIsUser) {
-        isUserWhiteInGame = false;
-      } else if (userIsWhiteFilter != null) {
-        // Both or neither match - use the filter to decide
-        isUserWhiteInGame = userIsWhiteFilter;
-      } else {
-        // Can't determine - skip game
-        return;
-      }
-
-      // Apply color filter if specified
-      if (userIsWhiteFilter != null && userIsWhiteFilter != isUserWhiteInGame) {
-        return;
-      }
-    }
+    // 2. Identify User. Games whose colour can't be determined are skipped.
+    final isUserWhiteInGame = resolveUserColor(
+      whiteHeader: white,
+      blackHeader: black,
+      usernameLower: usernameLower,
+      userIsWhiteFilter: userIsWhiteFilter,
+      strictPlayerMatching: strictPlayerMatching,
+      unattributablePolicy: UnattributableGamePolicy.skip,
+    );
+    if (isUserWhiteInGame == null) return;
 
     // 3. Calculate Result
-    final userResult = _calculateUserResult(result, isUserWhiteInGame);
+    final userResult = resultForUser(result, isUserWhiteInGame);
 
-    // 4. Traverse Moves using mainline() iterator
-    Position position = Chess.initial;
-    var currentNode = tree.root;
-
-    // Update root stats
-    currentNode.updateStats(userResult);
-
-    int depth = 0;
-    for (final nodeData in game.moves.mainline()) {
-      if (depth >= maxDepth) break;
-
-      try {
-        final moveSan = nodeData.san;
-
-        // Parse SAN into a Move object for the engine
-        final move = position.parseSan(moveSan);
-        if (move == null) break;
-
-        // Apply move
-        position = position.play(move);
-
-        // Tree Building
-        final childNode = currentNode.getOrCreateChild(moveSan, position.fen);
-        childNode.updateStats(userResult);
-        tree.indexNode(childNode);
-
-        // Advance
-        currentNode = childNode;
-        depth++;
-      } catch (e) {
-        break; // Stop if an illegal move is encountered
-      }
-    }
-  }
-
-  static double _calculateUserResult(String result, bool userIsWhite) {
-    final normalizedResult = result.trim();
-    if (normalizedResult == '1-0') return userIsWhite ? 1.0 : 0.0;
-    if (normalizedResult == '0-1') return userIsWhite ? 0.0 : 1.0;
-    return 0.5; // Draws or '*'
+    // 4. Traverse Moves using mainline() iterator (always from the standard
+    // initial position — this builder ignores any [FEN] start header).
+    walkMainlineIntoTree(
+      tree: tree,
+      game: game,
+      userResult: userResult,
+      maxDepth: maxDepth,
+    );
   }
 }
