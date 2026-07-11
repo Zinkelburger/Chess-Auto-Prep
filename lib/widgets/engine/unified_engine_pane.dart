@@ -152,13 +152,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
     final fenChanged = widget.fen != oldWidget.fen;
     final becameActive = !oldWidget.isActive;
-    final moveSeqChanged =
-        !_listEquals(widget.currentMoveSequence, oldWidget.currentMoveSequence);
 
     if (fenChanged || becameActive) {
       _scheduleAnalysis();
-    } else if (moveSeqChanged && _settings.showProbability) {
-      _scheduleCumulativeProbability();
     }
   }
 
@@ -177,21 +173,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() {});
     });
-  }
-
-  void _scheduleCumulativeProbability() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_isActive) return;
-      _calculateCumulativeProbability();
-    });
-  }
-
-  static bool _listEquals(List<String> a, List<String> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
   }
 
   @override
@@ -415,22 +396,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     }
   }
 
-  Future<void> _calculateCumulativeProbability() async {
-    if (widget.currentMoveSequence.isEmpty) {
-      _probabilityService.cumulativeProbability.value = 100.0;
-      return;
-    }
-    try {
-      await _probabilityService.calculateCumulativeProbability(
-        widget.currentMoveSequence,
-        isUserWhite: widget.isWhiteRepertoire,
-        startingMoves: _settings.probabilityStartMoves,
-      );
-    } catch (e) {
-      if (kDebugMode) log.e('[Engine] Cumulative DB FAILED — $e');
-    }
-  }
-
   // ── Cache ──────────────────────────────────────────────────────────────
 
   void _restoreFromCache(_PositionSnapshot cached) {
@@ -449,10 +414,6 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         totalMoves: cached.selectedMoveUcis.length,
         completedMoves: cached.poolResults.length,
       );
-
-      if (_settings.showProbability) {
-        _calculateCumulativeProbability();
-      }
 
       _scheduleSetState();
     });
