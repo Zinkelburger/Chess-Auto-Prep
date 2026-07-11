@@ -4,6 +4,8 @@
 /// using practical win probability (V) instead of raw engine eval.
 library;
 
+import 'dart:collection' show Queue;
+
 import '../models/build_tree_node.dart';
 import '../utils/ease_utils.dart' show expectedCpFromWinProb;
 import 'generation/eca_calculator.dart';
@@ -36,6 +38,18 @@ class ExpectimaxLine {
     required this.movesUci,
     required this.moveInfo,
   });
+
+  /// Same line at a different display rank.
+  ExpectimaxLine withRank(int newRank) => ExpectimaxLine(
+        rank: newRank,
+        expectimaxValue: expectimaxValue,
+        expectedEvalCp: expectedEvalCp,
+        evalCp: evalCp,
+        depth: depth,
+        movesSan: movesSan,
+        movesUci: movesUci,
+        moveInfo: moveInfo,
+      );
 
   factory ExpectimaxLine.fromPath(
     BuildTreeNode start,
@@ -146,7 +160,7 @@ List<ExpectimaxLine> generateExpectimaxLines(
   required int maxPlies,
   FenMap? fenMap,
 }) {
-  final limit = topLines.clamp(1, 16);
+  final limit = topLines.clamp(1, TreeBuildConfig.maxOurCandidates);
   if (start.children.isEmpty) return [];
 
   final isOurMove = start.isWhiteToMove == config.playAsWhite;
@@ -249,12 +263,13 @@ bool isBranchCompleteToPly(BuildTreeNode node, int targetPly) {
   return node.children.every((c) => isBranchCompleteToPly(c, targetPly));
 }
 
-/// Find a node in the tree by FEN (BFS).
+/// Find a node in the tree by FEN (BFS — returns the shallowest match,
+/// which is normally the canonical expansion of a transposed position).
 BuildTreeNode? findNodeByFen(BuildTree tree, String fen) {
   if (tree.root.fen == fen) return tree.root;
-  final queue = <BuildTreeNode>[tree.root];
+  final queue = Queue<BuildTreeNode>()..add(tree.root);
   while (queue.isNotEmpty) {
-    final node = queue.removeAt(0);
+    final node = queue.removeFirst();
     for (final child in node.children) {
       if (child.fen == fen) return child;
       queue.add(child);

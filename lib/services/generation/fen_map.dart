@@ -30,9 +30,15 @@ class FenMap {
   }
 
   /// Register a transposition leaf — a node that reached an already-expanded
-  /// FEN via a different move order.
+  /// FEN via a different move order.  Idempotent: re-registering the same
+  /// node (e.g. [populate] running again over a partially built tree) does
+  /// not grow the equivalence list.
   void addTransposition(String fen, BuildTreeNode node) {
-    (_equivalents[_key(fen)] ??= []).add(node);
+    final list = _equivalents[_key(fen)] ??= [];
+    for (final existing in list) {
+      if (identical(existing, node)) return;
+    }
+    list.add(node);
   }
 
   /// Get all transposition leaves for a FEN (excludes the canonical node).
@@ -51,12 +57,15 @@ class FenMap {
   int get size => _canonical.length;
 
   /// Walk a tree and register all nodes.  Canonical nodes are the first
-  /// expansion of each FEN; childless duplicates become transposition leaves.
+  /// expansion of each FEN; childless duplicates become transposition
+  /// leaves.  Idempotent: safe to call repeatedly on a growing tree (the
+  /// on-the-fly service re-populates during progressive deepening).
   void populate(BuildTreeNode node) {
     if (node.fen.isNotEmpty) {
-      if (!contains(node.fen)) {
+      final canonical = getCanonical(node.fen);
+      if (canonical == null) {
         putCanonical(node.fen, node);
-      } else if (node.children.isEmpty) {
+      } else if (!identical(canonical, node) && node.children.isEmpty) {
         addTransposition(node.fen, node);
       }
     }

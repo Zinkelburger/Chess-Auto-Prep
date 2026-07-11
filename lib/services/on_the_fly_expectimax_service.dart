@@ -63,6 +63,17 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
   /// if the pool or an engine worker stalls.
   static const Duration _depthPassTimeout = Duration(seconds: 60);
 
+  /// Node budget per ply of target depth.  Generous enough that the
+  /// interesting lines never hit it at typical on-the-fly depths (≤ 8);
+  /// exists so a pathological position can't grow an unbounded tree while
+  /// the user is just browsing.
+  static const int _maxNodesPerPly = 800;
+
+  /// Minimum interval between partial line refreshes during a depth pass —
+  /// each refresh re-runs expectimax over the whole tree, so this bounds
+  /// that cost while keeping the pane visibly live.
+  static const Duration _partialRefreshInterval = Duration(milliseconds: 400);
+
   final Map<String, _CachedSubtree> _cache = {};
   final Map<String, _MoveLineState> _moveLines = {};
 
@@ -163,6 +174,29 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
     );
   }
 
+  /// Wait for a previous (timed-out or superseded) build on the shared
+  /// builder to unwind.  The watchdog abandons build futures via
+  /// `.timeout(...)`, so the underlying build may still hold the builder
+  /// when the next run starts; without this, a quick retry dies on
+  /// `StateError('A tree build is already running')`.
+  Future<bool> _waitForBuilderIdle(int generation) async {
+    const pollInterval = Duration(milliseconds: 50);
+    final deadline = DateTime.now().add(_depthPassTimeout);
+    while (_buildService.isBuilding) {
+      _buildService.stopBuild();
+      if (_runGeneration != generation) return false;
+      if (DateTime.now().isAfter(deadline)) {
+        _lastError = 'Previous expectimax build did not stop — '
+            'engine may be stuck. Toggle expectimax to retry.';
+        _state = OnTheFlyState.idle;
+        notifyListeners();
+        return false;
+      }
+      await Future.delayed(pollInterval);
+    }
+    return true;
+  }
+
   Future<void> _runProgressiveBuild({
     required String fen,
     required bool playAsWhite,
@@ -170,6 +204,8 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
     required int generation,
     EvalDatabaseSettings? dbSettings,
   }) async {
+    if (!await _waitForBuilderIdle(generation)) return;
+
     BuildTree? tree;
     TreeBuildConfig? config;
     FenMap? fenMap;
@@ -310,7 +346,8 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
         return;
       }
 
-      fenMap ??= FenMap()..populate(tree.root);
+      // Idempotent: re-populating registers only nodes added this pass.
+      fenMap ??= FenMap();
       fenMap.populate(tree.root);
 
       final eca = ExpectimaxCalculator(config: config, fenMap: fenMap);
@@ -367,13 +404,14 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
   }) {
     final now = DateTime.now();
     if (_lastPartialNotify != null &&
-        now.difference(_lastPartialNotify!).inMilliseconds < 400) {
+        now.difference(_lastPartialNotify!) < _partialRefreshInterval) {
       return;
     }
     _lastPartialNotify = now;
 
-    final map = fenMap ?? FenMap()
-      ..populate(tree.root);
+    // Re-populate on every partial refresh: the tree grew since the last
+    // tick and populate() is idempotent for already-registered nodes.
+    final map = (fenMap ?? FenMap())..populate(tree.root);
     final eca = ExpectimaxCalculator(config: config, fenMap: map);
     eca.calculate(tree);
     calculateMyEase(tree, playAsWhite: playAsWhite);
@@ -459,17 +497,7 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       ..sort((a, b) => b.expectimaxValue.compareTo(a.expectimaxValue));
 
     return [
-      for (var i = 0; i < sorted.length; i++)
-        ExpectimaxLine(
-          rank: i + 1,
-          expectimaxValue: sorted[i].expectimaxValue,
-          expectedEvalCp: sorted[i].expectedEvalCp,
-          evalCp: sorted[i].evalCp,
-          depth: sorted[i].depth,
-          movesSan: sorted[i].movesSan,
-          movesUci: sorted[i].movesUci,
-          moveInfo: sorted[i].moveInfo,
-        ),
+      for (var i = 0; i < sorted.length; i++) sorted[i].withRank(i + 1),
     ];
   }
 
@@ -485,7 +513,7 @@ class OnTheFlyExpectimaxService extends ChangeNotifier {
       startFen: fen,
       playAsWhite: playAsWhite,
       maxPly: maxPly,
-      maxNodes: 800 * maxPly,
+      maxNodes: _maxNodesPerPly * maxPly,
       buildMode: buildMode,
       // 1 UCI thread per worker: parallelism comes from the pool's multiple
       // workers.  Anything >1 makes prepareForTreeBuild reconfigure workers
