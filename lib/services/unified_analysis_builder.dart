@@ -6,6 +6,7 @@ import 'package:dartchess/dartchess.dart';
 import '../models/opening_tree.dart';
 import '../models/position_analysis.dart';
 import '../utils/fen_utils.dart';
+import 'pgn_tree_core.dart';
 
 /// Builds both [PositionAnalysis] and [OpeningTree] in a single pass over the
 /// PGN list, eliminating the redundant parsing and mainline traversal from the
@@ -14,14 +15,6 @@ import '../utils/fen_utils.dart';
 /// Use [buildInIsolate] to run the work off the UI thread with per-game
 /// progress reporting.
 class UnifiedAnalysisBuilder {
-  static const _repertoirePlayerPatterns = [
-    'repertoire',
-    'training',
-    'me',
-    'player',
-    'study',
-  ];
-
   /// Parse PGNs once, walk each mainline once, and populate both the opening
   /// tree and the FEN-map analysis.
   ///
@@ -182,92 +175,61 @@ class UnifiedAnalysisBuilder {
     required int maxDepth,
     required bool strictPlayerMatching,
   }) {
-    final white = (game.headers['White'] ?? '').toLowerCase();
-    final black = (game.headers['Black'] ?? '').toLowerCase();
+    final white = game.headers['White'] ?? '';
+    final black = game.headers['Black'] ?? '';
     final result = game.headers['Result'] ?? '*';
 
     // ── Determine user colour in this game ──
-
-    bool isUserWhiteInGame;
-
-    if (!strictPlayerMatching) {
-      isUserWhiteInGame = userIsWhiteFilter;
-    } else {
-      final whiteIsUser =
-          white.contains(usernameLower) || _isRepertoirePlayer(white);
-      final blackIsUser =
-          black.contains(usernameLower) || _isRepertoirePlayer(black);
-
-      if (whiteIsUser && !blackIsUser) {
-        isUserWhiteInGame = true;
-      } else if (blackIsUser && !whiteIsUser) {
-        isUserWhiteInGame = false;
-      } else {
-        isUserWhiteInGame = userIsWhiteFilter;
-      }
-
-      if (userIsWhiteFilter != isUserWhiteInGame) return;
-    }
+    //
+    // Unlike OpeningTreeBuilder, this builder always has a non-null colour
+    // filter, so ambiguous games default to the filter's colour instead of
+    // being skipped. A null return therefore only means the user was matched
+    // to the other colour (filtered out).
+    final isUserWhiteInGame = resolveUserColor(
+      whiteHeader: white,
+      blackHeader: black,
+      usernameLower: usernameLower,
+      userIsWhiteFilter: userIsWhiteFilter,
+      strictPlayerMatching: strictPlayerMatching,
+      unattributablePolicy: UnattributableGamePolicy.assumeWhite,
+    );
+    if (isUserWhiteInGame == null) return;
 
     final bool isUserWhite = isUserWhiteInGame;
     final bool isUserBlack = !isUserWhiteInGame;
 
     // ── User result from their perspective ──
 
-    final double userResult;
-    final normalizedResult = result.trim();
-    if (normalizedResult == '1-0') {
-      userResult = isUserWhite ? 1.0 : 0.0;
-    } else if (normalizedResult == '0-1') {
-      userResult = isUserWhite ? 0.0 : 1.0;
-    } else {
-      userResult = 0.5;
-    }
+    final userResult = resultForUser(result, isUserWhite);
 
     // ── Walk mainline once, updating both tree and FEN map ──
-
+    //
+    // Unlike OpeningTreeBuilder, this builder honours a [FEN] start header.
     final startFen = game.headers['FEN'] ??
         'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
-    Position position = Chess.fromSetup(Setup.parseFen(startFen));
-    var currentNode = tree.root;
-    currentNode.updateStats(userResult);
 
-    int depth = 0;
-    for (final nodeData in game.moves.mainline()) {
-      if (depth >= maxDepth) break;
+    walkMainlineIntoTree(
+      tree: tree,
+      game: game,
+      userResult: userResult,
+      maxDepth: maxDepth,
+      startPosition: Chess.fromSetup(Setup.parseFen(startFen)),
+      onPositionBeforeMove: (position) {
+        // FEN map: link game + record stats for positions before the move.
+        _linkGameToFen(fenToGameIndices, position.fen, gameIndex);
 
-      // -- FEN map: link game + record stats for positions before the move --
-      _linkGameToFen(fenToGameIndices, position.fen, gameIndex);
-
-      final bool isUserTurn = (position.turn == Side.white && isUserWhite) ||
-          (position.turn == Side.black && isUserBlack);
-      if (isUserTurn) {
-        _updateStats(
-            stats, fenToGameIndices, position.fen, userResult, gameIndex);
-      }
-
-      // -- Parse and apply move --
-      final moveSan = nodeData.san;
-      final move = position.parseSan(moveSan);
-      if (move == null) break;
-
-      try {
-        position = position.play(move);
-      } catch (_) {
-        break;
-      }
-
-      // -- Tree: grow the tree with this move --
-      final childNode = currentNode.getOrCreateChild(moveSan, position.fen);
-      childNode.updateStats(userResult);
-      tree.indexNode(childNode);
-      currentNode = childNode;
-
-      depth++;
-    }
-
-    // Link final position to game index.
-    _linkGameToFen(fenToGameIndices, position.fen, gameIndex);
+        final bool isUserTurn = (position.turn == Side.white && isUserWhite) ||
+            (position.turn == Side.black && isUserBlack);
+        if (isUserTurn) {
+          _updateStats(
+              stats, fenToGameIndices, position.fen, userResult, gameIndex);
+        }
+      },
+      onWalkComplete: (finalPosition) {
+        // Link final position to game index.
+        _linkGameToFen(fenToGameIndices, finalPosition.fen, gameIndex);
+      },
+    );
   }
 
   // ── FEN map helpers ──────────────────────────────────────────────────
@@ -302,11 +264,5 @@ class UnifiedAnalysisBuilder {
     if (!list.contains(gameIndex)) {
       list.add(gameIndex);
     }
-  }
-
-  static bool _isRepertoirePlayer(String playerName) {
-    final lowerName = playerName.toLowerCase();
-    return _repertoirePlayerPatterns
-        .any((pattern) => lowerName.contains(pattern));
   }
 }
