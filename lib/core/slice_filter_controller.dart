@@ -12,6 +12,7 @@ import 'package:flutter/widgets.dart';
 import '../models/pgn_filter_models.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../utils/fen_utils.dart';
+import '../utils/san_token_utils.dart';
 
 // ── Position parsing ─────────────────────────────────────────────────────────
 
@@ -43,12 +44,7 @@ PositionParseResult parsePositionInput(String input) {
 }
 
 PositionParseResult _parseSanSequence(String input) {
-  final tokens = input
-      .replaceAll(RegExp(r'\d+\.+'), '')
-      .replaceAll(RegExp(r'(1-0|0-1|1/2-1/2|\*)'), '')
-      .split(RegExp(r'\s+'))
-      .where((t) => t.isNotEmpty)
-      .toList();
+  final tokens = cleanSanTokens(input);
 
   if (tokens.isEmpty) {
     return const PositionParseResult.err('No moves found');

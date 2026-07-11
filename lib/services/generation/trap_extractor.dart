@@ -15,6 +15,7 @@ import 'package:chess_auto_prep/models/trap_line_info.dart';
 import 'package:chess_auto_prep/models/trap_reply.dart';
 import '../../utils/ease_utils.dart' show winProbability;
 import '../../utils/eval_constants.dart';
+import 'trap_score.dart';
 
 class TrapExtractor {
   final bool playAsWhite;
@@ -77,42 +78,24 @@ class TrapExtractor {
     }
 
     // Only opponent-move nodes with at least 2 children
+    // (analyzeTrapScore returns null for fewer than 2 children).
     final isOpponentMove =
         playAsWhite ? !node.isWhiteToMove : node.isWhiteToMove;
     if (!isOpponentMove) return;
-    if (node.children.length < 2) return;
 
-    BuildTreeNode? mostPopular;
-    BuildTreeNode? bestMoveNode;
-    double highestProb = 0.0;
-    int bestEval = kWorstEvalCp;
+    final analysis = analyzeTrapScore(node);
+    if (analysis == null || analysis.popularIsBest) return;
 
-    for (final child in node.children) {
-      if (child.moveProbability > highestProb) {
-        highestProb = child.moveProbability;
-        mostPopular = child;
-      }
-      if (child.hasEngineEval) {
-        final evalForMover = -child.engineEvalCp!;
-        if (evalForMover > bestEval) {
-          bestEval = evalForMover;
-          bestMoveNode = child;
-        }
-      }
-    }
-
-    if (mostPopular == null || bestMoveNode == null) return;
-    if (mostPopular == bestMoveNode) return;
-
-    if (!mostPopular.hasEngineEval) return;
-    final popularEval = -mostPopular.engineEvalCp!;
+    final mostPopular = analysis.mostPopular;
+    final bestMoveNode = analysis.bestMove;
+    final highestProb = analysis.highestProb;
+    final bestEval = analysis.bestEvalForMover;
+    final popularEval = analysis.popularEvalForMover;
 
     final evalDiff = bestEval - popularEval;
     if (evalDiff <= 0) return;
 
-    double trap = evalDiff / 200.0;
-    if (trap > 1.0) trap = 1.0;
-    trap *= highestProb;
+    final trap = analysis.trapScore;
     if (trap <= minTrapScore) return;
 
     // Trick surplus: how much better we do practically vs raw eval.

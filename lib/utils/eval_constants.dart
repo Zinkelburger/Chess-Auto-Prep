@@ -58,3 +58,8 @@ int effectiveCpFromScores({int? scoreCp, int? scoreMate}) {
 
 /// Whether [cp] represents a forced-mate eval for display purposes.
 bool isMateEval(int cp) => cp.abs() >= kMateCpThreshold;
+
+/// Moves under this probability are noise for probability-weighted
+/// aggregates (ease regret, local CPL): they contribute almost nothing to
+/// the weighted sum but their evals can be wild, so they are skipped.
+const double kNegligibleMoveProb = 0.01;

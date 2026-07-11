@@ -21,6 +21,8 @@ import '../services/games_repertoire/repertoire_merge.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
+import '../utils/movetext_builder.dart';
+import '../utils/san_token_utils.dart';
 import 'move_navigation.dart';
 import 'repertoire_authoring.dart';
 import 'repertoire_writer.dart';
@@ -432,15 +434,7 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
   }
 
   /// Parses a PGN move text string into SAN moves.
-  List<String> _parsePgnMoveText(String movesStr) {
-    if (movesStr.trim().isEmpty) return [];
-    final cleaned = movesStr
-        .replaceAll(RegExp(r'\d+\.+\s*'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    if (cleaned.isEmpty) return [];
-    return cleaned.split(' ').where((m) => m.isNotEmpty).toList();
-  }
+  List<String> _parsePgnMoveText(String movesStr) => cleanSanTokens(movesStr);
 
   /// If a root position is set, navigate to it so the tree starts there.
   void _navigateToRootPosition() {
@@ -453,15 +447,26 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
   }
 
   /// Converts a SAN move list to PGN move text.
+  ///
+  /// Move numbering starts from the tree's starting position, so
+  /// black-to-move / mid-game roots get correct `N...` numbering instead of
+  /// the old (wrong) assumption of White to move at move 1.
   String _movesToPgnMoveText(List<String> moves) {
     if (moves.isEmpty) return '';
-    final sb = StringBuffer();
-    for (int i = 0; i < moves.length; i++) {
-      if (i.isEven) sb.write('${(i ~/ 2) + 1}. ');
-      sb.write(moves[i]);
-      if (i < moves.length - 1) sb.write(' ');
+    var startMoveNumber = 1;
+    var whiteToMoveFirst = true;
+    try {
+      final setup = Setup.parseFen(_tree.startingFen);
+      startMoveNumber = setup.fullmoves;
+      whiteToMoveFirst = setup.turn == Side.white;
+    } catch (_) {
+      // Unparsable starting FEN — fall back to standard-start numbering.
     }
-    return sb.toString();
+    return buildNumberedMovetext(
+      moves,
+      startMoveNumber: startMoveNumber,
+      whiteToMoveFirst: whiteToMoveFirst,
+    );
   }
 
   // ── Repertoire lifecycle ─────────────────────────────────────────

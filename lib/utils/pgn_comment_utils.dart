@@ -8,6 +8,8 @@ import 'dart:ui' show Color;
 
 import 'package:dartchess/dartchess.dart';
 
+import 'movetext_builder.dart';
+
 // ---------------------------------------------------------------------------
 // NAG (Numeric Annotation Glyph) constants and helpers
 // ---------------------------------------------------------------------------
@@ -720,27 +722,24 @@ List<CommentToken> parseCommentTokens(String text) {
 /// Serialize a flat list of [PgnNodeData] moves into PGN movetext with
 /// move numbers, NAGs, and inline `{comment}` braces.
 ///
-/// Appends [result] (e.g. `1-0`) unless it is null or `*`.
+/// Assumes the game starts with White's move 1 (full games from the standard
+/// start). Appends [result] (e.g. `1-0`) unless it is null or `*`.
+/// Delegates numbering to the shared [buildNumberedMovetext].
 String buildMovetext(List<PgnNodeData> moves, {String? result}) {
-  final buf = StringBuffer();
-  var moveNum = 1;
-  var isWhite = true;
-  for (final move in moves) {
-    if (isWhite) buf.write('$moveNum. ');
-    buf.write('${move.san} ');
-    if (move.nags != null && move.nags!.isNotEmpty) {
-      for (final nag in move.nags!) {
-        buf.write('\$$nag ');
+  final text = buildNumberedMovetext(
+    [for (final m in moves) m.san],
+    suffix: (i) {
+      final move = moves[i];
+      final buf = StringBuffer();
+      for (final nag in move.nags ?? const <int>[]) {
+        buf.write(' \$$nag');
       }
-    }
-    if (move.comments != null && move.comments!.isNotEmpty) {
-      for (final c in move.comments!) {
-        if (c.isNotEmpty) buf.write('{$c} ');
+      for (final c in move.comments ?? const <String>[]) {
+        if (c.isNotEmpty) buf.write(' {$c}');
       }
-    }
-    if (!isWhite) moveNum++;
-    isWhite = !isWhite;
-  }
-  if (result != null && result != '*') buf.write(result);
-  return buf.toString().trim();
+      return buf.toString();
+    },
+  );
+  if (result == null || result == '*') return text;
+  return text.isEmpty ? result : '$text $result';
 }

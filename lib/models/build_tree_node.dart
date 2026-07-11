@@ -176,10 +176,21 @@ class BuildTreeNode implements MoveTreeNodeView {
     totalGames = w + b + d;
   }
 
-  double get winRate {
+  /// Database score for WHITE: `(whiteWins + draws/2) / totalGames`.
+  ///
+  /// NOTE: this is always White's perspective (Lichess DB stats), unlike
+  /// [OpeningTreeNode.winRate] / [PositionStats.winRate] which are
+  /// user-perspective. Use [winRateFor] to get the score for the side we
+  /// are building for.
+  double get whiteWinRate {
     if (totalGames == 0) return 0.0;
     return (whiteWins + 0.5 * draws) / totalGames;
   }
+
+  /// Database score from the perspective of the side we play:
+  /// [whiteWinRate] when playing White, its complement when playing Black.
+  double winRateFor(bool playAsWhite) =>
+      playAsWhite ? whiteWinRate : 1.0 - whiteWinRate;
 
   /// Count all nodes in this subtree (including this node).
   int countSubtree() {
