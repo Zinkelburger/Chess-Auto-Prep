@@ -31,7 +31,11 @@ class PositionStats {
 
   bool get hasEval => evalCp != null;
 
-  /// Calculate win rate (0.0 to 1.0)
+  /// Calculate win rate (0.0 to 1.0).
+  ///
+  /// USER-perspective: [wins]/[losses] come from `resultForUser`, i.e. they
+  /// are the analyzed player's results, not White's. Contrast with
+  /// `BuildTreeNode.whiteWinRate`, which is always White's score.
   double get winRate {
     if (games == 0) return 0.0;
     return (wins + 0.5 * draws) / games;

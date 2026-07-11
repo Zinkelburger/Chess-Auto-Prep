@@ -54,7 +54,7 @@ double? _nodeEase(BuildTreeNode node) {
   double sumWeightedRegret = 0.0;
   for (final child in node.children) {
     if (!child.hasEngineEval) continue;
-    if (child.moveProbability < 0.01) continue;
+    if (child.moveProbability < kNegligibleMoveProb) continue;
     final qVal = scoreToQ(-child.engineEvalCp!);
     final regret = math.max(0.0, qMax - qVal);
     sumWeightedRegret += math.pow(child.moveProbability, kEaseBeta) * regret;

@@ -26,6 +26,7 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 
+import '../utils/movetext_builder.dart';
 import '../models/tactics_position.dart';
 import '../models/tactics_session_settings.dart';
 import 'pgn_parsing_service.dart'
@@ -40,7 +41,12 @@ String _sanitizeComment(String s) =>
 
 /// Numbered movetext for [solutionSan] starting from [fen]
 /// (e.g. `4... Qh4# 5. Ke2`), with an optional leading brace [comment].
-String buildMovetext(
+///
+/// Move numbering and side-to-move are derived from [fen]; serialization
+/// delegates to the shared [buildNumberedMovetext]. (Formerly named
+/// `buildMovetext`; renamed to not collide with the full-game serializer in
+/// `pgn_comment_utils.dart`.)
+String buildSolutionMovetext(
   String fen,
   List<String> solutionSan, {
   String? comment,
@@ -50,24 +56,13 @@ String buildMovetext(
   if (comment != null && comment.trim().isNotEmpty) {
     buf.write('{${_sanitizeComment(comment.trim())}} ');
   }
-  if (solutionSan.isEmpty) {
-    buf.write(result);
-    return buf.toString();
-  }
-
-  final setup = Setup.parseFen(fen);
-  var moveNum = setup.fullmoves;
-  var isWhite = setup.turn == Side.white;
-
-  for (int i = 0; i < solutionSan.length; i++) {
-    if (isWhite) {
-      buf.write('$moveNum. ');
-    } else if (i == 0) {
-      buf.write('$moveNum... ');
-    }
-    buf.write(solutionSan[i]);
-    if (!isWhite) moveNum++;
-    isWhite = !isWhite;
+  if (solutionSan.isNotEmpty) {
+    final setup = Setup.parseFen(fen);
+    buf.write(buildNumberedMovetext(
+      solutionSan,
+      startMoveNumber: setup.fullmoves,
+      whiteToMoveFirst: setup.turn == Side.white,
+    ));
     buf.write(' ');
   }
   buf.write(result);
@@ -134,7 +129,7 @@ String encodePuzzlePgn(
     header('CorrectLine', puzzle.correctLine.join('|'));
   }
 
-  final movetext = buildMovetext(
+  final movetext = buildSolutionMovetext(
     puzzle.fen,
     solutionSan,
     comment: includeNote ? puzzle.mistakeAnalysis : null,

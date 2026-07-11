@@ -32,6 +32,21 @@ double winProbability(int cp) {
   return 1.0 / (1.0 + math.exp(-kWinProbK * cp));
 }
 
+/// Centipawn clamp applied by the Lichess winning-chance model
+/// (lila `ui/lib/src/ceval/winningChances.ts` clamps cp to ±1000).
+const int kWinningChanceClampCp = 1000;
+
+/// Lichess-style winning chance in [-1, 1] for a centipawn score.
+///
+/// Same logistic curve as [scoreToQ] / [winProbability] (shared [kWinProbK]),
+/// but the input is clamped to ±[kWinningChanceClampCp] first, matching
+/// lila's UI model. The tighter clamp is a deliberate policy for move
+/// classification: it caps the winning chance near ±0.95 so swings between
+/// two already-decided evals (say +8 → +15, or +9 → mate) stay small instead
+/// of registering as full-point swings and being flagged as blunders.
+double winningChanceFromCp(int cp) =>
+    scoreToQ(cp.clamp(-kWinningChanceClampCp, kWinningChanceClampCp));
+
 /// Inverse of [winProbability]: converts a win probability V in (0,1) back
 /// to an approximate centipawn value.
 int expectedCpFromWinProb(double v) {

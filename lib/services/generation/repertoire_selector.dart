@@ -10,7 +10,14 @@ import '../eval/eval_canonicalize.dart';
 import 'eca_calculator.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
+import 'node_selection.dart';
 import 'setup_bias.dart';
+
+/// Playable-mode blend: weight of expectimax value vs myEase when scoring
+/// our-move candidates.  60/40 keeps objective strength dominant while
+/// still letting naturalness break real ties.
+const double kPlayabilityExpectimaxWeight = 0.6;
+const double kPlayabilityEaseWeight = 1.0 - kPlayabilityExpectimaxWeight;
 
 class RepertoireSelector {
   final TreeBuildConfig config;
@@ -109,12 +116,8 @@ class RepertoireSelector {
       return winner;
     }
 
-    int bestCp = kWorstEvalCp;
-    for (final child in node.children) {
-      if (!child.hasEngineEval) continue;
-      final cp = child.evalForUs(config.playAsWhite);
-      if (cp > bestCp) bestCp = cp;
-    }
+    final bestCp =
+        bestSiblingEvalCp(node.children, playAsWhite: config.playAsWhite);
     if (bestCp == kWorstEvalCp) return winner;
 
     // Never prefer a setup move the eval-loss guard would reject.
@@ -131,9 +134,11 @@ class RepertoireSelector {
         continue;
       }
       // Among qualifying setup moves, keep the objective's favorite.
+      // Without expectimax, scale raw cp into the same [0, 1]-ish range so
+      // it stays comparable (kMateCpBase cp ≈ certain win ≈ V of 1.0).
       final score = child.hasExpectimax
           ? child.expectimaxValue
-          : child.evalForUs(config.playAsWhite) / 10000.0;
+          : child.evalForUs(config.playAsWhite) / kMateCpBase;
       if (score > bestScore) {
         bestScore = score;
         setupPick = child;
@@ -147,22 +152,19 @@ class RepertoireSelector {
     );
   }
 
-  /// Engine-only: pick the child with the best engine eval for us,
-  /// respecting the max-eval-loss filter.
+  /// Engine-only: pick the child with the best engine eval for us
+  /// (argmax over children that have an engine eval).
   ScoredChild? _pickByEngineEval(BuildTreeNode node) {
-    if (node.children.isEmpty) return null;
-
-    int bestCp = kWorstEvalCp;
-    BuildTreeNode? bestChild;
-
-    for (final child in node.children) {
-      if (!child.hasEngineEval) continue;
-      final cpUs = child.evalForUs(config.playAsWhite);
-      if (cpUs > bestCp) {
-        bestCp = cpUs;
-        bestChild = child;
-      }
-    }
+    // maxEvalLossCp: 0 keeps only the best-eval children; the argmax then
+    // picks the first of them — same child the plain eval argmax chose.
+    final bestChild = pickChildByValue(
+      node.children,
+      playAsWhite: config.playAsWhite,
+      maxEvalLossCp: 0,
+      eligible: (child) => child.hasEngineEval,
+      value: (child) => child.evalForUs(config.playAsWhite).toDouble(),
+      minValue: kWorstEvalCp.toDouble(),
+    );
 
     if (bestChild == null) return null;
     return ScoredChild(
@@ -180,7 +182,7 @@ class RepertoireSelector {
 
     for (final child in node.children) {
       if (child.totalGames == 0) continue;
-      final wr = config.playAsWhite ? child.winRate : 1.0 - child.winRate;
+      final wr = child.winRateFor(config.playAsWhite);
       if (wr > bestWr) {
         bestWr = wr;
         bestChild = child;
@@ -198,39 +200,19 @@ class RepertoireSelector {
 
   /// Trappy mode: pick the child whose subtree maximizes total expected
   /// opponent centipawn loss, subject to the eval-loss filter.
+  ///
+  /// The filtered pass requires an engine eval, but the fallback pass
+  /// historically considered ALL children — hence
+  /// `eligibleGuardsFallback: false`.
   ScoredChild? _pickByOpponentCpl(BuildTreeNode node) {
-    if (node.children.isEmpty) return null;
-
-    int bestChildCp = kWorstEvalCp;
-    for (final child in node.children) {
-      if (!child.hasEngineEval) continue;
-      final cpUs = child.evalForUs(config.playAsWhite);
-      if (cpUs > bestChildCp) bestChildCp = cpUs;
-    }
-
-    double bestCpl = -1.0;
-    BuildTreeNode? bestChild;
-    int passing = 0;
-
-    for (final child in node.children) {
-      if (!child.hasEngineEval) continue;
-      final cpUs = child.evalForUs(config.playAsWhite);
-      if (cpUs < bestChildCp - config.maxEvalLossCp) continue;
-      passing++;
-      if (child.cplValue > bestCpl) {
-        bestCpl = child.cplValue;
-        bestChild = child;
-      }
-    }
-
-    if (passing == 0) {
-      for (final child in node.children) {
-        if (child.cplValue > bestCpl) {
-          bestCpl = child.cplValue;
-          bestChild = child;
-        }
-      }
-    }
+    final bestChild = pickChildByValue(
+      node.children,
+      playAsWhite: config.playAsWhite,
+      maxEvalLossCp: config.maxEvalLossCp,
+      eligible: (child) => child.hasEngineEval,
+      eligibleGuardsFallback: false,
+      value: (child) => child.cplValue,
+    );
 
     if (bestChild == null) return _pickByEngineEval(node);
     return ScoredChild(
@@ -250,7 +232,8 @@ class RepertoireSelector {
     for (final child in node.children) {
       if (!child.hasExpectimax) continue;
       final myEase = child.myEase >= 0 ? child.myEase : 0.5;
-      final score = child.expectimaxValue * 0.6 + myEase * 0.4;
+      final score = child.expectimaxValue * kPlayabilityExpectimaxWeight +
+          myEase * kPlayabilityEaseWeight;
       if (score > bestScore) {
         bestScore = score;
         bestChild = child;

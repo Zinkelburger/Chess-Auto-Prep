@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../core/board_preview_controller.dart';
 import '../models/pgn_filter_models.dart';
+import '../utils/san_token_utils.dart';
 import 'hoverable_move_chips.dart';
 
 /// A browseable list of PGN game lines with search and hover board preview.
@@ -365,14 +366,6 @@ List<String> _extractMainlineMoves(String pgnText, {int maxMoves = 10}) {
   text = text.replaceAll(RegExp(r'\{[^}]*\}'), '');
   text = text.replaceAll(RegExp(r'\([^)]*\)'), '');
 
-  // Tokenize: strip move numbers, result tokens
-  final tokens = text
-      .replaceAll(RegExp(r'\d+\.+'), '')
-      .replaceAll(RegExp(r'(1-0|0-1|1/2-1/2|\*)'), '')
-      .split(RegExp(r'\s+'))
-      .where((t) => t.isNotEmpty && !t.startsWith('\$'))
-      .take(maxMoves)
-      .toList();
-
-  return tokens;
+  // Tokenize: strip move numbers, result tokens, NAGs
+  return cleanSanTokens(text).take(maxMoves).toList();
 }
