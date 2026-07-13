@@ -222,12 +222,16 @@ class _HeaderCell extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w600,
-                color: active ? Colors.grey[100] : Colors.grey[400],
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w600,
+                  color: active ? Colors.grey[100] : Colors.grey[400],
+                ),
               ),
             ),
             if (active)
