@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
+import '../../../utils/pgn_comment_utils.dart' show nagColor;
 import '../../../widgets/shortcut_tooltip.dart';
 import '../models/trap_line_info.dart';
 import '../services/trap_index_service.dart';
@@ -216,7 +217,7 @@ class TrapTourBarState extends State<TrapTourBar> {
   }
 }
 
-/// Opening name plus a one-line "what they do wrong / how you punish it".
+/// Opening name plus a one-line summary: blunder rate, refutation, stats.
 class _TrapTourNarrative extends StatelessWidget {
   const _TrapTourNarrative({required this.trap});
 
@@ -224,8 +225,7 @@ class _TrapTourNarrative extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tempted =
-        '${trap.popularMove} (${(trap.popularProb * 100).toStringAsFixed(0)}%)';
+    final prob = (trap.popularProb * 100).toStringAsFixed(0);
     final gain = '+${(trap.evalDiffCp / 100).toStringAsFixed(1)}';
     final reach = '${(trap.cumulativeProb * 100).toStringAsFixed(1)}%';
 
@@ -242,27 +242,29 @@ class _TrapTourNarrative extends StatelessWidget {
         const SizedBox(height: 1),
         Text.rich(
           TextSpan(
-            style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+            style: TextStyle(fontSize: 11, color: Colors.grey[300]),
             children: [
-              const TextSpan(text: 'They\'re tempted by '),
+              TextSpan(text: '$prob% play '),
               TextSpan(
-                text: tempted,
-                style: const TextStyle(
+                text: trap.popularMove,
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: AppColors.danger,
+                  // Blunder / good-move colours from the shared NAG palette
+                  // (brighter on dark than AppColors.danger/evalPositive).
+                  color: nagColor(4),
                 ),
               ),
               if (trap.refutationMove != null) ...[
-                const TextSpan(text: ' — punish with '),
+                const TextSpan(text: ' — refutation '),
                 TextSpan(
                   text: trap.refutationMove!,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: AppColors.evalPositive,
+                    color: nagColor(1),
                   ),
                 ),
               ],
-              TextSpan(text: ' · $gain gain · reaches $reach of games'),
+              TextSpan(text: ' · $gain eval · $reach of games reach this'),
             ],
           ),
           maxLines: 1,

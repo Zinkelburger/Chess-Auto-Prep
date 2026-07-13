@@ -24,6 +24,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final TreePath currentPath;
   final ValueChanged<TreePath>? onJump;
   final void Function(TreePath, String?)? onCommentChanged;
+  final void Function(TreePath, int)? onToggleNag;
   final void Function(TreePath)? onDelete;
   final void Function(TreePath)? onPromote;
   final void Function(TreePath)? onMakeMainLine;
@@ -57,6 +58,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
     required this.currentPath,
     this.onJump,
     this.onCommentChanged,
+    this.onToggleNag,
     this.onDelete,
     this.onPromote,
     this.onMakeMainLine,
@@ -235,6 +237,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       currentPath: widget.currentPath,
       onJump: widget.onJump,
       onCommentChanged: widget.onCommentChanged,
+      onToggleNag: widget.onToggleNag,
       onDelete: widget.onDelete,
       onPromote: widget.onPromote,
       onMakeMainLine: widget.onMakeMainLine,

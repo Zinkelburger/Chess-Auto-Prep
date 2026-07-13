@@ -298,6 +298,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final positionText = fromInitial
         ? 'Initial Position'
         : movesToPgnMoveText(widget.currentMoveSequence);
+    final sideLabel = widget.isWhiteRepertoire ? 'White' : 'Black';
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -315,7 +316,7 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'GENERATING FROM',
+                  'GENERATING A $sideLabel REPERTOIRE FROM',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -333,6 +334,39 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 12),
+          _buildSideChip(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSideChip(BuildContext context) {
+    final isWhite = widget.isWhiteRepertoire;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isWhite ? Colors.white : Colors.black,
+              border: Border.all(color: Colors.grey.withValues(alpha: 0.7)),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            isWhite ? 'White' : 'Black',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
         ],
       ),

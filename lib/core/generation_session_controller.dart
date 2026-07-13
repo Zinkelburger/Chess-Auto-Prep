@@ -105,6 +105,11 @@ class GenerationSessionController extends ChangeNotifier {
   bool _cancelRequested = false;
   bool _finishNowRequested = false;
 
+  /// A discard is a cancel that also throws away the partial tree, so nothing
+  /// is left to resume.  Tracked separately from [_cancelRequested] because
+  /// the unwind must skip the partial-tree save and delete the file instead.
+  bool _discardRequested = false;
+
   /// Single source of truth for the generated tree and every artifact derived
   /// from it (FenMap, eval-tree snapshot, trap index).
   GeneratedRepertoire? _current;
@@ -219,6 +224,7 @@ class GenerationSessionController extends ChangeNotifier {
     _isGenerating = true;
     _isPaused = false;
     _cancelRequested = false;
+    _discardRequested = false;
     _finishNowRequested = false;
     lastError = null;
     lastRunSummary = '';
@@ -292,8 +298,10 @@ class GenerationSessionController extends ChangeNotifier {
       }
 
       if (_cancelRequested) {
-        lastRunSummary = 'Build cancelled (${tree.totalNodes} nodes) — '
-            'resume it anytime from the Generate tab.';
+        lastRunSummary = _discardRequested
+            ? 'Build discarded (${tree.totalNodes} nodes).'
+            : 'Build cancelled (${tree.totalNodes} nodes) — '
+                'resume it anytime from the Generate tab.';
         return;
       }
       final finishedEarly = _finishNowRequested;
@@ -502,6 +510,11 @@ class GenerationSessionController extends ChangeNotifier {
       if (engineEntered) {
         await EngineLifecycle.instance.exitGeneration();
       }
+      // A discarded build leaves nothing to resume: drop the partial tree
+      // that cancelBuild would otherwise have saved.
+      if (_discardRequested) {
+        await _deletePartialTree(filePath);
+      }
       // Release any dangling pause gate so nothing awaits it forever.
       buildService.resumeBuild();
       _stopElapsedTicker();
@@ -519,6 +532,7 @@ class GenerationSessionController extends ChangeNotifier {
       _isGenerating = false;
       _isPaused = false;
       _cancelRequested = false;
+      _discardRequested = false;
       _activeRequest = null;
       _resetProgress();
       _flushProgressNotify();
@@ -654,14 +668,25 @@ class GenerationSessionController extends ChangeNotifier {
   void cancelBuild() {
     if (!_isGenerating || _cancelRequested) return;
     _cancelRequested = true;
-    savePartialTree();
+    // A discard throws the tree away, so there is no point saving it here —
+    // the unwind deletes the partial file instead.
+    if (!_discardRequested) savePartialTree();
     if (_isPaused) {
       _isPaused = false;
       _pipelineSw.start();
     }
     buildService.stopBuild();
-    progressStatus = 'Cancelling…';
+    progressStatus = _discardRequested ? 'Discarding…' : 'Cancelling…';
     _flushProgressNotify();
+  }
+
+  /// Throw the build away entirely: stop the run and delete the partial tree
+  /// so nothing lingers to resume.  This is the destructive escape hatch for
+  /// a paused build the user has decided they don't want.
+  void discardBuild() {
+    if (!_isGenerating || _cancelRequested) return;
+    _discardRequested = true;
+    cancelBuild();
   }
 
   /// Stop Phase 1 BFS and proceed to selection on the tree built so far.

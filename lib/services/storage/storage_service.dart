@@ -46,6 +46,34 @@ abstract class StorageService {
   /// Returns the absolute path for a repertoire file with the given [name].
   Future<String> repertoireFilePath(String name);
 
+  // ── Repertoire folders + chapters ────────────────────────────────────────
+  //
+  // A repertoire is a *folder* under the repertoires directory; each chapter
+  // is a `.pgn` file inside it (structurally identical to a legacy single-file
+  // repertoire).  [listRepertoires] first migrates any flat `<name>.pgn` left
+  // over from before chapters existed into `<name>/Main.pgn`.
+
+  /// Lists repertoire folders. `gameCount` carries the chapter count.
+  Future<List<RepertoireMetadata>> listRepertoires();
+
+  /// Lists the chapter `.pgn` files inside the repertoire folder at
+  /// [repertoireDirPath]. `gameCount` carries each chapter's line count.
+  Future<List<RepertoireMetadata>> listChapters(String repertoireDirPath);
+
+  /// Absolute path of the repertoire folder for [name] (not created).
+  Future<String> repertoireDirectoryPath(String name);
+
+  /// Absolute path of a chapter file named [chapterName] inside
+  /// [repertoireDirPath].
+  String chapterFilePath(String repertoireDirPath, String chapterName);
+
+  /// Renames the repertoire folder at [oldDirPath] to a sibling named
+  /// [newName]. Returns the new folder path.
+  Future<String> renameRepertoireDirectory(String oldDirPath, String newName);
+
+  /// Recursively deletes the repertoire folder at [dirPath]. No-op if missing.
+  Future<void> deleteRepertoireDirectory(String dirPath);
+
   // ── Study file management ────────────────────────────────────────────────
 
   /// Lists all `.pgn` files in the studies directory ([RepertoireMetadata]

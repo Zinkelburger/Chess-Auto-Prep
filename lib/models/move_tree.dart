@@ -9,6 +9,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import '../constants/chess_constants.dart';
+import '../utils/pgn_comment_utils.dart' show toggleQualityNag;
 import 'move_tree_node_view.dart';
 
 // ---------------------------------------------------------------------------
@@ -186,6 +187,25 @@ class MoveTree {
   })  : startingFen = startingFen ?? kStandardStartFen,
         roots = roots ?? [];
 
+  /// Deep copy whose nodes carry freshly minted ids.
+  ///
+  /// A tree received from another isolate (e.g. parsed via `compute`) holds
+  /// ids minted by that isolate's own counter, which can collide with ids
+  /// of nodes created here; adopt such a tree only through this copy.
+  MoveTree copyWithFreshIds() => MoveTree(
+        startingFen: startingFen,
+        roots: roots.map(_copyNodeWithFreshId).toList(),
+      );
+
+  static MoveNode _copyNodeWithFreshId(MoveNode node) => MoveNode(
+        san: node.san,
+        fen: node.fen,
+        comment: node.comment,
+        nags: node.nags,
+        isEphemeral: node.isEphemeral,
+        children: node.children.map(_copyNodeWithFreshId).toList(),
+      );
+
   // ── Lookup ──────────────────────────────────────────────────────────
 
   /// Children list that *contains* the node at [path].
@@ -335,6 +355,18 @@ class MoveTree {
     }
   }
 
+  /// Toggle a move-quality NAG on the node at [path].
+  ///
+  /// The six move-quality glyphs (ids 1–6) are mutually exclusive — setting
+  /// one clears the others — matching Lichess/ChessBase behaviour. Toggling
+  /// the glyph already present removes it. Non-quality NAGs are left intact.
+  void toggleNag(TreePath path, int nagId) {
+    final node = nodeAt(path);
+    if (node == null) return;
+    final next = toggleQualityNag(node.nags, nagId);
+    node.nags = next.isEmpty ? null : next;
+  }
+
   // ── PGN round-trip ─────────────────────────────────────────────────
 
   /// Parse a PGN string into a [MoveTree].
@@ -470,6 +502,7 @@ class MoveTree {
     }
 
     buffer.write('${main.san} ');
+    _writeNags(buffer, main.nags);
     if (main.comment != null && main.comment!.isNotEmpty) {
       buffer.write('{${_sanitizeComment(main.comment!)}} ');
     }
@@ -484,6 +517,7 @@ class MoveTree {
 
       final variant = siblings[i];
       buffer.write('${variant.san} ');
+      _writeNags(buffer, variant.nags);
       if (variant.comment != null && variant.comment!.isNotEmpty) {
         buffer.write('{${_sanitizeComment(variant.comment!)}} ');
       }
@@ -496,6 +530,14 @@ class MoveTree {
 
     _writeNodes(
         buffer, main.children, isWhite ? moveNumber : moveNumber + 1, !isWhite);
+  }
+
+  /// Write `$N` NAG tokens (PGN standard) so annotations survive a round-trip.
+  static void _writeNags(StringBuffer buffer, List<int>? nags) {
+    if (nags == null) return;
+    for (final nag in nags) {
+      buffer.write('\$$nag ');
+    }
   }
 
   static String _sanitizeComment(String comment) =>

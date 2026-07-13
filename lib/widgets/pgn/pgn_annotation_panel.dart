@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../utils/pgn_comment_utils.dart' show kMoveNags;
+import 'movetext_primitives.dart' show GlyphButton;
 
 class PgnAnnotationPanel extends StatefulWidget {
   /// Identity of the annotated move. When it changes the comment field is
@@ -121,7 +122,7 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
                 ),
               ),
               for (final nag in kMoveNags)
-                _GlyphButton(
+                GlyphButton(
                   symbol: nag.symbol,
                   name: nag.name,
                   color: nag.color,
@@ -165,54 +166,3 @@ class _PgnAnnotationPanelState extends State<PgnAnnotationPanel> {
   }
 }
 
-class _GlyphButton extends StatelessWidget {
-  final String symbol;
-  final String name;
-  final Color color;
-  final bool isActive;
-  final VoidCallback? onTap;
-
-  const _GlyphButton({
-    required this.symbol,
-    required this.name,
-    required this.color,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: name,
-      waitDuration: const Duration(milliseconds: 400),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(5),
-        child: Container(
-          margin: const EdgeInsets.only(right: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          decoration: BoxDecoration(
-            color: isActive ? color.withValues(alpha: 0.2) : null,
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(
-              color: isActive
-                  ? color.withValues(alpha: 0.7)
-                  : Colors.grey.withValues(alpha: 0.3),
-            ),
-          ),
-          child: Text(
-            symbol,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              fontFamily: 'monospace',
-              color: onTap == null
-                  ? Colors.grey[700]
-                  : (isActive ? color : Colors.grey[400]),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

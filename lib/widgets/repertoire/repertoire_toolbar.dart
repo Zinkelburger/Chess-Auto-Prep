@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../constants/ui_breakpoints.dart';
+import '../../models/repertoire_metadata.dart';
 import '../../screens/settings_screen.dart';
 import '../../theme/app_colors.dart';
 import '../app_mode_menu_button.dart';
@@ -23,10 +24,12 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.isGenerationPaused = false,
     this.showTrainButton = false,
     this.showSelectRepertoireAction = false,
+    this.showChaptersAction = false,
     this.generationLocked = false,
     this.trapNavigation,
     required this.onOpenSettings,
     this.onSelectRepertoire,
+    this.onOpenChapters,
     this.onTrainRepertoire,
     this.onOpenGeneration,
     this.onBuildFromGames,
@@ -42,10 +45,12 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final bool isGenerationPaused;
   final bool showTrainButton;
   final bool showSelectRepertoireAction;
+  final bool showChaptersAction;
   final bool generationLocked;
   final Widget? trapNavigation;
   final VoidCallback onOpenSettings;
   final VoidCallback? onSelectRepertoire;
+  final VoidCallback? onOpenChapters;
   final VoidCallback? onTrainRepertoire;
   final VoidCallback? onOpenGeneration;
   final VoidCallback? onBuildFromGames;
@@ -73,6 +78,12 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
           : title,
       actions: [
         BoardZoneControls(trapNavigation: trapNavigation),
+        if (showChaptersAction && onOpenChapters != null)
+          IconButton(
+            tooltip: 'Chapters',
+            icon: const Icon(Icons.menu_book, size: 20),
+            onPressed: generationLocked ? null : onOpenChapters,
+          ),
         if (isGenerating)
           RepertoireGenerationStatusChip(
             isPaused: isGenerationPaused,
@@ -105,17 +116,31 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             if (isWhiteRepertoire != null && onSwitchColor != null)
               PopupMenuItem(
                 value: 'switch_color',
-                child: ListTile(
-                  leading: Icon(
-                    Icons.circle,
-                    size: 20,
-                    color: isWhiteRepertoire! ? Colors.black : Colors.white,
+                child: Tooltip(
+                  message: 'This repertoire prepares the '
+                      '${isWhiteRepertoire! ? 'White' : 'Black'} side. '
+                      'Switching flips the board and treats the '
+                      '${isWhiteRepertoire! ? 'Black' : 'White'} side as '
+                      'your moves.',
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: ListTile(
+                    leading: Icon(
+                      isWhiteRepertoire!
+                          ? Icons.circle_outlined
+                          : Icons.circle,
+                      size: 20,
+                      color: Colors.black87,
+                    ),
+                    title: Text(
+                      'Playing as ${isWhiteRepertoire! ? 'White' : 'Black'}',
+                    ),
+                    subtitle: Text(
+                      'Switch to ${isWhiteRepertoire! ? 'Black' : 'White'} '
+                      'repertoire',
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
                   ),
-                  title: Text(
-                    'Switch to ${isWhiteRepertoire! ? 'Black' : 'White'}',
-                  ),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
                 ),
               ),
             const PopupMenuItem(
@@ -205,6 +230,190 @@ class RepertoireToolbarTitle extends StatelessWidget {
             style: theme.textTheme.bodySmall,
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// Breadcrumb title for the builder: `Repertoire ▸ Chapter ▾`.
+///
+/// The repertoire segment switches repertoires; the chapter segment opens a
+/// dropdown of sibling chapters (current one checked, with line counts) plus
+/// "Add chapter" and "Manage chapters" actions. This makes the folder →
+/// chapter hierarchy visible at all times and turns chapter switching into a
+/// single click instead of a full-screen detour.
+class RepertoireBreadcrumbTitle extends StatelessWidget {
+  const RepertoireBreadcrumbTitle({
+    super.key,
+    required this.repertoireName,
+    required this.chapterName,
+    required this.chapters,
+    required this.currentChapterPath,
+    this.onSwitchRepertoire,
+    required this.onSelectChapter,
+    this.onAddChapter,
+    this.onManageChapters,
+    this.enabled = true,
+  });
+
+  final String repertoireName;
+  final String chapterName;
+  final List<RepertoireMetadata> chapters;
+  final String? currentChapterPath;
+  final VoidCallback? onSwitchRepertoire;
+  final ValueChanged<RepertoireMetadata> onSelectChapter;
+  final VoidCallback? onAddChapter;
+  final VoidCallback? onManageChapters;
+  final bool enabled;
+
+  static const _addValue = '__add_chapter__';
+  static const _manageValue = '__manage_chapters__';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final repTap = enabled ? onSwitchRepertoire : null;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Repertoire Builder',
+          style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
+        ),
+        const SizedBox(height: 1),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Tooltip(
+                message: 'Switch repertoire',
+                waitDuration: const Duration(milliseconds: 600),
+                child: InkWell(
+                  onTap: repTap,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 2),
+                    child: Text(
+                      repertoireName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right, size: 18, color: Colors.grey[500]),
+            Flexible(child: _buildChapterMenu(context, theme)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChapterMenu(BuildContext context, ThemeData theme) {
+    final child = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              chapterName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Icon(
+            Icons.arrow_drop_down,
+            size: 20,
+            color: enabled ? Colors.grey[400] : Colors.grey[700],
+          ),
+        ],
+      ),
+    );
+
+    if (!enabled) return child;
+
+    return Tooltip(
+      message: 'Switch chapter',
+      waitDuration: const Duration(milliseconds: 600),
+      child: PopupMenuButton<String>(
+        tooltip: '',
+        position: PopupMenuPosition.under,
+        onSelected: (value) {
+          if (value == _addValue) {
+            onAddChapter?.call();
+          } else if (value == _manageValue) {
+            onManageChapters?.call();
+          } else {
+            for (final c in chapters) {
+              if (c.filePath == value) {
+                onSelectChapter(c);
+                break;
+              }
+            }
+          }
+        },
+        itemBuilder: (context) => [
+          for (final c in chapters)
+            PopupMenuItem<String>(
+              value: c.filePath,
+              child: _chapterRow(c),
+            ),
+          const PopupMenuDivider(),
+          const PopupMenuItem<String>(
+            value: _addValue,
+            child: ListTile(
+              leading: Icon(Icons.add, size: 20),
+              title: Text('Add chapter'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+          const PopupMenuItem<String>(
+            value: _manageValue,
+            child: ListTile(
+              leading: Icon(Icons.settings, size: 20),
+              title: Text('Manage chapters'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+        ],
+        child: child,
+      ),
+    );
+  }
+
+  Widget _chapterRow(RepertoireMetadata c) {
+    final isCurrent = c.filePath == currentChapterPath;
+    return Row(
+      children: [
+        SizedBox(
+          width: 24,
+          child: isCurrent ? const Icon(Icons.check, size: 18) : null,
+        ),
+        Expanded(
+          child: Text(
+            c.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontWeight: isCurrent ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '${c.gameCount}',
+          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+        ),
       ],
     );
   }

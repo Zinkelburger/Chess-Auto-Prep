@@ -22,6 +22,9 @@ import '../utils/log.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../widgets/chess_board_widget.dart';
 import '../widgets/opening_tree_widget.dart';
+import '../widgets/opening_explorer/opening_explorer_panel.dart';
+import '../services/live_explorer_service.dart';
+import '../models/explorer_response.dart';
 import '../widgets/coverage_calculator_widget.dart';
 import '../widgets/pgn_with_analysis_pane.dart';
 import 'package:file_picker/file_picker.dart';
@@ -62,6 +65,7 @@ import '../widgets/games_repertoire/draft_review_pane.dart';
 import '../widgets/layout/jobs_tab_content.dart';
 import 'package:chess_auto_prep/core/navigation_stack.dart';
 import 'repertoire_selection_screen.dart';
+import 'repertoire_chapters_screen.dart';
 
 class RepertoireScreen extends StatefulWidget {
   const RepertoireScreen({super.key});
@@ -115,12 +119,25 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   /// Lines pane docked right of the PGN/Tree tabs; collapses to a thin rail.
   bool _linesPaneCollapsed = false;
 
+  /// Live Lichess opening-explorer overlay inside the Tree tab (book toggle).
+  /// Lazily created so the API service only exists once the user opens it.
+  LiveExplorerService? _liveExplorer;
+  bool _showExplorer = false;
+
+  /// Fraction of the Tree tab given to the tree when the explorer is open.
+  double _treeSplitRatio = 0.6;
+
   // ── Build-from-games draft session (inline in the Lines/Draft pane) ──
   final GamesDraftController _draftController = GamesDraftController();
 
   bool get _isDraftActive => _draftController.isActive;
 
   String? _lastRepertoireId;
+
+  /// Sibling chapters of the current repertoire folder, for the toolbar
+  /// breadcrumb's chapter dropdown. Reloaded whenever the active chapter
+  /// changes or chapters are added/renamed/deleted.
+  List<RepertoireMetadata> _chapters = [];
 
   /// Session-sticky: once the empty-state cards are dismissed (explicitly or
   /// by playing a move), show the normal tools column even at the root.
@@ -323,6 +340,22 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     if (newRepertoireId != null) {
       _auditController.tryRestore(newRepertoireId!);
+      _loadChapters();
+    }
+  }
+
+  /// Loads the sibling chapters of the active repertoire folder so the toolbar
+  /// breadcrumb can offer one-click switching.
+  Future<void> _loadChapters() async {
+    final current = _controller.currentRepertoire;
+    if (current == null) return;
+    final folder = StorageFactory.instance.parentPath(current.filePath);
+    try {
+      final chapters = await StorageFactory.instance.listChapters(folder);
+      if (!mounted) return;
+      setState(() => _chapters = chapters);
+    } catch (e) {
+      log.w('Load chapters failed', name: 'RepertoireScreen', error: e);
     }
   }
 
@@ -356,12 +389,43 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     }
   }
 
+  /// Confirm before throwing a paused build away — the partial tree is deleted
+  /// and cannot be resumed afterward.
+  Future<void> _confirmDiscardBuild() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard this build?'),
+        content: const Text(
+          'The paused build and everything it has explored so far will be '
+          'deleted. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (discard == true) {
+      _generationController.discardBuild();
+    }
+  }
+
   @override
   void dispose() {
     if (_auditController.isAuditing) {
       _auditController.saveProgress(_repertoireFilePath);
     }
     _toolsTabController.dispose();
+    _liveExplorer?.dispose();
     _focusNode.dispose();
     _boardPreview.dispose();
     _draftController.removeListener(_onDraftChanged);
@@ -499,20 +563,27 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     final repertoire = _controller.currentRepertoire!;
     return Scaffold(
       appBar: RepertoireToolbar(
-        title: RepertoireToolbarTitle(
-          repertoireName: repertoire.name,
-          gameCount: repertoire.gameCount,
+        title: RepertoireBreadcrumbTitle(
+          repertoireName: p.basename(
+            StorageFactory.instance.parentPath(repertoire.filePath),
+          ),
+          chapterName: repertoire.name,
+          chapters: _chapters,
+          currentChapterPath: repertoire.filePath,
+          enabled: !_generationController.isGenerating,
+          onSwitchRepertoire: _showRepertoireSelection,
+          onSelectChapter: _onChapterSelected,
+          onAddChapter: _addChapterInline,
+          onManageChapters: _showChapterList,
         ),
         isGenerating: _generationController.isGenerating,
         isGenerationPaused: _generationController.isPaused,
         showTrainButton: true,
-        showSelectRepertoireAction: true,
         generationLocked: _generationController.isGenerating,
         onOpenSettings: () async {
           await openRepertoireSettings(context);
           _reclaimFocus();
         },
-        onSelectRepertoire: _showRepertoireSelection,
         onTrainRepertoire: _trainRepertoire,
         onOpenGeneration: _openGenerationDialog,
         onBuildFromGames: _buildFromGames,
@@ -610,12 +681,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
           child: Column(
             children: [
               // Paused builds free the tab and the engine; a slim banner
-              // keeps resume/cancel in reach.
+              // keeps resume/discard in reach.
               if (_generationController.isGenerating &&
                   _generationController.isPaused)
                 GenerationPausedBanner(
                   onResume: _generationController.resumeBuild,
-                  onCancel: _generationController.cancelBuild,
+                  onDiscard: _confirmDiscardBuild,
                 ),
               Expanded(
                 child: Stack(
@@ -646,7 +717,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                         canPause: _generationController.canPause,
                         isCancelling: _generationController.isCancelling,
                         onPause: _generationController.pauseBuild,
-                        onCancel: _generationController.cancelBuild,
                       ),
                   ],
                 ),
@@ -768,21 +838,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // PGN editor is now permanent on the left so it can be seen next to
+        // the Lines/Tree pane.
         Expanded(
           flex: 3,
           child: Column(
             children: [
-              _buildToolsTabBar(),
-              Expanded(
-                child: TabBarView(
-                  controller: _toolsTabController,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _buildPgnTabWithEngines(),
-                    _buildTreeTabContent(),
-                  ],
-                ),
-              ),
+              Expanded(child: _buildPgnTabWithEngines()),
               _buildNavControls(),
             ],
           ),
@@ -792,7 +854,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         if (_linesPaneCollapsed)
           _buildCollapsedLinesRail()
         else
-          Expanded(flex: 2, child: _buildLinesPane()),
+          Expanded(flex: 2, child: _buildRightPane()),
       ],
     );
   }
@@ -833,42 +895,37 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     );
   }
 
-  Widget _buildLinesPane() {
+  /// Right-hand pane: a single collapsible surface holding the Lines and
+  /// Tree tabs (they are never shown at once, and collapse together).
+  Widget _buildRightPane() {
     return Column(
       children: [
         SizedBox(
-          height: 30,
+          height: 32,
           child: Row(
             children: [
               IconButton(
                 icon: const Icon(Icons.keyboard_double_arrow_right, size: 16),
                 padding: EdgeInsets.zero,
                 visualDensity: VisualDensity.compact,
-                tooltip: 'Collapse lines pane',
+                tooltip: 'Collapse pane',
                 onPressed: () => setState(() => _linesPaneCollapsed = true),
               ),
-              const SizedBox(width: 2),
-              Icon(
-                _isDraftActive ? Icons.download_done : Icons.list_alt,
-                size: 14,
-                color: _isDraftActive ? AppColors.warning : null,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _isDraftActive
-                    ? 'Draft'
-                    : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _isDraftActive ? AppColors.warning : null,
-                  fontWeight: _isDraftActive ? FontWeight.w600 : null,
-                ),
-              ),
+              Expanded(child: _buildRightPaneTabBar()),
             ],
           ),
         ),
         const Divider(height: 1),
-        Expanded(child: _buildLinesPaneContent()),
+        Expanded(
+          child: TabBarView(
+            controller: _toolsTabController,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              _buildLinesPaneContent(),
+              _buildTreeTabContent(),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -908,23 +965,161 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   Widget _buildTreeTabContent() {
     final tree = _controller.openingTree;
-    if (tree == null) {
-      return const Center(
-        child: Text(
-          'No opening tree available.\nLoad a repertoire to build the tree.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey),
+    final Widget treeArea = tree == null
+        ? const Center(
+            child: Text(
+              'No opening tree available.\nLoad a repertoire to build the tree.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
+        : OpeningTreeWidget(
+            tree: tree,
+            repertoireLines: _controller.repertoireLines,
+            currentMoveSequence: _controller.currentMoveSequence,
+            onMoveSelected: _controller.userSelectedTreeMove,
+            onGoBack: _controller.goBack,
+            onGoForward: _controller.goForward,
+          );
+
+    return Column(
+      children: [
+        _buildTreeToolbar(),
+        const Divider(height: 1),
+        Expanded(
+          child:
+              _showExplorer ? _buildTreeExplorerSplit(treeArea) : treeArea,
         ),
-      );
-    }
-    return OpeningTreeWidget(
-      tree: tree,
-      repertoireLines: _controller.repertoireLines,
-      currentMoveSequence: _controller.currentMoveSequence,
-      onMoveSelected: _controller.userSelectedTreeMove,
-      onGoBack: _controller.goBack,
-      onGoForward: _controller.goForward,
+      ],
     );
+  }
+
+  /// Header above the tree with the Lichess-style book toggle that reveals
+  /// the live opening explorer beneath the tree.
+  Widget _buildTreeToolbar() {
+    final theme = Theme.of(context);
+    return SizedBox(
+      height: 30,
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+          Text('Repertoire tree',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[400])),
+          const Spacer(),
+          IconButton(
+            icon: Icon(
+              _showExplorer ? Icons.menu_book : Icons.menu_book_outlined,
+              size: 16,
+            ),
+            color: _showExplorer ? theme.colorScheme.primary : null,
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            tooltip: _showExplorer
+                ? 'Hide opening explorer'
+                : 'Show Lichess opening explorer',
+            onPressed: _toggleExplorer,
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+    );
+  }
+
+  void _toggleExplorer() {
+    setState(() {
+      _showExplorer = !_showExplorer;
+      if (_showExplorer) {
+        _liveExplorer ??= LiveExplorerService();
+      } else {
+        _liveExplorer?.reset();
+      }
+    });
+  }
+
+  Widget _buildTreeExplorerSplit(Widget treeArea) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const handleH = 10.0;
+        final avail = constraints.maxHeight - handleH;
+        // Keep both panes usable regardless of split ratio.
+        final topH = (avail * _treeSplitRatio).clamp(80.0, avail - 140.0);
+        return Column(
+          children: [
+            SizedBox(height: topH, child: treeArea),
+            _buildSplitHandle(avail),
+            Expanded(child: _buildExplorerPanel()),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSplitHandle(double availHeight) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (d) {
+          if (availHeight <= 0) return;
+          setState(() {
+            _treeSplitRatio =
+                (_treeSplitRatio + d.delta.dy / availHeight).clamp(0.15, 0.85);
+          });
+        },
+        child: Container(
+          height: 10,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          alignment: Alignment.center,
+          child: Container(
+            width: 28,
+            height: 3,
+            decoration: BoxDecoration(
+              color: Colors.grey[600],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExplorerPanel() {
+    return OpeningExplorerPanel(
+      service: _liveExplorer!,
+      fen: _controller.fen,
+      repertoireMovesAtPosition: _repertoireMovesAtCurrentPosition(),
+      onPlayMove: _controller.playMove,
+      onAddMove: _onExplorerAddMove,
+    );
+  }
+
+  /// SANs already present in the repertoire tree at the current cursor.
+  Set<String> _repertoireMovesAtCurrentPosition() {
+    final tree = _controller.tree;
+    final path = _controller.path;
+    final children = path.isEmpty ? tree.roots : tree.nodeAt(path)?.children;
+    return {for (final c in (children ?? const [])) c.san};
+  }
+
+  Future<void> _onExplorerAddMove(ExplorerMove move) async {
+    try {
+      await _controller.writer.addMoveAtPosition(
+        fen: _controller.fen,
+        san: move.san,
+        pathFromRoot: _controller.currentMoveSequence,
+      );
+      _controller.playMove(move.san);
+      if (mounted) showAppSnackBar(context, 'Added ${move.san} to repertoire');
+    } catch (e) {
+      if (mounted) {
+        showAppSnackBar(context, 'Failed to add ${move.san}: $e',
+            isError: true);
+      }
+    }
   }
 
   Widget _buildPgnTabWithEngines() {
@@ -971,22 +1166,31 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     );
   }
 
-  Widget _buildToolsTabBar() {
+  Widget _buildRightPaneTabBar() {
+    final linesLabel = _isDraftActive
+        ? 'Draft'
+        : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}';
+    final linesColor = _isDraftActive ? AppColors.warning : null;
     return TabBar(
       controller: _toolsTabController,
-      tabs: const [
+      tabs: [
         Tab(
           height: 30,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.article_outlined, size: 14),
-              SizedBox(width: 4),
-              Text('PGN', style: TextStyle(fontSize: 12)),
+              Icon(
+                _isDraftActive ? Icons.download_done : Icons.list_alt,
+                size: 14,
+                color: linesColor,
+              ),
+              const SizedBox(width: 4),
+              Text(linesLabel,
+                  style: TextStyle(fontSize: 12, color: linesColor)),
             ],
           ),
         ),
-        Tab(
+        const Tab(
           height: 30,
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1299,6 +1503,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       onJump: (path) => _controller.jump(path),
       onCommentChanged: (path, comment) =>
           _controller.setCommentAtPath(path, comment),
+      onToggleNag: (path, nagId) => _controller.toggleNagAtPath(path, nagId),
       onDelete: (path) => _controller.deleteAtPath(path),
       onPromote: (path) => _controller.promoteVariation(path),
       onMakeMainLine: (path) => _controller.makeMainLine(path),
@@ -1413,7 +1618,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   void _showTrapLine(TrapLineInfo trap, {int? ply}) {
     final built = TrapLineBuilder.build(trap);
     if (built == null) {
-      // Stale/corrupt trap file: fall back to the bare sequence.
+      // Neither the moves nor a FEN were usable (legacy FEN-less trap with
+      // unparseable SANs): fall back to the bare sequence and flag it so a
+      // recurring failure is visible rather than silently dropping the line.
+      log.w(
+        'Trap line unbuildable, showing bare moves: ${trap.movesSan.join(" ")}',
+        name: 'RepertoireScreen',
+      );
       _controller.loadMoveSequence(trap.movesSan);
       _toolsTabController.animateTo(0);
       return;
@@ -1528,8 +1739,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
   void _onDraftChanged() {
     if (!mounted) return;
-    // A draft opening from any entry point should always be visible.
-    if (_draftController.isActive) _linesPaneCollapsed = false;
+    // A draft opening from any entry point should always be visible — reveal
+    // the pane and focus the Lines tab (the draft renders there).
+    if (_draftController.isActive) {
+      _linesPaneCollapsed = false;
+      _toolsTabController.animateTo(0);
+    }
     setState(() {});
   }
 
@@ -1604,6 +1819,133 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       await _controller.setRepertoire(result);
     }
     _reclaimFocus();
+  }
+
+  /// Opens the chapter list for the current repertoire folder so the user can
+  /// switch chapters (and then generate / edit within that chapter). The active
+  /// chapter's file path is `.../<repertoire>/<chapter>.pgn`; its parent
+  /// directory is the repertoire folder.
+  Future<void> _showChapterList() async {
+    final current = _controller.currentRepertoire;
+    if (current == null) return;
+    final folderPath = StorageFactory.instance.parentPath(current.filePath);
+    final folder = RepertoireMetadata(
+      filePath: folderPath,
+      name: p.basename(folderPath),
+      lastModified: DateTime.now(),
+    );
+
+    final chapter = await Navigator.of(context).push<RepertoireMetadata>(
+      MaterialPageRoute(
+        builder: (_) => RepertoireChaptersScreen(repertoire: folder),
+      ),
+    );
+
+    if (chapter != null && mounted && chapter.filePath != current.filePath) {
+      await _controller.setRepertoire(chapter);
+    }
+    // Chapters may have been added/renamed/deleted without switching.
+    await _loadChapters();
+    _reclaimFocus();
+  }
+
+  /// Switches the active chapter from the breadcrumb dropdown.
+  Future<void> _onChapterSelected(RepertoireMetadata chapter) async {
+    if (chapter.filePath == _controller.currentRepertoire?.filePath) return;
+    await _controller.setRepertoire(chapter);
+    _reclaimFocus();
+  }
+
+  /// Creates a new chapter inline (from the breadcrumb dropdown) and switches
+  /// to it, without the full-screen chapter manager. The chapter inherits the
+  /// repertoire's color from the currently loaded chapter.
+  Future<void> _addChapterInline() async {
+    final current = _controller.currentRepertoire;
+    if (current == null) return;
+    final folder = StorageFactory.instance.parentPath(current.filePath);
+    final existingNames = _chapters.map((c) => c.name.toLowerCase()).toSet();
+
+    final controller = TextEditingController();
+    String? nameError;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Add Chapter'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Name this chapter (e.g. a variation or system):'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Chapter Name',
+                  hintText: "King's Gambit",
+                  errorText: nameError,
+                ),
+                onChanged: (_) {
+                  if (nameError != null) setLocal(() => nameError = null);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.isEmpty) {
+                  setLocal(() => nameError = 'Please enter a name');
+                  return;
+                }
+                if (existingNames.contains(value.toLowerCase())) {
+                  setLocal(() => nameError = 'A chapter named "$value" exists');
+                  return;
+                }
+                Navigator.of(context).pop(value);
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    controller.dispose();
+    if (name == null || !mounted) return;
+
+    try {
+      final storage = StorageFactory.instance;
+      final color = _controller.isRepertoireWhite ? 'White' : 'Black';
+      final path = storage.chapterFilePath(folder, name);
+      if (await storage.fileExists(path)) {
+        if (mounted) showAppSnackBar(context, 'That chapter already exists.');
+        return;
+      }
+      final header = '// $name\n'
+          '// Color: $color\n'
+          '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
+      await storage.writeFile(path, header);
+
+      await _controller.setRepertoire(RepertoireMetadata(
+        filePath: path,
+        name: name,
+        gameCount: 0,
+        lastModified: DateTime.now(),
+      ));
+      await _loadChapters();
+      _reclaimFocus();
+    } catch (e) {
+      log.w('Create chapter failed', name: 'RepertoireScreen', error: e);
+      if (mounted) {
+        showAppSnackBar(context, 'Could not create chapter.', isError: true);
+      }
+    }
   }
 
   Future<void> _reloadRepertoire() async {

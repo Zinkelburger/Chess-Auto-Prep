@@ -219,6 +219,19 @@ void main() {
       tree.setComment(TreePath.from([0]), 'King pawn opening');
       expect(tree.nodeAt(TreePath.from([0]))?.comment, 'King pawn opening');
     });
+
+    test('toggleNag sets and clears a move-quality glyph', () {
+      final tree = MoveTree.fromMoves(['e4']);
+      final path = TreePath.from([0]);
+      tree.toggleNag(path, 1);
+      expect(tree.nodeAt(path)?.nags, [1]);
+      // Quality NAGs are mutually exclusive — setting another replaces it.
+      tree.toggleNag(path, 4);
+      expect(tree.nodeAt(path)?.nags, [4]);
+      // Toggling the active glyph removes it.
+      tree.toggleNag(path, 4);
+      expect(tree.nodeAt(path)?.nags, isNull);
+    });
   });
 
   group('MoveTree PGN round-trip', () {
@@ -242,6 +255,25 @@ void main() {
     test('fromPgn preserves comments', () {
       final tree = MoveTree.fromPgn('[Event "Test"]\n\n1. e4 {Best move} e5');
       expect(tree.roots[0].comment, 'Best move');
+    });
+
+    test('NAG glyphs survive a serialize → parse round-trip', () {
+      final tree = MoveTree.fromMoves(['e4', 'e5', 'Nf3']);
+      tree.toggleNag(TreePath.from([0]), 3); // e4!!
+      tree.toggleNag(TreePath.from([0, 0]), 2); // e5?
+      final reparsed = MoveTree.fromPgn(
+          '[Event "Test"]\n\n${tree.toPgnMoveText()}');
+      expect(reparsed.nodeAt(TreePath.from([0]))?.nags, contains(3));
+      expect(reparsed.nodeAt(TreePath.from([0, 0]))?.nags, contains(2));
+    });
+
+    test('NAG glyphs survive on variations too', () {
+      final tree = MoveTree.fromMoves(['e4', 'e5']);
+      tree.addMove(TreePath.from([0]), 'c5'); // sideline
+      tree.toggleNag(TreePath.from([0, 1]), 5); // c5!?
+      final reparsed = MoveTree.fromPgn(
+          '[Event "Test"]\n\n${tree.toPgnMoveText()}');
+      expect(reparsed.roots[0].children[1].nags, contains(5));
     });
 
     test('fromPgn with FEN header', () {

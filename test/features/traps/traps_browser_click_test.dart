@@ -71,6 +71,51 @@ void main() {
       expect(sans, contains('e6'));
     });
 
+    test('recovers a trap-rooted annotated line when moves cannot replay', () {
+      // Same trap, but the stored SAN lead-up is corrupt/stale ("Zz9" cannot
+      // parse), so the full replay fails. The FEN is still good, so we should
+      // recover a tree rooted at the trap position with annotated replies.
+      final trap = TrapLineInfo(
+        movesSan: const ['e4', 'd5', 'Zz9'],
+        trapScore: 0.5,
+        popularProb: 0.4,
+        popularMove: 'Nc6',
+        bestMove: 'e6',
+        popularEvalCp: 252,
+        bestEvalCp: 10,
+        evalDiffCp: 200,
+        cumulativeProb: 0.01,
+        trickSurplus: 0.1,
+        expectimaxValue: 0.59,
+        wpEval: 0.51,
+        fen: 'rn2kb1r/ppp1pppp/5n2/q6b/2B5/2NP1P2/PPPB2PP/R2QK1NR b KQkq - 2 7',
+        refutationMove: 'Nd5',
+        refutationEvalCp: 260,
+        allReplies: const [
+          TrapReply(
+            san: 'Nc6',
+            probability: 0.4,
+            evalAfterCp: 252,
+            classification: TrapReplyClass.blunder,
+          ),
+        ],
+      );
+
+      final built = TrapLineBuilder.build(trap);
+      expect(built, isNotNull);
+      final (:tree, :cursor) = built!;
+
+      // Rooted at the trap position: no lead-up moves, board on the trap FEN.
+      expect(cursor, TreePath.empty);
+      expect(tree.fenAt(cursor), trap.fen);
+
+      // The annotated blunder + punish still survive.
+      final blunder = tree.roots.first;
+      expect(blunder.san, 'Nc6');
+      expect(blunder.nags, [4]);
+      expect(blunder.children.first.san, 'Nd5');
+    });
+
     test('legacy trap without allReplies still gets both key replies', () {
       final trap = TrapLineInfo(
         movesSan: const ['e4', 'e5'],

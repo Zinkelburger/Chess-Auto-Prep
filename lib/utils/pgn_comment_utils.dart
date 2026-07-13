@@ -24,14 +24,22 @@ class NagInfo {
   const NagInfo(this.id, this.symbol, this.name, this.color);
 }
 
-/// The 6 standard move-quality NAGs with Lichess-inspired colors.
+/// The 6 standard move-quality NAGs.
+///
+/// The palette is a single good→bad temperature ramp (teal → green → lime →
+/// amber → orange → red) chosen for the app's dark surface: every tone clears
+/// ~7:1 on #121212. (The previous values were Lichess's *light-theme* set —
+/// its #168226 brilliant-green was nearly invisible on dark, and its magenta
+/// `!?` read as an alert rather than "interesting". The green/red have since
+/// been lifted a step — #66BB6A/#EF5350 sat at ~7.9:1/~5.4:1, and the red in
+/// particular was hard to read at movetext sizes.)
 const kMoveNags = [
-  NagInfo(3, '!!', 'Brilliant', Color(0xFF168226)),
-  NagInfo(1, '!', 'Good move', Color(0xFF4CAF50)),
-  NagInfo(5, '!?', 'Interesting', Color(0xFFEA45D8)),
-  NagInfo(6, '?!', 'Dubious', Color(0xFF56B4E9)),
-  NagInfo(2, '?', 'Mistake', Color(0xFFE69F00)),
-  NagInfo(4, '??', 'Blunder', Color(0xFFDF5353)),
+  NagInfo(3, '!!', 'Brilliant', Color(0xFF2BD9C5)),
+  NagInfo(1, '!', 'Good move', Color(0xFF81C784)),
+  NagInfo(5, '!?', 'Interesting', Color(0xFFCDDC39)),
+  NagInfo(6, '?!', 'Dubious', Color(0xFFFFCA28)),
+  NagInfo(2, '?', 'Mistake', Color(0xFFFF9E45)),
+  NagInfo(4, '??', 'Blunder', Color(0xFFFF8A80)),
 ];
 
 /// Lookup NAG info by ID. Returns null for unknown NAGs.
@@ -47,6 +55,46 @@ String nagSymbol(int id) => nagInfoById(id)?.symbol ?? '\$$id';
 
 /// Get the color for a NAG ID. Returns a neutral grey for unknown NAGs.
 Color nagColor(int id) => nagInfoById(id)?.color ?? const Color(0xFF9E9E9E);
+
+/// The primary move-quality NAG (ids 1–6) on [nags], or null when none is set.
+/// Drives the move's colour in the movetext. Only one quality NAG is ever
+/// present at a time (they are mutually exclusive — see [toggleQualityNag]).
+int? primaryQualityNag(List<int>? nags) {
+  if (nags == null) return null;
+  for (final n in nags) {
+    if (n >= 1 && n <= 6) return n;
+  }
+  return null;
+}
+
+/// The concatenated glyph symbols (e.g. `!?`) for the move-quality NAGs (ids
+/// 1–6) on [nags], in list order. Empty when none is set. This is the suffix
+/// appended after the SAN in the movetext (`Nf3` → `Nf3!?`).
+String qualityNagSuffix(List<int>? nags) {
+  if (nags == null) return '';
+  final buf = StringBuffer();
+  for (final n in nags) {
+    if (n >= 1 && n <= 6) buf.write(nagSymbol(n));
+  }
+  return buf.toString();
+}
+
+/// Toggle move-quality NAG [nagId] on a move's [current] NAG list, returning
+/// the new list. The six quality glyphs (ids 1–6) are mutually exclusive:
+/// setting one clears the others, and setting the one already present removes
+/// it. Non-quality NAGs are preserved. The result may be empty (callers store
+/// `null` for an empty NAG list).
+List<int> toggleQualityNag(List<int>? current, int nagId) {
+  final others = [
+    for (final n in current ?? const <int>[])
+      if (n < 1 || n > 6) n,
+  ];
+  final alreadyOn = (current ?? const <int>[]).contains(nagId);
+  return <int>[
+    if (!alreadyOn && nagId >= 1 && nagId <= 6) nagId,
+    ...others,
+  ];
+}
 
 // ---------------------------------------------------------------------------
 // PGN comment-token regexes

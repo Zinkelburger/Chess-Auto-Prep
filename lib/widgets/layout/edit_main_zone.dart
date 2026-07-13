@@ -25,6 +25,7 @@ class EditMainZone extends StatelessWidget {
     required this.currentPath,
     this.onJump,
     this.onCommentChanged,
+    this.onToggleNag,
     this.onDelete,
     this.onPromote,
     this.onMakeMainLine,
@@ -45,6 +46,7 @@ class EditMainZone extends StatelessWidget {
   final TreePath currentPath;
   final ValueChanged<TreePath>? onJump;
   final void Function(TreePath path, String? comment)? onCommentChanged;
+  final void Function(TreePath path, int nagId)? onToggleNag;
   final void Function(TreePath path)? onDelete;
   final void Function(TreePath path)? onPromote;
   final void Function(TreePath path)? onMakeMainLine;
@@ -70,6 +72,7 @@ class EditMainZone extends StatelessWidget {
       currentPath: currentPath,
       onJump: onJump,
       onCommentChanged: onCommentChanged,
+      onToggleNag: onToggleNag,
       onDelete: onDelete,
       onPromote: onPromote,
       onMakeMainLine: onMakeMainLine,

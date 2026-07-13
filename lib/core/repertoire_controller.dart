@@ -385,6 +385,12 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     notifyListeners();
   }
 
+  /// Toggle a move-quality NAG glyph on the node at [target].
+  void toggleNagAtPath(TreePath target, int nagId) {
+    _tree.toggleNag(target, nagId);
+    notifyListeners();
+  }
+
   // ── Private helpers ──────────────────────────────────────────────
 
   String? _normalizeStartingFen(String? fen) {

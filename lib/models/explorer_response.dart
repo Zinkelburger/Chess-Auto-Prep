@@ -47,10 +47,17 @@ class ExplorerResponse {
   final List<ExplorerMove> moves;
   final int totalGames;
 
+  /// Opening name/ECO for this position, when the API identifies one
+  /// (e.g. "Sicilian Defense" / "B20"). Null for unnamed positions.
+  final String? openingName;
+  final String? openingEco;
+
   const ExplorerResponse({
     required this.fen,
     required this.moves,
     required this.totalGames,
+    this.openingName,
+    this.openingEco,
   });
 
   /// Parse a raw JSON map returned by the Lichess Explorer endpoint.
@@ -85,7 +92,14 @@ class ExplorerResponse {
     }
 
     moves.sort((a, b) => b.playRate.compareTo(a.playRate));
-    return ExplorerResponse(fen: fen, moves: moves, totalGames: totalGames);
+    final opening = data['opening'] as Map<String, dynamic>?;
+    return ExplorerResponse(
+      fen: fen,
+      moves: moves,
+      totalGames: totalGames,
+      openingName: opening?['name'] as String?,
+      openingEco: opening?['eco'] as String?,
+    );
   }
 
   /// Find the best move for [asWhite]'s side by win rate, breaking ties
