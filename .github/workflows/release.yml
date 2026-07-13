@@ -48,15 +48,48 @@ jobs:
       - name: Build Linux release
         run: flutter build linux --release
 
+      # libcdbdirect.so dynamically links libraries end users won't have
+      # (boost_fiber, TBB, jemalloc, snappy, ...). It is linked with an
+      # $ORIGIN rpath, so copying them next to it makes them resolve both in
+      # the zip and inside the Flatpak.
+      - name: Bundle libcdbdirect runtime dependencies
+        run: |
+          BUNDLE_LIB=build/linux/x64/release/bundle/lib
+          test -f "$BUNDLE_LIB/libcdbdirect.so"
+          for dep in $(ldd "$BUNDLE_LIB/libcdbdirect.so" | awk '$3 ~ /^\// {print $3}'); do
+            case "$(basename "$dep")" in
+              libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|ld-linux*) continue ;;
+              libgcc_s*|libstdc++*|libgomp*|libatomic*) continue ;;
+            esac
+            cp -vn "$dep" "$BUNDLE_LIB/"
+          done
+
       - name: Zip bundle
         run: |
           cd build/linux/x64/release/bundle
           zip -r ../../../../../chess-auto-prep-${{ github.ref_name }}-linux.zip .
 
+      - name: Install flatpak-builder
+        run: sudo apt-get install -y flatpak flatpak-builder
+
+      - name: Install Flatpak runtime
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+
+      - name: Build Flatpak bundle
+        run: |
+          flatpak-builder --user --force-clean --disable-rofiles-fuse --repo=flatpak-repo flatpak-build \
+            packaging/flatpak/com.example.chess_auto_prep.yml
+          flatpak build-bundle flatpak-repo \
+            chess-auto-prep-${{ github.ref_name }}-linux.flatpak com.example.chess_auto_prep
+
       - uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: chess-auto-prep-${{ github.ref_name }}-linux.zip
+          path: |
+            chess-auto-prep-${{ github.ref_name }}-linux.zip
+            chess-auto-prep-${{ github.ref_name }}-linux.flatpak
 
   build-windows:
     runs-on: windows-latest

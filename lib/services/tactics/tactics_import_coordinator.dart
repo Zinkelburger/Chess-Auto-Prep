@@ -48,18 +48,41 @@ class TacticsImportCoordinator extends ChangeNotifier {
   /// Total number of PGN games in storage.
   int totalStoredGames = 0;
 
+  /// Last-known usernames, remembered so internal refreshes after an
+  /// import (which only knows its own source's username) still count
+  /// pending games for both platforms.
+  String? _lichessUsername;
+  String? _chesscomUsername;
+
+  /// Start of the pending/resume recency window, evaluated fresh on every
+  /// count. Set by the UI from the fetch-window form; games played before
+  /// it are treated as expired (not pending, not resumed). Null = no window.
+  DateTime? Function()? pendingSinceProvider;
+
   /// Recompute [pendingGameCount] from stored PGNs vs analyzed game IDs.
   /// Only counts games for platforms with a configured username, since
-  /// resume cannot process games without one.
+  /// resume cannot process games without one. A null username keeps the
+  /// previously remembered value.
+  ///
+  /// Also storage hygiene: analyzed and expired games no longer serve the
+  /// resume queue, so they are pruned from the stored-PGN file here —
+  /// except mid-import, when the running import appends to that same file.
   Future<void> refreshPendingCount({
     String? lichessUsername,
     String? chesscomUsername,
   }) async {
+    if (lichessUsername != null) _lichessUsername = lichessUsername;
+    if (chesscomUsername != null) _chesscomUsername = chesscomUsername;
     final service = TacticsImportService(database: database);
     await service.initialize();
+    final since = pendingSinceProvider?.call();
+    if (!isImporting) {
+      await service.pruneStoredPgns(since: since);
+    }
     final counts = await service.countPendingGames(
-      lichessUsername: lichessUsername,
-      chesscomUsername: chesscomUsername,
+      lichessUsername: _lichessUsername,
+      chesscomUsername: _chesscomUsername,
+      since: since,
     );
     pendingGameCount = counts.pending;
     totalStoredGames = counts.total;
@@ -67,11 +90,13 @@ class TacticsImportCoordinator extends ChangeNotifier {
   }
 
   /// Resume analysis of stored PGN games that weren't analyzed yet.
+  /// Games played before [since] are left alone (expired from the queue).
   Future<void> resumeAnalysis({
     required String? lichessUsername,
     required String? chesscomUsername,
     required int depth,
     required int cores,
+    DateTime? since,
   }) async {
     if (isImporting) return;
 
@@ -89,13 +114,15 @@ class TacticsImportCoordinator extends ChangeNotifier {
         lichessUsername: lichessUsername,
         chesscomUsername: chesscomUsername,
         depth: depth,
+        since: since,
         maxCores: cores,
         progressCallback: _onProgress,
         onPositionFound: _onPositionFound,
       );
 
       await database.loadPositions();
-      importStatus = _statusMessage(result);
+      // Cancelled: clear the "Stopping…" note instead of claiming success.
+      importStatus = importService.wasCancelled ? null : _statusMessage(result);
       notifyListeners();
     } finally {
       activeImport = null;
@@ -107,10 +134,10 @@ class TacticsImportCoordinator extends ChangeNotifier {
     }
   }
 
-  /// Runs an import to completion. Returns `true` when a result was produced,
-  /// `false` when it was skipped because another import is already running.
-  /// Throws [TacticsImportUsernameRequired] for an empty username; other
-  /// failures propagate to the caller.
+  /// Runs an import to completion. Returns `true` when it ran to the end,
+  /// `false` when it was skipped (another import already running) or
+  /// cancelled partway. Throws [TacticsImportUsernameRequired] for an empty
+  /// username; other failures propagate to the caller.
   Future<bool> import({
     required TacticsImportSource source,
     required TacticsImportParams params,
@@ -160,6 +187,14 @@ class TacticsImportCoordinator extends ChangeNotifier {
       }
 
       await database.loadPositions();
+      // A cancelled run must not look like a completed one: no success
+      // banner, and `false` so callers (auto-fetch, manual import) don't
+      // advance their last-fetch timestamp past unanalyzed games.
+      if (importService.wasCancelled) {
+        importStatus = null;
+        notifyListeners();
+        return false;
+      }
       importStatus = _statusMessage(result);
       notifyListeners();
       return true;
@@ -221,10 +256,14 @@ class TacticsImportCoordinator extends ChangeNotifier {
         TacticsImportSource.chessCom, chesscomUsername, chesscomLastFetch);
   }
 
+  /// Ask the running import to stop. `isImporting` stays true until the run
+  /// actually winds down (its finally block clears it) — flipping it here
+  /// would let a second import start while the first still holds the engine
+  /// pool.
   void cancelImport() {
+    if (activeImport == null) return;
     activeImport?.cancel();
-    importStatus = null;
-    isImporting = false;
+    importStatus = 'Stopping…';
     notifyListeners();
   }
 

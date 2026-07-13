@@ -5,6 +5,10 @@
 library;
 
 /// Return [fen] truncated to the first four fields, or unchanged if fewer.
+///
+/// This is the single 4-field FEN reducer: `normalizeFen` in
+/// `lib/utils/fen_utils.dart` delegates here. Both names feed PERSISTENT
+/// cache keys, so any behavior change invalidates existing eval databases.
 String canonicalizeFen4(String fen) {
   var spaces = 0;
   for (var i = 0; i < fen.length; i++) {

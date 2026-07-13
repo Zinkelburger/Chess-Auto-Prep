@@ -73,6 +73,10 @@ class InteractivePgnEditor extends StatefulWidget {
   /// Optional board preview on trap dot hover.
   final BoardPreviewController? boardPreview;
 
+  /// Read-only header shown instead of the title field for ephemeral lines
+  /// (e.g. "Trap #45 · Sicilian Defense").
+  final String? ephemeralTitle;
+
   const InteractivePgnEditor({
     super.key,
     required this.tree,
@@ -93,6 +97,7 @@ class InteractivePgnEditor extends StatefulWidget {
     this.repertoireColor,
     this.trapIndex,
     this.boardPreview,
+    this.ephemeralTitle,
   });
 
   @override
@@ -290,13 +295,16 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     showMenu<String>(
       context: context,
       position: position,
+      popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         PopupMenuItem(
           enabled: false,
           height: 32,
           child: Text(moveName,
-              style:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurface)),
         ),
         const PopupMenuDivider(height: 1),
         PopupMenuItem(
@@ -332,12 +340,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             child: _PopupMenuRow(icon: Icons.list_alt, text: 'View in Lines'),
           ),
         const PopupMenuDivider(height: 1),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'delete',
           child: _PopupMenuRow(
-              icon: Icons.delete_outline,
-              text: 'Delete from Here',
-              color: Colors.grey[400]),
+              icon: Icons.delete_outline, text: 'Delete from Here'),
         ),
       ],
     ).then((value) {
@@ -394,7 +400,32 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (_showTitleField) ...[
+                    if (widget.ephemeralTitle != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded,
+                                size: 14, color: AppColors.warning),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                widget.ephemeralTitle!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.warning,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Divider(height: 1, color: Colors.grey[800]),
+                      const SizedBox(height: 4),
+                    ] else if (_showTitleField) ...[
                       Row(
                         children: [
                           Icon(Icons.drive_file_rename_outline,
@@ -733,12 +764,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 class _PopupMenuRow extends StatelessWidget {
   final IconData icon;
   final String text;
-  final Color? color;
 
   const _PopupMenuRow({
     required this.icon,
     required this.text,
-    this.color,
   });
 
   @override
@@ -746,9 +775,9 @@ class _PopupMenuRow extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 16, color: color),
+        Icon(icon, size: 16),
         const SizedBox(width: 8),
-        Text(text, style: TextStyle(fontSize: 12, color: color)),
+        Text(text, style: const TextStyle(fontSize: 12)),
       ],
     );
   }

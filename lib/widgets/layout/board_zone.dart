@@ -11,7 +11,8 @@ import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../chess_board_widget.dart' show BoardAnnotation, CompletedMove;
 import '../repertoire/repertoire_board_pane.dart';
 
-/// Chess board with preview overlay and generation lock UI.
+/// Chess board with preview overlay. Generation locking is handled by the
+/// screen-level [GenerationLockOverlay], not here.
 class BoardZone extends StatelessWidget {
   const BoardZone({
     super.key,
@@ -19,12 +20,7 @@ class BoardZone extends StatelessWidget {
     required this.fen,
     required this.positionFromFen,
     required this.boardFlipped,
-    required this.isGenerating,
-    required this.isGenerationPaused,
     required this.onMove,
-    required this.onPause,
-    required this.onResume,
-    required this.onCancel,
     this.annotations = const [],
   });
 
@@ -32,12 +28,7 @@ class BoardZone extends StatelessWidget {
   final String fen;
   final Position Function(String fen) positionFromFen;
   final bool boardFlipped;
-  final bool isGenerating;
-  final bool isGenerationPaused;
   final void Function(CompletedMove move) onMove;
-  final VoidCallback onPause;
-  final VoidCallback onResume;
-  final VoidCallback onCancel;
   final List<BoardAnnotation> annotations;
 
   @override
@@ -47,12 +38,7 @@ class BoardZone extends StatelessWidget {
       fen: fen,
       positionFromFen: positionFromFen,
       boardFlipped: boardFlipped,
-      isGenerating: isGenerating,
-      isGenerationPaused: isGenerationPaused,
       onMove: onMove,
-      onPause: onPause,
-      onResume: onResume,
-      onCancel: onCancel,
       annotations: annotations,
     );
   }

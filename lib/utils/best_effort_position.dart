@@ -9,6 +9,7 @@ library;
 import 'package:dartchess/dartchess.dart';
 
 import 'fen_utils.dart';
+import 'san_token_utils.dart';
 
 /// Attempt to build a renderable [Position] from [input].
 ///
@@ -79,14 +80,7 @@ List<String> _splitOnGaps(String input) {
 }
 
 /// Tokenize a move group: strip move numbers and results, split on whitespace.
-List<String> _tokenize(String group) {
-  return group
-      .replaceAll(RegExp(r'\d+\.+'), '')
-      .replaceAll(RegExp(r'(1-0|0-1|1/2-1/2|\*)'), '')
-      .split(RegExp(r'\s+'))
-      .where((t) => t.isNotEmpty)
-      .toList();
-}
+List<String> _tokenize(String group) => cleanSanTokens(group);
 
 /// Try to play [san] as a legal move from [pos].
 Position? _tryLegalMove(Position pos, String san) {

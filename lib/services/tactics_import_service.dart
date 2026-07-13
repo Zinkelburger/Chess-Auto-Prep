@@ -50,6 +50,9 @@ class TacticsImportService {
     StockfishPool.instance.stopAll();
   }
 
+  /// Whether the last import/resume run was cancelled via [cancel].
+  bool get wasCancelled => _cancelled;
+
   /// Check if engine-based analysis is available on this platform
   bool get isAnalysisAvailable =>
       StockfishPool.instance.workerCount > 0 || parallel.isParallelAnalysisAvailable;
@@ -93,10 +96,13 @@ class TacticsImportService {
   /// Returns `(total, pending)` where `total` is the number of distinct game
   /// PGNs in storage and `pending` is how many of those lack an entry in
   /// [TacticsDatabase.analyzedGameIds]. Only counts games for platforms that
-  /// have a configured username, since resume cannot process others.
+  /// have a configured username, since resume cannot process others. Games
+  /// played before [since] are treated as expired: not pending, and
+  /// [resumeStoredPgns] applies the same window so count and behavior agree.
   Future<({int total, int pending})> countPendingGames({
     String? lichessUsername,
     String? chesscomUsername,
+    DateTime? since,
   }) async {
     final content = await StorageFactory.instance.readImportedPgns();
     if (content == null || content.isEmpty) return (total: 0, pending: 0);
@@ -108,12 +114,58 @@ class TacticsImportService {
     int pending = 0;
     for (final game in games) {
       final gameId = _extractGameId(game);
-      if (gameId.isEmpty || _database.isGameAnalyzed(gameId)) continue;
-      if (gameId.startsWith('lichess_') && !hasLichess) continue;
-      if (gameId.startsWith('chesscom_') && !hasChessCom) continue;
-      pending++;
+      if (gameId.isEmpty || _isGameAnalyzed(gameId)) continue;
+      if (since != null && _isGameBefore(game, since)) continue;
+      // Only count games resume can actually process: a known platform
+      // prefix with that platform's username configured.
+      if (gameId.startsWith('lichess_') && hasLichess) pending++;
+      if (gameId.startsWith('chesscom_') && hasChessCom) pending++;
     }
     return (total: games.length, pending: pending);
+  }
+
+  /// Remove stored PGNs that no longer serve the resume queue: games
+  /// already analyzed, and games played before [since] (expired). Returns
+  /// how many games were removed.
+  ///
+  /// The analyzed-IDs list is intentionally kept — it's a few bytes per
+  /// game and is what prevents re-analysis when an overlapping date range
+  /// is fetched again later.
+  Future<int> pruneStoredPgns({DateTime? since}) async {
+    final content = await StorageFactory.instance.readImportedPgns();
+    if (content == null || content.isEmpty) return 0;
+
+    final games = splitPgnIntoGames(content);
+    final kept = <String>[];
+    for (final game in games) {
+      final gameId = _extractGameId(game);
+      if (gameId.isNotEmpty && _isGameAnalyzed(gameId)) continue;
+      if (since != null && _isGameBefore(game, since)) continue;
+      kept.add(game);
+    }
+    if (kept.length == games.length) return 0;
+
+    await StorageFactory.instance.saveImportedPgns(kept.join('\n\n'));
+    if (kDebugMode) {
+      log.i('Pruned ${games.length - kept.length} stored PGNs '
+          '(${kept.length} kept)');
+    }
+    return games.length - kept.length;
+  }
+
+  /// Whether the game's `Date`/`UTCDate` header is before [cutoff] (day
+  /// granularity). Games without a parseable date pass the filter — better
+  /// to analyze one game too many than silently drop it.
+  static bool _isGameBefore(String gameText, DateTime cutoff) {
+    final match = RegExp(r'\[(?:Date|UTCDate) "(\d{4})\.(\d{2})\.(\d{2})"\]')
+        .firstMatch(gameText);
+    if (match == null) return false;
+    final gameDate = DateTime(
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+      int.parse(match.group(3)!),
+    );
+    return gameDate.isBefore(DateTime(cutoff.year, cutoff.month, cutoff.day));
   }
 
   /// Resume analysis of stored PGN games that haven't been analyzed yet.
@@ -121,11 +173,13 @@ class TacticsImportService {
   /// Reads saved PGNs from storage, splits them by source (Lichess vs
   /// Chess.com based on game ID prefix), and processes each batch with the
   /// appropriate username. Already-analyzed games are skipped automatically
-  /// by [_processGames].
+  /// by [_processGames]. Games played before [since] are left untouched —
+  /// the same window [countPendingGames] applies.
   Future<ImportResult> resumeStoredPgns({
     required String? lichessUsername,
     required String? chesscomUsername,
     required int depth,
+    DateTime? since,
     int? maxCores,
     ProgressCallback? progressCallback,
     OnPositionFoundCallback? onPositionFound,
@@ -142,10 +196,11 @@ class TacticsImportService {
 
     for (final game in games) {
       final gameId = _extractGameId(game);
-      if (_database.isGameAnalyzed(gameId)) {
+      if (_isGameAnalyzed(gameId)) {
         preFilterSkipped++;
         continue;
       }
+      if (since != null && _isGameBefore(game, since)) continue;
 
       if (gameId.startsWith('lichess_')) {
         lichessGames.add(game);
@@ -345,19 +400,7 @@ class TacticsImportService {
 
     // Filter out games older than the since date by parsing PGN Date header.
     if (since != null) {
-      final sinceDay = DateTime(since.year, since.month, since.day);
-      allGames = allGames.where((gameText) {
-        final dateMatch =
-            RegExp(r'\[(?:Date|UTCDate) "(\d{4})\.(\d{2})\.(\d{2})"\]')
-                .firstMatch(gameText);
-        if (dateMatch == null) return true;
-        final gameDate = DateTime(
-          int.parse(dateMatch.group(1)!),
-          int.parse(dateMatch.group(2)!),
-          int.parse(dateMatch.group(3)!),
-        );
-        return !gameDate.isBefore(sinceDay);
-      }).toList();
+      allGames = allGames.where((g) => !_isGameBefore(g, since)).toList();
     }
 
     // Limit to target games
@@ -434,11 +477,20 @@ class TacticsImportService {
   /// sources (plus our own injected [GameId] header). Returns empty string
   /// if no ID can be determined, which causes the game to be analyzed every
   /// time (safe fallback).
+  ///
+  /// Always returns a platform-prefixed ID (`lichess_` / `chesscom_`) —
+  /// [resumeStoredPgns] routes games to the right username by that prefix,
+  /// so an unprefixed ID would make a game unresumable.
   String _extractGameId(String gameText) {
-    // 1. Our own injected GameId header (from a previous import)
-    final gameIdMatch = RegExp(r'\[GameId "([^"]+)"\]').firstMatch(gameText);
-    if (gameIdMatch != null) {
-      return gameIdMatch.group(1)!;
+    // 1. A GameId header — ours from a previous import, or Lichess's own:
+    //    their PGN exports natively carry the bare game ID in [GameId].
+    //    Only trust it as-is when it already has a platform prefix.
+    final rawHeaderId =
+        RegExp(r'\[GameId "([^"]+)"\]').firstMatch(gameText)?.group(1);
+    if (rawHeaderId != null &&
+        (rawHeaderId.startsWith('lichess_') ||
+            rawHeaderId.startsWith('chesscom_'))) {
+      return rawHeaderId;
     }
 
     // 2. Chess.com: [Link "https://www.chess.com/game/live/123456789"]
@@ -471,11 +523,27 @@ class TacticsImportService {
       }
     }
 
+    // 4. A bare GameId header with no Site/Link to attribute it — only
+    //    Lichess emits a native GameId header, so prefix accordingly.
+    if (rawHeaderId != null && rawHeaderId.isNotEmpty) {
+      return 'lichess_$rawHeaderId';
+    }
+
     // No recognizable game ID found
     if (kDebugMode) {
       log.w('Warning: could not extract game ID from PGN headers');
     }
     return '';
+  }
+
+  /// Whether [gameId] was already analyzed, accepting legacy records: builds
+  /// that trusted Lichess's native GameId header stored those IDs without
+  /// the `lichess_` prefix.
+  bool _isGameAnalyzed(String gameId) {
+    if (_database.isGameAnalyzed(gameId)) return true;
+    const prefix = 'lichess_';
+    return gameId.startsWith(prefix) &&
+        _database.isGameAnalyzed(gameId.substring(prefix.length));
   }
 
   /// Inject GameId header into PGN if not present
@@ -563,7 +631,7 @@ class TacticsImportService {
 
     for (int i = 0; i < games.length; i++) {
       final gameId = _extractGameId(games[i]);
-      if (skipAnalyzedGames && _database.isGameAnalyzed(gameId)) {
+      if (skipAnalyzedGames && _isGameAnalyzed(gameId)) {
         skippedCount++;
         if (kDebugMode) log.w('Skipping already-analyzed game: $gameId');
         continue;

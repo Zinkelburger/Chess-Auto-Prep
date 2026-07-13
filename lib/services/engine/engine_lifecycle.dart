@@ -54,13 +54,19 @@ class EngineLifecycle extends ChangeNotifier {
     await _queueTail;
   }
 
+  /// The user's persisted preference.  Only [toggleOn]/[toggleOff] (explicit
+  /// user actions) change it — [suspend] shuts the engine down without
+  /// touching it, so app-driven shutdowns (mode switch, app close) can't
+  /// masquerade as the user disabling the engine.
+  bool _userWantsEngine = true;
+
   /// Load persisted toggle state. Call once at app startup.
   ///
   /// Engine is **on** by default; only a stored `false` disables it.
   Future<void> loadPersistedState() async {
     final prefs = await SharedPreferences.getInstance();
-    final wasOn = prefs.getBool(_toggleKey) ?? true;
-    if (wasOn) {
+    _userWantsEngine = prefs.getBool(_toggleKey) ?? true;
+    if (_userWantsEngine) {
       await _doToggleOn();
     }
   }
@@ -68,17 +74,33 @@ class EngineLifecycle extends ChangeNotifier {
   Future<void> toggleOn() => _serialExec(_doToggleOn);
   Future<void> toggleOff() => _serialExec(_doToggleOff);
 
+  /// Free the engine without changing the user's persisted preference.
+  Future<void> suspend() => _serialExec(_doShutdown);
+
+  /// Restart after [suspend] when the user preference allows it.
+  Future<void> resume() => _serialExec(() async {
+        if (_userWantsEngine) await _doToggleOn();
+      });
+
   Future<void> _doToggleOn() async {
+    _userWantsEngine = true;
+    _persistToggle(true);
     if (_state != EngineState.off) return;
     // Workers are spawned lazily on first use (ensureWorkers is called by
     // AnalysisService, EngineWeaknessService, etc. before any eval work).
     // This avoids N Stockfish processes sitting idle after app launch.
     _state = EngineState.idle;
-    _persistToggle(true);
     notifyListeners();
   }
 
   Future<void> _doToggleOff() async {
+    if (_state == EngineState.generating) return;
+    _userWantsEngine = false;
+    _persistToggle(false);
+    await _doShutdown();
+  }
+
+  Future<void> _doShutdown() async {
     if (_state == EngineState.off) return;
     if (_state == EngineState.generating) return;
     _analysis.cancel();
@@ -87,7 +109,6 @@ class EngineLifecycle extends ChangeNotifier {
     }
     _pool.dispose();
     _state = EngineState.off;
-    _persistToggle(false);
     notifyListeners();
   }
 
@@ -118,6 +139,21 @@ class EngineLifecycle extends ChangeNotifier {
       await _pool.prepareForTreeBuild(threads);
     }
     _state = EngineState.generating;
+    notifyListeners();
+  }
+
+  /// Hand the engine back to interactive analysis while a build is paused.
+  ///
+  /// The pool and its thread configuration stay untouched — the paused build
+  /// picks the same workers back up when it resumes (via [enterGeneration]);
+  /// interactive analysis just borrows them meanwhile. Restores the state
+  /// the user's toggle implies, so an engine that was off stays off.
+  Future<void> pauseGeneration() => _serialExec(_doPauseGeneration);
+
+  Future<void> _doPauseGeneration() async {
+    if (_state != EngineState.generating) return;
+    _state =
+        _toggleStateBeforeGeneration ? EngineState.idle : EngineState.off;
     notifyListeners();
   }
 
@@ -152,6 +188,7 @@ class EngineLifecycle extends ChangeNotifier {
     _analysis.cancel();
     _pool.dispose();
     _state = EngineState.off;
+    _userWantsEngine = true;
     _toggleStateBeforeGeneration = false;
     _queueTail = Future.value();
     testMode = false;

@@ -15,12 +15,12 @@
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../utils/chess_utils.dart' show uciPvToSan, uciToSan, toStandardUci;
+import '../utils/ease_utils.dart' show winningChanceFromCp;
 import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'engine/stockfish_pool.dart';
@@ -92,14 +92,12 @@ enum MoveClassification { normal, interesting, inaccuracy, mistake, blunder }
 
 /// Lichess-style centipawn-to-winning-chance conversion.
 ///
-/// Uses the logistic model from lila's ui/lib/src/ceval/winningChances.ts:
-/// `2 / (1 + exp(-0.00368208 * cp)) - 1`
-/// Clamps CP to [-1000, 1000], maps mate to pseudo-CP.
-double cpToWinningChance(int? cp, int? mate) {
-  double eCp = effectiveCpFromScores(scoreCp: cp, scoreMate: mate).toDouble();
-  eCp = eCp.clamp(-1000, 1000);
-  return 2.0 / (1.0 + math.exp(-kWinProbK * eCp)) - 1.0;
-}
+/// Maps mate scores to pseudo-CP, then delegates to the shared
+/// [winningChanceFromCp] curve (the same `kWinProbK` logistic used by the
+/// ease/expectimax pipeline). See [winningChanceFromCp] for why the input is
+/// clamped to ±1000 cp here rather than saturated at mate scores.
+double cpToWinningChance(int? cp, int? mate) =>
+    winningChanceFromCp(effectiveCpFromScores(scoreCp: cp, scoreMate: mate));
 
 /// Classify a move based on the change in winning chances.
 MoveClassification classifyMove(double delta) {

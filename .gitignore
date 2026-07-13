@@ -60,6 +60,9 @@ tactics-trainer/frontend/node_modules/
 tactics-trainer/frontend/dist/
 tactics-trainer/frontend/.vite/
 
+# flatpak-builder state
+.flatpak-builder/
+
 # Flutter/Dart
 build/
 .dart_tool/

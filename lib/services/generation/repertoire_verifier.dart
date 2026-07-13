@@ -96,6 +96,7 @@ class RepertoireVerifier {
     required FenMap fenMap,
     required ExpectimaxCalculator ecaCalc,
     bool Function()? isCancelled,
+    Future<void> Function()? pauseGate,
     void Function(String status)? onStatus,
   }) async {
     final depth = config.resolvedVerifyDepth;
@@ -133,6 +134,7 @@ class RepertoireVerifier {
           chosenFens.add(chosen.fen);
         }
       }
+      await pauseGate?.call();
       if (stop()) break;
       onStatus?.call(
         'Verifying ${spine.length} repertoire moves at depth $depth '
@@ -143,6 +145,7 @@ class RepertoireVerifier {
 
       var demoted = false;
       for (final node in spine) {
+        await pauseGate?.call();
         if (stop()) break;
         final chosen = _chosenChild(node);
         if (chosen == null) continue;

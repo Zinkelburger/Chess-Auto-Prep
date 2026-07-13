@@ -10,6 +10,8 @@ import '../../utils/ease_utils.dart' show winProbability;
 import '../../utils/eval_constants.dart';
 import 'fen_map.dart';
 import 'generation_config.dart';
+import 'node_selection.dart';
+import 'trap_score.dart';
 
 class ExpectimaxCalculator {
   final TreeBuildConfig config;
@@ -140,7 +142,7 @@ class ExpectimaxCalculator {
     double sum = 0.0;
     for (final child in node.children) {
       if (!child.hasEngineEval) continue;
-      if (child.moveProbability < 0.01) continue;
+      if (child.moveProbability < kNegligibleMoveProb) continue;
       int delta = child.engineEvalCp! - bestOppCp;
       if (delta < 0) delta = 0;
       sum += child.moveProbability * delta.toDouble();
@@ -160,43 +162,15 @@ class ExpectimaxCalculator {
   ScoredChild? scoreOurMoveChildren(BuildTreeNode node) {
     if (node.children.isEmpty) return null;
 
-    int bestChildCp = kWorstEvalCp;
-    for (final child in node.children) {
-      if (!child.hasEngineEval) continue;
-      final cpUs = child.evalForUs(config.playAsWhite);
-      if (cpUs > bestChildCp) bestChildCp = cpUs;
-    }
-
     final nw = config.noveltyWeight / 100.0;
 
-    double bestV = -1.0;
-    BuildTreeNode? bestChild;
-    int passing = 0;
-
-    for (final child in node.children) {
-      if (!child.hasExpectimax) continue;
-      final cpUs = child.evalForUs(config.playAsWhite);
-      if (cpUs < bestChildCp - config.maxEvalLossCp) continue;
-      passing++;
-
-      final v = _noveltyAdjustedValue(node, child, nw);
-      if (v > bestV) {
-        bestV = v;
-        bestChild = child;
-      }
-    }
-
-    // Fallback: all filtered → consider all children
-    if (passing == 0) {
-      for (final child in node.children) {
-        if (!child.hasExpectimax) continue;
-        final v = _noveltyAdjustedValue(node, child, nw);
-        if (v > bestV) {
-          bestV = v;
-          bestChild = child;
-        }
-      }
-    }
+    final bestChild = pickChildByValue(
+      node.children,
+      playAsWhite: config.playAsWhite,
+      maxEvalLossCp: config.maxEvalLossCp,
+      eligible: (child) => child.hasExpectimax,
+      value: (child) => _noveltyAdjustedValue(node, child, nw),
+    );
 
     if (bestChild == null) return null;
     return ScoredChild(
@@ -264,47 +238,21 @@ class ExpectimaxCalculator {
   }
 
   /// Pick the child with the highest CPL value among eval-guarded candidates.
+  ///
+  /// Unlike [scoreOurMoveChildren], no eligibility guard: children without
+  /// engine evals enter the filter with `evalForUs == 0`.
   BuildTreeNode? _pickByCplValue(BuildTreeNode node) {
-    if (node.children.isEmpty) return null;
-
-    int bestChildCp = kWorstEvalCp;
-    for (final child in node.children) {
-      if (!child.hasEngineEval) continue;
-      final cpUs = child.evalForUs(config.playAsWhite);
-      if (cpUs > bestChildCp) bestChildCp = cpUs;
-    }
-
-    double bestCpl = -1.0;
-    BuildTreeNode? bestChild;
-    int passing = 0;
-
-    for (final child in node.children) {
-      final cpUs = child.evalForUs(config.playAsWhite);
-      if (cpUs < bestChildCp - config.maxEvalLossCp) continue;
-      passing++;
-      if (child.cplValue > bestCpl) {
-        bestCpl = child.cplValue;
-        bestChild = child;
-      }
-    }
-
-    if (passing == 0) {
-      for (final child in node.children) {
-        if (child.cplValue > bestCpl) {
-          bestCpl = child.cplValue;
-          bestChild = child;
-        }
-      }
-    }
-
-    return bestChild;
+    return pickChildByValue(
+      node.children,
+      playAsWhite: config.playAsWhite,
+      maxEvalLossCp: config.maxEvalLossCp,
+      value: (child) => child.cplValue,
+    );
   }
 
   /// Compute trap scores on opponent-move nodes throughout the tree.
-  /// Trap score measures how often opponents play suboptimal moves:
-  ///   trap = clamp(eval_diff / 200, 0, 1) * highest_probability
-  /// where eval_diff is the difference between the best move's eval
-  /// and the most popular move's eval (from the mover's perspective).
+  /// Trap score measures how often opponents play suboptimal moves;
+  /// see [analyzeTrapScore] for the shared formula.
   void computeTrapScores(BuildTreeNode root) {
     _trapScoreRecursive(root);
   }
@@ -315,43 +263,11 @@ class ExpectimaxCalculator {
     }
 
     final isOurMove = node.isWhiteToMove == config.playAsWhite;
-    if (isOurMove || node.children.length < 2) return;
+    if (isOurMove) return;
 
-    BuildTreeNode? mostPopular;
-    BuildTreeNode? bestMove;
-    double highestProb = 0.0;
-    int bestEval = kWorstEvalCp;
-
-    for (final child in node.children) {
-      if (child.moveProbability > highestProb) {
-        highestProb = child.moveProbability;
-        mostPopular = child;
-      }
-      if (child.hasEngineEval) {
-        final evalForMover = -child.engineEvalCp!;
-        if (evalForMover > bestEval) {
-          bestEval = evalForMover;
-          bestMove = child;
-        }
-      }
-    }
-
-    if (mostPopular == null || bestMove == null) return;
-    if (mostPopular == bestMove) {
-      node.trapScore = 0.0;
-      return;
-    }
-
-    if (!mostPopular.hasEngineEval) return;
-    final popularEval = -mostPopular.engineEvalCp!;
-
-    double evalDiff = (bestEval - popularEval).toDouble();
-    if (evalDiff < 0) evalDiff = 0;
-    double trap = evalDiff / 200.0;
-    if (trap > 1.0) trap = 1.0;
-    trap *= highestProb;
-
-    node.trapScore = trap;
+    final analysis = analyzeTrapScore(node);
+    if (analysis == null) return;
+    node.trapScore = analysis.trapScore;
   }
 }
 

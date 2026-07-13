@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../../models/build_tree_node.dart';
+import '../../utils/movetext_builder.dart';
 import 'line_extractor.dart';
 
 /// Buffers PGN game entries and appends them to a file in batches.
@@ -102,6 +103,10 @@ String buildRepertoirePgnEntry({
   ].join('\n');
 }
 
+/// Numbered movetext for a generated line, with optional per-move
+/// probability annotations. Numbering starts at move 1 with the side given
+/// by [rootWhiteToMove]; serialization delegates to the shared
+/// [buildNumberedMovetext].
 String movesToPgnMoveText(
   List<String> moves, {
   bool rootWhiteToMove = true,
@@ -111,33 +116,26 @@ String movesToPgnMoveText(
   bool annotateMaiaOnly = true,
 }) {
   if (moves.isEmpty) return '';
-  final sb = StringBuffer();
-  for (int i = 0; i < moves.length; i++) {
-    final ply = i + (rootWhiteToMove ? 0 : 1);
-    if (ply.isEven) {
-      sb.write('${(ply ~/ 2) + 1}. ');
-    } else if (i == 0 && !rootWhiteToMove) {
-      sb.write('${(ply ~/ 2) + 1}... ');
-    }
-    sb.write(moves[i]);
-
-    if (annotateMoveProbabilities && i >= prefixMoveCount) {
+  return buildNumberedMovetext(
+    moves,
+    whiteToMoveFirst: rootWhiteToMove,
+    suffix: (i) {
+      if (!annotateMoveProbabilities || i < prefixMoveCount) return null;
       final annIdx = i - prefixMoveCount;
-      if (annIdx < lineAnnotations.length) {
-        final ann = lineAnnotations[annIdx];
-        if (ann.probability != null) {
-          final prob = ann.probability!;
-          final tag = ann.fromLichess && !annotateMaiaOnly
-              ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
-              : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
-          sb.write(' {$tag}');
-        }
-        if (ann.engineInjected) {
-          sb.write(' {engine-injected}');
-        }
+      if (annIdx >= lineAnnotations.length) return null;
+      final ann = lineAnnotations[annIdx];
+      final sb = StringBuffer();
+      if (ann.probability != null) {
+        final prob = ann.probability!;
+        final tag = ann.fromLichess && !annotateMaiaOnly
+            ? '[%humanFrequency ${prob.toStringAsFixed(3)}]'
+            : '[%maiaProbability ${prob.toStringAsFixed(3)}]';
+        sb.write(' {$tag}');
       }
-    }
-    sb.write(' ');
-  }
-  return sb.toString().trim();
+      if (ann.engineInjected) {
+        sb.write(' {engine-injected}');
+      }
+      return sb.toString();
+    },
+  );
 }

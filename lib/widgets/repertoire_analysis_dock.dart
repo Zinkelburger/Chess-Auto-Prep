@@ -65,6 +65,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
     widget.controller.addListener(_onControllerChanged);
     // Manual listener: may restart on-the-fly expectimax when dock/depth settings change.
     _settings.addListener(_onSettingsChanged);
+    // Engine toggled on / generation finished should kick off compute.
+    EngineLifecycle.instance.addListener(_onSettingsChanged);
     _analysis.discoveryResult.addListener(_onAnalysisUpdated);
     _onTheFly.addListener(_onAnalysisUpdated);
   }
@@ -73,6 +75,7 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   void dispose() {
     widget.controller.removeListener(_onControllerChanged);
     _settings.removeListener(_onSettingsChanged);
+    EngineLifecycle.instance.removeListener(_onSettingsChanged);
     _analysis.discoveryResult.removeListener(_onAnalysisUpdated);
     _onTheFly.removeListener(_onAnalysisUpdated);
     _onTheFly.dispose();
@@ -116,12 +119,15 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
   }
 
   void _maybeAutoCompute() {
-    if (EngineLifecycle.instance.state == EngineState.off ||
-        EngineLifecycle.instance.state == EngineState.generating) {
-      return;
-    }
+    if (EngineLifecycle.instance.state == EngineState.generating) return;
     if (widget.isGenerating && !widget.isGenerationPaused) return;
     if (!_settings.showExpectimaxDock) return;
+    if (EngineLifecycle.instance.state == EngineState.off) {
+      // Expectimax pane visible = shared pool wanted — turn it on; the
+      // lifecycle listener re-enters here once the engine reaches idle.
+      EngineLifecycle.instance.toggleOn();
+      return;
+    }
 
     final fen = widget.controller.fen;
     if (_onTheFly.currentFen == fen &&

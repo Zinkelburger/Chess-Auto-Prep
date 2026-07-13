@@ -117,6 +117,12 @@ class TacticsSessionController extends ChangeNotifier {
 
   bool get hasActivePosition => currentPosition != null;
 
+  /// True when the shown puzzle is behind the session head (reached via
+  /// Previous) — it's already completed/skipped, so revealing edit tools
+  /// can't spoil an unsolved puzzle.
+  bool get isViewingPastPuzzle =>
+      currentPosition != null && database.isViewingPastSessionPuzzle;
+
   ReviewSession get currentSession => database.currentSession;
 
   /// PGN viewer move number / side, parsed from [positionContext].

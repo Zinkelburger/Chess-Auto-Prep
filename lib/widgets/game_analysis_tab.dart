@@ -10,6 +10,7 @@ import '../models/solitaire_trophy.dart';
 import '../services/game_analysis_controller.dart';
 import '../utils/chess_utils.dart' show formatEvalDisplay;
 import '../widgets/clickable_move_line.dart';
+import '../widgets/engine/engine_gate.dart';
 import '../widgets/game_analysis_chart.dart';
 import '../theme/app_colors.dart';
 import '../widgets/pgn_viewer_widget.dart';
@@ -161,6 +162,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
 
   void _startAnalysis() {
     if (widget.gamePgnText == null) return;
+    if (!EngineGate.ensureAvailable(context)) return;
     widget.analysisController.analyzeGame(
       widget.gamePgnText!,
       onAnnotatedMovetext: widget.onAnnotatedMovetext != null

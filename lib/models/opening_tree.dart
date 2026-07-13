@@ -57,7 +57,12 @@ class OpeningTreeNode {
     this.parent,
   }) : children = children ?? {};
 
-  /// Calculate win rate (0.0 to 1.0)
+  /// Calculate win rate (0.0 to 1.0).
+  ///
+  /// USER-perspective: [wins]/[losses] are counted for the tree's
+  /// protagonist (the user/repertoire side the tree was built for), not for
+  /// White. Contrast with `BuildTreeNode.whiteWinRate`, which is always
+  /// White's score.
   double get winRate {
     if (gamesPlayed == 0) return 0.0;
     return (wins + 0.5 * draws) / gamesPlayed;

@@ -151,6 +151,56 @@ void main() {
     expect(notificationCount, 4);
   });
 
+  test('pauseGeneration hands the engine back as idle when it was on',
+      () async {
+    await lifecycle.toggleOn();
+    await lifecycle.enterGeneration(1);
+    notificationCount = 0;
+
+    await lifecycle.pauseGeneration();
+    expect(lifecycle.state, EngineState.idle);
+    expect(notificationCount, 1);
+  });
+
+  test('pauseGeneration restores off when the engine was off before the build',
+      () async {
+    await lifecycle.enterGeneration(1);
+
+    await lifecycle.pauseGeneration();
+    expect(lifecycle.state, EngineState.off);
+  });
+
+  test('pauseGeneration is a no-op when not generating', () async {
+    await lifecycle.toggleOn();
+    notificationCount = 0;
+
+    await lifecycle.pauseGeneration();
+    expect(lifecycle.state, EngineState.idle);
+    expect(notificationCount, 0);
+  });
+
+  test('resume after pause re-enters generating and exits cleanly', () async {
+    await lifecycle.toggleOn();
+    await lifecycle.enterGeneration(1);
+    await lifecycle.pauseGeneration();
+
+    await lifecycle.enterGeneration(1);
+    expect(lifecycle.state, EngineState.generating);
+
+    await lifecycle.exitGeneration();
+    expect(lifecycle.state, EngineState.idle);
+  });
+
+  test('pause–resume cycle preserves an off toggle across exitGeneration',
+      () async {
+    await lifecycle.enterGeneration(1);
+    await lifecycle.pauseGeneration();
+    await lifecycle.enterGeneration(1);
+
+    await lifecycle.exitGeneration();
+    expect(lifecycle.state, EngineState.off);
+  });
+
   test(
     'full state machine cycle: off → on → analyze → complete → off',
     () async {

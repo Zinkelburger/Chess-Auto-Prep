@@ -1278,6 +1278,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     showMenu<String>(
       context: context,
       position: _menuPosition(globalPosition),
+      popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         _menuItem('copy_line', Icons.copy_outlined, 'Copy line PGN'),
         _menuItem('add_to_study', Icons.menu_book_outlined,
@@ -1308,6 +1309,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     showMenu<String>(
       context: context,
       position: _menuPosition(globalPosition),
+      popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         _menuItem('copy_line', Icons.copy_outlined, 'Copy line PGN'),
         _menuItem('add_to_study', Icons.menu_book_outlined,

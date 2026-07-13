@@ -189,28 +189,15 @@ class _TacticsImportPanelState extends State<TacticsImportPanel> {
           ),
           const SizedBox(height: 16),
         ],
+        if (widget.pendingGameCount > 0 && !widget.isImporting) ...[
+          _ResumeAnalysisBanner(
+            pendingGameCount: widget.pendingGameCount,
+            onResume: widget.onResumeAnalysis,
+          ),
+          const SizedBox(height: 16),
+        ],
         _buildImportCard(),
         const SizedBox(height: 12),
-        if (widget.pendingGameCount > 0 && !widget.isImporting)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: widget.onResumeAnalysis,
-                icon: const Icon(Icons.play_arrow, size: 20),
-                label: Text(
-                  'Resume Analysis — '
-                  '${widget.pendingGameCount} game${widget.pendingGameCount == 1 ? '' : 's'} remaining',
-                ),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.all(14),
-                  side: BorderSide(color: Colors.orange.shade400),
-                  foregroundColor: Colors.orange.shade300,
-                ),
-              ),
-            ),
-          ),
         _buildStartCard(positionCount),
         const SizedBox(height: 8),
         Wrap(
@@ -990,6 +977,51 @@ class _MistakeTypeCheckbox extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Offer to finish analyzing games that were fetched but never analyzed
+/// (a stopped or interrupted import). Sits at the top and mirrors
+/// [TacticsImportStatusBanner]'s look, so stopping an import and resuming
+/// it live in the same place: stop button while running, run button after.
+class _ResumeAnalysisBanner extends StatelessWidget {
+  const _ResumeAnalysisBanner({
+    required this.pendingGameCount,
+    required this.onResume,
+  });
+
+  final int pendingGameCount;
+  final VoidCallback? onResume;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.blue),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.pause_circle_outline, size: 16, color: Colors.blue[300]),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$pendingGameCount recent game${pendingGameCount == 1 ? '' : 's'} '
+              'fetched but not analyzed yet',
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.play_circle_outlined, size: 20),
+            tooltip: 'Resume analysis',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: onResume,
+          ),
+        ],
       ),
     );
   }
