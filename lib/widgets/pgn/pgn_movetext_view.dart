@@ -30,8 +30,7 @@ import '../../utils/pgn_comment_utils.dart'
         RichSegment,
         RichSegmentType,
         kSanCorePattern,
-        nagSymbol,
-        nagColor;
+        nagSymbol;
 
 class PgnMovetextView extends StatelessWidget {
   /// The parsed game (for game-level comments before any move).
@@ -270,16 +269,11 @@ class PgnMovetextView extends StatelessWidget {
       final isCurrentMove = i == mainLineIndex - 1 && analysisPath.isEmpty;
       final hasBranch = variationsByPly.containsKey(i + 1);
 
-      // Determine move color: NAG color takes priority
-      final moveNag = (moveData.nags != null && moveData.nags!.isNotEmpty)
-          ? moveData.nags!.firstWhere((n) => n >= 1 && n <= 6, orElse: () => 0)
-          : 0;
-      final nagMoveColor = moveNag > 0 ? nagColor(moveNag) : null;
-
+      // Move color is independent of NAGs: annotation glyphs (!, ?, !?) render
+      // in the same color as the move text, never tinted a separate color.
       final moveColor = isCurrentMove
           ? AppColors.pgnMoveCurrentFg
-          : (nagMoveColor ??
-              (hasBranch ? AppColors.lichessDb : AppColors.info));
+          : (hasBranch ? AppColors.lichessDb : AppColors.info);
 
       // Build SAN + NAG text (always shown — annotations survive view mode)
       final nagSuffix = (moveData.nags != null && moveData.nags!.isNotEmpty)
@@ -330,7 +324,7 @@ class PgnMovetextView extends StatelessWidget {
                         fontFamily: 'monospace',
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: nagMoveColor ?? AppColors.pgnMove,
+                        color: moveColor,
                       ),
                     ),
                 ]),
@@ -567,12 +561,15 @@ class PgnMovetextView extends StatelessWidget {
       }
     }
 
+    // Serialize the anchor position once per comment (not per word) for the
+    // legality-cache key.
+    final anchorFen = anchorPos.fen;
     final words = text.split(' ');
     for (int wi = 0; wi < words.length; wi++) {
       if (wi > 0) buffer.write(' ');
       final word = words[wi];
       if (word.isEmpty) continue;
-      final hit = _extractLegalSan(word, anchorPos);
+      final hit = _extractLegalSanCached(word, anchorPos, anchorFen);
       if (hit == null) {
         buffer.write(word);
         continue;
@@ -585,6 +582,27 @@ class PgnMovetextView extends StatelessWidget {
     buffer.write(' ');
     flushProse();
     return spans;
+  }
+
+  /// Memoizes [_extractLegalSan] across rebuilds. Navigating the game
+  /// re-renders the whole movetext, and re-parsing every prose word's SAN from
+  /// scratch each time is what made move clicks lag on heavily-annotated
+  /// (book/study) PGNs. Keyed by the anchor FEN plus the word, so results are
+  /// correct across positions and games; the check is a pure function of those
+  /// two, so caching is always safe. Cleared wholesale past a size cap so the
+  /// map can't grow without bound over a long session.
+  static final Map<String, ({String prefix, String san, String suffix})?>
+      _legalSanCache = {};
+
+  ({String prefix, String san, String suffix})? _extractLegalSanCached(
+      String word, Position pos, String anchorFen) {
+    final key = '$anchorFen $word';
+    final cached = _legalSanCache[key];
+    if (cached != null || _legalSanCache.containsKey(key)) return cached;
+    if (_legalSanCache.length > 50000) _legalSanCache.clear();
+    final result = _extractLegalSan(word, pos);
+    _legalSanCache[key] = result;
+    return result;
   }
 
   /// Extract a legal SAN move from a single prose word, along with any leading
@@ -673,9 +691,24 @@ class PgnMovetextView extends StatelessWidget {
   /// Replay the mainline into a list of positions: `[k]` is the board after
   /// `k` half-moves. Returns null when there is no start position, or when
   /// inline lines are disabled (nothing consumes the positions then).
+  // Single-slot cache for the mainline replay: navigating just re-renders the
+  // same game, so replaying every SAN on each rebuild is wasted work. Reused
+  // while the same [moveHistory] list of the same length replays from the same
+  // start position — comment/NAG edits don't change positions, and appending a
+  // move (edit mode) changes the length, so both stay correct.
+  static List<PgnNodeData>? _prefixCacheKeyMoves;
+  static Position? _prefixCacheKeyStart;
+  static int _prefixCacheKeyLength = -1;
+  static List<Position>? _prefixCacheValue;
+
   List<Position>? _buildPrefixPositions() {
     final start = startPosition;
     if (start == null || onPlayInlineLine == null) return null;
+    if (identical(_prefixCacheKeyMoves, moveHistory) &&
+        identical(_prefixCacheKeyStart, start) &&
+        _prefixCacheKeyLength == moveHistory.length) {
+      return _prefixCacheValue;
+    }
     final positions = <Position>[start];
     Position pos = start;
     for (final data in moveHistory) {
@@ -688,6 +721,10 @@ class PgnMovetextView extends StatelessWidget {
       pos = pos.play(move);
       positions.add(pos);
     }
+    _prefixCacheKeyMoves = moveHistory;
+    _prefixCacheKeyStart = start;
+    _prefixCacheKeyLength = moveHistory.length;
+    _prefixCacheValue = positions;
     return positions;
   }
 
@@ -1038,8 +1075,8 @@ class PgnMovetextView extends StatelessWidget {
                       fontFamily: 'monospace',
                       fontSize: 13,
                       fontWeight: FontWeight.bold,
-                      color: nagColor(node.nags!
-                          .firstWhere((n) => n >= 1 && n <= 6)),
+                      color:
+                          isCurrentNode ? AppColors.pgnMoveCurrentFg : moveColor,
                     ),
                   ),
               ]),
