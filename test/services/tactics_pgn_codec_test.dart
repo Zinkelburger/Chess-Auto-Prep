@@ -300,10 +300,10 @@ void main() {
     });
   });
 
-  group('buildMovetext numbering', () {
+  group('buildSolutionMovetext numbering', () {
     test('white to move numbering', () {
       expect(
-        buildMovetext(
+        buildSolutionMovetext(
             'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4',
             ['Qxf7#']),
         '4. Qxf7# *',
@@ -312,7 +312,7 @@ void main() {
 
     test('black to move gets ellipsis and increments correctly', () {
       expect(
-        buildMovetext('6k1/5ppp/8/8/8/8/r7/6K1 b - - 0 10',
+        buildSolutionMovetext('6k1/5ppp/8/8/8/8/r7/6K1 b - - 0 10',
             ['Ra1+', 'Kh2', 'Ra2']),
         '10... Ra1+ 11. Kh2 Ra2 *',
       );

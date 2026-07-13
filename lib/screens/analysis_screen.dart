@@ -21,6 +21,7 @@ import '../models/opening_tree.dart';
 import '../services/analysis_games_service.dart';
 import '../services/engine_weakness_service.dart';
 import '../services/unified_analysis_builder.dart';
+import '../widgets/engine/engine_gate.dart';
 import '../widgets/engine_weakness_dialog.dart';
 import '../widgets/app_mode_menu_button.dart';
 import '../widgets/position_analysis_widget.dart';
@@ -369,6 +370,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   Future<void> _showWeaknessConfig() async {
     if (_whiteTree == null && _blackTree == null) return;
+    if (!EngineGate.ensureAvailable(context)) return;
 
     final config = await showDialog<EngineWeaknessConfig>(
       context: context,

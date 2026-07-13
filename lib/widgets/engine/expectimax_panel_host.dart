@@ -80,6 +80,9 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
     }
     widget.controller.addListener(_scheduleAutoCompute);
     _settings.addListener(_scheduleAutoCompute);
+    // Engine toggled on / generation finished should kick off compute (and
+    // rebuild so the idle "engine is off" message clears).
+    EngineLifecycle.instance.addListener(_onLifecycleChanged);
     _onTheFly.addListener(_onFlyUpdated);
     _scheduleAutoCompute();
   }
@@ -88,11 +91,18 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
   void dispose() {
     widget.controller.removeListener(_scheduleAutoCompute);
     _settings.removeListener(_scheduleAutoCompute);
+    EngineLifecycle.instance.removeListener(_onLifecycleChanged);
     _onTheFly.removeListener(_onFlyUpdated);
     if (_ownsOnTheFly) {
       _ownedOnTheFly?.dispose();
     }
     super.dispose();
+  }
+
+  void _onLifecycleChanged() {
+    if (!mounted) return;
+    _scheduleAutoCompute();
+    setState(() {});
   }
 
   @override
@@ -123,11 +133,15 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
   void _maybeAutoCompute() {
     if (!_ownsOnTheFly && widget.onTheFlyService != null) return;
     if (!widget.autoComputeEnabled) return;
-    if (EngineLifecycle.instance.state == EngineState.off ||
-        EngineLifecycle.instance.state == EngineState.generating) {
+    if (EngineLifecycle.instance.state == EngineState.generating) return;
+    if (widget.isGenerating && !widget.isGenerationPaused) return;
+    if (EngineLifecycle.instance.state == EngineState.off) {
+      // Expectimax being enabled IS the request to run the shared pool —
+      // turn it on instead of idling behind a message.  The lifecycle
+      // listener re-enters here once the engine reaches idle.
+      EngineLifecycle.instance.toggleOn();
       return;
     }
-    if (widget.isGenerating && !widget.isGenerationPaused) return;
 
     final fen = widget.controller.fen;
     if (_onTheFly.currentFen == fen &&
@@ -158,6 +172,48 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
     );
   }
 
+  /// Why auto-compute is currently blocked, or null when it can run.
+  /// Mirrors the early-return conditions in [_maybeAutoCompute].
+  String? _notRunningReason() {
+    if (EngineLifecycle.instance.state == EngineState.generating ||
+        (widget.isGenerating && !widget.isGenerationPaused)) {
+      return 'Paused while a repertoire is generating';
+    }
+    if (EngineLifecycle.instance.state == EngineState.off) {
+      // Transient: auto-compute turns the engine on and re-runs.
+      return 'Starting engine…';
+    }
+    if (!widget.autoComputeEnabled) {
+      return 'Expectimax panel is hidden';
+    }
+    return null;
+  }
+
+  /// Retry is pointless mid-generation (the pool belongs to the build);
+  /// everything else — engine off, error, timeout — is recoverable.
+  bool get _retryAvailable =>
+      EngineLifecycle.instance.state != EngineState.generating &&
+      !(widget.isGenerating && !widget.isGenerationPaused);
+
+  /// Force a fresh run — recovers from errors, timeouts, or a stuck state.
+  /// Turns the global engine on if needed: an explicit compute request
+  /// overrides the persisted engine kill switch.
+  Future<void> _retry() async {
+    if (EngineLifecycle.instance.state == EngineState.off) {
+      await EngineLifecycle.instance.toggleOn();
+      if (!mounted) return;
+    }
+    _onTheFly.cancel();
+    _onTheFly.ensureRunning(
+      fen: widget.controller.fen,
+      playAsWhite: widget.controller.isRepertoireWhite,
+      mainTree: widget.tree,
+      mainConfig: widget.treeConfig,
+      mainFenMap: widget.fenMap,
+      maxDepth: _settings.onTheFlyMaxDepth,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final fen = widget.controller.fen;
@@ -173,6 +229,8 @@ class _ExpectimaxPanelHostState extends State<ExpectimaxPanelHost> {
       coherenceResult: widget.coherenceResult,
       progressiveSnapshot: useMain ? null : _onTheFly.progressiveLines,
       onTheFlyMode: !useMain,
+      notRunningReason: useMain ? null : _notRunningReason(),
+      onRetry: useMain || !_retryAvailable ? null : _retry,
       compact: widget.compact,
       onOpenSettings: widget.onOpenSettings,
       onMoveSelected: widget.onMoveSelected ?? widget.controller.playMove,

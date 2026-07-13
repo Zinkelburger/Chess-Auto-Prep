@@ -18,6 +18,10 @@ class TrapDetailCard extends StatelessWidget {
   final VoidCallback? onTrainLine;
   final BoardPreviewController boardPreview;
 
+  /// Tap on a specific move in the path — jump to that ply. Falls back to
+  /// [onShowPath] (whole line) when null.
+  final void Function(int ply)? onMoveTapped;
+
   const TrapDetailCard({
     super.key,
     required this.trap,
@@ -26,6 +30,7 @@ class TrapDetailCard extends StatelessWidget {
     this.onShowPath,
     this.onTrainLine,
     required this.boardPreview,
+    this.onMoveTapped,
   });
 
   @override
@@ -85,7 +90,8 @@ class TrapDetailCard extends StatelessWidget {
       sanMoves: trap.movesSan,
       startPly: 0,
       maxMoves: trap.movesSan.length,
-      onMoveTapped: onShowPath != null ? (_) => onShowPath!() : null,
+      onMoveTapped: onMoveTapped ??
+          (onShowPath != null ? (_) => onShowPath!() : null),
       onMoveHovered: (idx, _) {
         final fen = fenAfterMoves(kStandardStartFen, trap.movesSan, idx);
         boardPreview.setPreview(fen);

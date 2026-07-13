@@ -223,7 +223,7 @@ class TacticsTrainingPanel extends StatelessWidget {
                 description: onPreviousPosition != null
                     ? 'Previous position'
                     : 'Already at the first position',
-                shortcut: 'P',
+                shortcut: 'P or ↑',
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -237,7 +237,7 @@ class TacticsTrainingPanel extends StatelessWidget {
             Expanded(
               child: shortcutTooltip(
                 description: _nextDescription,
-                shortcut: 'N',
+                shortcut: 'N or ↓',
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(

@@ -12,6 +12,7 @@ import '../utils/atomic_file.dart';
 import '../utils/fen_utils.dart';
 import '../utils/file_text_reader.dart';
 import 'pgn_parsing_service.dart';
+import 'pgn_tree_core.dart';
 
 /// Both colours' analysis + tree, built from one pass over a player's games.
 typedef AnalysisBundle = ({
@@ -35,20 +36,13 @@ typedef AnalysisBundle = ({
 ///     cache, validated against the PGN file's (size, modified) stat.
 ///   • [buildInIsolate]     – single-colour build from an in-memory PGN list.
 class UnifiedAnalysisBuilder {
-  static const _repertoirePlayerPatterns = [
-    'repertoire',
-    'training',
-    'me',
-    'player',
-    'study',
-  ];
-
   /// Bump when the cache layout changes; older files are ignored (and then
   /// overwritten by the next build). Version 1 was the never-read legacy
   /// format that stored only the top-50 positions.
   static const _cacheVersion = 2;
 
   // ── Synchronous builds ───────────────────────────────────────────────
+
 
   /// Parse PGNs once, walk each mainline once, and populate both the opening
   /// tree and the FEN-map analysis for a single colour.
@@ -411,20 +405,19 @@ class UnifiedAnalysisBuilder {
     final white = (game.headers['White'] ?? '').toLowerCase();
     final black = (game.headers['Black'] ?? '').toLowerCase();
     return (
-      white: white.contains(usernameLower) || _isRepertoirePlayer(white),
-      black: black.contains(usernameLower) || _isRepertoirePlayer(black),
+      white: white.contains(usernameLower) || isRepertoirePlayer(white),
+      black: black.contains(usernameLower) || isRepertoirePlayer(black),
     );
   }
 
   /// Game result from the user's perspective (1 win / 0.5 draw / 0 loss).
-  static double _userResult(PgnGame<PgnNodeData> game, bool isUserWhite) {
-    final result = (game.headers['Result'] ?? '*').trim();
-    if (result == '1-0') return isUserWhite ? 1.0 : 0.0;
-    if (result == '0-1') return isUserWhite ? 0.0 : 1.0;
-    return 0.5;
-  }
+  static double _userResult(PgnGame<PgnNodeData> game, bool isUserWhite) =>
+      resultForUser(game.headers['Result'] ?? '*', isUserWhite);
 
   /// Walk the game's mainline once, updating [acc]'s tree and FEN map.
+  ///
+  /// The walk itself is the shared [walkMainlineIntoTree]; this builder's
+  /// additions are the FEN-map hooks and honouring a [FEN] start header.
   static void _walkMainline({
     required PgnGame<PgnNodeData> game,
     required int gameIndex,
@@ -434,45 +427,28 @@ class UnifiedAnalysisBuilder {
     required int maxDepth,
   }) {
     final startFen = game.headers['FEN'] ?? kStandardStartFen;
-    Position position = Chess.fromSetup(Setup.parseFen(startFen));
-    var currentNode = acc.tree.root;
-    currentNode.updateStats(userResult);
 
-    int depth = 0;
-    for (final nodeData in game.moves.mainline()) {
-      if (depth >= maxDepth) break;
+    walkMainlineIntoTree(
+      tree: acc.tree,
+      game: game,
+      userResult: userResult,
+      maxDepth: maxDepth,
+      startPosition: Chess.fromSetup(Setup.parseFen(startFen)),
+      onPositionBeforeMove: (position) {
+        // FEN map: link game + record stats for positions before the move.
+        _linkGameToFen(acc.fenToGameIndices, position.fen, gameIndex);
 
-      // -- FEN map: link game + record stats for positions before the move --
-      _linkGameToFen(acc.fenToGameIndices, position.fen, gameIndex);
-
-      final bool isUserTurn = (position.turn == Side.white) == isUserWhite;
-      if (isUserTurn) {
-        _updateStats(acc.stats, acc.fenToGameIndices, position.fen, userResult,
-            gameIndex);
-      }
-
-      // -- Parse and apply move --
-      final moveSan = nodeData.san;
-      final move = position.parseSan(moveSan);
-      if (move == null) break;
-
-      try {
-        position = position.play(move);
-      } catch (_) {
-        break;
-      }
-
-      // -- Tree: grow the tree with this move --
-      final childNode = currentNode.getOrCreateChild(moveSan, position.fen);
-      childNode.updateStats(userResult);
-      acc.tree.indexNode(childNode);
-      currentNode = childNode;
-
-      depth++;
-    }
-
-    // Link final position to game index.
-    _linkGameToFen(acc.fenToGameIndices, position.fen, gameIndex);
+        final bool isUserTurn = (position.turn == Side.white) == isUserWhite;
+        if (isUserTurn) {
+          _updateStats(acc.stats, acc.fenToGameIndices, position.fen,
+              userResult, gameIndex);
+        }
+      },
+      onWalkComplete: (finalPosition) {
+        // Link final position to game index.
+        _linkGameToFen(acc.fenToGameIndices, finalPosition.fen, gameIndex);
+      },
+    );
   }
 
   // ── FEN map helpers ──────────────────────────────────────────────────
@@ -510,12 +486,6 @@ class UnifiedAnalysisBuilder {
     if (list.isEmpty || list.last != gameIndex) {
       list.add(gameIndex);
     }
-  }
-
-  static bool _isRepertoirePlayer(String playerName) {
-    final lowerName = playerName.toLowerCase();
-    return _repertoirePlayerPatterns
-        .any((pattern) => lowerName.contains(pattern));
   }
 }
 

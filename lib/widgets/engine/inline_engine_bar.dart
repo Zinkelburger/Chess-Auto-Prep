@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import '../../models/engine_settings.dart';
 import '../../services/analysis_service.dart';
 import '../../services/eval_cache.dart';
+import '../../services/engine/engine_lifecycle.dart';
 import '../../services/engine/eval_worker.dart';
 import '../../services/engine/stockfish_connection_factory.dart';
 import '../../services/engine/stockfish_pool.dart' show kPoolHashPerWorkerMb;
@@ -24,6 +25,7 @@ import '../../utils/chess_utils.dart'
 import '../../utils/fen_utils.dart';
 import '../clickable_move_line.dart';
 import '../analysis/analysis_settings_sheet.dart';
+import 'engine_gate.dart';
 
 class InlineEngineBar extends StatefulWidget {
   final String fen;
@@ -75,14 +77,35 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   EvalWorker? _worker;
   int _workerThreads = 0;
 
+  bool _gateLocked = EngineGate.isLocked;
+
   @override
   void initState() {
     super.initState();
     // Manual listener: thread-count changes dispose worker and re-run discovery.
     _settings.addListener(_onSettingsChanged);
+    EngineLifecycle.instance.addListener(_onEngineGateChanged);
     _externalToggleNotifier.add(_onExternalToggle);
     if (_engineEnabled && widget.isActive) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _runDiscovery());
+    }
+  }
+
+  /// Generation starting/ending: free our dedicated worker so the build gets
+  /// the CPU, then re-run discovery once the engine is ours again.
+  void _onEngineGateChanged() {
+    if (!mounted) return;
+    final locked = EngineGate.isLocked;
+    if (locked == _gateLocked) return;
+    _gateLocked = locked;
+    if (locked) {
+      _generation++;
+      _disposeWorker();
+      _lastAnalyzedFen = null;
+      setState(() => _isSearching = false);
+    } else {
+      setState(() {});
+      if (_engineEnabled && widget.isActive) _runDiscovery();
     }
   }
 
@@ -106,6 +129,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   void dispose() {
     _generation++;
     _externalToggleNotifier.remove(_onExternalToggle);
+    EngineLifecycle.instance.removeListener(_onEngineGateChanged);
     _settings.removeListener(_onSettingsChanged);
     _disposeWorker();
     super.dispose();
@@ -165,7 +189,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
   }
 
   Future<void> _runDiscovery() async {
-    if (!mounted || !_engineEnabled) return;
+    if (!mounted || !_engineEnabled || EngineGate.isLocked) return;
     if (widget.fen == _lastAnalyzedFen && _discovery.lines.isNotEmpty) return;
 
     final myGen = ++_generation;
@@ -234,7 +258,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
         _buildToggleBar(context),
         if (_engineEnabled) ...[
           const Divider(height: 1),
-          _buildLines(context),
+          if (EngineGate.isLocked)
+            const EngineBusyNotice(dense: true)
+          else
+            _buildLines(context),
         ],
       ],
     );
@@ -251,7 +278,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             child: FittedBox(
               child: Switch(
                 value: _engineEnabled,
-                onChanged: _toggleEngine,
+                onChanged: (value) {
+                  if (value && !EngineGate.ensureAvailable(context)) return;
+                  _toggleEngine(value);
+                },
               ),
             ),
           ),
@@ -259,11 +289,13 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
           Expanded(
             child: _engineEnabled
                 ? Text(
-                    _isSearching
-                        ? 'Depth ${_discovery.depth} • '
-                            '${formatNodes(_discovery.nodes)} nodes'
-                        : '${_discovery.lines.length} lines • '
-                            'depth ${_discovery.depth}',
+                    EngineGate.isLocked
+                        ? 'Engine busy'
+                        : _isSearching
+                            ? 'Depth ${_discovery.depth} • '
+                                '${formatNodes(_discovery.nodes)} nodes'
+                            : '${_discovery.lines.length} lines • '
+                                'depth ${_discovery.depth}',
                     style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                     overflow: TextOverflow.ellipsis,
                   )

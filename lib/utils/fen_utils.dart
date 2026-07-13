@@ -8,16 +8,17 @@
 /// "is this the same position?"
 library;
 
+import '../services/eval/eval_canonicalize.dart';
+
 /// Strip a FEN down to its first four fields (board / active colour /
 /// castling / en-passant) so that positions are compared correctly
 /// regardless of move counters.
-String normalizeFen(String fen) {
-  final parts = fen.split(' ');
-  if (parts.length >= 4) {
-    return '${parts[0]} ${parts[1]} ${parts[2]} ${parts[3]}';
-  }
-  return fen;
-}
+///
+/// Delegates to [canonicalizeFen4] — the single 4-field reducer. Both names
+/// feed PERSISTENT cache keys (eval DB, explorer/transposition caches), so
+/// the two MUST stay identical: any divergence would silently orphan
+/// previously written cache entries.
+String normalizeFen(String fen) => canonicalizeFen4(fen);
 
 /// Whether the side to move in [fen] is white.
 ///

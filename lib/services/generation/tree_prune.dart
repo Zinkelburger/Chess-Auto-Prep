@@ -8,30 +8,72 @@ library;
 import '../../models/build_tree_node.dart';
 import 'frontier_queue.dart';
 
+/// Snapshot of an eval-too-low subtree root taken just before deletion, so
+/// debug output can answer "was line X generated and then pruned?".
+class PrunedLine {
+  final int nodeId;
+  final int ply;
+  final String lineSan;
+  final String fen;
+  final int? engineEvalCp;
+  final int? pruneEvalCp;
+  final double cumulativeProbability;
+  final int subtreeNodes;
+
+  PrunedLine.fromNode(BuildTreeNode node)
+      : nodeId = node.nodeId,
+        ply = node.ply,
+        lineSan = node.getLineSan().join(' '),
+        fen = node.fen,
+        engineEvalCp = node.engineEvalCp,
+        pruneEvalCp = node.pruneEvalCp,
+        cumulativeProbability = node.cumulativeProbability,
+        subtreeNodes = node.countSubtree();
+
+  Map<String, dynamic> toJson() => {
+        'node_id': nodeId,
+        'ply': ply,
+        'line_san': lineSan,
+        'fen': fen,
+        if (engineEvalCp != null) 'engine_eval_cp': engineEvalCp,
+        if (pruneEvalCp != null) 'prune_eval_cp': pruneEvalCp,
+        'cumulative_probability': cumulativeProbability,
+        'subtree_nodes': subtreeNodes,
+      };
+}
+
 /// Remove every subtree whose root was flagged [PruneReason.evalTooLow],
 /// keeping the rest of the tree intact. Also drops the removed nodes from the
 /// tree's [BuildTree.nodeIndex] and refreshes [BuildTree.totalNodes].
 ///
+/// When [removedLines] is provided, a [PrunedLine] snapshot of each removed
+/// subtree root is appended to it (descendants are not recorded separately).
+///
 /// Returns the number of nodes removed (including descendants).
-int pruneEvalTooLow(BuildTree tree) {
-  final removed = _pruneRecursive(tree, tree.root);
+int pruneEvalTooLow(BuildTree tree, {List<PrunedLine>? removedLines}) {
+  final removed = _pruneRecursive(tree, tree.root, removedLines);
   if (removed > 0) {
     tree.totalNodes = tree.root.countSubtree();
   }
   return removed;
 }
 
-int _pruneRecursive(BuildTree tree, BuildTreeNode node) {
+int _pruneRecursive(
+  BuildTree tree,
+  BuildTreeNode node,
+  List<PrunedLine>? removedLines,
+) {
   int removed = 0;
   for (int i = node.children.length - 1; i >= 0; i--) {
     final child = node.children[i];
     if (child.pruneReason == PruneReason.evalTooLow) {
+      removedLines?.add(PrunedLine.fromNode(child));
       final subtreeSize = child.countSubtree();
       _removeFromIndex(tree, child);
       node.children.removeAt(i);
       removed += subtreeSize;
     } else {
-      removed += _pruneRecursive(tree, child);
+      removed += _pruneRecursive(tree, child, removedLines);
     }
   }
   return removed;

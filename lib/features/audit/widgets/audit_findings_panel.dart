@@ -446,6 +446,7 @@ class AuditFindingsPanelState extends State<AuditFindingsPanel> {
       context: context,
       position: RelativeRect.fromLTRB(
           position.dx, position.dy, position.dx + 1, position.dy + 1),
+      popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         PopupMenuItem(
           value: 'dismiss',

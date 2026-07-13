@@ -19,7 +19,7 @@ class RepertoireShortcuts extends StatelessWidget {
     required this.onToggleLinesTab,
     required this.onCollapseBottomPane,
     required this.onFlip,
-    required this.onToggleTrapWalkthrough,
+    required this.onToggleTrapTour,
     required this.onToggleEngine,
     required this.onGoBack,
     required this.onGoForward,
@@ -47,9 +47,9 @@ class RepertoireShortcuts extends StatelessWidget {
 
   final VoidCallback onFlip;
 
-  /// Called on T when the current position is a trap.
+  /// Called on T to toggle the trap tour.
   /// Return true if the shortcut was handled.
-  final bool Function() onToggleTrapWalkthrough;
+  final bool Function() onToggleTrapTour;
 
   final VoidCallback onToggleEngine;
   final VoidCallback onGoBack;
@@ -61,10 +61,12 @@ class RepertoireShortcuts extends StatelessWidget {
   /// Called on Shift+Right before [onGoForward]. Return true if trap nav handled.
   final bool Function() onGoToNextTrap;
 
-  /// N — next finding in the audit findings panel.
+  /// N — next trap-tour stop when the tour is open, otherwise next finding
+  /// in the audit findings panel.
   final bool Function()? onNextFinding;
 
-  /// P — previous finding in the audit findings panel.
+  /// P — previous trap-tour stop when the tour is open, otherwise previous
+  /// finding in the audit findings panel.
   final bool Function()? onPrevFinding;
 
   /// D — dismiss current finding in the audit findings panel.
@@ -111,7 +113,7 @@ class RepertoireShortcuts extends StatelessWidget {
     }
 
     if (event.logicalKey == LogicalKeyboardKey.keyT && hasNoLetterModifiers) {
-      if (onToggleTrapWalkthrough()) {
+      if (onToggleTrapTour()) {
         return KeyEventResult.handled;
       }
     }

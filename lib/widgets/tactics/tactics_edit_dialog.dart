@@ -11,8 +11,10 @@ library;
 
 import 'package:dartchess/dartchess.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../models/tactics_position.dart';
+import '../../utils/app_messages.dart';
 
 class TacticsEditDialog extends StatefulWidget {
   final TacticsPosition position;
@@ -171,6 +173,18 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
 
   void _onChanged() => setState(_validate);
 
+  Future<void> _copyToClipboard(String text, String message) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (mounted) showAppSnackBar(context, message);
+    } catch (_) {
+      if (mounted) {
+        showAppSnackBar(context, AppMessages.clipboardWriteFailed,
+            isError: true);
+      }
+    }
+  }
+
   void _save() {
     final updated = widget.position.copyWith(
       fen: _fenCtrl.text.trim(),
@@ -199,6 +213,27 @@ class _TacticsEditDialogState extends State<TacticsEditDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // One-click export for reusing the puzzle elsewhere.
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _copyToClipboard(_fenCtrl.text.trim(), 'FEN copied.'),
+                    icon: const Icon(Icons.copy, size: 14),
+                    label: const Text('Copy FEN'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(
+                      _splitLine(_correctLineCtrl.text).join(' '),
+                      'Moves copied.',
+                    ),
+                    icon: const Icon(Icons.copy, size: 14),
+                    label: const Text('Copy moves'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               const Text('Puzzle',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),

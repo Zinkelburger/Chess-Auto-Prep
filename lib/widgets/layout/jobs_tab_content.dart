@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../constants/chess_constants.dart';
 import '../../core/audit_session_controller.dart';
 import '../../core/generation_session_controller.dart';
 import '../../core/repertoire_controller.dart';
@@ -14,6 +15,8 @@ import '../../features/audit/models/audit_finding.dart';
 import '../../features/audit/models/audit_result.dart';
 import '../../features/audit/widgets/audit_config_panel.dart';
 import '../../services/jobs/repertoire_job.dart';
+import '../../utils/app_messages.dart';
+import '../generation/snapshot_export_dialog.dart';
 import '../repertoire_generation_tab.dart';
 import 'jobs_panel.dart';
 
@@ -83,9 +86,13 @@ class JobsTabContent extends StatelessWidget {
               isWhiteRepertoire: controller.isRepertoireWhite,
               currentRepertoire: controller.currentRepertoire,
               currentMoveSequence: controller.currentMoveSequence,
+              repertoireStartFen: controller.startingFen ?? kStandardStartFen,
               generationController: generationController,
-              onLineSaved: (moves, title, pgn) {
-                controller.appendNewLine(moves, title, pgn);
+              onLinesSaved: (lines) {
+                controller.appendNewLines([
+                  for (final l in lines)
+                    (moves: l.moves, title: l.title, pgn: l.pgn),
+                ]);
               },
             ),
           ),
@@ -139,8 +146,32 @@ class JobsTabContent extends StatelessWidget {
         onResumeGeneration: gc.resumeBuild,
         onCancelGeneration: gc.cancelBuild,
         onFinishNowGeneration: gc.finishNow,
+        onExportLinesGeneration: () => _exportSnapshot(context, gc),
       ),
     );
+  }
+
+  /// Ask for a new repertoire name (+ verify choice) and export the lines
+  /// the build has found so far.  The run continues either way.
+  Future<void> _exportSnapshot(
+    BuildContext context,
+    GenerationSessionController gc,
+  ) async {
+    final config = gc.activeConfig;
+    final choice = await showSnapshotExportDialog(
+      context,
+      suggestedName: gc.snapshotNameSuggestion(),
+      canVerify: config?.needsStockfish ?? false,
+      verifyDepth: config?.resolvedVerifyDepth,
+    );
+    if (choice == null) return;
+    final (ok, message) = await gc.exportSnapshot(
+      repertoireName: choice.name,
+      verify: choice.verify,
+    );
+    if (context.mounted) {
+      showAppSnackBar(context, message, isError: !ok);
+    }
   }
 
   Widget _inlineConfigHeader({

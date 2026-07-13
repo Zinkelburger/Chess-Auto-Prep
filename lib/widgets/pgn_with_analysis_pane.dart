@@ -48,6 +48,10 @@ class PgnWithAnalysisPane extends StatefulWidget {
   final bool embedAnalysisDock;
   final TrapIndexService? trapIndex;
 
+  /// Read-only header shown instead of the title field for ephemeral lines
+  /// (e.g. "Trap #45 · Sicilian Defense").
+  final String? ephemeralTitle;
+
   const PgnWithAnalysisPane({
     super.key,
     required this.controller,
@@ -76,6 +80,7 @@ class PgnWithAnalysisPane extends StatefulWidget {
     this.isGenerationPaused = false,
     this.embedAnalysisDock = true,
     this.trapIndex,
+    this.ephemeralTitle,
   });
 
   @override
@@ -252,6 +257,7 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
       onViewInLines: widget.onViewInLines,
       trapIndex: widget.trapIndex,
       boardPreview: widget.boardPreview,
+      ephemeralTitle: widget.ephemeralTitle,
     );
   }
 }

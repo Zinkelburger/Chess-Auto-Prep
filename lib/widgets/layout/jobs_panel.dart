@@ -13,6 +13,7 @@ import '../../services/generation/generation_config.dart';
 import '../../services/jobs/generation_job_display.dart';
 import '../../services/jobs/repertoire_job.dart';
 import '../../theme/app_colors.dart';
+import '../generation/depth_progress_bars.dart';
 
 class JobsPanel extends StatelessWidget {
   final JobManager jobManager;
@@ -25,6 +26,7 @@ class JobsPanel extends StatelessWidget {
   final VoidCallback? onResumeGeneration;
   final VoidCallback? onCancelGeneration;
   final VoidCallback? onFinishNowGeneration;
+  final VoidCallback? onExportLinesGeneration;
   final VoidCallback? onPauseAudit;
   final VoidCallback? onResumeAudit;
   final VoidCallback? onCancelAudit;
@@ -41,6 +43,7 @@ class JobsPanel extends StatelessWidget {
     this.onResumeGeneration,
     this.onCancelGeneration,
     this.onFinishNowGeneration,
+    this.onExportLinesGeneration,
     this.onPauseAudit,
     this.onResumeAudit,
     this.onCancelAudit,
@@ -160,24 +163,40 @@ class JobsPanel extends StatelessWidget {
     final gc = generationController;
     final phase = gc.progressPhase;
     final config = gc.activeConfig ?? _configFromJob(job);
-    final statsLine = buildGenerationStatsLine(
-      phase: phase,
-      nodes: gc.progressNodes,
-      currentDepth: gc.progressDepth,
-      maxPlyConfig: gc.progressMaxPlyConfig,
-      unexploredAtDepth: gc.progressUnexploredAtDepth,
-      totalAtDepth: gc.progressTotalAtDepth,
-      nodesPerMinute: gc.progressNodesPerMinute,
-      etaDepthSec: gc.progressEtaSec?.round(),
-      linesExtracted: gc.progressLines,
-    );
+    final statParts = [
+      ...buildGenerationStatParts(
+        phase: phase,
+        nodes: gc.progressNodes,
+        currentDepth: gc.progressDepth,
+        maxPlyConfig: gc.progressMaxPlyConfig,
+        unexploredAtDepth: gc.progressUnexploredAtDepth,
+        totalAtDepth: gc.progressTotalAtDepth,
+        nodesPerMinute: gc.progressNodesPerMinute,
+        etaDepthSec: gc.progressEtaSec?.round(),
+        linesExtracted: gc.progressLines,
+        bestFirst: gc.progressBestFirst,
+        frontierSize: gc.progressFrontier,
+        etaRunSec: gc.progressRunEtaSec,
+      ),
+      if (gc.snapshotStatus != null) gc.snapshotStatus!,
+    ];
     final fraction = generationProgressFraction(
       phase: phase,
       currentDepth: gc.progressDepth,
       maxPlyConfig: gc.progressMaxPlyConfig,
       unexploredAtDepth: gc.progressUnexploredAtDepth,
       totalAtDepth: gc.progressTotalAtDepth,
+      bestFirst: gc.progressBestFirst,
+      priorityProgress: gc.progressPriorityFraction,
     );
+    final depthBars = phase == GenerationPhase.buildingTree &&
+            gc.progressDepthTotals.isNotEmpty
+        ? DepthProgressBars(
+            totals: gc.progressDepthTotals,
+            explored: gc.progressDepthExplored,
+            accent: Theme.of(context).colorScheme.primary,
+          )
+        : null;
     final elapsed = formatJobDuration(
       Duration(milliseconds: gc.progressElapsedMs),
     );
@@ -185,35 +204,58 @@ class JobsPanel extends StatelessWidget {
     final configSummary = config?.summaryLabel;
     final accent = Theme.of(context).colorScheme.primary;
 
+    final cancelling = gc.isCancelling;
     return _ActiveJobCard(
       icon: Icons.auto_awesome,
       accent: accent,
       title: job.label,
       subtitle: configSummary,
-      phaseIcon: phase.icon,
-      phaseLabel: phase.label,
-      statsLine: statsLine,
+      phaseIcon: cancelling ? Icons.stop_circle_outlined : phase.icon,
+      phaseLabel: cancelling ? 'Cancelling…' : phase.label,
+      statParts: statParts,
+      detail: depthBars,
       elapsed: elapsed,
       resourceLabel: resourceLabel,
       progress: fraction,
       isPaused: gc.isPaused,
-      onPause: onPauseGeneration,
+      // Pause only where the pipeline honors it; the remaining phases are
+      // short synchronous passes that would ignore the request.
+      onPause: cancelling || !phase.isPausable ? null : onPauseGeneration,
       onResume: onResumeGeneration,
-      onCancel: onCancelGeneration,
-      extraActions: onFinishNowGeneration != null &&
-              phase == GenerationPhase.buildingTree
+      onCancel: cancelling ? null : onCancelGeneration,
+      extraActions: !cancelling && phase == GenerationPhase.buildingTree
           ? [
-              Tooltip(
-                message: 'Stop exploring and build lines from '
-                    'what\'s been found so far',
-                child: TextButton(
-                  onPressed: onFinishNowGeneration,
-                  child: Text(
-                    'Finish Now',
-                    style: TextStyle(fontSize: 11, color: Colors.orange[300]),
+              if (onExportLinesGeneration != null)
+                Tooltip(
+                  message: gc.isSnapshotExporting
+                      ? (gc.snapshotStatus ?? 'Exporting snapshot…')
+                      : 'Save the lines found so far to a new repertoire — '
+                          'the run keeps going',
+                  child: TextButton(
+                    onPressed: gc.isSnapshotExporting
+                        ? null
+                        : onExportLinesGeneration,
+                    child: Text(
+                      'Export Lines',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.lightBlue[300],
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              if (onFinishNowGeneration != null)
+                Tooltip(
+                  message: 'Stop exploring and build lines from '
+                      'what\'s been found so far',
+                  child: TextButton(
+                    onPressed: onFinishNowGeneration,
+                    child: Text(
+                      'Finish Now',
+                      style: TextStyle(fontSize: 11, color: Colors.orange[300]),
+                    ),
+                  ),
+                ),
             ]
           : null,
     );
@@ -224,9 +266,11 @@ class JobsPanel extends StatelessWidget {
     final fraction = ac.totalNodes > 0
         ? ac.nodesChecked / ac.totalNodes
         : null;
-    final statsLine = ac.totalNodes > 0
-        ? '${ac.nodesChecked} / ${ac.totalNodes} positions checked'
-        : 'Starting audit…';
+    final statParts = [
+      ac.totalNodes > 0
+          ? '${ac.nodesChecked} / ${ac.totalNodes} positions checked'
+          : 'Starting audit…',
+    ];
     final configSummary = ac.lastConfig?.summaryLabel ??
         _auditConfigFromJob(job)?.summaryLabel;
     final accent = Theme.of(context).colorScheme.tertiary;
@@ -238,7 +282,7 @@ class JobsPanel extends StatelessWidget {
       subtitle: configSummary,
       phaseIcon: Icons.search,
       phaseLabel: 'Auditing',
-      statsLine: statsLine,
+      statParts: statParts,
       elapsed: null,
       resourceLabel: null,
       progress: fraction,
@@ -258,9 +302,11 @@ class JobsPanel extends StatelessWidget {
       subtitle: null,
       phaseIcon: Icons.analytics_outlined,
       phaseLabel: 'Analyzing coverage',
-      statsLine: job.progress.message.isNotEmpty
-          ? job.progress.message
-          : 'Starting analysis…',
+      statParts: [
+        job.progress.message.isNotEmpty
+            ? job.progress.message
+            : 'Starting analysis…',
+      ],
       elapsed: null,
       resourceLabel: null,
       progress: job.progress.fraction > 0 ? job.progress.fraction : null,
@@ -363,7 +409,7 @@ class _ActiveJobCard extends StatelessWidget {
     required this.subtitle,
     required this.phaseIcon,
     required this.phaseLabel,
-    required this.statsLine,
+    required this.statParts,
     required this.elapsed,
     required this.resourceLabel,
     required this.progress,
@@ -372,6 +418,7 @@ class _ActiveJobCard extends StatelessWidget {
     required this.onResume,
     required this.onCancel,
     this.extraActions,
+    this.detail,
   });
 
   final IconData icon;
@@ -380,7 +427,7 @@ class _ActiveJobCard extends StatelessWidget {
   final String? subtitle;
   final IconData phaseIcon;
   final String phaseLabel;
-  final String statsLine;
+  final List<String> statParts;
   final String? elapsed;
   final String? resourceLabel;
   final double? progress;
@@ -389,6 +436,10 @@ class _ActiveJobCard extends StatelessWidget {
   final VoidCallback? onResume;
   final VoidCallback? onCancel;
   final List<Widget>? extraActions;
+
+  /// Optional widget rendered between the stat chips and the progress bar
+  /// (e.g. per-depth mini-bars during a tree build).
+  final Widget? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -498,16 +549,34 @@ class _ActiveJobCard extends StatelessWidget {
               ],
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            statsLine,
-            style: TextStyle(
-              fontSize: 10,
-              fontFamily: 'monospace',
-              color: Colors.grey[400],
-              height: 1.3,
-            ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final part in statParts)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[850],
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    part,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey[300],
+                    ),
+                  ),
+                ),
+            ],
           ),
+          if (detail != null) ...[
+            const SizedBox(height: 6),
+            detail!,
+          ],
           if (progress != null) ...[
             const SizedBox(height: 6),
             ClipRRect(

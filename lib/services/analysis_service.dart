@@ -111,6 +111,11 @@ class AnalysisService {
     // poll briefly in case of minor scheduling skew.
     const poll = Duration(milliseconds: 16);
     const maxWait = Duration(milliseconds: 200);
+    // Yield-only, not a hard dependency: the pane's full pipeline (discovery
+    // + per-move deep evals) can run for a minute or stall outright, and
+    // expectimax must never be held hostage by it — the pool serializes
+    // worker access anyway.  Give the pane a short head start, then go.
+    const maxGateWait = Duration(seconds: 3);
     final deadline = DateTime.now().add(maxWait);
 
     while (DateTime.now().isBefore(deadline)) {
@@ -121,9 +126,17 @@ class AnalysisService {
             debugPrint('[Analysis] Expectimax waiting for engine-pane pipeline '
                 '(${fen.split(' ').take(2).join(' ')})');
           }
-          await done.future;
-          if (kDebugMode) {
-            debugPrint('[Analysis] Expectimax may proceed — engine-pane done');
+          try {
+            await done.future.timeout(maxGateWait);
+            if (kDebugMode) {
+              debugPrint(
+                  '[Analysis] Expectimax may proceed — engine-pane done');
+            }
+          } on TimeoutException {
+            if (kDebugMode) {
+              debugPrint('[Analysis] Expectimax proceeding — engine-pane '
+                  'pipeline still busy after ${maxGateWait.inSeconds}s');
+            }
           }
           return;
         }

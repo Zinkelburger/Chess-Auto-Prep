@@ -10,6 +10,25 @@ import 'dart:math' as math;
 
 import '../../models/build_tree_node.dart';
 
+/// Below this Maia frequency, an engine-best move is considered "hard to
+/// find" and its ease is capped at [kEngineBestEaseCap] rather than trusted
+/// outright — Maia disagreeing with the engine usually means the move is
+/// unnatural for a human even though it is objectively best.
+const double kHardEngineBestMaiaFreq = 0.15;
+
+/// Ease ceiling applied to engine-best-but-unnatural moves (see
+/// [kHardEngineBestMaiaFreq]).
+const double kEngineBestEaseCap = 0.5;
+
+/// Engine gap (centipawns) between the best and second-best sibling above
+/// which the best move counts as effectively forced (ease = 1.0).
+const int kOnlyReasonableMoveGapCp = 200;
+
+/// Position-quality thresholds for the easy/hard move counters in
+/// [computeLinePlayability].
+const double kEasyMoveQuality = 0.7;
+const double kHardMoveQuality = 0.3;
+
 /// Compute my-ease for all our-move children in the tree.
 ///
 /// At each our-turn node, each child receives a [BuildTreeNode.myEase]
@@ -46,8 +65,9 @@ double _computeMyEase(BuildTreeNode ourMoveChild, BuildTreeNode parent) {
 
   if (_isOnlyReasonableMove(ourMoveChild, parent)) {
     ease = 1.0;
-  } else if (ease < 0.15 && _isEngineBest(ourMoveChild, parent)) {
-    ease = ease.clamp(0.0, 0.5);
+  } else if (ease < kHardEngineBestMaiaFreq &&
+      _isEngineBest(ourMoveChild, parent)) {
+    ease = ease.clamp(0.0, kEngineBestEaseCap);
   }
 
   return ease.clamp(0.0, 1.0);
@@ -65,7 +85,7 @@ bool _isOnlyReasonableMove(BuildTreeNode child, BuildTreeNode parent) {
       .sort((a, b) => (b.engineEvalCp ?? 0).compareTo(a.engineEvalCp ?? 0));
 
   final gap = (evaluated[0].engineEvalCp! - evaluated[1].engineEvalCp!).abs();
-  return gap > 200;
+  return gap > kOnlyReasonableMoveGapCp;
 }
 
 /// True when this child has the best engine eval among siblings.
@@ -168,8 +188,8 @@ LinePlayability computeLinePlayability(
       minQuality = quality;
       minPly = i;
     }
-    if (quality > 0.7) easy++;
-    if (quality < 0.3) hard++;
+    if (quality > kEasyMoveQuality) easy++;
+    if (quality < kHardMoveQuality) hard++;
   }
 
   if (qualities.isEmpty) return LinePlayability.neutral;
