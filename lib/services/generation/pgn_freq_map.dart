@@ -173,6 +173,7 @@ Future<(PgnFreqMap, PgnFreqStats)> parsePgnFiles({
 }) async {
   final resultPort = ReceivePort();
   final progressPort = ReceivePort();
+  final errorPort = ReceivePort();
 
   StreamSubscription? progressSub;
   if (onProgress != null) {
@@ -183,23 +184,40 @@ Future<(PgnFreqMap, PgnFreqStats)> parsePgnFiles({
     });
   }
 
-  await Isolate.spawn(
-    _parseIsolateEntry,
-    _ParseRequest(
-      paths: paths,
-      config: config,
-      useDiskCache: useDiskCache,
-      resultPort: resultPort.sendPort,
-      progressPort: progressPort.sendPort,
-    ),
-  );
+  try {
+    await Isolate.spawn(
+      _parseIsolateEntry,
+      _ParseRequest(
+        paths: paths,
+        config: config,
+        useDiskCache: useDiskCache,
+        resultPort: resultPort.sendPort,
+        progressPort: progressPort.sendPort,
+      ),
+      onError: errorPort.sendPort,
+    );
 
-  final result = await resultPort.first as _ParseResult;
-  await progressSub?.cancel();
-  resultPort.close();
-  progressPort.close();
+    // Race the result against an uncaught isolate error so a crashed
+    // isolate surfaces as an exception instead of hanging this await.
+    final completer = Completer<_ParseResult>();
+    resultPort.listen((msg) {
+      if (!completer.isCompleted) completer.complete(msg as _ParseResult);
+    });
+    errorPort.listen((msg) {
+      final desc = (msg is List && msg.isNotEmpty) ? msg.first : msg;
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('PGN parsing failed: $desc'));
+      }
+    });
 
-  return (result.map, result.stats);
+    final result = await completer.future;
+    return (result.map, result.stats);
+  } finally {
+    await progressSub?.cancel();
+    resultPort.close();
+    progressPort.close();
+    errorPort.close();
+  }
 }
 
 // ── Isolate internals ────────────────────────────────────────────────────
@@ -501,26 +519,10 @@ List<String> _tokenizeMovetext(String movetext) {
   return tokens;
 }
 
-/// SAN to UCI conversion using dartchess.
-String? _sanToUci(String fen, String san) {
+/// Parse a SAN move against a live position; null if unparseable/illegal.
+Move? _parseSanMove(Position position, String san) {
   try {
-    final position = Chess.fromSetup(Setup.parseFen(fen));
-    final move = position.parseSan(san);
-    if (move == null) return null;
-    return move.uci;
-  } catch (_) {
-    return null;
-  }
-}
-
-/// Play a UCI move and return the new FEN, or null if illegal.
-String? _playUci(String baseFen, String uci) {
-  try {
-    final position = Chess.fromSetup(Setup.parseFen(baseFen));
-    final move = Move.parse(uci);
-    if (move == null) return null;
-    final newPos = position.play(move);
-    return newPos.fen;
+    return position.parseSan(san);
   } catch (_) {
     return null;
   }
@@ -543,17 +545,21 @@ String? _buildTrackingTarget(PgnFreqConfig cfg) {
 
   if (prefixMoves.isEmpty && !wantFen) return null;
 
-  var fen = wantFen ? cfg.startFen! : kDefaultStartFen;
-
-  for (final san in prefixMoves) {
-    final uci = _sanToUci(fen, san);
-    if (uci == null) return null;
-    final newFen = _playUci(fen, uci);
-    if (newFen == null) return null;
-    fen = newFen;
+  Position position;
+  try {
+    position =
+        Chess.fromSetup(Setup.parseFen(wantFen ? cfg.startFen! : kDefaultStartFen));
+  } catch (_) {
+    return null;
   }
 
-  return canonicalizeFen4(fen);
+  for (final san in prefixMoves) {
+    final move = _parseSanMove(position, san);
+    if (move == null) return null;
+    position = position.play(move);
+  }
+
+  return canonicalizeFen4(position.fen);
 }
 
 class _ParseWarningLogger {
@@ -601,11 +607,13 @@ _GameResult _processGameMovetext({
   required Map<String, String> headers,
   required _ParseWarningLogger warnings,
 }) {
-  var fen = kDefaultStartFen;
+  // One live position threaded through the game; fenKey always mirrors it.
+  Position position = Chess.initial;
+  var fenKey = canonicalizeFen4(position.fen);
   var tracking = targetKey == null;
   var plyTracked = 0;
 
-  if (targetKey != null && _fenKeysEqual(fen, targetKey)) {
+  if (targetKey != null && fenKey == targetKey) {
     tracking = true;
     map.recordReach(targetKey);
   }
@@ -617,57 +625,38 @@ _GameResult _processGameMovetext({
     if (san == null) continue;
     if (_isResult(san)) break;
 
-    final uci = _sanToUci(fen, san);
-    if (uci == null) {
+    // parseSan only yields legal moves, so this covers illegal moves too.
+    final move = _parseSanMove(position, san);
+    if (move == null) {
       warnings.logMoveFailure(
         gameIndex: gameIndex,
         headers: headers,
         failingSan: san,
-        fen: fen,
+        fen: position.fen,
         reason: 'cannot parse move',
       );
       return _GameResult.error;
     }
 
     if (!tracking) {
-      final newFen = _playUci(fen, uci);
-      if (newFen == null) {
-        warnings.logMoveFailure(
-          gameIndex: gameIndex,
-          headers: headers,
-          failingSan: san,
-          fen: fen,
-          reason: 'illegal move',
-        );
-        return _GameResult.error;
-      }
-      fen = newFen;
+      position = position.play(move);
+      fenKey = canonicalizeFen4(position.fen);
 
-      if (targetKey != null && _fenKeysEqual(fen, targetKey)) {
+      if (fenKey == targetKey) {
         tracking = true;
-        map.recordReach(targetKey);
+        map.recordReach(fenKey);
       }
       continue;
     }
 
     if (maxPly > 0 && plyTracked >= maxPly) break;
 
-    map.recordMove(canonicalizeFen4(fen), uci, san);
+    map.recordMove(fenKey, move.uci, san);
 
-    final newFen = _playUci(fen, uci);
-    if (newFen == null) {
-      warnings.logMoveFailure(
-        gameIndex: gameIndex,
-        headers: headers,
-        failingSan: san,
-        fen: fen,
-        reason: 'illegal move',
-      );
-      return _GameResult.error;
-    }
-    fen = newFen;
+    position = position.play(move);
+    fenKey = canonicalizeFen4(position.fen);
 
-    map.recordReach(canonicalizeFen4(fen));
+    map.recordReach(fenKey);
     plyTracked++;
   }
 
