@@ -622,10 +622,23 @@ class PgnViewerController extends ChangeNotifier {
         boardFlipped = true;
       case PerspectiveMode.player:
         final target = perspective.playerName.toLowerCase().trim();
+        // Exact match first so same-surname matchups still orient correctly.
         if (b == target) {
           boardFlipped = true;
         } else if (w == target) {
           boardFlipped = false;
+        } else {
+          // Collections mix name spellings ("Gashimov,V" / "Gashimov, Vugar"),
+          // so fall back to surname comparison, like detectFileProtagonist.
+          String surname(String s) => s.split(',').first.trim();
+          final t = surname(target);
+          final bMatch = t.isNotEmpty && surname(b) == t;
+          final wMatch = t.isNotEmpty && surname(w) == t;
+          if (bMatch && !wMatch) {
+            boardFlipped = true;
+          } else if (wMatch && !bMatch) {
+            boardFlipped = false;
+          }
         }
     }
     notifyListeners();
