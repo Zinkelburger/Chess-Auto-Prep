@@ -301,12 +301,16 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
                     Icon(Icons.library_books,
                         size: 14, color: Colors.grey[400]),
                     const SizedBox(width: 6),
-                    Text(
-                      'Search Repertoire Lines',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[300],
+                    Flexible(
+                      child: Text(
+                        'Search Repertoire Lines',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[300],
+                        ),
                       ),
                     ),
                   ],

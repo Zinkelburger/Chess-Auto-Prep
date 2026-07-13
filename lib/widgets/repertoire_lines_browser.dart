@@ -240,42 +240,57 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
 
         return Column(
           children: [
-            LineFilterControls(
-              searchController: _searchController,
-              showOnlyMatchingPosition: _showOnlyMatchingPosition,
-              onShowOnlyMatchingPositionChanged: (value) {
-                setState(() => _showOnlyMatchingPosition = value);
-                _applyFilters();
-              },
-              metricsFilters: _metricsFilters,
-              onMetricsFilterToggled: (filter, active) {
-                setState(() {
-                  if (active) {
-                    _metricsFilters.add(filter);
-                  } else {
-                    _metricsFilters.remove(filter);
-                  }
-                });
-                _applyFilters();
-              },
-              coverageResult: widget.coverageResult,
-              coverageFilter: _coverageFilter,
-              onCoverageFilterChanged: (filter) {
-                setState(() => _coverageFilter = filter);
-                _applyFilters();
-              },
-              lineCoverage: _lineCoverage,
-              totalLineCount: widget.lines.length,
-            ),
-            LineMetricsPanel(
-              showCoverageProgress: widget.isCoverageRunning,
-              coverageProgress: widget.coverageProgress,
-              coverageProgressMessage: widget.coverageProgressMessage,
-              coverageResult: widget.coverageResult,
-              lineCoverage: _lineCoverage,
-              filteredLines: _filteredLines,
-              currentMoveSequence: widget.currentMoveSequence,
-              onNavigateToPosition: widget.onNavigateToPosition,
+            // The filter/metrics block has a fixed natural height; when the
+            // pane is short (e.g. the bottom pane's Lines tab) cap it at half
+            // the pane and scroll inside instead of overflowing the list.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: (constraints.maxHeight / 2).clamp(0, 320),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    LineFilterControls(
+                      searchController: _searchController,
+                      showOnlyMatchingPosition: _showOnlyMatchingPosition,
+                      onShowOnlyMatchingPositionChanged: (value) {
+                        setState(() => _showOnlyMatchingPosition = value);
+                        _applyFilters();
+                      },
+                      metricsFilters: _metricsFilters,
+                      onMetricsFilterToggled: (filter, active) {
+                        setState(() {
+                          if (active) {
+                            _metricsFilters.add(filter);
+                          } else {
+                            _metricsFilters.remove(filter);
+                          }
+                        });
+                        _applyFilters();
+                      },
+                      coverageResult: widget.coverageResult,
+                      coverageFilter: _coverageFilter,
+                      onCoverageFilterChanged: (filter) {
+                        setState(() => _coverageFilter = filter);
+                        _applyFilters();
+                      },
+                      lineCoverage: _lineCoverage,
+                      totalLineCount: widget.lines.length,
+                    ),
+                    LineMetricsPanel(
+                      showCoverageProgress: widget.isCoverageRunning,
+                      coverageProgress: widget.coverageProgress,
+                      coverageProgressMessage: widget.coverageProgressMessage,
+                      coverageResult: widget.coverageResult,
+                      lineCoverage: _lineCoverage,
+                      filteredLines: _filteredLines,
+                      currentMoveSequence: widget.currentMoveSequence,
+                      onNavigateToPosition: widget.onNavigateToPosition,
+                    ),
+                  ],
+                ),
+              ),
             ),
             Expanded(
               child: LinesListPanel(
