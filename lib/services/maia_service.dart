@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -38,12 +40,19 @@ class MaiaService {
 
       OrtEnv.instance.init();
 
-      final sessionOptions = OrtSessionOptions();
-
       final rawAsset = await rootBundle.load('assets/maia3_simplified.onnx');
       final bytes = rawAsset.buffer.asUint8List();
 
-      _session = OrtSession.fromBuffer(bytes, sessionOptions);
+      // Parsing/optimizing the 45 MB model graph is one long synchronous
+      // native call — done here it freezes the UI for the whole duration.
+      // Build the session in a short-lived isolate and adopt it by native
+      // address (the session outlives the isolate; onnxruntime is
+      // thread-safe across isolates).
+      final address = await Isolate.run(() {
+        OrtEnv.instance.init();
+        return OrtSession.fromBuffer(bytes, OrtSessionOptions()).address;
+      });
+      _session = OrtSession.fromAddress(address);
       _isInitialized = true;
       log.i('Maia-3 model initialized successfully');
     } catch (e) {
@@ -62,7 +71,18 @@ class MaiaService {
     return result;
   }
 
-  Future<MaiaResult> _evaluateOnnx(String fen, int elo) async {
+  /// Chains inference calls so only one is in flight: the isolate session
+  /// behind [OrtSession.runAsync] pairs requests with responses by order
+  /// alone, so overlapping calls could receive each other's outputs.
+  Future<void> _evalQueue = Future.value();
+
+  Future<MaiaResult> _evaluateOnnx(String fen, int elo) {
+    final result = _evalQueue.then((_) => _runOnnx(fen, elo));
+    _evalQueue = result.then((_) {}, onError: (_) {});
+    return result;
+  }
+
+  Future<MaiaResult> _runOnnx(String fen, int elo) async {
     if (!_isInitialized) {
       await initialize();
       if (!_isInitialized) throw Exception('Maia not initialized');
@@ -99,7 +119,17 @@ class MaiaService {
       'elo_oppo': eloOppoOrt,
     };
 
-    final outputs = _session!.run(runOptions, inputs);
+    // runAsync executes the native inference in the package's worker
+    // isolate; the UI isolate only does the cheap pre/post-processing.
+    final outputs = await _session!.runAsync(runOptions, inputs) ??
+        const <OrtValue?>[];
+    if (outputs.isEmpty) {
+      inputOrt.release();
+      eloSelfOrt.release();
+      eloOppoOrt.release();
+      runOptions.release();
+      throw Exception('Maia inference returned no outputs');
+    }
 
     // Output 0: logits_move [1, 4352]
     // Output 1: logits_value [1, 3] (L/D/W)

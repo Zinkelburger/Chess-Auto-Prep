@@ -6,10 +6,9 @@ import '../../theme/app_colors.dart';
 /// runs.
 ///
 /// Blocks every interaction underneath (board, PGN editor, engine panes) and
-/// hosts the pause/cancel controls plus live progress. Pausing removes the
-/// overlay entirely (see [GenerationPausedBanner]) and frees the engine;
-/// cancelling stops the run but keeps the partial tree resumable from the
-/// Generate tab.
+/// hosts the pause control plus live progress. Pausing removes the overlay
+/// entirely (see [GenerationPausedBanner]), frees the engine, and unlocks the
+/// tab — from there the build can be resumed or discarded.
 class GenerationLockOverlay extends StatelessWidget {
   const GenerationLockOverlay({
     super.key,
@@ -17,7 +16,6 @@ class GenerationLockOverlay extends StatelessWidget {
     required this.canPause,
     required this.isCancelling,
     required this.onPause,
-    required this.onCancel,
   });
 
   final String statusText;
@@ -25,9 +23,10 @@ class GenerationLockOverlay extends StatelessWidget {
   /// Pause is offered only in phases whose loops honor the pause gate.
   final bool canPause;
 
+  /// True while a discard/cancel triggered elsewhere (e.g. the Jobs panel)
+  /// unwinds; the overlay reflects it and disables Pause.
   final bool isCancelling;
   final VoidCallback onPause;
-  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -84,50 +83,30 @@ class GenerationLockOverlay extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 18),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                alignment: WrapAlignment.center,
-                children: [
-                  Tooltip(
-                    message: canPause
-                        ? 'Pause the build and free the engine'
-                        : 'This phase finishes on its own and cannot pause',
-                    child: FilledButton.icon(
-                      onPressed: canPause && !isCancelling ? onPause : null,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.warningSurface,
-                      ),
-                      icon: const Icon(Icons.pause, color: Colors.white),
-                      label: const Text(
-                        'Pause',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+              Tooltip(
+                message: canPause
+                    ? 'Pause the build and free the engine'
+                    : 'This phase finishes on its own and cannot pause',
+                child: FilledButton.icon(
+                  onPressed: canPause && !isCancelling ? onPause : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.warningSurface,
+                  ),
+                  icon: const Icon(Icons.pause, color: Colors.white),
+                  label: const Text(
+                    'Pause',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  FilledButton.icon(
-                    onPressed: isCancelling ? null : onCancel,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.dangerSurface,
-                    ),
-                    icon: const Icon(Icons.stop, color: Colors.white),
-                    label: const Text(
-                      'Cancel',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
               const SizedBox(height: 10),
               Text(
-                'Pause frees the engine and unlocks the tab.\n'
-                'Cancel keeps the partial build — resume it anytime.',
+                'Pausing frees the engine and unlocks the tab.\n'
+                'You can resume it later — or discard it if you change '
+                'your mind.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11.5,
@@ -145,16 +124,18 @@ class GenerationLockOverlay extends StatelessWidget {
 
 /// Slim, non-blocking banner shown instead of the overlay while a build is
 /// paused: the tab and engine are fully usable, and the build can be resumed
-/// or cancelled from here.
+/// or discarded from here.
 class GenerationPausedBanner extends StatelessWidget {
   const GenerationPausedBanner({
     super.key,
     required this.onResume,
-    required this.onCancel,
+    required this.onDiscard,
   });
 
   final VoidCallback onResume;
-  final VoidCallback onCancel;
+
+  /// Throw the build away for good (after confirmation at the call site).
+  final VoidCallback onDiscard;
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +156,7 @@ class GenerationPausedBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 'Build paused — board and engine are free. '
-                'Cancelling keeps the partial build for later.',
+                'Resume it when you like, or discard it if you don\'t want it.',
                 style: TextStyle(fontSize: 12.5, color: Colors.grey[300]),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -196,15 +177,15 @@ class GenerationPausedBanner extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             OutlinedButton.icon(
-              onPressed: onCancel,
+              onPressed: onDiscard,
               style: OutlinedButton.styleFrom(
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
               ),
-              icon: const Icon(Icons.stop, size: 16),
-              label: const Text('Cancel', style: TextStyle(fontSize: 12.5)),
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: const Text('Discard', style: TextStyle(fontSize: 12.5)),
             ),
           ],
         ),

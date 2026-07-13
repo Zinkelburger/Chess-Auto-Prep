@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/repertoire_metadata.dart';
+import '../screens/repertoire_chapters_screen.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/storage/storage_factory.dart';
 import '../utils/app_messages.dart';
@@ -17,7 +18,9 @@ import 'layout/empty_state_placeholder.dart';
 import 'pgn_import_dialog.dart';
 
 class RepertoireListBody extends StatefulWidget {
-  /// Called when the user taps a repertoire card or creates a new one.
+  /// Called with the chosen *chapter*'s metadata (a `.pgn` file path). A
+  /// repertoire is a folder; tapping one opens its chapter list, and the
+  /// selected chapter is what the builder / trainer actually load.
   final ValueChanged<RepertoireMetadata> onSelected;
 
   const RepertoireListBody({super.key, required this.onSelected});
@@ -44,7 +47,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     });
 
     try {
-      final repertoires = await StorageFactory.instance.listRepertoireFiles();
+      final repertoires = await StorageFactory.instance.listRepertoires();
       repertoires.sort((a, b) => b.lastModified.compareTo(a.lastModified));
 
       if (!mounted) return;
@@ -126,7 +129,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
 
   Widget _buildRepertoireCard(RepertoireMetadata repertoire) {
     final name = repertoire.name;
-    final gameCount = repertoire.gameCount;
+    final chapterCount = repertoire.gameCount;
     final lastModified = repertoire.lastModified;
 
     String timeAgo = 'Unknown';
@@ -143,7 +146,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
-        onTap: () => widget.onSelected(repertoire),
+        onTap: () => _openRepertoire(repertoire),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -175,7 +178,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$gameCount game${gameCount == 1 ? '' : 's'}',
+                      '$chapterCount chapter${chapterCount == 1 ? '' : 's'}',
                       style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                     ),
                     const SizedBox(height: 2),
@@ -223,6 +226,24 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
         ),
       ),
     );
+  }
+
+  // ── Open (drill into chapters) ────────────────────────────────────────
+
+  /// Opens the chapter list for [repertoire]; a chosen chapter is forwarded to
+  /// [widget.onSelected] (the contract the builder / trainer already consume).
+  Future<void> _openRepertoire(RepertoireMetadata repertoire) async {
+    final chapter = await Navigator.of(context).push<RepertoireMetadata>(
+      MaterialPageRoute(
+        builder: (_) => RepertoireChaptersScreen(repertoire: repertoire),
+      ),
+    );
+    if (chapter != null && mounted) {
+      widget.onSelected(chapter);
+    } else if (mounted) {
+      // Chapters may have been added/removed while browsing.
+      await _loadRepertoires();
+    }
   }
 
   // ── Create / Delete / Rename ──────────────────────────────────────────
@@ -339,31 +360,35 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
   }) async {
     try {
       final storage = StorageFactory.instance;
-      final filePath = await storage.repertoireFilePath(name);
+      final dirPath = await storage.repertoireDirectoryPath(name);
 
-      if (await storage.fileExists(filePath)) {
+      if (_repertoires
+          .any((r) => r.name.toLowerCase() == name.toLowerCase())) {
         if (mounted) {
           showAppSnackBar(context, AppMessages.repertoireExists(name));
         }
         return;
       }
 
-      final header = '// $name Repertoire\n'
+      // New repertoires start with a single "Main" chapter; imported PGN lands
+      // there. Additional chapters are added from the chapter list.
+      final chapterPath = storage.chapterFilePath(dirPath, 'Main');
+      final header = '// Main\n'
           '// Color: $color\n'
           '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
 
       int gameCount = 0;
       if (pgnImport != null) {
-        await storage.writeFile(filePath, '$header${pgnImport.pgnContent}\n');
+        await storage.writeFile(chapterPath, '$header${pgnImport.pgnContent}\n');
         gameCount = pgnImport.gameCount;
       } else {
-        await storage.writeFile(filePath, header);
+        await storage.writeFile(chapterPath, header);
       }
 
       if (mounted) {
         widget.onSelected(RepertoireMetadata(
-          filePath: filePath,
-          name: name,
+          filePath: chapterPath,
+          name: 'Main',
           gameCount: gameCount,
           lastModified: DateTime.now(),
         ));
@@ -400,7 +425,8 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
 
     if (confirmed == true) {
       try {
-        await StorageFactory.instance.deleteFile(repertoire.filePath);
+        await StorageFactory.instance
+            .deleteRepertoireDirectory(repertoire.filePath);
         await _loadRepertoires();
       } catch (e) {
         debugPrint('Delete repertoire failed: $e');
@@ -476,8 +502,7 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
     if (result != null && result.isNotEmpty) {
       try {
         final storage = StorageFactory.instance;
-        final newPath = await storage.repertoireFilePath(result);
-        await storage.renameFile(repertoire.filePath, newPath);
+        await storage.renameRepertoireDirectory(repertoire.filePath, result);
         await _loadRepertoires();
       } catch (e) {
         debugPrint('Rename repertoire failed: $e');

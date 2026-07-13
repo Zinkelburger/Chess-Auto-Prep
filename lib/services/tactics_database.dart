@@ -100,12 +100,12 @@ class TacticsDatabase extends ChangeNotifier {
 
       // External files (studies) may hold chapters from the standard start;
       // our own set files always carry [FEN].
-      final decoded = decodePuzzlesFromPgn(
-        content,
+      final decoded = await compute(_decodePuzzlesEntry, (
+        content: content,
         requireFen: !isExternalSet,
         includeVariations: isExternalSet && _externalIncludeVariations,
         onlyGame: isExternalSet ? _externalGameIndex : null,
-      );
+      ));
       for (final warning in decoded.errors) {
         log.w('Set "$_activeSetName": $warning');
       }
@@ -331,10 +331,11 @@ class TacticsDatabase extends ChangeNotifier {
             log.e('External set file vanished: $externalPath');
             return;
           }
-          await storage.writeFile(
-              externalPath, patchStatsInPgn(existing, snapshot));
+          await storage.writeFile(externalPath,
+              await compute(_patchStatsEntry, (existing, snapshot)));
         } else {
-          final encoded = encodePuzzlesToPgn(setName, snapshot);
+          final encoded =
+              await compute(_encodePuzzlesEntry, (setName, snapshot));
           if (encoded.fallback > 0) {
             log.w(
                 '${encoded.fallback} position(s) stored with raw [CorrectLine] fallback');
@@ -579,12 +580,19 @@ class TacticsDatabase extends ChangeNotifier {
     final content = await storage.readFile(path);
     final existing = <TacticsPosition>[];
     if (content != null && content.trim().isNotEmpty) {
-      existing.addAll(decodePuzzlesFromPgn(content).puzzles);
+      final decoded = await compute(_decodePuzzlesEntry, (
+        content: content,
+        requireFen: true,
+        includeVariations: false,
+        onlyGame: null,
+      ));
+      existing.addAll(decoded.puzzles);
     }
     if (existing.any((p) => p.fen == position.fen)) return false;
     existing.add(position);
-    await storage.writeFile(
-        path, encodePuzzlesToPgn(defaultSetName, existing).pgn);
+    final encoded =
+        await compute(_encodePuzzlesEntry, (defaultSetName, existing));
+    await storage.writeFile(path, encoded.pgn);
     return true;
   }
 
@@ -631,6 +639,33 @@ class TacticsDatabase extends ChangeNotifier {
     return next;
   }
 }
+
+// ── compute() entry points ─────────────────────────────────────────────────
+// The PGN codec is pure CPU work: on a set of hundreds of puzzles a decode
+// or full re-encode blocks long enough to drop frames, and savePositions()
+// runs once per streamed tactic during imports.  These wrappers let the
+// database run the codec off the UI isolate.
+
+({List<TacticsPosition> puzzles, List<String> errors}) _decodePuzzlesEntry(
+        ({
+          String content,
+          bool requireFen,
+          bool includeVariations,
+          int? onlyGame,
+        }) args) =>
+    decodePuzzlesFromPgn(
+      args.content,
+      requireFen: args.requireFen,
+      includeVariations: args.includeVariations,
+      onlyGame: args.onlyGame,
+    );
+
+({String pgn, int encoded, int fallback, int dropped}) _encodePuzzlesEntry(
+        (String, List<TacticsPosition>) args) =>
+    encodePuzzlesToPgn(args.$1, args.$2);
+
+String _patchStatsEntry((String, List<TacticsPosition>) args) =>
+    patchStatsInPgn(args.$1, args.$2);
 
 /// Result of attempting a tactical position
 enum TacticsResult {

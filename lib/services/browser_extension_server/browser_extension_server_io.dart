@@ -158,26 +158,28 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
 
       final repertoires = <Map<String, dynamic>>[];
 
-      await for (final file in repertoireDir.list()) {
-        if (file is File && file.path.toLowerCase().endsWith('.pgn')) {
-          final stat = await file.stat();
-          final content = await readTextFile(file);
-          final lineCount = countPgnGames(content);
-          final fileName = p.basename(file.path);
-          final name = p.basenameWithoutExtension(file.path);
+      // Repertoires are folders; chapters are `.pgn` files inside them. Walk
+      // recursively so each chapter is an addressable target. `name`/`filename`
+      // carry the repertoire-relative path (e.g. "e5/Kings Gambit") so the
+      // extension can round-trip it back to the exact chapter on add.
+      for (final file in await _chapterPgnFiles(repertoireDir)) {
+        final stat = await file.stat();
+        final content = await readTextFile(file);
+        final lineCount = countPgnGames(content);
+        final rel = p.relative(file.path, from: repertoireDir.path);
+        final name = p.withoutExtension(rel);
 
-          final color = extractRepertoireColor(content);
+        final color = extractRepertoireColor(content);
 
-          repertoires.add({
-            'name': name,
-            'filename': fileName,
-            'path': file.path,
-            'modified': stat.modified.millisecondsSinceEpoch / 1000,
-            'size': stat.size,
-            'lineCount': lineCount,
-            'color': color, // "white", "black", or null if not specified
-          });
-        }
+        repertoires.add({
+          'name': name,
+          'filename': rel,
+          'path': file.path,
+          'modified': stat.modified.millisecondsSinceEpoch / 1000,
+          'size': stat.size,
+          'lineCount': lineCount,
+          'color': color, // "white", "black", or null if not specified
+        });
       }
 
       // Sort by modification time (most recent first)
@@ -218,15 +220,12 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
         return;
       }
 
-      // Sanitize filename
-      targetFilename = p.basename(targetFilename);
-      if (!targetFilename.toLowerCase().endsWith('.pgn')) {
-        targetFilename = '$targetFilename.pgn';
-      }
-
+      // The target is a repertoire-relative path (folder/chapter). Normalize
+      // and drop any `..`/leading-separator traversal, keeping the sub-path so
+      // it resolves to the intended chapter.
       final repertoireDir = await AppPaths.repertoiresDirectory(create: true);
-
-      final targetFile = File(p.join(repertoireDir.path, targetFilename));
+      final targetFile = _resolveTargetChapter(repertoireDir, targetFilename);
+      targetFilename = p.relative(targetFile.path, from: repertoireDir.path);
 
       // Check for duplicates
       if (await _isDuplicate(data, targetFile)) {
@@ -275,11 +274,7 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
 
       int repertoireCount = 0;
       if (await repertoireDir.exists()) {
-        await for (final file in repertoireDir.list()) {
-          if (file is File && file.path.toLowerCase().endsWith('.pgn')) {
-            repertoireCount++;
-          }
-        }
+        repertoireCount = (await _chapterPgnFiles(repertoireDir)).length;
       }
 
       _sendJson(request, {
@@ -306,6 +301,36 @@ class BrowserExtensionServerIO implements BrowserExtensionServer {
     if (!await file.exists()) return 0;
     final content = await readTextFile(file);
     return countPgnGames(content);
+  }
+
+  /// All chapter `.pgn` files under [dir] (recursive), excluding the
+  /// raw-games sidecars written by the build-from-games flow.
+  Future<List<File>> _chapterPgnFiles(Directory dir) async {
+    final out = <File>[];
+    await for (final entity in dir.list(recursive: true)) {
+      if (entity is File &&
+          entity.path.toLowerCase().endsWith('.pgn') &&
+          !p.basenameWithoutExtension(entity.path).endsWith('_raw_games')) {
+        out.add(entity);
+      }
+    }
+    return out;
+  }
+
+  /// Resolve a client-supplied [target] (a repertoire-relative path) to a
+  /// chapter file, stripping traversal. A bare name with no folder maps to a
+  /// same-named repertoire's `Main.pgn`, matching the app's folder model.
+  File _resolveTargetChapter(Directory repertoireDir, String target) {
+    var rel = p.normalize(target.trim());
+    // Drop leading separators and any `..` segments (path-traversal guard).
+    final segments = p.split(rel).where((s) => s != '..' && s != '').toList();
+    rel = segments.isEmpty ? 'Repertoire' : p.joinAll(segments);
+    if (!rel.toLowerCase().endsWith('.pgn')) rel = '$rel.pgn';
+    // A top-level "<name>.pgn" (no chapter folder) becomes "<name>/Main.pgn".
+    if (p.split(rel).length == 1) {
+      rel = p.join(p.withoutExtension(rel), 'Main.pgn');
+    }
+    return File(p.join(repertoireDir.path, rel));
   }
 
   /// Generate a signature for a line based on moves (for duplicate detection)

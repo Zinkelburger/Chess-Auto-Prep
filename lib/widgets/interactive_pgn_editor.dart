@@ -14,7 +14,9 @@ import 'package:chess_auto_prep/constants/chess_constants.dart';
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/utils/app_messages.dart';
 import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
-    show filterDisplayComment;
+    show filterDisplayComment, kMoveNags, qualityNagSuffix;
+import 'package:chess_auto_prep/widgets/pgn/movetext_primitives.dart'
+    show GlyphButton, MoveChip;
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 
@@ -30,6 +32,10 @@ class InteractivePgnEditor extends StatefulWidget {
 
   /// Called when the user edits a comment.
   final void Function(TreePath path, String? comment)? onCommentChanged;
+
+  /// Called to toggle a move-quality NAG glyph on a move.  When null the
+  /// glyph toolbar is hidden (the surface doesn't support annotation glyphs).
+  final void Function(TreePath path, int nagId)? onToggleNag;
 
   /// Called to delete a subtree.
   final void Function(TreePath path)? onDelete;
@@ -78,6 +84,7 @@ class InteractivePgnEditor extends StatefulWidget {
     required this.currentPath,
     this.onJump,
     this.onCommentChanged,
+    this.onToggleNag,
     this.onDelete,
     this.onPromote,
     this.onMakeMainLine,
@@ -350,7 +357,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
               child: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceContainer,
+                  color: AppColors.pgnSurface,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppColors.divider),
                 ),
@@ -402,6 +409,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                       ),
                     ),
                     Divider(height: 1, color: Colors.grey[800]),
+                    if (widget.onToggleNag != null) _buildGlyphBar(),
                     TextField(
                       controller: _commentController,
                       focusNode: _commentFocusNode,
@@ -580,6 +588,40 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     return widgets;
   }
 
+  /// Compact move-quality glyph toolbar acting on the cursor move (disabled at
+  /// the start position). Mirrors the PGN viewer's amend annotation panel so
+  /// glyphs are edited the same way across the app.
+  Widget _buildGlyphBar() {
+    final onMove = widget.currentPath.isNotEmpty;
+    final node = onMove ? widget.tree.nodeAt(widget.currentPath) : null;
+    final active = node?.nags ?? const <int>[];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          for (final nag in kMoveNags)
+            GlyphButton(
+              symbol: nag.symbol,
+              name: nag.name,
+              color: nag.color,
+              isActive: active.contains(nag.id),
+              onTap: onMove ? () => _toggleNag(nag.id) : null,
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _toggleNag(int nagId) {
+    if (widget.currentPath.isEmpty) return;
+    widget.onToggleNag?.call(widget.currentPath, nagId);
+    widget.onDirty?.call();
+    // A glyph edit doesn't move the cursor or swap the tree instance, so the
+    // cached move widgets would otherwise stay stale — force a rebuild.
+    _cachedMoveWidgets = null;
+    _scheduleAutoSave();
+  }
+
   Widget _buildInlineComment(String comment) {
     final sanitized =
         filterDisplayComment(comment.replaceAll('{', '').replaceAll('}', ''));
@@ -617,10 +659,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final isSelected = widget.currentPath == nodePath;
     final isOnCtxPath = _isOnContextPath(nodePath);
 
+    final nagSuffix = qualityNagSuffix(node.nags);
+
     late final Color textColor;
     Color? bgColor;
     FontWeight fontWeight = FontWeight.normal;
-    TextDecoration decoration = TextDecoration.none;
 
     if (isSelected) {
       textColor = Colors.white;
@@ -632,36 +675,32 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       fontWeight = FontWeight.w500;
     } else {
       textColor = AppColors.pgnMove;
-      decoration = TextDecoration.underline;
     }
 
-    return GestureDetector(
+    // No per-move underline: every move here is tappable, so a link underline
+    // on each one is noise. The glyph suffix renders in exactly the same style
+    // as the SAN ("Nf3!?" is one piece of text) — both match the PGN viewer.
+    return MoveChip(
+      san: node.san,
+      nagSuffix: nagSuffix,
+      sanStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 13,
+        color: textColor,
+        fontWeight: fontWeight,
+      ),
+      nagStyle: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 13,
+        color: textColor,
+        fontWeight: fontWeight,
+      ),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(3),
+      ),
       onTap: () => _jumpTo(nodePath),
       onSecondaryTapDown: (d) => _showContextMenu(nodePath, d.globalPosition),
-      child: Container(
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(3),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              node.san,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 13,
-                color: textColor,
-                fontWeight: fontWeight,
-                decoration: decoration,
-                decorationColor: AppColors.onSurfaceDim.withValues(alpha: 0.45),
-                decorationStyle: TextDecorationStyle.dotted,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

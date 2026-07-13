@@ -13,6 +13,8 @@ import 'package:chess_auto_prep/utils/chess_utils.dart'
     show coordsAtPly, plyBeforeMove;
 import 'package:chess_auto_prep/models/move_tree.dart';
 import 'package:chess_auto_prep/theme/app_colors.dart';
+import 'package:chess_auto_prep/utils/pgn_comment_utils.dart'
+    show toggleQualityNag;
 import 'package:chess_auto_prep/widgets/pgn/add_to_study_dialog.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_annotation_panel.dart';
 import 'package:chess_auto_prep/widgets/pgn/pgn_movetext_view.dart';
@@ -1094,15 +1096,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   void _togglePanelNodeNag(MoveNode node, int nagId) {
     _promoteNodeLineage(node);
     setState(() {
-      final nags = node.nags ?? [];
-      if (nags.contains(nagId)) {
-        nags.remove(nagId);
-      } else {
-        // Remove other move-quality NAGs (1-6) before adding
-        nags.removeWhere((n) => n >= 1 && n <= 6);
-        nags.add(nagId);
-      }
-      node.nags = nags.isEmpty ? null : nags;
+      final next = toggleQualityNag(node.nags, nagId);
+      node.nags = next.isEmpty ? null : next;
     });
     _notifyCommentsChanged();
   }
@@ -1226,15 +1221,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     if (moveIndex < 0 || moveIndex >= _moveHistory.length) return;
     final moveData = _moveHistory[moveIndex];
     setState(() {
-      final nags = moveData.nags ?? [];
-      if (nags.contains(nagId)) {
-        nags.remove(nagId);
-      } else {
-        // Remove other move-quality NAGs (1-6) before adding
-        nags.removeWhere((n) => n >= 1 && n <= 6);
-        nags.add(nagId);
-      }
-      moveData.nags = nags.isEmpty ? null : nags;
+      final next = toggleQualityNag(moveData.nags, nagId);
+      moveData.nags = next.isEmpty ? null : next;
     });
     _notifyCommentsChanged();
   }

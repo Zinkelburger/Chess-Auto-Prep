@@ -181,6 +181,60 @@ class _StudyScreenState extends State<StudyScreen> {
     }
   }
 
+  /// Paste-in PGN import: every game becomes a chapter appended to the study.
+  Future<void> _importPgn() async {
+    final controller = TextEditingController();
+    final pgn = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import PGN'),
+        content: SizedBox(
+          width: 460,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 6,
+            maxLines: 14,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            decoration: const InputDecoration(
+              hintText: 'Paste one or more games in PGN…\n\n'
+                  'Each game becomes a chapter.',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (pgn == null || pgn.trim().isEmpty) return;
+    final added = await _study.importChapters(pgn);
+    if (!mounted) return;
+    showAppSnackBar(
+      context,
+      added == 0
+          ? 'No games found in that PGN.'
+          : 'Imported $added chapter${added == 1 ? '' : 's'}.',
+      isError: added == 0,
+    );
+  }
+
+  /// Copy the whole study (all chapters) as PGN to the clipboard.
+  Future<void> _exportPgn() async {
+    await _study.flushSave();
+    await Clipboard.setData(ClipboardData(text: _study.doc.toPgn()));
+    if (mounted) showAppSnackBar(context, 'Study PGN copied to clipboard.');
+  }
+
   Future<void> _deleteCurrentStudy() async {
     final path = _study.doc.filePath;
     if (path == null) return;
@@ -489,11 +543,20 @@ class _StudyScreenState extends State<StudyScreen> {
             tooltip: 'Manage studies',
             onSelected: (action) {
               switch (action) {
+                case 'import':
+                  _importPgn();
+                case 'export':
+                  _exportPgn();
                 case 'delete':
                   _deleteCurrentStudy();
               }
             },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                  value: 'import', child: Text('Import PGN…')),
+              const PopupMenuItem(
+                  value: 'export', child: Text('Copy study PGN')),
+              const PopupMenuDivider(),
               const PopupMenuItem(
                   value: 'delete', child: Text('Delete study…')),
             ],
@@ -621,6 +684,7 @@ class _StudyScreenState extends State<StudyScreen> {
               currentRepertoireName: _study.chapter.name,
               onJump: _study.jumpTo,
               onCommentChanged: _study.setComment,
+              onToggleNag: _study.toggleNag,
               onDelete: _study.deleteAt,
               onPromote: _study.promote,
               onMakeMainLine: _study.makeMainLine,

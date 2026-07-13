@@ -111,11 +111,9 @@ class TrapDetailCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Opponent is tempted to play ${trap.popularMove}',
+          Text('$probPct% of opponents play ${trap.popularMove} here',
               style: theme.textTheme.bodyLarge
                   ?.copyWith(fontWeight: FontWeight.w600)),
-          Text('$probPct% of humans choose this move',
-              style: theme.textTheme.bodyMedium),
         ],
       ),
     );
@@ -177,9 +175,9 @@ class TrapDetailCard extends StatelessWidget {
                         color: Colors.green[700])),
                 const SizedBox(height: 2),
                 Text.rich(TextSpan(children: [
-                  const TextSpan(
-                      text: 'After they blunder, play ',
-                      style: TextStyle(fontSize: 13)),
+                  TextSpan(
+                      text: 'After ${trap.popularMove}, play ',
+                      style: const TextStyle(fontSize: 13)),
                   TextSpan(
                       text: trap.refutationMove!,
                       style: const TextStyle(
@@ -328,9 +326,9 @@ class TrapDetailCard extends StatelessWidget {
     final rawPct = (trap.wpEval * 100).toStringAsFixed(1);
     final surplus = (trap.trickSurplus * 100).toStringAsFixed(1);
     return Text(
-      'Practical win prob: $practicalPct%  vs  Raw eval: $rawPct%\n'
-      '"This position performs $surplus% better in practice than eval shows"',
-      style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+      'Practical win probability: $practicalPct% · raw eval equivalent: '
+      '$rawPct% · difference: +$surplus%',
+      style: theme.textTheme.bodySmall,
     );
   }
 
@@ -348,7 +346,7 @@ class TrapDetailCard extends StatelessWidget {
           TextButton.icon(
             onPressed: onShowPath,
             icon: const Icon(Icons.route, size: 16),
-            label: const Text('How Do I Get Here?'),
+            label: const Text('Show Full Line'),
           ),
         if (onTrainLine != null)
           TextButton.icon(

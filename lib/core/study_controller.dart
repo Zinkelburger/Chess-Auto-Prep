@@ -14,6 +14,8 @@ import 'package:flutter/foundation.dart';
 import '../models/move_tree.dart';
 import '../models/repertoire_metadata.dart';
 import '../models/study_document.dart';
+import '../services/pgn_parsing_service.dart'
+    show splitPgnIntoGames, extractHeaders, stripBom;
 import '../services/storage/storage_factory.dart';
 import '../utils/chess_utils.dart' show tryParseFen;
 import 'package:chess_auto_prep/utils/log.dart';
@@ -100,7 +102,23 @@ class StudyController extends ChangeNotifier {
     await flushSave();
     final content = await StorageFactory.instance.readFile(path);
     final name = path.split('/').last.replaceAll(RegExp(r'\.pgn$'), '');
-    _doc = StudyDocument.fromPgn(content ?? '', name: name, filePath: path);
+    // Parsing replays every move of every chapter (multi-MB repertoire
+    // studies take long enough to freeze the UI), so it runs off-isolate;
+    // the trees come back with foreign node ids and must be re-minted.
+    final parsed = await compute(
+        _parseStudyEntry, (content: content ?? '', name: name, path: path));
+    _doc = StudyDocument(
+      name: parsed.name,
+      filePath: parsed.filePath,
+      chapters: [
+        for (final c in parsed.chapters)
+          StudyChapter(
+            name: c.name,
+            headers: c.headers,
+            tree: c.tree.copyWithFreshIds(),
+          ),
+      ],
+    );
     _chapterIndex = 0;
     _cursor = TreePath.empty;
     _dirty = false;
@@ -178,6 +196,35 @@ class StudyController extends ChangeNotifier {
     _chapterIndex = _doc.chapters.length - 1;
     _cursor = TreePath.empty;
     _markDirty();
+  }
+
+  /// Append every game in [pgn] as a new chapter (Lichess-style PGN import).
+  /// Each game's `[Event]` becomes the chapter name; `[FEN]` starting
+  /// positions and comments are preserved. Returns the number of chapters
+  /// added (0 when [pgn] holds no parseable games), selecting the first new
+  /// chapter and persisting immediately.
+  Future<int> importChapters(String pgn) async {
+    // Off-isolate for the same reason as [openStudy]; ids re-minted on adopt.
+    final games = await compute(_parseChapterTreesEntry, pgn);
+    final firstNewIndex = _doc.chapters.length;
+    int added = 0;
+    for (final (headers, tree) in games) {
+      // Skip fragments that are neither a game nor a headered stub.
+      if (tree.isEmpty && headers.isEmpty) continue;
+      final name = headers['Event']?.trim().isNotEmpty == true
+          ? headers['Event']!
+          : 'Chapter ${_doc.chapters.length + 1}';
+      _doc.chapters.add(StudyChapter(
+          name: name, headers: headers, tree: tree.copyWithFreshIds()));
+      added++;
+    }
+    if (added > 0) {
+      _chapterIndex = firstNewIndex;
+      _cursor = TreePath.empty;
+      _markDirty();
+      await flushSave();
+    }
+    return added;
   }
 
   void renameChapter(int index, String name) {
@@ -268,6 +315,11 @@ class StudyController extends ChangeNotifier {
     _markDirty();
   }
 
+  void toggleNag(TreePath path, int nagId) {
+    tree.toggleNag(path, nagId);
+    _markDirty();
+  }
+
   void deleteAt(TreePath path) {
     tree.deleteAt(path);
     // If the cursor was inside the deleted subtree, retreat to its parent.
@@ -322,4 +374,22 @@ class StudyController extends ChangeNotifier {
     if (_dirty) unawaited(_save());
     super.dispose();
   }
+}
+
+// ── compute() entry points ─────────────────────────────────────────────────
+// PGN → MoveTree parsing replays every move with dartchess; big studies
+// block long enough to freeze the UI, so the controller parses off-isolate.
+// Trees crossing the isolate boundary carry foreign node ids — adopt them
+// only via [MoveTree.copyWithFreshIds].
+
+StudyDocument _parseStudyEntry(
+        ({String content, String name, String? path}) args) =>
+    StudyDocument.fromPgn(args.content, name: args.name, filePath: args.path);
+
+List<(Map<String, String>, MoveTree)> _parseChapterTreesEntry(String pgn) {
+  final games = splitPgnIntoGames(stripBom(pgn));
+  return [
+    for (final gameText in games)
+      (extractHeaders(gameText), MoveTree.fromPgn(gameText)),
+  ];
 }

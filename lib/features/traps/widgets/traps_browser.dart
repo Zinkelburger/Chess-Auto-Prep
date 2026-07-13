@@ -15,6 +15,7 @@ import 'package:chess_auto_prep/features/traps/models/trap_reply.dart';
 import 'package:chess_auto_prep/features/traps/services/trap_index_service.dart';
 import 'package:chess_auto_prep/core/board_preview_controller.dart';
 import '../../../utils/chess_utils.dart';
+import '../../../utils/pgn_comment_utils.dart' show nagColor;
 import '../../../widgets/chess_board_widget.dart';
 import '../../../theme/app_colors.dart';
 import 'trap_detail_card.dart';
@@ -403,7 +404,8 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               runSpacing: 4,
               children: [
                 _buildStatBadge(
-                  '${(trap.popularProb * 100).toStringAsFixed(0)}% fall in',
+                  '${(trap.popularProb * 100).toStringAsFixed(0)}% play '
+                  '${trap.popularMove}',
                   _trapScoreColor(trap.trapScore),
                   tooltip:
                       'Share of opponents who play ${trap.popularMove} here',
@@ -460,10 +462,11 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 fontSize: 12,
                 fontFamily: 'monospace',
                 fontWeight: FontWeight.bold,
+                // NAG palette: brighter on dark than danger/evalPositive.
                 color: isGood
-                    ? AppColors.evalPositive
+                    ? nagColor(1)
                     : isBad
-                        ? AppColors.danger
+                        ? nagColor(4)
                         : Colors.orange[300],
               ),
             ),
@@ -508,38 +511,44 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
       TrapReplyClass.acceptable => ('OK', Colors.grey),
       TrapReplyClass.good => ('BEST', AppColors.evalPositive),
     };
+    // Same contrast rule as _buildStatBadge: near-white text, colour only in
+    // the tint/border.
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: color.withValues(alpha: 0.6), width: 0.5),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 8,
+        style: const TextStyle(
+          fontSize: 9,
           fontWeight: FontWeight.bold,
-          color: color,
+          color: Color(0xFFE8E8E8),
           letterSpacing: 0.3,
         ),
       ),
     );
   }
 
+  /// Near-white text on a dim tint of [color]; the colour carries meaning via
+  /// the tint/border only. (Coloured text on a same-colour wash — red on red,
+  /// amber on amber — was unreadable.)
   Widget _buildStatBadge(String text, Color color, {String? tooltip}) {
     final badge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.3),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.5), width: 0.5),
+        border: Border.all(color: color.withValues(alpha: 0.6), width: 0.5),
       ),
       child: Text(
         text,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 10,
-          fontWeight: FontWeight.bold,
-          color: color,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFFE8E8E8),
           fontFamily: 'monospace',
         ),
       ),
@@ -547,15 +556,43 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
     return tooltip != null ? Tooltip(message: tooltip, child: badge) : badge;
   }
 
+  /// Full line to the trap position, then the opponent's popular move (with
+  /// its quality glyph) and our refutation — the whole trap in one line.
   Widget _buildMovesPreview(TrapLineInfo trap, int matchDepth) {
     final moves = trap.movesSan;
-    const maxPreviewMoves = 12;
+
+    TrapReply? popularReply;
+    for (final r in trap.allReplies ?? const <TrapReply>[]) {
+      if (r.san == trap.popularMove) {
+        popularReply = r;
+        break;
+      }
+    }
+    final popularGlyph = switch (popularReply?.classification) {
+      TrapReplyClass.mistake => '?',
+      TrapReplyClass.inaccuracy => '?!',
+      TrapReplyClass.acceptable || TrapReplyClass.good => '',
+      // Blunder, or no reply data (legacy files treat the popular move as one).
+      _ => '??',
+    };
+
+    // (text, color, bold) for every ply: lead-up, popular move, refutation.
+    final plies = <(String, Color?, bool)>[
+      for (int i = 0; i < moves.length; i++)
+        (
+          moves[i],
+          i < matchDepth ? AppColors.warning : Colors.grey[300],
+          i < matchDepth,
+        ),
+      ('${trap.popularMove}$popularGlyph', nagColor(4), true),
+      if (trap.refutationMove != null) (trap.refutationMove!, nagColor(1), true),
+    ];
 
     return Wrap(
       spacing: 2,
       runSpacing: 2,
       children: [
-        for (int i = 0; i < moves.length && i < maxPreviewMoves; i++) ...[
+        for (int i = 0; i < plies.length; i++) ...[
           if (i % 2 == 0)
             Text(
               '${(i ~/ 2) + 1}.',
@@ -574,26 +611,16 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               borderRadius: BorderRadius.circular(2),
             ),
             child: Text(
-              moves[i],
+              plies[i].$1,
               style: TextStyle(
                 fontSize: 11,
                 fontFamily: 'monospace',
-                color: i < matchDepth ? AppColors.warning : Colors.grey[300],
-                fontWeight:
-                    i < matchDepth ? FontWeight.bold : FontWeight.normal,
+                color: plies[i].$2,
+                fontWeight: plies[i].$3 ? FontWeight.bold : FontWeight.normal,
               ),
             ),
           ),
         ],
-        if (moves.length > maxPreviewMoves)
-          Text(
-            '... +${moves.length - maxPreviewMoves}',
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey[500],
-              fontStyle: FontStyle.italic,
-            ),
-          ),
       ],
     );
   }

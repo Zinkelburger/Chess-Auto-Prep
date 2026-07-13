@@ -268,7 +268,6 @@ class LineItemRow extends StatelessWidget {
             _MovesPreview(
               line: line,
               matchDepth: matchDepth,
-              isExpanded: isExpanded,
               boardPreview: boardPreview,
             ),
             _LineMetricsRow(metrics: metrics),
@@ -609,24 +608,22 @@ class _HardMoveWarning extends StatelessWidget {
 class _MovesPreview extends StatelessWidget {
   final RepertoireLine line;
   final int matchDepth;
-  final bool isExpanded;
   final BoardPreviewController? boardPreview;
 
   const _MovesPreview({
     required this.line,
     required this.matchDepth,
-    required this.isExpanded,
     this.boardPreview,
   });
 
   @override
   Widget build(BuildContext context) {
     final moves = line.moves;
-    final maxPreviewMoves = isExpanded ? 12 : 8;
 
     return HoverableMoveChips(
       moves: moves,
-      maxMoves: maxPreviewMoves,
+      // Lines tab shows the complete mainline; never truncate with an ellipsis.
+      maxMoves: moves.length,
       fontSize: 11,
       highlightDepth: matchDepth,
       highlightColor: AppColors.lichessDb,

@@ -55,6 +55,21 @@ class OpeningTreeMoveRow extends StatelessWidget {
               width: 0.5,
             ),
           ),
+          // Frequency "heat": more-played moves get a heavier left-anchored
+          // wash, so the eye weights common continuations. Shared visual
+          // language with the live opening explorer rows.
+          gradient: LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            stops: [
+              (playedPercent / 100).clamp(0.0, 1.0),
+              (playedPercent / 100).clamp(0.0, 1.0),
+            ],
+            colors: [
+              Colors.white.withValues(alpha: 0.05),
+              Colors.transparent,
+            ],
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

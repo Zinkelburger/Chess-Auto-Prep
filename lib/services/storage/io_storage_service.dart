@@ -168,6 +168,116 @@ class IOStorageService implements StorageService {
     return p.join(dir.path, '$name.pgn');
   }
 
+  // ── Repertoire folders + chapters ─────────────────────────────────────────
+
+  /// A `.pgn` under the repertoires tree that is a real chapter (not the
+  /// raw-games sidecar written by the build-from-games flow).
+  static bool _isChapterFile(String path) =>
+      path.toLowerCase().endsWith('.pgn') &&
+      !p.basenameWithoutExtension(path).endsWith('_raw_games');
+
+  /// One-time fold of legacy flat `repertoires/<name>.pgn` files into
+  /// `repertoires/<name>/Main.pgn` so every repertoire is a folder. Each move
+  /// is best-effort and isolated: a failure or name collision leaves that file
+  /// untouched rather than aborting the whole listing.
+  Future<void> _migrateFlatRepertoires(Directory dir) async {
+    await for (final entity in dir.list()) {
+      if (entity is! File || !_isChapterFile(entity.path)) continue;
+      try {
+        final base = p.basenameWithoutExtension(entity.path);
+        final targetDir = Directory(p.join(dir.path, base));
+        if (await targetDir.exists()) continue;
+        await targetDir.create();
+        await entity.rename(p.join(targetDir.path, 'Main.pgn'));
+      } catch (e) {
+        log.e('Repertoire migration skipped ${entity.path}: $e');
+      }
+    }
+  }
+
+  @override
+  Future<List<RepertoireMetadata>> listRepertoires() async {
+    final dir = await AppPaths.repertoiresDirectory(create: true);
+    await _migrateFlatRepertoires(dir);
+
+    final folders = <Directory>[
+      await for (final entity in dir.list())
+        if (entity is Directory) entity,
+    ];
+
+    return Future.wait(folders.map((folder) async {
+      var chapterCount = 0;
+      DateTime lastModified = (await folder.stat()).modified;
+      await for (final entity in folder.list()) {
+        if (entity is File && _isChapterFile(entity.path)) {
+          chapterCount++;
+          final modified = (await entity.stat()).modified;
+          if (modified.isAfter(lastModified)) lastModified = modified;
+        }
+      }
+      return RepertoireMetadata(
+        filePath: folder.path,
+        name: p.basename(folder.path),
+        gameCount: chapterCount,
+        lastModified: lastModified,
+      );
+    }));
+  }
+
+  @override
+  Future<List<RepertoireMetadata>> listChapters(String repertoireDirPath) async {
+    final dir = Directory(repertoireDirPath);
+    if (!await dir.exists()) return [];
+
+    final files = <File>[
+      await for (final entity in dir.list())
+        if (entity is File && _isChapterFile(entity.path)) entity,
+    ];
+
+    final entries = await Future.wait(files.map((file) async {
+      final stat = await file.stat();
+      return RepertoireMetadata(
+        filePath: file.path,
+        name: p.basenameWithoutExtension(file.path),
+        gameCount: await _cachedGameCount(file, stat),
+        lastModified: stat.modified,
+      );
+    }));
+
+    entries.sort(
+        (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return entries;
+  }
+
+  @override
+  Future<String> repertoireDirectoryPath(String name) async {
+    final dir = await AppPaths.repertoiresDirectory(create: true);
+    return p.join(dir.path, name);
+  }
+
+  @override
+  String chapterFilePath(String repertoireDirPath, String chapterName) =>
+      p.join(repertoireDirPath, '$chapterName.pgn');
+
+  @override
+  Future<String> renameRepertoireDirectory(
+      String oldDirPath, String newName) async {
+    final parent = p.dirname(oldDirPath);
+    final newPath = p.join(parent, newName);
+    await Directory(oldDirPath).rename(newPath);
+    return newPath;
+  }
+
+  @override
+  Future<void> deleteRepertoireDirectory(String dirPath) async {
+    try {
+      final dir = Directory(dirPath);
+      if (await dir.exists()) await dir.delete(recursive: true);
+    } catch (e) {
+      log.e('Error deleting repertoire folder $dirPath: $e');
+    }
+  }
+
   // ── Study file management ────────────────────────────────────────────────
 
   @override

@@ -119,13 +119,20 @@ abstract final class AppColors {
   static const pgnEphemeral = Color(0xFF7A8FA8);
   static const pgnEphemeralMuted = Color(0xFF5A6578);
 
+  /// Background of movetext panels (the repertoire editor pane). Near-black:
+  /// text contrast is maximised on the darkest surface, so movetext gets
+  /// [surface]-level darkness rather than the mid-gray [surfaceContainer]
+  /// (#2A2A2A), which cost every text tone in the pane ~2 contrast steps.
+  static const pgnSurface = Color(0xFF151515);
+
   /// Default SAN in editable PGN panes. Bright (~14:1 on [surface]) so the
   /// movetext stays readable in glare/sunlight at small sizes.
   static const pgnMove = Color(0xFFDDE6EF);
 
   /// Move numbers (`1.` / `2...`) — dimmer than moves to keep hierarchy, but
-  /// still ~6.7:1 on [surface] (the old #757575 was ~4:1, unreadable in sun).
-  static const pgnMoveNumber = Color(0xFF9AA0A6);
+  /// comfortably readable (~9:1 on [surface]; the previous #9AA0A6 at ~6.7:1
+  /// still read as "disabled gray" next to the bright SANs).
+  static const pgnMoveNumber = Color(0xFFB4BCC6);
 
   /// Current navigation position — the "you are here" accent. Used as the
   /// bright border/glow around the highlighted move pill.
@@ -155,9 +162,11 @@ abstract final class AppColors {
   /// (2.9:1) that stays legible with [pgnMoveCurrentFg] text.
   static const pgnEphemeralBg = Color(0xFF42607D);
 
-  /// Inline move comments — lifted off the old flat gray to a readable tone
-  /// (~11:1) so even the alpha-dimmed blockquote/bracket/FEN variants clear AA.
-  static const pgnComment = Color(0xFFCCCCCC);
+  /// Move-comment prose — a warm ivory (~11:1) instead of flat neutral gray.
+  /// The warmth is deliberate: moves/numbers are all cool-toned, so prose in a
+  /// warm tone separates "annotation text" from "notation" at a glance, and
+  /// the alpha-dimmed blockquote/bracket/FEN variants still clear AA.
+  static const pgnComment = Color(0xFFD6CDBD);
 
   /// Solid, near-black fill for bordered comment blocks. Replaces the old
   /// translucent gray wash (which muddied to ~#232323) with a clean panel that
