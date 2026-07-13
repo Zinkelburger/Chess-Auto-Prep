@@ -67,6 +67,7 @@ flutter:
     - assets/data/all_moves_maia3_reversed.json
     - assets/executables/
     - assets/pgn_collections/
+    - assets/data/openings/
 
 flutter_launcher_icons:
   android: true

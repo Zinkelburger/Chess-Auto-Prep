@@ -18,6 +18,7 @@ import '../models/pgn_game_entry.dart';
 export '../models/pgn_game_entry.dart';
 import '../services/default_pgn_service.dart';
 import '../services/game_analysis_controller.dart';
+import '../services/opening_book_service.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/solitaire_trophy_service.dart';
 import '../services/storage/storage_factory.dart';
@@ -327,8 +328,13 @@ class PgnViewerController extends ChangeNotifier {
 
   late final PgnFenIndex _fenIndex = PgnFenIndex(
     isActive: isActive,
-    onChanged: notifyListeners,
+    onChanged: _onFenIndexReady,
   );
+
+  void _onFenIndexReady() {
+    notifyListeners();
+    _classifyOpenings();
+  }
 
   /// Read-only access to the precomputed FEN → game-indices map.
   /// Returns null while the index is being built.
@@ -507,7 +513,11 @@ class PgnViewerController extends ChangeNotifier {
     await _fenIndex.tryLoadPersisted(path, entries.length);
     await tryRestoreSavedSlice(path, entries);
     await loadCurrentGame();
-    if (_fenIndex.value == null) _buildFenIndex();
+    if (_fenIndex.value == null) {
+      _buildFenIndex(); // classification runs via _onFenIndexReady
+    } else {
+      _classifyOpenings();
+    }
   }
 
   /// Load PGN games directly from raw text (e.g. pasted from the clipboard).
@@ -573,6 +583,37 @@ class PgnViewerController extends ChangeNotifier {
             ))
         .toList();
     _fenIndex.build(gameData, filePath: filePath, gameTotal: allGames.length);
+  }
+
+  /// Attach ECO / Opening headers (in-memory only) from the bundled lichess
+  /// opening book, so the slice header filters can match opening names.
+  /// Position-based via the FEN index, so transpositions are classified too.
+  Future<void> _classifyOpenings() async {
+    final index = _fenIndex.value;
+    if (index == null || allGames.isEmpty) return;
+    final games = allGames;
+
+    final book = await OpeningBookService.instance.load();
+    // A new file may have loaded while the book was loading.
+    if (!isActive() || !identical(_fenIndex.value, index)) return;
+
+    final openings = classifyGamesFromIndex(book, index, games.length);
+    var changed = false;
+    for (var i = 0; i < games.length; i++) {
+      final entry = openings[i];
+      if (entry == null) continue;
+      final headers = games[i].headers;
+      if (headers['Opening'] != entry.name) {
+        headers['Opening'] = entry.name;
+        changed = true;
+      }
+      // Keep an existing ECO header: the source file's code is authoritative.
+      if ((headers['ECO'] ?? '').isEmpty) {
+        headers['ECO'] = entry.eco;
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
   }
 
   Future<void> tryRestoreSavedSlice(
