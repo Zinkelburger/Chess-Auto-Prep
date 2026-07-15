@@ -6,7 +6,10 @@ games, repertoire building/training, player analysis, studies.
 ## Keeping CI green (non-negotiable)
 
 CI (`.github/workflows/ci.yml`) runs format check → analyze → unit tests, plus a
-headless integration test job. Before **every** commit:
+headless integration test job — but **only on `v*` tags or manual dispatch**, to
+conserve free Actions minutes. That means local checks are the *only* gate on
+regular pushes, which makes them mandatory, not advisory. Before **every**
+commit:
 
 1. **`dart format lib test integration_test`** — CI's first gate is
    `dart format --set-exit-if-changed`; one unformatted file fails the job and
