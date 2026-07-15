@@ -34,10 +34,10 @@ class Perspective {
   const Perspective({this.mode = PerspectiveMode.white, this.playerName = ''});
 
   String toHeaderValue() => switch (mode) {
-        PerspectiveMode.white => 'white',
-        PerspectiveMode.black => 'black',
-        PerspectiveMode.player => playerName,
-      };
+    PerspectiveMode.white => 'white',
+    PerspectiveMode.black => 'black',
+    PerspectiveMode.player => playerName,
+  };
 
   static Perspective fromHeaderValue(String value) {
     final v = value.trim();
@@ -64,12 +64,14 @@ List<PgnGameEntry> parseMultiGamePgn(String content) {
     if (trimmed.isEmpty) continue;
     final headers = pgn.extractHeaders(trimmed);
     final rating = int.tryParse(headers['StudyRating'] ?? '') ?? 0;
-    entries.add(PgnGameEntry(
-      headers: headers,
-      pgnText: trimmed,
-      studyRating: rating.clamp(0, 5),
-      studySummary: headers['StudySummary'] ?? '',
-    ));
+    entries.add(
+      PgnGameEntry(
+        headers: headers,
+        pgnText: trimmed,
+        studyRating: rating.clamp(0, 5),
+        studySummary: headers['StudySummary'] ?? '',
+      ),
+    );
   }
   return entries;
 }
@@ -100,7 +102,8 @@ final studySummaryRe = RegExp(r'\[StudySummary\s+"[^"]*"\]');
 final studySummaryLineRe = RegExp(r'\[StudySummary\s+"[^"]*"\]\n?');
 
 List<String> buildMetadataOutput(
-    List<({String pgn, int rating, String summary})> gameData) {
+  List<({String pgn, int rating, String summary})> gameData,
+) {
   final results = <String>[];
   for (final game in gameData) {
     var pgn = game.pgn;
@@ -193,7 +196,8 @@ String? detectProtagonistFrom(List<PgnGameEntry> games) {
 /// same two players (order: most-frequent-as-White first). Returns null if
 /// only one (or no) recurring player is found.
 ({String player1, String player2})? detectBothPlayersFrom(
-    List<PgnGameEntry> games) {
+  List<PgnGameEntry> games,
+) {
   if (games.length < 2) return null;
   final sample = games.take(math.min(6, games.length)).toList();
   final counts = <String, int>{};
@@ -287,6 +291,7 @@ class PgnViewerController extends ChangeNotifier {
     if (asWhite > 0 && asBlack == 0) protagonistFixedSide = Side.white;
     if (asBlack > 0 && asWhite == 0) protagonistFixedSide = Side.black;
   }
+
   List<int>? _activeSliceIndices;
 
   int currentGameIndex = 0;
@@ -313,7 +318,8 @@ class PgnViewerController extends ChangeNotifier {
   bool get buildingTree => _viewerTree.buildingTree;
   int get treeBuildProcessed => _viewerTree.treeBuildProcessed;
   int get treeBuildTotal => _viewerTree.treeBuildTotal;
-  List<String> get treeCurrentMoveSequence => _viewerTree.treeCurrentMoveSequence;
+  List<String> get treeCurrentMoveSequence =>
+      _viewerTree.treeCurrentMoveSequence;
 
   late final PgnFenIndex _fenIndex = PgnFenIndex(
     isActive: isActive,
@@ -564,10 +570,12 @@ class PgnViewerController extends ChangeNotifier {
 
   void _buildFenIndex() {
     final gameData = allGames
-        .map((g) => (
-              headers: Map<String, String>.from(g.headers),
-              pgnText: g.pgnText,
-            ))
+        .map(
+          (g) => (
+            headers: Map<String, String>.from(g.headers),
+            pgnText: g.pgnText,
+          ),
+        )
         .toList();
     _fenIndex.build(gameData, filePath: filePath, gameTotal: allGames.length);
   }
@@ -604,17 +612,23 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   Future<void> tryRestoreSavedSlice(
-      String path, List<PgnGameEntry> entries) async {
+    String path,
+    List<PgnGameEntry> entries,
+  ) async {
     final config = await SlicePersistence.load(path);
     if (config == null) return;
 
-    final allRecords =
-        entries.map((g) => (headers: g.headers, pgnText: g.pgnText)).toList();
+    final allRecords = entries
+        .map((g) => (headers: g.headers, pgnText: g.pgnText))
+        .toList();
     isLoading = true;
     notifyListeners();
 
-    final indices =
-        await applySliceConfig(config, allRecords, fenIndex: fenIndex);
+    final indices = await applySliceConfig(
+      config,
+      allRecords,
+      fenIndex: fenIndex,
+    );
     if (!isActive()) return;
 
     isLoading = false;
@@ -730,16 +744,20 @@ class PgnViewerController extends ChangeNotifier {
 
   void nextGame() {
     if (filteredGames.isEmpty) return;
-    currentGameIndex =
-        (currentGameIndex + 1).clamp(0, filteredGames.length - 1);
+    currentGameIndex = (currentGameIndex + 1).clamp(
+      0,
+      filteredGames.length - 1,
+    );
     notifyListeners();
     loadCurrentGame();
   }
 
   void prevGame() {
     if (filteredGames.isEmpty) return;
-    currentGameIndex =
-        (currentGameIndex - 1).clamp(0, filteredGames.length - 1);
+    currentGameIndex = (currentGameIndex - 1).clamp(
+      0,
+      filteredGames.length - 1,
+    );
     notifyListeners();
     loadCurrentGame();
   }
@@ -822,8 +840,10 @@ class PgnViewerController extends ChangeNotifier {
   Future<void> doPersistMetadata() async {
     if (filePath == null) return;
     final gameData = allGames
-        .map((g) =>
-            (pgn: g.pgnText, rating: g.studyRating, summary: g.studySummary))
+        .map(
+          (g) =>
+              (pgn: g.pgnText, rating: g.studyRating, summary: g.studySummary),
+        )
         .toList();
 
     final result = await compute(buildMetadataOutput, gameData);
@@ -833,8 +853,10 @@ class PgnViewerController extends ChangeNotifier {
       allGames[i].pgnText = result[i];
     }
     try {
-      await StorageFactory.instance
-          .writeFile(filePath!, '${result.join('\n\n')}\n');
+      await StorageFactory.instance.writeFile(
+        filePath!,
+        '${result.join('\n\n')}\n',
+      );
       _fenIndex.persist(filePath: filePath, gameTotal: allGames.length);
     } catch (e) {
       debugPrint('Failed to persist metadata: $e');
@@ -895,15 +917,18 @@ class PgnViewerController extends ChangeNotifier {
     final labels = activeSliceConfig.chipLabels;
     if (chipIndex < 0 || chipIndex >= labels.length) return;
 
-    final hasPos = activeSliceConfig.positionInput != null &&
+    final hasPos =
+        activeSliceConfig.positionInput != null &&
         activeSliceConfig.positionInput!.isNotEmpty;
-    final hasSeq = activeSliceConfig.sequencePattern != null &&
+    final hasSeq =
+        activeSliceConfig.sequencePattern != null &&
         activeSliceConfig.sequencePattern!.isNotEmpty;
     String? newPositionInput = activeSliceConfig.positionInput;
     String? newSequencePattern = activeSliceConfig.sequencePattern;
     int newSequenceGap = activeSliceConfig.sequenceGap;
-    final newHeaders =
-        List<HeaderFilterConfig>.from(activeSliceConfig.headerFilters);
+    final newHeaders = List<HeaderFilterConfig>.from(
+      activeSliceConfig.headerFilters,
+    );
 
     int idx = chipIndex;
     if (hasPos && idx == 0) {
@@ -932,10 +957,11 @@ class PgnViewerController extends ChangeNotifier {
     }
 
     final newConfig = SliceConfig(
-        positionInput: newPositionInput,
-        headerFilters: newHeaders,
-        sequencePattern: newSequencePattern,
-        sequenceGap: newSequenceGap);
+      positionInput: newPositionInput,
+      headerFilters: newHeaders,
+      sequencePattern: newSequencePattern,
+      sequenceGap: newSequenceGap,
+    );
 
     await recomputeAndApplyConfig(newConfig);
   }
@@ -947,13 +973,19 @@ class PgnViewerController extends ChangeNotifier {
     return [
       (
         label: '$p as White',
-        filter:
-            HeaderFilterConfig(field: 'White', mode: MatchMode.contains, value: p),
+        filter: HeaderFilterConfig(
+          field: 'White',
+          mode: MatchMode.contains,
+          value: p,
+        ),
       ),
       (
         label: '$p as Black',
-        filter:
-            HeaderFilterConfig(field: 'Black', mode: MatchMode.contains, value: p),
+        filter: HeaderFilterConfig(
+          field: 'Black',
+          mode: MatchMode.contains,
+          value: p,
+        ),
       ),
     ];
   }
@@ -966,18 +998,23 @@ class PgnViewerController extends ChangeNotifier {
   /// the same player (so "as White" ↔ "as Black" swap rather than stack) while
   /// keeping position/sequence filters.
   Future<void> applySlicePreset(HeaderFilterConfig filter) async {
-    final newHeaders = activeSliceConfig.headerFilters
-        .where((h) =>
-            !((h.field == 'White' || h.field == 'Black') &&
-                h.value == filter.value))
-        .toList()
-      ..add(filter);
-    await recomputeAndApplyConfig(SliceConfig(
-      positionInput: activeSliceConfig.positionInput,
-      headerFilters: newHeaders,
-      sequencePattern: activeSliceConfig.sequencePattern,
-      sequenceGap: activeSliceConfig.sequenceGap,
-    ));
+    final newHeaders =
+        activeSliceConfig.headerFilters
+            .where(
+              (h) =>
+                  !((h.field == 'White' || h.field == 'Black') &&
+                      h.value == filter.value),
+            )
+            .toList()
+          ..add(filter);
+    await recomputeAndApplyConfig(
+      SliceConfig(
+        positionInput: activeSliceConfig.positionInput,
+        headerFilters: newHeaders,
+        sequencePattern: activeSliceConfig.sequencePattern,
+        sequenceGap: activeSliceConfig.sequenceGap,
+      ),
+    );
   }
 
   /// Recompute matches for [newConfig] and apply them (shared by chip removal
@@ -988,13 +1025,17 @@ class PgnViewerController extends ChangeNotifier {
       return;
     }
 
-    final allRecords =
-        allGames.map((g) => (headers: g.headers, pgnText: g.pgnText)).toList();
+    final allRecords = allGames
+        .map((g) => (headers: g.headers, pgnText: g.pgnText))
+        .toList();
     isLoading = true;
     notifyListeners();
 
-    final indices =
-        await applySliceConfig(newConfig, allRecords, fenIndex: fenIndex);
+    final indices = await applySliceConfig(
+      newConfig,
+      allRecords,
+      fenIndex: fenIndex,
+    );
     if (!isActive()) return;
 
     isLoading = false;
@@ -1027,8 +1068,9 @@ class PgnViewerController extends ChangeNotifier {
       case GameSortMode.fileOrder:
         if (hasActiveFilters) {
           final filteredSet = filteredGames.toSet();
-          filteredGames =
-              allGames.where((g) => filteredSet.contains(g)).toList();
+          filteredGames = allGames
+              .where((g) => filteredSet.contains(g))
+              .toList();
         } else {
           filteredGames = List.of(allGames);
         }

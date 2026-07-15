@@ -24,13 +24,13 @@ AuditFinding _finding({
 }
 
 AuditResult _result(List<AuditFinding> findings) => AuditResult(
-      findings: findings,
-      nodesChecked: findings.length,
-      ourMoveNodesChecked: 0,
-      opponentNodesChecked: 0,
-      leafNodesChecked: 0,
-      elapsed: Duration.zero,
-    );
+  findings: findings,
+  nodesChecked: findings.length,
+  ourMoveNodesChecked: 0,
+  opponentNodesChecked: 0,
+  leafNodesChecked: 0,
+  elapsed: Duration.zero,
+);
 
 void main() {
   test('returns empty without a result', () {

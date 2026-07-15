@@ -18,39 +18,38 @@ void main() {
         nodeId: nextId++,
       )..engineEvalCp = 25;
 
-      final e4 = BuildTreeNode(
-        fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
-        moveSan: 'e4',
-        moveUci: 'e2e4',
-        ply: 1,
-        isWhiteToMove: false,
-        nodeId: nextId++,
-        parent: root,
-      )
-        ..engineEvalCp = -30
-        ..maiaFrequency = 0.42
-        ..moveProbability = 1.0
-        ..isRepertoireMove = true;
+      final e4 =
+          BuildTreeNode(
+              fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+              moveSan: 'e4',
+              moveUci: 'e2e4',
+              ply: 1,
+              isWhiteToMove: false,
+              nodeId: nextId++,
+              parent: root,
+            )
+            ..engineEvalCp = -30
+            ..maiaFrequency = 0.42
+            ..moveProbability = 1.0
+            ..isRepertoireMove = true;
 
-      final d4 = BuildTreeNode(
-        fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
-        moveSan: 'd4',
-        moveUci: 'd2d4',
-        ply: 1,
-        isWhiteToMove: false,
-        nodeId: nextId++,
-        parent: root,
-      )
-        ..engineEvalCp = -25
-        ..maiaFrequency = 0.38
-        ..moveProbability = 1.0;
+      final d4 =
+          BuildTreeNode(
+              fen: 'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1',
+              moveSan: 'd4',
+              moveUci: 'd2d4',
+              ply: 1,
+              isWhiteToMove: false,
+              nodeId: nextId++,
+              parent: root,
+            )
+            ..engineEvalCp = -25
+            ..maiaFrequency = 0.38
+            ..moveProbability = 1.0;
 
       root.children.addAll([e4, d4]);
 
-      tree = BuildTree(
-        root: root,
-        totalNodes: root.countSubtree(),
-      );
+      tree = BuildTree(root: root, totalNodes: root.countSubtree());
       tree.computeMetadata();
     });
 
@@ -64,17 +63,18 @@ void main() {
 
     test('does not set myEase on opponent-move children', () {
       final e4 = root.children[0];
-      final c5 = BuildTreeNode(
-        fen: 'test-fen',
-        moveSan: 'c5',
-        moveUci: 'c7c5',
-        ply: 2,
-        isWhiteToMove: true,
-        nodeId: 10,
-        parent: e4,
-      )
-        ..engineEvalCp = 35
-        ..maiaFrequency = 0.41;
+      final c5 =
+          BuildTreeNode(
+              fen: 'test-fen',
+              moveSan: 'c5',
+              moveUci: 'c7c5',
+              ply: 2,
+              isWhiteToMove: true,
+              nodeId: 10,
+              parent: e4,
+            )
+            ..engineEvalCp = 35
+            ..maiaFrequency = 0.41;
 
       e4.children.add(c5);
       tree.computeMetadata();
@@ -125,17 +125,18 @@ void main() {
         isWhiteToMove: true,
         nodeId: 1,
       );
-      final child = BuildTreeNode(
-        fen: 'fen2',
-        moveSan: 'e4',
-        moveUci: 'e2e4',
-        ply: 1,
-        isWhiteToMove: false,
-        nodeId: 2,
-        parent: parent,
-      )
-        ..myEase = 0.8
-        ..isRepertoireMove = true;
+      final child =
+          BuildTreeNode(
+              fen: 'fen2',
+              moveSan: 'e4',
+              moveUci: 'e2e4',
+              ply: 1,
+              isWhiteToMove: false,
+              nodeId: 2,
+              parent: parent,
+            )
+            ..myEase = 0.8
+            ..isRepertoireMove = true;
       parent.children.add(child);
 
       final q = computePositionQuality(parent, true);
@@ -169,17 +170,18 @@ void main() {
           isWhiteToMove: true,
           nodeId: i + 1,
         );
-        final child = BuildTreeNode(
-          fen: 'fen-child-$i',
-          moveSan: 'Nf${i + 3}',
-          moveUci: '',
-          ply: i * 2 + 1,
-          isWhiteToMove: false,
-          nodeId: 10 + i,
-          parent: parent,
-        )
-          ..myEase = 0.8
-          ..isRepertoireMove = true;
+        final child =
+            BuildTreeNode(
+                fen: 'fen-child-$i',
+                moveSan: 'Nf${i + 3}',
+                moveUci: '',
+                ply: i * 2 + 1,
+                isWhiteToMove: false,
+                nodeId: 10 + i,
+                parent: parent,
+              )
+              ..myEase = 0.8
+              ..isRepertoireMove = true;
         parent.children.add(child);
         nodes.add(parent);
       }

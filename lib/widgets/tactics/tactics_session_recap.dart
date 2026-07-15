@@ -59,12 +59,17 @@ class TacticsSessionRecap extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.flag_circle_outlined,
-                    color: theme.colorScheme.primary),
+                Icon(
+                  Icons.flag_circle_outlined,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
-                Text('Session complete',
-                    style: theme.textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  'Session complete',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 20),
@@ -97,8 +102,9 @@ class TacticsSessionRecap extends StatelessWidget {
                 'Accuracy ${(accuracy * 100).toStringAsFixed(0)}%'
                 ' · ${_formatSeconds(totalTimeSeconds)} total'
                 ' · avg ${_formatSeconds(totalTimeSeconds / _attempted)} per puzzle',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             const SizedBox(height: 20),
             Row(
@@ -111,10 +117,7 @@ class TacticsSessionRecap extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                 ],
-                OutlinedButton(
-                  onPressed: onDone,
-                  child: const Text('Done'),
-                ),
+                OutlinedButton(onPressed: onDone, child: const Text('Done')),
               ],
             ),
           ],
@@ -145,12 +148,18 @@ class _StatTile extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 22),
           const SizedBox(height: 4),
-          Text('$count',
-              style: theme.textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold)),
-          Text(label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          Text(
+            '$count',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );

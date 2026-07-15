@@ -146,31 +146,30 @@ class CandidateService {
         trapCount = _countTraps(child);
       }
 
-      candidates.add(CandidateMove(
-        san: child.moveSan,
-        uci: child.moveUci,
-        evalCp: child.hasEngineEval ? child.evalForUs(playAsWhite) : null,
-        ease: child.ease,
-        myEase: child.myEase >= 0 ? child.myEase : null,
-        expectimax: child.hasExpectimax ? child.expectimaxValue : null,
-        subtreeTrapCount: trapCount,
-        isRepertoireMove: child.isRepertoireMove,
-        inRepertoire: openingTree?.hasMoveOnPath(
-              pathFromRoot,
-              child.moveSan,
-            ) ??
-            false,
-        coverageDelta: coverageDeltaForMove(
-          coverage,
-          pathFromRoot,
-          child.moveSan,
+      candidates.add(
+        CandidateMove(
+          san: child.moveSan,
+          uci: child.moveUci,
+          evalCp: child.hasEngineEval ? child.evalForUs(playAsWhite) : null,
+          ease: child.ease,
+          myEase: child.myEase >= 0 ? child.myEase : null,
+          expectimax: child.hasExpectimax ? child.expectimaxValue : null,
+          subtreeTrapCount: trapCount,
+          isRepertoireMove: child.isRepertoireMove,
+          inRepertoire:
+              openingTree?.hasMoveOnPath(pathFromRoot, child.moveSan) ?? false,
+          coverageDelta: coverageDeltaForMove(
+            coverage,
+            pathFromRoot,
+            child.moveSan,
+          ),
+          evalSource: 'tree',
+          treeNode: child,
+          ply: child.ply,
+          dbGames: child.totalGames > 0 ? child.totalGames : null,
+          dbFrequency: child.moveProbability > 0 ? child.moveProbability : null,
         ),
-        evalSource: 'tree',
-        treeNode: child,
-        ply: child.ply,
-        dbGames: child.totalGames > 0 ? child.totalGames : null,
-        dbFrequency: child.moveProbability > 0 ? child.moveProbability : null,
-      ));
+      );
     }
 
     return sortCandidates(candidates, isOurTurn: isOurTurn);
@@ -202,9 +201,7 @@ class CandidateService {
       );
     }
 
-    final explorerBySan = {
-      for (final move in explorer.moves) move.san: move,
-    };
+    final explorerBySan = {for (final move in explorer.moves) move.san: move};
     final merged = <CandidateMove>[];
     final seenSans = <String>{};
 
@@ -218,13 +215,15 @@ class CandidateService {
 
     for (final dbMove in explorer.moves) {
       if (seenSans.contains(dbMove.san)) continue;
-      merged.add(_candidateFromExplorerMove(
-        fen: fen,
-        move: dbMove,
-        openingTree: openingTree,
-        coverage: coverage,
-        pathFromRoot: pathFromRoot,
-      ));
+      merged.add(
+        _candidateFromExplorerMove(
+          fen: fen,
+          move: dbMove,
+          openingTree: openingTree,
+          coverage: coverage,
+          pathFromRoot: pathFromRoot,
+        ),
+      );
     }
 
     return _limitCandidates(
@@ -323,11 +322,7 @@ class CandidateService {
   static (double?, double?, double?) _resultRates(ExplorerMove move) {
     final total = move.total;
     if (total <= 0) return (null, null, null);
-    return (
-      move.white / total,
-      move.draws / total,
-      move.black / total,
-    );
+    return (move.white / total, move.draws / total, move.black / total);
   }
 
   @visibleForTesting

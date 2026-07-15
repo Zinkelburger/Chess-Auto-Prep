@@ -15,7 +15,7 @@ class LineFilterControls extends StatelessWidget {
 
   final Set<LineMetricsFilter> metricsFilters;
   final void Function(LineMetricsFilter filter, bool active)
-      onMetricsFilterToggled;
+  onMetricsFilterToggled;
 
   final CoverageResult? coverageResult;
   final CoverageFilter coverageFilter;
@@ -43,9 +43,7 @@ class LineFilterControls extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey[700]!, width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.grey[700]!, width: 1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,8 +76,9 @@ class LineFilterControls extends StatelessWidget {
               ),
               _toggleChip(
                 label: 'Low coherence',
-                selected:
-                    metricsFilters.contains(LineMetricsFilter.lowCoherence),
+                selected: metricsFilters.contains(
+                  LineMetricsFilter.lowCoherence,
+                ),
                 onSelected: (v) =>
                     onMetricsFilterToggled(LineMetricsFilter.lowCoherence, v),
               ),
@@ -183,26 +182,42 @@ class _CoverageFilterRow extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                _chip('All', CoverageFilter.all, null,
-                    hasCoverageResult ? totalLineCount : null),
+                _chip(
+                  'All',
+                  CoverageFilter.all,
+                  null,
+                  hasCoverageResult ? totalLineCount : null,
+                ),
                 const SizedBox(width: 6),
-                _chip('Covered', CoverageFilter.covered,
-                    const Color(0xFF4CAF50),
-                    hasCoverageResult ? countCoveredLines(lineCoverage) : null),
+                _chip(
+                  'Covered',
+                  CoverageFilter.covered,
+                  const Color(0xFF4CAF50),
+                  hasCoverageResult ? countCoveredLines(lineCoverage) : null,
+                ),
                 const SizedBox(width: 6),
-                _chip('Too shallow', CoverageFilter.tooShallow,
-                    const Color(0xFFFFA726),
-                    hasCoverageResult ? countShallowLines(lineCoverage) : null),
+                _chip(
+                  'Too shallow',
+                  CoverageFilter.tooShallow,
+                  const Color(0xFFFFA726),
+                  hasCoverageResult ? countShallowLines(lineCoverage) : null,
+                ),
                 const SizedBox(width: 6),
-                _chip('Too deep', CoverageFilter.tooDeep,
-                    const Color(0xFF42A5F5),
-                    hasCoverageResult ? countDeepLines(lineCoverage) : null),
+                _chip(
+                  'Too deep',
+                  CoverageFilter.tooDeep,
+                  const Color(0xFF42A5F5),
+                  hasCoverageResult ? countDeepLines(lineCoverage) : null,
+                ),
                 const SizedBox(width: 6),
-                _chip('Unaccounted', CoverageFilter.unaccounted,
-                    const Color(0xFFEF5350),
-                    hasCoverageResult
-                        ? countUnaccountedLines(lineCoverage)
-                        : null),
+                _chip(
+                  'Unaccounted',
+                  CoverageFilter.unaccounted,
+                  const Color(0xFFEF5350),
+                  hasCoverageResult
+                      ? countUnaccountedLines(lineCoverage)
+                      : null,
+                ),
               ],
             ),
           ),
@@ -268,8 +283,7 @@ class _CoverageChip extends StatelessWidget {
             if (count != null) ...[
               const SizedBox(width: 4),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? Colors.white.withValues(alpha: 0.25)

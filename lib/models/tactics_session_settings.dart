@@ -77,8 +77,11 @@ class TacticsSessionSettings {
     final played = pos.gameDateTime;
     if (played == null) return true;
     final now = DateTime.now();
-    final cutoff = DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: days - 1));
+    final cutoff = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: days - 1));
     return !played.isBefore(cutoff);
   }
 
@@ -139,8 +142,9 @@ class TacticsSessionSettings {
       includeOneStar:
           prefs.getBool(_keyIncludeOneStar) ?? defaults.includeOneStar,
       skipReviewed: prefs.getBool(_keySkipReviewed) ?? defaults.skipReviewed,
-      mistakeTypes:
-          storedTypes != null ? storedTypes.toSet() : defaults.mistakeTypes,
+      mistakeTypes: storedTypes != null
+          ? storedTypes.toSet()
+          : defaults.mistakeTypes,
       maxAgeDays: storedMaxAge == null
           ? defaults.maxAgeDays
           : (storedMaxAge <= 0 ? null : storedMaxAge),

@@ -121,8 +121,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         sliceFen == null) {
       return;
     }
-    await _controller
-        .recomputeAndApplyConfig(SliceConfig(positionInput: sliceFen));
+    await _controller.recomputeAndApplyConfig(
+      SliceConfig(positionInput: sliceFen),
+    );
     if (!mounted) return;
     final count = _controller.filteredGames.length;
     showAppSnackBar(
@@ -336,12 +337,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         // New repertoire — write files and switch.
         final rawGamesName = '${safeName}_raw_games';
         final rawGamesPath = await storage.repertoireFilePath(rawGamesName);
-        await storage.writeFile(
-          rawGamesPath,
-          _controller.buildExportContent(),
-        );
+        await storage.writeFile(rawGamesPath, _controller.buildExportContent());
 
-        final header = '// $safeName Repertoire\n'
+        final header =
+            '// $safeName Repertoire\n'
             '// Color: ${result.color}\n'
             '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
         await storage.writeFile(repertoirePath, header);
@@ -362,8 +361,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       } catch (e) {
         debugPrint('Generate repertoire from games failed: $e');
         if (mounted) {
-          showAppSnackBar(context, 'Failed to create repertoire.',
-              isError: true);
+          showAppSnackBar(
+            context,
+            'Failed to create repertoire.',
+            isError: true,
+          );
         }
         _reclaimFocus();
         return;
@@ -380,10 +382,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }) async {
     final rawGamesName = '${safeName}_raw_games';
     final rawGamesPath = await storage.repertoireFilePath(rawGamesName);
-    await storage.writeFile(
-      rawGamesPath,
-      _controller.buildExportContent(),
-    );
+    await storage.writeFile(rawGamesPath, _controller.buildExportContent());
 
     if (!mounted) return;
     final gameCount = _controller.filteredGames.length;
@@ -454,12 +453,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       context: context,
       builder: (_) => GameSearchDialog(
         games: _controller.filteredGames
-            .map((g) => GameNavItem(
-                  label: g.label,
-                  studyRating: g.studyRating,
-                  studySummary: g.studySummary,
-                  headers: g.headers,
-                ))
+            .map(
+              (g) => GameNavItem(
+                label: g.label,
+                studyRating: g.studyRating,
+                studySummary: g.studySummary,
+                headers: g.headers,
+              ),
+            )
             .toList(),
         currentIndex: _controller.currentGameIndex,
       ),
@@ -554,8 +555,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
       }
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.tab) {
-      _tabController
-          .animateTo((_tabController.index + 1) % _tabController.length);
+      _tabController.animateTo(
+        (_tabController.index + 1) % _tabController.length,
+      );
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.keyR && hasNoLetterModifiers) {
       if (_pgnWidgetController.inVariation) {
@@ -662,11 +664,13 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
   }
 
   PreferredSizeWidget _buildAppBar(ThemeData theme) {
-    final fileName =
-        _controller.filePath != null ? p.basename(_controller.filePath!) : '';
+    final fileName = _controller.filePath != null
+        ? p.basename(_controller.filePath!)
+        : '';
     return AppBar(
       titleSpacing: 16,
-      leading: !_controller.showOpeningTree &&
+      leading:
+          !_controller.showOpeningTree &&
               !_controller.isSolitaireMode &&
               _controller.hasTreeReturnPosition
           ? IconButton(
@@ -712,15 +716,17 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               icon: Icon(
                 _editMode ? Icons.edit : Icons.edit_outlined,
                 size: 20,
-                color:
-                    _editMode ? Theme.of(context).colorScheme.primary : null,
+                color: _editMode ? Theme.of(context).colorScheme.primary : null,
               ),
-              tooltip: 'Amend game — moves, marks & comments '
+              tooltip:
+                  'Amend game — moves, marks & comments '
                   'are saved to the file (A)',
             ),
           ],
           IconButton(
-            onPressed: _controller.showOpeningTree ? null : _controller.toggleSolitaire,
+            onPressed: _controller.showOpeningTree
+                ? null
+                : _controller.toggleSolitaire,
             icon: Icon(
               Icons.psychology,
               size: 20,
@@ -730,11 +736,14 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             ),
             tooltip: 'Solitaire mode (Shift+S)',
           ),
-          if (_controller.isSolitaireMode &&
-              _controller.totalTrophyCount > 0)
+          if (_controller.isSolitaireMode && _controller.totalTrophyCount > 0)
             IconButton(
               onPressed: () => _showTrophyCabinet(),
-              icon: const Icon(Icons.emoji_events, size: 20, color: Colors.amber),
+              icon: const Icon(
+                Icons.emoji_events,
+                size: 20,
+                color: Colors.amber,
+              ),
               tooltip: 'Trophies (${_controller.totalTrophyCount})',
             ),
           _actionDivider(),
@@ -754,48 +763,55 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
               tooltip: 'Export filtered games (Ctrl+E)',
             ),
             PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, size: 20),
-            tooltip: 'More actions',
-            onSelected: (value) {
-              if (value == 'generate_repertoire') {
-                _generateRepertoireFromGames();
-              } else if (value == 'trophies') {
-                _showTrophyCabinet();
-              } else if (value == 'make_puzzle') {
-                context.read<AppState>().switchToPuzzleCreator(
-                    seedFen: _controller.currentPosition.fen);
-              }
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: 'make_puzzle',
-                child: ListTile(
-                  leading: Icon(Icons.extension, size: 20),
-                  title: Text('Make puzzle from this position'),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
+              icon: const Icon(Icons.more_vert, size: 20),
+              tooltip: 'More actions',
+              onSelected: (value) {
+                if (value == 'generate_repertoire') {
+                  _generateRepertoireFromGames();
+                } else if (value == 'trophies') {
+                  _showTrophyCabinet();
+                } else if (value == 'make_puzzle') {
+                  context.read<AppState>().switchToPuzzleCreator(
+                    seedFen: _controller.currentPosition.fen,
+                  );
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'make_puzzle',
+                  child: ListTile(
+                    leading: Icon(Icons.extension, size: 20),
+                    title: Text('Make puzzle from this position'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
-              ),
-              const PopupMenuItem(
-                value: 'generate_repertoire',
-                child: ListTile(
-                  leading: Icon(Icons.auto_fix_high, size: 20),
-                  title: Text('Generate repertoire from games'),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
+                const PopupMenuItem(
+                  value: 'generate_repertoire',
+                  child: ListTile(
+                    leading: Icon(Icons.auto_fix_high, size: 20),
+                    title: Text('Generate repertoire from games'),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
-              ),
-              PopupMenuItem(
-                value: 'trophies',
-                child: ListTile(
-                  leading: const Icon(Icons.emoji_events, size: 20, color: Colors.amber),
-                  title: Text('Trophy cabinet (${_controller.totalTrophyCount})'),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
+                PopupMenuItem(
+                  value: 'trophies',
+                  child: ListTile(
+                    leading: const Icon(
+                      Icons.emoji_events,
+                      size: 20,
+                      color: Colors.amber,
+                    ),
+                    title: Text(
+                      'Trophy cabinet (${_controller.totalTrophyCount})',
+                    ),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           ],
         ],
         const AppModeMenuButton(),
@@ -833,10 +849,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                       : Icons.description_outlined,
                   size: 20,
                 ),
-                title: Text(
-                  p.basename(path),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                title: Text(p.basename(path), overflow: TextOverflow.ellipsis),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
               ),
@@ -894,7 +907,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Widget _buildBoardPane() {
     final solitaire = _controller.solitaire;
-    final showFeedback = _controller.isSolitaireMode && solitaire.feedback != null;
+    final showFeedback =
+        _controller.isSolitaireMode && solitaire.feedback != null;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -910,7 +924,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                 // In solitaire, moves are allowed while guessing and again
                 // once the game completes (free exploration of the annotated
                 // game); only opponent auto-play locks the board.
-                enableUserMoves: !_controller.isSolitaireMode ||
+                enableUserMoves:
+                    !_controller.isSolitaireMode ||
                     solitaire.waitingForUser ||
                     solitaire.isComplete,
               ),
@@ -950,7 +965,6 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
     );
   }
 
-
   Widget _buildSidePanel() {
     if (_controller.showOpeningTree) {
       return PgnOpeningTreePanel(controller: _controller);
@@ -977,8 +991,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                             const SizedBox(
                               width: 12,
                               height: 12,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 1.5),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                              ),
                             ),
                           ],
                         ],
@@ -1002,8 +1017,8 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                       variationDepth: _pgnWidgetController.variationDepth,
                       gamePgnText: _controller.filteredGames.isNotEmpty
                           ? _controller
-                              .filteredGames[_controller.currentGameIndex]
-                              .pgnText
+                                .filteredGames[_controller.currentGameIndex]
+                                .pgnText
                           : null,
                       onAnnotatedMovetext: _controller.persistMoveComments,
                       onUserNavigation: () {
@@ -1018,16 +1033,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
         if (_controller.filteredGames.isNotEmpty)
           GameNavBar(
             games: _controller.filteredGames
-                .map((g) => GameNavItem(
-                      label: g.label,
-                      studyRating: g.studyRating,
-                      studySummary: g.studySummary,
-                      headers: g.headers,
-                    ))
+                .map(
+                  (g) => GameNavItem(
+                    label: g.label,
+                    studyRating: g.studyRating,
+                    studySummary: g.studySummary,
+                    headers: g.headers,
+                  ),
+                )
                 .toList(),
             currentIndex: _controller.currentGameIndex,
             currentRating: _controller
-                .filteredGames[_controller.currentGameIndex].studyRating,
+                .filteredGames[_controller.currentGameIndex]
+                .studyRating,
             sortMode: _controller.sortMode,
             isAutoPlaying: _controller.isAutoPlaying,
             autoPlayDelaySec: _controller.autoPlayDelaySec,
@@ -1052,10 +1070,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
             onToggleEditMode: _toggleEditMode,
             isEditMode: _editMode,
             isSolitaireMode: _controller.isSolitaireMode,
-            solitaireWaitingForUser: _controller.isSolitaireMode &&
+            solitaireWaitingForUser:
+                _controller.isSolitaireMode &&
                 _controller.solitaire.waitingForUser,
-            solitaireCanReveal: _controller.isSolitaireMode &&
-                _controller.solitaire.canReveal,
+            solitaireCanReveal:
+                _controller.isSolitaireMode && _controller.solitaire.canReveal,
             solitaireRevealCountdown: _controller.isSolitaireMode
                 ? _controller.solitaire.revealCountdownSec
                 : 0,
@@ -1118,7 +1137,9 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                       borderRadius: BorderRadius.circular(6),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: Colors.grey[800]!),
@@ -1126,8 +1147,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.description,
-                                size: 16, color: Colors.grey[500]),
+                            Icon(
+                              Icons.description,
+                              size: 16,
+                              color: Colors.grey[500],
+                            ),
                             const SizedBox(width: 8),
                             Flexible(
                               child: Text(
@@ -1221,16 +1245,19 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Widget _buildSolitaireStatusBar() {
     final s = _controller.solitaire;
-    final progress = s.totalMoves > 0
-        ? s.revealedPly / s.totalMoves
-        : 0.0;
+    final progress = s.totalMoves > 0 ? s.revealedPly / s.totalMoves : 0.0;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+      color: Theme.of(
+        context,
+      ).colorScheme.primaryContainer.withValues(alpha: 0.3),
       child: Row(
         children: [
-          Icon(Icons.psychology, size: 16,
-              color: Theme.of(context).colorScheme.primary),
+          Icon(
+            Icons.psychology,
+            size: 16,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           const SizedBox(width: 8),
           Text(
             'Solitaire (${s.userIsWhite ? "White" : "Black"})',
@@ -1244,10 +1271,7 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 6,
-              ),
+              child: LinearProgressIndicator(value: progress, minHeight: 6),
             ),
           ),
           const SizedBox(width: 12),
@@ -1271,8 +1295,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
 
   Widget _buildSolitaireSettingsButton() {
     return PopupMenuButton<String>(
-      icon: Icon(Icons.more_vert, size: 16,
-          color: Theme.of(context).colorScheme.primary),
+      icon: Icon(
+        Icons.more_vert,
+        size: 16,
+        color: Theme.of(context).colorScheme.primary,
+      ),
       tooltip: 'Solitaire settings',
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(),
@@ -1286,8 +1313,10 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
           const PopupMenuItem(
             enabled: false,
             height: 32,
-            child: Text('Reveal delay',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            child: Text(
+              'Reveal delay',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
           ),
           for (final sec in [0, 15, 30, 60, 90, 120])
             PopupMenuItem(
@@ -1298,8 +1327,11 @@ class _PgnViewerScreenState extends State<PgnViewerScreen>
                   SizedBox(
                     width: 20,
                     child: sec == currentDelay
-                        ? Icon(Icons.check, size: 16,
-                            color: Theme.of(context).colorScheme.primary)
+                        ? Icon(
+                            Icons.check,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          )
                         : null,
                   ),
                   const SizedBox(width: 8),

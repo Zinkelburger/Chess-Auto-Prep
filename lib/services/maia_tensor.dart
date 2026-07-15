@@ -21,17 +21,20 @@ class MaiaTensor {
     if (_initialized) return;
 
     try {
-      final movesJson =
-          await rootBundle.loadString('assets/data/all_moves_maia3.json');
-      final movesRevJson = await rootBundle
-          .loadString('assets/data/all_moves_maia3_reversed.json');
+      final movesJson = await rootBundle.loadString(
+        'assets/data/all_moves_maia3.json',
+      );
+      final movesRevJson = await rootBundle.loadString(
+        'assets/data/all_moves_maia3_reversed.json',
+      );
 
       final Map<String, dynamic> movesMap = json.decode(movesJson);
       _allMoves = movesMap.map((key, value) => MapEntry(key, value as int));
 
       final Map<String, dynamic> movesRevMap = json.decode(movesRevJson);
-      _allMovesReversed = movesRevMap
-          .map((key, value) => MapEntry(int.parse(key), value as String));
+      _allMovesReversed = movesRevMap.map(
+        (key, value) => MapEntry(int.parse(key), value as String),
+      );
 
       _initialized = true;
     } catch (e) {
@@ -56,7 +59,7 @@ class MaiaTensor {
       'b',
       'r',
       'q',
-      'k'
+      'k',
     ];
 
     final tensor = Float32List(64 * 12);
@@ -122,7 +125,8 @@ class MaiaTensor {
       final fromStr = fromSq.name;
 
       for (final toSq in targets.squares) {
-        final isPromotion = piece?.role == Role.pawn &&
+        final isPromotion =
+            piece?.role == Role.pawn &&
             ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
                 (piece.color == Side.black && toSq ~/ 8 == 0));
 
@@ -132,7 +136,7 @@ class MaiaTensor {
             Role.queen,
             Role.rook,
             Role.bishop,
-            Role.knight
+            Role.knight,
           ]) {
             final promoChar = _roleToUciChar(role);
             final uci = '$fromStr$toStr$promoChar';
@@ -160,12 +164,12 @@ class MaiaTensor {
   }
 
   static String _roleToUciChar(Role role) => switch (role) {
-        Role.queen => 'q',
-        Role.rook => 'r',
-        Role.bishop => 'b',
-        Role.knight => 'n',
-        _ => '',
-      };
+    Role.queen => 'q',
+    Role.rook => 'r',
+    Role.bishop => 'b',
+    Role.knight => 'n',
+    _ => '',
+  };
 
   // --- Mirroring Logic ---
 
@@ -179,8 +183,9 @@ class MaiaTensor {
     final fullmove = tokens.length > 5 ? tokens[5] : '1';
 
     final ranks = position.split('/');
-    final mirroredRanks =
-        ranks.reversed.map((rank) => _swapColorsInRank(rank)).toList();
+    final mirroredRanks = ranks.reversed
+        .map((rank) => _swapColorsInRank(rank))
+        .toList();
     final mirroredPosition = mirroredRanks.join('/');
 
     final mirroredActiveColor = activeColor == 'w' ? 'b' : 'w';

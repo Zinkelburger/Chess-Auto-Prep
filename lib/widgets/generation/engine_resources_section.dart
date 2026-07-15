@@ -76,8 +76,9 @@ class EngineResourcesSection extends StatelessWidget {
                   child: TextField(
                     controller: threadsController,
                     enabled: !isGenerating,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: false),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: false,
+                    ),
                     decoration: const InputDecoration(
                       labelText: 'Engine Threads',
                       border: OutlineInputBorder(),

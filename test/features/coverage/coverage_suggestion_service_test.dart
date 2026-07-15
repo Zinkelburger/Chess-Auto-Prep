@@ -16,18 +16,19 @@ BuildTreeNode _makeNode(
   int ply = 1,
   double trapScore = 0,
 }) {
-  final node = BuildTreeNode(
-    fen: fen,
-    moveSan: san,
-    moveUci: uci,
-    ply: ply,
-    isWhiteToMove: ply % 2 == 0,
-    nodeId: '$san@$fen'.hashCode,
-  )
-    ..isRepertoireMove = isRepertoire
-    ..expectimaxValue = expectimax
-    ..myEase = myEase
-    ..trapScore = trapScore;
+  final node =
+      BuildTreeNode(
+          fen: fen,
+          moveSan: san,
+          moveUci: uci,
+          ply: ply,
+          isWhiteToMove: ply % 2 == 0,
+          nodeId: '$san@$fen'.hashCode,
+        )
+        ..isRepertoireMove = isRepertoire
+        ..expectimaxValue = expectimax
+        ..myEase = myEase
+        ..trapScore = trapScore;
 
   if (evalCp != null) {
     node.engineEvalCp = evalCp;
@@ -135,38 +136,36 @@ BuildTree _treeForGap(List<String> gapMoves) {
 
 void main() {
   group('CoverageSuggestionService coherenceBonus', () {
-    test('populates coherenceBonus from lineCoherence when coherence provided',
-        () {
-      const gapMoves = ['e4', 'e5'];
-      final tree = _treeForGap(gapMoves);
-      final coverage = _coverageWithShallowGap(
-        gapMoves: gapMoves,
-        gapFen: 'fen_e5',
-      );
-      final coherence = _coherenceWithItemset(
-        const FrequentItemset(
-          items: {'e4', 'Nf3'},
-          support: 0.6,
-          count: 6,
-        ),
-      );
+    test(
+      'populates coherenceBonus from lineCoherence when coherence provided',
+      () {
+        const gapMoves = ['e4', 'e5'];
+        final tree = _treeForGap(gapMoves);
+        final coverage = _coverageWithShallowGap(
+          gapMoves: gapMoves,
+          gapFen: 'fen_e5',
+        );
+        final coherence = _coherenceWithItemset(
+          const FrequentItemset(items: {'e4', 'Nf3'}, support: 0.6, count: 6),
+        );
 
-      final service = CoverageSuggestionService(
-        coverage: coverage,
-        tree: tree,
-        coherence: coherence,
-      );
+        final service = CoverageSuggestionService(
+          coverage: coverage,
+          tree: tree,
+          coherence: coherence,
+        );
 
-      final suggestions = service.generateSuggestions(
-        targetCoverage: 60,
-        playAsWhite: true,
-      );
+        final suggestions = service.generateSuggestions(
+          targetCoverage: 60,
+          playAsWhite: true,
+        );
 
-      expect(suggestions, isNotEmpty);
-      expect(suggestions.first.coherenceBonus, isNotNull);
-      expect(suggestions.first.coherenceBonus, greaterThan(0));
-      expect(suggestions.first.fullMoves, contains('Nf3'));
-    });
+        expect(suggestions, isNotEmpty);
+        expect(suggestions.first.coherenceBonus, isNotNull);
+        expect(suggestions.first.coherenceBonus, greaterThan(0));
+        expect(suggestions.first.fullMoves, contains('Nf3'));
+      },
+    );
 
     test('leaves coherenceBonus null without coherence result', () {
       const gapMoves = ['e4', 'e5'];
@@ -176,10 +175,7 @@ void main() {
         gapFen: 'fen_e5',
       );
 
-      final service = CoverageSuggestionService(
-        coverage: coverage,
-        tree: tree,
-      );
+      final service = CoverageSuggestionService(coverage: coverage, tree: tree);
 
       final suggestions = service.generateSuggestions(
         targetCoverage: 60,
@@ -198,18 +194,10 @@ void main() {
         gapFen: 'fen_e5',
       );
       final coherent = _coherenceWithItemset(
-        const FrequentItemset(
-          items: {'e4', 'Nf3'},
-          support: 0.9,
-          count: 9,
-        ),
+        const FrequentItemset(items: {'e4', 'Nf3'}, support: 0.9, count: 9),
       );
       final incoherent = _coherenceWithItemset(
-        const FrequentItemset(
-          items: {'d4', 'c4'},
-          support: 0.9,
-          count: 9,
-        ),
+        const FrequentItemset(items: {'d4', 'c4'}, support: 0.9, count: 9),
       );
 
       final coherentService = CoverageSuggestionService(
@@ -253,11 +241,7 @@ void main() {
         gapFen: 'fen_e5',
       );
       final coherence = _coherenceWithItemset(
-        const FrequentItemset(
-          items: {'e4', 'Nf3'},
-          support: 0.9,
-          count: 9,
-        ),
+        const FrequentItemset(items: {'e4', 'Nf3'}, support: 0.9, count: 9),
       );
 
       final withCoherence = CoverageSuggestionService(
@@ -271,17 +255,11 @@ void main() {
       );
 
       final scoreWith = withCoherence
-          .generateSuggestions(
-            targetCoverage: 60,
-            playAsWhite: true,
-          )
+          .generateSuggestions(targetCoverage: 60, playAsWhite: true)
           .first
           .score;
       final scoreWithout = withoutCoherence
-          .generateSuggestions(
-            targetCoverage: 60,
-            playAsWhite: true,
-          )
+          .generateSuggestions(targetCoverage: 60, playAsWhite: true)
           .first
           .score;
 

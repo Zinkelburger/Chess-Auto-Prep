@@ -21,9 +21,11 @@ List<String> mainlineSan(MoveTreeNodeView node) {
 void main() {
   group('MoveTreeNodeView unifies node types', () {
     test('MoveNode implements the interface', () {
-      final n = MoveNode(san: 'e4', fen: 'after-e4', children: [
-        MoveNode(san: 'e5', fen: 'after-e5'),
-      ]);
+      final n = MoveNode(
+        san: 'e4',
+        fen: 'after-e4',
+        children: [MoveNode(san: 'e5', fen: 'after-e5')],
+      );
       expect(n, isA<MoveTreeNodeView>());
       expect(n.fenAfter, 'after-e4');
       expect(mainlineSan(n), ['e4', 'e5']);

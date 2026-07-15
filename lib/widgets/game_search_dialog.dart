@@ -66,13 +66,13 @@ class _GameEntry {
   });
 
   factory _GameEntry.fromGame(GameNavItem game) => _GameEntry(
-        white: _playerName(game.headers, 'White'),
-        black: _playerName(game.headers, 'Black'),
-        secondary: _formatSecondaryLine(game.headers),
-        summary: _isJunk(game.studySummary) ? '' : game.studySummary,
-        rating: game.studyRating,
-        searchText: _buildSearchableText(game),
-      );
+    white: _playerName(game.headers, 'White'),
+    black: _playerName(game.headers, 'Black'),
+    secondary: _formatSecondaryLine(game.headers),
+    summary: _isJunk(game.studySummary) ? '' : game.studySummary,
+    rating: game.studyRating,
+    searchText: _buildSearchableText(game),
+  );
 }
 
 bool _isJunk(String? value) {
@@ -109,7 +109,8 @@ String _formatDate(String raw) {
     final year = segments[0];
     final month = segments[1];
     final day = segments[2];
-    final yearOnly = !_isJunk(year) &&
+    final yearOnly =
+        !_isJunk(year) &&
         (RegExp(r'^\?+$').hasMatch(month) || _isJunk(month)) &&
         (RegExp(r'^\?+$').hasMatch(day) || _isJunk(day));
     if (yearOnly) return year;
@@ -148,11 +149,9 @@ List<_SearchResult> _computeResults(List<_GameEntry> entries, String query) {
     final n = int.parse(trimmed);
     final idx = n - 1;
     if (idx >= 0 && idx < entries.length) {
-      results.add(_SearchResult(
-        index: idx,
-        isGoToGame: true,
-        goToLabel: 'Go to game $n',
-      ));
+      results.add(
+        _SearchResult(index: idx, isGoToGame: true, goToLabel: 'Go to game $n'),
+      );
       seen.add(idx);
     }
   }
@@ -187,8 +186,9 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
   final _focusNode = FocusNode();
 
   // Display/search data precomputed once so scrolling and typing stay smooth.
-  late final List<_GameEntry> _entries =
-      widget.games.map(_GameEntry.fromGame).toList();
+  late final List<_GameEntry> _entries = widget.games
+      .map(_GameEntry.fromGame)
+      .toList();
 
   // Results cached and only recomputed when the query text changes.
   late List<_SearchResult> _results = _computeResults(_entries, '');
@@ -267,9 +267,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(
-                        color: theme.colorScheme.primary,
-                      ),
+                      borderSide: BorderSide(color: theme.colorScheme.primary),
                     ),
                   ),
                   style: const TextStyle(fontSize: 14),
@@ -280,17 +278,21 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                 SizedBox(
                   // Show up to _visibleRows at once, but never taller than the
                   // window allows (leaving room for the search field + margins).
-                  height: math.min(
-                    _visibleRows * _resultRowHeight,
-                    MediaQuery.of(context).size.height - 220,
-                  ).clamp(_resultRowHeight, _visibleRows * _resultRowHeight),
+                  height: math
+                      .min(
+                        _visibleRows * _resultRowHeight,
+                        MediaQuery.of(context).size.height - 220,
+                      )
+                      .clamp(_resultRowHeight, _visibleRows * _resultRowHeight),
                   child: results.isEmpty
                       ? Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(
                             'No matches',
                             style: TextStyle(
-                                color: Colors.grey[500], fontSize: 13),
+                              color: Colors.grey[500],
+                              fontSize: 13,
+                            ),
                           ),
                         )
                       : ListView.builder(
@@ -332,10 +334,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
             width: 32,
             child: Text(
               '${result.index + 1}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[500],
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
             ),
           ),
           Expanded(
@@ -361,10 +360,7 @@ class _GameSearchDialogState extends State<GameSearchDialog> {
                       secondary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey[500],
-                      ),
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                     ),
                   ),
                 if (!result.isGoToGame && entry.summary.isNotEmpty)

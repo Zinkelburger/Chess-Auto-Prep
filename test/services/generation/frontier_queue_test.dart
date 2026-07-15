@@ -8,11 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 int _idCounter = 0;
 
-BuildTreeNode _node({
-  double priority = -1.0,
-  double cumP = 1.0,
-  int ply = 0,
-}) {
+BuildTreeNode _node({double priority = -1.0, double cumP = 1.0, int ply = 0}) {
   final n = BuildTreeNode(
     fen: 'fen-${++_idCounter}',
     moveSan: 'e4',

@@ -150,7 +150,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
                     selectedSquare: selectedSquare,
                     highlightedSquares: {
                       ...widget.highlightedSquares,
-                      ..._internalHighlights
+                      ..._internalHighlights,
                     },
                     flipped: widget.flipped,
                     lightColor: lightSquareColor,
@@ -207,10 +207,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
               width: squareSize,
               height: squareSize,
               child: IgnorePointer(
-                child: PieceImage(
-                  piece: piece,
-                  size: squareSize,
-                ),
+                child: PieceImage(piece: piece, size: squareSize),
               ),
             ),
           );
@@ -406,10 +403,7 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       left: _currentDragPosition!.dx - squareSize / 2,
       top: _currentDragPosition!.dy - squareSize / 2,
       child: IgnorePointer(
-        child: PieceImage(
-          piece: _draggedPiece!,
-          size: squareSize,
-        ),
+        child: PieceImage(piece: _draggedPiece!, size: squareSize),
       ),
     );
   }
@@ -449,7 +443,8 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
       }
 
       final piece = widget.position.board.pieceAt(fromSq);
-      final isPromotion = piece?.role == Role.pawn &&
+      final isPromotion =
+          piece?.role == Role.pawn &&
           ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
               (piece.color == Side.black && toSq ~/ 8 == 0));
 
@@ -465,14 +460,16 @@ class _ChessBoardWidgetState extends State<ChessBoardWidget> {
 
       _clearSelection();
 
-      widget.onMove?.call(CompletedMove(
-        from: from,
-        to: to,
-        san: san,
-        fenBefore: fenBefore,
-        fenAfter: fenAfter,
-        uci: uci,
-      ));
+      widget.onMove?.call(
+        CompletedMove(
+          from: from,
+          to: to,
+          san: san,
+          fenBefore: fenBefore,
+          fenAfter: fenAfter,
+          uci: uci,
+        ),
+      );
     } catch (e) {
       debugPrint('[ChessBoardWidget] Move failed: $e');
       _clearSelection();
@@ -535,10 +532,11 @@ class _BoardPainter extends CustomPainter {
 
         if (highlightedSquares.contains(square) && square != selectedSquare) {
           canvas.drawRect(
-              rect,
-              Paint()
-                ..color = highlightColor
-                ..blendMode = BlendMode.multiply);
+            rect,
+            Paint()
+              ..color = highlightColor
+              ..blendMode = BlendMode.multiply,
+          );
         }
       }
     }
@@ -634,16 +632,21 @@ class _AnnotationPainter extends CustomPainter {
     final headPath = Path()
       ..moveTo(to.dx, to.dy)
       ..lineTo(
-          shaftEnd.dx + perp.dx * headHalfW, shaftEnd.dy + perp.dy * headHalfW)
+        shaftEnd.dx + perp.dx * headHalfW,
+        shaftEnd.dy + perp.dy * headHalfW,
+      )
       ..lineTo(
-          shaftEnd.dx - perp.dx * headHalfW, shaftEnd.dy - perp.dy * headHalfW)
+        shaftEnd.dx - perp.dx * headHalfW,
+        shaftEnd.dy - perp.dy * headHalfW,
+      )
       ..close();
 
     canvas.drawPath(
-        headPath,
-        Paint()
-          ..color = a.brush.color
-          ..style = PaintingStyle.fill);
+      headPath,
+      Paint()
+        ..color = a.brush.color
+        ..style = PaintingStyle.fill,
+    );
   }
 
   void _drawCircle(Canvas canvas, double sq, BoardAnnotation a) {
@@ -652,12 +655,13 @@ class _AnnotationPainter extends CustomPainter {
     final strokeW = sq * 0.06 * a.brush.strokeWidthFactor / 3.0;
 
     canvas.drawCircle(
-        center,
-        radius,
-        Paint()
-          ..color = a.brush.color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = math.max(strokeW, 2.0));
+      center,
+      radius,
+      Paint()
+        ..color = a.brush.color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(strokeW, 2.0),
+    );
   }
 
   void _drawLabel(Canvas canvas, double sq, BoardAnnotation a) {
@@ -669,11 +673,12 @@ class _AnnotationPainter extends CustomPainter {
 
     // Background circle
     canvas.drawCircle(
-        pos,
-        radius,
-        Paint()
-          ..color = a.brush.color
-          ..style = PaintingStyle.fill);
+      pos,
+      radius,
+      Paint()
+        ..color = a.brush.color
+        ..style = PaintingStyle.fill,
+    );
 
     // Text
     final tp = TextPainter(

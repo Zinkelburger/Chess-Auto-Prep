@@ -115,7 +115,8 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     if (oldWidget.coverageResult != widget.coverageResult) {
       _computeLineCoverage();
     }
-    final metricsChanged = oldWidget.tree != widget.tree ||
+    final metricsChanged =
+        oldWidget.tree != widget.tree ||
         oldWidget.traps != widget.traps ||
         oldWidget.coherenceResult != widget.coherenceResult;
     if (metricsChanged) {
@@ -235,7 +236,8 @@ class _RepertoireLinesBrowserState extends State<RepertoireLinesBrowser> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final layout = LineTableLayout.forWidth(constraints.maxWidth);
-        final needsCoverageRun = _coverageFilter != CoverageFilter.all &&
+        final needsCoverageRun =
+            _coverageFilter != CoverageFilter.all &&
             widget.coverageResult == null;
 
         return Column(
@@ -366,10 +368,7 @@ class RepertoireLinesBrowserDialog extends StatelessWidget {
                 children: [
                   const Text(
                     'Browse Repertoire Lines',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   IconButton(

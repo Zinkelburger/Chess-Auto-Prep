@@ -65,8 +65,9 @@ class RepertoireReviewEntry {
     }
 
     final due = cells[5].isEmpty ? null : DateTime.tryParse(cells[5])?.toUtc();
-    final reviewed =
-        cells[7].isEmpty ? null : DateTime.tryParse(cells[7])?.toUtc();
+    final reviewed = cells[7].isEmpty
+        ? null
+        : DateTime.tryParse(cells[7])?.toUtc();
 
     return RepertoireReviewEntry(
       repertoireId: cells[0],
@@ -83,8 +84,9 @@ class RepertoireReviewEntry {
   }
 
   String toCsvRow() {
-    final dueStr =
-        dueDateUtc == null ? '' : dueDateUtc!.toUtc().toIso8601String();
+    final dueStr = dueDateUtc == null
+        ? ''
+        : dueDateUtc!.toUtc().toIso8601String();
     final reviewedStr = lastReviewedUtc == null
         ? ''
         : lastReviewedUtc!.toUtc().toIso8601String();

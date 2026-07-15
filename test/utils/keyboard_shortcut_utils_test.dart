@@ -13,11 +13,7 @@ void main() {
 
     testWidgets('returns true when TextField has focus', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: TextField(autofocus: true),
-          ),
-        ),
+        MaterialApp(home: Scaffold(body: TextField(autofocus: true))),
       );
       await tester.pump();
       expect(isTextInputFocused(), isTrue);

@@ -80,7 +80,9 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
           ..clear()
           ..addAll(names);
         _gameCount = countPgnGames(pgns);
-        _error = _gameCount == 0 ? 'No games found in the selected files.' : null;
+        _error = _gameCount == 0
+            ? 'No games found in the selected files.'
+            : null;
         if (!_nameEdited) {
           final guess = _guessPlayerName(pgns);
           if (guess != null) _nameController.text = guess;
@@ -96,15 +98,15 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
   /// are these".
   static String? _guessPlayerName(String pgns) {
     final counts = <String, int>{};
-    for (final match
-        in RegExp(r'\[(?:White|Black) "([^"]+)"\]').allMatches(pgns)) {
+    for (final match in RegExp(
+      r'\[(?:White|Black) "([^"]+)"\]',
+    ).allMatches(pgns)) {
       final name = match.group(1)!.trim();
       if (name.isEmpty || name == '?' || isRepertoirePlayer(name)) continue;
       counts[name] = (counts[name] ?? 0) + 1;
     }
     if (counts.isEmpty) return null;
-    return (counts.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value)))
+    return (counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
         .first
         .key;
   }
@@ -119,11 +121,13 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
       setState(() => _error = 'Select PGN files with at least one game.');
       return;
     }
-    Navigator.of(context).pop(AnalysisImportResult(
-      pgns: _pgns,
-      playerName: name,
-      gameCount: _gameCount,
-    ));
+    Navigator.of(context).pop(
+      AnalysisImportResult(
+        pgns: _pgns,
+        playerName: name,
+        gameCount: _gameCount,
+      ),
+    );
   }
 
   @override
@@ -147,17 +151,20 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
               OutlinedButton.icon(
                 onPressed: _pickFiles,
                 icon: const Icon(Icons.file_open, size: 18),
-                label: Text(_fileNames.isEmpty
-                    ? 'Choose PGN Files'
-                    : 'Choose Different Files'),
+                label: Text(
+                  _fileNames.isEmpty
+                      ? 'Choose PGN Files'
+                      : 'Choose Different Files',
+                ),
               ),
               if (_fileNames.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
                   '${_fileNames.join(', ')} — '
                   '$_gameCount game${_gameCount == 1 ? '' : 's'}',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
               if (_error != null) ...[
@@ -165,7 +172,9 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
                 Text(
                   _error!,
                   style: TextStyle(
-                      fontSize: 12, color: theme.colorScheme.error),
+                    fontSize: 12,
+                    color: theme.colorScheme.error,
+                  ),
                 ),
               ],
               const SizedBox(height: 16),
@@ -173,7 +182,8 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
                 controller: _nameController,
                 decoration: InputDecoration(
                   labelText: 'Player name',
-                  helperText: 'Matched against the White/Black headers to tell '
+                  helperText:
+                      'Matched against the White/Black headers to tell '
                       'the player\'s colour per game. Games where it matches '
                       'neither side count for both colours, so repertoire '
                       'files work with any name.',
@@ -197,10 +207,7 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _confirm,
-          child: const Text('Import'),
-        ),
+        FilledButton(onPressed: _confirm, child: const Text('Import')),
       ],
     );
   }

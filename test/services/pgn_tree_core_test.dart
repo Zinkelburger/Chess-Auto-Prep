@@ -65,49 +65,60 @@ void main() {
 
     test('ambiguous game (neither matches) with null filter is skipped '
         'under skip policy', () {
-      expect(resolve(filter: null, policy: UnattributableGamePolicy.skip),
-          isNull);
+      expect(
+        resolve(filter: null, policy: UnattributableGamePolicy.skip),
+        isNull,
+      );
     });
 
     test('ambiguous game (neither matches) with null filter defaults to '
         'White under assumeWhite policy', () {
       expect(
-          resolve(filter: null, policy: UnattributableGamePolicy.assumeWhite),
-          isTrue);
+        resolve(filter: null, policy: UnattributableGamePolicy.assumeWhite),
+        isTrue,
+      );
     });
 
     test('ambiguous game (both match) with null filter is skipped under '
         'skip policy', () {
       expect(
-          resolve(
-            white: 'TestUser',
-            black: 'My Repertoire',
-            filter: null,
-            policy: UnattributableGamePolicy.skip,
-          ),
-          isNull);
+        resolve(
+          white: 'TestUser',
+          black: 'My Repertoire',
+          filter: null,
+          policy: UnattributableGamePolicy.skip,
+        ),
+        isNull,
+      );
     });
 
     test('ambiguous game falls back to the filter under both policies', () {
       for (final policy in UnattributableGamePolicy.values) {
-        expect(resolve(filter: true, policy: policy), isTrue,
-            reason: 'filter=true, policy=$policy');
-        expect(resolve(filter: false, policy: policy), isFalse,
-            reason: 'filter=false, policy=$policy');
+        expect(
+          resolve(filter: true, policy: policy),
+          isTrue,
+          reason: 'filter=true, policy=$policy',
+        );
+        expect(
+          resolve(filter: false, policy: policy),
+          isFalse,
+          reason: 'filter=false, policy=$policy',
+        );
       }
     });
 
     test('both headers matching falls back to the filter', () {
       expect(
-          resolve(white: 'TestUser', black: 'TestUser2', filter: false),
-          isFalse);
+        resolve(white: 'TestUser', black: 'TestUser2', filter: false),
+        isFalse,
+      );
       expect(
-          resolve(white: 'TestUser', black: 'TestUser2', filter: true),
-          isTrue);
+        resolve(white: 'TestUser', black: 'TestUser2', filter: true),
+        isTrue,
+      );
     });
 
-    test('colour filter rejects games where user played the other colour',
-        () {
+    test('colour filter rejects games where user played the other colour', () {
       // User matched as Black, but filter demands White games.
       expect(resolve(black: 'TestUser', filter: true), isNull);
       // User matched as White, but filter demands Black games.
@@ -193,9 +204,17 @@ void main() {
     test('merges repeated lines and accumulates results', () {
       final tree = OpeningTree();
       walkMainlineIntoTree(
-          tree: tree, game: parse('1. e4 e5 *'), userResult: 1.0, maxDepth: 30);
+        tree: tree,
+        game: parse('1. e4 e5 *'),
+        userResult: 1.0,
+        maxDepth: 30,
+      );
       walkMainlineIntoTree(
-          tree: tree, game: parse('1. e4 c5 *'), userResult: 0.0, maxDepth: 30);
+        tree: tree,
+        game: parse('1. e4 c5 *'),
+        userResult: 0.0,
+        maxDepth: 30,
+      );
 
       final e4 = tree.root.children['e4']!;
       expect(e4.gamesPlayed, 2);
@@ -247,8 +266,7 @@ void main() {
       expect(e5!.fen, contains(' w '));
     });
 
-    test('invokes per-ply and completion callbacks with correct positions',
-        () {
+    test('invokes per-ply and completion callbacks with correct positions', () {
       final tree = OpeningTree();
       final beforeMoveFens = <String>[];
       String? finalFen;
@@ -270,14 +288,14 @@ void main() {
   });
 
   group('builder policies end-to-end', () {
-    const ambiguousPgn = '[White "Alice"]\n'
+    const ambiguousPgn =
+        '[White "Alice"]\n'
         '[Black "Bob"]\n'
         '[Result "1-0"]\n'
         '\n'
         '1. e4 e5 *';
 
-    test(
-        'OpeningTreeBuilder skips games it cannot attribute '
+    test('OpeningTreeBuilder skips games it cannot attribute '
         '(userIsWhite null)', () async {
       final tree = await OpeningTreeBuilder.buildTree(
         pgnList: [ambiguousPgn],
@@ -287,21 +305,20 @@ void main() {
       expect(tree.totalGames, 0);
     });
 
-    test('OpeningTreeBuilder keeps attributable games when userIsWhite null',
-        () async {
-      final tree = await OpeningTreeBuilder.buildTree(
-        pgnList: [
-          ambiguousPgn.replaceFirst('Alice', 'TestUser'),
-        ],
-        username: 'testuser',
-        userIsWhite: null,
-      );
-      expect(tree.totalGames, 1);
-      expect(tree.root.wins, 1);
-    });
+    test(
+      'OpeningTreeBuilder keeps attributable games when userIsWhite null',
+      () async {
+        final tree = await OpeningTreeBuilder.buildTree(
+          pgnList: [ambiguousPgn.replaceFirst('Alice', 'TestUser')],
+          username: 'testuser',
+          userIsWhite: null,
+        );
+        expect(tree.totalGames, 1);
+        expect(tree.root.wins, 1);
+      },
+    );
 
-    test('UnifiedAnalysisBuilder defaults ambiguous games to the filter',
-        () {
+    test('UnifiedAnalysisBuilder defaults ambiguous games to the filter', () {
       final (_, treeAsWhite) = UnifiedAnalysisBuilder.build(
         pgnList: [ambiguousPgn],
         username: 'testuser',

@@ -125,8 +125,7 @@ void main() {
       expect(out.rating, 3);
     });
 
-    test('longer solution PV rides in a header, mainline stays trainable',
-        () {
+    test('longer solution PV rides in a header, mainline stays trainable', () {
       final puzzle = _puzzle(
         fen: '6k1/5ppp/8/8/8/8/r7/6K1 b - - 0 1',
         line: ['Ra1+'],
@@ -174,8 +173,7 @@ void main() {
       expect(puzzle.gameWhite, 'Student');
     });
 
-    test('games without FEN are skipped and reported, others still import',
-        () {
+    test('games without FEN are skipped and reported, others still import', () {
       const pgn = '''
 [Event "Normal game"]
 
@@ -304,16 +302,20 @@ void main() {
     test('white to move numbering', () {
       expect(
         buildSolutionMovetext(
-            'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4',
-            ['Qxf7#']),
+          'r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4',
+          ['Qxf7#'],
+        ),
         '4. Qxf7# *',
       );
     });
 
     test('black to move gets ellipsis and increments correctly', () {
       expect(
-        buildSolutionMovetext('6k1/5ppp/8/8/8/8/r7/6K1 b - - 0 10',
-            ['Ra1+', 'Kh2', 'Ra2']),
+        buildSolutionMovetext('6k1/5ppp/8/8/8/8/r7/6K1 b - - 0 10', [
+          'Ra1+',
+          'Kh2',
+          'Ra2',
+        ]),
         '10... Ra1+ 11. Kh2 Ra2 *',
       );
     });
@@ -334,16 +336,28 @@ void main() {
 ''';
 
     test('onlyGame restricts decoding to that chapter', () {
-      final decoded =
-          decodePuzzlesFromPgn(study, requireFen: false, onlyGame: 1);
+      final decoded = decodePuzzlesFromPgn(
+        study,
+        requireFen: false,
+        onlyGame: 1,
+      );
       expect(decoded.puzzles, hasLength(1));
-      expect(decoded.puzzles.single.correctLine,
-          ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5']);
+      expect(decoded.puzzles.single.correctLine, [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+        'Bb5',
+      ]);
     });
 
     test('includeVariations expands lines into extra cards', () {
-      final decoded = decodePuzzlesFromPgn(study,
-          requireFen: false, includeVariations: true, onlyGame: 1);
+      final decoded = decodePuzzlesFromPgn(
+        study,
+        requireFen: false,
+        includeVariations: true,
+        onlyGame: 1,
+      );
       // Mainline + Philidor variation; the 1. d4 line shares the chapter
       // start position with the mainline card and is skipped.
       expect(decoded.puzzles, hasLength(2));
@@ -363,8 +377,11 @@ void main() {
     });
 
     test('variation cards do not disturb stat patching', () {
-      final decoded = decodePuzzlesFromPgn(study,
-          requireFen: false, includeVariations: true);
+      final decoded = decodePuzzlesFromPgn(
+        study,
+        requireFen: false,
+        includeVariations: true,
+      );
       final reviewed = [
         for (final p in decoded.puzzles) p.copyWith(reviewCount: 3),
       ];

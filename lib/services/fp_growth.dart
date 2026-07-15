@@ -30,10 +30,7 @@ class FPGrowthMiner {
   final double minSupport;
   final List<Set<String>> transactions;
 
-  FPGrowthMiner({
-    required this.minSupport,
-    required this.transactions,
-  });
+  FPGrowthMiner({required this.minSupport, required this.transactions});
 
   List<FrequentItemset> mine() {
     if (transactions.isEmpty) return [];
@@ -48,10 +45,9 @@ class FPGrowthMiner {
       }
     }
 
-    final frequentItems = freq.entries
-        .where((e) => e.value >= minCount)
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final frequentItems =
+        freq.entries.where((e) => e.value >= minCount).toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
     if (frequentItems.isEmpty) return [];
 
@@ -64,10 +60,9 @@ class FPGrowthMiner {
     final headerTable = <String, _FPNode>{};
 
     for (final transaction in transactions) {
-      final sorted = transaction
-          .where((item) => itemOrder.containsKey(item))
-          .toList()
-        ..sort((a, b) => itemOrder[a]!.compareTo(itemOrder[b]!));
+      final sorted =
+          transaction.where((item) => itemOrder.containsKey(item)).toList()
+            ..sort((a, b) => itemOrder[a]!.compareTo(itemOrder[b]!));
 
       var current = root;
       for (final item in sorted) {
@@ -105,11 +100,13 @@ class FPGrowthMiner {
       final support = _countItem(headerTable[item]);
 
       if (support >= minCount) {
-        results.add(FrequentItemset(
-          items: newPrefix,
-          support: support / transactions.length,
-          count: support,
-        ));
+        results.add(
+          FrequentItemset(
+            items: newPrefix,
+            support: support / transactions.length,
+            count: support,
+          ),
+        );
 
         final conditionalPatterns = _conditionalPatternBase(headerTable[item]!);
         if (conditionalPatterns.isNotEmpty) {
@@ -119,11 +116,13 @@ class FPGrowthMiner {
           );
           final subResults = subMiner.mine();
           for (final sub in subResults) {
-            results.add(FrequentItemset(
-              items: {...sub.items, ...newPrefix},
-              support: sub.support,
-              count: sub.count,
-            ));
+            results.add(
+              FrequentItemset(
+                items: {...sub.items, ...newPrefix},
+                support: sub.support,
+                count: sub.count,
+              ),
+            );
           }
         }
       }
@@ -137,8 +136,9 @@ class FPGrowthMiner {
     all.sort((a, b) => b.items.length.compareTo(a.items.length));
     final maximal = <FrequentItemset>[];
     for (final candidate in all) {
-      final isSubset = maximal
-          .any((m) => candidate.items.every((item) => m.items.contains(item)));
+      final isSubset = maximal.any(
+        (m) => candidate.items.every((item) => m.items.contains(item)),
+      );
       if (!isSubset) maximal.add(candidate);
     }
     return maximal;

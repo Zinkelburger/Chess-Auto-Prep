@@ -50,8 +50,9 @@ Future<SnapshotExportChoice?> showSnapshotExportDialog(
             });
             return;
           }
-          Navigator.of(context)
-              .pop(SnapshotExportChoice(name: name, verify: verify));
+          Navigator.of(
+            context,
+          ).pop(SnapshotExportChoice(name: name, verify: verify));
         }
 
         return AlertDialog(
@@ -89,8 +90,8 @@ Future<SnapshotExportChoice?> showSnapshotExportDialog(
                 subtitle: Text(
                   canVerify
                       ? 'Re-checks the chosen moves'
-                          '${verifyDepth != null ? ' at depth $verifyDepth' : ''}. '
-                          'Exploration pauses while verifying, then resumes.'
+                            '${verifyDepth != null ? ' at depth $verifyDepth' : ''}. '
+                            'Exploration pauses while verifying, then resumes.'
                       : 'Not available for this build mode.',
                   style: const TextStyle(fontSize: 12),
                 ),

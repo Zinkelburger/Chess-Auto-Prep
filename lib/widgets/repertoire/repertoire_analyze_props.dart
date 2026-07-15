@@ -52,7 +52,7 @@ class RepertoireAnalyzeProps {
   final String? coverageProgressMessage;
   final void Function(RepertoireLine line) onLineSelected;
   final Future<void> Function(RepertoireLine line, String newTitle)
-      onLineRenamed;
+  onLineRenamed;
   final void Function(List<String> moveSequence)? onNavigateToPosition;
   final List<TrapLineInfo> traps;
   final void Function(TrapLineInfo trap) onTrapSelected;
@@ -69,8 +69,8 @@ class RepertoireAnalyzeProps {
   final VoidCallback? onStartTrapTour;
 
   Map<String, String> get lineNames => {
-        for (final line in lines) line.id: line.name,
-      };
+    for (final line in lines) line.id: line.name,
+  };
 
   bool get hasCoverageView => coverageResult != null;
 

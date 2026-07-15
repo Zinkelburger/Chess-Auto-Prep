@@ -49,9 +49,7 @@ class _PositionPreviewIconState extends State<PositionPreviewIcon> {
     );
 
     _overlayEntry?.remove();
-    _overlayEntry = OverlayEntry(
-      builder: (_) => _buildBoard(position, anchor),
-    );
+    _overlayEntry = OverlayEntry(builder: (_) => _buildBoard(position, anchor));
     overlay.insert(_overlayEntry!);
   }
 
@@ -66,7 +64,9 @@ class _PositionPreviewIconState extends State<PositionPreviewIcon> {
     var top = anchor.dy + _anchorGap;
 
     left = left.clamp(
-        0.0, (screenSize.width - _boardSize).clamp(0.0, double.infinity));
+      0.0,
+      (screenSize.width - _boardSize).clamp(0.0, double.infinity),
+    );
     if (top + _boardSize > screenSize.height - 8) {
       top = anchor.dy - _boardSize - _anchorGap - 24;
     }

@@ -97,7 +97,8 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     super.didUpdateWidget(old);
     final oldProg = old.progressiveSnapshot;
     final newProg = widget.progressiveSnapshot;
-    final progChanged = oldProg != newProg &&
+    final progChanged =
+        oldProg != newProg &&
         (oldProg == null ||
             newProg == null ||
             oldProg.lines != newProg.lines ||
@@ -147,8 +148,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
       return;
     }
 
-    final eca =
-        ExpectimaxCalculator(config: widget.config!, fenMap: widget.fenMap);
+    final eca = ExpectimaxCalculator(
+      config: widget.config!,
+      fenMap: widget.fenMap,
+    );
 
     final lines = generateExpectimaxLines(
       node,
@@ -239,9 +242,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 Text(
                   'Expectimax failed',
                   style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600),
+                    color: Colors.grey[400],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -256,7 +260,9 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                     label: const Text('Retry', style: TextStyle(fontSize: 11)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -295,11 +301,15 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                   OutlinedButton.icon(
                     onPressed: widget.onRetry,
                     icon: const Icon(Icons.play_arrow, size: 14),
-                    label:
-                        const Text('Compute', style: TextStyle(fontSize: 11)),
+                    label: const Text(
+                      'Compute',
+                      style: TextStyle(fontSize: 11),
+                    ),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
@@ -334,8 +344,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                   color: AppColors.expectimax,
                 ),
                 if (done > 0)
-                  Text('$done',
-                      style: TextStyle(fontSize: 8, color: Colors.grey[400])),
+                  Text(
+                    '$done',
+                    style: TextStyle(fontSize: 8, color: Colors.grey[400]),
+                  ),
               ],
             ),
           ),
@@ -415,8 +427,10 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
                 'likely game continuations via expectimax search.\n\n'
                 'Depth/eval settings are in Settings → On-the-fly Expectimax '
                 '(separate from Generation tab Engine Depth).',
-            child: Text('Expectimax PV (on-the-fly)',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            child: Text(
+              'Expectimax PV (on-the-fly)',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
           ),
           if (isComputing) ...[
             const Padding(
@@ -470,17 +484,21 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     for (final info in line.moveInfo) {
       if (!info.isOurMove && info.moveProbability > 0) {
         final pct = (info.moveProbability * 100).round();
-        annotations.add(MoveAnnotation(
-          suffix: ' $pct%',
-          suffixColor: pct >= 50 ? AppColors.warning : Colors.grey[500],
-          suffixFontWeight: FontWeight.w600,
-        ));
+        annotations.add(
+          MoveAnnotation(
+            suffix: ' $pct%',
+            suffixColor: pct >= 50 ? AppColors.warning : Colors.grey[500],
+            suffixFontWeight: FontWeight.w600,
+          ),
+        );
       } else if (info.isOurMove && info.isRepertoireMove) {
-        annotations.add(const MoveAnnotation(
-          prefixIcon: Icons.star,
-          prefixIconColor: AppColors.expectimax,
-          iconSize: 9,
-        ));
+        annotations.add(
+          const MoveAnnotation(
+            prefixIcon: Icons.star,
+            prefixIconColor: AppColors.expectimax,
+            iconSize: 9,
+          ),
+        );
       } else {
         annotations.add(const MoveAnnotation());
       }
@@ -489,7 +507,8 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
     double? coherence;
     if (widget.coherenceResult != null) {
       coherence = _averageCoherenceForFirstMove(
-          line.movesSan.isNotEmpty ? line.movesSan.first : null);
+        line.movesSan.isNotEmpty ? line.movesSan.first : null,
+      );
     }
 
     return Padding(
@@ -497,25 +516,31 @@ class _ExpectimaxLinesPaneState extends State<ExpectimaxLinesPane> {
       child: Row(
         children: [
           SizedBox(
-              width: 20,
-              child: Text('${line.rank}',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 13))),
+            width: 20,
+            child: Text(
+              '${line.rank}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
           Tooltip(
             message: tooltipParts.join('\n'),
             child: SizedBox(
-                width: 56,
-                child: Text(expectedEval,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      color: _evalColor(line.expectedEvalCp),
-                    ))),
+              width: 56,
+              child: Text(
+                expectedEval,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  color: _evalColor(line.expectedEvalCp),
+                ),
+              ),
+            ),
           ),
           if (coherence != null)
             Tooltip(
-              message: 'Coherence: lines through this move share '
+              message:
+                  'Coherence: lines through this move share '
                   '${(coherence * 100).round()}% structural patterns',
               child: Container(
                 width: 40,

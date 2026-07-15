@@ -125,48 +125,54 @@ class _HoverableMoveChipsState extends State<HoverableMoveChips> {
       // separates them.
       final numberPrefix = ply % 2 == 0 ? '${(ply ~/ 2) + 1}.' : '';
       if (numberPrefix.isNotEmpty) {
-        spans.add(TextSpan(
-          text: numberPrefix,
+        spans.add(
+          TextSpan(
+            text: numberPrefix,
+            style: TextStyle(
+              fontSize: widget.fontSize,
+              color: numColor,
+              fontFamily: 'monospace',
+              height: 1.5,
+            ),
+          ),
+        );
+      }
+      spans.add(
+        TextSpan(
+          text: moves[i],
           style: TextStyle(
             fontSize: widget.fontSize,
-            color: numColor,
             fontFamily: 'monospace',
+            color: isHighlighted ? hlColor : defaultColor,
+            fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
+            backgroundColor: isHighlighted
+                ? hlColor.withValues(alpha: 0.25)
+                : null,
             height: 1.5,
           ),
-        ));
-      }
-      spans.add(TextSpan(
-        text: moves[i],
-        style: TextStyle(
-          fontSize: widget.fontSize,
-          fontFamily: 'monospace',
-          color: isHighlighted ? hlColor : defaultColor,
-          fontWeight: isHighlighted ? FontWeight.bold : FontWeight.normal,
-          backgroundColor:
-              isHighlighted ? hlColor.withValues(alpha: 0.25) : null,
-          height: 1.5,
+          recognizer: _tapRecognizerFor(i),
+          onEnter: hasHover ? (event) => _onEnterMove(event, i) : null,
+          onExit: hasHover ? (_) => widget.boardPreview!.clearPreview() : null,
+          mouseCursor: hasTap ? SystemMouseCursors.click : MouseCursor.defer,
         ),
-        recognizer: _tapRecognizerFor(i),
-        onEnter: hasHover ? (event) => _onEnterMove(event, i) : null,
-        onExit: hasHover ? (_) => widget.boardPreview!.clearPreview() : null,
-        mouseCursor:
-            hasTap ? SystemMouseCursors.click : MouseCursor.defer,
-      ));
+      );
       if (i < end - 1) {
         spans.add(const TextSpan(text: ' '));
       }
     }
 
     if (moves.length > widget.maxMoves) {
-      spans.add(TextSpan(
-        text: ' ... +${moves.length - widget.maxMoves}',
-        style: TextStyle(
-          fontSize: widget.fontSize - 1,
-          color: numColor,
-          fontStyle: FontStyle.italic,
-          height: 1.5,
+      spans.add(
+        TextSpan(
+          text: ' ... +${moves.length - widget.maxMoves}',
+          style: TextStyle(
+            fontSize: widget.fontSize - 1,
+            color: numColor,
+            fontStyle: FontStyle.italic,
+            height: 1.5,
+          ),
         ),
-      ));
+      );
     }
 
     return Text.rich(TextSpan(children: spans));

@@ -106,12 +106,14 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
     final form = _configFormKey.currentState;
     if (form == null) {
       if (triesLeft <= 0) return;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _seedWhenFormReady(
-            pgnPaths: pgnPaths,
-            minGames: minGames,
-            autoStart: autoStart,
-            triesLeft: triesLeft - 1,
-          ));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _seedWhenFormReady(
+          pgnPaths: pgnPaths,
+          minGames: minGames,
+          autoStart: autoStart,
+          triesLeft: triesLeft - 1,
+        ),
+      );
       return;
     }
     form.seedDbExplorer(pgnPaths: pgnPaths, minGames: minGames);
@@ -229,9 +231,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       existingTree: existingTree,
       onLinesSaved: widget.onLinesSaved,
     );
-    unawaited(ctrl.startBuild(request).whenComplete(() {
-      if (mounted) _checkForPartialTree();
-    }));
+    unawaited(
+      ctrl.startBuild(request).whenComplete(() {
+        if (mounted) _checkForPartialTree();
+      }),
+    );
   }
 
   // ── UI ───────────────────────────────────────────────────────────────
@@ -242,15 +246,18 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
       listenable: widget.generationController,
       builder: (context, _) {
         final ctrl = widget.generationController;
-        final statusText =
-            ctrl.isGenerating ? ctrl.progressStatus : ctrl.lastRunSummary;
+        final statusText = ctrl.isGenerating
+            ? ctrl.progressStatus
+            : ctrl.lastRunSummary;
         return SingleChildScrollView(
           padding: const EdgeInsets.all(8.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Generate Repertoire',
-                  style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                'Generate Repertoire',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               _buildStartingPositionBanner(context),
               const SizedBox(height: 8),
@@ -275,8 +282,9 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
                 Text(
                   statusText,
                   style: TextStyle(
-                    color:
-                        ctrl.lastError != null ? AppColors.danger : Colors.grey,
+                    color: ctrl.lastError != null
+                        ? AppColors.danger
+                        : Colors.grey,
                   ),
                 ),
               ],

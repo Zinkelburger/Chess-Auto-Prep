@@ -135,13 +135,17 @@ class LineItemRow extends StatelessWidget {
       resolvedTitle = displayTitle!;
     } else {
       final eventTitle = pgn_utils.extractEventTitle(line.fullPgn);
-      resolvedTitle =
-          !isPlaceholderLineTitle(eventTitle) ? eventTitle : line.name;
+      resolvedTitle = !isPlaceholderLineTitle(eventTitle)
+          ? eventTitle
+          : line.name;
     }
 
-    final matchDepth =
-        pgn_utils.getPositionMatchDepth(line, currentMoveSequence);
-    final isExactMatch = matchDepth == currentMoveSequence.length &&
+    final matchDepth = pgn_utils.getPositionMatchDepth(
+      line,
+      currentMoveSequence,
+    );
+    final isExactMatch =
+        matchDepth == currentMoveSequence.length &&
         currentMoveSequence.isNotEmpty;
 
     return InkWell(
@@ -257,8 +261,11 @@ class LineItemRow extends StatelessWidget {
                 width: 28,
                 height: 28,
                 child: IconButton(
-                  icon: Icon(Icons.delete_outline,
-                      size: 14, color: Colors.grey[600]),
+                  icon: Icon(
+                    Icons.delete_outline,
+                    size: 14,
+                    color: Colors.grey[600],
+                  ),
                   padding: EdgeInsets.zero,
                   tooltip: 'Delete line',
                   onPressed: () => _confirmDelete(context),
@@ -318,17 +325,13 @@ class _ScoreText extends StatelessWidget {
   final double? value;
   final double dangerBelow;
 
-  const _ScoreText({
-    required this.value,
-    this.dangerBelow = 0.3,
-  });
+  const _ScoreText({required this.value, this.dangerBelow = 0.3});
 
   @override
   Widget build(BuildContext context) {
     final v = value;
     if (v == null) {
-      return Text('—',
-          style: TextStyle(fontSize: 11, color: Colors.grey[600]));
+      return Text('—', style: TextStyle(fontSize: 11, color: Colors.grey[600]));
     }
     final color = v >= goodAbove
         ? AppColors.success
@@ -349,8 +352,7 @@ class _TrapsCellText extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = metrics?.trapCount ?? 0;
     if (count == 0) {
-      return Text('—',
-          style: TextStyle(fontSize: 11, color: Colors.grey[600]));
+      return Text('—', style: TextStyle(fontSize: 11, color: Colors.grey[600]));
     }
     final evalDiff = metrics?.bestTrapEvalDiff;
     final text = Text(
@@ -362,10 +364,7 @@ class _TrapsCellText extends StatelessWidget {
       ),
     );
     if (evalDiff == null) return text;
-    return Tooltip(
-      message: 'Best trap wins +${evalDiff}cp',
-      child: text,
-    );
+    return Tooltip(message: 'Best trap wins +${evalDiff}cp', child: text);
   }
 }
 
@@ -430,8 +429,7 @@ class _CoverageStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     final leaf = info?.leaf;
     if (leaf == null) {
-      return Text('—',
-          style: TextStyle(fontSize: 11, color: Colors.grey[600]));
+      return Text('—', style: TextStyle(fontSize: 11, color: Colors.grey[600]));
     }
 
     late final Color color;
@@ -453,11 +451,7 @@ class _CoverageStatus extends StatelessWidget {
 
     final label = Text(
       text,
-      style: TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w600,
-        color: color,
-      ),
+      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color),
     );
     if (tooltip == null) return label;
     return Tooltip(message: tooltip, child: label);
@@ -479,20 +473,23 @@ class _UnaccountedAnnotation extends StatelessWidget {
     final groups = info!.groupedUnaccounted.entries.toList();
     if (groups.isEmpty) return const SizedBox.shrink();
 
-    final displayGroups =
-        groups.take(LineItemRow.maxUnaccountedGroupsPreview).toList();
+    final displayGroups = groups
+        .take(LineItemRow.maxUnaccountedGroupsPreview)
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: displayGroups.map((group) {
-        final moves = [...group.value]..sort((a, b) {
+        final moves = [...group.value]
+          ..sort((a, b) {
             if (a.gameCount != b.gameCount) {
               return b.gameCount.compareTo(a.gameCount);
             }
             return b.probability.compareTo(a.probability);
           });
-        final displayMoves =
-            moves.take(LineItemRow.maxUnaccountedMovesPreview).toList();
+        final displayMoves = moves
+            .take(LineItemRow.maxUnaccountedMovesPreview)
+            .toList();
 
         return Padding(
           padding: const EdgeInsets.only(top: 4),
@@ -527,11 +524,13 @@ class _UnaccountedAnnotation extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 10,
                               fontFamily: 'monospace',
-                              color: const Color(0xFFEF5350)
-                                  .withValues(alpha: 0.9),
+                              color: const Color(
+                                0xFFEF5350,
+                              ).withValues(alpha: 0.9),
                               decoration: TextDecoration.underline,
-                              decorationColor: const Color(0xFFEF5350)
-                                  .withValues(alpha: 0.5),
+                              decorationColor: const Color(
+                                0xFFEF5350,
+                              ).withValues(alpha: 0.5),
                             ),
                           ),
                         );
@@ -607,8 +606,11 @@ class _HardMoveWarning extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.warning_amber_rounded,
-                    size: 12, color: AppColors.danger),
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 12,
+                  color: AppColors.danger,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   label,
@@ -622,12 +624,14 @@ class _HardMoveWarning extends StatelessWidget {
             InkWell(
               onTap: () {
                 if (navigationStack != null) {
-                  navigationStack!.push(const NavigationEntry(
-                    tabIndex: LineItemRow.linesTabIndex,
-                    fen: '',
-                    label: 'Lines',
-                    reason: 'hard_move',
-                  ));
+                  navigationStack!.push(
+                    const NavigationEntry(
+                      tabIndex: LineItemRow.linesTabIndex,
+                      fen: '',
+                      label: 'Lines',
+                      reason: 'hard_move',
+                    ),
+                  );
                 }
                 onNavigateToPosition!(line.moves.sublist(0, ply + 1));
               },

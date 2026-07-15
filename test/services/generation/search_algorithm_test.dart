@@ -9,26 +9,22 @@ TreeBuildConfig makeConfig({
   int oppMaxChildren = 4,
   int fastAltGapCp = 30,
   SelectionMode selectionMode = SelectionMode.expectimax,
-}) =>
-    TreeBuildConfig(
-      startFen: kStandardStartFen,
-      playAsWhite: true,
-      searchAlgorithm: searchAlgorithm,
-      ourMultipv: ourMultipv,
-      maxEvalLossCp: maxEvalLossCp,
-      oppMaxChildren: oppMaxChildren,
-      fastAltGapCp: fastAltGapCp,
-      selectionMode: selectionMode,
-    );
+}) => TreeBuildConfig(
+  startFen: kStandardStartFen,
+  playAsWhite: true,
+  searchAlgorithm: searchAlgorithm,
+  ourMultipv: ourMultipv,
+  maxEvalLossCp: maxEvalLossCp,
+  oppMaxChildren: oppMaxChildren,
+  fastAltGapCp: fastAltGapCp,
+  selectionMode: selectionMode,
+);
 
 void main() {
   group('serialization', () {
     test('round-trips fast_alt_gap_cp', () {
       final json = makeConfig(fastAltGapCp: 45).toJson();
-      final back = TreeBuildConfig.fromJson(
-        json,
-        startFen: kStandardStartFen,
-      );
+      final back = TreeBuildConfig.fromJson(json, startFen: kStandardStartFen);
       expect(back.fastAltGapCp, 45);
     });
 
@@ -44,31 +40,27 @@ void main() {
     });
 
     test('legacy best_first maps onto the algorithm', () {
-      final pure = TreeBuildConfig.fromJson(
-        {'best_first': false},
-        startFen: kStandardStartFen,
-      );
+      final pure = TreeBuildConfig.fromJson({
+        'best_first': false,
+      }, startFen: kStandardStartFen);
       expect(pure.searchAlgorithm, SearchAlgorithm.pure);
       expect(pure.bestFirst, isFalse);
 
-      final fast = TreeBuildConfig.fromJson(
-        {'best_first': true},
-        startFen: kStandardStartFen,
-      );
+      final fast = TreeBuildConfig.fromJson({
+        'best_first': true,
+      }, startFen: kStandardStartFen);
       expect(fast.searchAlgorithm, SearchAlgorithm.fast);
 
-      final unset = TreeBuildConfig.fromJson(
-        {},
-        startFen: kStandardStartFen,
-      );
+      final unset = TreeBuildConfig.fromJson({}, startFen: kStandardStartFen);
       expect(unset.searchAlgorithm, SearchAlgorithm.fast);
     });
 
     test('still writes the legacy best_first key', () {
       expect(makeConfig().toJson()['best_first'], isTrue);
       expect(
-        makeConfig(searchAlgorithm: SearchAlgorithm.pure)
-            .toJson()['best_first'],
+        makeConfig(
+          searchAlgorithm: SearchAlgorithm.pure,
+        ).toJson()['best_first'],
         isFalse,
       );
     });
@@ -118,10 +110,7 @@ void main() {
 
     test('gap 0 disables the gate entirely', () {
       final c = makeConfig(fastAltGapCp: 0);
-      expect(
-        c.expandAlternative(gapCp: 400, altsAlreadyExpanded: 10),
-        isTrue,
-      );
+      expect(c.expandAlternative(gapCp: 400, altsAlreadyExpanded: 10), isTrue);
     });
   });
 

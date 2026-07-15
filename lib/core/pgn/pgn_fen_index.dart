@@ -86,8 +86,10 @@ class PgnFenIndex {
     for (final indices in _value!.values) {
       for (final i in indices) {
         if (i < 0 || i >= gameTotal) {
-          debugPrint('Skipping FEN index persist: index $i out of range for '
-              '$gameTotal games (stale index vs. game set).');
+          debugPrint(
+            'Skipping FEN index persist: index $i out of range for '
+            '$gameTotal games (stale index vs. game set).',
+          );
           return;
         }
       }

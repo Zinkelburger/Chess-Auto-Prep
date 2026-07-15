@@ -154,9 +154,11 @@ class AuditSessionController extends ChangeNotifier {
     _nodesChecked = snapshot.result.nodesChecked;
     _totalNodes = snapshot.result.nodesChecked;
     _interruptedSnapshot = snapshot.isComplete ? null : snapshot;
-    debugPrint('[AuditController] Restored: '
-        '${snapshot.result.findings.length} findings, '
-        'isComplete=${snapshot.isComplete}');
+    debugPrint(
+      '[AuditController] Restored: '
+      '${snapshot.result.findings.length} findings, '
+      'isComplete=${snapshot.isComplete}',
+    );
     notifyListeners();
   }
 
@@ -218,12 +220,14 @@ class AuditSessionController extends ChangeNotifier {
   void onProgress(int checked, int total) {
     _nodesChecked = checked;
     _totalNodes = total;
-    currentJob?.updateProgress(JobProgress(
-      fraction: total > 0 ? checked / total : 0,
-      message: '$checked / $total positions',
-      nodesProcessed: checked,
-      totalNodes: total,
-    ));
+    currentJob?.updateProgress(
+      JobProgress(
+        fraction: total > 0 ? checked / total : 0,
+        message: '$checked / $total positions',
+        nodesProcessed: checked,
+        totalNodes: total,
+      ),
+    );
     notifyListeners();
   }
 
@@ -295,8 +299,11 @@ class AuditSessionController extends ChangeNotifier {
       _isAuditing = false;
       currentJob?.updateStatus(JobStatus.completed);
       currentJob = null;
-      AuditPersistence.instance
-          .saveComplete(repertoireFilePath, auditResult, config);
+      AuditPersistence.instance.saveComplete(
+        repertoireFilePath,
+        auditResult,
+        config,
+      );
       notifyListeners();
     } catch (e) {
       _isAuditing = false;

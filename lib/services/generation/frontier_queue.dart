@@ -18,10 +18,9 @@ import '../../models/build_tree_node.dart';
 /// before priorities existed) carry `searchPriority == -1`; fall back to the
 /// reach probability, which is what the priority degenerates to when no
 /// our-move alternative discount applies.
-double effectiveSearchPriority(BuildTreeNode node) =>
-    node.searchPriority >= 0.0
-        ? node.searchPriority
-        : node.cumulativeProbability;
+double effectiveSearchPriority(BuildTreeNode node) => node.searchPriority >= 0.0
+    ? node.searchPriority
+    : node.cumulativeProbability;
 
 class FrontierQueue {
   final bool bestFirst;

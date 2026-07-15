@@ -49,17 +49,18 @@ BuildTree _duplicateTrapTree() {
     cumulativeProbability: 0.5,
     parent: a1,
   );
-  final trapA = makeNode(
-    fen: trapFenA,
-    san: 'd4',
-    uci: 'd2d4',
-    ply: 3,
-    isWhiteToMove: false,
-    evalCp: 20,
-    parent: a2,
-  )
-    ..hasExpectimax = true
-    ..expectimaxValue = 0.55;
+  final trapA =
+      makeNode(
+          fen: trapFenA,
+          san: 'd4',
+          uci: 'd2d4',
+          ply: 3,
+          isWhiteToMove: false,
+          evalCp: 20,
+          parent: a2,
+        )
+        ..hasExpectimax = true
+        ..expectimaxValue = 0.55;
   // Popular blunder + best reply
   makeNode(
     fen: 'rnbqkbnr/ppp1pppp/2p5/3pP3/3P4/8/PPP2PPP/RNBQKBNR w KQkq - 0 4',
@@ -105,17 +106,18 @@ BuildTree _duplicateTrapTree() {
     cumulativeProbability: 0.4,
     parent: b1,
   );
-  final trapB = makeNode(
-    fen: trapFenB,
-    san: 'e4',
-    uci: 'e2e4',
-    ply: 3,
-    isWhiteToMove: false,
-    evalCp: 20,
-    parent: b2,
-  )
-    ..hasExpectimax = true
-    ..expectimaxValue = 0.55;
+  final trapB =
+      makeNode(
+          fen: trapFenB,
+          san: 'e4',
+          uci: 'e2e4',
+          ply: 3,
+          isWhiteToMove: false,
+          evalCp: 20,
+          parent: b2,
+        )
+        ..hasExpectimax = true
+        ..expectimaxValue = 0.55;
   makeNode(
     fen: 'rnbqkbnr/ppp1pppp/2p5/3pP3/3P4/8/PPP2PPP/RNBQKBNR w KQkq - 2 6',
     san: 'd5',
@@ -144,8 +146,7 @@ BuildTree _duplicateTrapTree() {
 
 void main() {
   group('TrapExtractor deduplication', () {
-    test(
-        'deduplicates traps at the same position '
+    test('deduplicates traps at the same position '
         'with different move counters', () {
       final tree = _duplicateTrapTree();
       final extractor = TrapExtractor(playAsWhite: true);
@@ -153,8 +154,11 @@ void main() {
 
       // Both paths reach the same 4-field position.
       // After fixing dedup to use canonicalizeFen4, we should get 1 trap.
-      expect(traps.length, 1,
-          reason: 'Same position via transposition should produce 1 trap');
+      expect(
+        traps.length,
+        1,
+        reason: 'Same position via transposition should produce 1 trap',
+      );
     });
 
     test('keeps distinct traps at genuinely different positions', () {
@@ -180,8 +184,11 @@ void main() {
       // different evals — should produce at least 1 trap.
       // The key point: distinct FENs should NOT be deduped.
       final fens = traps.map((t) => t.fen).toSet();
-      expect(fens.length, traps.length,
-          reason: 'Distinct positions should not be collapsed');
+      expect(
+        fens.length,
+        traps.length,
+        reason: 'Distinct positions should not be collapsed',
+      );
     });
   });
 }

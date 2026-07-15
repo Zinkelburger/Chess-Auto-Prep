@@ -45,7 +45,10 @@ const _ambiguousPgn = '''
 const _pgnList = [_asWhitePgn, _asBlackPgn, _asWhiteAgainPgn, _ambiguousPgn];
 
 void _expectAnalysisEquals(PositionAnalysis actual, PositionAnalysis expected) {
-  expect(actual.positionStats.keys.toSet(), expected.positionStats.keys.toSet());
+  expect(
+    actual.positionStats.keys.toSet(),
+    expected.positionStats.keys.toSet(),
+  );
   for (final entry in expected.positionStats.entries) {
     final a = actual.positionStats[entry.key]!;
     expect(a.games, entry.value.games, reason: 'games for ${entry.key}');
@@ -113,8 +116,11 @@ void main() {
 
       for (final analysis in [bundle.whiteAnalysis, bundle.blackAnalysis]) {
         for (final entry in analysis.fenToGameIndices.entries) {
-          expect(entry.value.toSet().length, entry.value.length,
-              reason: 'duplicate index for ${entry.key}');
+          expect(
+            entry.value.toSet().length,
+            entry.value.length,
+            reason: 'duplicate index for ${entry.key}',
+          );
         }
       }
     });
@@ -131,35 +137,37 @@ void main() {
       await tempDir.delete(recursive: true);
     });
 
-    test('cache written by the build round-trips through loadCachedBundle',
-        () async {
-      final pgnPath = '${tempDir.path}/games.pgn';
-      final whiteCachePath = '${tempDir.path}/white_analysis.json';
-      final blackCachePath = '${tempDir.path}/black_analysis.json';
-      await File(pgnPath).writeAsString(_pgnList.join('\n\n'));
+    test(
+      'cache written by the build round-trips through loadCachedBundle',
+      () async {
+        final pgnPath = '${tempDir.path}/games.pgn';
+        final whiteCachePath = '${tempDir.path}/white_analysis.json';
+        final blackCachePath = '${tempDir.path}/black_analysis.json';
+        await File(pgnPath).writeAsString(_pgnList.join('\n\n'));
 
-      final built = await UnifiedAnalysisBuilder.buildBothInIsolate(
-        pgnFilePath: pgnPath,
-        username: 'TestUser',
-        whiteCachePath: whiteCachePath,
-        blackCachePath: blackCachePath,
-      );
+        final built = await UnifiedAnalysisBuilder.buildBothInIsolate(
+          pgnFilePath: pgnPath,
+          username: 'TestUser',
+          whiteCachePath: whiteCachePath,
+          blackCachePath: blackCachePath,
+        );
 
-      expect(File(whiteCachePath).existsSync(), isTrue);
-      expect(File(blackCachePath).existsSync(), isTrue);
+        expect(File(whiteCachePath).existsSync(), isTrue);
+        expect(File(blackCachePath).existsSync(), isTrue);
 
-      final cached = await UnifiedAnalysisBuilder.loadCachedBundle(
-        pgnFilePath: pgnPath,
-        whiteCachePath: whiteCachePath,
-        blackCachePath: blackCachePath,
-      );
+        final cached = await UnifiedAnalysisBuilder.loadCachedBundle(
+          pgnFilePath: pgnPath,
+          whiteCachePath: whiteCachePath,
+          blackCachePath: blackCachePath,
+        );
 
-      expect(cached, isNotNull);
-      _expectAnalysisEquals(cached!.whiteAnalysis, built.whiteAnalysis);
-      _expectAnalysisEquals(cached.blackAnalysis, built.blackAnalysis);
-      _expectTreeEquals(cached.whiteTree.root, built.whiteTree.root);
-      _expectTreeEquals(cached.blackTree.root, built.blackTree.root);
-    });
+        expect(cached, isNotNull);
+        _expectAnalysisEquals(cached!.whiteAnalysis, built.whiteAnalysis);
+        _expectAnalysisEquals(cached.blackAnalysis, built.blackAnalysis);
+        _expectTreeEquals(cached.whiteTree.root, built.whiteTree.root);
+        _expectTreeEquals(cached.blackTree.root, built.blackTree.root);
+      },
+    );
 
     test('cache misses when the PGN file changed after the build', () async {
       final pgnPath = '${tempDir.path}/games.pgn';

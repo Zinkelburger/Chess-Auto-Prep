@@ -60,12 +60,10 @@ class HoleHuntProgress {
   double get fraction {
     switch (phase) {
       case HoleHuntPhase.walking:
-        final walkFraction =
-            totalNodes > 0 ? nodesChecked / totalNodes : 0.0;
+        final walkFraction = totalNodes > 0 ? nodesChecked / totalNodes : 0.0;
         return 0.7 * walkFraction.clamp(0.0, 1.0);
       case HoleHuntPhase.traps:
-        final trapFraction =
-            leavesTotal > 0 ? leavesDone / leavesTotal : 1.0;
+        final trapFraction = leavesTotal > 0 ? leavesDone / leavesTotal : 1.0;
         return 0.7 + 0.3 * trapFraction.clamp(0.0, 1.0);
     }
   }
@@ -136,12 +134,14 @@ class HoleHuntService {
     // ── Pass 1: BFS walk ─────────────────────────────────────────────────
     final totalNodes = _countNodes(tree.root, config.maxPly);
     final queue = Queue<_HuntQueueEntry>();
-    queue.add(_HuntQueueEntry(
-      node: tree.root,
-      movePath: tree.root.getMovePath(),
-      ply: 0,
-      cumProb: 1.0,
-    ));
+    queue.add(
+      _HuntQueueEntry(
+        node: tree.root,
+        movePath: tree.root.getMovePath(),
+        ply: 0,
+        cumProb: 1.0,
+      ),
+    );
 
     int checked = 0;
 
@@ -158,12 +158,14 @@ class HoleHuntService {
 
       checked++;
       if (checked % 5 == 0 || checked == totalNodes) {
-        onProgress?.call(HoleHuntProgress(
-          phase: HoleHuntPhase.walking,
-          nodesChecked: checked,
-          totalNodes: totalNodes,
-          findingsCount: findings.length,
-        ));
+        onProgress?.call(
+          HoleHuntProgress(
+            phase: HoleHuntPhase.walking,
+            nodesChecked: checked,
+            totalNodes: totalNodes,
+            findingsCount: findings.length,
+          ),
+        );
       }
 
       final isWhiteTurn = node.fen.contains(' w ');
@@ -171,11 +173,13 @@ class HoleHuntService {
 
       if (node.children.isEmpty) {
         leafNodes++;
-        leaves.add(LeafEntry(
-          fen: node.fen,
-          movePath: entry.movePath,
-          cumProb: entry.cumProb,
-        ));
+        leaves.add(
+          LeafEntry(
+            fen: node.fen,
+            movePath: entry.movePath,
+            cumProb: entry.cumProb,
+          ),
+        );
         continue;
       }
 
@@ -204,20 +208,24 @@ class HoleHuntService {
 
       // Enqueue children. Inverted attenuation vs the audit: the attacker
       // steers (probability 1); the owner chooses among their alternatives.
-      final parentTotal =
-          node.children.values.fold<int>(0, (sum, c) => sum + c.gamesPlayed);
+      final parentTotal = node.children.values.fold<int>(
+        0,
+        (sum, c) => sum + c.gamesPlayed,
+      );
       for (final childEntry in node.children.entries) {
-        queue.add(_HuntQueueEntry(
-          node: childEntry.value,
-          movePath: [...entry.movePath, childEntry.key],
-          ply: entry.ply + 1,
-          cumProb: childProbability(
-            isOwnerTurn: isOwnerTurn,
-            childGames: childEntry.value.gamesPlayed,
-            parentTotalGames: parentTotal,
-            cumProb: entry.cumProb,
+        queue.add(
+          _HuntQueueEntry(
+            node: childEntry.value,
+            movePath: [...entry.movePath, childEntry.key],
+            ply: entry.ply + 1,
+            cumProb: childProbability(
+              isOwnerTurn: isOwnerTurn,
+              childGames: childEntry.value.gamesPlayed,
+              parentTotalGames: parentTotal,
+              cumProb: entry.cumProb,
+            ),
           ),
-        ));
+        );
       }
     }
 
@@ -236,14 +244,16 @@ class HoleHuntService {
     stopwatch.stop();
 
     final ranked = rankByExploitScore(findings);
-    onProgress?.call(HoleHuntProgress(
-      phase: HoleHuntPhase.traps,
-      nodesChecked: checked,
-      totalNodes: totalNodes,
-      leavesDone: 1,
-      leavesTotal: 1,
-      findingsCount: ranked.length,
-    ));
+    onProgress?.call(
+      HoleHuntProgress(
+        phase: HoleHuntPhase.traps,
+        nodesChecked: checked,
+        totalNodes: totalNodes,
+        leavesDone: 1,
+        leavesTotal: 1,
+        findingsCount: ranked.length,
+      ),
+    );
 
     return AuditResult(
       findings: ranked,
@@ -292,22 +302,31 @@ class HoleHuntService {
         if (attackerCp < config.uncoveredMinAdvantageCp) continue;
 
         final gainCp = attackerCp.clamp(0, 1 << 20) + config.outOfBookBonusCp;
-        emit(AuditFinding(
-          type: AuditFindingType.uncoveredStrongMove,
-          severity: attackerCp >= 100
-              ? AuditSeverity.critical
-              : (attackerCp >= 0 ? AuditSeverity.warning : AuditSeverity.info),
-          movePath: entry.movePath,
-          fen: node.fen,
-          missingMove: san,
-          positionEvalCp: line.effectiveCp,
-          bestMoveEvalCp: bestWhiteCp,
-          cumulativeProbability: entry.cumProb,
-          transposesIntoRepertoire:
-              move_utils.doesMoveTranspose(node.fen, san, tree),
-          exploitScore:
-              exploitScoreOf(cumProb: entry.cumProb, gainCp: gainCp),
-        ));
+        emit(
+          AuditFinding(
+            type: AuditFindingType.uncoveredStrongMove,
+            severity: attackerCp >= 100
+                ? AuditSeverity.critical
+                : (attackerCp >= 0
+                      ? AuditSeverity.warning
+                      : AuditSeverity.info),
+            movePath: entry.movePath,
+            fen: node.fen,
+            missingMove: san,
+            positionEvalCp: line.effectiveCp,
+            bestMoveEvalCp: bestWhiteCp,
+            cumulativeProbability: entry.cumProb,
+            transposesIntoRepertoire: move_utils.doesMoveTranspose(
+              node.fen,
+              san,
+              tree,
+            ),
+            exploitScore: exploitScoreOf(
+              cumProb: entry.cumProb,
+              gainCp: gainCp,
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (kDebugMode) {
@@ -339,8 +358,10 @@ class HoleHuntService {
       if (discovery.lines.isEmpty) return (cacheHits, cacheMisses);
 
       final bestWhiteCp = discovery.lines.first.effectiveCp;
-      final bestSan =
-          move_utils.uciToSan(node.fen, discovery.lines.first.moveUci);
+      final bestSan = move_utils.uciToSan(
+        node.fen,
+        discovery.lines.first.moveUci,
+      );
       _evalCache.putEvalCpWhite(node.fen, bestWhiteCp, config.discoveryDepth);
 
       int ownerLossOf(int whiteCp) =>
@@ -382,7 +403,11 @@ class HoleHuntService {
         final verifiedWhiteCp = childIsWhiteTurn
             ? (verify.scoreCp ?? 0)
             : -(verify.scoreCp ?? 0);
-        _evalCache.putEvalCpWhite(childFen, verifiedWhiteCp, config.verifyDepth);
+        _evalCache.putEvalCpWhite(
+          childFen,
+          verifiedWhiteCp,
+          config.verifyDepth,
+        );
 
         final verifiedLoss = ownerLossOf(verifiedWhiteCp);
         // Shallow-search artifact guard: the deep search must confirm at
@@ -390,21 +415,25 @@ class HoleHuntService {
         if (verifiedLoss < config.refutationThresholdCp / 2) continue;
 
         final pvSan = move_utils.uciPvToSan(childFen, verify.pv, maxPlies: 8);
-        emit(AuditFinding(
-          type: AuditFindingType.refutation,
-          severity: AuditSeverity.critical,
-          movePath: [...entry.movePath, repSan],
-          fen: node.fen,
-          ourMove: repSan,
-          bestMove: bestSan,
-          evalLossCp: verifiedLoss,
-          positionEvalCp: verifiedWhiteCp,
-          bestMoveEvalCp: bestWhiteCp,
-          exploitLine: pvSan,
-          cumulativeProbability: entry.cumProb,
-          exploitScore:
-              exploitScoreOf(cumProb: entry.cumProb, gainCp: verifiedLoss),
-        ));
+        emit(
+          AuditFinding(
+            type: AuditFindingType.refutation,
+            severity: AuditSeverity.critical,
+            movePath: [...entry.movePath, repSan],
+            fen: node.fen,
+            ourMove: repSan,
+            bestMove: bestSan,
+            evalLossCp: verifiedLoss,
+            positionEvalCp: verifiedWhiteCp,
+            bestMoveEvalCp: bestWhiteCp,
+            exploitLine: pvSan,
+            cumulativeProbability: entry.cumProb,
+            exploitScore: exploitScoreOf(
+              cumProb: entry.cumProb,
+              gainCp: verifiedLoss,
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (kDebugMode) {
@@ -449,12 +478,14 @@ class HoleHuntService {
       }
       if (_cancelled) return;
 
-      onProgress?.call(HoleHuntProgress(
-        phase: HoleHuntPhase.traps,
-        leavesDone: i,
-        leavesTotal: selected.length,
-        findingsCount: findingsCount(),
-      ));
+      onProgress?.call(
+        HoleHuntProgress(
+          phase: HoleHuntPhase.traps,
+          leavesDone: i,
+          leavesTotal: selected.length,
+          findingsCount: findingsCount(),
+        ),
+      );
 
       final leaf = selected[i];
       final buildConfig = TreeBuildConfig(
@@ -512,31 +543,35 @@ class HoleHuntService {
         final gap = top.expectedEvalCp - (rawCp ?? top.expectedEvalCp);
         if (gap < config.practicalGapThresholdCp) continue;
 
-        emit(AuditFinding(
-          type: AuditFindingType.practicalTrap,
-          severity: gap >= config.practicalGapThresholdCp * 2
-              ? AuditSeverity.critical
-              : AuditSeverity.warning,
-          movePath: leaf.movePath,
-          fen: leaf.fen,
-          positionEvalCp: rawCp,
-          expectedEvalCp: top.expectedEvalCp,
-          practicalGapCp: gap,
-          exploitLine: top.movesSan,
-          cumulativeProbability: leaf.cumProb,
-          exploitScore: exploitScoreOf(cumProb: leaf.cumProb, gainCp: gap),
-        ));
+        emit(
+          AuditFinding(
+            type: AuditFindingType.practicalTrap,
+            severity: gap >= config.practicalGapThresholdCp * 2
+                ? AuditSeverity.critical
+                : AuditSeverity.warning,
+            movePath: leaf.movePath,
+            fen: leaf.fen,
+            positionEvalCp: rawCp,
+            expectedEvalCp: top.expectedEvalCp,
+            practicalGapCp: gap,
+            exploitLine: top.movesSan,
+            cumulativeProbability: leaf.cumProb,
+            exploitScore: exploitScoreOf(cumProb: leaf.cumProb, gainCp: gap),
+          ),
+        );
       } catch (e) {
         debugPrint('[HoleHunt] Trap build failed at leaf ${leaf.fen}: $e');
       }
     }
 
-    onProgress?.call(HoleHuntProgress(
-      phase: HoleHuntPhase.traps,
-      leavesDone: selected.length,
-      leavesTotal: selected.length,
-      findingsCount: findingsCount(),
-    ));
+    onProgress?.call(
+      HoleHuntProgress(
+        phase: HoleHuntPhase.traps,
+        leavesDone: selected.length,
+        leavesTotal: selected.length,
+        findingsCount: findingsCount(),
+      ),
+    );
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────

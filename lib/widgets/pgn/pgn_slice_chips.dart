@@ -49,8 +49,10 @@ class PgnSliceChips extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Colors.blue.withAlpha(20),
                 borderRadius: BorderRadius.circular(8),
-                border:
-                    Border.all(color: Colors.blue.withAlpha(60), width: 0.5),
+                border: Border.all(
+                  color: Colors.blue.withAlpha(60),
+                  width: 0.5,
+                ),
               ),
               child: Text(
                 '${controller.filteredGames.length}/${controller.allGames.length}',
@@ -97,8 +99,11 @@ class PgnSliceChips extends StatelessWidget {
             const SizedBox(width: 4),
             GestureDetector(
               onTap: () => controller.removeSliceChip(index),
-              child: Icon(Icons.close,
-                  size: 13, color: Colors.blue[300]!.withAlpha(180)),
+              child: Icon(
+                Icons.close,
+                size: 13,
+                color: Colors.blue[300]!.withAlpha(180),
+              ),
             ),
           ],
         ),

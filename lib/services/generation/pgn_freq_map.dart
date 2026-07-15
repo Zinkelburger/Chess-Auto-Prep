@@ -143,20 +143,20 @@ class PgnFreqMap {
           }
         }
         if (!found) {
-          dst.moves.add(PgnFreqMove(
-            uci: srcMove.uci,
-            san: srcMove.san,
-            count: srcMove.count,
-          ));
+          dst.moves.add(
+            PgnFreqMove(
+              uci: srcMove.uci,
+              san: srcMove.san,
+              count: srcMove.count,
+            ),
+          );
         }
       }
     }
   }
 
-  PgnFreqStats get stats => PgnFreqStats(
-        positions: positionCount,
-        totalGames: totalGames,
-      );
+  PgnFreqStats get stats =>
+      PgnFreqStats(positions: positionCount, totalGames: totalGames);
 }
 
 // ── Isolate-based PGN file parsing ───────────────────────────────────────
@@ -344,17 +344,19 @@ void _parseIsolateEntry(_ParseRequest req) {
 
   parseWarnings.logSummaryIfNeeded();
 
-  req.resultPort.send(_ParseResult(
-    map,
-    PgnFreqStats(
-      positions: map.positionCount,
-      totalGames: totalParsed,
-      skippedElo: skippedElo,
-      skippedPrefix: skippedPrefix,
-      parseErrors: parseErrors,
-      fileReadErrors: fileReadErrors,
+  req.resultPort.send(
+    _ParseResult(
+      map,
+      PgnFreqStats(
+        positions: map.positionCount,
+        totalGames: totalParsed,
+        skippedElo: skippedElo,
+        skippedPrefix: skippedPrefix,
+        parseErrors: parseErrors,
+        fileReadErrors: fileReadErrors,
+      ),
     ),
-  ));
+  );
 }
 
 // ── PGN file splitting ───────────────────────────────────────────────────
@@ -539,7 +541,8 @@ String? _buildTrackingTarget(PgnFreqConfig cfg) {
       ? _parsePrefixMoves(cfg.startMoves!)
       : <String>[];
 
-  final wantFen = cfg.startFen != null &&
+  final wantFen =
+      cfg.startFen != null &&
       cfg.startFen!.isNotEmpty &&
       !_fenKeysEqual(cfg.startFen!, kDefaultStartFen);
 
@@ -547,8 +550,9 @@ String? _buildTrackingTarget(PgnFreqConfig cfg) {
 
   Position position;
   try {
-    position =
-        Chess.fromSetup(Setup.parseFen(wantFen ? cfg.startFen! : kDefaultStartFen));
+    position = Chess.fromSetup(
+      Setup.parseFen(wantFen ? cfg.startFen! : kDefaultStartFen),
+    );
   } catch (_) {
     return null;
   }

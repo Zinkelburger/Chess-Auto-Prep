@@ -6,13 +6,7 @@ import '../../utils/system_info.dart';
 
 // ── Selection mode ──────────────────────────────────────────────────────
 
-enum SelectionMode {
-  expectimax,
-  engineOnly,
-  dbWinRateOnly,
-  playable,
-  trappy,
-}
+enum SelectionMode { expectimax, engineOnly, dbWinRateOnly, playable, trappy }
 
 // ── Tree build algorithm mode ───────────────────────────────────────────
 
@@ -327,7 +321,7 @@ class TreeBuildConfig {
       noveltyWeight: (json['novelty_weight'] as num?)?.toInt() ?? 0,
       pgnFilePaths:
           (json['pgn_file_paths'] as List<dynamic>?)?.cast<String>() ??
-              const [],
+          const [],
       dbMinGames: (json['db_min_games'] as num?)?.toInt() ?? 5,
       dbMinProb: (json['db_min_prob'] as num?)?.toDouble() ?? 0.05,
       minElo: (json['min_elo'] as num?)?.toInt() ?? 0,
@@ -365,11 +359,11 @@ class TreeBuildConfig {
 
   /// Short label for the active build algorithm.
   String get buildModeLabel => switch (buildMode) {
-        BuildMode.stockfishExpectimax => 'Stockfish + expectimax',
-        BuildMode.maiaDbExplore => 'Maia DB explore',
-        BuildMode.dbExplorer => 'DB Explorer',
-        BuildMode.trapFinder => 'Trap finder',
-      };
+    BuildMode.stockfishExpectimax => 'Stockfish + expectimax',
+    BuildMode.maiaDbExplore => 'Maia DB explore',
+    BuildMode.dbExplorer => 'DB Explorer',
+    BuildMode.trapFinder => 'Trap finder',
+  };
 
   /// Compact one-line summary for Jobs panel and status displays.
   String get summaryLabel {
@@ -483,70 +477,70 @@ class TreeBuildConfig {
 
   /// Short label for the frontier/pruning algorithm.
   String get searchAlgorithmLabel => switch (searchAlgorithm) {
-        SearchAlgorithm.pure => 'Pure Expectimax',
-        SearchAlgorithm.fast => 'Fast Expectimax',
-      };
+    SearchAlgorithm.pure => 'Pure Expectimax',
+    SearchAlgorithm.fast => 'Fast Expectimax',
+  };
 
   /// Convert a white-perspective centipawn score to "our" perspective.
   int toOurPerspective(int whiteCp) => playAsWhite ? whiteCp : -whiteCp;
 
   /// Serialise to a JSON-compatible map for tree file metadata.
   Map<String, dynamic> toJson() => {
-        'play_as_white': playAsWhite,
-        'min_probability': minProbability,
-        'max_depth': maxPly,
-        'max_nodes': maxNodes,
-        'search_algorithm': searchAlgorithm.name,
-        // Legacy key so older builds of the app can still read tree metadata.
-        'best_first': bestFirst,
-        'our_alt_discount': ourAltDiscount,
-        'fast_alt_gap_cp': fastAltGapCp,
-        'maia_prior_games': maiaPriorGames,
-        'cover_min_prob': coverMinProb,
-        'verify_final': verifyFinal,
-        'verify_depth': verifyDepth,
-        'setup_moves': setupMoves,
-        'setup_tolerance_cp': setupToleranceCp,
-        'build_mode': buildMode.name,
-        'eval_depth': evalDepth,
-        'engine_threads': resolvedEngineThreads,
-        'our_multipv': ourMultipv,
-        'max_eval_loss_cp': maxEvalLossCp,
-        'opp_max_children': oppMaxChildren,
-        'opp_mass_target': oppMassTarget,
-        'min_eval_cp': minEvalCp,
-        'max_eval_cp': maxEvalCp,
-        'relative_eval': relativeEval,
-        'use_lichess_db': useLichessDb,
-        'use_masters': useMasters,
-        'rating_range': ratingRange,
-        'speeds': speeds,
-        'min_games': minGames,
-        'maia_elo': maiaElo,
-        'maia_min_prob': maiaMinProb,
-        'maia_only': maiaOnly,
-        'rank_lines_by_importance': rankLinesByImportance,
-        'annotate_move_probabilities': annotateMoveProbabilities,
-        'annotate_maia_only': annotateMaiaOnly,
-        'selection_mode': selectionMode.name,
-        'leaf_confidence': leafConfidence,
-        'novelty_weight': noveltyWeight,
-        'pgn_file_paths': pgnFilePaths,
-        'db_min_games': dbMinGames,
-        'db_min_prob': dbMinProb,
-        'min_elo': minElo,
-        'enable_cdbdirect': enableCdbDirect,
-        'cdbdirect_path': cdbDirectPath,
-        'cdbdirect_read_ahead': cdbDirectReadAhead,
-        'batch_eval_lookups': batchEvalLookups,
-        'enable_local_chessdb': enableLocalChessDb,
-        'local_chessdb_path': localChessDbPath,
-        'enable_chessdb_api': enableChessDbApi,
-        'chessdb_api_daily_quota': chessDbApiDailyQuota,
-        'chessdb_api_concurrency': chessDbApiConcurrency,
-        'enable_ext_eval_subtree_skip': enableExtEvalSubtreeSkip,
-        'min_acceptable_eval_depth': minAcceptableEvalDepth,
-      };
+    'play_as_white': playAsWhite,
+    'min_probability': minProbability,
+    'max_depth': maxPly,
+    'max_nodes': maxNodes,
+    'search_algorithm': searchAlgorithm.name,
+    // Legacy key so older builds of the app can still read tree metadata.
+    'best_first': bestFirst,
+    'our_alt_discount': ourAltDiscount,
+    'fast_alt_gap_cp': fastAltGapCp,
+    'maia_prior_games': maiaPriorGames,
+    'cover_min_prob': coverMinProb,
+    'verify_final': verifyFinal,
+    'verify_depth': verifyDepth,
+    'setup_moves': setupMoves,
+    'setup_tolerance_cp': setupToleranceCp,
+    'build_mode': buildMode.name,
+    'eval_depth': evalDepth,
+    'engine_threads': resolvedEngineThreads,
+    'our_multipv': ourMultipv,
+    'max_eval_loss_cp': maxEvalLossCp,
+    'opp_max_children': oppMaxChildren,
+    'opp_mass_target': oppMassTarget,
+    'min_eval_cp': minEvalCp,
+    'max_eval_cp': maxEvalCp,
+    'relative_eval': relativeEval,
+    'use_lichess_db': useLichessDb,
+    'use_masters': useMasters,
+    'rating_range': ratingRange,
+    'speeds': speeds,
+    'min_games': minGames,
+    'maia_elo': maiaElo,
+    'maia_min_prob': maiaMinProb,
+    'maia_only': maiaOnly,
+    'rank_lines_by_importance': rankLinesByImportance,
+    'annotate_move_probabilities': annotateMoveProbabilities,
+    'annotate_maia_only': annotateMaiaOnly,
+    'selection_mode': selectionMode.name,
+    'leaf_confidence': leafConfidence,
+    'novelty_weight': noveltyWeight,
+    'pgn_file_paths': pgnFilePaths,
+    'db_min_games': dbMinGames,
+    'db_min_prob': dbMinProb,
+    'min_elo': minElo,
+    'enable_cdbdirect': enableCdbDirect,
+    'cdbdirect_path': cdbDirectPath,
+    'cdbdirect_read_ahead': cdbDirectReadAhead,
+    'batch_eval_lookups': batchEvalLookups,
+    'enable_local_chessdb': enableLocalChessDb,
+    'local_chessdb_path': localChessDbPath,
+    'enable_chessdb_api': enableChessDbApi,
+    'chessdb_api_daily_quota': chessDbApiDailyQuota,
+    'chessdb_api_concurrency': chessDbApiConcurrency,
+    'enable_ext_eval_subtree_skip': enableExtEvalSubtreeSkip,
+    'min_acceptable_eval_depth': minAcceptableEvalDepth,
+  };
 
   TreeBuildConfig copyWith({
     String? startFen,
@@ -666,10 +660,7 @@ class TreeBuildConfig {
   }
 }
 
-SearchAlgorithm _parseSearchAlgorithm(
-  String? value, {
-  bool? legacyBestFirst,
-}) {
+SearchAlgorithm _parseSearchAlgorithm(String? value, {bool? legacyBestFirst}) {
   switch (value) {
     case 'pure':
       return SearchAlgorithm.pure;

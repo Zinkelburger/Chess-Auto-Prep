@@ -105,10 +105,9 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
   };
   String? _error;
 
-  String? get _savedFor =>
-      _platform == GamesPlatform.chesscom
-          ? widget.initialChesscomUsername
-          : widget.initialLichessUsername;
+  String? get _savedFor => _platform == GamesPlatform.chesscom
+      ? widget.initialChesscomUsername
+      : widget.initialLichessUsername;
 
   @override
   void initState() {
@@ -142,16 +141,17 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
       setState(() => _error = 'Enter a username first.');
       return;
     }
-    Navigator.of(context).pop(GamesSourceConfig(
-      platform: _platform,
-      username: username,
-      isWhite: _isWhite,
-      selection: _useDate
-          ? GameSelection(since: _since, speeds: _speeds)
-          : GameSelection(maxGames: _maxGames, speeds: _speeds),
-      startMoves:
-          _fromCurrentPosition ? widget.currentMoveSans : const [],
-    ));
+    Navigator.of(context).pop(
+      GamesSourceConfig(
+        platform: _platform,
+        username: username,
+        isWhite: _isWhite,
+        selection: _useDate
+            ? GameSelection(since: _since, speeds: _speeds)
+            : GameSelection(maxGames: _maxGames, speeds: _speeds),
+        startMoves: _fromCurrentPosition ? widget.currentMoveSans : const [],
+      ),
+    );
   }
 
   @override
@@ -168,9 +168,13 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
               SegmentedButton<GamesPlatform>(
                 segments: const [
                   ButtonSegment(
-                      value: GamesPlatform.chesscom, label: Text('Chess.com')),
+                    value: GamesPlatform.chesscom,
+                    label: Text('Chess.com'),
+                  ),
                   ButtonSegment(
-                      value: GamesPlatform.lichess, label: Text('Lichess')),
+                    value: GamesPlatform.lichess,
+                    label: Text('Lichess'),
+                  ),
                 ],
                 selected: {_platform},
                 onSelectionChanged: (s) => _onPlatformChanged(s.first),
@@ -201,13 +205,14 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
                   segments: const [
                     ButtonSegment(value: false, label: Text('All my games')),
                     ButtonSegment(
-                        value: true, label: Text('From current position')),
+                      value: true,
+                      label: Text('From current position'),
+                    ),
                   ],
                   selected: {_fromCurrentPosition},
                   onSelectionChanged: widget.atRoot
                       ? null
-                      : (s) =>
-                          setState(() => _fromCurrentPosition = s.first),
+                      : (s) => setState(() => _fromCurrentPosition = s.first),
                 ),
                 const SizedBox(height: 8),
                 StartingPositionCard(
@@ -226,24 +231,27 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
                 Text(
                   _fromCurrentPosition
                       ? 'Only games that reach this position are drafted; '
-                          'all other openings are left out.'
+                            'all other openings are left out.'
                       : 'Every downloaded game is used, drafting lines from '
-                          'the first move.',
-                  style: Theme.of(context).textTheme.bodySmall
-                      ?.copyWith(color: Colors.grey[500]),
+                            'the first move.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
                 ),
               ],
               const SizedBox(height: 12),
               SegmentedButton<bool>(
                 segments: const [
                   ButtonSegment(
-                      value: true,
-                      label: Text('From date'),
-                      icon: Icon(Icons.event, size: 16)),
+                    value: true,
+                    label: Text('From date'),
+                    icon: Icon(Icons.event, size: 16),
+                  ),
                   ButtonSegment(
-                      value: false,
-                      label: Text('Most recent'),
-                      icon: Icon(Icons.format_list_numbered, size: 16)),
+                    value: false,
+                    label: Text('Most recent'),
+                    icon: Icon(Icons.format_list_numbered, size: 16),
+                  ),
                 ],
                 selected: {_useDate},
                 onSelectionChanged: (s) => setState(() => _useDate = s.first),
@@ -254,14 +262,17 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
                   date: _since,
                   label: 'Games since',
                   onChanged: (d) => setState(
-                      () => _since = d ?? DateTime.now()
-                          .subtract(const Duration(days: 180))),
+                    () => _since =
+                        d ?? DateTime.now().subtract(const Duration(days: 180)),
+                  ),
                 )
               else ...[
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('Most recent $_maxGames games',
-                      style: const TextStyle(fontSize: 13)),
+                  child: Text(
+                    'Most recent $_maxGames games',
+                    style: const TextStyle(fontSize: 13),
+                  ),
                 ),
                 Slider(
                   value: _maxGames.toDouble(),
@@ -297,10 +308,13 @@ class _GamesSourceDialogState extends State<_GamesSourceDialog> {
               ),
               if (_error != null) ...[
                 const SizedBox(height: 8),
-                Text(_error!,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                        fontSize: 12)),
+                Text(
+                  _error!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ],
           ),

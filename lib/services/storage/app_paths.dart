@@ -74,8 +74,9 @@ class AppPaths {
     return dir;
   }
 
-  static Future<Directory> pgnCollectionsDirectory(
-      {bool create = false}) async {
+  static Future<Directory> pgnCollectionsDirectory({
+    bool create = false,
+  }) async {
     final docs = await documentsDirectory();
     final dir = Directory(p.join(docs.path, pgnCollectionsDirectoryName));
     if (create && !await dir.exists()) {

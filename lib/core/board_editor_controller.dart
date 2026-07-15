@@ -267,8 +267,7 @@ class BoardEditorController extends ChangeNotifier {
       return switch (e.cause) {
         IllegalSetupCause.empty => 'The board is empty.',
         IllegalSetupCause.kings => 'Each side needs exactly one king.',
-        IllegalSetupCause.oppositeCheck =>
-          'The side not to move is in check.',
+        IllegalSetupCause.oppositeCheck => 'The side not to move is in check.',
         IllegalSetupCause.impossibleCheck =>
           'Impossible check: this position cannot be reached.',
         IllegalSetupCause.pawnsOnBackrank =>

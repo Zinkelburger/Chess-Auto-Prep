@@ -49,8 +49,10 @@ class EnginePaneFooter extends StatelessWidget {
                   child: TextButton.icon(
                     onPressed: onSetRoot,
                     icon: const Icon(Icons.my_location, size: 14),
-                    label: const Text('Set as root',
-                        style: TextStyle(fontSize: 11)),
+                    label: const Text(
+                      'Set as root',
+                      style: TextStyle(fontSize: 11),
+                    ),
                     style: TextButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: Size.zero,

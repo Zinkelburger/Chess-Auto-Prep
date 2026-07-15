@@ -101,15 +101,17 @@ List<SmoothedMove> smoothOpponentMoves({
   for (final m in observed) {
     seen.add(m.uci);
     final prior = lambda > 0 ? (maiaPolicy[m.uci] ?? 0.0) : 0.0;
-    out.add(SmoothedMove(
-      uci: m.uci,
-      san: m.san,
-      probability: (m.games + lambda * prior) / denom,
-      games: m.games,
-      whiteWins: m.whiteWins,
-      blackWins: m.blackWins,
-      draws: m.draws,
-    ));
+    out.add(
+      SmoothedMove(
+        uci: m.uci,
+        san: m.san,
+        probability: (m.games + lambda * prior) / denom,
+        games: m.games,
+        whiteWins: m.whiteWins,
+        blackWins: m.blackWins,
+        draws: m.draws,
+      ),
+    );
   }
 
   if (lambda > 0) {
@@ -117,12 +119,7 @@ List<SmoothedMove> smoothOpponentMoves({
       if (seen.contains(entry.key)) continue;
       final p = lambda * entry.value / denom;
       if (p <= 0) continue;
-      out.add(SmoothedMove(
-        uci: entry.key,
-        san: '',
-        probability: p,
-        games: 0,
-      ));
+      out.add(SmoothedMove(uci: entry.key, san: '', probability: p, games: 0));
     }
   }
 

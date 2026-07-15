@@ -111,8 +111,9 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
           _analysisFraction = analysis;
         } else {
           final legacy = prefs.getDouble(_kLegacyPgnFraction);
-          _analysisFraction =
-              legacy != null ? (1.0 - legacy).clamp(0.22, 0.65) : 0.42;
+          _analysisFraction = legacy != null
+              ? (1.0 - legacy).clamp(0.22, 0.65)
+              : 0.42;
         }
         _showDock = prefs.getBool(_kShowDock) ?? true;
       });
@@ -144,8 +145,10 @@ class _PgnWithAnalysisPaneState extends State<PgnWithAnalysisPane> {
                 return _buildPgnEditor();
               }
               final total = constraints.maxHeight;
-              final dockHeight =
-                  (total * _analysisFraction).clamp(120.0, total - 100);
+              final dockHeight = (total * _analysisFraction).clamp(
+                120.0,
+                total - 100,
+              );
               final pgnHeight = total - dockHeight - 8;
 
               return Column(

@@ -83,8 +83,11 @@ class _SolitaireTrophyCabinetState extends State<SolitaireTrophyCabinet> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.emoji_events_outlined,
-                        size: 48, color: Colors.grey[700]),
+                    Icon(
+                      Icons.emoji_events_outlined,
+                      size: 48,
+                      color: Colors.grey[700],
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'No trophies yet',

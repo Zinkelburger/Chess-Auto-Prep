@@ -88,7 +88,9 @@ class _ExpandedTrapListState extends State<ExpandedTrapList> {
                     borderRadius: BorderRadius.circular(4),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: Colors.grey.withAlpha(80)),

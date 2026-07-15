@@ -101,11 +101,9 @@ class _TrainingResultsPanelState extends State<TrainingResultsPanel> {
       final message = widget.hadLearnPhaseThisSession
           ? 'Line learned — continuing...'
           : widget.lineHadMistake
-              ? 'Scheduling for review...'
-              : 'Line complete!';
-      return Center(
-        child: Text(message, style: theme.textTheme.bodyMedium),
-      );
+          ? 'Scheduling for review...'
+          : 'Line complete!';
+      return Center(child: Text(message, style: theme.textTheme.bodyMedium));
     }
 
     final entry = widget.reviewMap[widget.currentLine?.id];
@@ -237,7 +235,8 @@ class TrainingRatingButtons extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final entry = currentLine != null ? reviewMap[currentLine!.id] : null;
-    final previewEntry = entry ??
+    final previewEntry =
+        entry ??
         RepertoireReviewEntry(
           repertoireId: repertoireId,
           lineId: currentLine?.id ?? '',

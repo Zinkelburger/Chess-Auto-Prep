@@ -34,7 +34,7 @@ class InlineEngineBar extends StatefulWidget {
   /// Called when the user clicks a move in an engine line.
   /// Provides the full PV as SAN moves and the 0-based index of the clicked move.
   final void Function(List<String> sanMoves, int clickedIndex)?
-      onLineMoveTapped;
+  onLineMoveTapped;
 
   const InlineEngineBar({
     super.key,
@@ -292,10 +292,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
                     EngineGate.isLocked
                         ? 'Engine busy'
                         : _isSearching
-                            ? 'Depth ${_discovery.depth} • '
-                                '${formatNodes(_discovery.nodes)} nodes'
-                            : '${_discovery.lines.length} lines • '
-                                'depth ${_discovery.depth}',
+                        ? 'Depth ${_discovery.depth} • '
+                              '${formatNodes(_discovery.nodes)} nodes'
+                        : '${_discovery.lines.length} lines • '
+                              'depth ${_discovery.depth}',
                     style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                     overflow: TextOverflow.ellipsis,
                   )
@@ -360,8 +360,10 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
     final sanMoves = _pvToSanList(widget.fen, line.pv);
     final san = sanMoves.isNotEmpty ? sanMoves.first : '?';
 
-    final evalStr =
-        formatEvalDisplay(scoreCp: line.scoreCp, scoreMate: line.scoreMate);
+    final evalStr = formatEvalDisplay(
+      scoreCp: line.scoreCp,
+      scoreMate: line.scoreMate,
+    );
 
     final evalColor = AppColors.cpEval(line.effectiveCp);
 
@@ -417,9 +419,7 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
             ),
           ),
           const SizedBox(width: 6),
-          Expanded(
-            child: _buildClickableContinuation(sanMoves),
-          ),
+          Expanded(child: _buildClickableContinuation(sanMoves)),
         ],
       ),
     );
@@ -430,8 +430,9 @@ class _InlineEngineBarState extends State<InlineEngineBar> {
 
     final fenParts = widget.fen.split(' ');
     final whiteToMove = isWhiteToMove(widget.fen);
-    final fullMoveNum =
-        fenParts.length >= 6 ? (int.tryParse(fenParts[5]) ?? 1) : 1;
+    final fullMoveNum = fenParts.length >= 6
+        ? (int.tryParse(fenParts[5]) ?? 1)
+        : 1;
     // Ply of the first move in the PV (index 0)
     final firstMovePly = (fullMoveNum - 1) * 2 + (whiteToMove ? 0 : 1);
 

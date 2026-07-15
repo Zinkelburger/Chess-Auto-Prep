@@ -127,10 +127,7 @@ int plyBeforeMove({
   required bool startWhiteToMove,
 }) {
   final abs = ply + (startWhiteToMove ? 0 : 1);
-  return (
-    moveNumber: (abs ~/ 2) + startFullmoves,
-    isWhite: abs.isEven,
-  );
+  return (moveNumber: (abs ~/ 2) + startFullmoves, isWhite: abs.isEven);
 }
 
 /// Parse an algebraic square name (e.g. 'e4') to a dartchess [Square].
@@ -191,13 +188,13 @@ String toStandardUci(Position position, Square from, Square to) =>
 
 /// Role to uppercase character for SVG asset filenames (e.g. Role.pawn → 'P').
 String roleChar(Role role) => switch (role) {
-      Role.pawn => 'P',
-      Role.knight => 'N',
-      Role.bishop => 'B',
-      Role.rook => 'R',
-      Role.queen => 'Q',
-      Role.king => 'K',
-    };
+  Role.pawn => 'P',
+  Role.knight => 'N',
+  Role.bishop => 'B',
+  Role.rook => 'R',
+  Role.queen => 'Q',
+  Role.king => 'K',
+};
 
 /// Format a centipawn / mate score for display (e.g. `+1.3`, `-0.5`, `#3`).
 ///
@@ -236,8 +233,11 @@ List<String> uciPvToSan(String fen, List<String> uciMoves, {int maxMoves = 8}) {
 
 /// Format a large integer with k/M suffixes, using [mDecimals] decimal places
 /// at the millions threshold and [kDecimals] at the thousands threshold.
-String _formatWithSuffix(int value,
-    {required int mDecimals, required int kDecimals}) {
+String _formatWithSuffix(
+  int value, {
+  required int mDecimals,
+  required int kDecimals,
+}) {
   if (value >= 1000000) {
     return '${(value / 1000000).toStringAsFixed(mDecimals)}M';
   }
@@ -254,8 +254,7 @@ String formatNodes(int nodes) =>
     _formatWithSuffix(nodes, mDecimals: 1, kDecimals: 1);
 
 /// Format NPS with k/M suffixes.
-String formatNps(int nps) =>
-    _formatWithSuffix(nps, mDecimals: 1, kDecimals: 0);
+String formatNps(int nps) => _formatWithSuffix(nps, mDecimals: 1, kDecimals: 0);
 
 /// Compute the FEN after playing [sanMoves] from [startFen] up to [upToIndex].
 ///

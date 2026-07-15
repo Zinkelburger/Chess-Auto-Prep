@@ -21,25 +21,25 @@ class PrunedLine {
   final int subtreeNodes;
 
   PrunedLine.fromNode(BuildTreeNode node)
-      : nodeId = node.nodeId,
-        ply = node.ply,
-        lineSan = node.getLineSan().join(' '),
-        fen = node.fen,
-        engineEvalCp = node.engineEvalCp,
-        pruneEvalCp = node.pruneEvalCp,
-        cumulativeProbability = node.cumulativeProbability,
-        subtreeNodes = node.countSubtree();
+    : nodeId = node.nodeId,
+      ply = node.ply,
+      lineSan = node.getLineSan().join(' '),
+      fen = node.fen,
+      engineEvalCp = node.engineEvalCp,
+      pruneEvalCp = node.pruneEvalCp,
+      cumulativeProbability = node.cumulativeProbability,
+      subtreeNodes = node.countSubtree();
 
   Map<String, dynamic> toJson() => {
-        'node_id': nodeId,
-        'ply': ply,
-        'line_san': lineSan,
-        'fen': fen,
-        if (engineEvalCp != null) 'engine_eval_cp': engineEvalCp,
-        if (pruneEvalCp != null) 'prune_eval_cp': pruneEvalCp,
-        'cumulative_probability': cumulativeProbability,
-        'subtree_nodes': subtreeNodes,
-      };
+    'node_id': nodeId,
+    'ply': ply,
+    'line_san': lineSan,
+    'fen': fen,
+    if (engineEvalCp != null) 'engine_eval_cp': engineEvalCp,
+    if (pruneEvalCp != null) 'prune_eval_cp': pruneEvalCp,
+    'cumulative_probability': cumulativeProbability,
+    'subtree_nodes': subtreeNodes,
+  };
 }
 
 /// Remove every subtree whose root was flagged [PruneReason.evalTooLow],

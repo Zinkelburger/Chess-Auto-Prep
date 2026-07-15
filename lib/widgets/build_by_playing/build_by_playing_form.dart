@@ -88,17 +88,23 @@ class _BuildByPlayingDialogState extends State<_BuildByPlayingDialog> {
   late bool _fromCurrentPosition = !widget.atRoot;
 
   late final TextEditingController _coverMinProbCtrl = TextEditingController(
-      text: (widget.initial.coverMinProb * 100).toStringAsFixed(0));
+    text: (widget.initial.coverMinProb * 100).toStringAsFixed(0),
+  );
   late final TextEditingController _oppMassTargetCtrl = TextEditingController(
-      text: (widget.initial.oppMassTarget * 100).toStringAsFixed(0));
-  late final TextEditingController _oppMaxChildrenCtrl =
-      TextEditingController(text: '${widget.initial.oppMaxChildren}');
-  late final TextEditingController _maxPlyCtrl =
-      TextEditingController(text: '${widget.initial.maxPly}');
+    text: (widget.initial.oppMassTarget * 100).toStringAsFixed(0),
+  );
+  late final TextEditingController _oppMaxChildrenCtrl = TextEditingController(
+    text: '${widget.initial.oppMaxChildren}',
+  );
+  late final TextEditingController _maxPlyCtrl = TextEditingController(
+    text: '${widget.initial.maxPly}',
+  );
   late final TextEditingController _minCumProbCtrl = TextEditingController(
-      text: (widget.initial.minCumulativeProbability * 100).toString());
-  late final TextEditingController _minGamesCtrl =
-      TextEditingController(text: '${widget.initial.minGames}');
+    text: (widget.initial.minCumulativeProbability * 100).toString(),
+  );
+  late final TextEditingController _minGamesCtrl = TextEditingController(
+    text: '${widget.initial.minGames}',
+  );
 
   @override
   void dispose() {
@@ -116,7 +122,8 @@ class _BuildByPlayingDialogState extends State<_BuildByPlayingDialog> {
   String get _rootOptionLabel {
     if (widget.rootMoveSans.isNotEmpty) return 'From repertoire root';
     final root = widget.rootFen;
-    final isStandardStart = root == null ||
+    final isStandardStart =
+        root == null ||
         root.split(' ').first == kStandardStartFen.split(' ').first;
     return isStandardStart ? 'From initial position' : 'From repertoire start';
   }
@@ -135,20 +142,28 @@ class _BuildByPlayingDialogState extends State<_BuildByPlayingDialog> {
 
   void _submit() {
     final initial = widget.initial;
-    Navigator.of(context).pop(BuildByPlayingConfig(
-      useMasters: _useMasters,
-      speeds: _speeds.join(','),
-      ratings: _ratings.join(','),
-      coverMinProb: _percent(_coverMinProbCtrl, initial.coverMinProb),
-      oppMassTarget: _percent(_oppMassTargetCtrl, initial.oppMassTarget),
-      oppMaxChildren:
-          _int(_oppMaxChildrenCtrl, initial.oppMaxChildren, 1, 20),
-      maxPly: _int(_maxPlyCtrl, initial.maxPly, 2, 100),
-      minCumulativeProbability:
-          _percent(_minCumProbCtrl, initial.minCumulativeProbability),
-      minGames: _int(_minGamesCtrl, initial.minGames, 1, 100000),
-      startFromCurrentPosition: _fromCurrentPosition,
-    ));
+    Navigator.of(context).pop(
+      BuildByPlayingConfig(
+        useMasters: _useMasters,
+        speeds: _speeds.join(','),
+        ratings: _ratings.join(','),
+        coverMinProb: _percent(_coverMinProbCtrl, initial.coverMinProb),
+        oppMassTarget: _percent(_oppMassTargetCtrl, initial.oppMassTarget),
+        oppMaxChildren: _int(
+          _oppMaxChildrenCtrl,
+          initial.oppMaxChildren,
+          1,
+          20,
+        ),
+        maxPly: _int(_maxPlyCtrl, initial.maxPly, 2, 100),
+        minCumulativeProbability: _percent(
+          _minCumProbCtrl,
+          initial.minCumulativeProbability,
+        ),
+        minGames: _int(_minGamesCtrl, initial.minGames, 1, 100000),
+        startFromCurrentPosition: _fromCurrentPosition,
+      ),
+    );
   }
 
   Widget _advancedField({
@@ -197,8 +212,8 @@ class _BuildByPlayingDialogState extends State<_BuildByPlayingDialog> {
                 database: _useMasters
                     ? LichessDatabase.masters
                     : LichessDatabase.lichess,
-                onDatabaseChanged: (db) => setState(
-                    () => _useMasters = db == LichessDatabase.masters),
+                onDatabaseChanged: (db) =>
+                    setState(() => _useMasters = db == LichessDatabase.masters),
                 selectedSpeeds: _speeds,
                 onSpeedsChanged: (s) => setState(() => _speeds = s),
                 selectedRatings: _ratings,
@@ -208,16 +223,16 @@ class _BuildByPlayingDialogState extends State<_BuildByPlayingDialog> {
                 const SizedBox(height: 12),
                 SegmentedButton<bool>(
                   segments: [
-                    ButtonSegment(
-                        value: false, label: Text(_rootOptionLabel)),
+                    ButtonSegment(value: false, label: Text(_rootOptionLabel)),
                     const ButtonSegment(
-                        value: true, label: Text('From current position')),
+                      value: true,
+                      label: Text('From current position'),
+                    ),
                   ],
                   selected: {_fromCurrentPosition},
                   onSelectionChanged: widget.atRoot
                       ? null
-                      : (s) =>
-                          setState(() => _fromCurrentPosition = s.first),
+                      : (s) => setState(() => _fromCurrentPosition = s.first),
                 ),
                 const SizedBox(height: 8),
                 StartingPositionCard(
@@ -241,40 +256,46 @@ class _BuildByPlayingDialogState extends State<_BuildByPlayingDialog> {
                     controller: _coverMinProbCtrl,
                     label: 'Cover opponent replies played at least',
                     suffix: '%',
-                    tooltip: 'Every opponent reply played at least this '
+                    tooltip:
+                        'Every opponent reply played at least this '
                         'often gets its own branch.',
                   ),
                   _advancedField(
                     controller: _oppMassTargetCtrl,
                     label: 'Stop adding replies after covering',
                     suffix: '% of games',
-                    tooltip: 'Once the branched replies cover this share of '
+                    tooltip:
+                        'Once the branched replies cover this share of '
                         'games, rarer replies are skipped (unless they pass '
                         'the threshold above).',
                   ),
                   _advancedField(
                     controller: _oppMaxChildrenCtrl,
                     label: 'Most opponent replies per position',
-                    tooltip: 'Hard cap on how many opponent replies are '
+                    tooltip:
+                        'Hard cap on how many opponent replies are '
                         'branched at any one position.',
                   ),
                   _advancedField(
                     controller: _maxPlyCtrl,
                     label: 'Maximum line depth in half-moves',
-                    tooltip: 'Lines end after this many half-moves from the '
+                    tooltip:
+                        'Lines end after this many half-moves from the '
                         'session start.',
                   ),
                   _advancedField(
                     controller: _minCumProbCtrl,
                     label: 'Stop lines rarer than',
                     suffix: '% cumulative',
-                    tooltip: 'Lines end once the combined probability of the '
+                    tooltip:
+                        'Lines end once the combined probability of the '
                         'opponent\'s moves drops below this.',
                   ),
                   _advancedField(
                     controller: _minGamesCtrl,
                     label: 'Minimum games in database',
-                    tooltip: 'Lines end at positions with fewer database '
+                    tooltip:
+                        'Lines end at positions with fewer database '
                         'games than this.',
                   ),
                 ],

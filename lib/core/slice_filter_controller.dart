@@ -56,7 +56,8 @@ PositionParseResult _parseSanSequence(String input) {
       final move = pos.parseSan(tokens[i]);
       if (move == null) {
         return PositionParseResult.err(
-            "Could not parse move ${i + 1}: '${tokens[i]}'");
+          "Could not parse move ${i + 1}: '${tokens[i]}'",
+        );
       }
       pos = pos.play(move);
     } catch (e) {
@@ -111,8 +112,8 @@ class HeaderFilterRow {
     this.field = 'Black',
     this.mode = MatchMode.contains,
     String initialValue = '',
-  })  : value = initialValue,
-        controller = TextEditingController(text: initialValue);
+  }) : value = initialValue,
+       controller = TextEditingController(text: initialValue);
 
   HeaderFilterConfig toConfig() =>
       HeaderFilterConfig(field: field, mode: mode, value: value);
@@ -260,8 +261,8 @@ class SliceFilterController extends ChangeNotifier {
   }
 
   /// Whether a preset-style player filter ([field] = White/Black) is active.
-  bool hasPresetHeaderFilter(String field, String value) => headerRows
-      .any((r) => r.field == field && r.value == value);
+  bool hasPresetHeaderFilter(String field, String value) =>
+      headerRows.any((r) => r.field == field && r.value == value);
 
   /// Toggle a preset player filter. Applying "«P» as White" removes any
   /// "«P» as Black" row (and vice versa) so the presets swap, not stack.
@@ -287,13 +288,13 @@ class SliceFilterController extends ChangeNotifier {
 
   /// Snapshot the current filters as a serializable config.
   SliceConfig buildConfig() => SliceConfig(
-        positionInput: positionFen,
-        headerFilters: headerConfigs,
-        sequencePattern: hasSequenceFilter
-            ? sequenceGroups.map((g) => g.join(' ')).join(' [gap] ')
-            : null,
-        sequenceGap: sequenceGap,
-      );
+    positionInput: positionFen,
+    headerFilters: headerConfigs,
+    sequencePattern: hasSequenceFilter
+        ? sequenceGroups.map((g) => g.join(' ')).join(' [gap] ')
+        : null,
+    sequenceGap: sequenceGap,
+  );
 
   /// Clear all filters back to their defaults.
   void reset() {
@@ -318,11 +319,13 @@ class SliceFilterController extends ChangeNotifier {
 
     for (final f in config?.headerFilters ?? const <HeaderFilterConfig>[]) {
       if (f.value.isEmpty) continue;
-      headerRows.add(HeaderFilterRow(
-        field: kHeaderFieldOptions.contains(f.field) ? f.field : 'Black',
-        mode: f.mode,
-        initialValue: f.value,
-      ));
+      headerRows.add(
+        HeaderFilterRow(
+          field: kHeaderFieldOptions.contains(f.field) ? f.field : 'Black',
+          mode: f.mode,
+          initialValue: f.value,
+        ),
+      );
     }
     if (headerRows.isEmpty) {
       headerRows.add(HeaderFilterRow(field: 'Date', mode: MatchMode.after));

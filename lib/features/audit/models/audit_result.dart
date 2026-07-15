@@ -112,17 +112,17 @@ class AuditResult {
   String toJsonString() => jsonEncode(toJson());
 
   Map<String, dynamic> toJson() => {
-        'version': 1,
-        'timestamp': timestamp?.toIso8601String(),
-        'nodesChecked': nodesChecked,
-        'ourMoveNodesChecked': ourMoveNodesChecked,
-        'opponentNodesChecked': opponentNodesChecked,
-        'leafNodesChecked': leafNodesChecked,
-        'evalCacheHits': evalCacheHits,
-        'evalCacheMisses': evalCacheMisses,
-        'elapsedMs': elapsed.inMilliseconds,
-        'findings': findings.map((f) => f.toJson()).toList(),
-      };
+    'version': 1,
+    'timestamp': timestamp?.toIso8601String(),
+    'nodesChecked': nodesChecked,
+    'ourMoveNodesChecked': ourMoveNodesChecked,
+    'opponentNodesChecked': opponentNodesChecked,
+    'leafNodesChecked': leafNodesChecked,
+    'evalCacheHits': evalCacheHits,
+    'evalCacheMisses': evalCacheMisses,
+    'elapsedMs': elapsed.inMilliseconds,
+    'findings': findings.map((f) => f.toJson()).toList(),
+  };
 
   factory AuditResult.fromJsonString(String s) =>
       AuditResult.fromJson(jsonDecode(s) as Map<String, dynamic>);

@@ -140,22 +140,24 @@ List<String> extractSnapshotLines({
   final entries = <String>[];
   for (int i = 0; i < extractedLines.length; i++) {
     final line = extractedLines[i];
-    entries.add(buildRepertoirePgnEntry(
-      moves: [...prefix, ...line.movesSan],
-      title: 'Generated Line ${i + 1}',
-      cumulativeProb: line.probability,
-      finalEvalCp: line.leafEvalCp ?? 0,
-      isWhiteRepertoire: config.playAsWhite,
-      rootFen: rootFen,
-      rootWhiteToMove: rootWhiteToMove,
-      pruneReason: line.leafPruneReason,
-      pruneEvalCp: line.leafPruneEvalCp,
-      lineAnnotations: line.moveAnnotations,
-      prefixMoveCount: prefix.length,
-      rankByImportance: config.rankLinesByImportance,
-      annotateMoveProbabilities: config.annotateMoveProbabilities,
-      annotateMaiaOnly: config.annotateMaiaOnly,
-    ));
+    entries.add(
+      buildRepertoirePgnEntry(
+        moves: [...prefix, ...line.movesSan],
+        title: 'Generated Line ${i + 1}',
+        cumulativeProb: line.probability,
+        finalEvalCp: line.leafEvalCp ?? 0,
+        isWhiteRepertoire: config.playAsWhite,
+        rootFen: rootFen,
+        rootWhiteToMove: rootWhiteToMove,
+        pruneReason: line.leafPruneReason,
+        pruneEvalCp: line.leafPruneEvalCp,
+        lineAnnotations: line.moveAnnotations,
+        prefixMoveCount: prefix.length,
+        rankByImportance: config.rankLinesByImportance,
+        annotateMoveProbabilities: config.annotateMoveProbabilities,
+        annotateMaiaOnly: config.annotateMaiaOnly,
+      ),
+    );
   }
   return entries;
 }

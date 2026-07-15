@@ -60,8 +60,9 @@ int _myEaseRecursive(BuildTreeNode node, bool playAsWhite) {
 /// Primary signal: [BuildTreeNode.maiaFrequency] — Maia's predicted
 /// probability that a human would play this move.
 double _computeMyEase(BuildTreeNode ourMoveChild, BuildTreeNode parent) {
-  double ease =
-      ourMoveChild.maiaFrequency >= 0 ? ourMoveChild.maiaFrequency : 0.5;
+  double ease = ourMoveChild.maiaFrequency >= 0
+      ? ourMoveChild.maiaFrequency
+      : 0.5;
 
   if (_isOnlyReasonableMove(ourMoveChild, parent)) {
     ease = 1.0;
@@ -81,8 +82,9 @@ bool _isOnlyReasonableMove(BuildTreeNode child, BuildTreeNode parent) {
   final evaluated = parent.children.where((c) => c.hasEngineEval).toList();
   if (evaluated.length < 2) return true;
 
-  evaluated
-      .sort((a, b) => (b.engineEvalCp ?? 0).compareTo(a.engineEvalCp ?? 0));
+  evaluated.sort(
+    (a, b) => (b.engineEvalCp ?? 0).compareTo(a.engineEvalCp ?? 0),
+  );
 
   final gap = (evaluated[0].engineEvalCp! - evaluated[1].engineEvalCp!).abs();
   return gap > kOnlyReasonableMoveGapCp;
@@ -103,17 +105,14 @@ bool _isEngineBest(BuildTreeNode child, BuildTreeNode parent) {
 ///
 /// At our-move nodes: how natural is our best move here.
 /// At opponent-move nodes: how hard it is for the opponent (1 - ease).
-double computePositionQuality(
-  BuildTreeNode node,
-  bool playAsWhite,
-) {
+double computePositionQuality(BuildTreeNode node, bool playAsWhite) {
   final isOurMove = node.isWhiteToMove == playAsWhite;
 
   if (isOurMove) {
     final bestChild = node.children.isEmpty
         ? null
         : node.children.where((c) => c.isRepertoireMove).firstOrNull ??
-            node.children.first;
+              node.children.first;
     if (bestChild == null) return 0.5;
     return bestChild.myEase >= 0 ? bestChild.myEase : 0.5;
   } else {
@@ -180,8 +179,7 @@ LinePlayability computeLinePlayability(
 
     // Skip root position (not a move) and our first move (opening choice)
     // from the bottleneck search.
-    final skipBottleneck =
-        i == 0 || (isOurMove && !seenFirstOurMove);
+    final skipBottleneck = i == 0 || (isOurMove && !seenFirstOurMove);
     if (isOurMove && !seenFirstOurMove) seenFirstOurMove = true;
 
     if (!skipBottleneck && quality < minQuality) {
@@ -199,8 +197,8 @@ LinePlayability computeLinePlayability(
       .reduce((a, b) => a + b);
   final geoMean = math.exp(logSum / qualities.length);
 
-  final bottleneckIsOurMove = minPly < linePath.length &&
-      linePath[minPly].isWhiteToMove == playAsWhite;
+  final bottleneckIsOurMove =
+      minPly < linePath.length && linePath[minPly].isWhiteToMove == playAsWhite;
 
   return LinePlayability(
     playability: geoMean.clamp(0.0, 1.0),

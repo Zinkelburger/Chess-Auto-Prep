@@ -149,9 +149,7 @@ class _TableHeader extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: Colors.grey[850],
-        border: Border(
-          bottom: BorderSide(color: Colors.grey[700]!, width: 1),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.grey[700]!, width: 1)),
       ),
       child: Row(
         children: [
@@ -170,13 +168,19 @@ class _TableHeader extends StatelessWidget {
           if (layout.showMovesColumn)
             _fixedCell(LineTableLayout.movesWidth, 'Moves', LineSortBy.moves),
           _fixedCell(LineTableLayout.easeWidth, 'Ease', LineSortBy.ease),
-          _fixedCell(LineTableLayout.coherenceWidth, 'Coherence',
-              LineSortBy.coherence),
+          _fixedCell(
+            LineTableLayout.coherenceWidth,
+            'Coherence',
+            LineSortBy.coherence,
+          ),
           if (layout.showTrapsColumn)
             _fixedCell(LineTableLayout.trapsWidth, 'Traps', LineSortBy.traps),
           if (layout.showCoverageColumn)
             _fixedCell(
-                LineTableLayout.coverageWidth, 'Coverage', LineSortBy.coverage),
+              LineTableLayout.coverageWidth,
+              'Coverage',
+              LineSortBy.coverage,
+            ),
         ],
       ),
     );

@@ -82,17 +82,14 @@ class _EditContextLayoutSheetState extends State<_EditContextLayoutSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Pane layout',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Pane layout', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
             Text(
               'Columns are side-by-side; views within a column stack vertically. '
               'Drag dividers in the context zone to resize.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[500],
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.grey[500]),
             ),
             const SizedBox(height: 12),
             ...List.generate(cols.length, (ci) => _columnCard(ci, cols[ci])),
@@ -170,10 +167,7 @@ class _EditContextLayoutSheetState extends State<_EditContextLayoutSheet> {
                         ),
                       ],
                       onSelected: (targetCol) => _apply(
-                        _layout.placeView(
-                          view,
-                          columnIndex: targetCol,
-                        ),
+                        _layout.placeView(view, columnIndex: targetCol),
                       ),
                     ),
                   ],

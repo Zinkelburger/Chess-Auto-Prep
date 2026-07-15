@@ -96,9 +96,7 @@ class AnalysisGamesService {
       }
 
       if (isDateMode) {
-        onProgress?.call(
-          '${allGames.length} games downloaded so far…',
-        );
+        onProgress?.call('${allGames.length} games downloaded so far…');
       } else {
         onProgress?.call(
           '${allGames.length} / $maxGames games downloaded so far…',
@@ -158,8 +156,9 @@ class AnalysisGamesService {
       params['max'] = maxGames.toString();
     }
 
-    final uri = Uri.parse('https://lichess.org/api/games/user/$username')
-        .replace(queryParameters: params);
+    final uri = Uri.parse(
+      'https://lichess.org/api/games/user/$username',
+    ).replace(queryParameters: params);
 
     final response = await LichessApiClient.instance.get(
       uri,
@@ -197,7 +196,10 @@ class AnalysisGamesService {
     final gameCount = countPgnGames(pgns);
 
     // Write PGN.
-    await writeTextFileAtomically(File(p.join(directory.path, '$key.pgn')), pgns);
+    await writeTextFileAtomically(
+      File(p.join(directory.path, '$key.pgn')),
+      pgns,
+    );
 
     // Write metadata.
     final info = AnalysisPlayerInfo(
@@ -220,8 +222,7 @@ class AnalysisGamesService {
   }
 
   String _playerKey(String platform, String username) {
-    return AnalysisPlayerInfo(platform: platform, username: username)
-        .playerKey;
+    return AnalysisPlayerInfo(platform: platform, username: username).playerKey;
   }
 
   /// Absolute path of the raw PGN file for [username] on [platform].
@@ -297,9 +298,7 @@ class AnalysisGamesService {
             return null;
           }
         }),
-      ))
-          .whereType<AnalysisPlayerInfo>()
-          .toList();
+      )).whereType<AnalysisPlayerInfo>().toList();
 
       players.sort((a, b) {
         final aDate = a.downloadedAt;

@@ -18,24 +18,27 @@ import 'services/engine/engine_lifecycle.dart';
 import 'services/eval_cache.dart';
 
 void main() {
-  runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-    FlutterError.onError = (FlutterErrorDetails details) {
-      FlutterError.presentError(details);
-      debugPrint('FlutterError: ${details.exceptionAsString()}');
-    };
+      FlutterError.onError = (FlutterErrorDetails details) {
+        FlutterError.presentError(details);
+        debugPrint('FlutterError: ${details.exceptionAsString()}');
+      };
 
-    try {
-      await _initializeApp();
-      runApp(const ChessAutoPrepApp());
-    } catch (error, stackTrace) {
-      debugPrint('Startup failed: $error\n$stackTrace');
-      runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
-    }
-  }, (error, stackTrace) {
-    debugPrint('Uncaught async error: $error\n$stackTrace');
-  });
+      try {
+        await _initializeApp();
+        runApp(const ChessAutoPrepApp());
+      } catch (error, stackTrace) {
+        debugPrint('Startup failed: $error\n$stackTrace');
+        runApp(StartupErrorApp(error: error, stackTrace: stackTrace));
+      }
+    },
+    (error, stackTrace) {
+      debugPrint('Uncaught async error: $error\n$stackTrace');
+    },
+  );
 }
 
 Future<void> _initializeApp() async {
@@ -52,8 +55,9 @@ Future<void> _initializeApp() async {
 
 void _startBrowserExtensionServer() async {
   if (BrowserExtensionServerFactory.isSupported) {
-    final started =
-        await BrowserExtensionServerFactory.start(port: kBrowserExtensionPort);
+    final started = await BrowserExtensionServerFactory.start(
+      port: kBrowserExtensionPort,
+    );
     if (started) {
       debugPrint('Browser extension server started successfully');
     } else {
@@ -66,11 +70,7 @@ void _startBrowserExtensionServer() async {
 
 /// Shown when startup initialization fails before [ChessAutoPrepApp] can run.
 class StartupErrorApp extends StatelessWidget {
-  const StartupErrorApp({
-    super.key,
-    required this.error,
-    this.stackTrace,
-  });
+  const StartupErrorApp({super.key, required this.error, this.stackTrace});
 
   final Object error;
   final StackTrace? stackTrace;
@@ -94,8 +94,11 @@ class StartupErrorApp extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.error_outline,
-                    color: AppColors.danger, size: 48),
+                const Icon(
+                  Icons.error_outline,
+                  color: AppColors.danger,
+                  size: 48,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   'Chess Auto Prep failed to start',
@@ -187,14 +190,10 @@ class ChessAutoPrepApp extends StatelessWidget {
             ),
           ),
           textButtonTheme: TextButtonThemeData(
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
-            ),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
           ),
           outlinedButtonTheme: OutlinedButtonThemeData(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-            ),
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
           ),
           filledButtonTheme: FilledButtonThemeData(
             style: FilledButton.styleFrom(

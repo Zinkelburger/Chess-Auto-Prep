@@ -16,13 +16,11 @@ class LichessDbInfoIcon extends StatelessWidget {
     return ListenableBuilder(
       listenable: LichessAuthService.instance,
       builder: (context, _) {
-        if (LichessAuthService.instance.isLoggedIn) return const SizedBox.shrink();
+        if (LichessAuthService.instance.isLoggedIn)
+          return const SizedBox.shrink();
         return IconButton(
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(
-            minWidth: 48,
-            minHeight: 48,
-          ),
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           iconSize: size,
           splashRadius: 24,
           icon: Icon(Icons.info_outline, size: size, color: Colors.grey[500]),
@@ -96,8 +94,10 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
           child: const SizedBox.expand(),
         ),
         Positioned(
-          left: (widget.anchor.left - 180)
-              .clamp(8.0, MediaQuery.of(context).size.width - 280),
+          left: (widget.anchor.left - 180).clamp(
+            8.0,
+            MediaQuery.of(context).size.width - 280,
+          ),
           top: widget.anchor.bottom + 4,
           child: Material(
             elevation: 8,
@@ -122,8 +122,11 @@ class _InfoPopupOverlayState extends State<_InfoPopupOverlay> {
                   Text(
                     'Database features require a Lichess account. '
                     'Log in to enable database queries.',
-                    style:
-                        TextStyle(fontSize: 12, color: textColor, height: 1.4),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: textColor,
+                      height: 1.4,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   SizedBox(

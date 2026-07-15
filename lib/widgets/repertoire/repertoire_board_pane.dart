@@ -32,7 +32,8 @@ class RepertoireBoardPane extends StatelessWidget {
     return ListenableBuilder(
       listenable: boardPreview,
       builder: (context, _) {
-        final isPreview = boardPreview.isPreview &&
+        final isPreview =
+            boardPreview.isPreview &&
             boardPreview.target == BoardPreviewTarget.mainBoard;
         final displayFen = isPreview ? boardPreview.previewFen! : fen;
         final position = positionFromFen(displayFen);
@@ -63,14 +64,17 @@ class RepertoireBoardPane extends StatelessWidget {
                       right: 4,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black54,
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text('Preview',
-                            style: TextStyle(
-                                color: Colors.white70, fontSize: 11)),
+                        child: const Text(
+                          'Preview',
+                          style: TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
                       ),
                     ),
                 ],

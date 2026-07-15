@@ -85,17 +85,19 @@ void main() {
     test('de-duplicates by link', () {
       final pgn = [
         game(
-            white: 'me',
-            black: 'a',
-            date: '2026.06.01',
-            tc: '300',
-            link: 'https://lichess.org/abc'),
+          white: 'me',
+          black: 'a',
+          date: '2026.06.01',
+          tc: '300',
+          link: 'https://lichess.org/abc',
+        ),
         game(
-            white: 'me',
-            black: 'a',
-            date: '2026.06.01',
-            tc: '300',
-            link: 'https://lichess.org/abc'),
+          white: 'me',
+          black: 'a',
+          date: '2026.06.01',
+          tc: '300',
+          link: 'https://lichess.org/abc',
+        ),
       ].join('\n\n');
 
       final kept = applySelection(parseGameRecords(pgn), const GameSelection());

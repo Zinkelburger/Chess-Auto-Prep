@@ -50,13 +50,12 @@ String displayTacticsNote(String raw) {
     final before = _evalFromWinPercent(double.parse(percent.group(1)!));
     final after = _evalFromWinPercent(double.parse(percent.group(2)!));
     final best = percent.group(3);
-    raw = best != null
-        ? '$before → $after, $best $before'
-        : '$before → $after';
+    raw = best != null ? '$before → $after, $best $before' : '$before → $after';
   } else {
     final verbose = _legacyVerboseNoteRe.firstMatch(trimmed);
     if (verbose != null) {
-      raw = '${verbose.group(1)} ${verbose.group(2)} → ${verbose.group(3)}, '
+      raw =
+          '${verbose.group(1)} ${verbose.group(2)} → ${verbose.group(3)}, '
           '${verbose.group(4)} ${verbose.group(2)}';
     }
   }
@@ -130,7 +129,7 @@ class TacticsTrainingPanel extends StatelessWidget {
   final int solutionStartPly;
   final int? activeSolutionMoveIndex;
   final void Function(List<String> sanMoves, int clickedIndex)?
-      onSolutionMoveTapped;
+  onSolutionMoveTapped;
 
   bool get _showRating => !autoAdvance && (positionSolved || showSolution);
 
@@ -180,8 +179,9 @@ class TacticsTrainingPanel extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: onToggleSolution,
-                    child:
-                        Text(showSolution ? 'Hide Solution' : 'Show Solution'),
+                    child: Text(
+                      showSolution ? 'Hide Solution' : 'Show Solution',
+                    ),
                   ),
                 ),
               ),
@@ -318,10 +318,7 @@ class TacticsTrainingPanel extends StatelessWidget {
           ),
         if (_showRating) ...[
           const SizedBox(height: 12),
-          _TacticsStarRating(
-            rating: position.rating,
-            onSetRating: onSetRating,
-          ),
+          _TacticsStarRating(rating: position.rating, onSetRating: onSetRating),
         ],
       ],
     );
@@ -380,7 +377,8 @@ class TacticsTrainingPanel extends StatelessWidget {
     }
 
     final trainablePlies = position.correctLine.length;
-    final highlightIndex = activeSolutionMoveIndex ??
+    final highlightIndex =
+        activeSolutionMoveIndex ??
         (currentMoveIndex < trainablePlies ? currentMoveIndex : null);
 
     return ClickableMoveLineWidget(
@@ -419,8 +417,11 @@ class _NoteCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.sticky_note_2_outlined,
-              size: 18, color: theme.colorScheme.onSurfaceVariant),
+          Icon(
+            Icons.sticky_note_2_outlined,
+            size: 18,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -439,10 +440,7 @@ class _NoteCard extends StatelessWidget {
 
 /// Compact 1-5 star rating row for tactic quality.
 class _TacticsStarRating extends StatelessWidget {
-  const _TacticsStarRating({
-    required this.rating,
-    required this.onSetRating,
-  });
+  const _TacticsStarRating({required this.rating, required this.onSetRating});
 
   final int rating;
   final ValueChanged<int> onSetRating;
@@ -451,10 +449,7 @@ class _TacticsStarRating extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          'Rate:',
-          style: TextStyle(fontSize: 13, color: Colors.grey[400]),
-        ),
+        Text('Rate:', style: TextStyle(fontSize: 13, color: Colors.grey[400])),
         const SizedBox(width: 8),
         for (int star = 1; star <= 5; star++)
           Tooltip(
@@ -518,8 +513,7 @@ class TacticsPositionInfo extends StatelessWidget {
                 icon: const Icon(Icons.arrow_back, size: 18),
                 tooltip: 'Back to browse',
                 visualDensity: VisualDensity.compact,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 padding: EdgeInsets.zero,
               ),
             Expanded(
@@ -537,31 +531,26 @@ class TacticsPositionInfo extends StatelessWidget {
                 icon: const Icon(Icons.edit, size: 16),
                 tooltip: 'Edit this tactic',
                 visualDensity: VisualDensity.compact,
-                constraints:
-                    const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 padding: EdgeInsets.zero,
               ),
           ],
         ),
         const SizedBox(height: 12),
-        Text('Game: ${pos.gameWhite} vs ${pos.gameBlack}',
-            style: const TextStyle(fontSize: 14)),
+        Text(
+          'Game: ${pos.gameWhite} vs ${pos.gameBlack}',
+          style: const TextStyle(fontSize: 14),
+        ),
         if (pos.userMove.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             'You played: ${pos.userMove}${pos.mistakeType}',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
           ),
           if (pos.opponentBestResponse.isNotEmpty)
             Text(
               'Allows: ${pos.opponentBestResponse}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
         ],
         if (engine.userMoveCount(pos) > 1) ...[

@@ -230,9 +230,9 @@ class PositionAnalysis {
     Map<String, PositionStats>? positionStats,
     List<GameInfo>? games,
     Map<String, List<int>>? fenToGameIndices,
-  })  : positionStats = positionStats ?? {},
-        games = games ?? [],
-        fenToGameIndices = fenToGameIndices ?? {};
+  }) : positionStats = positionStats ?? {},
+       games = games ?? [],
+       fenToGameIndices = fenToGameIndices ?? {};
 
   /// Add or update position statistics
   void addPositionStats(PositionStats stats) {
@@ -277,8 +277,9 @@ class PositionAnalysis {
     int minGames = 3,
     String sortBy = 'win_rate',
   }) {
-    var filtered =
-        positionStats.values.where((stats) => stats.games >= minGames).toList();
+    var filtered = positionStats.values
+        .where((stats) => stats.games >= minGames)
+        .toList();
 
     if (sortBy == 'eval_bad_white') {
       filtered = filtered.where((s) => s.hasEval).toList();

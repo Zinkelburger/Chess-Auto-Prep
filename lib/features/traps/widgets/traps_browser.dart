@@ -93,8 +93,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
     final sorted = List<TrapLineInfo>.from(_filteredTraps);
     switch (_sortBy) {
       case 'expected':
-        sorted.sort(
-            (a, b) => _expectedGainCp(b).compareTo(_expectedGainCp(a)));
+        sorted.sort((a, b) => _expectedGainCp(b).compareTo(_expectedGainCp(a)));
       case 'reach':
         sorted.sort((a, b) => b.cumulativeProb.compareTo(a.cumulativeProb));
       case 'eval':
@@ -143,8 +142,11 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
         children: [
           Row(
             children: [
-              const Icon(Icons.warning_amber_rounded,
-                  size: 16, color: AppColors.warning),
+              const Icon(
+                Icons.warning_amber_rounded,
+                size: 16,
+                color: AppColors.warning,
+              ),
               const SizedBox(width: 8),
               Text(
                 '$count trap${count == 1 ? '' : 's'}',
@@ -156,7 +158,8 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               if (widget.onStartTour != null && count > 0) ...[
                 const SizedBox(width: 10),
                 Tooltip(
-                  message: 'Walk through every trap on the board, '
+                  message:
+                      'Walk through every trap on the board, '
                       'one at a time (T)',
                   child: FilledButton.icon(
                     onPressed: widget.onStartTour,
@@ -167,7 +170,9 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                       foregroundColor: Colors.black,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       textStyle: const TextStyle(
-                          fontSize: 12, fontWeight: FontWeight.w700),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -175,7 +180,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
               const Spacer(),
               if (hasRepertoireData) ...[
                 _buildFilterChip(
-                  'All (${ widget.traps.length})',
+                  'All (${widget.traps.length})',
                   TrapFilter.all,
                   tooltip: 'All traps found in the explored tree',
                 ),
@@ -213,10 +218,15 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: selected ? AppColors.warning.withValues(alpha: 0.2) : Colors.grey[800],
+          color: selected
+              ? AppColors.warning.withValues(alpha: 0.2)
+              : Colors.grey[800],
           borderRadius: BorderRadius.circular(10),
           border: selected
-              ? Border.all(color: AppColors.warning.withValues(alpha: 0.5), width: 1)
+              ? Border.all(
+                  color: AppColors.warning.withValues(alpha: 0.5),
+                  width: 1,
+                )
               : null,
         ),
         child: Text(
@@ -322,8 +332,10 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                     color: Colors.grey[500],
                   ),
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                   onPressed: () {
                     setState(() {
                       _expandedTrapKey = isExpanded ? null : key;
@@ -349,10 +361,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                     margin: const EdgeInsets.only(right: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: Colors.grey[700]!,
-                        width: 0.5,
-                      ),
+                      border: Border.all(color: Colors.grey[700]!, width: 0.5),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: IgnorePointer(
@@ -411,7 +420,8 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 _buildStatBadge(
                   '+${_expectedGainCp(trap)}cp expected',
                   AppColors.evalPositive,
-                  tooltip: 'Expected gain: +${trap.evalDiffCp}cp × '
+                  tooltip:
+                      'Expected gain: +${trap.evalDiffCp}cp × '
                       '${(trap.popularProb * 100).toStringAsFixed(0)}% '
                       'chance they play ${trap.popularMove}',
                 ),
@@ -445,7 +455,8 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
   Widget _buildReplyRow(TrapReply reply, TrapLineInfo trap) {
     final evalDrop = (trap.positionEvalCp ?? 0) - reply.evalAfterCp;
     final isGood = reply.classification == TrapReplyClass.good;
-    final isBad = reply.classification == TrapReplyClass.blunder ||
+    final isBad =
+        reply.classification == TrapReplyClass.blunder ||
         reply.classification == TrapReplyClass.mistake;
 
     return Padding(
@@ -463,8 +474,8 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 color: isGood
                     ? AppColors.evalPositive
                     : isBad
-                        ? AppColors.danger
-                        : Colors.orange[300],
+                    ? AppColors.danger
+                    : Colors.orange[300],
               ),
             ),
           ),
@@ -479,10 +490,7 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
           else if (isGood)
             const Text(
               'best move',
-              style: TextStyle(
-                fontSize: 10,
-                color: AppColors.evalPositive,
-              ),
+              style: TextStyle(fontSize: 10, color: AppColors.evalPositive),
             ),
           const Spacer(),
           Text(
@@ -579,8 +587,9 @@ class _TrapsBrowserState extends State<TrapsBrowser> {
                 fontSize: 11,
                 fontFamily: 'monospace',
                 color: i < matchDepth ? AppColors.warning : Colors.grey[300],
-                fontWeight:
-                    i < matchDepth ? FontWeight.bold : FontWeight.normal,
+                fontWeight: i < matchDepth
+                    ? FontWeight.bold
+                    : FontWeight.normal,
               ),
             ),
           ),

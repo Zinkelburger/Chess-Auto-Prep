@@ -12,10 +12,7 @@ import 'package:dartchess/dartchess.dart';
 import 'package:chess_auto_prep/main.dart';
 import 'package:chess_auto_prep/widgets/chess_board_widget.dart';
 
-Future<void> _pumpDesktopSizedWidget(
-  WidgetTester tester,
-  Widget widget,
-) async {
+Future<void> _pumpDesktopSizedWidget(WidgetTester tester, Widget widget) async {
   tester.view.physicalSize = const Size(1600, 1000);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
@@ -52,14 +49,13 @@ void main() {
       testPosition = Chess.initial;
     });
 
-    testWidgets('renders initial chess position correctly',
-        (WidgetTester tester) async {
+    testWidgets('renders initial chess position correctly', (
+      WidgetTester tester,
+    ) async {
       await _pumpDesktopSizedWidget(
         tester,
         MaterialApp(
-          home: Scaffold(
-            body: ChessBoardWidget(position: testPosition),
-          ),
+          home: Scaffold(body: ChessBoardWidget(position: testPosition)),
         ),
       );
 
@@ -107,35 +103,40 @@ void main() {
     });
 
     testWidgets(
-        'does not complete a move when destination is illegal after selection',
-        (WidgetTester tester) async {
-      var moveCount = 0;
+      'does not complete a move when destination is illegal after selection',
+      (WidgetTester tester) async {
+        var moveCount = 0;
 
-      await _pumpDesktopSizedWidget(
-        tester,
-        MaterialApp(
-          home: Scaffold(
-            body: ChessBoardWidget(
-              position: testPosition,
-              onMove: (_) => moveCount++,
+        await _pumpDesktopSizedWidget(
+          tester,
+          MaterialApp(
+            home: Scaffold(
+              body: ChessBoardWidget(
+                position: testPosition,
+                onMove: (_) => moveCount++,
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      final chessBoardFinder = find.byType(ChessBoardWidget);
-      final renderBox = tester.renderObject(chessBoardFinder) as RenderBox;
-      final squareSize = renderBox.size.width / 8;
-      final origin = tester.getTopLeft(chessBoardFinder);
+        final chessBoardFinder = find.byType(ChessBoardWidget);
+        final renderBox = tester.renderObject(chessBoardFinder) as RenderBox;
+        final squareSize = renderBox.size.width / 8;
+        final origin = tester.getTopLeft(chessBoardFinder);
 
-      await tester.tapAt(origin + _boardLocalCenterForSquare('e2', squareSize));
-      await tester.pump();
-      // e5 is empty but not a legal single step for the e2 pawn.
-      await tester.tapAt(origin + _boardLocalCenterForSquare('e5', squareSize));
-      await tester.pump();
+        await tester.tapAt(
+          origin + _boardLocalCenterForSquare('e2', squareSize),
+        );
+        await tester.pump();
+        // e5 is empty but not a legal single step for the e2 pawn.
+        await tester.tapAt(
+          origin + _boardLocalCenterForSquare('e5', squareSize),
+        );
+        await tester.pump();
 
-      expect(moveCount, 0);
-    });
+        expect(moveCount, 0);
+      },
+    );
 
     testWidgets('allows making legal moves', (WidgetTester tester) async {
       CompletedMove? lastMove;

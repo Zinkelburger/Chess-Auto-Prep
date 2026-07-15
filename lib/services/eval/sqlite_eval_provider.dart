@@ -113,12 +113,14 @@ class SqliteEvalProvider implements ExternalEvalProvider {
 
       if (depth < minDepth) return const EvalLookupResult.shallow();
 
-      return EvalLookupResult.found(EvalHit(
-        cp: whiteCp,
-        mate: mate,
-        depth: depth,
-        bestMove: move?.isNotEmpty == true ? move : null,
-      ));
+      return EvalLookupResult.found(
+        EvalHit(
+          cp: whiteCp,
+          mate: mate,
+          depth: depth,
+          bestMove: move?.isNotEmpty == true ? move : null,
+        ),
+      );
     } catch (e) {
       if (kDebugMode) debugPrint('[SqliteEvalProvider] lookup failed: $e');
       return const EvalLookupResult.miss();

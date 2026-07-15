@@ -34,10 +34,8 @@ class EvalChainOutcome {
   bool get resolved => whiteCp != null;
 }
 
-typedef StockfishEvalFn = Future<({int stmCp, int depth})> Function(
-  String fen,
-  int depth,
-);
+typedef StockfishEvalFn =
+    Future<({int stmCp, int depth})> Function(String fen, int depth);
 
 /// Resolve an eval using the configured external-source chain.
 ///
@@ -62,9 +60,15 @@ Future<EvalChainOutcome> resolveEvalChain({
 
   // Shared tail for a successful external-source lookup: persist to the project
   // cache (falling back to the configured depth) and build the outcome.
-  Future<EvalChainOutcome> recordHit(EvalChainSource source, EvalHit hit) async {
+  Future<EvalChainOutcome> recordHit(
+    EvalChainSource source,
+    EvalHit hit,
+  ) async {
     await cacheWrite?.call(
-        fen, hit.cp, hit.depth > 0 ? hit.depth : config.evalDepth);
+      fen,
+      hit.cp,
+      hit.depth > 0 ? hit.depth : config.evalDepth,
+    );
     return EvalChainOutcome(
       source: source,
       whiteCp: hit.cp,
@@ -76,8 +80,9 @@ Future<EvalChainOutcome> resolveEvalChain({
   if (canonicalNode != null && canonicalNode.hasEngineEval) {
     stats.transpositionEvalHits++;
     final isWhiteStm = isWhiteToMove(fen);
-    final whiteCp =
-        isWhiteStm ? canonicalNode.engineEvalCp! : -canonicalNode.engineEvalCp!;
+    final whiteCp = isWhiteStm
+        ? canonicalNode.engineEvalCp!
+        : -canonicalNode.engineEvalCp!;
     return EvalChainOutcome(
       source: EvalChainSource.transposition,
       whiteCp: whiteCp,

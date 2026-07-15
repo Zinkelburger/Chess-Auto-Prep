@@ -15,7 +15,7 @@ import 'games_draft.dart';
 
 class GamesDraftController extends ChangeNotifier {
   GamesDraftController({GamesLibraryService? gamesLibrary})
-      : _gamesLibrary = gamesLibrary ?? GamesLibraryService();
+    : _gamesLibrary = gamesLibrary ?? GamesLibraryService();
 
   final GamesLibraryService _gamesLibrary;
 

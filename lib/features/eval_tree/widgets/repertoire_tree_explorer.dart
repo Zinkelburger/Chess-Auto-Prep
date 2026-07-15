@@ -184,34 +184,43 @@ class _PositionStatsBar extends StatelessWidget {
 
     final evalCp = currentNode.evalForUsCp;
     if (evalCp != null) {
-      chips.add(_StatChip(
-        label: 'Eval',
-        value: _formatEval(evalCp),
-        color: evalColor(evalCp),
-      ));
+      chips.add(
+        _StatChip(
+          label: 'Eval',
+          value: _formatEval(evalCp),
+          color: evalColor(evalCp),
+        ),
+      );
     }
 
     if (currentNode.ease != null) {
-      chips.add(_StatChip(
-        label: 'Ease',
-        value: currentNode.ease!.toStringAsFixed(2),
-        color: easeColor(currentNode.ease!),
-      ));
+      chips.add(
+        _StatChip(
+          label: 'Ease',
+          value: currentNode.ease!.toStringAsFixed(2),
+          color: easeColor(currentNode.ease!),
+        ),
+      );
     }
 
     if (currentNode.expectimaxValue != null) {
-      chips.add(_StatChip(
-        label: 'V',
-        value: '${(currentNode.expectimaxValue! * 100).toStringAsFixed(1)}%',
-        color: vColor(currentNode.expectimaxValue!),
-      ));
+      chips.add(
+        _StatChip(
+          label: 'V',
+          value: '${(currentNode.expectimaxValue! * 100).toStringAsFixed(1)}%',
+          color: vColor(currentNode.expectimaxValue!),
+        ),
+      );
     }
 
-    chips.add(_StatChip(
-      label: 'Reach',
-      value: '${(currentNode.cumulativeProbability * 100).toStringAsFixed(1)}%',
-      color: Colors.blue[300]!,
-    ));
+    chips.add(
+      _StatChip(
+        label: 'Reach',
+        value:
+            '${(currentNode.cumulativeProbability * 100).toStringAsFixed(1)}%',
+        color: Colors.blue[300]!,
+      ),
+    );
 
     if (chips.isEmpty) return const SizedBox.shrink();
 
@@ -289,11 +298,7 @@ class _CandidateTableHeader extends StatelessWidget {
             child: Text('NATRL', style: style, textAlign: TextAlign.right),
           ),
           Expanded(
-            child: Text(
-              'EXP EASE',
-              style: style,
-              textAlign: TextAlign.right,
-            ),
+            child: Text('EXP EASE', style: style, textAlign: TextAlign.right),
           ),
           SizedBox(
             width: 44,
@@ -366,8 +371,11 @@ class _CandidateRow extends StatelessWidget {
                     if (isRepertoire)
                       Padding(
                         padding: const EdgeInsets.only(right: 2),
-                        child: Icon(Icons.star,
-                            size: 12, color: Colors.amber[400]),
+                        child: Icon(
+                          Icons.star,
+                          size: 12,
+                          color: Colors.amber[400],
+                        ),
                       ),
                     Flexible(
                       child: Text(
@@ -421,10 +429,7 @@ class _CandidateRow extends StatelessWidget {
                       : 'Minimum opponent ease deeper in this reply',
                 ),
               ),
-              SizedBox(
-                width: 48,
-                child: _TrapCountBadge(count: trapCount),
-              ),
+              SizedBox(width: 48, child: _TrapCountBadge(count: trapCount)),
               SizedBox(
                 width: 40,
                 child: Text(
@@ -521,8 +526,8 @@ class _TrapCountBadge extends StatelessWidget {
     final color = count >= 3
         ? Colors.red[300]!
         : count >= 2
-            ? Colors.orange[300]!
-            : Colors.yellow[300]!;
+        ? Colors.orange[300]!
+        : Colors.yellow[300]!;
 
     return Tooltip(
       message: '$count trappy position${count == 1 ? '' : 's'} in this line',

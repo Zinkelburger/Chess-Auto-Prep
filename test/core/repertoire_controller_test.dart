@@ -8,10 +8,7 @@ import 'package:chess_auto_prep/core/repertoire_controller.dart';
 import 'package:chess_auto_prep/models/repertoire_metadata.dart';
 
 /// Replay [moves] from [startingFen] (or standard start) and return the FEN.
-String fenAfterMoves(
-  List<String> moves, {
-  String? startingFen,
-}) {
+String fenAfterMoves(List<String> moves, {String? startingFen}) {
   Position pos;
   if (startingFen != null) {
     pos = Chess.fromSetup(Setup.parseFen(startingFen));
@@ -63,24 +60,26 @@ void assertNavigationInvariants(RepertoireController controller) {
 
 void main() {
   group('setPositionFromMoveHistory', () {
-    test('setPositionFromMoveHistory preserves full move history from startpos',
-        () {
-      final controller = RepertoireController();
-      const fen =
-          'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2';
-      const moves = ['e4', 'e5', 'Nf3'];
+    test(
+      'setPositionFromMoveHistory preserves full move history from startpos',
+      () {
+        final controller = RepertoireController();
+        const fen =
+            'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2';
+        const moves = ['e4', 'e5', 'Nf3'];
 
-      final success = controller.setPositionFromMoveHistory(
-        fen: fen,
-        moves: moves,
-      );
+        final success = controller.setPositionFromMoveHistory(
+          fen: fen,
+          moves: moves,
+        );
 
-      expect(success, isTrue);
-      expect(controller.currentMoveSequence, moves);
-      expect(controller.currentMoveIndex, 2);
-      expect(controller.fen, fen);
-      assertNavigationInvariants(controller);
-    });
+        expect(success, isTrue);
+        expect(controller.currentMoveSequence, moves);
+        expect(controller.currentMoveIndex, 2);
+        expect(controller.fen, fen);
+        assertNavigationInvariants(controller);
+      },
+    );
 
     test('setPositionFromMoveHistory supports custom starting positions', () {
       final controller = RepertoireController();
@@ -217,10 +216,7 @@ void main() {
       for (var i = 0; i < moves.length; i++) {
         controller.goForward();
         assertNavigationInvariants(controller);
-        expect(
-          controller.currentMoveSequence,
-          moves.sublist(0, i + 1),
-        );
+        expect(controller.currentMoveSequence, moves.sublist(0, i + 1));
       }
 
       final restored = navigationSnapshot(controller);
@@ -252,19 +248,20 @@ void main() {
     });
 
     test(
-        'playMove advances FEN, increments moveIndex, extends history by exactly one',
-        () {
-      final before = navigationSnapshot(controller);
+      'playMove advances FEN, increments moveIndex, extends history by exactly one',
+      () {
+        final before = navigationSnapshot(controller);
 
-      controller.playMove('e4');
+        controller.playMove('e4');
 
-      expect(controller.moveHistory.length, before.history.length + 1);
-      expect(controller.currentMoveIndex, before.moveIndex + 1);
-      expect(controller.moveHistory.last, 'e4');
-      expect(controller.fen, fenAfterMoves(['e4']));
-      expect(controller.fen, isNot(equals(before.fen)));
-      assertNavigationInvariants(controller);
-    });
+        expect(controller.moveHistory.length, before.history.length + 1);
+        expect(controller.currentMoveIndex, before.moveIndex + 1);
+        expect(controller.moveHistory.last, 'e4');
+        expect(controller.fen, fenAfterMoves(['e4']));
+        expect(controller.fen, isNot(equals(before.fen)));
+        assertNavigationInvariants(controller);
+      },
+    );
 
     test('playMove after goBack creates variation', () {
       controller.loadMoveHistory(['e4', 'e5', 'Nf3']);
@@ -282,9 +279,9 @@ void main() {
     });
 
     test(
-        'userSelectedTreeMove maintains consistency between history and tree cursor',
-        () async {
-      const pgn = '''
+      'userSelectedTreeMove maintains consistency between history and tree cursor',
+      () async {
+        const pgn = '''
 // Color: White
 
 [Event "Tree line"]
@@ -296,39 +293,39 @@ void main() {
 1. e4 e5 2. Nf3 Nc6
 ''';
 
-      await controller.restoreRepertoireFromPgn(pgn);
-      controller.navigateToLineMove(['e4']);
-      assertNavigationInvariants(controller);
+        await controller.restoreRepertoireFromPgn(pgn);
+        controller.navigateToLineMove(['e4']);
+        assertNavigationInvariants(controller);
 
-      final treePathBefore = controller.openingTree!.currentNode.getMovePath();
-      expect(treePathBefore, ['e4']);
+        final treePathBefore = controller.openingTree!.currentNode
+            .getMovePath();
+        expect(treePathBefore, ['e4']);
 
-      controller.userSelectedTreeMove('e5');
+        controller.userSelectedTreeMove('e5');
 
-      expect(controller.moveHistory, ['e4', 'e5']);
-      expect(controller.currentMoveIndex, 1);
-      expect(controller.currentMoveSequence, ['e4', 'e5']);
-      expect(
-        controller.openingTree!.currentNode.getMovePath(),
-        ['e4', 'e5'],
-      );
-      expect(controller.fen, fenAfterMoves(['e4', 'e5']));
-      assertNavigationInvariants(controller);
-    });
+        expect(controller.moveHistory, ['e4', 'e5']);
+        expect(controller.currentMoveIndex, 1);
+        expect(controller.currentMoveSequence, ['e4', 'e5']);
+        expect(controller.openingTree!.currentNode.getMovePath(), ['e4', 'e5']);
+        expect(controller.fen, fenAfterMoves(['e4', 'e5']));
+        assertNavigationInvariants(controller);
+      },
+    );
 
     test(
-        'consecutive playMove calls produce monotonically increasing move indices',
-        () {
-      const moves = ['e4', 'e5', 'Nf3', 'Nc6'];
-      var previousIndex = controller.currentMoveIndex;
+      'consecutive playMove calls produce monotonically increasing move indices',
+      () {
+        const moves = ['e4', 'e5', 'Nf3', 'Nc6'];
+        var previousIndex = controller.currentMoveIndex;
 
-      for (final san in moves) {
-        controller.playMove(san);
-        expect(controller.currentMoveIndex, greaterThan(previousIndex));
-        previousIndex = controller.currentMoveIndex;
-        assertNavigationInvariants(controller);
-      }
-    });
+        for (final san in moves) {
+          controller.playMove(san);
+          expect(controller.currentMoveIndex, greaterThan(previousIndex));
+          previousIndex = controller.currentMoveIndex;
+          assertNavigationInvariants(controller);
+        }
+      },
+    );
   });
 
   group('PGN and repertoire sync', () {
@@ -336,8 +333,9 @@ void main() {
     late String filePath;
 
     setUp(() async {
-      tempDir =
-          await io.Directory.systemTemp.createTemp('repertoire_ctrl_test');
+      tempDir = await io.Directory.systemTemp.createTemp(
+        'repertoire_ctrl_test',
+      );
       filePath = '${tempDir.path}/test.pgn';
       await io.File(filePath).writeAsString('''
 // Color: White
@@ -358,11 +356,12 @@ void main() {
       }
     });
 
-    test('restoreRepertoireFromPgn rebuilds parsed lines from PGN snapshot',
-        () async {
-      final controller = RepertoireController();
+    test(
+      'restoreRepertoireFromPgn rebuilds parsed lines from PGN snapshot',
+      () async {
+        final controller = RepertoireController();
 
-      const newPgn = '''
+        const newPgn = '''
 // Color: White
 
 [Event "Fresh line"]
@@ -374,20 +373,21 @@ void main() {
 1. e4 c5 2. Nf3
 ''';
 
-      await controller.restoreRepertoireFromPgn(newPgn);
+        await controller.restoreRepertoireFromPgn(newPgn);
 
-      expect(controller.repertoireLines, hasLength(1));
-      expect(controller.repertoireLines.single.moves, ['e4', 'c5', 'Nf3']);
-      expect(controller.openingTree, isNotNull);
-    });
+        expect(controller.repertoireLines, hasLength(1));
+        expect(controller.repertoireLines.single.moves, ['e4', 'c5', 'Nf3']);
+        expect(controller.openingTree, isNotNull);
+      },
+    );
 
     test(
-        'restoreRepertoireFromPgn without Root comment resets navigation to start',
-        () async {
-      final controller = RepertoireController();
-      controller.loadMoveHistory(['d4', 'd5', 'c4']);
+      'restoreRepertoireFromPgn without Root comment resets navigation to start',
+      () async {
+        final controller = RepertoireController();
+        controller.loadMoveHistory(['d4', 'd5', 'c4']);
 
-      const newPgn = '''
+        const newPgn = '''
 // Color: White
 
 [Event "Fresh line"]
@@ -399,21 +399,22 @@ void main() {
 1. e4 c5 2. Nf3
 ''';
 
-      await controller.restoreRepertoireFromPgn(newPgn);
+        await controller.restoreRepertoireFromPgn(newPgn);
 
-      expect(controller.currentMoveIndex, -1);
-      expect(controller.currentMoveSequence, isEmpty);
-    },
-        skip:
-            'BUG: restoreRepertoireFromPgn without // Root: leaves stale moveHistory/currentMoveIndex');
+        expect(controller.currentMoveIndex, -1);
+        expect(controller.currentMoveSequence, isEmpty);
+      },
+      skip:
+          'BUG: restoreRepertoireFromPgn without // Root: leaves stale moveHistory/currentMoveIndex',
+    );
 
     test(
-        'restoreRepertoireFromPgn with empty syncPath resets navigation to start',
-        () async {
-      final controller = RepertoireController();
-      controller.loadMoveHistory(['d4', 'd5', 'c4']);
+      'restoreRepertoireFromPgn with empty syncPath resets navigation to start',
+      () async {
+        final controller = RepertoireController();
+        controller.loadMoveHistory(['d4', 'd5', 'c4']);
 
-      const newPgn = '''
+        const newPgn = '''
 // Color: White
 
 [Event "Fresh line"]
@@ -425,22 +426,25 @@ void main() {
 1. e4 c5 2. Nf3
 ''';
 
-      await controller.restoreRepertoireFromPgn(newPgn, syncPath: []);
+        await controller.restoreRepertoireFromPgn(newPgn, syncPath: []);
 
-      expect(controller.repertoireLines.single.moves, ['e4', 'c5', 'Nf3']);
-      expect(controller.currentMoveIndex, -1);
-      expect(controller.currentMoveSequence, isEmpty);
-      expect(controller.fen, kStandardStartFen);
-      assertNavigationInvariants(controller);
-    });
+        expect(controller.repertoireLines.single.moves, ['e4', 'c5', 'Nf3']);
+        expect(controller.currentMoveIndex, -1);
+        expect(controller.currentMoveSequence, isEmpty);
+        expect(controller.fen, kStandardStartFen);
+        assertNavigationInvariants(controller);
+      },
+    );
 
     test('setRepertoireColor flips side and resets navigation state', () async {
       final controller = RepertoireController();
-      await controller.setRepertoire(RepertoireMetadata(
-        name: 'Test',
-        filePath: filePath,
-        lastModified: DateTime(2026, 1, 1),
-      ));
+      await controller.setRepertoire(
+        RepertoireMetadata(
+          name: 'Test',
+          filePath: filePath,
+          lastModified: DateTime(2026, 1, 1),
+        ),
+      );
       controller.loadMoveHistory(['e4', 'e5', 'Nf3']);
       expect(controller.currentMoveIndex, 2);
 
@@ -536,25 +540,26 @@ void main() {
     });
 
     test(
-        'currentMoveSequence length equals moveIndex plus one after play and navigate',
-        () {
-      const moves = ['e4', 'e5', 'Nf3'];
-      for (final san in moves) {
-        controller.playMove(san);
+      'currentMoveSequence length equals moveIndex plus one after play and navigate',
+      () {
+        const moves = ['e4', 'e5', 'Nf3'];
+        for (final san in moves) {
+          controller.playMove(san);
+          assertNavigationInvariants(controller);
+        }
+
+        controller.goBack();
         assertNavigationInvariants(controller);
-      }
 
-      controller.goBack();
-      assertNavigationInvariants(controller);
+        controller.goForward();
+        assertNavigationInvariants(controller);
 
-      controller.goForward();
-      assertNavigationInvariants(controller);
+        controller.goToStart();
+        assertNavigationInvariants(controller);
 
-      controller.goToStart();
-      assertNavigationInvariants(controller);
-
-      controller.goToEnd();
-      assertNavigationInvariants(controller);
-    });
+        controller.goToEnd();
+        assertNavigationInvariants(controller);
+      },
+    );
   });
 }

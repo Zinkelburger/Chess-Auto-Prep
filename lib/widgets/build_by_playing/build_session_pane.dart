@@ -101,7 +101,8 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
 
   Widget _buildHeader(BuildContext context) {
     final theme = Theme.of(context);
-    final busy = _session.phase == BuildByPlayingPhase.advancing ||
+    final busy =
+        _session.phase == BuildByPlayingPhase.advancing ||
         _session.phase == BuildByPlayingPhase.opponentThinking ||
         _session.phase == BuildByPlayingPhase.committing;
     return Padding(
@@ -111,14 +112,18 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
         children: [
           Row(
             children: [
-              Icon(Icons.sports_esports,
-                  size: 16, color: theme.colorScheme.primary),
+              Icon(
+                Icons.sports_esports,
+                size: 16,
+                color: theme.colorScheme.primary,
+              ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   'Build by playing — ${_session.progressText}',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -128,16 +133,17 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
                   tooltip: 'Session settings',
                   onPressed: widget.onOpenSettings,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
                 ),
               IconButton(
                 icon: const Icon(Icons.close, size: 16),
                 tooltip: 'End session (progress is saved as you commit)',
                 onPressed: _session.endSession,
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 28, minHeight: 28),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
             ],
           ),
@@ -175,7 +181,8 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
   /// layout stays static between decision points.
   Widget _buildDecisionSurface(BuildContext context) {
     final theme = Theme.of(context);
-    final atDecision = _session.phase == BuildByPlayingPhase.awaitingUserMove ||
+    final atDecision =
+        _session.phase == BuildByPlayingPhase.awaitingUserMove ||
         _session.phase == BuildByPlayingPhase.exploring;
 
     return Column(
@@ -218,7 +225,7 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
           child: Text(
             enabled
                 ? 'No database statistics for this position — play your '
-                    'move on the board and commit it.'
+                      'move on the board and commit it.'
                 : '',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
@@ -262,9 +269,9 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
                   ? _session.commitScratchFirstMove
                   : null,
               icon: const Icon(Icons.check, size: 18),
-              label: Text(scratchMove == null
-                  ? 'Commit move'
-                  : 'Commit $scratchMove'),
+              label: Text(
+                scratchMove == null ? 'Commit move' : 'Commit $scratchMove',
+              ),
             ),
           ),
           const SizedBox(height: 6),
@@ -273,8 +280,10 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: enabled ? _session.skipDecision : null,
-                  child: const Text('Skip this position',
-                      style: TextStyle(fontSize: 12)),
+                  child: const Text(
+                    'Skip this position',
+                    style: TextStyle(fontSize: 12),
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
@@ -283,8 +292,10 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
                   onPressed: _session.canUndoCommit
                       ? _session.undoLastCommit
                       : null,
-                  child: const Text('Undo last commit',
-                      style: TextStyle(fontSize: 12)),
+                  child: const Text(
+                    'Undo last commit',
+                    style: TextStyle(fontSize: 12),
+                  ),
                 ),
               ),
             ],
@@ -302,8 +313,11 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.pause_circle_outline,
-                size: 32, color: AppColors.warning),
+            const Icon(
+              Icons.pause_circle_outline,
+              size: 32,
+              color: AppColors.warning,
+            ),
             const SizedBox(height: 12),
             Text(
               _session.statusText ?? 'Paused',
@@ -335,8 +349,11 @@ class _BuildSessionPaneState extends State<BuildSessionPane> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_outline,
-                size: 32, color: theme.colorScheme.primary),
+            Icon(
+              Icons.check_circle_outline,
+              size: 32,
+              color: theme.colorScheme.primary,
+            ),
             const SizedBox(height: 12),
             Text(
               'Every line reached its cutoff.\n'

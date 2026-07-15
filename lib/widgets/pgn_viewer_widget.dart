@@ -264,9 +264,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     // Skip the reload when the incoming movetext is one this widget just
     // emitted (an annotation / mainline edit flowing back through onComments
     // Changed): reloading would reset the cursor to the start of the game.
-    final incomingMovetext = _normalizeMovetext(_stripHeaders(widget.pgnText ?? ''));
+    final incomingMovetext = _normalizeMovetext(
+      _stripHeaders(widget.pgnText ?? ''),
+    );
     final isOwnEdit =
-        _lastEmittedMovetext != null && incomingMovetext == _lastEmittedMovetext;
+        _lastEmittedMovetext != null &&
+        incomingMovetext == _lastEmittedMovetext;
 
     if (gameIdChanged ||
         (pgnChanged &&
@@ -376,7 +379,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final event = game.headers['Event'] ?? '';
     final wElo = game.headers['WhiteElo'];
     final bElo = game.headers['BlackElo'];
-    final hasElo = (wElo != null && wElo.isNotEmpty && wElo != '?') ||
+    final hasElo =
+        (wElo != null && wElo.isNotEmpty && wElo != '?') ||
         (bElo != null && bElo.isNotEmpty && bElo != '?');
 
     // Book-style PGN detection: no ratings, no real event, and White holds a
@@ -397,7 +401,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       } else {
         title = chapter;
       }
-      if (annotator != null && annotator.isNotEmpty) title = '$title\nby $annotator';
+      if (annotator != null && annotator.isNotEmpty)
+        title = '$title\nby $annotator';
       return title;
     }
 
@@ -414,9 +419,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final result = game.headers['Result'] ?? '';
 
     // Build detail line, omitting blank/placeholder parts
-    final details = [event, date, result]
-        .where((s) => s.isNotEmpty && !_isBlankHeader(s))
-        .join(' • ');
+    final details = [
+      event,
+      date,
+      result,
+    ].where((s) => s.isNotEmpty && !_isBlankHeader(s)).join(' • ');
 
     if (_isBlankHeader(wStr) && _isBlankHeader(bStr)) {
       return details;
@@ -523,8 +530,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     widget.onPositionChanged?.call(pos);
   }
 
-  List<MoveNode>? _findPathToNode(
-      MoveNode target, List<MoveNode> roots) {
+  List<MoveNode>? _findPathToNode(MoveNode target, List<MoveNode> roots) {
     for (final root in roots) {
       final path = _findPathRecursive(root, target, []);
       if (path != null) return path;
@@ -533,7 +539,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   List<MoveNode>? _findPathRecursive(
-      MoveNode current, MoveNode target, List<MoveNode> pathSoFar) {
+    MoveNode current,
+    MoveNode target,
+    List<MoveNode> pathSoFar,
+  ) {
     final newPath = [...pathSoFar, current];
     if (current.id == target.id) return newPath;
     for (final child in current.children) {
@@ -569,7 +578,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   /// fork bar shows them (mainline continuation first). Shared by the chip
   /// rendering and the 1–9 keyboard shortcuts so both always agree.
   List<({String san, Color color, VoidCallback onTap, bool emphasized})>
-      _branchCandidates() {
+  _branchCandidates() {
     final candidates =
         <({String san, Color color, VoidCallback onTap, bool emphasized})>[];
     if (_analysisPath.isEmpty && !_inlineActive) {
@@ -627,8 +636,13 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     if (candidates.length < 2) return null;
     final chips = <Widget>[
       for (final (i, c) in candidates.indexed)
-        _branchChip(c.san, c.color, c.onTap,
-            emphasized: c.emphasized, shortcutNumber: i < 9 ? i + 1 : null),
+        _branchChip(
+          c.san,
+          c.color,
+          c.onTap,
+          emphasized: c.emphasized,
+          shortcutNumber: i < 9 ? i + 1 : null,
+        ),
     ];
     return Padding(
       padding: const EdgeInsets.only(left: 8, right: 8, top: 4),
@@ -644,8 +658,13 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     );
   }
 
-  Widget _branchChip(String san, Color color, VoidCallback onTap,
-      {bool emphasized = false, int? shortcutNumber}) {
+  Widget _branchChip(
+    String san,
+    Color color,
+    VoidCallback onTap, {
+    bool emphasized = false,
+    int? shortcutNumber,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(4),
@@ -661,8 +680,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           children: [
             if (shortcutNumber != null) ...[
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 0.5,
+                ),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(3),
@@ -754,8 +775,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   /// anything to the move tree — it just walks the board through the line, so
   /// the comment keeps its rendering and the arrows step along the line.
   void _playInlineLine(
-      int moveNumber, bool isWhite, List<String> sans, int clickedIndex,
-      {String? anchorFen}) {
+    int moveNumber,
+    bool isWhite,
+    List<String> sans,
+    int clickedIndex, {
+    String? anchorFen,
+  }) {
     // FEN-anchored lines start from the FEN, not a mainline position; keep the
     // mainline highlight where the user is so exiting returns there. Otherwise
     // locate the branch point by move number as before.
@@ -867,7 +892,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     // In edit mode, moves become permanent edits saved to disk: extending the
     // mainline at its end, or adding a real (non-ephemeral) sideline elsewhere.
     // Outside edit mode, moves are ephemeral scratch analysis (never saved).
-    final editing = widget.editMode &&
+    final editing =
+        widget.editMode &&
         widget.onCommentsChanged != null &&
         widget.revealedPly == null;
 
@@ -910,8 +936,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         if (existing != null) {
           _analysisPath = [existing];
         } else {
-          final newNode =
-              MoveNode(san: san, fen: fenAfter, isEphemeral: !editing);
+          final newNode = MoveNode(
+            san: san,
+            fen: fenAfter,
+            isEphemeral: !editing,
+          );
           roots.add(newNode);
           _analysisPath = [newNode];
         }
@@ -919,8 +948,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       } else {
         // Extending current variation
         final current = _analysisPath.last;
-        final (node, _) =
-            current.addChild(san, fenAfter, isEphemeral: !editing);
+        final (node, _) = current.addChild(
+          san,
+          fenAfter,
+          isEphemeral: !editing,
+        );
         // A permanent move under ephemeral ancestors would be dropped by the
         // serializer — promote the whole line to saved.
         if (editing) _promoteNodeLineage(current);
@@ -1147,8 +1179,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final mainIndex = _panelMainlineTarget;
     if (node != null) {
       targetKey = 'v${node.id}';
-      label =
-          _moveLabelAt(_activeBranchPly + _analysisPath.length - 1, node.san);
+      label = _moveLabelAt(
+        _activeBranchPly + _analysisPath.length - 1,
+        node.san,
+      );
       nags = node.nags ?? const [];
       comment = node.comment ?? '';
       onToggleNag = (nagId) => _togglePanelNodeNag(node, nagId);
@@ -1208,8 +1242,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
         final moveData = _moveHistory[index];
         final existing =
             (moveData.comments == null || moveData.comments!.isEmpty)
-                ? ''
-                : moveData.comments!.first;
+            ? ''
+            : moveData.comments!.first;
         if (existing.contains(note)) return;
         final merged = existing.isEmpty ? note : '$existing $note';
         if (moveData.comments == null || moveData.comments!.isEmpty) {
@@ -1248,8 +1282,12 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   static PopupMenuItem<String> _menuItem(
-      String value, IconData icon, String label,
-      {bool enabled = true, Color? color}) {
+    String value,
+    IconData icon,
+    String label, {
+    bool enabled = true,
+    Color? color,
+  }) {
     final effectiveColor = enabled ? color : Colors.grey[700];
     return PopupMenuItem(
       value: value,
@@ -1281,8 +1319,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         _menuItem('copy_line', Icons.copy_outlined, 'Copy line PGN'),
-        _menuItem('add_to_study', Icons.menu_book_outlined,
-            'Add to study…'),
+        _menuItem('add_to_study', Icons.menu_book_outlined, 'Add to study…'),
         // In amend mode the bottom panel handles comments/glyphs; the inline
         // editor stays for quick comments outside amend mode.
         if (!widget.editMode && widget.onCommentsChanged != null) ...[
@@ -1302,7 +1339,10 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   }
 
   void _showVariationContextMenu(
-      MoveNode node, int branchPly, Offset globalPosition) {
+    MoveNode node,
+    int branchPly,
+    Offset globalPosition,
+  ) {
     final line = _lineToVariationNode(node, branchPly);
     if (line == null) return;
 
@@ -1312,12 +1352,15 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       popUpAnimationStyle: AnimationStyle.noAnimation,
       items: [
         _menuItem('copy_line', Icons.copy_outlined, 'Copy line PGN'),
-        _menuItem('add_to_study', Icons.menu_book_outlined,
-            'Add to study…'),
+        _menuItem('add_to_study', Icons.menu_book_outlined, 'Add to study…'),
         if (node.isEphemeral) ...[
           const PopupMenuDivider(),
-          _menuItem('delete', Icons.delete_outline, 'Delete variation',
-              color: Colors.red),
+          _menuItem(
+            'delete',
+            Icons.delete_outline,
+            'Delete variation',
+            color: Colors.red,
+          ),
           _menuItem('clear_all', Icons.clear_all, 'Clear all analysis'),
         ],
       ],
@@ -1419,7 +1462,8 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     final study = context.read<StudyController>();
     final appState = context.read<AppState>();
     try {
-      final path = result.existingPath ??
+      final path =
+          result.existingPath ??
           await StorageFactory.instance.studyFilePath(result.newStudyName!);
       await study.addChapterToStudyFile(path, result.chapterName, pgn);
       if (!mounted) return;
@@ -1436,8 +1480,7 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
     } catch (e) {
       debugPrint('Add line to study failed: $e');
       if (mounted) {
-        showAppSnackBar(context, 'Failed to add line to study.',
-            isError: true);
+        showAppSnackBar(context, 'Failed to add line to study.', isError: true);
       }
     }
   }
@@ -1503,11 +1546,13 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
   PgnChildNode<PgnNodeData> _moveNodeToPgnChild(MoveNode node) {
     final hasComment = node.comment != null && node.comment!.trim().isNotEmpty;
     final hasNags = node.nags != null && node.nags!.isNotEmpty;
-    final child = PgnChildNode<PgnNodeData>(PgnNodeData(
-      san: node.san,
-      comments: hasComment ? [node.comment!.trim()] : null,
-      nags: hasNags ? List<int>.from(node.nags!) : null,
-    ));
+    final child = PgnChildNode<PgnNodeData>(
+      PgnNodeData(
+        san: node.san,
+        comments: hasComment ? [node.comment!.trim()] : null,
+        nags: hasNags ? List<int>.from(node.nags!) : null,
+      ),
+    );
     for (final c in node.children) {
       if (c.isEphemeral) continue;
       child.children.add(_moveNodeToPgnChild(c));
@@ -1527,8 +1572,9 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
       children: [
         Text(
           lines.first,
-          style: theme.textTheme.titleSmall
-              ?.copyWith(fontWeight: FontWeight.w600),
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
           textAlign: TextAlign.center,
         ),
         for (final line in lines.skip(1))
@@ -1567,9 +1613,11 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
           children: [
             const Icon(Icons.error, size: 64, color: Colors.red),
             const SizedBox(height: 16),
-            Text(_error!,
-                style: const TextStyle(color: Colors.red),
-                textAlign: TextAlign.center),
+            Text(
+              _error!,
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       );
@@ -1643,18 +1691,23 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
                   icon: const Icon(Icons.subdirectory_arrow_left, size: 18),
                   label: const Text('Return to mainline'),
                   style: FilledButton.styleFrom(
-                    backgroundColor:
-                        AppColors.pgnMainLine.withValues(alpha: 0.16),
+                    backgroundColor: AppColors.pgnMainLine.withValues(
+                      alpha: 0.16,
+                    ),
                     foregroundColor: AppColors.pgnMainLine,
                     textStyle: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                       side: BorderSide(
-                          color:
-                              AppColors.pgnMainLine.withValues(alpha: 0.35)),
+                        color: AppColors.pgnMainLine.withValues(alpha: 0.35),
+                      ),
                     ),
                   ),
                 ),
@@ -1668,22 +1721,26 @@ class _PgnViewerWidgetState extends State<PgnViewerWidget>
             children: [
               if (widget.showStartEndButtons)
                 IconButton(
-                    onPressed: _canGoBack ? _goToStart : null,
-                    icon: const Icon(Icons.skip_previous),
-                    tooltip: 'Start (Home)'),
+                  onPressed: _canGoBack ? _goToStart : null,
+                  icon: const Icon(Icons.skip_previous),
+                  tooltip: 'Start (Home)',
+                ),
               IconButton(
-                  onPressed: _canGoBack ? _goBack : null,
-                  icon: const Icon(Icons.chevron_left),
-                  tooltip: 'Back (←)'),
+                onPressed: _canGoBack ? _goBack : null,
+                icon: const Icon(Icons.chevron_left),
+                tooltip: 'Back (←)',
+              ),
               IconButton(
-                  onPressed: _canGoForward ? _goForward : null,
-                  icon: const Icon(Icons.chevron_right),
-                  tooltip: 'Forward (→)'),
+                onPressed: _canGoForward ? _goForward : null,
+                icon: const Icon(Icons.chevron_right),
+                tooltip: 'Forward (→)',
+              ),
               if (widget.showStartEndButtons)
                 IconButton(
-                    onPressed: _canGoForward ? _goToEnd : null,
-                    icon: const Icon(Icons.skip_next),
-                    tooltip: 'End (End)'),
+                  onPressed: _canGoForward ? _goToEnd : null,
+                  icon: const Icon(Icons.skip_next),
+                  tooltip: 'End (End)',
+                ),
             ],
           ),
         ),

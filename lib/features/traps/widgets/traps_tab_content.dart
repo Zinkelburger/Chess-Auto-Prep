@@ -48,8 +48,11 @@ class TrapsTabContent extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.warning_amber_rounded,
-                  size: 48, color: Colors.grey[700]),
+              Icon(
+                Icons.warning_amber_rounded,
+                size: 48,
+                color: Colors.grey[700],
+              ),
               const SizedBox(height: 16),
               Text(
                 'No traps detected yet',
@@ -63,9 +66,9 @@ class TrapsTabContent extends StatelessWidget {
               Text(
                 hasRepertoire
                     ? 'Discover traps in your existing repertoire, or '
-                        'generate a new repertoire to find them.'
+                          'generate a new repertoire to find them.'
                     : 'Generate a repertoire to discover positions where '
-                        'opponents are likely to make mistakes.',
+                          'opponents are likely to make mistakes.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: Colors.grey[600]),
               ),

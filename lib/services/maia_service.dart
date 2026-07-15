@@ -76,10 +76,11 @@ class MaiaService {
     final legalMovesMask = inputData['legalMoves'] as Float32List;
     final isBlack = inputData['isBlack'] as bool;
     // Board: [1, 64, 12]
-    final inputOrt = OrtValueTensor.createTensorWithDataList(
-      floatInput,
-      [1, 64, 12],
-    );
+    final inputOrt = OrtValueTensor.createTensorWithDataList(floatInput, [
+      1,
+      64,
+      12,
+    ]);
 
     // Elo: Float32 [1]
     final eloSelfOrt = OrtValueTensor.createTensorWithDataList(
@@ -160,7 +161,10 @@ class MaiaService {
   }
 
   Map<String, double> _processLogits(
-      List<double> logits, Float32List legalMask, bool isBlack) {
+    List<double> logits,
+    Float32List legalMask,
+    bool isBlack,
+  ) {
     final legalIndices = <int>[];
     final legalLogits = <double>[];
 

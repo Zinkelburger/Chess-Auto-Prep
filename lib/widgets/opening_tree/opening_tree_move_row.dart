@@ -50,10 +50,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           border: Border(
-            bottom: BorderSide(
-              color: Colors.grey[800]!,
-              width: 0.5,
-            ),
+            bottom: BorderSide(color: Colors.grey[800]!, width: 0.5),
           ),
         ),
         child: Column(
@@ -78,10 +75,7 @@ class OpeningTreeMoveRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '${node.gamesPlayed} games (${playedPercent.toStringAsFixed(1)}%)',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[400],
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                   ),
                 ),
                 Text(

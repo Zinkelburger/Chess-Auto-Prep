@@ -129,12 +129,14 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
 
       for (final toSq in targets.squares) {
         final piece = position.board.pieceAt(fromSq);
-        final isPromotion = piece?.role == Role.pawn &&
+        final isPromotion =
+            piece?.role == Role.pawn &&
             ((piece!.color == Side.white && toSq ~/ 8 == 7) ||
                 (piece.color == Side.black && toSq ~/ 8 == 0));
 
-        final promotionRoles =
-            isPromotion ? [Role.queen, Role.knight, Role.rook, Role.bishop] : [null];
+        final promotionRoles = isPromotion
+            ? [Role.queen, Role.knight, Role.rook, Role.bishop]
+            : [null];
 
         for (final promo in promotionRoles) {
           final move = NormalMove(from: fromSq, to: toSq, promotion: promo);
@@ -150,19 +152,20 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
             // Also accept the standard UCI king→destination (e.g. e1g1).
             final uciAliases = <String>[uci];
             if (isCastlingMove(position, fromSq, toSq)) {
-              final kingDest =
-                  castlingKingDestination(position, fromSq, toSq);
+              final kingDest = castlingKingDestination(position, fromSq, toSq);
               uciAliases.add('$from${toAlgebraic(kingDest)}');
             }
 
-            entries.add(LegalMoveEntry(
-              san: san,
-              uciAliases: uciAliases,
-              from: from,
-              to: to,
-              fenBefore: position.fen,
-              fenAfter: newPos.fen,
-            ));
+            entries.add(
+              LegalMoveEntry(
+                san: san,
+                uciAliases: uciAliases,
+                from: from,
+                to: to,
+                fenBefore: position.fen,
+                fenAfter: newPos.fen,
+              ),
+            );
           } catch (_) {
             // skip illegal moves
           }
@@ -173,13 +176,13 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
   }
 
   static String _roleToLower(Role role) => switch (role) {
-        Role.queen => 'q',
-        Role.knight => 'n',
-        Role.bishop => 'b',
-        Role.rook => 'r',
-        Role.pawn => '',
-        Role.king => 'k',
-      };
+    Role.queen => 'q',
+    Role.knight => 'n',
+    Role.bishop => 'b',
+    Role.rook => 'r',
+    Role.pawn => '',
+    Role.king => 'k',
+  };
 
   // ---------------------------------------------------------------------------
   // Input handling
@@ -196,14 +199,16 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
     if (match != null) {
       _controller.clear();
       setState(() => _error = null);
-      widget.onMove(CompletedMove(
-        from: match.from,
-        to: match.to,
-        san: match.san,
-        fenBefore: match.fenBefore,
-        fenAfter: match.fenAfter,
-        uci: match.uci,
-      ));
+      widget.onMove(
+        CompletedMove(
+          from: match.from,
+          to: match.to,
+          san: match.san,
+          fenBefore: match.fenBefore,
+          fenAfter: match.fenAfter,
+          uci: match.uci,
+        ),
+      );
       return;
     }
 
@@ -233,16 +238,13 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
     if (sanMatches.length == 1) return sanMatches.first;
 
     // 3. UCI match (checks all aliases, e.g. castling e1h1 and e1g1)
-    final uciMatches = _legalMoves
-        .where((e) => e.matchesUci(lower))
-        .toList();
+    final uciMatches = _legalMoves.where((e) => e.matchesUci(lower)).toList();
     if (uciMatches.length == 1) return uciMatches.first;
 
     // 4. UCI promotion shorthand: "e7e8" without piece → default to queen
     if (uciMatches.isEmpty && lower.length == 4) {
       final queenPromo = _legalMoves
-          .where((e) =>
-              e.uciStartsWith(lower) && e.uci.endsWith('q'))
+          .where((e) => e.uciStartsWith(lower) && e.uci.endsWith('q'))
           .toList();
       if (queenPromo.length == 1) return queenPromo.first;
     }
@@ -255,18 +257,19 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
     final stripped = _stripAnnotations(input);
     final lower = stripped.toLowerCase();
     final castlingNorm = _castlingNormalize(lower);
-    return _legalMoves.any((e) =>
-        _normalizeSan(e.san).startsWith(castlingNorm) ||
-        _stripAnnotations(e.san).startsWith(stripped) ||
-        e.uciStartsWith(lower));
+    return _legalMoves.any(
+      (e) =>
+          _normalizeSan(e.san).startsWith(castlingNorm) ||
+          _stripAnnotations(e.san).startsWith(stripped) ||
+          e.uciStartsWith(lower),
+    );
   }
 
   static String _stripAnnotations(String s) =>
       s.replaceAll(RegExp(r'[+#?!x]'), '').trim();
 
   /// Lowercase + treat 0 as O for castling shorthand.
-  static String _castlingNormalize(String lower) =>
-      lower.replaceAll('0', 'o');
+  static String _castlingNormalize(String lower) => lower.replaceAll('0', 'o');
 
   static String _normalizeSan(String san) =>
       _castlingNormalize(_stripAnnotations(san).toLowerCase());
@@ -322,8 +325,10 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
                   : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.15),
             ),
           ),
-          prefixIconConstraints:
-              const BoxConstraints(minWidth: 28, minHeight: 0),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 28,
+            minHeight: 0,
+          ),
           suffixIcon: inputText.isNotEmpty
               ? IconButton(
                   icon: const Icon(Icons.clear, size: 14),
@@ -332,12 +337,16 @@ class MoveInputWidgetState extends State<MoveInputWidget> {
                     setState(() => _error = null);
                   },
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 24, minHeight: 24),
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
                 )
               : null,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 4,
+            vertical: 8,
+          ),
           isDense: true,
           filled: false,
           border: OutlineInputBorder(

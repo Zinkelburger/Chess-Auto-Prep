@@ -23,8 +23,11 @@ void main() {
     test('false for ordinary king moves in every direction', () {
       final p = pos('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1');
       for (final dest in ['d1', 'f1', 'd2', 'e2', 'f2']) {
-        expect(isCastlingMove(p, sq('e1'), sq(dest)), isFalse,
-            reason: 'e1->$dest is a normal king move, not a castle');
+        expect(
+          isCastlingMove(p, sq('e1'), sq(dest)),
+          isFalse,
+          reason: 'e1->$dest is a normal king move, not a castle',
+        );
       }
     });
 
@@ -64,8 +67,11 @@ void main() {
     test('leaves ordinary king moves untouched', () {
       final p = pos('r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1');
       for (final dest in ['d1', 'f1', 'd2', 'e2', 'f2']) {
-        expect(castlingKingDestination(p, sq('e1'), sq(dest)), sq(dest),
-            reason: 'e1->$dest must not be remapped');
+        expect(
+          castlingKingDestination(p, sq('e1'), sq(dest)),
+          sq(dest),
+          reason: 'e1->$dest must not be remapped',
+        );
       }
     });
 

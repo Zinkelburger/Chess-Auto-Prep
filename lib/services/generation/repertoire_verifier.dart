@@ -74,7 +74,7 @@ class VerificationReport {
 
   String get summary => completed
       ? 'Verified $movesChecked repertoire moves at depth $verifyDepth — '
-          '${demotions.isEmpty ? 'all passed' : '${demotions.length} demoted and re-selected'}'
+            '${demotions.isEmpty ? 'all passed' : '${demotions.length} demoted and re-selected'}'
       : 'Verification incomplete ($movesChecked moves checked)';
 }
 
@@ -89,7 +89,7 @@ class RepertoireVerifier {
   static const int _maxPasses = 3;
 
   RepertoireVerifier({required this.config, StockfishPool? pool})
-      : pool = pool ?? StockfishPool.instance;
+    : pool = pool ?? StockfishPool.instance;
 
   Future<VerificationReport> verify(
     BuildTree tree, {
@@ -191,14 +191,16 @@ class RepertoireVerifier {
         }
 
         if (bestSib != null && bestSibUs - chosenUs > config.maxEvalLossCp) {
-          demotions.add(VerificationDemotion(
-            fen: node.fen,
-            ply: node.ply,
-            oldSan: chosen.moveSan,
-            newSan: bestSib.moveSan,
-            oldDeepCpUs: chosenUs,
-            newDeepCpUs: bestSibUs,
-          ));
+          demotions.add(
+            VerificationDemotion(
+              fen: node.fen,
+              ply: node.ply,
+              oldSan: chosen.moveSan,
+              newSan: bestSib.moveSan,
+              oldDeepCpUs: chosenUs,
+              newDeepCpUs: bestSibUs,
+            ),
+          );
           demoted = true;
         }
       }

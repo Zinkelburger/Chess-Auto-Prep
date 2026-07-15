@@ -118,11 +118,7 @@ class _CompactTreeOutlineState extends State<CompactTreeOutline> {
     _highlightIndex = highlightIndex;
   }
 
-  void _buildRowsRecursive(
-    BuildTreeNode node,
-    int depth,
-    List<_FlatRow> rows,
-  ) {
+  void _buildRowsRecursive(BuildTreeNode node, int depth, List<_FlatRow> rows) {
     final hasChildren = node.children.isNotEmpty;
     final isExpanded = _expandedNodeIds.contains(node.nodeId);
     rows.add(
@@ -188,8 +184,9 @@ class _CompactTreeOutlineState extends State<CompactTreeOutline> {
           playAsWhite: widget.playAsWhite,
           startPlyOffset: _startPlyOffset,
           isHighlighted: isHighlighted,
-          onChevronTap:
-              row.hasChildren ? () => _toggleExpanded(row.node) : null,
+          onChevronTap: row.hasChildren
+              ? () => _toggleExpanded(row.node)
+              : null,
           onRowTap: () => widget.onNodeTapped?.call(row.node),
         );
       },
@@ -251,11 +248,7 @@ class _CompactTreeRow extends StatelessWidget {
               SizedBox(
                 width: 14,
                 child: node.isRepertoireMove
-                    ? Icon(
-                        Icons.star,
-                        size: 12,
-                        color: Colors.amber[400],
-                      )
+                    ? Icon(Icons.star, size: 12, color: Colors.amber[400])
                     : null,
               ),
               Expanded(

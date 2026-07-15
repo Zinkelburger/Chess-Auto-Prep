@@ -67,13 +67,13 @@ class AnalysisPlayerInfo {
   // ── Serialisation ──────────────────────────────────────────────────
 
   Map<String, dynamic> toJson() => {
-        'platform': platform,
-        'username': username,
-        'maxGames': maxGames,
-        'monthsBack': monthsBack,
-        'downloadedAt': downloadedAt?.toIso8601String(),
-        'gameCount': gameCount,
-      };
+    'platform': platform,
+    'username': username,
+    'maxGames': maxGames,
+    'monthsBack': monthsBack,
+    'downloadedAt': downloadedAt?.toIso8601String(),
+    'gameCount': gameCount,
+  };
 
   factory AnalysisPlayerInfo.fromJson(Map<String, dynamic> json) {
     return AnalysisPlayerInfo(

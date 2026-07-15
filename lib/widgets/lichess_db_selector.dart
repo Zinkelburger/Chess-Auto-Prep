@@ -79,9 +79,12 @@ class LichessDbSelector extends StatelessWidget {
             if (!compact)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: Text('Database',
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+                child: Text(
+                  'Database',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             if (compact)
               const Padding(
@@ -106,8 +109,9 @@ class LichessDbSelector extends StatelessWidget {
             ),
           ],
           selected: {database},
-          onSelectionChanged:
-              enabled ? (s) => onDatabaseChanged(s.first) : null,
+          onSelectionChanged: enabled
+              ? (s) => onDatabaseChanged(s.first)
+              : null,
         ),
 
         // Speed & rating filters (only for the Lichess player DB)
@@ -124,7 +128,8 @@ class LichessDbSelector extends StatelessWidget {
           SizedBox(
             width: 140,
             child: Tooltip(
-              message: 'Minimum games for a move to be considered.\n'
+              message:
+                  'Minimum games for a move to be considered.\n'
                   'Lower values include rarer moves, higher values\n'
                   'give more reliable statistics.',
               child: TextField(
@@ -149,14 +154,19 @@ class LichessDbSelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (!compact)
-          Text('Time Controls',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            'Time Controls',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         if (compact)
           Tooltip(
             message: 'Which time controls to include.',
-            child: Text('Speeds:',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+            child: Text(
+              'Speeds:',
+              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            ),
           ),
         const SizedBox(height: 6),
         Wrap(
@@ -165,8 +175,10 @@ class LichessDbSelector extends StatelessWidget {
           children: _speedOptions.map((opt) {
             final isSelected = selectedSpeeds.contains(opt.$2);
             return FilterChip(
-              label:
-                  Text(opt.$1, style: TextStyle(fontSize: compact ? 11 : 12)),
+              label: Text(
+                opt.$1,
+                style: TextStyle(fontSize: compact ? 11 : 12),
+              ),
               selected: isSelected,
               onSelected: enabled
                   ? (v) {
@@ -180,8 +192,9 @@ class LichessDbSelector extends StatelessWidget {
                     }
                   : null,
               visualDensity: compact ? VisualDensity.compact : null,
-              materialTapTargetSize:
-                  compact ? MaterialTapTargetSize.shrinkWrap : null,
+              materialTapTargetSize: compact
+                  ? MaterialTapTargetSize.shrinkWrap
+                  : null,
             );
           }).toList(),
         ),
@@ -194,15 +207,21 @@ class LichessDbSelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (!compact)
-          Text('Rating Ranges',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            'Rating Ranges',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         if (compact)
           Tooltip(
-            message: 'Rating buckets to include.\n'
+            message:
+                'Rating buckets to include.\n'
                 'Each value is the lower bound of a Lichess rating bracket.',
-            child: Text('Ratings:',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+            child: Text(
+              'Ratings:',
+              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            ),
           ),
         const SizedBox(height: 6),
         Wrap(
@@ -225,8 +244,9 @@ class LichessDbSelector extends StatelessWidget {
                     }
                   : null,
               visualDensity: compact ? VisualDensity.compact : null,
-              materialTapTargetSize:
-                  compact ? MaterialTapTargetSize.shrinkWrap : null,
+              materialTapTargetSize: compact
+                  ? MaterialTapTargetSize.shrinkWrap
+                  : null,
             );
           }).toList(),
         ),

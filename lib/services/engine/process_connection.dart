@@ -55,8 +55,9 @@ class ProcessConnection implements EngineConnection {
       log.i('Extracting Stockfish binary to ${file.path}...');
       await file.parent.create(recursive: true);
 
-      final byteData =
-          await rootBundle.load('assets/executables/$binaryName.gz');
+      final byteData = await rootBundle.load(
+        'assets/executables/$binaryName.gz',
+      );
       final compressed = byteData.buffer.asUint8List(
         byteData.offsetInBytes,
         byteData.lengthInBytes,
@@ -84,10 +85,10 @@ class ProcessConnection implements EngineConnection {
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen((line) {
-        if (!_isDisposed) {
-          _stdoutController.add(line);
-        }
-      });
+            if (!_isDisposed) {
+              _stdoutController.add(line);
+            }
+          });
 
       // Drain stderr to prevent buffer fill-up that can stall the process.
       _process!.stderr.drain<void>();
@@ -145,7 +146,9 @@ class ProcessConnection implements EngineConnection {
     if (proc != null) {
       try {
         proc.stdin.writeln('quit');
-      } catch (_) {/* stdin may be closed */}
+      } catch (_) {
+        /* stdin may be closed */
+      }
       proc.kill(); // SIGTERM on POSIX, TerminateProcess on Windows
       if (!Platform.isWindows) {
         // On POSIX, the initial kill() sends SIGTERM which the process may
@@ -155,7 +158,9 @@ class ProcessConnection implements EngineConnection {
         Future.delayed(const Duration(seconds: 2), () {
           try {
             proc.kill(ProcessSignal.sigkill);
-          } catch (_) {/* process may have already exited */}
+          } catch (_) {
+            /* process may have already exited */
+          }
         });
       }
     }

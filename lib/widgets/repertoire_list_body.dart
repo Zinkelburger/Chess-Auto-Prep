@@ -304,8 +304,10 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                   (r) => r.name.toLowerCase() == name.toLowerCase(),
                 );
                 if (exists) {
-                  setState(() => nameError =
-                      'A repertoire named "$name" already exists');
+                  setState(
+                    () =>
+                        nameError = 'A repertoire named "$name" already exists',
+                  );
                   return;
                 }
                 Navigator.of(context).pop({
@@ -348,7 +350,8 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
         return;
       }
 
-      final header = '// $name Repertoire\n'
+      final header =
+          '// $name Repertoire\n'
           '// Color: $color\n'
           '// Created on ${DateTime.now().toString().split('.')[0]}\n\n';
 
@@ -361,18 +364,23 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       }
 
       if (mounted) {
-        widget.onSelected(RepertoireMetadata(
-          filePath: filePath,
-          name: name,
-          gameCount: gameCount,
-          lastModified: DateTime.now(),
-        ));
+        widget.onSelected(
+          RepertoireMetadata(
+            filePath: filePath,
+            name: name,
+            gameCount: gameCount,
+            lastModified: DateTime.now(),
+          ),
+        );
       }
     } catch (e) {
       debugPrint('Create repertoire failed: $e');
       if (mounted) {
-        showAppSnackBar(context, AppMessages.createRepertoireFailed,
-            isError: true);
+        showAppSnackBar(
+          context,
+          AppMessages.createRepertoireFailed,
+          isError: true,
+        );
       }
     }
   }
@@ -383,7 +391,8 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       builder: (context) => AlertDialog(
         title: const Text('Delete Repertoire'),
         content: Text(
-            'Delete repertoire "${repertoire.name}"? This action cannot be undone.'),
+          'Delete repertoire "${repertoire.name}"? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -405,8 +414,11 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       } catch (e) {
         debugPrint('Delete repertoire failed: $e');
         if (mounted) {
-          showAppSnackBar(context, AppMessages.deleteRepertoireFailed,
-              isError: true);
+          showAppSnackBar(
+            context,
+            AppMessages.deleteRepertoireFailed,
+            isError: true,
+          );
         }
       }
     }
@@ -458,8 +470,10 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
                       r.filePath != repertoire.filePath,
                 );
                 if (exists) {
-                  setState(() =>
-                      nameError = 'A repertoire named "$newName" already exists');
+                  setState(
+                    () => nameError =
+                        'A repertoire named "$newName" already exists',
+                  );
                   return;
                 }
                 Navigator.of(context).pop(newName);
@@ -482,8 +496,11 @@ class _RepertoireListBodyState extends State<RepertoireListBody> {
       } catch (e) {
         debugPrint('Rename repertoire failed: $e');
         if (mounted) {
-          showAppSnackBar(context, AppMessages.renameRepertoireFailed,
-              isError: true);
+          showAppSnackBar(
+            context,
+            AppMessages.renameRepertoireFailed,
+            isError: true,
+          );
         }
       }
     }
@@ -505,10 +522,7 @@ class _InlinePgnAttach extends StatefulWidget {
   final PgnImportResult? importResult;
   final ValueChanged<PgnImportResult?> onChanged;
 
-  const _InlinePgnAttach({
-    required this.importResult,
-    required this.onChanged,
-  });
+  const _InlinePgnAttach({required this.importResult, required this.onChanged});
 
   @override
   State<_InlinePgnAttach> createState() => _InlinePgnAttachState();
@@ -542,7 +556,8 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
 
       if (count > 0) {
         widget.onChanged(
-            PgnImportResult(pgnContent: content, gameCount: count));
+          PgnImportResult(pgnContent: content, gameCount: count),
+        );
       } else {
         widget.onChanged(null);
       }
@@ -573,8 +588,10 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
             GestureDetector(
               onTap: _pickFile,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: cs.primaryContainer,
                   borderRadius: BorderRadius.circular(20),
@@ -602,7 +619,9 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
                 constraints: const BoxConstraints(maxWidth: 200),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: cs.primaryContainer,
                     borderRadius: BorderRadius.circular(20),
@@ -610,8 +629,11 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.description,
-                          size: 13, color: cs.onPrimaryContainer),
+                      Icon(
+                        Icons.description,
+                        size: 13,
+                        color: cs.onPrimaryContainer,
+                      ),
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(
@@ -627,8 +649,11 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
                       const SizedBox(width: 6),
                       GestureDetector(
                         onTap: _clear,
-                        child: Icon(Icons.close,
-                            size: 13, color: cs.onPrimaryContainer),
+                        child: Icon(
+                          Icons.close,
+                          size: 13,
+                          color: cs.onPrimaryContainer,
+                        ),
                       ),
                     ],
                   ),
@@ -644,8 +669,7 @@ class _InlinePgnAttachState extends State<_InlinePgnAttach> {
             children: [
               Icon(Icons.warning_amber, size: 13, color: cs.error),
               const SizedBox(width: 5),
-              Text(_error!,
-                  style: TextStyle(fontSize: 11, color: cs.error)),
+              Text(_error!, style: TextStyle(fontSize: 11, color: cs.error)),
             ],
           ),
         ],

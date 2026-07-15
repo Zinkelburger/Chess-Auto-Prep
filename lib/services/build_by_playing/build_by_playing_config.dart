@@ -55,10 +55,10 @@ class BuildByPlayingConfig {
   final bool startFromCurrentPosition;
 
   ExplorerSourceConfig get source => ExplorerSourceConfig(
-        useMasters: useMasters,
-        speeds: speeds,
-        ratings: ratings,
-      );
+    useMasters: useMasters,
+    speeds: speeds,
+    ratings: ratings,
+  );
 
   BuildByPlayingConfig copyWith({
     bool? useMasters,
@@ -111,27 +111,27 @@ class BuildByPlayingSettings extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       const def = BuildByPlayingConfig();
       _config = BuildByPlayingConfig(
-        useMasters:
-            prefs.getBool('${_prefix}use_masters') ?? def.useMasters,
+        useMasters: prefs.getBool('${_prefix}use_masters') ?? def.useMasters,
         speeds: prefs.getString('${_prefix}speeds') ?? def.speeds,
         ratings: prefs.getString('${_prefix}ratings') ?? def.ratings,
-        coverMinProb: (prefs.getDouble('${_prefix}cover_min_prob') ??
-                def.coverMinProb)
-            .clamp(0.0, 1.0),
-        oppMassTarget: (prefs.getDouble('${_prefix}opp_mass_target') ??
-                def.oppMassTarget)
-            .clamp(0.0, 1.0),
-        oppMaxChildren: (prefs.getInt('${_prefix}opp_max_children') ??
-                def.oppMaxChildren)
-            .clamp(1, 20),
-        maxPly: (prefs.getInt('${_prefix}max_ply') ?? def.maxPly)
-            .clamp(2, 100),
+        coverMinProb:
+            (prefs.getDouble('${_prefix}cover_min_prob') ?? def.coverMinProb)
+                .clamp(0.0, 1.0),
+        oppMassTarget:
+            (prefs.getDouble('${_prefix}opp_mass_target') ?? def.oppMassTarget)
+                .clamp(0.0, 1.0),
+        oppMaxChildren:
+            (prefs.getInt('${_prefix}opp_max_children') ?? def.oppMaxChildren)
+                .clamp(1, 20),
+        maxPly: (prefs.getInt('${_prefix}max_ply') ?? def.maxPly).clamp(2, 100),
         minCumulativeProbability:
             (prefs.getDouble('${_prefix}min_cum_prob') ??
                     def.minCumulativeProbability)
                 .clamp(0.0, 1.0),
-        minGames:
-            (prefs.getInt('${_prefix}min_games') ?? def.minGames).clamp(1, 100000),
+        minGames: (prefs.getInt('${_prefix}min_games') ?? def.minGames).clamp(
+          1,
+          100000,
+        ),
         // startFromCurrentPosition is per-session, not persisted.
       );
       notifyListeners();
@@ -153,7 +153,9 @@ class BuildByPlayingSettings extends ChangeNotifier {
       await prefs.setInt('${_prefix}opp_max_children', config.oppMaxChildren);
       await prefs.setInt('${_prefix}max_ply', config.maxPly);
       await prefs.setDouble(
-          '${_prefix}min_cum_prob', config.minCumulativeProbability);
+        '${_prefix}min_cum_prob',
+        config.minCumulativeProbability,
+      );
       await prefs.setInt('${_prefix}min_games', config.minGames);
     } catch (e) {
       debugPrint('[BuildByPlayingSettings] Failed to save prefs: $e');

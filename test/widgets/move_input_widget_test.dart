@@ -140,19 +140,24 @@ void main() {
 
     testWidgets('capture without x works (Nf6 matches Nxf6)', (tester) async {
       // Position where Nxf6 is a capture
-      final pos = Chess.fromSetup(Setup.parseFen(
-          'rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2'));
+      final pos = Chess.fromSetup(
+        Setup.parseFen(
+          'rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2',
+        ),
+      );
       // White has e4, black has Nf6. White can't Nxf6 here.
       // Use a position where a capture exists:
       // After 1.e4 d5 — white can play exd5
-      final pos2 = Chess.fromSetup(Setup.parseFen(
-          'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2'));
+      final pos2 = Chess.fromSetup(
+        Setup.parseFen(
+          'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2',
+        ),
+      );
 
       CompletedMove? received;
-      await tester.pumpWidget(buildWidget(
-        position: pos2,
-        onMove: (m) => received = m,
-      ));
+      await tester.pumpWidget(
+        buildWidget(position: pos2, onMove: (m) => received = m),
+      );
 
       await tester.tap(find.byType(TextField));
       await tester.pump();
@@ -166,14 +171,16 @@ void main() {
     });
 
     testWidgets('capture with x also works (exd5)', (tester) async {
-      final pos = Chess.fromSetup(Setup.parseFen(
-          'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2'));
+      final pos = Chess.fromSetup(
+        Setup.parseFen(
+          'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 2',
+        ),
+      );
 
       CompletedMove? received;
-      await tester.pumpWidget(buildWidget(
-        position: pos,
-        onMove: (m) => received = m,
-      ));
+      await tester.pumpWidget(
+        buildWidget(position: pos, onMove: (m) => received = m),
+      );
 
       await tester.tap(find.byType(TextField));
       await tester.pump();
@@ -187,14 +194,16 @@ void main() {
 
     testWidgets('castling with O-O works', (tester) async {
       // Position where castling is legal
-      final pos = Chess.fromSetup(Setup.parseFen(
-          'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4'));
+      final pos = Chess.fromSetup(
+        Setup.parseFen(
+          'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
+        ),
+      );
 
       CompletedMove? received;
-      await tester.pumpWidget(buildWidget(
-        position: pos,
-        onMove: (m) => received = m,
-      ));
+      await tester.pumpWidget(
+        buildWidget(position: pos, onMove: (m) => received = m),
+      );
 
       await tester.tap(find.byType(TextField));
       await tester.pump();
@@ -207,14 +216,16 @@ void main() {
     });
 
     testWidgets('castling with 0-0 (zeros) works', (tester) async {
-      final pos = Chess.fromSetup(Setup.parseFen(
-          'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4'));
+      final pos = Chess.fromSetup(
+        Setup.parseFen(
+          'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
+        ),
+      );
 
       CompletedMove? received;
-      await tester.pumpWidget(buildWidget(
-        position: pos,
-        onMove: (m) => received = m,
-      ));
+      await tester.pumpWidget(
+        buildWidget(position: pos, onMove: (m) => received = m),
+      );
 
       await tester.tap(find.byType(TextField));
       await tester.pump();
@@ -227,14 +238,16 @@ void main() {
     });
 
     testWidgets('castling via UCI e1g1 works', (tester) async {
-      final pos = Chess.fromSetup(Setup.parseFen(
-          'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4'));
+      final pos = Chess.fromSetup(
+        Setup.parseFen(
+          'r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
+        ),
+      );
 
       CompletedMove? received;
-      await tester.pumpWidget(buildWidget(
-        position: pos,
-        onMove: (m) => received = m,
-      ));
+      await tester.pumpWidget(
+        buildWidget(position: pos, onMove: (m) => received = m),
+      );
 
       await tester.tap(find.byType(TextField));
       await tester.pump();

@@ -119,9 +119,11 @@ class ExtractedLine {
     }
 
     if (leafPruneReason == PruneReason.evalTooHigh && leafPruneEvalCp != null) {
-      sb.write('{Already winning '
-          '(${leafPruneEvalCp! >= 0 ? "+" : ""}${(leafPruneEvalCp! / 100).toStringAsFixed(1)}); '
-          'no further preparation needed} ');
+      sb.write(
+        '{Already winning '
+        '(${leafPruneEvalCp! >= 0 ? "+" : ""}${(leafPruneEvalCp! / 100).toStringAsFixed(1)}); '
+        'no further preparation needed} ',
+      );
     }
     sb.write('*');
     return sb.toString();
@@ -209,8 +211,9 @@ class LineExtractor {
     if (!cycle) {
       visited.add(key);
       if (isOurMove) {
-        final selected =
-            resolved.children.where((c) => c.isRepertoireMove).firstOrNull;
+        final selected = resolved.children
+            .where((c) => c.isRepertoireMove)
+            .firstOrNull;
         if (selected != null) {
           pushedAny = true;
           _extractDfs(
@@ -219,7 +222,7 @@ class LineExtractor {
             movesUci: [...movesUci, selected.moveUci],
             moveAnnotations: [
               ...moveAnnotations,
-              MoveProbabilityAnnotation.none
+              MoveProbabilityAnnotation.none,
             ],
             lines: lines,
             maxLines: maxLines,
@@ -230,10 +233,10 @@ class LineExtractor {
         for (final child in resolved.children) {
           // Coverage-floored children sit below the reach-probability floor
           // but carry a guaranteed answer — export their lines too.
-          final covered = config.coverMinProb > 0.0 &&
+          final covered =
+              config.coverMinProb > 0.0 &&
               child.moveProbability >= config.coverMinProb;
-          if (!covered &&
-              child.cumulativeProbability < config.minProbability) {
+          if (!covered && child.cumulativeProbability < config.minProbability) {
             continue;
           }
           pushedAny = true;
@@ -241,10 +244,7 @@ class LineExtractor {
             node: child,
             movesSan: [...movesSan, child.moveSan],
             movesUci: [...movesUci, child.moveUci],
-            moveAnnotations: [
-              ...moveAnnotations,
-              _annotationForChild(child),
-            ],
+            moveAnnotations: [...moveAnnotations, _annotationForChild(child)],
             lines: lines,
             maxLines: maxLines,
             visited: visited,
@@ -258,9 +258,11 @@ class LineExtractor {
 
     String? openingName;
     String? openingEco;
-    for (BuildTreeNode? current = node;
-        current != null;
-        current = current.parent) {
+    for (
+      BuildTreeNode? current = node;
+      current != null;
+      current = current.parent
+    ) {
       if (current.openingName != null) {
         openingName = current.openingName;
         openingEco = current.openingEco;
@@ -268,17 +270,19 @@ class LineExtractor {
       }
     }
 
-    lines.add(ExtractedLine(
-      movesSan: movesSan,
-      movesUci: movesUci,
-      probability: node.cumulativeProbability,
-      leafPruneReason: node.pruneReason,
-      leafPruneEvalCp: node.pruneEvalCp,
-      openingName: openingName,
-      openingEco: openingEco,
-      leafEvalCp: node.engineEvalCp,
-      moveAnnotations: moveAnnotations,
-    ));
+    lines.add(
+      ExtractedLine(
+        movesSan: movesSan,
+        movesUci: movesUci,
+        probability: node.cumulativeProbability,
+        leafPruneReason: node.pruneReason,
+        leafPruneEvalCp: node.pruneEvalCp,
+        openingName: openingName,
+        openingEco: openingEco,
+        leafEvalCp: node.engineEvalCp,
+        moveAnnotations: moveAnnotations,
+      ),
+    );
   }
 
   /// Export all extracted lines as a single PGN string.
@@ -289,19 +293,23 @@ class LineExtractor {
     }
 
     final rootWhiteToMove = isWhiteToMove(config.startFen);
-    return sorted.asMap().entries.map((e) {
-      final idx = e.key + 1;
-      final eventName = repertoireName != null
-          ? '$repertoireName Line #$idx'
-          : 'Repertoire Line #$idx';
-      return e.value.toPgn(
-        rootWhiteToMove: rootWhiteToMove,
-        event: eventName,
-        startFen: config.startFen,
-        rankByImportance: config.rankLinesByImportance,
-        annotateMoveProbabilities: config.annotateMoveProbabilities,
-        annotateMaiaOnly: config.annotateMaiaOnly,
-      );
-    }).join('\n\n');
+    return sorted
+        .asMap()
+        .entries
+        .map((e) {
+          final idx = e.key + 1;
+          final eventName = repertoireName != null
+              ? '$repertoireName Line #$idx'
+              : 'Repertoire Line #$idx';
+          return e.value.toPgn(
+            rootWhiteToMove: rootWhiteToMove,
+            event: eventName,
+            startFen: config.startFen,
+            rankByImportance: config.rankLinesByImportance,
+            annotateMoveProbabilities: config.annotateMoveProbabilities,
+            annotateMaiaOnly: config.annotateMaiaOnly,
+          );
+        })
+        .join('\n\n');
   }
 }

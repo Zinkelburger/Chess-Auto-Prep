@@ -92,8 +92,9 @@ class _EngineWeaknessConfigDialogState
       if (tree == null) continue;
       for (final nodes in tree.fenToNodes.values) {
         if (nodes.isEmpty) continue;
-        final best =
-            nodes.reduce((a, b) => a.gamesPlayed >= b.gamesPlayed ? a : b);
+        final best = nodes.reduce(
+          (a, b) => a.gamesPlayed >= b.gamesPlayed ? a : b,
+        );
         if (best.gamesPlayed >= minGames) count++;
       }
     }
@@ -101,21 +102,25 @@ class _EngineWeaknessConfigDialogState
   }
 
   String get _resourceSummary {
-    final workers = int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.workers;
+    final workers =
+        int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.workers;
     return '$workers workers × $kPoolHashPerWorkerMb MB hash each = '
         '${workers * kPoolHashPerWorkerMb} MB total';
   }
 
   void _submit() {
-    Navigator.of(context).pop(EngineWeaknessConfig(
-      depth: int.tryParse(_depthCtrl.text) ?? 20,
-      minGames: int.tryParse(_minGamesCtrl.text) ?? 3,
-      whiteCp: int.tryParse(_whiteCpCtrl.text) ?? -50,
-      blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
-      workers: int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.workers,
-      redownload: _redownload,
-      monthsBack: int.tryParse(_monthsCtrl.text) ?? 6,
-    ));
+    Navigator.of(context).pop(
+      EngineWeaknessConfig(
+        depth: int.tryParse(_depthCtrl.text) ?? 20,
+        minGames: int.tryParse(_minGamesCtrl.text) ?? 3,
+        whiteCp: int.tryParse(_whiteCpCtrl.text) ?? -50,
+        blackCp: int.tryParse(_blackCpCtrl.text) ?? 100,
+        workers:
+            int.tryParse(_workersCtrl.text) ?? EngineSettings.instance.workers,
+        redownload: _redownload,
+        monthsBack: int.tryParse(_monthsCtrl.text) ?? 6,
+      ),
+    );
   }
 
   @override
@@ -145,9 +150,7 @@ class _EngineWeaknessConfigDialogState
               Wrap(
                 spacing: 16,
                 runSpacing: 12,
-                children: [
-                  _field('Workers', _workersCtrl, 80),
-                ],
+                children: [_field('Workers', _workersCtrl, 80)],
               ),
               const SizedBox(height: 8),
               Text(

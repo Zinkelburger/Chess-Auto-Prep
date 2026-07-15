@@ -10,10 +10,7 @@ void main() {
     });
 
     test('plain numbered movetext', () {
-      expect(
-        cleanSanTokens('1. e4 e5 2. Nf3 Nc6'),
-        ['e4', 'e5', 'Nf3', 'Nc6'],
-      );
+      expect(cleanSanTokens('1. e4 e5 2. Nf3 Nc6'), ['e4', 'e5', 'Nf3', 'Nc6']);
     });
 
     test('glued move numbers', () {
@@ -37,17 +34,15 @@ void main() {
     });
 
     test('castling survives (not mistaken for a result token)', () {
-      expect(
-        cleanSanTokens('4. O-O O-O-O 1-0'),
-        ['O-O', 'O-O-O'],
-      );
+      expect(cleanSanTokens('4. O-O O-O-O 1-0'), ['O-O', 'O-O-O']);
     });
 
     test('check, mate, capture, and promotion notation survive', () {
-      expect(
-        cleanSanTokens('10. Qxf7+ Kd8 11. e8=Q# 1-0'),
-        ['Qxf7+', 'Kd8', 'e8=Q#'],
-      );
+      expect(cleanSanTokens('10. Qxf7+ Kd8 11. e8=Q# 1-0'), [
+        'Qxf7+',
+        'Kd8',
+        'e8=Q#',
+      ]);
     });
 
     test('irregular whitespace', () {

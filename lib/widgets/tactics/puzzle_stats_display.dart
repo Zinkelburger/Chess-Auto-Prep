@@ -30,10 +30,10 @@ class PuzzleStatsDisplay extends StatelessWidget {
           color: pos.reviewCount == 0
               ? Colors.grey
               : pos.successRate >= 0.7
-                  ? Colors.green
-                  : pos.successRate >= 0.4
-                      ? Colors.orange
-                      : Colors.red,
+              ? Colors.green
+              : pos.successRate >= 0.4
+              ? Colors.orange
+              : Colors.red,
         ),
       ),
     );

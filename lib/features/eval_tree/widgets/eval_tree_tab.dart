@@ -28,8 +28,8 @@ class EvalTreePositionSelection {
     required this.rootFen,
     required List<String> movePathSan,
     required List<String> rootStartMovesSan,
-  })  : movePathSan = List.unmodifiable(movePathSan),
-        rootStartMovesSan = List.unmodifiable(rootStartMovesSan);
+  }) : movePathSan = List.unmodifiable(movePathSan),
+       rootStartMovesSan = List.unmodifiable(rootStartMovesSan);
 
   List<String> get fullMovePathSan => [...rootStartMovesSan, ...movePathSan];
 
@@ -157,8 +157,10 @@ class _EvalTreeTabState extends State<EvalTreeTab>
           return _buildEmptyState(context);
         }
 
-        final layoutFrame =
-            EvalTreeLayoutEngine.buildFrame(snapshot, _controller);
+        final layoutFrame = EvalTreeLayoutEngine.buildFrame(
+          snapshot,
+          _controller,
+        );
         return Column(
           children: [
             _buildSummaryBar(context, snapshot),
@@ -179,7 +181,8 @@ class _EvalTreeTabState extends State<EvalTreeTab>
                     child: RepertoireTreeExplorer(
                       snapshot: snapshot,
                       controller: _controller,
-                      metricsCache: _metricsCache ??
+                      metricsCache:
+                          _metricsCache ??
                           EvalTreeLineMetricsCache.fromSnapshot(snapshot),
                       currentNode: currentNode,
                     ),
@@ -204,7 +207,8 @@ class _EvalTreeTabState extends State<EvalTreeTab>
 
   Widget _buildEmptyState(BuildContext context) {
     final hasPath = _treePath() != null;
-    final message = _error ??
+    final message =
+        _error ??
         (hasPath
             ? 'Generate a repertoire tree or load a saved tree file.'
             : 'Select a repertoire first.');

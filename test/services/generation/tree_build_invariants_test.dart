@@ -32,16 +32,15 @@ TreeBuildConfig _headlessConfig({
   double coverMinProb = 0.0,
   double minProbability = 0.0001,
   int maxPly = 4,
-}) =>
-    TreeBuildConfig(
-      startFen: kStandardStartFen,
-      playAsWhite: true,
-      buildMode: BuildMode.maiaDbExplore,
-      relativeEval: false,
-      coverMinProb: coverMinProb,
-      minProbability: minProbability,
-      maxPly: maxPly,
-    );
+}) => TreeBuildConfig(
+  startFen: kStandardStartFen,
+  playAsWhite: true,
+  buildMode: BuildMode.maiaDbExplore,
+  relativeEval: false,
+  coverMinProb: coverMinProb,
+  minProbability: minProbability,
+  maxPly: maxPly,
+);
 
 BuildRun _makeRun({
   required TreeBuildConfig config,
@@ -143,28 +142,34 @@ void main() {
 
     test('no eval → no prune', () {
       final node = makeNode(
-          fen: kFenAfterE4, san: 'e4', ply: 1, isWhiteToMove: false);
+        fen: kFenAfterE4,
+        san: 'e4',
+        ply: 1,
+        isWhiteToMove: false,
+      );
       expect(evalWindowPrune(node, config), isFalse);
       expect(node.pruneReason, PruneReason.none);
     });
 
     test('inside window → no prune', () {
       final node = makeNode(
-          fen: kFenAfterE4,
-          san: 'e4',
-          ply: 1,
-          isWhiteToMove: false,
-          evalCp: -30); // STM (black) -30 → +30 for white
+        fen: kFenAfterE4,
+        san: 'e4',
+        ply: 1,
+        isWhiteToMove: false,
+        evalCp: -30,
+      ); // STM (black) -30 → +30 for white
       expect(evalWindowPrune(node, config), isFalse);
     });
 
     test('above window → evalTooHigh with recorded eval', () {
       final node = makeNode(
-          fen: kFenAfterE4,
-          san: 'e4',
-          ply: 1,
-          isWhiteToMove: false,
-          evalCp: -300); // +300 for white > maxEvalCp 200
+        fen: kFenAfterE4,
+        san: 'e4',
+        ply: 1,
+        isWhiteToMove: false,
+        evalCp: -300,
+      ); // +300 for white > maxEvalCp 200
       expect(evalWindowPrune(node, config), isTrue);
       expect(node.pruneReason, PruneReason.evalTooHigh);
       expect(node.pruneEvalCp, 300);
@@ -172,11 +177,12 @@ void main() {
 
     test('below window → evalTooLow', () {
       final node = makeNode(
-          fen: kFenAfterE4,
-          san: 'e4',
-          ply: 1,
-          isWhiteToMove: false,
-          evalCp: 100); // -100 for white < minEvalCp -50
+        fen: kFenAfterE4,
+        san: 'e4',
+        ply: 1,
+        isWhiteToMove: false,
+        evalCp: 100,
+      ); // -100 for white < minEvalCp -50
       expect(evalWindowPrune(node, config), isTrue);
       expect(node.pruneReason, PruneReason.evalTooLow);
     });
@@ -185,13 +191,13 @@ void main() {
   group('addOpponentChildren fan-out policy', () {
     // Parent: position after 1.e4 — black (opponent) to move.
     BuildTreeNode opponentNode() => makeNode(
-          fen: kFenAfterE4,
-          san: 'e4',
-          uci: 'e2e4',
-          ply: 1,
-          isWhiteToMove: false,
-          cumulativeProbability: 0.8,
-        )..searchPriority = 0.8;
+      fen: kFenAfterE4,
+      san: 'e4',
+      uci: 'e2e4',
+      ply: 1,
+      isWhiteToMove: false,
+      cumulativeProbability: 0.8,
+    )..searchPriority = 0.8;
 
     SmoothedMove cand(String uci, double p, {int games = 100}) =>
         SmoothedMove(uci: uci, san: '', probability: p, games: games);
@@ -237,8 +243,11 @@ void main() {
         maxChildren: 0,
       );
 
-      expect(node.children.length, 1,
-          reason: 'p=0.5 ≥ coverMinProb must survive the games filter');
+      expect(
+        node.children.length,
+        1,
+        reason: 'p=0.5 ≥ coverMinProb must survive the games filter',
+      );
     });
 
     test('noise filter drops sparse moves below the coverage floor', () {
@@ -300,11 +309,7 @@ void main() {
       addOpponentChildren(
         run: run,
         node: node,
-        candidates: [
-          cand('e7e5', 0.4),
-          cand('c7c5', 0.3),
-          cand('e7e6', 0.2),
-        ],
+        candidates: [cand('e7e5', 0.4), cand('c7c5', 0.3), cand('e7e6', 0.2)],
         smoothing: false,
         maxChildren: 2,
       );
@@ -316,11 +321,7 @@ void main() {
       addOpponentChildren(
         run: run2,
         node: node2,
-        candidates: [
-          cand('e7e5', 0.4),
-          cand('c7c5', 0.3),
-          cand('e7e6', 0.2),
-        ],
+        candidates: [cand('e7e5', 0.4), cand('c7c5', 0.3), cand('e7e6', 0.2)],
         smoothing: false,
         massTarget: 0.6,
       );
@@ -393,26 +394,28 @@ void main() {
   });
 
   group('TreeBuildService lifecycle', () {
-    test('re-entrancy guard rejects an overlapping build before any await',
-        () async {
-      final service = TreeBuildService();
-      final first = service.build(
-        config: _headlessConfig(),
-        isCancelled: () => false,
-        onProgress: (_) {},
-      );
-      // Second call must fail even though the first has not completed a
-      // single await yet — the guard is set synchronously.
-      final second = service.build(
-        config: _headlessConfig(),
-        isCancelled: () => false,
-        onProgress: (_) {},
-      );
-      await expectLater(second, throwsStateError);
-      final tree = await first;
-      expect(tree.totalNodes, greaterThanOrEqualTo(1));
-      expect(service.isBuilding, isFalse);
-    });
+    test(
+      're-entrancy guard rejects an overlapping build before any await',
+      () async {
+        final service = TreeBuildService();
+        final first = service.build(
+          config: _headlessConfig(),
+          isCancelled: () => false,
+          onProgress: (_) {},
+        );
+        // Second call must fail even though the first has not completed a
+        // single await yet — the guard is set synchronously.
+        final second = service.build(
+          config: _headlessConfig(),
+          isCancelled: () => false,
+          onProgress: (_) {},
+        );
+        await expectLater(second, throwsStateError);
+        final tree = await first;
+        expect(tree.totalNodes, greaterThanOrEqualTo(1));
+        expect(service.isBuilding, isFalse);
+      },
+    );
 
     test('completed headless build marks buildComplete', () async {
       final service = TreeBuildService();
@@ -483,50 +486,50 @@ void main() {
       t.e4e5nf3.explored = false; // leaf at ply 3
       t.d4.explored = false; // inner node at ply 1
 
-      final (frontier, minPly) =
-          TreeBuildService.prepareResumeFrontier(t.root);
+      final (frontier, minPly) = TreeBuildService.prepareResumeFrontier(t.root);
       expect(frontier, containsAll([t.e4e5nf3, t.d4]));
       expect(minPly, 1);
     });
 
-    test('legacy nodes without priority get reach probability on resume',
-        () async {
-      final t = StandardTree();
-      void markExplored(BuildTreeNode n) {
-        n.explored = true;
-        for (final c in n.children) {
-          markExplored(c);
+    test(
+      'legacy nodes without priority get reach probability on resume',
+      () async {
+        final t = StandardTree();
+        void markExplored(BuildTreeNode n) {
+          n.explored = true;
+          for (final c in n.children) {
+            markExplored(c);
+          }
         }
-      }
 
-      markExplored(t.root);
-      // A legacy unexplored leaf: no searchPriority persisted.
-      t.e4e5nf3.explored = false;
-      t.e4e5nf3.searchPriority = -1.0;
-      t.e4e5nf3.cumulativeProbability = 0.55;
+        markExplored(t.root);
+        // A legacy unexplored leaf: no searchPriority persisted.
+        t.e4e5nf3.explored = false;
+        t.e4e5nf3.searchPriority = -1.0;
+        t.e4e5nf3.cumulativeProbability = 0.55;
 
-      final tree = BuildTree(
-        root: t.root,
-        totalNodes: 11,
-        configSnapshot: const {},
-      );
-      tree.computeMetadata();
+        final tree = BuildTree(
+          root: t.root,
+          totalNodes: 11,
+          configSnapshot: const {},
+        );
+        tree.computeMetadata();
 
-      final service = TreeBuildService();
-      await service.build(
-        config: _headlessConfig(),
-        isCancelled: () => false,
-        onProgress: (_) {},
-        existingTree: tree,
-      );
+        final service = TreeBuildService();
+        await service.build(
+          config: _headlessConfig(),
+          isCancelled: () => false,
+          onProgress: (_) {},
+          existingTree: tree,
+        );
 
-      expect(t.e4e5nf3.searchPriority, closeTo(0.55, 1e-9));
-    });
+        expect(t.e4e5nf3.searchPriority, closeTo(0.55, 1e-9));
+      },
+    );
   });
 
   group('coverage sweep — no silent holes', () {
-    test('removes dangling our-turn leaves below the coverage floor',
-        () async {
+    test('removes dangling our-turn leaves below the coverage floor', () async {
       final t = StandardTree();
       void markExplored(BuildTreeNode n) {
         n.explored = true;
@@ -560,8 +563,11 @@ void main() {
 
       // The uncovered dangling leaf must be gone: its parent no longer
       // lists it and the node count dropped.
-      expect(t.e4.children.contains(t.e4e5), isFalse,
-          reason: 'uncovered our-turn hole must be removed');
+      expect(
+        t.e4.children.contains(t.e4e5),
+        isFalse,
+        reason: 'uncovered our-turn hole must be removed',
+      );
       expect(result.totalNodes, lessThan(nodesBefore));
     });
 

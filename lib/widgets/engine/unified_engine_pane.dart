@@ -41,7 +41,7 @@ class UnifiedEnginePane extends StatefulWidget {
   final bool? isUserTurn;
   final Function(String uciMove)? onMoveSelected;
   final void Function(List<String> sanMoves, int clickedIndex)?
-      onLineMoveTapped;
+  onLineMoveTapped;
   final List<String> currentMoveSequence;
   final bool isWhiteRepertoire;
   final VoidCallback? onSetRoot;
@@ -198,7 +198,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
 
     // Restart only when engine becomes usable again (toggle on / exit generation),
     // not when analysis finishes (analyzing → idle) or we enter analyzing.
-    final becameUsable = (prev == null ||
+    final becameUsable =
+        (prev == null ||
             prev == EngineState.off ||
             prev == EngineState.generating) &&
         (state == EngineState.idle || state == EngineState.analyzing) &&
@@ -259,13 +260,16 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     }
 
     final useStockfish = _settings.showStockfish;
-    final useMaia = _settings.showMaia &&
+    final useMaia =
+        _settings.showMaia &&
         _settings.fetchMaiaForOpponent &&
         MaiaFactory.isAvailable &&
         MaiaFactory.instance != null;
 
-    _perfLog('Pipeline START — SF=${useStockfish ? "ON" : "OFF"}, '
-        'Maia=${useMaia ? "ON" : "OFF"}, DB=OFF');
+    _perfLog(
+      'Pipeline START — SF=${useStockfish ? "ON" : "OFF"}, '
+      'Maia=${useMaia ? "ON" : "OFF"}, DB=OFF',
+    );
 
     try {
       // ── Fire all sources in parallel ──
@@ -277,14 +281,12 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
             )
           : Future.value(const DiscoveryResult());
 
-      final maiaFuture =
-          useMaia ? _runMaiaAnalysis() : Future.value(<String, double>{});
+      final maiaFuture = useMaia
+          ? _runMaiaAnalysis()
+          : Future.value(<String, double>{});
 
       // ── Await all ──
-      final results = await Future.wait<Object?>([
-        discoveryFuture,
-        maiaFuture,
-      ]);
+      final results = await Future.wait<Object?>([discoveryFuture, maiaFuture]);
 
       if (!mounted || _analysisGeneration != myGen) {
         _analysis.endEnginePaneAnalysis(widget.fen);
@@ -306,9 +308,11 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
       final candidates = _filterCandidates(sfUcis, _maiaProbs!, dbData);
       _selectedMoveUcis = candidates;
 
-      _perfLog('Filtered ${candidates.length} candidates '
-          '(${sfUcis.length} SF + '
-          '${candidates.length - sfUcis.length} Maia/DB)');
+      _perfLog(
+        'Filtered ${candidates.length} candidates '
+        '(${sfUcis.length} SF + '
+        '${candidates.length - sfUcis.length} Maia/DB)',
+      );
 
       // ── Start evaluation phase ──
       _analysis.startEvaluation(
@@ -386,8 +390,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
     }
     _perfLog('Maia inference START');
     try {
-      final result =
-          await MaiaFactory.instance!.evaluate(widget.fen, _settings.maiaElo);
+      final result = await MaiaFactory.instance!.evaluate(
+        widget.fen,
+        _settings.maiaElo,
+      );
       _perfLog('Maia inference DONE — ${result.policy.length} moves');
       return result.policy;
     } catch (e) {
@@ -457,7 +463,8 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
         EngineLifecycle.instance.onAnalysisComplete();
         _analysis.endEnginePaneAnalysis(_currentAnalysisFen);
         _perfLog(
-            'Evaluation COMPLETE — ${_analysis.results.value.length} evals');
+          'Evaluation COMPLETE — ${_analysis.results.value.length} evals',
+        );
         _trySaveCurrentToCache();
       }
     });
@@ -469,10 +476,7 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (!widget.compact) ...[
-          _buildSettingsBar(),
-          const Divider(height: 1),
-        ],
+        if (!widget.compact) ...[_buildSettingsBar(), const Divider(height: 1)],
         if (EngineGate.isLocked)
           const Expanded(child: EngineBusyNotice())
         else if (_engineEnabled) ...[
@@ -510,8 +514,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                           'Depth ${ps.discoveryDepth} • '
                           '${formatNodes(ps.discoveryNodes)} nodes • '
                           '${formatNps(ps.discoveryNps)} n/s',
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[400]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[400],
+                          ),
                           overflow: TextOverflow.ellipsis,
                         );
                       }
@@ -524,8 +530,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                           'Evaluating ${ps.completedMoves}/${ps.totalMoves}: '
                           '$sans  |  '
                           'Workers: ${ps.activeWorkers}',
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[400]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[400],
+                          ),
                           overflow: TextOverflow.ellipsis,
                         );
                       }
@@ -533,8 +541,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                       if (ps.isComplete) {
                         return Text(
                           '${ps.totalMoves} moves analyzed',
-                          style:
-                              TextStyle(fontSize: 12, color: Colors.grey[400]),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[400],
+                          ),
                         );
                       }
 
@@ -602,8 +612,10 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
                         const SizedBox(width: 8),
                         Text(
                           'Analyzing...',
-                          style:
-                              TextStyle(color: Colors.grey[500], fontSize: 13),
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 13,
+                          ),
                         ),
                       ],
                     ),
@@ -667,8 +679,9 @@ class _UnifiedEnginePaneState extends State<UnifiedEnginePane> {
           ? '$tooltipExtra\n$_colHeaderTip'
           : _colHeaderTip,
       child: Material(
-        color:
-            muted ? Colors.white.withValues(alpha: 0.04) : Colors.transparent,
+        color: muted
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(4),
         child: InkWell(
           onTap: () {

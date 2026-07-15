@@ -135,10 +135,13 @@ class _StudyScreenState extends State<StudyScreen> {
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, controller.text),
-              child: const Text('OK')),
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('OK'),
+          ),
         ],
       ),
     );
@@ -168,7 +171,9 @@ class _StudyScreenState extends State<StudyScreen> {
   void _startNameEdit() {
     _nameEditController.text = _study.doc.name;
     _nameEditController.selection = TextSelection(
-        baseOffset: 0, extentOffset: _nameEditController.text.length);
+      baseOffset: 0,
+      extentOffset: _nameEditController.text.length,
+    );
     setState(() => _editingName = true);
   }
 
@@ -197,8 +202,9 @@ class _StudyScreenState extends State<StudyScreen> {
         content: const Text('The PGN file will be permanently deleted.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
             onPressed: () => Navigator.pop(ctx, true),
@@ -236,15 +242,18 @@ class _StudyScreenState extends State<StudyScreen> {
         builder: (ctx) => AlertDialog(
           title: const Text('Replace starting position?'),
           content: Text(
-              'Chapter "${_study.chapter.name}" already has moves; setting a '
-              'new starting position will clear them.'),
+            'Chapter "${_study.chapter.name}" already has moves; setting a '
+            'new starting position will clear them.',
+          ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Replace')),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Replace'),
+            ),
           ],
         ),
       );
@@ -265,12 +274,17 @@ class _StudyScreenState extends State<StudyScreen> {
   /// comments shown as the note), optionally with every variation expanded
   /// into an extra card starting at its branch point.  Review stats write
   /// back into this file's headers.
-  Future<void> _review(
-      {required bool wholeStudy, required bool includeVariations}) async {
+  Future<void> _review({
+    required bool wholeStudy,
+    required bool includeVariations,
+  }) async {
     final path = _study.doc.filePath;
     if (path == null) {
-      showAppSnackBar(context, 'Save the study first (create it by name).',
-          isError: true);
+      showAppSnackBar(
+        context,
+        'Save the study first (create it by name).',
+        isError: true,
+      );
       return;
     }
     final hasMoves = wholeStudy
@@ -278,33 +292,39 @@ class _StudyScreenState extends State<StudyScreen> {
         : _study.chapterHasMoves;
     if (!hasMoves) {
       showAppSnackBar(
-          context,
-          wholeStudy
-              ? 'No chapters with moves to review yet.'
-              : 'This chapter has no moves to review yet.',
-          isError: true);
+        context,
+        wholeStudy
+            ? 'No chapters with moves to review yet.'
+            : 'This chapter has no moves to review yet.',
+        isError: true,
+      );
       return;
     }
     await _study.flushSave();
     if (!mounted) return;
     context.read<AppState>().switchToTacticsReview(
-          path: path,
-          gameIndex: wholeStudy ? null : _study.chapterIndex,
-          includeVariations: includeVariations,
-        );
+      path: path,
+      gameIndex: wholeStudy ? null : _study.chapterIndex,
+      includeVariations: includeVariations,
+    );
   }
 
   Future<void> _renameChapter() async {
-    final name =
-        await _promptName('Rename chapter', initial: _study.chapter.name);
+    final name = await _promptName(
+      'Rename chapter',
+      initial: _study.chapter.name,
+    );
     if (name == null) return;
     _study.renameChapter(_study.chapterIndex, name);
   }
 
   Future<void> _deleteChapter() async {
     if (_study.doc.chapters.length <= 1) {
-      showAppSnackBar(context, 'A study needs at least one chapter.',
-          isError: true);
+      showAppSnackBar(
+        context,
+        'A study needs at least one chapter.',
+        isError: true,
+      );
       return;
     }
     final confirmed = await showDialog<bool>(
@@ -313,8 +333,9 @@ class _StudyScreenState extends State<StudyScreen> {
         title: Text('Delete chapter "${_study.chapter.name}"?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red[700]),
             onPressed: () => Navigator.pop(ctx, true),
@@ -357,13 +378,15 @@ class _StudyScreenState extends State<StudyScreen> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'chapter', child: Text('Review chapter')),
               PopupMenuItem(
-                  value: 'chapter_vars',
-                  child: Text('Review chapter + variations')),
+                value: 'chapter_vars',
+                child: Text('Review chapter + variations'),
+              ),
               PopupMenuDivider(),
               PopupMenuItem(value: 'study', child: Text('Review study')),
               PopupMenuItem(
-                  value: 'study_vars',
-                  child: Text('Review study + variations')),
+                value: 'study_vars',
+                child: Text('Review study + variations'),
+              ),
             ],
           ),
           IconButton(
@@ -376,7 +399,8 @@ class _StudyScreenState extends State<StudyScreen> {
             tooltip: 'Make puzzle from this position',
             onPressed: () {
               context.read<AppState>().switchToPuzzleCreator(
-                  seedFen: _study.currentPosition.fen);
+                seedFen: _study.currentPosition.fen,
+              );
             },
           ),
           const AppModeMenuButton(),
@@ -392,16 +416,20 @@ class _StudyScreenState extends State<StudyScreen> {
             final board = _buildBoardPane();
             final side = _buildSidePane();
             return compact
-                ? Column(children: [
-                    Expanded(flex: 5, child: board),
-                    const Divider(height: 1),
-                    Expanded(flex: 4, child: side),
-                  ])
-                : Row(children: [
-                    Expanded(flex: 5, child: board),
-                    Container(width: 1, color: Colors.grey[700]),
-                    Expanded(flex: 4, child: side),
-                  ]);
+                ? Column(
+                    children: [
+                      Expanded(flex: 5, child: board),
+                      const Divider(height: 1),
+                      Expanded(flex: 4, child: side),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(flex: 5, child: board),
+                      Container(width: 1, color: Colors.grey[700]),
+                      Expanded(flex: 4, child: side),
+                    ],
+                  );
           },
         ),
       ),
@@ -443,8 +471,10 @@ class _StudyScreenState extends State<StudyScreen> {
                 decoration: const InputDecoration(
                   isDense: true,
                   border: OutlineInputBorder(),
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                 ),
                 onSubmitted: (_) => _commitNameEdit(),
               ),
@@ -459,8 +489,10 @@ class _StudyScreenState extends State<StudyScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 260),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
                   child: Text(
                     isExternal ? '${current.name} (set)' : current.name,
                     style: theme.textTheme.bodyMedium,
@@ -501,7 +533,9 @@ class _StudyScreenState extends State<StudyScreen> {
             },
             itemBuilder: (_) => [
               const PopupMenuItem(
-                  value: 'delete', child: Text('Delete study…')),
+                value: 'delete',
+                child: Text('Delete study…'),
+              ),
             ],
           ),
       ],
@@ -551,8 +585,11 @@ class _StudyScreenState extends State<StudyScreen> {
           padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
           child: Row(
             children: [
-              Icon(Icons.bookmark_outline,
-                  size: 16, color: theme.colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.bookmark_outline,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: DropdownButton<int>(
@@ -600,18 +637,26 @@ class _StudyScreenState extends State<StudyScreen> {
                 },
                 itemBuilder: (_) => const [
                   PopupMenuItem(
-                      value: 'review', child: Text('Review this chapter')),
+                    value: 'review',
+                    child: Text('Review this chapter'),
+                  ),
                   PopupMenuDivider(),
                   PopupMenuItem(
-                      value: 'add_from_position',
-                      child: Text('New chapter from position…')),
+                    value: 'add_from_position',
+                    child: Text('New chapter from position…'),
+                  ),
                   PopupMenuItem(
-                      value: 'set_position',
-                      child: Text('Set starting position…')),
+                    value: 'set_position',
+                    child: Text('Set starting position…'),
+                  ),
                   PopupMenuItem(
-                      value: 'rename', child: Text('Rename chapter…')),
+                    value: 'rename',
+                    child: Text('Rename chapter…'),
+                  ),
                   PopupMenuItem(
-                      value: 'delete', child: Text('Delete chapter…')),
+                    value: 'delete',
+                    child: Text('Delete chapter…'),
+                  ),
                 ],
               ),
             ],

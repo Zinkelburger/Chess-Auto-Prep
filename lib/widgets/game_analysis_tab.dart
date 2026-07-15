@@ -85,10 +85,12 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       _lastAlignedNearestIdx = null;
     }
     if (widget.currentPly != oldWidget.currentPly) {
-      final branchPly =
-          _activeBestLinePly != null ? _activeBestLinePly! - 1 : null;
-      final expectedBranchPly =
-          _activeExpectedMovePly != null ? _activeExpectedMovePly! - 1 : null;
+      final branchPly = _activeBestLinePly != null
+          ? _activeBestLinePly! - 1
+          : null;
+      final expectedBranchPly = _activeExpectedMovePly != null
+          ? _activeExpectedMovePly! - 1
+          : null;
       if (widget.currentPly != branchPly &&
           widget.currentPly != expectedBranchPly) {
         _activeBestLinePly = null;
@@ -147,10 +149,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       final renderObject = ctx.findRenderObject();
       final scrollable = Scrollable.maybeOf(ctx);
       if (renderObject == null || scrollable == null) return;
-      scrollable.position.ensureVisible(
-        renderObject,
-        alignment: 0.5,
-      );
+      scrollable.position.ensureVisible(renderObject, alignment: 0.5);
     });
   }
 
@@ -483,9 +482,7 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
         decoration: isNearest
             ? BoxDecoration(
                 color: Colors.white.withAlpha(12),
-                border: Border(
-                  left: BorderSide(color: classColor, width: 3),
-                ),
+                border: Border(left: BorderSide(color: classColor, width: 3)),
               )
             : null,
         child: Column(
@@ -510,8 +507,10 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: classColor.withAlpha(30),
                     borderRadius: BorderRadius.circular(4),
@@ -530,7 +529,11 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                   const SizedBox(width: 6),
                   const Tooltip(
                     message: 'You found a better move here!',
-                    child: Icon(Icons.emoji_events, color: Colors.amber, size: 16),
+                    child: Icon(
+                      Icons.emoji_events,
+                      color: Colors.amber,
+                      size: 16,
+                    ),
                   ),
                 ],
                 const Spacer(),
@@ -562,8 +565,10 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                   onMoveTapped: (idx) => _onBestLineMoveClicked(e, idx),
                   label: 'Best: ',
                   fontSize: 14,
-                  movePadding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                  movePadding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 4,
+                  ),
                 ),
               ),
           ],
@@ -583,7 +588,9 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       TextSpan(
         text: '${e.san} ',
         style: monoStyle.copyWith(
-            color: AppColors.maia, fontWeight: FontWeight.bold),
+          color: AppColors.maia,
+          fontWeight: FontWeight.bold,
+        ),
       ),
       TextSpan(
         text: '$playedEval ',
@@ -601,7 +608,9 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
       final isExpectedActive = _activeExpectedMovePly == e.ply;
       spans.addAll([
         TextSpan(
-            text: '  ·  ', style: monoStyle.copyWith(color: Colors.grey[600])),
+          text: '  ·  ',
+          style: monoStyle.copyWith(color: Colors.grey[600]),
+        ),
         WidgetSpan(
           alignment: PlaceholderAlignment.baseline,
           baseline: TextBaseline.alphabetic,
@@ -620,13 +629,16 @@ class _GameAnalysisTabState extends State<GameAnalysisTab> {
                 child: Text(
                   e.maiaTopMove!,
                   style: monoStyle.copyWith(
-                    color:
-                        isExpectedActive ? Colors.white : AppColors.pgnMainLine,
+                    color: isExpectedActive
+                        ? Colors.white
+                        : AppColors.pgnMainLine,
                     fontWeight: FontWeight.bold,
-                    decoration:
-                        isExpectedActive ? null : TextDecoration.underline,
-                    decorationColor:
-                        AppColors.pgnMainLine.withValues(alpha: 0.31),
+                    decoration: isExpectedActive
+                        ? null
+                        : TextDecoration.underline,
+                    decorationColor: AppColors.pgnMainLine.withValues(
+                      alpha: 0.31,
+                    ),
                     decorationStyle: TextDecorationStyle.dotted,
                   ),
                 ),

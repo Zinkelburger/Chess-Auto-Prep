@@ -79,14 +79,12 @@ class DraftFilters {
 }
 
 class GamesDraft {
-  GamesDraft({
-    required this.tree,
-    required this.isWhite,
-  }) : diff = RepertoireDiff.compute(
-          tree: tree,
-          repertoire: MoveTree(),
-          isWhite: isWhite,
-        );
+  GamesDraft({required this.tree, required this.isWhite})
+    : diff = RepertoireDiff.compute(
+        tree: tree,
+        repertoire: MoveTree(),
+        isWhite: isWhite,
+      );
 
   /// Build a draft and classify it against an existing repertoire (review
   /// mode). Pass an empty [MoveTree] for the bootstrap case.
@@ -95,10 +93,10 @@ class GamesDraft {
     required this.isWhite,
     required MoveTree repertoire,
   }) : diff = RepertoireDiff.compute(
-          tree: tree,
-          repertoire: repertoire,
-          isWhite: isWhite,
-        );
+         tree: tree,
+         repertoire: repertoire,
+         isWhite: isWhite,
+       );
 
   final OpeningTree tree;
   final bool isWhite;

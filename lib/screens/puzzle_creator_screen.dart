@@ -37,10 +37,8 @@ class PuzzleCreatorScreen extends StatefulWidget {
   }) {
     return Navigator.of(context).push<TacticsPosition>(
       MaterialPageRoute(
-        builder: (_) => PuzzleCreatorScreen(
-          database: database,
-          initialFen: initialFen,
-        ),
+        builder: (_) =>
+            PuzzleCreatorScreen(database: database, initialFen: initialFen),
       ),
     );
   }
@@ -95,8 +93,10 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
         Navigator.of(context).pop(puzzle);
       } else {
         showAppSnackBar(
-            context, 'A puzzle with this position already exists.',
-            isError: true);
+          context,
+          'A puzzle with this position already exists.',
+          isError: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -122,16 +122,20 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
             child: _buildSidePanel(),
           );
           return compact
-              ? Column(children: [
-                  Expanded(flex: 5, child: board),
-                  const Divider(height: 1),
-                  Expanded(flex: 4, child: panel),
-                ])
-              : Row(children: [
-                  Expanded(flex: 5, child: board),
-                  Container(width: 1, color: Colors.grey[700]),
-                  Expanded(flex: 4, child: panel),
-                ]);
+              ? Column(
+                  children: [
+                    Expanded(flex: 5, child: board),
+                    const Divider(height: 1),
+                    Expanded(flex: 4, child: panel),
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(flex: 5, child: board),
+                    Container(width: 1, color: Colors.grey[700]),
+                    Expanded(flex: 4, child: panel),
+                  ],
+                );
         },
       ),
     );
@@ -157,8 +161,11 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
                             _creator.step == CreatorStep.recordSolution,
                         onMove: (move) {
                           if (!_creator.playMoveSan(move.san)) {
-                            showAppSnackBar(context, 'Move rejected.',
-                                isError: true);
+                            showAppSnackBar(
+                              context,
+                              'Move rejected.',
+                              isError: true,
+                            );
                           }
                         },
                       ),
@@ -177,10 +184,10 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
   Widget _buildSidePanel() {
     return switch (_creator.step) {
       CreatorStep.setup => PositionSetupPanel(
-          controller: _creator.editor,
-          actionLabel: 'Record solution',
-          onAction: (_) => _creator.startRecording(),
-        ),
+        controller: _creator.editor,
+        actionLabel: 'Record solution',
+        onAction: (_) => _creator.startRecording(),
+      ),
       CreatorStep.recordSolution => _buildRecordingPanel(),
       CreatorStep.details => _buildDetailsPanel(),
     };
@@ -203,9 +210,12 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
         const SizedBox(height: 4),
         Expanded(
           child: _creator.solutionSan.isEmpty
-              ? Text('No moves yet.',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant))
+              ? Text(
+                  'No moves yet.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                )
               : SingleChildScrollView(
                   child: Wrap(
                     spacing: 6,
@@ -237,8 +247,9 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
             OutlinedButton.icon(
               icon: const Icon(Icons.undo, size: 16),
               label: const Text('Undo move'),
-              onPressed:
-                  _creator.solutionSan.isEmpty ? null : _creator.undoLastMove,
+              onPressed: _creator.solutionSan.isEmpty
+                  ? null
+                  : _creator.undoLastMove,
             ),
             const SizedBox(width: 8),
             OutlinedButton(
@@ -264,8 +275,10 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Solution: ${_creator.solutionSan.join(' ')}',
-              style: theme.textTheme.bodyMedium),
+          Text(
+            'Solution: ${_creator.solutionSan.join(' ')}',
+            style: theme.textTheme.bodyMedium,
+          ),
           const SizedBox(height: 16),
           TextField(
             controller: _noteCtrl,
@@ -315,8 +328,8 @@ class _PuzzleCreatorScreenState extends State<PuzzleCreatorScreen> {
                     color: Colors.amber,
                   ),
                   visualDensity: VisualDensity.compact,
-                  onPressed: () => setState(
-                      () => _rating = star == _rating ? 0 : star),
+                  onPressed: () =>
+                      setState(() => _rating = star == _rating ? 0 : star),
                 ),
             ],
           ),

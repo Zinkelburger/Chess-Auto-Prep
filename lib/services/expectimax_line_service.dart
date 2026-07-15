@@ -41,15 +41,15 @@ class ExpectimaxLine {
 
   /// Same line at a different display rank.
   ExpectimaxLine withRank(int newRank) => ExpectimaxLine(
-        rank: newRank,
-        expectimaxValue: expectimaxValue,
-        expectedEvalCp: expectedEvalCp,
-        evalCp: evalCp,
-        depth: depth,
-        movesSan: movesSan,
-        movesUci: movesUci,
-        moveInfo: moveInfo,
-      );
+    rank: newRank,
+    expectimaxValue: expectimaxValue,
+    expectedEvalCp: expectedEvalCp,
+    evalCp: evalCp,
+    depth: depth,
+    movesSan: movesSan,
+    movesUci: movesUci,
+    moveInfo: moveInfo,
+  );
 
   factory ExpectimaxLine.fromPath(
     BuildTreeNode start,
@@ -69,16 +69,17 @@ class ExpectimaxLine {
       movesSan: path.map((n) => n.moveSan).toList(),
       movesUci: path.map((n) => n.moveUci).toList(),
       moveInfo: path
-          .map((n) => ExpectimaxMoveInfo(
-                moveProbability: n.moveProbability,
-                isOurMove: n.isWhiteToMove != config.playAsWhite,
-                isRepertoireMove: n.isRepertoireMove,
-                evalCp:
-                    n.hasEngineEval ? n.evalForUs(config.playAsWhite) : null,
-                ease: n.ease,
-                trapScore: n.trapScore >= 0 ? n.trapScore : null,
-                expectimaxValue: n.hasExpectimax ? n.expectimaxValue : null,
-              ))
+          .map(
+            (n) => ExpectimaxMoveInfo(
+              moveProbability: n.moveProbability,
+              isOurMove: n.isWhiteToMove != config.playAsWhite,
+              isRepertoireMove: n.isRepertoireMove,
+              evalCp: n.hasEngineEval ? n.evalForUs(config.playAsWhite) : null,
+              ease: n.ease,
+              trapScore: n.trapScore >= 0 ? n.trapScore : null,
+              expectimaxValue: n.hasExpectimax ? n.expectimaxValue : null,
+            ),
+          )
           .toList(),
     );
   }
@@ -171,7 +172,8 @@ List<ExpectimaxLine> generateExpectimaxLines(
     for (final child in start.children) {
       if (!child.hasExpectimax) continue;
       scored.add(
-          ScoredChild(child: child, expectimaxValue: child.expectimaxValue));
+        ScoredChild(child: child, expectimaxValue: child.expectimaxValue),
+      );
     }
     scored.sort((a, b) => b.expectimaxValue.compareTo(a.expectimaxValue));
     for (var i = 0; i < limit && i < scored.length; i++) {
@@ -195,12 +197,14 @@ List<ExpectimaxLine> generateExpectimaxLines(
       maxPlies: maxPlies - 1,
       fenMap: fenMap,
     );
-    lines.add(ExpectimaxLine.fromPath(
-      start,
-      [firstChild, ...continuation],
-      config,
-      rank: i + 1,
-    ));
+    lines.add(
+      ExpectimaxLine.fromPath(
+        start,
+        [firstChild, ...continuation],
+        config,
+        rank: i + 1,
+      ),
+    );
   }
 
   return lines;
@@ -233,11 +237,7 @@ ExpectimaxLine? generateLineForFirstMove(
 
 /// True when [fen] exists in [tree] with expectimax and the subtree reaches
 /// at least [targetPly] (suitable for multi-move precomputed PV).
-bool hasPrecomputedExpectimaxAtPly(
-  BuildTree tree,
-  String fen,
-  int targetPly,
-) {
+bool hasPrecomputedExpectimaxAtPly(BuildTree tree, String fen, int targetPly) {
   final node = findNodeByFen(tree, fen);
   if (node == null || !node.hasExpectimax || node.children.isEmpty) {
     return false;

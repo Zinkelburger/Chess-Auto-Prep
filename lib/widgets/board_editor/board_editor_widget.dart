@@ -85,8 +85,7 @@ class _BoardEditorWidgetState extends State<BoardEditorWidget> {
 
   void _onPanUpdate(DragUpdateDetails details) {
     if (_draggedPiece == null || _panStart == null) return;
-    if (!_isDragging &&
-        (details.localPosition - _panStart!).distance > 3) {
+    if (!_isDragging && (details.localPosition - _panStart!).distance > 3) {
       _isDragging = true;
     }
     if (_isDragging) {
@@ -157,7 +156,9 @@ class _BoardEditorWidgetState extends State<BoardEditorWidget> {
                     top: _dragPosition!.dy - squareSize / 2,
                     child: IgnorePointer(
                       child: PieceImage(
-                          piece: _draggedPiece!, size: squareSize),
+                        piece: _draggedPiece!,
+                        size: squareSize,
+                      ),
                     ),
                   ),
               ],
@@ -176,15 +177,17 @@ class _BoardEditorWidgetState extends State<BoardEditorWidget> {
       if (piece == null) continue;
       if (_isDragging && square == _dragFrom) continue;
       final (x, y) = _squareOrigin(square, squareSize);
-      widgets.add(Positioned(
-        left: x,
-        top: y,
-        width: squareSize,
-        height: squareSize,
-        child: IgnorePointer(
-          child: PieceImage(piece: piece, size: squareSize),
+      widgets.add(
+        Positioned(
+          left: x,
+          top: y,
+          width: squareSize,
+          height: squareSize,
+          child: IgnorePointer(
+            child: PieceImage(piece: piece, size: squareSize),
+          ),
         ),
-      ));
+      );
     }
     return widgets;
   }
@@ -204,7 +207,11 @@ class _EditorBoardPainter extends CustomPainter {
         final isLight = (col + row) % 2 == 0;
         canvas.drawRect(
           Rect.fromLTWH(
-              col * squareSize, row * squareSize, squareSize, squareSize),
+            col * squareSize,
+            row * squareSize,
+            squareSize,
+            squareSize,
+          ),
           Paint()..color = isLight ? lightColor : darkColor,
         );
       }

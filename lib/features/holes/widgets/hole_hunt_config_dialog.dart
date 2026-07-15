@@ -57,14 +57,11 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
     _maxPlyCtrl = TextEditingController(text: '${c.maxPly}');
     _maiaEloCtrl = TextEditingController(text: '${c.maiaElo}');
     _trapLeavesCtrl = TextEditingController(text: '${c.trapLeafCount}');
-    _strongWindowCtrl =
-        TextEditingController(text: '${c.strongMoveWindowCp}');
-    _refutationCtrl =
-        TextEditingController(text: '${c.refutationThresholdCp}');
+    _strongWindowCtrl = TextEditingController(text: '${c.strongMoveWindowCp}');
+    _refutationCtrl = TextEditingController(text: '${c.refutationThresholdCp}');
     _verifyDepthCtrl = TextEditingController(text: '${c.verifyDepth}');
     _trapPlyCtrl = TextEditingController(text: '${c.trapSearchPly}');
-    _trapGapCtrl =
-        TextEditingController(text: '${c.practicalGapThresholdCp}');
+    _trapGapCtrl = TextEditingController(text: '${c.practicalGapThresholdCp}');
   }
 
   @override
@@ -91,15 +88,14 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
       maiaElo: int.tryParse(_maiaEloCtrl.text) ?? defaults.maiaElo,
       trapLeafCount:
           int.tryParse(_trapLeavesCtrl.text) ?? defaults.trapLeafCount,
-      strongMoveWindowCp: int.tryParse(_strongWindowCtrl.text) ??
-          defaults.strongMoveWindowCp,
-      refutationThresholdCp: int.tryParse(_refutationCtrl.text) ??
-          defaults.refutationThresholdCp,
+      strongMoveWindowCp:
+          int.tryParse(_strongWindowCtrl.text) ?? defaults.strongMoveWindowCp,
+      refutationThresholdCp:
+          int.tryParse(_refutationCtrl.text) ?? defaults.refutationThresholdCp,
       verifyDepth: int.tryParse(_verifyDepthCtrl.text) ?? defaults.verifyDepth,
-      trapSearchPly:
-          int.tryParse(_trapPlyCtrl.text) ?? defaults.trapSearchPly,
-      practicalGapThresholdCp: int.tryParse(_trapGapCtrl.text) ??
-          defaults.practicalGapThresholdCp,
+      trapSearchPly: int.tryParse(_trapPlyCtrl.text) ?? defaults.trapSearchPly,
+      practicalGapThresholdCp:
+          int.tryParse(_trapGapCtrl.text) ?? defaults.practicalGapThresholdCp,
     );
   }
 
@@ -131,13 +127,17 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                 segments: const [
                   ButtonSegment(
                     value: true,
-                    label: Text('Attack this player',
-                        style: TextStyle(fontSize: 12)),
+                    label: Text(
+                      'Attack this player',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                   ButtonSegment(
                     value: false,
-                    label: Text('Stress-test my own play',
-                        style: TextStyle(fontSize: 12)),
+                    label: Text(
+                      'Stress-test my own play',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                 ],
                 selected: {_attackMode},
@@ -154,7 +154,7 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                 _attackMode
                     ? 'You play $attackerColor against these $treeColor lines.'
                     : 'Finds what a prepared $attackerColor opponent could '
-                        'exploit in these games.',
+                          'exploit in these games.',
                 style: TextStyle(fontSize: 12, color: Colors.grey[500]),
               ),
               const SizedBox(height: 16),
@@ -183,9 +183,10 @@ class _HoleHuntConfigDialogState extends State<HoleHuntConfigDialog> {
                       color: Colors.grey[500],
                     ),
                     const SizedBox(width: 4),
-                    Text('More thresholds',
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.grey[500])),
+                    Text(
+                      'More thresholds',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    ),
                   ],
                 ),
               ),

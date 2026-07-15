@@ -121,10 +121,7 @@ void main() {
     });
 
     test('sanSequenceAt returns SAN list', () {
-      expect(
-        tree.sanSequenceAt(TreePath.from([0, 0, 0])),
-        ['e4', 'e5', 'Nf3'],
-      );
+      expect(tree.sanSequenceAt(TreePath.from([0, 0, 0])), ['e4', 'e5', 'Nf3']);
     });
 
     test('sanSequenceAt empty path returns empty', () {
@@ -224,13 +221,18 @@ void main() {
   group('MoveTree PGN round-trip', () {
     test('fromPgn parses simple mainline', () {
       final tree = MoveTree.fromPgn('[Event "Test"]\n\n1. e4 e5 2. Nf3 Nc6');
-      expect(tree.sanSequenceAt(tree.mainlineEndFrom(TreePath.empty)),
-          ['e4', 'e5', 'Nf3', 'Nc6']);
+      expect(tree.sanSequenceAt(tree.mainlineEndFrom(TreePath.empty)), [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+      ]);
     });
 
     test('fromPgn parses variations', () {
       final tree = MoveTree.fromPgn(
-          '[Event "Test"]\n\n1. e4 e5 (1... c5 2. Nf3) 2. Nf3');
+        '[Event "Test"]\n\n1. e4 e5 (1... c5 2. Nf3) 2. Nf3',
+      );
       expect(tree.roots[0].san, 'e4');
       final e4Children = tree.roots[0].children;
       expect(e4Children.length, 2);

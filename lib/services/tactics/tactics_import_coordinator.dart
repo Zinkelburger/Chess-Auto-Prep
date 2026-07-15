@@ -33,7 +33,7 @@ class TacticsImportParams {
 
 class TacticsImportCoordinator extends ChangeNotifier {
   TacticsImportCoordinator({TacticsDatabase? database})
-      : database = database ?? TacticsDatabase();
+    : database = database ?? TacticsDatabase();
 
   final TacticsDatabase database;
 
@@ -100,8 +100,9 @@ class TacticsImportCoordinator extends ChangeNotifier {
   }) async {
     if (isImporting) return;
 
-    final importService =
-        activeImport = TacticsImportService(database: database);
+    final importService = activeImport = TacticsImportService(
+      database: database,
+    );
 
     importStatus = 'Resuming analysis…';
     isImporting = true;
@@ -147,8 +148,9 @@ class TacticsImportCoordinator extends ChangeNotifier {
       throw const TacticsImportUsernameRequired();
     }
 
-    final importService =
-        activeImport = TacticsImportService(database: database);
+    final importService = activeImport = TacticsImportService(
+      database: database,
+    );
     final depth = params.depth.clamp(1, 25);
     final cores = params.cores.clamp(1, TacticsImportService.availableCores);
 
@@ -160,8 +162,9 @@ class TacticsImportCoordinator extends ChangeNotifier {
     try {
       await importService.initialize();
 
-      final since =
-          params.mode == TacticsImportMode.sinceDate ? params.since : null;
+      final since = params.mode == TacticsImportMode.sinceDate
+          ? params.since
+          : null;
 
       final ImportResult result;
       if (source == TacticsImportSource.lichess) {
@@ -202,10 +205,12 @@ class TacticsImportCoordinator extends ChangeNotifier {
       activeImport = null;
       isImporting = false;
       await refreshPendingCount(
-        lichessUsername:
-            source == TacticsImportSource.lichess ? params.username : null,
-        chesscomUsername:
-            source == TacticsImportSource.chessCom ? params.username : null,
+        lichessUsername: source == TacticsImportSource.lichess
+            ? params.username
+            : null,
+        chesscomUsername: source == TacticsImportSource.chessCom
+            ? params.username
+            : null,
       );
     }
   }
@@ -244,16 +249,24 @@ class TacticsImportCoordinator extends ChangeNotifier {
           onFetched?.call(source, DateTime.now());
         }
       } catch (e) {
-        log.w('Auto-fetch ${source.name} failed: $e',
-            name: 'TacticsImportCoordinator');
+        log.w(
+          'Auto-fetch ${source.name} failed: $e',
+          name: 'TacticsImportCoordinator',
+        );
         dismissImportStatus();
       }
     }
 
     await fetchOne(
-        TacticsImportSource.lichess, lichessUsername, lichessLastFetch);
+      TacticsImportSource.lichess,
+      lichessUsername,
+      lichessLastFetch,
+    );
     await fetchOne(
-        TacticsImportSource.chessCom, chesscomUsername, chesscomLastFetch);
+      TacticsImportSource.chessCom,
+      chesscomUsername,
+      chesscomLastFetch,
+    );
   }
 
   /// Ask the running import to stop. `isImporting` stays true until the run

@@ -58,8 +58,10 @@ class _PgnCommentEditorState extends State<PgnCommentEditor> {
               style: TextStyle(fontSize: 13, color: Colors.grey[200]),
               decoration: InputDecoration(
                 isDense: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 4,
+                ),
                 border: InputBorder.none,
                 hintText: 'Comment',
                 hintStyle: TextStyle(color: Colors.grey[600], fontSize: 13),

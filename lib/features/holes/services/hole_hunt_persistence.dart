@@ -27,21 +27,20 @@ class HoleHuntSnapshot {
   });
 
   Map<String, dynamic> toJson() => {
-        'version': 1,
-        'isComplete': isComplete,
-        if (!isComplete) 'partial': true,
-        'config': config.toMap(),
-        'result': result.toJson(),
-      };
+    'version': 1,
+    'isComplete': isComplete,
+    if (!isComplete) 'partial': true,
+    'config': config.toMap(),
+    'result': result.toJson(),
+  };
 
-  factory HoleHuntSnapshot.fromJson(Map<String, dynamic> j) =>
-      HoleHuntSnapshot(
-        result: AuditResult.fromJson(j['result'] as Map<String, dynamic>),
-        config: j['config'] != null
-            ? HoleHuntConfig.fromMap(j['config'] as Map<String, dynamic>)
-            : const HoleHuntConfig(),
-        isComplete: j['isComplete'] as bool? ?? true,
-      );
+  factory HoleHuntSnapshot.fromJson(Map<String, dynamic> j) => HoleHuntSnapshot(
+    result: AuditResult.fromJson(j['result'] as Map<String, dynamic>),
+    config: j['config'] != null
+        ? HoleHuntConfig.fromMap(j['config'] as Map<String, dynamic>)
+        : const HoleHuntConfig(),
+    isComplete: j['isComplete'] as bool? ?? true,
+  );
 }
 
 class HoleHuntPersistence {
@@ -57,11 +56,13 @@ class HoleHuntPersistence {
       if (!exists) return null;
       final json = await StorageFactory.instance.readFile(path);
       if (json == null || json.isEmpty) return null;
-      final snapshot =
-          HoleHuntSnapshot.fromJson(jsonDecode(json) as Map<String, dynamic>);
+      final snapshot = HoleHuntSnapshot.fromJson(
+        jsonDecode(json) as Map<String, dynamic>,
+      );
       debugPrint(
-          '[HoleHuntPersistence] restored ${snapshot.result.findings.length} '
-          'findings from $path');
+        '[HoleHuntPersistence] restored ${snapshot.result.findings.length} '
+        'findings from $path',
+      );
       return snapshot;
     } catch (e) {
       debugPrint('[HoleHuntPersistence] Failed to load: $e');
@@ -98,17 +99,23 @@ class HoleHuntPersistence {
         // Best-effort; failure here is non-fatal and intentionally ignored.
       }
     }
-    await _write(path, HoleHuntSnapshot(result: result, config: effectiveConfig));
+    await _write(
+      path,
+      HoleHuntSnapshot(result: result, config: effectiveConfig),
+    );
   }
 
   Future<void> _write(String? path, HoleHuntSnapshot snapshot) async {
     if (path == null || path.isEmpty) return;
     try {
-      await StorageFactory.instance
-          .writeFile(path, jsonEncode(snapshot.toJson()));
+      await StorageFactory.instance.writeFile(
+        path,
+        jsonEncode(snapshot.toJson()),
+      );
       debugPrint(
-          '[HoleHuntPersistence] saved ${snapshot.result.findings.length} '
-          'findings (complete=${snapshot.isComplete}) to $path');
+        '[HoleHuntPersistence] saved ${snapshot.result.findings.length} '
+        'findings (complete=${snapshot.isComplete}) to $path',
+      );
     } catch (e) {
       debugPrint('[HoleHuntPersistence] Failed to save: $e');
     }

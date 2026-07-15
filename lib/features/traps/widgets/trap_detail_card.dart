@@ -72,15 +72,21 @@ class TrapDetailCard extends StatelessWidget {
     return Row(
       children: [
         if (index != null) ...[
-          Text('Trap #${index! + 1}',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+          Text(
+            'Trap #${index! + 1}',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const Spacer(),
         ],
         if (trap.openingName != null)
-          Text(trap.openingName!,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.primary)),
+          Text(
+            trap.openingName!,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.primary,
+            ),
+          ),
       ],
     );
   }
@@ -90,8 +96,8 @@ class TrapDetailCard extends StatelessWidget {
       sanMoves: trap.movesSan,
       startPly: 0,
       maxMoves: trap.movesSan.length,
-      onMoveTapped: onMoveTapped ??
-          (onShowPath != null ? (_) => onShowPath!() : null),
+      onMoveTapped:
+          onMoveTapped ?? (onShowPath != null ? (_) => onShowPath!() : null),
       onMoveHovered: (idx, _) {
         final fen = fenAfterMoves(kStandardStartFen, trap.movesSan, idx);
         boardPreview.setPreview(fen);
@@ -111,11 +117,16 @@ class TrapDetailCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Opponent is tempted to play ${trap.popularMove}',
-              style: theme.textTheme.bodyLarge
-                  ?.copyWith(fontWeight: FontWeight.w600)),
-          Text('$probPct% of humans choose this move',
-              style: theme.textTheme.bodyMedium),
+          Text(
+            'Opponent is tempted to play ${trap.popularMove}',
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            '$probPct% of humans choose this move',
+            style: theme.textTheme.bodyMedium,
+          ),
         ],
       ),
     );
@@ -170,24 +181,36 @@ class TrapDetailCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('YOUR REPLY',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green[700])),
+                Text(
+                  'YOUR REPLY',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green[700],
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text.rich(TextSpan(children: [
-                  const TextSpan(
-                      text: 'After they blunder, play ',
-                      style: TextStyle(fontSize: 13)),
+                Text.rich(
                   TextSpan(
-                      text: trap.refutationMove!,
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.bold)),
-                  TextSpan(
-                      text: ' (eval $evalText)',
-                      style: const TextStyle(fontSize: 13)),
-                ])),
+                    children: [
+                      const TextSpan(
+                        text: 'After they blunder, play ',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                      TextSpan(
+                        text: trap.refutationMove!,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' (eval $evalText)',
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -198,8 +221,9 @@ class TrapDetailCard extends StatelessWidget {
 
   String _bestMoveProb() {
     if (trap.allReplies == null) return '?';
-    final best =
-        trap.allReplies!.where((r) => r.classification == TrapReplyClass.good);
+    final best = trap.allReplies!.where(
+      (r) => r.classification == TrapReplyClass.good,
+    );
     if (best.isEmpty) return '?';
     return '${(best.first.probability * 100).toStringAsFixed(0)}%';
   }
@@ -231,9 +255,12 @@ class TrapDetailCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('ALL OPPONENT RESPONSES',
-            style: theme.textTheme.labelSmall
-                ?.copyWith(fontWeight: FontWeight.bold)),
+        Text(
+          'ALL OPPONENT RESPONSES',
+          style: theme.textTheme.labelSmall?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 4),
         Table(
           columnWidths: const {
@@ -272,8 +299,10 @@ class TrapDetailCard extends StatelessWidget {
           onExit: (_) => boardPreview.clearPreview(),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(reply.san,
-                style: const TextStyle(fontWeight: FontWeight.w500)),
+            child: Text(
+              reply.san,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
           ),
         ),
         Padding(
@@ -291,8 +320,10 @@ class TrapDetailCard extends StatelessWidget {
             children: [
               Icon(classInfo.$2, size: 14, color: classInfo.$3),
               const SizedBox(width: 4),
-              Text(classInfo.$1,
-                  style: TextStyle(fontSize: 11, color: classInfo.$3)),
+              Text(
+                classInfo.$1,
+                style: TextStyle(fontSize: 11, color: classInfo.$3),
+              ),
             ],
           ),
         ),
@@ -303,9 +334,14 @@ class TrapDetailCard extends StatelessWidget {
   Widget _headerCell(String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Text(text,
-          style: const TextStyle(
-              fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey,
+        ),
+      ),
     );
   }
 
@@ -314,10 +350,10 @@ class TrapDetailCard extends StatelessWidget {
       TrapReplyClass.blunder => ('BLUNDER', Icons.close, Colors.red),
       TrapReplyClass.mistake => ('MISTAKE', Icons.error_outline, Colors.orange),
       TrapReplyClass.inaccuracy => (
-          'INACCURACY',
-          Icons.warning_amber,
-          Colors.amber
-        ),
+        'INACCURACY',
+        Icons.warning_amber,
+        Colors.amber,
+      ),
       TrapReplyClass.acceptable => ('ACCEPTABLE', Icons.remove, Colors.grey),
       TrapReplyClass.good => ('GOOD', Icons.check, Colors.green),
     };
@@ -391,15 +427,19 @@ class _ComparisonBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: classColor)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: classColor,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(move,
-              style:
-                  const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(
+            move,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
           Text('Eval: $evalText', style: const TextStyle(fontSize: 12)),
           Text('Probability: $probText', style: const TextStyle(fontSize: 12)),
           const SizedBox(height: 4),
@@ -408,11 +448,14 @@ class _ComparisonBox extends StatelessWidget {
             children: [
               Icon(icon, size: 14, color: classColor),
               const SizedBox(width: 4),
-              Text(classification,
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: classColor)),
+              Text(
+                classification,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: classColor,
+                ),
+              ),
             ],
           ),
         ],
@@ -436,9 +479,14 @@ class _StatChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value,
-            style: TextStyle(
-                fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
         Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
       ],
     );

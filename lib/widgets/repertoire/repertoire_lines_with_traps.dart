@@ -15,10 +15,7 @@ import 'repertoire_analyze_props.dart';
 ///
 /// Used for compact analyze layout; wide layout uses [RepertoireAnalyzePane].
 class RepertoireLinesWithTraps extends StatefulWidget {
-  const RepertoireLinesWithTraps({
-    super.key,
-    required this.props,
-  });
+  const RepertoireLinesWithTraps({super.key, required this.props});
 
   final RepertoireAnalyzeProps props;
 
@@ -64,7 +61,8 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
   @override
   Widget build(BuildContext context) {
     final props = _props;
-    final hasAnyCollapsible = props.traps.isNotEmpty ||
+    final hasAnyCollapsible =
+        props.traps.isNotEmpty ||
         props.coherenceResult != null ||
         props.hasSuggestionMetrics ||
         props.currentRepertoire != null;
@@ -72,7 +70,8 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
     return Column(
       children: [
         Expanded(
-          flex: hasAnyCollapsible &&
+          flex:
+              hasAnyCollapsible &&
                   (_trapsExpanded ||
                       _coherenceExpanded ||
                       _suggestionsExpanded ||
@@ -117,8 +116,7 @@ class _RepertoireLinesWithTrapsState extends State<RepertoireLinesWithTraps> {
                 boardPreview: props.boardPreview,
                 onTrapSelected: props.onTrapSelected,
                 metrics: TrapIndexService(props.traps).metrics,
-                repertoireLineMoves:
-                    props.lines.map((l) => l.moves).toList(),
+                repertoireLineMoves: props.lines.map((l) => l.moves).toList(),
                 onStartTour: props.onStartTrapTour,
               ),
             ),

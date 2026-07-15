@@ -193,7 +193,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         _linesPanelWidth = prefs.getDouble(_kLinesPanelWidth);
       });
     } catch (e) {
-      log.w('Failed to load lines panel pref', name: 'RepertoireScreen', error: e);
+      log.w(
+        'Failed to load lines panel pref',
+        name: 'RepertoireScreen',
+        error: e,
+      );
     }
   }
 
@@ -202,7 +206,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kLinesPanelCollapsed, _linesPanelCollapsed);
     } catch (e) {
-      log.w('Failed to save lines panel pref', name: 'RepertoireScreen', error: e);
+      log.w(
+        'Failed to save lines panel pref',
+        name: 'RepertoireScreen',
+        error: e,
+      );
     }
   }
 
@@ -219,8 +227,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_kLinesPanelWidth, width);
     } catch (e) {
-      log.w('Failed to save lines panel width',
-          name: 'RepertoireScreen', error: e);
+      log.w(
+        'Failed to save lines panel width',
+        name: 'RepertoireScreen',
+        error: e,
+      );
     }
   }
 
@@ -271,9 +282,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _openGenerationDialog();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _generationTabKey.currentState?.seedDbExplorer(
-        pgnPaths: [path],
-      );
+      _generationTabKey.currentState?.seedDbExplorer(pgnPaths: [path]);
     });
   }
 
@@ -308,11 +317,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       // Load the requested repertoire if different from current
       final currentPath = _controller.currentRepertoire?.filePath;
       if (currentPath != path) {
-        _controller.setRepertoire(RepertoireMetadata(
-          filePath: path,
-          name: p.basenameWithoutExtension(path),
-          lastModified: DateTime.now(),
-        ));
+        _controller.setRepertoire(
+          RepertoireMetadata(
+            filePath: path,
+            name: p.basenameWithoutExtension(path),
+            lastModified: DateTime.now(),
+          ),
+        );
       }
       if (lineId != null) {
         _openLineAfterLoad(lineId);
@@ -449,7 +460,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     try {
       context.read<AppState>().removeListener(_onAppStateChanged);
     } catch (e) {
-      log.w('dispose listener cleanup failed', name: 'RepertoireScreen', error: e);
+      log.w(
+        'dispose listener cleanup failed',
+        name: 'RepertoireScreen',
+        error: e,
+      );
     }
 
     super.dispose();
@@ -561,10 +576,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               children: [
                 const Icon(Icons.error_outline, size: 64, color: Colors.red),
                 const SizedBox(height: 16),
-                Text(
-                  loadError,
-                  textAlign: TextAlign.center,
-                ),
+                Text(loadError, textAlign: TextAlign.center),
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _reloadRepertoire,
@@ -780,13 +792,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 findingsCount: _auditController.activeFindingCount,
                 jobsStatus: _generationController.isGenerating
                     ? (_generationController.isPaused
-                        ? 'Paused'
-                        : 'Generating...')
+                          ? 'Paused'
+                          : 'Generating...')
                     : _auditController.isAuditing
-                        ? (_auditController.isPaused
-                            ? 'Audit paused'
-                            : 'Auditing...')
-                        : null,
+                    ? (_auditController.isPaused
+                          ? 'Audit paused'
+                          : 'Auditing...')
+                    : null,
                 onFindingsTap: () => _toggleBottomPane(BottomPaneTab.findings),
                 onJobsTap: () => _toggleBottomPane(BottomPaneTab.jobs),
               ),
@@ -800,8 +812,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   Widget _buildWideLayout() {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final defaultWidth =
-            (constraints.maxWidth * 0.24).clamp(260.0, 400.0).toDouble();
+        final defaultWidth = (constraints.maxWidth * 0.24)
+            .clamp(260.0, 400.0)
+            .toDouble();
         final maxWidth = (constraints.maxWidth * 0.45)
             .clamp(_kLinesPanelMinWidth, constraints.maxWidth)
             .toDouble();
@@ -813,8 +826,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         // children, which cannot lay out under the Row's unbounded width.
         // maxHeight matches the width the square board resolves to anyway
         // (board side + padding), so the no-bar geometry is unchanged.
-        final boardZoneWidth =
-            constraints.maxHeight.clamp(0.0, constraints.maxWidth * 0.5);
+        final boardZoneWidth = constraints.maxHeight.clamp(
+          0.0,
+          constraints.maxWidth * 0.5,
+        );
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -861,15 +876,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   Widget _buildCompactLayout() {
     return Column(
       children: [
-        Expanded(
-          flex: 4,
-          child: _buildBoardZone(),
-        ),
+        Expanded(flex: 4, child: _buildBoardZone()),
         const Divider(height: 1, thickness: 1),
-        Expanded(
-          flex: 5,
-          child: _buildToolsColumn(),
-        ),
+        Expanded(flex: 5, child: _buildToolsColumn()),
       ],
     );
   }
@@ -892,8 +901,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             ),
           ),
         ),
-        if (_isBuildSessionActive)
-          BuildSessionBoardBar(session: _buildSession),
+        if (_isBuildSessionActive) BuildSessionBoardBar(session: _buildSession),
         if (_ephemeralFinding != null)
           EphemeralFindingBar(
             finding: _ephemeralFinding!,
@@ -957,8 +965,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
               const SizedBox(height: 8),
               Tooltip(
                 message: 'Show lines (L)',
-                child: Icon(Icons.keyboard_double_arrow_left,
-                    size: 16, color: theme.hintColor),
+                child: Icon(
+                  Icons.keyboard_double_arrow_left,
+                  size: 16,
+                  color: theme.hintColor,
+                ),
               ),
               const SizedBox(height: 12),
               RotatedBox(
@@ -967,15 +978,15 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   _isBuildSessionActive
                       ? 'Session'
                       : _isDraftActive
-                          ? 'Draft'
-                          : 'Lines (${_controller.repertoireLines.length})',
+                      ? 'Draft'
+                      : 'Lines (${_controller.repertoireLines.length})',
                   style: TextStyle(
                     fontSize: 11,
                     color: _isBuildSessionActive
                         ? theme.colorScheme.primary
                         : _isDraftActive
-                            ? AppColors.warning
-                            : theme.hintColor,
+                        ? AppColors.warning
+                        : theme.hintColor,
                     fontWeight: _isBuildSessionActive || _isDraftActive
                         ? FontWeight.w600
                         : null,
@@ -998,8 +1009,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 onPressed: () => _setLinesPanelCollapsed(true),
                 tooltip: 'Hide lines (L)',
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints(minWidth: 28, minHeight: 28),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
               Expanded(
                 child: TabBar(
@@ -1021,10 +1031,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             child: TabBarView(
               controller: _sidePanelTabController,
               physics: const NeverScrollableScrollPhysics(),
-              children: [
-                _buildSecondTabContent(),
-                _buildTreeTabContent(),
-              ],
+              children: [_buildSecondTabContent(), _buildTreeTabContent()],
             ),
           ),
         ],
@@ -1051,8 +1058,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(_draftController.progress,
-                  textAlign: TextAlign.center),
+              child: Text(
+                _draftController.progress,
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),
@@ -1110,9 +1119,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                 ),
               ),
               VerticalDivider(
-                  width: 1,
-                  thickness: 1,
-                  color: Theme.of(context).dividerColor),
+                width: 1,
+                thickness: 1,
+                color: Theme.of(context).dividerColor,
+              ),
               Expanded(
                 child: InlineExpectimaxBar(
                   controller: _controller,
@@ -1125,8 +1135,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                   isGenerating: _generationController.isGenerating,
                   isGenerationPaused: _generationController.isPaused,
                   // Follow the scratchpad while a session explores.
-                  fenOverride:
-                      _isBuildSessionActive ? _buildSession.boardFen : null,
+                  fenOverride: _isBuildSessionActive
+                      ? _buildSession.boardFen
+                      : null,
                 ),
               ),
             ],
@@ -1146,11 +1157,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   Widget _buildToolsTabBar() {
     return TabBar(
       controller: _toolsTabController,
-      tabs: [
-        _buildPgnTabLabel(),
-        _buildLinesTabLabel(),
-        _buildTreeTabLabel(),
-      ],
+      tabs: [_buildPgnTabLabel(), _buildLinesTabLabel(), _buildTreeTabLabel()],
       labelPadding: const EdgeInsets.symmetric(horizontal: 12),
       indicatorSize: TabBarIndicatorSize.label,
       dividerHeight: 1,
@@ -1175,8 +1182,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     final highlight = _isBuildSessionActive
         ? Theme.of(context).colorScheme.primary
         : _isDraftActive
-            ? AppColors.warning
-            : null;
+        ? AppColors.warning
+        : null;
     return Tab(
       height: 30,
       child: Row(
@@ -1186,8 +1193,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             _isBuildSessionActive
                 ? Icons.sports_esports
                 : _isDraftActive
-                    ? Icons.download_done
-                    : Icons.list_alt,
+                ? Icons.download_done
+                : Icons.list_alt,
             size: 14,
             color: highlight,
           ),
@@ -1196,8 +1203,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
             _isBuildSessionActive
                 ? 'Session'
                 : _isDraftActive
-                    ? 'Draft'
-                    : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
+                ? 'Draft'
+                : 'Lines${_traps.isNotEmpty ? ' & Traps' : ''}',
             style: TextStyle(
               fontSize: 12,
               color: highlight,
@@ -1227,9 +1234,7 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return Container(
       height: 28,
       decoration: BoxDecoration(
-        border: Border(
-          top: BorderSide(color: Theme.of(context).dividerColor),
-        ),
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -1342,10 +1347,12 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       },
       onRerunAudit: () => _openAuditDialog(forceConfig: true),
       interruptedSnapshot: ac.interruptedSnapshot,
-      onResumeAudit:
-          ac.interruptedSnapshot != null ? _resumeInterruptedAudit : null,
-      onStartFreshAudit:
-          ac.interruptedSnapshot != null ? _startFreshAudit : null,
+      onResumeAudit: ac.interruptedSnapshot != null
+          ? _resumeInterruptedAudit
+          : null,
+      onStartFreshAudit: ac.interruptedSnapshot != null
+          ? _startFreshAudit
+          : null,
       onStartAudit: () => _openAuditDialog(forceConfig: true),
     );
   }
@@ -1576,10 +1583,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
                               'Traps (${_traps.length})',
                               style: const TextStyle(fontSize: 11),
                             ),
-                            icon: Icon(Icons.warning_amber_rounded,
-                                size: 14,
-                                color:
-                                    _showTrapsInLinesTab ? null : Colors.grey),
+                            icon: Icon(
+                              Icons.warning_amber_rounded,
+                              size: 14,
+                              color: _showTrapsInLinesTab ? null : Colors.grey,
+                            ),
                           ),
                         ],
                         selected: {_showTrapsInLinesTab},
@@ -1616,8 +1624,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       traps: _traps,
       trapIndex: _trapIndex,
       currentMoveSequence: _controller.currentMoveSequence,
-      repertoireLineMoves:
-          _controller.repertoireLines.map((l) => l.moves).toList(),
+      repertoireLineMoves: _controller.repertoireLines
+          .map((l) => l.moves)
+          .toList(),
       boardPreview: _boardPreview,
       hasRepertoire: _repertoireFilePath != null,
       onTrapSelected: _showTrapLine,
@@ -1731,8 +1740,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       atRoot: !standardStart || _controller.currentMoveSequence.isEmpty,
       rootFen: kStandardStartFen,
       currentFen: standardStart ? _controller.fen : null,
-      currentMoveSans:
-          standardStart ? _controller.currentMoveSequence : const [],
+      currentMoveSans: standardStart
+          ? _controller.currentMoveSequence
+          : const [],
     );
     if (config == null || !mounted) return;
 
@@ -1750,9 +1760,9 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       repertoire: _controller.tree,
     );
     if (error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error),
-      ));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error)));
     }
   }
 
@@ -1869,8 +1879,11 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     } catch (e) {
       log.w('Clipboard read failed', name: 'RepertoireScreen', error: e);
       if (mounted) {
-        showAppSnackBar(context, AppMessages.clipboardReadFailed,
-            isError: true);
+        showAppSnackBar(
+          context,
+          AppMessages.clipboardReadFailed,
+          isError: true,
+        );
       }
     }
   }
@@ -1943,21 +1956,22 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         tree: tree,
         isWhiteRepertoire: _controller.isRepertoireWhite,
         onProgress: (message, progress) {
-          job.updateProgress(JobProgress(
-            fraction: progress ?? 0,
-            message: message,
-          ));
+          job.updateProgress(
+            JobProgress(fraction: progress ?? 0, message: message),
+          );
         },
       );
       if (result != null) {
-        job.updateProgress(JobProgress(
-          fraction: 1,
-          message:
-              '${result.coveragePercent.toStringAsFixed(1)}% covered, '
-              '${result.tooShallowLeaves.length} shallow, '
-              '${result.tooDeepLeaves.length} deep, '
-              '${result.unaccountedMoves.length} unaccounted',
-        ));
+        job.updateProgress(
+          JobProgress(
+            fraction: 1,
+            message:
+                '${result.coveragePercent.toStringAsFixed(1)}% covered, '
+                '${result.tooShallowLeaves.length} shallow, '
+                '${result.tooDeepLeaves.length} deep, '
+                '${result.unaccountedMoves.length} unaccounted',
+          ),
+        );
       }
       job.updateStatus(JobStatus.completed);
       if (result != null && mounted) {
@@ -1998,8 +2012,8 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   void _trainRepertoire() {
     if (_controller.currentRepertoire == null) return;
     context.read<AppState>().switchToTrainer(
-          repertoirePath: _controller.currentRepertoire!.filePath,
-        );
+      repertoirePath: _controller.currentRepertoire!.filePath,
+    );
   }
 
   Future<void> _importPgnFromFile() async {

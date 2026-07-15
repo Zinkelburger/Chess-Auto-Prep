@@ -21,14 +21,14 @@ class AnalyzeContextZone extends StatefulWidget {
     this.initialView,
     this.onViewChanged,
   }) : assert(
-          trapsContent != null ||
-              evalTreeContent != null ||
-              metricsContent != null ||
-              trapsBuilder != null ||
-              evalTreeBuilder != null ||
-              metricsBuilder != null,
-          'Provide at least one context content slot or builder',
-        );
+         trapsContent != null ||
+             evalTreeContent != null ||
+             metricsContent != null ||
+             trapsBuilder != null ||
+             evalTreeBuilder != null ||
+             metricsBuilder != null,
+         'Provide at least one context content slot or builder',
+       );
 
   final Widget? trapsContent;
   final Widget? evalTreeContent;
@@ -56,10 +56,10 @@ class _AnalyzeContextZoneState extends State<AnalyzeContextZone> {
       widget.metricsContent != null || widget.metricsBuilder != null;
 
   List<AnalyzeContextView> get _availableViews => [
-        if (_hasTrapsSlot()) AnalyzeContextView.traps,
-        if (_hasEvalTreeSlot()) AnalyzeContextView.evalTree,
-        if (_hasMetricsSlot()) AnalyzeContextView.metrics,
-      ];
+    if (_hasTrapsSlot()) AnalyzeContextView.traps,
+    if (_hasEvalTreeSlot()) AnalyzeContextView.evalTree,
+    if (_hasMetricsSlot()) AnalyzeContextView.metrics,
+  ];
 
   @override
   void initState() {

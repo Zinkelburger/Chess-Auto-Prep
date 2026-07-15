@@ -111,8 +111,7 @@ class AutoPlayEngine {
     if (!isPlaying || _lastStepTime == null) return;
 
     _timer?.cancel();
-    final elapsedMs =
-        DateTime.now().difference(_lastStepTime!).inMilliseconds;
+    final elapsedMs = DateTime.now().difference(_lastStepTime!).inMilliseconds;
     final newDelayMs = (val * 1000).round();
     final remainingMs = newDelayMs - elapsedMs;
 

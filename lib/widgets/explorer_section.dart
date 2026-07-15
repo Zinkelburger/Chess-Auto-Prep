@@ -86,8 +86,9 @@ class _ExplorerSectionState extends State<ExplorerSection> {
   }
 
   void _rebuildTrapIndex() {
-    _trapIndexCache =
-        widget.traps.isEmpty ? null : TrapIndexService(widget.traps);
+    _trapIndexCache = widget.traps.isEmpty
+        ? null
+        : TrapIndexService(widget.traps);
   }
 
   void _rebuildCandidateService() {
@@ -212,16 +213,16 @@ class _ExplorerSectionState extends State<ExplorerSection> {
         color: theme.colorScheme.surfaceContainerHighest,
         child: Row(
           children: [
-            Icon(
-              _expanded ? Icons.expand_more : Icons.chevron_right,
-              size: 16,
-            ),
+            Icon(_expanded ? Icons.expand_more : Icons.chevron_right, size: 16),
             const SizedBox(width: 4),
-            Text('Explorer',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[400])),
+            Text(
+              'Explorer',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[400],
+              ),
+            ),
             const Spacer(),
             if (_expanded)
               SizedBox(
@@ -247,7 +248,8 @@ class _ExplorerSectionState extends State<ExplorerSection> {
   }
 
   Widget _buildBrowseContent() {
-    final isOurTurn = widget.controller.position.turn ==
+    final isOurTurn =
+        widget.controller.position.turn ==
         (widget.controller.isRepertoireWhite ? Side.white : Side.black);
 
     return SizedBox(
@@ -270,13 +272,15 @@ class _ExplorerSectionState extends State<ExplorerSection> {
           });
         },
         onTrapGo: (trap) {
-          widget.navigationStack.push(NavigationEntry(
-            tabIndex: 0,
-            fen: widget.controller.fen,
-            label:
-                'Explorer · ${widget.controller.currentMoveSequence.lastOrNull ?? 'start'}',
-            reason: 'trap',
-          ));
+          widget.navigationStack.push(
+            NavigationEntry(
+              tabIndex: 0,
+              fen: widget.controller.fen,
+              label:
+                  'Explorer · ${widget.controller.currentMoveSequence.lastOrNull ?? 'start'}',
+              reason: 'trap',
+            ),
+          );
           widget.controller.loadMoveSequence(trap.movesSan);
         },
         onBack: widget.controller.goBack,
@@ -291,8 +295,10 @@ class _ExplorerSectionState extends State<ExplorerSection> {
     if (widget.controller.openingTree == null) {
       return const Padding(
         padding: EdgeInsets.all(12),
-        child: Text('No opening tree available',
-            style: TextStyle(color: Colors.grey, fontSize: 12)),
+        child: Text(
+          'No opening tree available',
+          style: TextStyle(color: Colors.grey, fontSize: 12),
+        ),
       );
     }
     return SizedBox(

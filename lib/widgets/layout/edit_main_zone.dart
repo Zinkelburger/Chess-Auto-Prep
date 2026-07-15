@@ -82,7 +82,8 @@ class EditMainZone extends StatelessWidget {
       onLineEdited: onLineEdited,
       onAutoSave: onAutoSave,
       onDirty: onDirty,
-      onCopyToClipboard: onCopyToClipboard ??
+      onCopyToClipboard:
+          onCopyToClipboard ??
           (text, message) => _copyToClipboard(context, text, message),
       onViewInLines: onViewInLines,
       trapIndex: trapIndex,

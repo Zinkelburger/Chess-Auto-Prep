@@ -116,8 +116,10 @@ class RepertoireSelector {
       return winner;
     }
 
-    final bestCp =
-        bestSiblingEvalCp(node.children, playAsWhite: config.playAsWhite);
+    final bestCp = bestSiblingEvalCp(
+      node.children,
+      playAsWhite: config.playAsWhite,
+    );
     if (bestCp == kWorstEvalCp) return winner;
 
     // Never prefer a setup move the eval-loss guard would reject.
@@ -232,7 +234,8 @@ class RepertoireSelector {
     for (final child in node.children) {
       if (!child.hasExpectimax) continue;
       final myEase = child.myEase >= 0 ? child.myEase : 0.5;
-      final score = child.expectimaxValue * kPlayabilityExpectimaxWeight +
+      final score =
+          child.expectimaxValue * kPlayabilityExpectimaxWeight +
           myEase * kPlayabilityEaseWeight;
       if (score > bestScore) {
         bestScore = score;

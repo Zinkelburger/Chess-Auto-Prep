@@ -58,11 +58,13 @@ String buildSolutionMovetext(
   }
   if (solutionSan.isNotEmpty) {
     final setup = Setup.parseFen(fen);
-    buf.write(buildNumberedMovetext(
-      solutionSan,
-      startMoveNumber: setup.fullmoves,
-      whiteToMoveFirst: setup.turn == Side.white,
-    ));
+    buf.write(
+      buildNumberedMovetext(
+        solutionSan,
+        startMoveNumber: setup.fullmoves,
+        whiteToMoveFirst: setup.turn == Side.white,
+      ),
+    );
     buf.write(' ');
   }
   buf.write(result);
@@ -119,8 +121,7 @@ String encodePuzzlePgn(
   if (puzzle.rating > 0) header('StarRating', '${puzzle.rating}');
 
   // Longer display PV (the mainline is only the trainable line).
-  if (solutionPvSan.isNotEmpty &&
-      !_sameLine(solutionPvSan, solutionSan)) {
+  if (solutionPvSan.isNotEmpty && !_sameLine(solutionPvSan, solutionSan)) {
     header('SolutionPv', solutionPvSan.join(' '));
   }
 
@@ -161,12 +162,14 @@ bool _sameLine(List<String> a, List<String> b) {
     final puzzle = puzzles[i];
     try {
       final san = engine.lineToSan(puzzle.fen, puzzle.correctLine);
-      games.add(encodePuzzlePgn(
-        puzzle,
-        san,
-        event: '$setName #${i + 1}',
-        solutionPvSan: engine.lineToSan(puzzle.fen, puzzle.solutionPv),
-      ));
+      games.add(
+        encodePuzzlePgn(
+          puzzle,
+          san,
+          event: '$setName #${i + 1}',
+          solutionPvSan: engine.lineToSan(puzzle.fen, puzzle.solutionPv),
+        ),
+      );
       if (san.isEmpty && puzzle.correctLine.isNotEmpty) fallback++;
     } catch (_) {
       dropped++; // unparsable FEN — the trainer could not load it either
@@ -257,34 +260,37 @@ bool _sameLine(List<String> a, List<String> b) {
 
       final setup = Setup.parseFen(fen);
       final side = setup.turn == Side.white ? 'White' : 'Black';
-      puzzles.add(TacticsPosition(
-        fen: fen,
-        userMove: headers['UserMove'] ?? '',
-        correctLine: correctLine,
-        solutionPv: (headers['SolutionPv'] ?? '')
-            .split(RegExp(r'\s+'))
-            .where((s) => s.isNotEmpty)
-            .toList(),
-        mistakeType: headers['MistakeType'] ??
-            TacticsSessionSettings.customMistakeType,
-        mistakeAnalysis: note ?? '',
-        positionContext: 'Move ${setup.fullmoves}, $side to play',
-        gameWhite: _cleanName(headers['White']),
-        gameBlack: _cleanName(headers['Black']),
-        gameResult: headers['Result'] ?? '*',
-        gameDate: headers['Date'] ?? '',
-        gameId: headers['GameId'] ?? '',
-        gameUrl: _cleanName(headers['Site']),
-        opponentBestResponse: headers['OpponentBestResponse'] ?? '',
-        reviewCount: int.tryParse(headers['ReviewCount'] ?? '') ?? 0,
-        successCount: int.tryParse(headers['SuccessCount'] ?? '') ?? 0,
-        lastReviewed: headers['LastReviewed'] != null
-            ? DateTime.tryParse(headers['LastReviewed']!)
-            : null,
-        timeToSolve: double.tryParse(headers['TimeToSolve'] ?? '') ?? 0.0,
-        hintsUsed: int.tryParse(headers['HintsUsed'] ?? '') ?? 0,
-        rating: int.tryParse(headers['StarRating'] ?? '') ?? 0,
-      ));
+      puzzles.add(
+        TacticsPosition(
+          fen: fen,
+          userMove: headers['UserMove'] ?? '',
+          correctLine: correctLine,
+          solutionPv: (headers['SolutionPv'] ?? '')
+              .split(RegExp(r'\s+'))
+              .where((s) => s.isNotEmpty)
+              .toList(),
+          mistakeType:
+              headers['MistakeType'] ??
+              TacticsSessionSettings.customMistakeType,
+          mistakeAnalysis: note ?? '',
+          positionContext: 'Move ${setup.fullmoves}, $side to play',
+          gameWhite: _cleanName(headers['White']),
+          gameBlack: _cleanName(headers['Black']),
+          gameResult: headers['Result'] ?? '*',
+          gameDate: headers['Date'] ?? '',
+          gameId: headers['GameId'] ?? '',
+          gameUrl: _cleanName(headers['Site']),
+          opponentBestResponse: headers['OpponentBestResponse'] ?? '',
+          reviewCount: int.tryParse(headers['ReviewCount'] ?? '') ?? 0,
+          successCount: int.tryParse(headers['SuccessCount'] ?? '') ?? 0,
+          lastReviewed: headers['LastReviewed'] != null
+              ? DateTime.tryParse(headers['LastReviewed']!)
+              : null,
+          timeToSolve: double.tryParse(headers['TimeToSolve'] ?? '') ?? 0.0,
+          hintsUsed: int.tryParse(headers['HintsUsed'] ?? '') ?? 0,
+          rating: int.tryParse(headers['StarRating'] ?? '') ?? 0,
+        ),
+      );
       seenFens.add(fen);
 
       if (includeVariations) {
@@ -333,9 +339,7 @@ void _expandVariations({
       final comments = <String>[];
       for (int t = 0; t < line.plies.length; t++) {
         final ply = line.plies[t];
-        if (cardFen == null &&
-            t >= line.deviation &&
-            pos.turn == solverSide) {
+        if (cardFen == null && t >= line.deviation && pos.turn == solverSide) {
           cardFen = pos.fen;
         }
         final move = pos.parseSan(ply.san);
@@ -350,28 +354,32 @@ void _expandVariations({
       }
       if (cardFen == null || tail.isEmpty) continue; // nothing to solve
       if (!seenFens.add(cardFen)) {
-        errors.add('Game $gameNumber: variation $varNum starts at the same '
-            'position as another card — skipped');
+        errors.add(
+          'Game $gameNumber: variation $varNum starts at the same '
+          'position as another card — skipped',
+        );
         continue;
       }
 
       final setup = Setup.parseFen(cardFen);
       final side = setup.turn == Side.white ? 'White' : 'Black';
-      puzzles.add(TacticsPosition(
-        fen: cardFen,
-        userMove: '',
-        correctLine: tail,
-        mistakeType: TacticsSessionSettings.customMistakeType,
-        mistakeAnalysis: comments.join(' '),
-        positionContext:
-            'Variation $varNum — Move ${setup.fullmoves}, $side to play',
-        gameWhite: _cleanName(headers['White']),
-        gameBlack: _cleanName(headers['Black']),
-        gameResult: headers['Result'] ?? '*',
-        gameDate: headers['Date'] ?? '',
-        gameId: headers['GameId'] ?? '',
-        gameUrl: _cleanName(headers['Site']),
-      ));
+      puzzles.add(
+        TacticsPosition(
+          fen: cardFen,
+          userMove: '',
+          correctLine: tail,
+          mistakeType: TacticsSessionSettings.customMistakeType,
+          mistakeAnalysis: comments.join(' '),
+          positionContext:
+              'Variation $varNum — Move ${setup.fullmoves}, $side to play',
+          gameWhite: _cleanName(headers['White']),
+          gameBlack: _cleanName(headers['Black']),
+          gameResult: headers['Result'] ?? '*',
+          gameDate: headers['Date'] ?? '',
+          gameId: headers['GameId'] ?? '',
+          gameUrl: _cleanName(headers['Site']),
+        ),
+      );
     } catch (e) {
       errors.add('Game $gameNumber: variation $varNum: $e — skipped');
     }
@@ -381,7 +389,8 @@ void _expandVariations({
 /// Every non-mainline root-to-leaf line in a PGN move tree, with the index
 /// of its first ply off the mainline (the first non-first-child choice).
 List<({List<PgnNodeData> plies, int deviation})> _variationLines(
-    PgnNode<PgnNodeData> root) {
+  PgnNode<PgnNodeData> root,
+) {
   final lines = <({List<PgnNodeData> plies, int deviation})>[];
   final prefix = <PgnNodeData>[];
 
@@ -395,8 +404,10 @@ List<({List<PgnNodeData> plies, int deviation})> _variationLines(
     for (int c = 0; c < node.children.length; c++) {
       final child = node.children[c];
       prefix.add(child.data);
-      walk(child,
-          deviation != -1 ? deviation : (c == 0 ? -1 : prefix.length - 1));
+      walk(
+        child,
+        deviation != -1 ? deviation : (c == 0 ? -1 : prefix.length - 1),
+      );
       prefix.removeLast();
     }
   }
@@ -436,9 +447,10 @@ String patchStatsInPgn(String content, List<TacticsPosition> puzzles) {
   // headers for content that has none.  Only patch when the split is exact
   // (every game came from a real `[Event` line), otherwise leave the file
   // untouched — losing a stats write beats corrupting someone's PGN.
-  final eventCount = RegExp(r'^\s*\[Event\b', multiLine: true)
-      .allMatches(stripped)
-      .length;
+  final eventCount = RegExp(
+    r'^\s*\[Event\b',
+    multiLine: true,
+  ).allMatches(stripped).length;
   if (games.isEmpty || eventCount != games.length) return content;
 
   final byFen = {for (final p in puzzles) p.fen: p};

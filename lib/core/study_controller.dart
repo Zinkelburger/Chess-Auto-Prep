@@ -76,9 +76,14 @@ class StudyController extends ChangeNotifier {
   /// so a later autosave can't clobber the addition; otherwise edits the
   /// file on disk directly.
   Future<void> addChapterToStudyFile(
-      String path, String chapterName, String pgn) async {
-    final chapter =
-        StudyChapter(name: chapterName, tree: MoveTree.fromPgn(pgn));
+    String path,
+    String chapterName,
+    String pgn,
+  ) async {
+    final chapter = StudyChapter(
+      name: chapterName,
+      tree: MoveTree.fromPgn(pgn),
+    );
     if (_doc.filePath == path) {
       _doc.chapters.add(chapter);
       _markDirty();
@@ -229,8 +234,9 @@ class StudyController extends ChangeNotifier {
 
   /// Follow the mainline continuation from the cursor, if any.
   void goForward() {
-    final children =
-        _cursor.isEmpty ? tree.roots : (tree.nodeAt(_cursor)?.children ?? []);
+    final children = _cursor.isEmpty
+        ? tree.roots
+        : (tree.nodeAt(_cursor)?.children ?? []);
     if (children.isEmpty) return;
     _cursor = _cursor.child(0);
     notifyListeners();

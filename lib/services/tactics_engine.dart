@@ -118,7 +118,9 @@ class TacticsEngine {
       final topProb = topEntry.value;
 
       final isCapture = _isCaptureUci(pos, topMoveUci);
-      final threshold = isCapture ? maiaMinExtendProbCapture : maiaMinExtendProb;
+      final threshold = isCapture
+          ? maiaMinExtendProbCapture
+          : maiaMinExtendProb;
       if (topProb < threshold) break;
 
       final pvOppUci = _sanToUci(pos, pvSan[pvIdx]);
@@ -347,8 +349,7 @@ class TacticsEngine {
   List<String> correctLineToSan(
     TacticsPosition position, {
     int maxMoves = maxTrainableUserMoves * 2,
-  }) =>
-      lineToSan(position.fen, position.correctLine, maxMoves: maxMoves);
+  }) => lineToSan(position.fen, position.correctLine, maxMoves: maxMoves);
 
   /// Full solution text for display.
   ///

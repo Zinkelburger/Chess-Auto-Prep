@@ -41,8 +41,9 @@ class SettingsSection extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               title,
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w600),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -143,9 +144,7 @@ class SettingsSwitchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final row = Row(
       children: [
-        Expanded(
-          child: Text(label, style: const TextStyle(fontSize: 13)),
-        ),
+        Expanded(child: Text(label, style: const TextStyle(fontSize: 13))),
         Switch(
           value: value,
           onChanged: onChanged,
@@ -358,8 +357,8 @@ class _CompactIntFieldState extends State<_CompactIntField> {
             icon: const Icon(Icons.remove, size: 18),
             onPressed: spec.value > spec.min
                 ? () => spec.onChanged(
-                      (spec.value - spec.step).clamp(spec.min, spec.max),
-                    )
+                    (spec.value - spec.step).clamp(spec.min, spec.max),
+                  )
                 : null,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -385,8 +384,8 @@ class _CompactIntFieldState extends State<_CompactIntField> {
             icon: const Icon(Icons.add, size: 18),
             onPressed: spec.value < spec.max
                 ? () => spec.onChanged(
-                      (spec.value + spec.step).clamp(spec.min, spec.max),
-                    )
+                    (spec.value + spec.step).clamp(spec.min, spec.max),
+                  )
                 : null,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28, minHeight: 28),

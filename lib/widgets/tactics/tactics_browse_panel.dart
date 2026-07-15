@@ -91,8 +91,9 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
 
   void _setShowBoards(bool value) {
     setState(() => _showBoards = value);
-    SharedPreferences.getInstance()
-        .then((prefs) => prefs.setBool(_showBoardsPrefKey, value));
+    SharedPreferences.getInstance().then(
+      (prefs) => prefs.setBool(_showBoardsPrefKey, value),
+    );
   }
 
   List<int> _buildVisibleIndices() {
@@ -240,10 +241,10 @@ class _TacticsBrowsePanelState extends State<TacticsBrowsePanel> {
                 // Plain click edits; the play button loads it for training.
                 onTap: _selectMode
                     ? () => setState(() {
-                          _selected.contains(realIndex)
-                              ? _selected.remove(realIndex)
-                              : _selected.add(realIndex);
-                        })
+                        _selected.contains(realIndex)
+                            ? _selected.remove(realIndex)
+                            : _selected.add(realIndex);
+                      })
                     : () => widget.onEditTactic(realIndex),
                 onTrain: () => widget.onSelectTactic(realIndex, visibleIndices),
                 onDelete: () => widget.onDeleteTactic(realIndex),
@@ -290,12 +291,18 @@ class TacticsBrowseHeader extends StatelessWidget {
           const Expanded(flex: 2, child: Text('Context', style: _headerStyle)),
           const SizedBox(width: 8),
           const Expanded(
-              flex: 2, child: Text('Played → Best', style: _headerStyle)),
+            flex: 2,
+            child: Text('Played → Best', style: _headerStyle),
+          ),
           const SizedBox(width: 8),
           const SizedBox(
-              width: 60,
-              child: Text('Stats',
-                  style: _headerStyle, textAlign: TextAlign.right)),
+            width: 60,
+            child: Text(
+              'Stats',
+              style: _headerStyle,
+              textAlign: TextAlign.right,
+            ),
+          ),
         ],
       ),
     );
@@ -347,13 +354,12 @@ class TacticsBrowseRow extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: isSelected || checked
-                ? Theme.of(context)
-                    .colorScheme
-                    .primaryContainer
-                    .withValues(alpha: 0.3)
+                ? Theme.of(
+                    context,
+                  ).colorScheme.primaryContainer.withValues(alpha: 0.3)
                 : (index.isEven
-                    ? Colors.transparent
-                    : Colors.white.withValues(alpha: 0.02)),
+                      ? Colors.transparent
+                      : Colors.white.withValues(alpha: 0.02)),
             border: Border(
               bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.15)),
             ),
@@ -376,28 +382,40 @@ class TacticsBrowseRow extends StatelessWidget {
                 if (onTrain != null)
                   IconButton(
                     onPressed: onTrain,
-                    icon: const Icon(Icons.play_arrow,
-                        size: 18, color: Colors.green),
+                    icon: const Icon(
+                      Icons.play_arrow,
+                      size: 18,
+                      color: Colors.green,
+                    ),
                     tooltip: 'Train this tactic',
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
                     padding: EdgeInsets.zero,
                   ),
                 IconButton(
                   onPressed: onEdit,
                   icon: const Icon(Icons.edit, size: 16),
                   tooltip: 'Edit tactic',
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   padding: EdgeInsets.zero,
                 ),
                 IconButton(
                   onPressed: onDelete,
-                  icon: Icon(Icons.close,
-                      size: 16, color: Colors.red.withValues(alpha: 0.6)),
+                  icon: Icon(
+                    Icons.close,
+                    size: 16,
+                    color: Colors.red.withValues(alpha: 0.6),
+                  ),
                   tooltip: 'Delete tactic',
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   padding: EdgeInsets.zero,
                 ),
               ],
@@ -557,8 +575,10 @@ class _BrowseFilterBar extends StatelessWidget {
             children: [
               Text(
                 '$visibleCount / $totalCount tactics',
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(width: 12),
               InkWell(
@@ -573,20 +593,23 @@ class _BrowseFilterBar extends StatelessWidget {
                         value: showBoards,
                         onChanged: (v) => onShowBoardsChanged(v ?? false),
                         visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Text('Show board previews',
-                        style: TextStyle(fontSize: 12)),
+                    const Text(
+                      'Show board previews',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ],
                 ),
               ),
               const Spacer(),
               if (selectMode) ...[
-                Text('$selectedCount selected',
-                    style: const TextStyle(fontSize: 12)),
+                Text(
+                  '$selectedCount selected',
+                  style: const TextStyle(fontSize: 12),
+                ),
                 const SizedBox(width: 8),
                 TextButton(
                   onPressed: onSelectAll,
@@ -595,10 +618,15 @@ class _BrowseFilterBar extends StatelessWidget {
                 const SizedBox(width: 4),
                 TextButton.icon(
                   onPressed: selectedCount > 0 ? onDeleteSelected : null,
-                  icon: const Icon(Icons.delete_outline,
-                      size: 14, color: Colors.red),
-                  label: const Text('Delete',
-                      style: TextStyle(color: Colors.red, fontSize: 12)),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 14,
+                    color: Colors.red,
+                  ),
+                  label: const Text(
+                    'Delete',
+                    style: TextStyle(color: Colors.red, fontSize: 12),
+                  ),
                 ),
                 const SizedBox(width: 4),
                 TextButton(
@@ -610,8 +638,10 @@ class _BrowseFilterBar extends StatelessWidget {
                   TextButton.icon(
                     onPressed: onCreatePuzzle,
                     icon: const Icon(Icons.add, size: 16),
-                    label: const Text('New puzzle',
-                        style: TextStyle(fontSize: 12)),
+                    label: const Text(
+                      'New puzzle',
+                      style: TextStyle(fontSize: 12),
+                    ),
                   ),
                 IconButton(
                   onPressed: onToggleSelectMode,
@@ -622,10 +652,15 @@ class _BrowseFilterBar extends StatelessWidget {
                 const SizedBox(width: 4),
                 TextButton.icon(
                   onPressed: onClearAll,
-                  icon: const Icon(Icons.delete_outline,
-                      size: 14, color: Colors.red),
-                  label: const Text('Clear All',
-                      style: TextStyle(color: Colors.red, fontSize: 12)),
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 14,
+                    color: Colors.red,
+                  ),
+                  label: const Text(
+                    'Clear All',
+                    style: TextStyle(color: Colors.red, fontSize: 12),
+                  ),
                 ),
               ],
             ],
@@ -666,13 +701,15 @@ class _BrowseFilterBar extends StatelessWidget {
                 onToggle: () => onToggleType('custom'),
               ),
               const SizedBox(width: 8),
-              ...TacticsStatusFilter.values.map((f) => ChoiceChip(
-                    label: Text(f.label, style: const TextStyle(fontSize: 11)),
-                    selected: statusFilter == f,
-                    onSelected: (_) => onStatusChanged(f),
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  )),
+              ...TacticsStatusFilter.values.map(
+                (f) => ChoiceChip(
+                  label: Text(f.label, style: const TextStyle(fontSize: 11)),
+                  selected: statusFilter == f,
+                  onSelected: (_) => onStatusChanged(f),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
               const SizedBox(width: 8),
               _MinRatingChip(
                 minRating: minRating,
@@ -686,16 +723,18 @@ class _BrowseFilterBar extends StatelessWidget {
             children: [
               const Icon(Icons.sort, size: 14, color: Colors.grey),
               const SizedBox(width: 4),
-              ...TacticsBrowseSort.values.map((s) => Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: ChoiceChip(
-                      label: Text(s.label, style: const TextStyle(fontSize: 11)),
-                      selected: sort == s,
-                      onSelected: (_) => onSortChanged(s),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                  )),
+              ...TacticsBrowseSort.values.map(
+                (s) => Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: ChoiceChip(
+                    label: Text(s.label, style: const TextStyle(fontSize: 11)),
+                    selected: sort == s,
+                    onSelected: (_) => onSortChanged(s),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ),
             ],
           ),
         ],
@@ -725,9 +764,14 @@ class _MistakeTypeChip extends StatelessWidget {
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(type,
-              style: TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 12, color: color)),
+          Text(
+            type,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: color,
+            ),
+          ),
           const SizedBox(width: 4),
           Text(label, style: const TextStyle(fontSize: 11)),
         ],
@@ -770,8 +814,11 @@ class _MinRatingChip extends StatelessWidget {
         label: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.star, size: 13,
-                color: minRating > 0 ? Colors.amber : Colors.grey),
+            Icon(
+              Icons.star,
+              size: 13,
+              color: minRating > 0 ? Colors.amber : Colors.grey,
+            ),
             const SizedBox(width: 2),
             Text(
               minRating > 0 ? '$minRating+' : 'Any',

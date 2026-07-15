@@ -220,8 +220,10 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       ...moves,
       ...widget.tree.sanSequenceAt(mainlineEnd).skip(moves.length),
     ];
-    final subtree =
-        MoveTree.fromMoves(fullMoves, startingFen: widget.tree.startingFen);
+    final subtree = MoveTree.fromMoves(
+      fullMoves,
+      startingFen: widget.tree.startingFen,
+    );
     final text = subtree.toPgnMoveText();
     widget.onCopyToClipboard?.call(text, 'Line copied to clipboard');
   }
@@ -254,8 +256,8 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     final title = typed.isNotEmpty
         ? typed
         : (widget.lineTitle?.trim().isNotEmpty ?? false)
-            ? widget.lineTitle!.trim()
-            : 'Repertoire Line';
+        ? widget.lineTitle!.trim()
+        : 'Repertoire Line';
     return widget.tree.toPgn(
       event: title,
       white: _whiteHeader(),
@@ -300,30 +302,38 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         PopupMenuItem(
           enabled: false,
           height: 32,
-          child: Text(moveName,
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: Theme.of(context).colorScheme.onSurface)),
+          child: Text(
+            moveName,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
         ),
         const PopupMenuDivider(height: 1),
         PopupMenuItem(
           value: 'comment',
           child: _PopupMenuRow(
-              icon: Icons.comment,
-              text: hasComment ? 'Edit Comment' : 'Add Comment'),
+            icon: Icons.comment,
+            text: hasComment ? 'Edit Comment' : 'Add Comment',
+          ),
         ),
         if (!isOnMainline)
           const PopupMenuItem(
             value: 'promote',
             child: _PopupMenuRow(
-                icon: Icons.arrow_upward, text: 'Promote Variation'),
+              icon: Icons.arrow_upward,
+              text: 'Promote Variation',
+            ),
           ),
         if (!isOnMainline)
           const PopupMenuItem(
             value: 'mainline',
             child: _PopupMenuRow(
-                icon: Icons.vertical_align_top, text: 'Make Main Line'),
+              icon: Icons.vertical_align_top,
+              text: 'Make Main Line',
+            ),
           ),
         const PopupMenuItem(
           value: 'duplicate',
@@ -332,7 +342,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         const PopupMenuItem(
           value: 'copy',
           child: _PopupMenuRow(
-              icon: Icons.content_copy, text: 'Copy PGN from Here'),
+            icon: Icons.content_copy,
+            text: 'Copy PGN from Here',
+          ),
         ),
         if (widget.isEditingExistingLine && widget.onViewInLines != null)
           const PopupMenuItem(
@@ -343,7 +355,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         const PopupMenuItem(
           value: 'delete',
           child: _PopupMenuRow(
-              icon: Icons.delete_outline, text: 'Delete from Here'),
+            icon: Icons.delete_outline,
+            text: 'Delete from Here',
+          ),
         ),
       ],
     ).then((value) {
@@ -405,8 +419,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                         padding: const EdgeInsets.symmetric(vertical: 3),
                         child: Row(
                           children: [
-                            const Icon(Icons.warning_amber_rounded,
-                                size: 14, color: AppColors.warning),
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 14,
+                              color: AppColors.warning,
+                            ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
@@ -428,8 +445,11 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                     ] else if (_showTitleField) ...[
                       Row(
                         children: [
-                          Icon(Icons.drive_file_rename_outline,
-                              size: 15, color: Colors.grey[500]),
+                          Icon(
+                            Icons.drive_file_rename_outline,
+                            size: 15,
+                            color: Colors.grey[500],
+                          ),
                           const SizedBox(width: 6),
                           Expanded(
                             child: TextField(
@@ -437,18 +457,21 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                               decoration: InputDecoration(
                                 hintText: 'Line title',
                                 hintStyle: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600),
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding:
-                                    const EdgeInsets.symmetric(vertical: 4),
-                              ),
-                              style: TextStyle(
+                                  color: Colors.grey[600],
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey[200]),
+                                ),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 4,
+                                ),
+                              ),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[200],
+                              ),
                               onChanged: (_) {
                                 widget.onDirty?.call();
                                 _scheduleAutoSave();
@@ -461,9 +484,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
                       const SizedBox(height: 4),
                     ],
                     Expanded(
-                      child: SingleChildScrollView(
-                        child: _buildMovesDisplay(),
-                      ),
+                      child: SingleChildScrollView(child: _buildMovesDisplay()),
                     ),
                   ],
                 ),
@@ -492,8 +513,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
   }
 
   String _moveLabelFor(TreePath path, MoveNode node) {
-    final (startMoveNumber, startIsWhite) =
-        MoveTree.moveNumberFromFen(widget.tree.startingFen);
+    final (startMoveNumber, startIsWhite) = MoveTree.moveNumberFromFen(
+      widget.tree.startingFen,
+    );
     final ply = path.length - 1;
     final isWhiteMove = startIsWhite ? ply.isEven : ply.isOdd;
     final moveNumber = startMoveNumber + ((startIsWhite ? ply : ply + 1) ~/ 2);
@@ -505,8 +527,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
       return const SizedBox.shrink();
     }
 
-    final (startMoveNumber, startIsWhite) =
-        MoveTree.moveNumberFromFen(widget.tree.startingFen);
+    final (startMoveNumber, startIsWhite) = MoveTree.moveNumberFromFen(
+      widget.tree.startingFen,
+    );
 
     return Wrap(
       spacing: 2,
@@ -568,8 +591,9 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     final main = siblings[0];
     final mainPath = parentPath.child(0);
-    final mainMove =
-        main.san == '--' ? null : positionBefore.parseSan(main.san);
+    final mainMove = main.san == '--'
+        ? null
+        : positionBefore.parseSan(main.san);
     Position positionAfterMain = positionBefore;
     if (mainMove != null) {
       positionAfterMain = positionBefore.play(mainMove);
@@ -584,10 +608,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
         widgets.add(_moveNumberLabel('$moveNumber... '));
       }
 
-      widgets.add(_buildSingleMoveWidget(
-        main,
-        mainPath,
-      ));
+      widgets.add(_buildSingleMoveWidget(main, mainPath));
     }
 
     if (_editingCommentPath == mainPath) {
@@ -598,17 +619,22 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
 
     if (siblings.length > 1) {
       for (int i = 1; i < siblings.length; i++) {
-        widgets.add(const Text(' ( ',
+        widgets.add(
+          const Text(
+            ' ( ',
             style: TextStyle(
               color: AppColors.pgnVariation,
               fontFamily: 'monospace',
               fontSize: 14,
-            )));
+            ),
+          ),
+        );
 
         final variant = siblings[i];
         final variantPath = parentPath.child(i);
-        final variantMove =
-            variant.san == '--' ? null : positionBefore.parseSan(variant.san);
+        final variantMove = variant.san == '--'
+            ? null
+            : positionBefore.parseSan(variant.san);
         Position positionAfterVariant = positionBefore;
         if (variantMove != null) {
           positionAfterVariant = positionBefore.play(variantMove);
@@ -621,10 +647,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
             widgets.add(_moveNumberLabel('$moveNumber... '));
           }
 
-          widgets.add(_buildSingleMoveWidget(
-            variant,
-            variantPath,
-          ));
+          widgets.add(_buildSingleMoveWidget(variant, variantPath));
         }
 
         if (_editingCommentPath == variantPath) {
@@ -633,30 +656,38 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
           widgets.add(_buildInlineComment(variant.comment!));
         }
 
-        widgets.addAll(_buildMoveWidgets(
-          variant.children,
-          isWhite ? moveNumber : moveNumber + 1,
-          !isWhite,
-          parentPath: variantPath,
-          positionBefore: positionAfterVariant,
-        ));
+        widgets.addAll(
+          _buildMoveWidgets(
+            variant.children,
+            isWhite ? moveNumber : moveNumber + 1,
+            !isWhite,
+            parentPath: variantPath,
+            positionBefore: positionAfterVariant,
+          ),
+        );
 
-        widgets.add(const Text(' ) ',
+        widgets.add(
+          const Text(
+            ' ) ',
             style: TextStyle(
               color: AppColors.pgnVariation,
               fontFamily: 'monospace',
               fontSize: 14,
-            )));
+            ),
+          ),
+        );
       }
     }
 
-    widgets.addAll(_buildMoveWidgets(
-      main.children,
-      isWhite ? moveNumber : moveNumber + 1,
-      !isWhite,
-      parentPath: mainPath,
-      positionBefore: positionAfterMain,
-    ));
+    widgets.addAll(
+      _buildMoveWidgets(
+        main.children,
+        isWhite ? moveNumber : moveNumber + 1,
+        !isWhite,
+        parentPath: mainPath,
+        positionBefore: positionAfterMain,
+      ),
+    );
 
     if (parentPath.isEmpty &&
         isFirstMove &&
@@ -702,10 +733,7 @@ class _InteractivePgnEditorState extends State<InteractivePgnEditor> {
     return true;
   }
 
-  Widget _buildSingleMoveWidget(
-    MoveNode node,
-    TreePath nodePath,
-  ) {
+  Widget _buildSingleMoveWidget(MoveNode node, TreePath nodePath) {
     final isSelected = widget.currentPath == nodePath;
     final isOnCtxPath = _isOnContextPath(nodePath);
 
@@ -765,10 +793,7 @@ class _PopupMenuRow extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _PopupMenuRow({
-    required this.icon,
-    required this.text,
-  });
+  const _PopupMenuRow({required this.icon, required this.text});
 
   @override
   Widget build(BuildContext context) {

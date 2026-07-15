@@ -36,10 +36,8 @@ class RepertoireWriter {
   Future<void> _queueTail = Future.value();
   final List<UndoOperation> _undoStack = [];
 
-  RepertoireWriter(
-    this._controller, {
-    RepertoireService? service,
-  }) : _service = service ?? RepertoireService();
+  RepertoireWriter(this._controller, {RepertoireService? service})
+    : _service = service ?? RepertoireService();
 
   bool get canUndo => _undoStack.isNotEmpty;
 
@@ -140,11 +138,7 @@ class RepertoireWriter {
     var fen = _fenAtPath(path);
 
     for (final san in suggestion.newMoves) {
-      path = await addMoveAtPosition(
-        fen: fen,
-        san: san,
-        pathFromRoot: path,
-      );
+      path = await addMoveAtPosition(fen: fen, san: san, pathFromRoot: path);
       fen = _fenAtPath(path);
     }
     return path;

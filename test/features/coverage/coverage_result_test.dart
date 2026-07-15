@@ -24,12 +24,18 @@ CoverageResult _coverageResult({
   List<LeafNode> tooShallowLeaves = const [],
   List<UnaccountedMove> unaccountedMoves = const [],
 }) {
-  final totalCovered =
-      coveredLeaves.fold<int>(0, (sum, leaf) => sum + leaf.gameCount);
-  final totalShallow =
-      tooShallowLeaves.fold<int>(0, (sum, leaf) => sum + leaf.gameCount);
-  final totalUnaccounted =
-      unaccountedMoves.fold<int>(0, (sum, move) => sum + move.gameCount);
+  final totalCovered = coveredLeaves.fold<int>(
+    0,
+    (sum, leaf) => sum + leaf.gameCount,
+  );
+  final totalShallow = tooShallowLeaves.fold<int>(
+    0,
+    (sum, leaf) => sum + leaf.gameCount,
+  );
+  final totalUnaccounted = unaccountedMoves.fold<int>(
+    0,
+    (sum, move) => sum + move.gameCount,
+  );
 
   return CoverageResult(
     rootFen: 'startpos',

@@ -318,9 +318,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         context,
         count > 0
             ? 'Reviewing "${_database.activeSetName}" as puzzles '
-                '($count position${count == 1 ? '' : 's'}).'
+                  '($count position${count == 1 ? '' : 's'}).'
             : 'No reviewable chapters in "${_database.activeSetName}" — '
-                'chapters need moves to train.',
+                  'chapters need moves to train.',
         isError: count == 0,
       );
     });
@@ -362,10 +362,12 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     if (mounted) {
       setState(() {});
       final appState = context.read<AppState>();
-      unawaited(_import.refreshPendingCount(
-        lichessUsername: appState.lichessUsername,
-        chesscomUsername: appState.chesscomUsername,
-      ));
+      unawaited(
+        _import.refreshPendingCount(
+          lichessUsername: appState.lichessUsername,
+          chesscomUsername: appState.chesscomUsername,
+        ),
+      );
       _maybeAutoFetch();
     }
   }
@@ -484,8 +486,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
       child: Row(
         children: [
-          Icon(Icons.school_outlined,
-              size: 16, color: theme.colorScheme.onSurfaceVariant),
+          Icon(
+            Icons.school_outlined,
+            size: 16,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -524,11 +529,13 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         content: const Text('This ends the current training session.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('End session')),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('End session'),
+          ),
         ],
       ),
     );
@@ -650,7 +657,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
     return Consumer<AppState>(
       builder: (context, appState, _) {
         final current = _session.currentPosition;
-        final isAtStartingPosition = current == null ||
+        final isAtStartingPosition =
+            current == null ||
             _session.positionSolved ||
             appState.currentPosition.fen == current.fen;
 
@@ -662,8 +670,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
             : 0;
         final solutionSan = _session.showSolution && current != null
             ? _solutionNav.sanMoves.isNotEmpty
-                ? _solutionNav.sanMoves
-                : _session.engine.correctLineToSan(current)
+                  ? _solutionNav.sanMoves
+                  : _session.engine.correctLineToSan(current)
             : const <String>[];
 
         return SingleChildScrollView(
@@ -695,8 +703,8 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   onCopyFen: _copyFen,
                   onBackToBrowse:
                       _session.playSource == TacticsPlaySource.browse
-                          ? _returnToBrowse
-                          : null,
+                      ? _returnToBrowse
+                      : null,
                   // Editing is gated by the controller (locked at the unsolved
                   // head of a session) and off entirely for external sets.
                   onEdit: !_database.isExternalSet && _session.canEditCurrent
@@ -709,15 +717,17 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
                   solutionSanMoves: solutionSan,
                   solutionStartPly: solutionStartPly,
                   activeSolutionMoveIndex: _solutionNav.activeIndex,
-                  onSolutionMoveTapped:
-                      solutionSan.isNotEmpty ? _onSolutionLineMoveTapped : null,
+                  onSolutionMoveTapped: solutionSan.isNotEmpty
+                      ? _onSolutionLineMoveTapped
+                      : null,
                 )
               else if (_showRecap)
                 TacticsSessionRecap(
                   solved: _session.outcomeCount(SessionPuzzleOutcome.correct),
                   failed: _session.outcomeCount(SessionPuzzleOutcome.incorrect),
-                  skipped:
-                      _session.outcomeCount(SessionPuzzleOutcome.unattempted),
+                  skipped: _session.outcomeCount(
+                    SessionPuzzleOutcome.unattempted,
+                  ),
                   totalTimeSeconds: _session.currentSession.totalTime,
                   onRetryMistakes: _session.sessionMistakes.isNotEmpty
                       ? _retryMistakes
@@ -843,11 +853,14 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Tactics'),
-        content: Text('Delete $count selected tactics?\n\nThis cannot be undone.'),
+        content: Text(
+          'Delete $count selected tactics?\n\nThis cannot be undone.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -911,8 +924,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -940,8 +954,9 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Clear All', style: TextStyle(color: Colors.red)),
@@ -1138,8 +1153,11 @@ class _TacticsControlPanelState extends State<TacticsControlPanel>
       } catch (e) {
         debugPrint('Copy FEN failed: $e');
         if (mounted) {
-          showAppSnackBar(context, AppMessages.clipboardWriteFailed,
-              isError: true);
+          showAppSnackBar(
+            context,
+            AppMessages.clipboardWriteFailed,
+            isError: true,
+          );
         }
       }
     }

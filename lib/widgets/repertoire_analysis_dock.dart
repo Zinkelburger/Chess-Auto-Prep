@@ -191,8 +191,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
                   ],
                 )
               : showEngine
-                  ? _buildEnginePane()
-                  : _buildExpectimaxPane(),
+              ? _buildEnginePane()
+              : _buildExpectimaxPane(),
         ),
       ],
     );
@@ -283,11 +283,11 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
             Tooltip(
               message: exRaw != null
                   ? 'Expectimax practical eval (V → cp).\n'
-                      'Accounts for likely opponent replies.\n'
-                      'Raw leaf engine: $exRaw'
+                        'Accounts for likely opponent replies.\n'
+                        'Raw leaf engine: $exRaw'
                   : 'Expectimax practical eval (V → cp).\n'
-                      'At our moves: max child V. At opponent moves: '
-                      'Σ pᵢ·V(childᵢ) plus tail for uncovered probability.',
+                        'At our moves: max child V. At opponent moves: '
+                        'Σ pᵢ·V(childᵢ) plus tail for uncovered probability.',
               child: _SummaryChip(
                 label: 'Expectimax',
                 value: exLabel,
@@ -327,7 +327,8 @@ class _RepertoireAnalysisDockState extends State<RepertoireAnalysisDock> {
       fen: widget.controller.fen,
       isActive: _engineActive,
       compact: true,
-      isUserTurn: widget.controller.position.turn ==
+      isUserTurn:
+          widget.controller.position.turn ==
           (widget.controller.isRepertoireWhite ? Side.white : Side.black),
       currentMoveSequence: widget.controller.currentMoveSequence,
       isWhiteRepertoire: widget.controller.isRepertoireWhite,
@@ -390,11 +391,7 @@ class _SummaryChip extends StatelessWidget {
   final String value;
   final Color? color;
 
-  const _SummaryChip({
-    required this.label,
-    required this.value,
-    this.color,
-  });
+  const _SummaryChip({required this.label, required this.value, this.color});
 
   @override
   Widget build(BuildContext context) {

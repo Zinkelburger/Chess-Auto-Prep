@@ -50,23 +50,29 @@ class SequenceFilter extends StatelessWidget {
             hintText: 'e.g.  d5 e5 [gap] f6',
             hintStyle: TextStyle(color: Colors.grey[600], fontSize: 12),
             isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 10,
+            ),
             border: const OutlineInputBorder(),
             suffixIcon: controller.sequenceText.text.isNotEmpty
                 ? IconButton(
                     icon: const Icon(Icons.close, size: 16),
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
                     onPressed: () {
                       controller.sequenceText.clear();
                       controller.validateSequence();
                     },
                   )
                 : null,
-            suffixIconConstraints:
-                const BoxConstraints(minWidth: 32, minHeight: 28),
+            suffixIconConstraints: const BoxConstraints(
+              minWidth: 32,
+              minHeight: 28,
+            ),
           ),
           style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
           onChanged: (_) => controller.validateSequence(),
@@ -86,16 +92,20 @@ class SequenceFilter extends StatelessWidget {
               )
             else
               const Spacer(),
-            Text('Max gap: ',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+            Text(
+              'Max gap: ',
+              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            ),
             SizedBox(
               width: 40,
               child: TextField(
                 controller: controller.gapText,
                 decoration: const InputDecoration(
                   isDense: true,
-                  contentPadding:
-                      EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 8,
+                  ),
                   border: OutlineInputBorder(),
                 ),
                 style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
@@ -104,8 +114,10 @@ class SequenceFilter extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Text('ply',
-                style: TextStyle(fontSize: 12, color: Colors.grey[400])),
+            Text(
+              'ply',
+              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+            ),
           ],
         ),
       ],

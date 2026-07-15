@@ -46,19 +46,13 @@ class BoardZone extends StatelessWidget {
 
 /// Trap navigation on the app bar. Engine on/off lives in Settings.
 class BoardZoneControls extends StatelessWidget {
-  const BoardZoneControls({
-    super.key,
-    this.trapNavigation,
-  });
+  const BoardZoneControls({super.key, this.trapNavigation});
 
   final Widget? trapNavigation;
 
   @override
   Widget build(BuildContext context) {
     if (trapNavigation == null) return const SizedBox.shrink();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [trapNavigation!],
-    );
+    return Row(mainAxisSize: MainAxisSize.min, children: [trapNavigation!]);
   }
 }

@@ -85,51 +85,51 @@ class TrapLineInfo {
   });
 
   Map<String, dynamic> toJson() => {
-        'moves_san': movesSan,
-        'trap_score': trapScore,
-        'popular_prob': popularProb,
-        'popular_move': popularMove,
-        'best_move': bestMove,
-        'popular_eval_cp': popularEvalCp,
-        'best_eval_cp': bestEvalCp,
-        'eval_diff_cp': evalDiffCp,
-        'cumulative_prob': cumulativeProb,
-        'trick_surplus': trickSurplus,
-        'expectimax_value': expectimaxValue,
-        'wp_eval': wpEval,
-        if (fen != null) 'fen': fen,
-        if (openingName != null) 'opening_name': openingName,
-        if (positionEvalCp != null) 'position_eval_cp': positionEvalCp,
-        if (allReplies != null)
-          'all_replies': allReplies!.map((r) => r.toJson()).toList(),
-        if (refutationMove != null) 'refutation_move': refutationMove,
-        if (refutationEvalCp != null) 'refutation_eval_cp': refutationEvalCp,
-      };
+    'moves_san': movesSan,
+    'trap_score': trapScore,
+    'popular_prob': popularProb,
+    'popular_move': popularMove,
+    'best_move': bestMove,
+    'popular_eval_cp': popularEvalCp,
+    'best_eval_cp': bestEvalCp,
+    'eval_diff_cp': evalDiffCp,
+    'cumulative_prob': cumulativeProb,
+    'trick_surplus': trickSurplus,
+    'expectimax_value': expectimaxValue,
+    'wp_eval': wpEval,
+    if (fen != null) 'fen': fen,
+    if (openingName != null) 'opening_name': openingName,
+    if (positionEvalCp != null) 'position_eval_cp': positionEvalCp,
+    if (allReplies != null)
+      'all_replies': allReplies!.map((r) => r.toJson()).toList(),
+    if (refutationMove != null) 'refutation_move': refutationMove,
+    if (refutationEvalCp != null) 'refutation_eval_cp': refutationEvalCp,
+  };
 
   factory TrapLineInfo.fromJson(Map<String, dynamic> json) => TrapLineInfo(
-        movesSan: (json['moves_san'] as List).cast<String>(),
-        trapScore: (json['trap_score'] as num).toDouble(),
-        popularProb: (json['popular_prob'] as num).toDouble(),
-        popularMove: json['popular_move'] as String,
-        bestMove: json['best_move'] as String,
-        popularEvalCp: json['popular_eval_cp'] as int,
-        bestEvalCp: json['best_eval_cp'] as int,
-        evalDiffCp: json['eval_diff_cp'] as int,
-        cumulativeProb: (json['cumulative_prob'] as num).toDouble(),
-        trickSurplus: (json['trick_surplus'] as num).toDouble(),
-        expectimaxValue: (json['expectimax_value'] as num).toDouble(),
-        wpEval: (json['wp_eval'] as num).toDouble(),
-        fen: json['fen'] as String?,
-        openingName: json['opening_name'] as String?,
-        positionEvalCp: json['position_eval_cp'] as int?,
-        allReplies: json['all_replies'] != null
-            ? (json['all_replies'] as List)
-                .map((r) => TrapReply.fromJson(r as Map<String, dynamic>))
-                .toList()
-            : null,
-        refutationMove: json['refutation_move'] as String?,
-        refutationEvalCp: json['refutation_eval_cp'] as int?,
-      );
+    movesSan: (json['moves_san'] as List).cast<String>(),
+    trapScore: (json['trap_score'] as num).toDouble(),
+    popularProb: (json['popular_prob'] as num).toDouble(),
+    popularMove: json['popular_move'] as String,
+    bestMove: json['best_move'] as String,
+    popularEvalCp: json['popular_eval_cp'] as int,
+    bestEvalCp: json['best_eval_cp'] as int,
+    evalDiffCp: json['eval_diff_cp'] as int,
+    cumulativeProb: (json['cumulative_prob'] as num).toDouble(),
+    trickSurplus: (json['trick_surplus'] as num).toDouble(),
+    expectimaxValue: (json['expectimax_value'] as num).toDouble(),
+    wpEval: (json['wp_eval'] as num).toDouble(),
+    fen: json['fen'] as String?,
+    openingName: json['opening_name'] as String?,
+    positionEvalCp: json['position_eval_cp'] as int?,
+    allReplies: json['all_replies'] != null
+        ? (json['all_replies'] as List)
+              .map((r) => TrapReply.fromJson(r as Map<String, dynamic>))
+              .toList()
+        : null,
+    refutationMove: json['refutation_move'] as String?,
+    refutationEvalCp: json['refutation_eval_cp'] as int?,
+  );
 
   /// Format eval in pawn units (e.g. +1.25, -0.50).
   String formatEval(int cp) {

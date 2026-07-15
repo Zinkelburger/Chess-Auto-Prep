@@ -43,7 +43,6 @@ class UnifiedAnalysisBuilder {
 
   // ── Synchronous builds ───────────────────────────────────────────────
 
-
   /// Parse PGNs once, walk each mainline once, and populate both the opening
   /// tree and the FEN-map analysis for a single colour.
   ///
@@ -327,14 +326,16 @@ class UnifiedAnalysisBuilder {
         await writeTextFileAtomically(
           File(args.whiteCachePath!),
           jsonEncode(
-              _encodeColorCache(bundle.whiteAnalysis, bundle.whiteTree, stat)),
+            _encodeColorCache(bundle.whiteAnalysis, bundle.whiteTree, stat),
+          ),
         );
       }
       if (args.blackCachePath != null) {
         await writeTextFileAtomically(
           File(args.blackCachePath!),
           jsonEncode(
-              _encodeColorCache(bundle.blackAnalysis, bundle.blackTree, stat)),
+            _encodeColorCache(bundle.blackAnalysis, bundle.blackTree, stat),
+          ),
         );
       }
     } catch (_) {
@@ -355,8 +356,9 @@ class UnifiedAnalysisBuilder {
       'version': _cacheVersion,
       'pgnSize': pgnStat.size,
       'pgnModifiedMs': pgnStat.modified.millisecondsSinceEpoch,
-      'positionStats':
-          analysis.positionStats.values.map((s) => s.toJson()).toList(),
+      'positionStats': analysis.positionStats.values
+          .map((s) => s.toJson())
+          .toList(),
       'fenToGameIndices': analysis.fenToGameIndices,
       'tree': tree.toTransferJson(),
     };
@@ -379,7 +381,8 @@ class UnifiedAnalysisBuilder {
 
       final acc = _ColorAccumulator(
         tree: OpeningTree.fromTransferJson(
-            Map<String, dynamic>.from(data['tree'] as Map)),
+          Map<String, dynamic>.from(data['tree'] as Map),
+        ),
       );
       for (final raw in data['positionStats'] as List<dynamic>) {
         final stats = PositionStats.fromJson(raw as Map<String, dynamic>);
@@ -440,8 +443,13 @@ class UnifiedAnalysisBuilder {
 
         final bool isUserTurn = (position.turn == Side.white) == isUserWhite;
         if (isUserTurn) {
-          _updateStats(acc.stats, acc.fenToGameIndices, position.fen,
-              userResult, gameIndex);
+          _updateStats(
+            acc.stats,
+            acc.fenToGameIndices,
+            position.fen,
+            userResult,
+            gameIndex,
+          );
         }
       },
       onWalkComplete: (finalPosition) {
@@ -518,8 +526,8 @@ class _ColorAccumulator {
   _ColorAccumulator({OpeningTree? tree}) : tree = tree ?? OpeningTree();
 
   PositionAnalysis toAnalysis(List<GameInfo> games) => PositionAnalysis(
-        positionStats: stats,
-        games: games,
-        fenToGameIndices: fenToGameIndices,
-      );
+    positionStats: stats,
+    games: games,
+    fenToGameIndices: fenToGameIndices,
+  );
 }

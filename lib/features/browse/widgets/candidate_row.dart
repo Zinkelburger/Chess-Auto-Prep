@@ -68,9 +68,7 @@ class CandidateRow extends StatelessWidget {
   Widget _buildMoveSan(ThemeData theme) {
     return Text(
       candidate.san,
-      style: theme.textTheme.bodyMedium?.copyWith(
-        fontWeight: FontWeight.w600,
-      ),
+      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
     );
   }
 
@@ -81,13 +79,17 @@ class CandidateRow extends StatelessWidget {
         const SizedBox(width: 6),
       ],
       if (candidate.dbFrequency != null) ...[
-        Text('${(candidate.dbFrequency! * 100).toStringAsFixed(0)}%',
-            style: const TextStyle(fontSize: 11)),
+        Text(
+          '${(candidate.dbFrequency! * 100).toStringAsFixed(0)}%',
+          style: const TextStyle(fontSize: 11),
+        ),
         const SizedBox(width: 6),
       ],
       if (candidate.dbGames != null) ...[
-        Text(_formatGames(candidate.dbGames!),
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+        Text(
+          _formatGames(candidate.dbGames!),
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
         const SizedBox(width: 6),
       ],
       if (candidate.dbWhiteWin != null) ...[
@@ -140,11 +142,14 @@ class _EvalChip extends StatelessWidget {
         color: AppColors.cpEvalBg(cp),
         borderRadius: BorderRadius.circular(3),
       ),
-      child: Text(text,
-          style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: AppColors.cpEval(cp))),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: AppColors.cpEval(cp),
+        ),
+      ),
     );
   }
 }
@@ -196,8 +201,10 @@ class _TrapBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.bolt, size: 10, color: AppColors.warning),
-          Text('$count',
-              style: const TextStyle(fontSize: 10, color: AppColors.warning)),
+          Text(
+            '$count',
+            style: const TextStyle(fontSize: 10, color: AppColors.warning),
+          ),
           if (onExpandTraps != null) ...[
             const SizedBox(width: 2),
             Icon(
@@ -262,11 +269,14 @@ class _CoverageDelta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text('+${delta.toStringAsFixed(1)}%',
-        style: const TextStyle(
-            fontSize: 10,
-            color: AppColors.success,
-            fontWeight: FontWeight.w500));
+    return Text(
+      '+${delta.toStringAsFixed(1)}%',
+      style: const TextStyle(
+        fontSize: 10,
+        color: AppColors.success,
+        fontWeight: FontWeight.w500,
+      ),
+    );
   }
 }
 
@@ -289,14 +299,17 @@ class _ResultBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-              flex: (white * 100).round(),
-              child: Container(color: Colors.white)),
+            flex: (white * 100).round(),
+            child: Container(color: Colors.white),
+          ),
           Expanded(
-              flex: (draw * 100).round(),
-              child: Container(color: Colors.grey.shade400)),
+            flex: (draw * 100).round(),
+            child: Container(color: Colors.grey.shade400),
+          ),
           Expanded(
-              flex: (black * 100).round(),
-              child: Container(color: Colors.grey.shade800)),
+            flex: (black * 100).round(),
+            child: Container(color: Colors.grey.shade800),
+          ),
         ],
       ),
     );

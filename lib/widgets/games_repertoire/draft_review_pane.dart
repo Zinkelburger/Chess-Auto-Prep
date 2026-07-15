@@ -51,15 +51,18 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
 
   Future<void> _merge() async {
     setState(() => _merging = true);
-    final draftTree =
-        widget.draft.materialize(filters: DraftFilters(minGames: _minGames));
+    final draftTree = widget.draft.materialize(
+      filters: DraftFilters(minGames: _minGames),
+    );
     if (draftTree.isEmpty) {
       setState(() => _merging = false);
       _toast('Nothing to merge — every line was filtered out.');
       return;
     }
-    final result =
-        widget.controller.mergeDraft(draftTree, isWhite: widget.isWhite);
+    final result = widget.controller.mergeDraft(
+      draftTree,
+      isWhite: widget.isWhite,
+    );
     if (!mounted) return;
 
     if (result.hasConflicts) {
@@ -79,8 +82,9 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
   }
 
   Future<void> _saveAsDraft() async {
-    final draftTree =
-        widget.draft.materialize(filters: DraftFilters(minGames: _minGames));
+    final draftTree = widget.draft.materialize(
+      filters: DraftFilters(minGames: _minGames),
+    );
     if (draftTree.isEmpty) {
       _toast('Nothing to save — every line was filtered out.');
       return;
@@ -89,8 +93,11 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
     final side = widget.isWhite ? 'White' : 'Black';
     final stamp = DateTime.now().toIso8601String().split('T').first;
     final name = 'Draft $label $side $stamp';
-    final content = draftToRepertoireFile(draftTree,
-        name: name, isWhite: widget.isWhite);
+    final content = draftToRepertoireFile(
+      draftTree,
+      name: name,
+      isWhite: widget.isWhite,
+    );
 
     try {
       final storage = StorageFactory.instance;
@@ -106,8 +113,7 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
 
   void _toast(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
   @override
@@ -125,7 +131,9 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
               Text(
                 'Draft from my games (${widget.isWhite ? 'White' : 'Black'})',
                 style: const TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const Spacer(),
               IconButton(
@@ -138,11 +146,15 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-          child: Wrap(spacing: 14, runSpacing: 2, children: [
-            _stat('covered', diff.inRepertoireCount, AppColors.success),
-            _stat('my off-book', diff.myDeviationCount, AppColors.warning),
-            _stat('opp. gaps', diff.opponentDeviationCount, AppColors.danger),
-          ]),
+          child: Wrap(
+            spacing: 14,
+            runSpacing: 2,
+            children: [
+              _stat('covered', diff.inRepertoireCount, AppColors.success),
+              _stat('my off-book', diff.myDeviationCount, AppColors.warning),
+              _stat('opp. gaps', diff.opponentDeviationCount, AppColors.danger),
+            ],
+          ),
         ),
         const SizedBox(height: 4),
         const Padding(
@@ -198,7 +210,9 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
                       ? 'Merging…'
                       : 'Discard lines you don\'t want, then merge the rest in.',
                   style: const TextStyle(
-                      fontSize: 12, color: AppColors.onSurfaceMuted),
+                    fontSize: 12,
+                    color: AppColors.onSurfaceMuted,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -221,10 +235,13 @@ class _DraftReviewPaneState extends State<DraftReviewPane> {
   }
 
   Widget _stat(String label, int n, Color color) {
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Container(width: 9, height: 9, color: color),
-      const SizedBox(width: 5),
-      Text('$n $label', style: const TextStyle(fontSize: 12)),
-    ]);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 9, height: 9, color: color),
+        const SizedBox(width: 5),
+        Text('$n $label', style: const TextStyle(fontSize: 12)),
+      ],
+    );
   }
 }

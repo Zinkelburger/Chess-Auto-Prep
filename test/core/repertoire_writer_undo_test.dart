@@ -29,11 +29,13 @@ void main() {
 ''');
 
       controller = RepertoireController();
-      await controller.setRepertoire(RepertoireMetadata(
-        name: 'Test',
-        filePath: filePath,
-        lastModified: DateTime(2026, 1, 1),
-      ));
+      await controller.setRepertoire(
+        RepertoireMetadata(
+          name: 'Test',
+          filePath: filePath,
+          lastModified: DateTime(2026, 1, 1),
+        ),
+      );
       writer = controller.writer;
     });
 
@@ -146,8 +148,12 @@ void main() {
       );
 
       await writer.acceptSuggestion(suggestion);
-      expect(
-          controller.repertoireLines.first.moves, ['e4', 'e5', 'Nf3', 'Nc6']);
+      expect(controller.repertoireLines.first.moves, [
+        'e4',
+        'e5',
+        'Nf3',
+        'Nc6',
+      ]);
       expect(writer.canUndo, isTrue);
 
       expect(await writer.undo(), isTrue);
