@@ -44,7 +44,17 @@ class AnalysisPlayerInfo {
   }
 
   /// Unique key used for file-system storage.
-  String get playerKey => '${platform}_${username.toLowerCase()}';
+  ///
+  /// Free-text names (the 'import' platform) may contain characters that are
+  /// invalid or hazardous in filenames (`/` would silently nest the files in
+  /// a subdirectory the player list never scans), so everything outside
+  /// [a-z0-9_-] is folded to `_`. Chess.com/Lichess usernames are already
+  /// limited to that alphabet, so their keys — and existing on-disk data —
+  /// are unchanged.
+  String get playerKey {
+    final safe = username.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '_');
+    return '${platform}_$safe';
+  }
 
   /// Human-readable description of the download range.
   String get rangeDescription {

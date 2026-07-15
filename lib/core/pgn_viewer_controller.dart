@@ -22,7 +22,8 @@ import '../services/opening_book_service.dart';
 import '../services/pgn_parsing_service.dart' as pgn;
 import '../services/solitaire_trophy_service.dart';
 import '../services/storage/storage_factory.dart';
-import '../widgets/pgn_viewer_widget.dart';
+import 'pgn/pgn_viewer_handle.dart';
+import '../utils/safe_change_notifier.dart';
 
 /// Board perspective mode persisted as [StudyPerspective] header on first game.
 enum PerspectiveMode { white, black, player }
@@ -225,7 +226,7 @@ String? detectProtagonistFrom(List<PgnGameEntry> games) {
 }
 
 /// Business logic and state for the PGN Viewer screen.
-class PgnViewerController extends ChangeNotifier {
+class PgnViewerController extends ChangeNotifier with SafeChangeNotifier {
   PgnViewerController({
     required this.pgnWidgetController,
     required this.analysisController,
@@ -234,7 +235,7 @@ class PgnViewerController extends ChangeNotifier {
     this.onReclaimFocus,
   });
 
-  final PgnViewerWidgetController pgnWidgetController;
+  final PgnViewerHandle pgnWidgetController;
   final GameAnalysisController analysisController;
   final bool Function() isActive;
   final void Function(void Function() callback)? schedulePostFrame;
@@ -376,15 +377,28 @@ class PgnViewerController extends ChangeNotifier {
 
   Timer? persistDebounce;
 
+  /// Set when a saved slice is restored on file open so the UI can show a
+  /// snackbar; consumed via [clearPendingSliceRestore].
+  SliceRestoreInfo? pendingSliceRestore;
+
+  /// Bumped by every synchronous change to the game collection or the active
+  /// slice. Async slice operations ([tryRestoreSavedSlice],
+  /// [recomputeAndApplyConfig]) capture it before their isolate await and
+  /// bail if it moved — otherwise indices computed for the old collection
+  /// get applied to (and persisted for) whatever loaded meanwhile.
+  int _sliceEpoch = 0;
+
   String? errorMessage;
 
   int get currentPly => pgnWidgetController.mainLineIndex;
 
-  void disposeController() {
+  @override
+  void dispose() {
     _autoPlay.dispose();
     solitaire.removeListener(_onSolitaireChanged);
     solitaire.dispose();
     persistDebounce?.cancel();
+    super.dispose();
   }
 
   Future<void> loadRecentFiles() async {
@@ -430,11 +444,16 @@ class PgnViewerController extends ChangeNotifier {
 
   Future<void> loadFile(String path) async {
     errorMessage = null;
+    pendingSliceRestore = null;
+    _sliceEpoch++;
     final storage = StorageFactory.instance;
     final fileName = p.basename(path);
 
     if (!await storage.fileExists(path)) {
       errorMessage = 'File not found: $fileName';
+      // The epoch bump above told any in-flight slice op that this load owns
+      // isLoading now, so release it even though this path never set it.
+      isLoading = false;
       debugPrint('PgnViewerController.loadFile: file does not exist: $path');
       notifyListeners();
       return;
@@ -491,6 +510,7 @@ class PgnViewerController extends ChangeNotifier {
     isLoading = false;
     filePath = path;
     allGames = entries;
+    _sliceEpoch++;
     _detectProtagonist(entries);
     filteredGames = List.of(entries);
     hasActiveFilters = false;
@@ -503,6 +523,7 @@ class PgnViewerController extends ChangeNotifier {
     notifyListeners();
 
     await addToRecentFiles(path);
+    _fenIndex.reset();
     await _fenIndex.tryLoadPersisted(path, entries.length);
     await tryRestoreSavedSlice(path, entries);
     await loadCurrentGame();
@@ -518,9 +539,14 @@ class PgnViewerController extends ChangeNotifier {
   /// are not persisted to disk.
   Future<void> loadPgnContent(String content) async {
     errorMessage = null;
+    pendingSliceRestore = null;
+    _sliceEpoch++;
     final trimmed = content.trim();
     if (trimmed.isEmpty) {
       errorMessage = 'Clipboard is empty — copy some PGN first';
+      // The epoch bump above told any in-flight slice op that this load owns
+      // isLoading now, so release it even though this path never set it.
+      isLoading = false;
       notifyListeners();
       return;
     }
@@ -553,6 +579,8 @@ class PgnViewerController extends ChangeNotifier {
     isLoading = false;
     filePath = null;
     allGames = entries;
+    _sliceEpoch++;
+    _fenIndex.reset();
     _detectProtagonist(entries);
     filteredGames = List.of(entries);
     hasActiveFilters = false;
@@ -615,8 +643,10 @@ class PgnViewerController extends ChangeNotifier {
     String path,
     List<PgnGameEntry> entries,
   ) async {
+    final epoch = _sliceEpoch;
     final config = await SlicePersistence.load(path);
     if (config == null) return;
+    if (!isActive() || epoch != _sliceEpoch) return;
 
     final allRecords = entries
         .map((g) => (headers: g.headers, pgnText: g.pgnText))
@@ -629,10 +659,15 @@ class PgnViewerController extends ChangeNotifier {
       allRecords,
       fenIndex: fenIndex,
     );
-    if (!isActive()) return;
+    // On a stale epoch another load/slice op owns the state now (including
+    // isLoading) — touch nothing.
+    if (!isActive() || epoch != _sliceEpoch) return;
 
     isLoading = false;
-    if (indices.length == entries.length) {
+    // An all-games or zero-game match isn't worth restoring: the former is a
+    // no-op, and the latter would blank the viewer for a file that loaded
+    // fine (the config likely predates a rewrite of the file).
+    if (indices.isEmpty || indices.length == entries.length) {
       notifyListeners();
       return;
     }
@@ -642,8 +677,14 @@ class PgnViewerController extends ChangeNotifier {
     activeSliceConfig = config;
     _activeSliceIndices = List<int>.from(indices);
     currentGameIndex = 0;
+    pendingSliceRestore = SliceRestoreInfo(
+      filteredCount: filteredGames.length,
+      totalCount: allGames.length,
+    );
     notifyListeners();
   }
+
+  void clearPendingSliceRestore() => pendingSliceRestore = null;
 
   void orientBoardForCurrentGame() {
     if (filteredGames.isEmpty) return;
@@ -887,6 +928,8 @@ class PgnViewerController extends ChangeNotifier {
         config.toJsonString() == activeSliceConfig.toJsonString()) {
       return;
     }
+    _sliceEpoch++;
+    isLoading = false;
     _activeSliceIndices = List<int>.from(indices);
     filteredGames = indices.map((i) => allGames[i]).toList();
     hasActiveFilters = filteredGames.length != allGames.length;
@@ -900,6 +943,10 @@ class PgnViewerController extends ChangeNotifier {
   }
 
   void resetFilters() {
+    // Invalidate any in-flight recompute/restore so it can't resurrect the
+    // slice being cleared, and take over its loading state.
+    _sliceEpoch++;
+    isLoading = false;
     filteredGames = List.of(allGames);
     hasActiveFilters = false;
     activeSliceConfig = const SliceConfig.empty();
@@ -1025,6 +1072,7 @@ class PgnViewerController extends ChangeNotifier {
       return;
     }
 
+    final epoch = _sliceEpoch;
     final allRecords = allGames
         .map((g) => (headers: g.headers, pgnText: g.pgnText))
         .toList();
@@ -1036,7 +1084,10 @@ class PgnViewerController extends ChangeNotifier {
       allRecords,
       fenIndex: fenIndex,
     );
-    if (!isActive()) return;
+    // On a stale epoch another load/slice op owns the state now (including
+    // isLoading) — applying would map old-collection indices onto the new
+    // games and persist the old config under the new file.
+    if (!isActive() || epoch != _sliceEpoch) return;
 
     isLoading = false;
     notifyListeners(); // applySlice may early-return on identical config
@@ -1351,4 +1402,15 @@ class PgnViewerController extends ChangeNotifier {
     notifyListeners();
     onReclaimFocus?.call();
   }
+}
+
+/// Set when a saved slice is restored so the UI can show a snackbar.
+class SliceRestoreInfo {
+  final int filteredCount;
+  final int totalCount;
+
+  const SliceRestoreInfo({
+    required this.filteredCount,
+    required this.totalCount,
+  });
 }

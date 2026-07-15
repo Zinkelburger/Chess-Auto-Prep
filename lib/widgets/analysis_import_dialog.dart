@@ -21,11 +21,13 @@ class AnalysisImportResult {
 
 /// Dialog for importing local PGN file(s) as an analysis "player".
 ///
-/// The player name is matched against the White/Black headers to decide the
-/// user's colour per game. Games where the name matches neither side (e.g. a
-/// repertoire export with no real player names) count for **both** colours,
-/// so repertoire files work without any name gymnastics — view whichever
-/// colour the file plays.
+/// The player name(s) — several may be given, separated by `;` — are matched
+/// against the White/Black headers to decide the user's colour per game, and
+/// a live summary shows how many games matched plus every header spelling
+/// currently matching (e.g. "Carlsen, Magnus ×54 · Carlsen,M ×33"). Games
+/// where no name matches either side (e.g. a repertoire export with no real
+/// player names) count for **both** colours, so repertoire files work
+/// without any name gymnastics — view whichever colour the file plays.
 ///
 /// Pops with an [AnalysisImportResult], or `null` if the user cancels.
 class AnalysisImportDialog extends StatefulWidget {
@@ -42,6 +44,11 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
   String _pgns = '';
   int _gameCount = 0;
   bool _nameEdited = false;
+
+  /// White/Black header pairs of the picked games, extracted once at pick
+  /// time so the match summary can recompute cheaply on every name edit.
+  List<({String white, String black})> _headerPairs = const [];
+  PlayerNameMatchSummary? _matchSummary;
 
   String? _error;
   String? _nameError;
@@ -74,12 +81,14 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
       if (contents.isEmpty) return;
 
       final pgns = contents.join('\n\n');
+      final headerPairs = _extractHeaderPairs(pgns);
       setState(() {
         _pgns = pgns;
         _fileNames
           ..clear()
           ..addAll(names);
-        _gameCount = countPgnGames(pgns);
+        _headerPairs = headerPairs;
+        _gameCount = headerPairs.length;
         _error = _gameCount == 0
             ? 'No games found in the selected files.'
             : null;
@@ -87,10 +96,30 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
           final guess = _guessPlayerName(pgns);
           if (guess != null) _nameController.text = guess;
         }
+        _matchSummary = _computeMatchSummary();
       });
     } catch (e) {
       setState(() => _error = 'Could not read files: $e');
     }
+  }
+
+  static List<({String white, String black})> _extractHeaderPairs(String pgns) {
+    return splitPgnIntoGames(pgns).map((game) {
+      final headers = extractHeaders(game);
+      return (white: headers['White'] ?? '', black: headers['Black'] ?? '');
+    }).toList();
+  }
+
+  /// Live preview of how the typed name(s) would attribute the picked games.
+  /// Placeholders are included so the preview matches what analysis will do.
+  PlayerNameMatchSummary? _computeMatchSummary() {
+    final names = _nameController.text.trim();
+    if (names.isEmpty || _headerPairs.isEmpty) return null;
+    return summarizePlayerNameMatches(
+      headerPairs: _headerPairs,
+      namesInput: names,
+      includeRepertoirePlaceholders: true,
+    );
   }
 
   /// Most frequent White/Black header name across the games, ignoring
@@ -109,6 +138,52 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
     return (counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
         .first
         .key;
+  }
+
+  /// "Matched X of Y games" + every header spelling currently matching, so
+  /// the user can tell whether their name(s) cover all the file's variants
+  /// ("Carlsen, Magnus" vs "Carlsen,M") before importing.
+  Widget _buildMatchSummary(ThemeData theme, PlayerNameMatchSummary summary) {
+    final variants = summary.variantCounts.entries
+        .map((e) => '${e.key} ×${e.value}')
+        .join(' · ');
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Matched ${summary.matchedGames} of ${summary.totalGames} games',
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: summary.matchedGames == 0 ? theme.colorScheme.error : null,
+            ),
+          ),
+          if (variants.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Matching as: $variants', style: muted),
+          ],
+          if (summary.unmatchedGames > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${summary.unmatchedGames} game'
+              '${summary.unmatchedGames == 1 ? '' : 's'} match'
+              '${summary.unmatchedGames == 1 ? 'es' : ''} neither side — '
+              'they will count for both colours.',
+              style: muted,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   void _confirm() {
@@ -181,23 +256,30 @@ class _AnalysisImportDialogState extends State<AnalysisImportDialog> {
               TextField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                  labelText: 'Player name',
+                  labelText: 'Player name(s)',
                   helperText:
                       'Matched against the White/Black headers to tell '
-                      'the player\'s colour per game. Games where it matches '
-                      'neither side count for both colours, so repertoire '
-                      'files work with any name.',
-                  helperMaxLines: 4,
+                      'the player\'s colour per game. Separate several '
+                      'names or abbreviations with ";" (e.g. "Carlsen; '
+                      'DrNykterstein"). Games where no name matches either '
+                      'side count for both colours, so repertoire files '
+                      'work with any name.',
+                  helperMaxLines: 5,
                   border: const OutlineInputBorder(),
                   errorText: _nameError,
                 ),
                 onChanged: (_) {
                   _nameEdited = true;
-                  if (_nameError != null) {
-                    setState(() => _nameError = null);
-                  }
+                  setState(() {
+                    _nameError = null;
+                    _matchSummary = _computeMatchSummary();
+                  });
                 },
               ),
+              if (_matchSummary != null) ...[
+                const SizedBox(height: 10),
+                _buildMatchSummary(theme, _matchSummary!),
+              ],
             ],
           ),
         ),

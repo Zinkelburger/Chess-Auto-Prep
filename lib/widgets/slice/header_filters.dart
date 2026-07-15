@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/slice_filter_controller.dart';
 import '../../models/pgn_filter_models.dart';
+import '../../services/pgn_tree_core.dart'
+    show PlayerNameMatchSummary, summarizePlayerNameMatches;
 
 final _ecoExact = RegExp(r'^[A-E]\d{2}$');
 bool _isValidEco(String value) => _ecoExact.hasMatch(value.trim());
@@ -15,7 +17,13 @@ bool _isValidEco(String value) => _ecoExact.hasMatch(value.trim());
 class HeaderFilters extends StatelessWidget {
   final SliceFilterController controller;
 
-  const HeaderFilters({super.key, required this.controller});
+  /// When provided, [kPlayerHeaderField] rows show which header spellings
+  /// their names currently match across these games (and how often), so the
+  /// user can see e.g. "Carlsen, Magnus ×54 · Carlsen,M ×33" instead of
+  /// trusting substring matching blind.
+  final List<GameRecord>? games;
+
+  const HeaderFilters({super.key, required this.controller, this.games});
 
   @override
   Widget build(BuildContext context) {
@@ -54,7 +62,9 @@ class HeaderFilters extends StatelessWidget {
     }
 
     String hintText;
-    if (f.field == 'ECO') {
+    if (f.field == kPlayerHeaderField) {
+      hintText = 'either colour — e.g. Carlsen; DrNykterstein';
+    } else if (f.field == 'ECO') {
       hintText = 'e.g. B12 or B1';
     } else if (f.field == 'Date') {
       hintText = 'e.g. 2000';
@@ -183,8 +193,54 @@ class HeaderFilters extends StatelessWidget {
                 style: TextStyle(fontSize: 10, color: Colors.orange[400]),
               ),
             ),
+          if (_showsNameMatches(f)) _buildNameMatchesLine(f.value),
         ],
       ),
     );
+  }
+
+  /// Matched-spellings feedback only makes sense for substring name search;
+  /// exact/regex/not-contains modes are left alone.
+  bool _showsNameMatches(HeaderFilterRow f) =>
+      games != null &&
+      f.field == kPlayerHeaderField &&
+      f.mode == MatchMode.contains &&
+      f.value.trim().isNotEmpty;
+
+  Widget _buildNameMatchesLine(String namesInput) {
+    final summary = summarizePlayerNameMatches(
+      headerPairs: [
+        for (final g in games!)
+          (white: g.headers['White'] ?? '', black: g.headers['Black'] ?? ''),
+      ],
+      namesInput: namesInput,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, top: 2),
+      child: Text(
+        _nameMatchesLabel(summary),
+        style: TextStyle(
+          fontSize: 11,
+          color: summary.matchedGames == 0 ? Colors.orange[400] : Colors.grey,
+        ),
+      ),
+    );
+  }
+
+  static String _nameMatchesLabel(PlayerNameMatchSummary summary) {
+    if (summary.matchedGames == 0) {
+      return 'No games match these names';
+    }
+    const maxShown = 8;
+    final variants = summary.variantCounts.entries.toList();
+    final shown = variants
+        .take(maxShown)
+        .map((e) => '${e.key} ×${e.value}')
+        .join(' · ');
+    final more = variants.length > maxShown
+        ? ' (+${variants.length - maxShown} more)'
+        : '';
+    return 'Matches ${summary.matchedGames} of ${summary.totalGames} games '
+        'as: $shown$more';
   }
 }

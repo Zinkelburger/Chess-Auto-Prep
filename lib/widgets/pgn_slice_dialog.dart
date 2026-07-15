@@ -181,7 +181,7 @@ class _PgnSliceDialogState extends State<PgnSliceDialog> {
               const Divider(),
               SequenceFilter(controller: _filters),
               const Divider(),
-              HeaderFilters(controller: _filters),
+              HeaderFilters(controller: _filters, games: widget.allGames),
               const SizedBox(height: 16),
               SizedBox(
                 height: 200,

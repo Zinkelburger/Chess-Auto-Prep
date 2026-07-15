@@ -673,38 +673,65 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       _trapPassSkipped = false;
     });
 
-    await EngineLifecycle.instance.enterGeneration(1);
-    await StockfishPool.instance.ensureWorkers(1);
+    // Snapshot the games file's mtime: a re-download during the hunt clears
+    // the (now stale) holes reports, and a report computed from the old tree
+    // must not resurrect them.
+    final pgnPath = await _gamesService.analysisPgnPath(
+      player.platform,
+      player.username,
+    );
+    final pgnModifiedAtStart = await _fileModifiedOrNull(pgnPath);
 
+    var enteredGeneration = false;
     try {
+      await EngineLifecycle.instance.enterGeneration(1);
+      enteredGeneration = true;
+      await StockfishPool.instance.ensureWorkers(1);
+
       final result = await _holeService.hunt(
         tree: tree,
         isWhiteRepertoire: isWhite,
         config: config,
         onProgress: (p) {
-          if (mounted) setState(() => _holesProgress = p);
+          // Cancellation only takes effect at loop boundaries, so callbacks
+          // can still fire after the user switched players.
+          if (mounted && _currentPlayer == player) {
+            setState(() => _holesProgress = p);
+          }
         },
         onFinding: (f) {
-          if (mounted) setState(() => _holesLive = [..._holesLive, f]);
+          if (mounted && _currentPlayer == player) {
+            setState(() => _holesLive = [..._holesLive, f]);
+          }
         },
       );
 
       // Persist to the player the hunt was started for, even if the user
-      // switched players meanwhile (partial reports included).
-      HoleHuntPersistence.instance.save(
-        await _gamesService.holesReportPath(
-          player.platform,
-          player.username,
-          isWhite,
-        ),
-        result,
-        config,
-        isComplete: !_huntCancelled,
-      );
+      // switched players meanwhile (partial reports included) — but not if
+      // the games were replaced mid-hunt.
+      final pgnModifiedNow = await _fileModifiedOrNull(pgnPath);
+      final gamesUnchanged =
+          pgnModifiedAtStart != null &&
+          pgnModifiedNow != null &&
+          pgnModifiedNow.isAtSameMomentAs(pgnModifiedAtStart);
+      if (gamesUnchanged) {
+        HoleHuntPersistence.instance.save(
+          await _gamesService.holesReportPath(
+            player.platform,
+            player.username,
+            isWhite,
+          ),
+          result,
+          config,
+          isComplete: !_huntCancelled,
+        );
+      } else {
+        debugPrint('Hole hunt: games changed mid-hunt, report not saved.');
+      }
 
       if (mounted && _currentPlayer == player) {
         setState(() {
-          _holesResults[isWhite] = result;
+          _holesResults[isWhite] = gamesUnchanged ? result : null;
           _holesLive = [];
           _trapPassSkipped = _holeService.trapPassSkipped;
         });
@@ -712,11 +739,19 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     } catch (e) {
       if (mounted) _showError('Hole hunt failed: $e');
     } finally {
-      EngineLifecycle.instance.exitGeneration();
+      if (enteredGeneration) EngineLifecycle.instance.exitGeneration();
       _isHunting = false;
       _huntCancelled = false;
       _holesProgress = null;
       if (mounted) setState(() {});
+    }
+  }
+
+  static Future<DateTime?> _fileModifiedOrNull(String path) async {
+    try {
+      return await File(path).lastModified();
+    } catch (_) {
+      return null;
     }
   }
 
@@ -822,6 +857,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         }
         return;
       }
+      if (!mounted || _currentPlayer != player) return;
       _analysisPgnPath = pgnPath;
 
       // Fast path: both colours restored from the stat-validated disk cache.
@@ -846,7 +882,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         );
       }
 
-      if (!mounted) return;
+      // Guard: the user may have selected a different player while the
+      // (possibly minutes-long) build ran — installing this bundle would
+      // show the old player's data under the new player's name.
+      if (!mounted || _currentPlayer != player) return;
       final result = bundle;
       setState(() {
         _whiteAnalysis = result.whiteAnalysis;

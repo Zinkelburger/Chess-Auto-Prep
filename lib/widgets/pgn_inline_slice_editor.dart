@@ -229,7 +229,7 @@ class _InlineSliceEditorState extends State<InlineSliceEditor> {
                   const SizedBox(height: 12),
                   SequenceFilter(controller: _filters),
                   const SizedBox(height: 12),
-                  HeaderFilters(controller: _filters),
+                  HeaderFilters(controller: _filters, games: widget.allGames),
                 ],
               ),
             ),

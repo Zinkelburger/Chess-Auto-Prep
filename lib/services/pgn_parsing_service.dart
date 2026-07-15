@@ -249,6 +249,34 @@ bool matchesField(String headerVal, String query, MatchMode mode) {
   }
 }
 
+/// [kPlayerHeaderField] filter: does either colour's header satisfy [query]?
+///
+/// [query] may hold several `;`-separated names ([splitPlayerNames]); a game
+/// passes when **any** name matches **either** side — except in
+/// [MatchMode.notContains], where **every** name must be absent from **both**
+/// sides (the natural reading of "player not contains X").
+bool playerFieldMatches(
+  String whiteHeader,
+  String blackHeader,
+  String query,
+  MatchMode mode,
+) {
+  final names = splitPlayerNames(query);
+  if (names.isEmpty) return true;
+  if (mode == MatchMode.notContains) {
+    return names.every(
+      (n) =>
+          matchesField(whiteHeader, n, mode) &&
+          matchesField(blackHeader, n, mode),
+    );
+  }
+  return names.any(
+    (n) =>
+        matchesField(whiteHeader, n, mode) ||
+        matchesField(blackHeader, n, mode),
+  );
+}
+
 // ── Sequence matching (isolate-safe) ─────────────────────────────────────────
 
 /// Parse a sequence pattern string into groups of consecutive SAN moves.
@@ -488,11 +516,22 @@ bool _passesNonPositionFilters(
   }
   for (final f in filterData) {
     if (f.value.isEmpty) continue;
-    final headerVal = headers[f.field] ?? '';
     final mode = MatchMode.values.firstWhere(
       (m) => m.name == f.modeName,
       orElse: () => MatchMode.contains,
     );
+    if (f.field == kPlayerHeaderField) {
+      if (!playerFieldMatches(
+        headers['White'] ?? '',
+        headers['Black'] ?? '',
+        f.value,
+        mode,
+      )) {
+        return false;
+      }
+      continue;
+    }
+    final headerVal = headers[f.field] ?? '';
     if (!matchesField(headerVal, f.value, mode)) return false;
   }
   return true;
