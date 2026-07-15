@@ -6,7 +6,6 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:io' as io;
 
-import 'package:dartchess/dartchess.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../models/opening_tree.dart';
@@ -16,6 +15,7 @@ import '../../../services/maia_factory.dart';
 import '../../../services/opening_tree_builder.dart';
 import '../../../services/pgn_parsing_service.dart' as pgn;
 import '../../../services/probability_service.dart';
+import '../../../utils/chess_move_utils.dart' as move_utils;
 import '../../../utils/fen_utils.dart';
 import '../models/audit_finding.dart';
 import '../models/audit_result.dart';
@@ -532,21 +532,8 @@ class RepertoireAuditService {
 
   /// Check if playing [san] from [fen] transposes into a position already
   /// covered in [tree] (the FEN after the move exists as a tree node).
-  bool _doesMoveTranspose(String fen, String san, OpeningTree tree) {
-    try {
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      final move = pos.parseSan(san);
-      if (move == null) return false;
-      final after = pos.play(move);
-      final afterPrefix = after.fen.split(' ').take(4).join(' ');
-      for (final key in tree.fenToNodes.keys) {
-        if (key.split(' ').take(4).join(' ') == afterPrefix) return true;
-      }
-    } catch (_) {
-      // Best-effort; failure here is non-fatal and intentionally ignored.
-    }
-    return false;
-  }
+  bool _doesMoveTranspose(String fen, String san, OpeningTree tree) =>
+      move_utils.doesMoveTranspose(fen, san, tree);
 
   // ── Dead-end check ───────────────────────────────────────────────────────
 
@@ -641,60 +628,17 @@ class RepertoireAuditService {
     return node.fen.contains(' w ');
   }
 
-  String? _uciToSan(String fen, String uci) {
-    try {
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      final move = Move.parse(uci);
-      if (move == null) return null;
-      final (_, san) = pos.makeSan(move);
-      return san;
-    } catch (_) {
-      return null;
-    }
-  }
+  String? _uciToSan(String fen, String uci) => move_utils.uciToSan(fen, uci);
 
-  String? _sanToUci(String fen, String san) {
-    try {
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      final move = pos.parseSan(san);
-      if (move == null) return null;
-      return move.uci;
-    } catch (_) {
-      return null;
-    }
-  }
+  String? _sanToUci(String fen, String san) => move_utils.sanToUci(fen, san);
 
   /// Returns (whiteCp, cacheHits, cacheMisses).
   Future<(int?, int, int)> _evalAfterMove(
     String fen,
     String moveUci,
     int depth,
-  ) async {
-    try {
-      final pos = Chess.fromSetup(Setup.parseFen(fen));
-      final move = Move.parse(moveUci);
-      if (move == null) return (null, 0, 0);
-      final newPos = pos.play(move);
-      final newFen = newPos.fen;
-
-      // Check EvalCache first — shared with generation pipeline.
-      final cached = await _evalCache.getEvalCpWhite(newFen, minDepth: depth);
-      if (cached != null) return (cached, 1, 0);
-
-      final result = await _pool.evaluateFen(newFen, depth);
-      final isWhiteAfter = newPos.turn == Side.white;
-      final whiteCp =
-          isWhiteAfter ? (result.scoreCp ?? 0) : -(result.scoreCp ?? 0);
-
-      // Write back so generation (and future audits) can reuse.
-      _evalCache.putEvalCpWhite(newFen, whiteCp, depth);
-
-      return (whiteCp, 0, 1);
-    } catch (e) {
-      if (kDebugMode) debugPrint('[Audit] Eval after move failed: $e');
-      return (null, 0, 0);
-    }
-  }
+  ) =>
+      move_utils.evalAfterMoveCached(_pool, _evalCache, fen, moveUci, depth);
 }
 
 class _AuditQueueEntry {

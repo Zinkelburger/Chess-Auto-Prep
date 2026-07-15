@@ -15,12 +15,12 @@ import '../core/generation_session_controller.dart';
 import '../models/build_tree_node.dart';
 import '../models/repertoire_metadata.dart';
 import '../services/generation/generation_config.dart';
-import '../services/generation/pgn_export.dart';
 import '../services/generation/tree_serialization.dart';
 import '../services/storage/storage_factory.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_messages.dart';
 import 'generation/generation_config_form.dart';
+import 'starting_position_card.dart';
 
 class RepertoireGenerationTab extends StatefulWidget {
   final String fen;
@@ -293,49 +293,11 @@ class RepertoireGenerationTabState extends State<RepertoireGenerationTab> {
   }
 
   Widget _buildStartingPositionBanner(BuildContext context) {
-    final primary = Theme.of(context).colorScheme.primary;
-    final fromInitial = widget.currentMoveSequence.isEmpty;
-    final positionText = fromInitial
-        ? 'Initial Position'
-        : movesToPgnMoveText(widget.currentMoveSequence);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: primary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: primary, width: 1.5),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.my_location, size: 28, color: primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'GENERATING FROM',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.2,
-                    color: primary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  positionText,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return StartingPositionCard(
+      label: 'GENERATING FROM',
+      fen: widget.fen,
+      moveSans: widget.currentMoveSequence,
+      flipped: !widget.isWhiteRepertoire,
     );
   }
 

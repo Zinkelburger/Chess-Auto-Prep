@@ -21,6 +21,7 @@ import '../services/games_repertoire/repertoire_merge.dart';
 import '../services/opening_tree_builder.dart';
 import '../services/repertoire_service.dart';
 import '../services/storage/storage_factory.dart';
+import '../utils/fen_utils.dart';
 import '../utils/movetext_builder.dart';
 import '../utils/san_token_utils.dart';
 import 'move_navigation.dart';
@@ -113,6 +114,30 @@ class RepertoireController with ChangeNotifier, MoveNavigation {
     final f = _tree.startingFen;
     return f == kStandardStartFen ? null : f;
   }
+
+  /// SAN moves of the saved root position (empty when no root is saved).
+  List<String> get rootMoveSans => _parsePgnMoveText(_rootMoves);
+
+  /// FEN of the saved root position — the tree's starting position when no
+  /// root is saved.
+  String get rootFen {
+    Position pos;
+    try {
+      pos = Chess.fromSetup(Setup.parseFen(_tree.startingFen));
+    } catch (_) {
+      pos = Chess.initial;
+    }
+    for (final san in rootMoveSans) {
+      final move = pos.parseSan(san);
+      if (move == null) break;
+      pos = pos.play(move);
+    }
+    return pos.fen;
+  }
+
+  /// Whether the cursor currently sits on the saved root position
+  /// (move counters ignored, so transpositions count).
+  bool get isAtRootPosition => normalizeFen(fen) == normalizeFen(rootFen);
 
   // ── Navigation (single entry point) ──────────────────────────────
 

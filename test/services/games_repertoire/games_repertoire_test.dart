@@ -111,6 +111,48 @@ void main() {
     });
   });
 
+  group('restrictTreeToLine', () {
+    test('keeps only the branch through the moves, prefix included', () {
+      final tree = OpeningTree()
+        ..appendLine(['e4', 'c5', 'Nf3', 'd6'])
+        ..appendLine(['e4', 'c5', 'Nc3'])
+        ..appendLine(['e4', 'e5', 'Nf3'])
+        ..appendLine(['d4', 'd5']);
+
+      expect(restrictTreeToLine(tree, ['e4', 'c5', 'Nf3']), isNull);
+
+      // Full line through the position survives, subtree intact.
+      expect(nodeFor(tree, ['e4', 'c5', 'Nf3', 'd6']), isNotNull);
+      // Siblings at every level along the path are gone.
+      expect(nodeFor(tree, ['d4']), isNull);
+      expect(nodeFor(tree, ['e4', 'e5']), isNull);
+      expect(nodeFor(tree, ['e4', 'c5', 'Nc3']), isNull);
+    });
+
+    test('empty move list is a no-op', () {
+      final tree = OpeningTree()
+        ..appendLine(['e4'])
+        ..appendLine(['d4']);
+      expect(restrictTreeToLine(tree, []), isNull);
+      expect(nodeFor(tree, ['e4']), isNotNull);
+      expect(nodeFor(tree, ['d4']), isNotNull);
+    });
+
+    test('reports when no game reaches the position', () {
+      final tree = OpeningTree()..appendLine(['e4', 'e5']);
+      final error = restrictTreeToLine(tree, ['e4', 'c5']);
+      expect(error, isNotNull);
+      expect(error, contains('e4 c5'));
+    });
+
+    test('matches SANs that differ only in check/mate suffixes', () {
+      final tree = OpeningTree()..appendLine(['e4', 'e5', 'Qh5', 'Nc6']);
+      // Caller position stored the queen check with a suffix.
+      expect(restrictTreeToLine(tree, ['e4', 'e5', 'Qh5+']), isNull);
+      expect(nodeFor(tree, ['e4', 'e5', 'Qh5', 'Nc6']), isNotNull);
+    });
+  });
+
   group('RepertoireMerge', () {
     test('union adds new opponent alternatives without conflict', () {
       final target = MoveTree.fromMoves(['e4', 'e5', 'Nf3']);

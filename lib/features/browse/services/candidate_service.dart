@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import '../../../models/build_tree_node.dart';
 import '../../../models/explorer_response.dart';
 import '../../../models/opening_tree.dart';
+import '../../../services/explorer_cache_service.dart';
 import '../../../services/generation/fen_map.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
 
@@ -71,12 +72,19 @@ class CandidateService {
   final CoverageResult? coverage;
   final CoverageService? coverageService;
 
+  /// Live Explorer stats source. When provided (with [explorerSource]) it is
+  /// preferred over [coverageService], whose fetch path is mothballed.
+  final ExplorerCacheService? explorerCache;
+  final ExplorerSourceConfig? explorerSource;
+
   CandidateService({
     this.tree,
     this.fenMap,
     this.openingTree,
     this.coverage,
     this.coverageService,
+    this.explorerCache,
+    this.explorerSource,
   });
 
   /// Returns sorted candidates, merging tree data with Lichess Explorer when
@@ -96,10 +104,14 @@ class CandidateService {
     );
 
     ExplorerResponse? explorer;
-    if (_shouldFetchExplorer(treeCandidates) && coverageService != null) {
-      final data = await coverageService!.getPositionData(fen);
-      if (data != null) {
-        explorer = ExplorerResponse.fromJson(data, fen: fen);
+    if (_shouldFetchExplorer(treeCandidates)) {
+      if (explorerCache != null && explorerSource != null) {
+        explorer = await explorerCache!.fetch(fen, explorerSource!);
+      } else if (coverageService != null) {
+        final data = await coverageService!.getPositionData(fen);
+        if (data != null) {
+          explorer = ExplorerResponse.fromJson(data, fen: fen);
+        }
       }
     }
 
