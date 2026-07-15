@@ -19,6 +19,10 @@ class OpeningTreeWidget extends StatefulWidget {
   final OpeningTree tree;
   final Function(String fen)? onPositionSelected;
   final Function(String move)? onMoveSelected;
+
+  /// When set, the move-path header becomes clickable: tapping a move jumps
+  /// to that ply (0 = starting position). When null the path is plain text.
+  final Function(int ply)? onPathPlySelected;
   final Function(String searchTerm)? onSearchChanged;
   final Function(RepertoireLine line)? onLineSelected;
   final VoidCallback? onGoBack;
@@ -42,6 +46,7 @@ class OpeningTreeWidget extends StatefulWidget {
     required this.tree,
     this.onPositionSelected,
     this.onMoveSelected,
+    this.onPathPlySelected,
     this.onSearchChanged,
     this.onLineSelected,
     this.onGoBack,
@@ -162,16 +167,18 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      movePath,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[300],
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: widget.onPathPlySelected != null
+                        ? _buildClickablePath(currentNode)
+                        : Text(
+                            movePath,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey[300],
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                   ),
                   const SizedBox(width: 8),
                   SizedBox(
@@ -384,6 +391,62 @@ class _OpeningTreeWidgetState extends State<OpeningTreeWidget> {
           ),
         ],
       ],
+    );
+  }
+
+  /// Move path rendered as tappable tokens: tap a move to jump to that ply,
+  /// tap the leading restart icon to return to the starting position.
+  Widget _buildClickablePath(OpeningTreeNode currentNode) {
+    final moves = currentNode.getMovePath();
+    if (moves.isEmpty) {
+      return Text(
+        'Starting position',
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.grey[300],
+          fontWeight: FontWeight.w500,
+        ),
+      );
+    }
+
+    final tokens = <Widget>[
+      InkWell(
+        onTap: () => widget.onPathPlySelected!(0),
+        borderRadius: BorderRadius.circular(3),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          child: Icon(Icons.restart_alt, size: 14, color: Colors.grey[400]),
+        ),
+      ),
+    ];
+
+    for (int i = 0; i < moves.length; i++) {
+      final label = i % 2 == 0 ? '${i ~/ 2 + 1}.${moves[i]}' : moves[i];
+      final isCurrent = i == moves.length - 1;
+      tokens.add(InkWell(
+        onTap: () => widget.onPathPlySelected!(i + 1),
+        borderRadius: BorderRadius.circular(3),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: isCurrent ? Colors.white : Colors.grey[300],
+              fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ));
+    }
+
+    // Long lines wrap; cap the height and keep the latest moves in view.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 56),
+      child: SingleChildScrollView(
+        reverse: true,
+        child: Wrap(spacing: 2, runSpacing: 2, children: tokens),
+      ),
     );
   }
 

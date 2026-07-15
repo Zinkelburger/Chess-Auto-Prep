@@ -8,9 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/audit_session_controller.dart';
 import '../../core/generation_session_controller.dart';
-import '../../core/hole_hunt_session_controller.dart';
 import '../../features/audit/services/audit_config.dart';
-import '../../features/holes/services/hole_hunt_config.dart';
 import '../../services/generation/generation_config.dart';
 import '../../services/jobs/generation_job_display.dart';
 import '../../services/jobs/repertoire_job.dart';
@@ -21,11 +19,9 @@ class JobsPanel extends StatelessWidget {
   final JobManager jobManager;
   final GenerationSessionController generationController;
   final AuditSessionController auditController;
-  final HoleHuntSessionController? holeHuntController;
   final VoidCallback? onOpenGenerationDialog;
   final VoidCallback? onOpenAuditDialog;
   final VoidCallback? onOpenCoverageDialog;
-  final VoidCallback? onOpenHoleHuntDialog;
   final VoidCallback? onPauseGeneration;
   final VoidCallback? onResumeGeneration;
   final VoidCallback? onCancelGeneration;
@@ -34,20 +30,15 @@ class JobsPanel extends StatelessWidget {
   final VoidCallback? onPauseAudit;
   final VoidCallback? onResumeAudit;
   final VoidCallback? onCancelAudit;
-  final VoidCallback? onPauseHoleHunt;
-  final VoidCallback? onResumeHoleHunt;
-  final VoidCallback? onCancelHoleHunt;
 
   const JobsPanel({
     super.key,
     required this.jobManager,
     required this.generationController,
     required this.auditController,
-    this.holeHuntController,
     this.onOpenGenerationDialog,
     this.onOpenAuditDialog,
     this.onOpenCoverageDialog,
-    this.onOpenHoleHuntDialog,
     this.onPauseGeneration,
     this.onResumeGeneration,
     this.onCancelGeneration,
@@ -56,9 +47,6 @@ class JobsPanel extends StatelessWidget {
     this.onPauseAudit,
     this.onResumeAudit,
     this.onCancelAudit,
-    this.onPauseHoleHunt,
-    this.onResumeHoleHunt,
-    this.onCancelHoleHunt,
   });
 
   @override
@@ -68,9 +56,8 @@ class JobsPanel extends StatelessWidget {
     final completed = jobManager.completedJobs;
     final isGenerating = generationController.isGenerating;
     final isAuditing = auditController.isAuditing;
-    final isHunting = holeHuntController?.isHunting ?? false;
 
-    if (jobs.isEmpty && !isGenerating && !isAuditing && !isHunting) {
+    if (jobs.isEmpty && !isGenerating && !isAuditing) {
       return _buildEmptyState(context);
     }
 
@@ -84,10 +71,6 @@ class JobsPanel extends StatelessWidget {
           isAuditing &&
           job == auditController.currentJob) {
         activeCards.add(_buildAuditJobCard(context, job));
-      } else if (job.type == JobType.holeHunt &&
-          isHunting &&
-          job == holeHuntController?.currentJob) {
-        activeCards.add(_buildHoleHuntJobCard(context, job));
       } else if (job.type == JobType.coverage) {
         activeCards.add(_buildCoverageJobCard(context, job));
       } else {
@@ -167,14 +150,6 @@ class JobsPanel extends StatelessWidget {
                   onPressed: onOpenCoverageDialog,
                   icon: const Icon(Icons.analytics_outlined, size: 16),
                   label: const Text('Coverage'),
-                ),
-              ],
-              if (onOpenHoleHuntDialog != null) ...[
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: onOpenHoleHuntDialog,
-                  icon: const Icon(Icons.gps_fixed, size: 16),
-                  label: const Text('Find Holes'),
                 ),
               ],
             ],
@@ -318,35 +293,6 @@ class JobsPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildHoleHuntJobCard(BuildContext context, RepertoireJob job) {
-    final hc = holeHuntController!;
-    final progress = hc.progress;
-    final configSummary = hc.lastConfig?.summaryLabel ??
-        _holeHuntConfigFromJob(job)?.summaryLabel;
-    final accent = Theme.of(context).colorScheme.tertiary;
-
-    return _ActiveJobCard(
-      icon: Icons.gps_fixed,
-      accent: accent,
-      title: job.label,
-      subtitle: configSummary,
-      phaseIcon: Icons.search,
-      phaseLabel: 'Hunting holes',
-      statParts: [
-        progress?.message ?? 'Starting hunt…',
-        if ((progress?.findingsCount ?? 0) > 0)
-          '${progress!.findingsCount} holes found',
-      ],
-      elapsed: null,
-      resourceLabel: null,
-      progress: progress?.fraction,
-      isPaused: hc.isPaused,
-      onPause: onPauseHoleHunt,
-      onResume: onResumeHoleHunt,
-      onCancel: onCancelHoleHunt,
-    );
-  }
-
   Widget _buildCoverageJobCard(BuildContext context, RepertoireJob job) {
     final accent = Theme.of(context).colorScheme.secondary;
     return _ActiveJobCard(
@@ -395,22 +341,11 @@ class JobsPanel extends StatelessWidget {
     }
   }
 
-  HoleHuntConfig? _holeHuntConfigFromJob(RepertoireJob job) {
-    final snap = job.configSnapshot;
-    if (snap == null) return null;
-    try {
-      return HoleHuntConfig.fromMap(snap);
-    } catch (_) {
-      return null;
-    }
-  }
-
   Widget _buildJobTile(BuildContext context, RepertoireJob job) {
     final icon = switch (job.type) {
       JobType.generation => Icons.auto_awesome,
       JobType.audit => Icons.policy_outlined,
       JobType.coverage => Icons.analytics_outlined,
-      JobType.holeHunt => Icons.gps_fixed,
     };
     final statusColor = switch (job.status) {
       JobStatus.running => Theme.of(context).colorScheme.primary,
@@ -437,9 +372,6 @@ class JobsPanel extends StatelessWidget {
       if (cfg != null) subtitleParts.add(cfg.summaryLabel);
     } else if (job.type == JobType.generation && job.configSnapshot != null) {
       final cfg = _configFromJob(job);
-      if (cfg != null) subtitleParts.add(cfg.summaryLabel);
-    } else if (job.type == JobType.holeHunt && job.configSnapshot != null) {
-      final cfg = _holeHuntConfigFromJob(job);
       if (cfg != null) subtitleParts.add(cfg.summaryLabel);
     }
 

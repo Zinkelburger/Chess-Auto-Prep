@@ -7,6 +7,9 @@ library;
 ///   • **Game-count mode** ([monthsBack] is `null`): download up to [maxGames].
 ///   • **Months mode** ([monthsBack] is set): download all games from the
 ///     last N months.
+///
+/// A third source is local PGN files ([platform] == 'import'), where the
+/// games were imported rather than downloaded and no range applies.
 class AnalysisPlayerInfo {
   final String platform;
   final String username;
@@ -31,15 +34,21 @@ class AnalysisPlayerInfo {
   /// Whether the download is/was limited by calendar months.
   bool get isMonthsMode => monthsBack != null;
 
+  /// True when the games came from local PGN files instead of a download.
+  bool get isImported => platform == 'import';
+
   /// Human-readable platform name.
-  String get platformDisplayName =>
-      platform == 'chesscom' ? 'Chess.com' : 'Lichess';
+  String get platformDisplayName {
+    if (isImported) return 'PGN file';
+    return platform == 'chesscom' ? 'Chess.com' : 'Lichess';
+  }
 
   /// Unique key used for file-system storage.
   String get playerKey => '${platform}_${username.toLowerCase()}';
 
   /// Human-readable description of the download range.
   String get rangeDescription {
+    if (isImported) return 'imported PGN';
     if (isMonthsMode) {
       return 'last $monthsBack month${monthsBack == 1 ? '' : 's'}';
     }

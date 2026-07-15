@@ -1,12 +1,12 @@
-/// Persistence for hole-hunt reports, stored alongside the repertoire PGN
-/// as `*_holes.json`. Mirrors [AuditPersistence] but without resume state
-/// (v1 hunts are re-run from scratch; cancels save partial reports).
+/// Persistence for hole-hunt reports, stored as a JSON file whose path the
+/// caller supplies (Player Analysis keys it per player and colour). No
+/// resume state: v1 hunts are re-run from scratch; cancels save partial
+/// reports.
 library;
 
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../services/storage/storage_factory.dart';
 import '../../audit/models/audit_result.dart';
@@ -48,18 +48,10 @@ class HoleHuntPersistence {
   HoleHuntPersistence._();
   static final instance = HoleHuntPersistence._();
 
-  /// Derive the holes JSON path from the repertoire PGN path.
-  String? holesPath(String? repertoireFilePath) {
-    if (repertoireFilePath == null || repertoireFilePath.isEmpty) return null;
-    final base = p.withoutExtension(repertoireFilePath);
-    return '${base}_holes.json';
-  }
-
-  /// Load a previously saved report for the given repertoire.
+  /// Load a previously saved report from [path].
   /// Returns `null` if no file exists or it fails to parse.
-  Future<HoleHuntSnapshot?> load(String? repertoireFilePath) async {
-    final path = holesPath(repertoireFilePath);
-    if (path == null) return null;
+  Future<HoleHuntSnapshot?> load(String? path) async {
+    if (path == null || path.isEmpty) return null;
     try {
       final exists = await StorageFactory.instance.fileExists(path);
       if (!exists) return null;
@@ -77,15 +69,15 @@ class HoleHuntPersistence {
     }
   }
 
-  /// Save a report (complete, or partial after a cancel).
+  /// Save a report (complete, or partial after a cancel) to [path].
   Future<void> save(
-    String? repertoireFilePath,
+    String? path,
     AuditResult result,
     HoleHuntConfig config, {
     bool isComplete = true,
   }) async {
     await _write(
-      repertoireFilePath,
+      path,
       HoleHuntSnapshot(result: result, config: config, isComplete: isComplete),
     );
   }
@@ -93,29 +85,24 @@ class HoleHuntPersistence {
   /// Re-save the current result (e.g. after dismissal changes), preserving
   /// the stored config when none is supplied.
   Future<void> saveResult(
-    String? repertoireFilePath,
+    String? path,
     AuditResult result, {
     HoleHuntConfig? config,
   }) async {
     HoleHuntConfig effectiveConfig = config ?? const HoleHuntConfig();
     if (config == null) {
       try {
-        final existing = await load(repertoireFilePath);
+        final existing = await load(path);
         if (existing != null) effectiveConfig = existing.config;
       } catch (_) {
         // Best-effort; failure here is non-fatal and intentionally ignored.
       }
     }
-    await _write(
-      repertoireFilePath,
-      HoleHuntSnapshot(result: result, config: effectiveConfig),
-    );
+    await _write(path, HoleHuntSnapshot(result: result, config: effectiveConfig));
   }
 
-  Future<void> _write(
-      String? repertoireFilePath, HoleHuntSnapshot snapshot) async {
-    final path = holesPath(repertoireFilePath);
-    if (path == null) return;
+  Future<void> _write(String? path, HoleHuntSnapshot snapshot) async {
+    if (path == null || path.isEmpty) return;
     try {
       await StorageFactory.instance
           .writeFile(path, jsonEncode(snapshot.toJson()));

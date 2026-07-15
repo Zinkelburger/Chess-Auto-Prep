@@ -48,8 +48,6 @@ import '../features/audit/models/audit_finding.dart';
 import '../features/audit/services/audit_board_annotations.dart';
 import '../features/audit/widgets/audit_findings_panel.dart';
 import '../features/audit/widgets/ephemeral_finding_bar.dart';
-import '../core/hole_hunt_session_controller.dart';
-import '../features/holes/widgets/holes_report_panel.dart';
 import '../features/traps/widgets/trap_navigation_buttons.dart';
 import '../features/traps/widgets/trap_tour_bar.dart';
 import '../features/traps/widgets/traps_tab_content.dart';
@@ -87,8 +85,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   final GlobalKey<RepertoireGenerationTabState> _generationTabKey =
       GlobalKey<RepertoireGenerationTabState>();
   final AuditSessionController _auditController = AuditSessionController();
-  final HoleHuntSessionController _holeHuntController =
-      HoleHuntSessionController();
   final GlobalKey<BottomPaneState> _bottomPaneKey =
       GlobalKey<BottomPaneState>();
   final GlobalKey<AuditFindingsPanelState> _findingsPanelKey =
@@ -96,10 +92,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   bool _isCompactLayout = false;
   bool _showInlineGenConfig = false;
   bool _showInlineAuditConfig = false;
-  bool _showInlineHoleHuntConfig = false;
-
-  /// Findings tab: show the hole-hunt report instead of the audit findings.
-  bool _findingsShowHoles = false;
 
   final JobManager _jobManager = JobManager.instance;
 
@@ -172,7 +164,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     BuildByPlayingSettings.instance.loadFromPrefs();
     _generationController.addListener(_onGenerationChanged);
     _auditController.addListener(_onAuditChanged);
-    _holeHuntController.addListener(_onHoleHuntChanged);
     _coverageController.addListener(_onCoverageChanged);
     _draftController.addListener(_onDraftChanged);
 
@@ -258,13 +249,10 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   void _clearInlineConfigFlags() {
-    if (_showInlineGenConfig ||
-        _showInlineAuditConfig ||
-        _showInlineHoleHuntConfig) {
+    if (_showInlineGenConfig || _showInlineAuditConfig) {
       setState(() {
         _showInlineGenConfig = false;
         _showInlineAuditConfig = false;
-        _showInlineHoleHuntConfig = false;
       });
     }
   }
@@ -273,7 +261,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     setState(() {
       _showInlineGenConfig = true;
       _showInlineAuditConfig = false;
-      _showInlineHoleHuntConfig = false;
     });
     _openBottomPane(BottomPaneTab.jobs);
   }
@@ -293,7 +280,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   void _openAuditDialog({bool forceConfig = false}) {
     if (!forceConfig) {
       if (_auditController.isAuditing || _auditController.hasResults) {
-        setState(() => _findingsShowHoles = false);
         _openBottomPane(BottomPaneTab.findings);
         return;
       }
@@ -301,23 +287,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     setState(() {
       _showInlineAuditConfig = true;
       _showInlineGenConfig = false;
-      _showInlineHoleHuntConfig = false;
-    });
-    _openBottomPane(BottomPaneTab.jobs);
-  }
-
-  void _openHoleHuntDialog({bool forceConfig = false}) {
-    if (!forceConfig) {
-      if (_holeHuntController.isHunting || _holeHuntController.hasResults) {
-        setState(() => _findingsShowHoles = true);
-        _openBottomPane(BottomPaneTab.findings);
-        return;
-      }
-    }
-    setState(() {
-      _showInlineHoleHuntConfig = true;
-      _showInlineGenConfig = false;
-      _showInlineAuditConfig = false;
     });
     _openBottomPane(BottomPaneTab.jobs);
   }
@@ -398,7 +367,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         final currentId = _controller.currentRepertoire!.filePath;
         if (currentId != _lastRepertoireId) {
           _auditController.onRepertoireSwitching(_lastRepertoireId);
-          _holeHuntController.onRepertoireSwitching(_lastRepertoireId);
           _lastRepertoireId = currentId;
           _boardFlipped = !_controller.isRepertoireWhite;
           // A build-by-playing session must not survive a repertoire swap.
@@ -423,7 +391,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
 
     if (newRepertoireId != null) {
       _auditController.tryRestore(newRepertoireId!);
-      _holeHuntController.tryRestore(newRepertoireId!);
     }
   }
 
@@ -462,9 +429,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     if (_auditController.isAuditing) {
       _auditController.saveProgress(_repertoireFilePath);
     }
-    if (_holeHuntController.isHunting) {
-      _holeHuntController.cancel(_repertoireFilePath);
-    }
     _toolsTabController.dispose();
     _sidePanelTabController.dispose();
     _focusNode.dispose();
@@ -477,8 +441,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     _coverageController.dispose();
     _auditController.removeListener(_onAuditChanged);
     _auditController.dispose();
-    _holeHuntController.removeListener(_onHoleHuntChanged);
-    _holeHuntController.dispose();
     _generationController.removeListener(_onGenerationChanged);
     _generationController.dispose();
     _controller.removeListener(_onRepertoireChanged);
@@ -658,7 +620,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         onBuildByPlaying: _startBuildByPlaying,
         onBuildFromGames: _buildFromGames,
         onOpenAudit: _openAuditDialog,
-        onOpenFindHoles: _openHoleHuntDialog,
         onImportPgnFile: _importPgnFromFile,
         onImportPgnPaste: _importPgnFromPaste,
         trapNavigation: _buildTrapNavigation(),
@@ -1326,23 +1287,18 @@ class _RepertoireScreenState extends State<RepertoireScreen>
     return JobsTabContent(
       showInlineGenConfig: _showInlineGenConfig,
       showInlineAuditConfig: _showInlineAuditConfig,
-      showInlineHoleHuntConfig: _showInlineHoleHuntConfig,
       controller: _controller,
       generationController: _generationController,
       auditController: _auditController,
-      holeHuntController: _holeHuntController,
       jobManager: _jobManager,
       generationTabKey: _generationTabKey,
       onCloseInlineGenConfig: () =>
           setState(() => _showInlineGenConfig = false),
       onCloseInlineAuditConfig: () =>
           setState(() => _showInlineAuditConfig = false),
-      onCloseInlineHoleHuntConfig: () =>
-          setState(() => _showInlineHoleHuntConfig = false),
       onOpenGenerationDialog: _openGenerationDialog,
       onOpenAuditConfig: () => _openAuditDialog(forceConfig: true),
       onOpenCoverageDialog: _showCoverageCalculator,
-      onOpenHoleHuntConfig: () => _openHoleHuntDialog(forceConfig: true),
       onAuditingChanged: (auditing) {
         if (!mounted) return;
         _auditController.onAuditingChanged(
@@ -1367,41 +1323,13 @@ class _RepertoireScreenState extends State<RepertoireScreen>
         if (!mounted) return;
         _auditController.onProgress(checked, total);
       },
-      onHoleHuntingChanged: (hunting) {
-        if (!mounted) return;
-        _holeHuntController.onHuntingChanged(
-          hunting,
-          _jobManager,
-          '${_controller.currentRepertoire?.name ?? 'Repertoire'} holes',
-        );
-        if (hunting) {
-          setState(() {
-            _showInlineHoleHuntConfig = false;
-            _findingsShowHoles = true;
-          });
-          _openBottomPane(BottomPaneTab.findings);
-        }
-      },
-      onHoleHuntResultReady: (result) {
-        if (!mounted) return;
-        _holeHuntController.onResultReady(result, _repertoireFilePath);
-      },
-      onHoleHuntLiveFinding: (finding) {
-        if (!mounted) return;
-        _holeHuntController.onLiveFinding(finding);
-      },
-      onHoleHuntProgress: (progress) {
-        if (!mounted) return;
-        _holeHuntController.onProgress(progress);
-      },
     );
   }
 
   Widget _buildFindingsContent() {
     final ac = _auditController;
-    final hc = _holeHuntController;
 
-    final auditPanel = AuditFindingsPanel(
+    return AuditFindingsPanel(
       key: _findingsPanelKey,
       result: ac.result,
       liveFindings: ac.liveFindings,
@@ -1419,55 +1347,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
       onStartFreshAudit:
           ac.interruptedSnapshot != null ? _startFreshAudit : null,
       onStartAudit: () => _openAuditDialog(forceConfig: true),
-    );
-
-    // Only offer the Audit/Holes switch once a hunt exists — the tab is
-    // unchanged for audit-only workflows.
-    if (!hc.hasResults && !hc.isHunting) return auditPanel;
-
-    final holesPanel = HolesReportPanel(
-      result: hc.result,
-      liveFindings: hc.liveFindings,
-      isHunting: hc.isHunting,
-      progress: hc.progress,
-      trapPassSkipped: hc.trapPassSkipped,
-      onFindingSelected: _onFindingSelected,
-      onResultChanged: (updatedResult) {
-        hc.onResultChanged(updatedResult, _repertoireFilePath);
-      },
-      onStartHunt: () => _openHoleHuntDialog(forceConfig: true),
-    );
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: SegmentedButton<bool>(
-            segments: [
-              ButtonSegment(
-                value: false,
-                label: Text('Audit (${ac.activeFindingCount})',
-                    style: const TextStyle(fontSize: 11)),
-              ),
-              ButtonSegment(
-                value: true,
-                label: Text('Holes (${hc.activeFindingCount})',
-                    style: const TextStyle(fontSize: 11)),
-              ),
-            ],
-            selected: {_findingsShowHoles},
-            onSelectionChanged: (s) =>
-                setState(() => _findingsShowHoles = s.first),
-            showSelectedIcon: false,
-            style: const ButtonStyle(
-              visualDensity: VisualDensity.compact,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-        ),
-        const Divider(height: 1),
-        Expanded(child: _findingsShowHoles ? holesPanel : auditPanel),
-      ],
     );
   }
 
@@ -1826,11 +1705,6 @@ class _RepertoireScreenState extends State<RepertoireScreen>
   }
 
   void _onAuditChanged() {
-    if (!mounted) return;
-    setState(() {});
-  }
-
-  void _onHoleHuntChanged() {
     if (!mounted) return;
     setState(() {});
   }

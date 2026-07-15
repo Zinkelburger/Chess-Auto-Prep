@@ -1,4 +1,5 @@
-/// Configuration for an adversarial hole hunt over a loaded repertoire.
+/// Configuration for an adversarial hole hunt over an opening tree
+/// (a player's games in Player Analysis, or an imported repertoire file).
 library;
 
 class HoleHuntConfig {

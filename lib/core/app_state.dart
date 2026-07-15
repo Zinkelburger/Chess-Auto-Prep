@@ -56,6 +56,14 @@ class AppState extends ChangeNotifier {
   /// Tactics mode).  Consumed by the study screen on activation.
   String? pendingStudyPath;
 
+  /// PGN file to open in the PGN Viewer ("Open Games in PGN Viewer" in
+  /// Player Analysis).  Consumed by the PGN viewer screen on activation.
+  String? pendingPgnViewerPath;
+
+  /// Optional position filter applied after opening [pendingPgnViewerPath]:
+  /// the viewer slices the collection to games containing this FEN.
+  String? pendingPgnViewerSliceFen;
+
   AppMode get currentMode => _currentMode;
   Position get currentPosition => _currentPosition;
   String? get lichessUsername => _lichessUsername;
@@ -108,6 +116,16 @@ class AppState extends ChangeNotifier {
   void switchToStudyEdit({required String path}) {
     pendingStudyPath = path;
     _currentMode = AppMode.study;
+    notifyListeners();
+  }
+
+  /// Switch to the PGN Viewer with the file at [path] opened, optionally
+  /// sliced to games containing [sliceFen] ("Open Games in PGN Viewer" in
+  /// Player Analysis).
+  void switchToPgnViewer({required String path, String? sliceFen}) {
+    pendingPgnViewerPath = path;
+    pendingPgnViewerSliceFen = sliceFen;
+    _currentMode = AppMode.pgnViewer;
     notifyListeners();
   }
 

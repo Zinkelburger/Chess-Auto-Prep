@@ -109,6 +109,7 @@ class GameInfo {
   final String event;
   final String whiteElo;
   final String blackElo;
+  final String link;
 
   GameInfo({
     this.pgnText,
@@ -120,7 +121,16 @@ class GameInfo {
     this.event = '',
     this.whiteElo = '',
     this.blackElo = '',
+    this.link = '',
   });
+
+  /// Online game URL, if any. Chess.com puts it in `[Link]`, Lichess in
+  /// `[Site]`; only http(s) values count.
+  String? get gameUrl {
+    if (link.startsWith('http')) return link;
+    if (site.startsWith('http')) return site;
+    return null;
+  }
 
   /// Human-readable game title
   String get title {
@@ -162,6 +172,7 @@ class GameInfo {
     String event = '';
     String whiteElo = '';
     String blackElo = '';
+    String link = '';
 
     final lines = pgnText.split('\n');
     for (final line in lines) {
@@ -181,6 +192,8 @@ class GameInfo {
         whiteElo = _extractHeader(line);
       } else if (line.startsWith('[BlackElo "')) {
         blackElo = _extractHeader(line);
+      } else if (line.startsWith('[Link "')) {
+        link = _extractHeader(line);
       }
     }
 
@@ -194,6 +207,7 @@ class GameInfo {
       event: event,
       whiteElo: whiteElo,
       blackElo: blackElo,
+      link: link,
     );
   }
 

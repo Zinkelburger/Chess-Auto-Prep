@@ -158,7 +158,8 @@ class _EngineWeaknessConfigDialogState
                   fontStyle: FontStyle.italic,
                 ),
               ),
-              if (widget.playerInfo != null) ...[
+              if (widget.playerInfo != null &&
+                  !widget.playerInfo!.isImported) ...[
                 const Divider(height: 24),
                 Row(
                   children: [

@@ -32,7 +32,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
     this.onBuildByPlaying,
     this.onBuildFromGames,
     this.onOpenAudit,
-    this.onOpenFindHoles,
     this.onImportPgnFile,
     this.onImportPgnPaste,
     this.isWhiteRepertoire,
@@ -53,7 +52,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onBuildByPlaying;
   final VoidCallback? onBuildFromGames;
   final VoidCallback? onOpenAudit;
-  final VoidCallback? onOpenFindHoles;
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
   final bool? isWhiteRepertoire;
@@ -90,7 +88,6 @@ class RepertoireToolbar extends StatelessWidget implements PreferredSizeWidget {
             onImportPgnFile: onImportPgnFile,
             onImportPgnPaste: onImportPgnPaste,
             onOpenAudit: onOpenAudit,
-            onOpenFindHoles: onOpenFindHoles,
           ),
         if (showTrainButton && onTrainRepertoire != null)
           RepertoireTrainButton(
@@ -300,7 +297,6 @@ class RepertoireActionRunner extends StatefulWidget {
     this.onImportPgnFile,
     this.onImportPgnPaste,
     this.onOpenAudit,
-    this.onOpenFindHoles,
   });
 
   final VoidCallback? onGenerate;
@@ -309,7 +305,6 @@ class RepertoireActionRunner extends StatefulWidget {
   final VoidCallback? onImportPgnFile;
   final VoidCallback? onImportPgnPaste;
   final VoidCallback? onOpenAudit;
-  final VoidCallback? onOpenFindHoles;
 
   @override
   State<RepertoireActionRunner> createState() => _RepertoireActionRunnerState();
@@ -337,9 +332,6 @@ class _RepertoireActionRunnerState extends State<RepertoireActionRunner> {
         if (widget.onOpenAudit != null)
           _RepAction('audit', 'Audit for gaps', Icons.policy_outlined,
               widget.onOpenAudit!),
-        if (widget.onOpenFindHoles != null)
-          _RepAction('find_holes', 'Find holes', Icons.gps_fixed,
-              widget.onOpenFindHoles!),
       ];
 
   @override
