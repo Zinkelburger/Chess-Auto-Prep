@@ -12,10 +12,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../analysis_service.dart';
 import 'stockfish_pool.dart';
+import '../../utils/safe_change_notifier.dart';
 
 enum EngineState { off, idle, analyzing, generating }
 
-class EngineLifecycle extends ChangeNotifier {
+class EngineLifecycle extends ChangeNotifier with SafeChangeNotifier {
   /// Application-wide shared instance.
   static final EngineLifecycle instance = EngineLifecycle._();
 

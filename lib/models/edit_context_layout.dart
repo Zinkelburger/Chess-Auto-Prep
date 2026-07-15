@@ -1,7 +1,7 @@
 /// User-arrangeable column/stack layout for [EditContextZone].
 library;
 
-import 'package:chess_auto_prep/widgets/layout/repertoire_mode.dart';
+import 'package:chess_auto_prep/models/repertoire_mode.dart';
 
 EditContextView? _viewFromName(String name) {
   for (final v in EditContextView.values) {

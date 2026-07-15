@@ -39,6 +39,7 @@ import '../services/storage/storage_factory.dart';
 import '../services/tree_build_service.dart';
 import '../utils/fen_utils.dart';
 import 'generated_repertoire.dart';
+import '../utils/safe_change_notifier.dart';
 
 /// One exported line from a completed generation run.
 class GeneratedLineExport {
@@ -92,7 +93,8 @@ class GenerationRequest {
   });
 }
 
-class GenerationSessionController extends ChangeNotifier {
+class GenerationSessionController extends ChangeNotifier
+    with SafeChangeNotifier {
   final TreeBuildService buildService = TreeBuildService();
   final CoherenceService coherenceService = CoherenceService();
 

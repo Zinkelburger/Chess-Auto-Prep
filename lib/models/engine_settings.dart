@@ -6,8 +6,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/engine_defaults.dart';
 import '../utils/system_info.dart';
 import 'settings_enums.dart';
+import '../utils/safe_change_notifier.dart';
 
-class EngineSettings with ChangeNotifier {
+class EngineSettings with ChangeNotifier, SafeChangeNotifier {
   static const _prefix = 'engine_settings.';
 
   // ── Stockfish settings ────────────────────────────────────────────────

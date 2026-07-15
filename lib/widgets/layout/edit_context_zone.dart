@@ -25,7 +25,7 @@ import 'package:chess_auto_prep/widgets/opening_tree_widget.dart';
 import 'edit_context_layout_sheet.dart';
 import 'edit_context_split_handle.dart';
 import 'edit_context_tabs.dart';
-import 'repertoire_mode.dart';
+import '../../models/repertoire_mode.dart';
 
 export 'edit_context_tabs.dart' show EditContextTabSpec, kEditContextTabs;
 

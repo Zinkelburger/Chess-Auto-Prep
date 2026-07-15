@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chess_auto_prep/models/edit_context_layout.dart';
-import 'package:chess_auto_prep/widgets/layout/repertoire_mode.dart';
+import 'package:chess_auto_prep/models/repertoire_mode.dart';
 
 void main() {
   test('defaultLayout places lines in second column', () {

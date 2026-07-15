@@ -25,6 +25,7 @@ import '../utils/eval_constants.dart';
 import '../utils/pgn_comment_utils.dart';
 import 'engine/stockfish_pool.dart';
 import 'maia_factory.dart';
+import '../utils/safe_change_notifier.dart';
 
 // ---------------------------------------------------------------------------
 // Data models
@@ -227,7 +228,7 @@ _parseCachedEvals(String pgnText) {
 // Controller
 // ---------------------------------------------------------------------------
 
-class GameAnalysisController extends ChangeNotifier {
+class GameAnalysisController extends ChangeNotifier with SafeChangeNotifier {
   List<MoveEval> _evals = [];
   List<MoveEval> get evals => _evals;
 

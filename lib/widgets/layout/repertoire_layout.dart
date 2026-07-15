@@ -12,7 +12,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../constants/ui_breakpoints.dart';
-import 'repertoire_mode.dart';
+import '../../models/repertoire_mode.dart';
 
 /// Flex weight for the board column — 40% of wide layout width.
 const int kBoardZoneFlex = 4;

@@ -7,10 +7,11 @@ library;
 import 'package:flutter/foundation.dart';
 
 import '../models/opening_tree.dart';
+import 'package:chess_auto_prep/features/coverage/models/coverage_config.dart';
 import 'package:chess_auto_prep/features/coverage/services/coverage_service.dart';
-import '../widgets/coverage_calculator_widget.dart';
+import '../utils/safe_change_notifier.dart';
 
-class CoverageController extends ChangeNotifier {
+class CoverageController extends ChangeNotifier with SafeChangeNotifier {
   CoverageResult? _result;
   bool _isRunning = false;
   double? _progress;

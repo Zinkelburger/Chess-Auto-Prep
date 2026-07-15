@@ -27,6 +27,7 @@ import '../utils/san_token_utils.dart';
 import 'move_navigation.dart';
 import 'repertoire_authoring.dart';
 import 'repertoire_writer.dart';
+import '../utils/safe_change_notifier.dart';
 
 // ---------------------------------------------------------------------------
 // Isolate-safe top-level helper for parsing repertoire lines (used by compute)
@@ -41,7 +42,8 @@ List<RepertoireLine> _parseRepertoireInIsolate(
 
 /// Manages repertoire state and acts as the single source of truth.
 /// All UI components should derive their chess position from this class.
-class RepertoireController with ChangeNotifier, MoveNavigation {
+class RepertoireController
+    with ChangeNotifier, MoveNavigation, SafeChangeNotifier {
   late final RepertoireWriter writer = RepertoireWriter(this);
 
   /// Pure PGN-authoring collaborator (game/line construction).

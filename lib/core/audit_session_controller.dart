@@ -16,8 +16,9 @@ import '../models/opening_tree.dart';
 import '../services/engine/engine_lifecycle.dart';
 import '../services/engine/stockfish_pool.dart';
 import '../services/jobs/repertoire_job.dart';
+import '../utils/safe_change_notifier.dart';
 
-class AuditSessionController extends ChangeNotifier {
+class AuditSessionController extends ChangeNotifier with SafeChangeNotifier {
   final RepertoireAuditService _service = RepertoireAuditService();
 
   AuditResult? _result;

@@ -21,6 +21,7 @@ import 'generation/generation_config.dart';
 import 'generation/tree_my_ease.dart';
 import 'maia_factory.dart';
 import 'tree_build_service.dart';
+import '../utils/safe_change_notifier.dart';
 
 enum OnTheFlyState { idle, computing, ready, cancelled }
 
@@ -52,7 +53,7 @@ class _MoveLineState {
   const _MoveLineState({required this.line, required this.lineDepth});
 }
 
-class OnTheFlyExpectimaxService extends ChangeNotifier {
+class OnTheFlyExpectimaxService extends ChangeNotifier with SafeChangeNotifier {
   final TreeBuildService _buildService = TreeBuildService();
   final EngineSettings _settings = EngineSettings.instance;
 
