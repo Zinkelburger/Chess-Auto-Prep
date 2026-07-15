@@ -929,6 +929,7 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | Test file | Verifies |
 |-----------|----------|
 | `test/core/board_preview_controller_test.dart` | Preview debounce, clear |
+| `test/core/generation_session_controller_test.dart` | Engine-free surface of `GenerationSessionController`: initial state, `onTreeBuilt`/`clearTree` bundle lifecycle, resume-mismatch refusal, progress throttling, idle guards, dispose safety |
 | `test/core/repertoire_controller_test.dart` | Controller navigation (tree-path model), line sync, invariants |
 | `test/models/move_tree_test.dart` | MoveTree: parse PGN, round-trip, addMove, navigation, variations, TreePath equality |
 | `test/core/repertoire_writer_test.dart` | Add move, PGN append |
@@ -963,6 +964,8 @@ Adversarial "Find Holes" hunt — hosted in Player Analysis (`analysis_screen.da
 | `test/services/repertoire_service_test.dart` | Repertoire I/O |
 | `test/services/trap_extractor_test.dart` | Trap extraction |
 | `test/services/tactics/tactics_session_controller_test.dart` | Tactics session |
+| `test/services/training/training_session_controller_test.dart` | Repertoire trainer: `loadRepertoire` happy/error paths, due-queue ordering, `setIdle`, `isCorrectUserMove` SAN/UCI edge cases, drill/learn/replay phase transitions, session statistics, move-progress streaks, dispose safety (in-memory service fakes) |
+| `test/services/games_repertoire/games_draft_controller_test.dart` | `GamesDraftController`: build happy path + classification, building flag/notify lifecycle, no-games and fetch-failure errors, start-position restriction, re-entrancy no-op, `close`, dispose safety |
 | `test/services/tactics_engine_test.dart` | `checkMoveAtIndex`, SAN normalization, mate-in-1 from mid-game FEN; `buildTrainableLine` fallback + Maia agree/disagree/low-confidence paths with mock evaluator |
 | `test/services/eval/test_*.dart` | Eval provider chain (helpers) |
 | `test/widgets/layout/edit_context_zone_test.dart` | Context zone multi-panel chips |
