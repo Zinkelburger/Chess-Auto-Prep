@@ -113,7 +113,8 @@ void main() {
         evalCp: 35,
         nodeId: 999,
       );
-      final continuation = makeNode(
+      // Attaches itself as a child of `canonical` via `parent:`.
+      makeNode(
         fen: kFenAfterE4E5Nf3,
         san: 'Nf3',
         uci: 'g1f3',

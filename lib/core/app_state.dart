@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dartchess/dartchess.dart';
 import '../services/lichess_auth_service.dart';
+import '../utils/safe_change_notifier.dart';
 
 enum AppMode {
   tactics,
@@ -12,7 +13,7 @@ enum AppMode {
   study,
 }
 
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier with SafeChangeNotifier {
   AppMode _currentMode = AppMode.tactics;
   Position _currentPosition = Chess.initial;
   String? _lichessUsername;

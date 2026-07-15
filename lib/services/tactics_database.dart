@@ -7,6 +7,7 @@ import '../models/tactics_session_settings.dart';
 import 'storage/storage_factory.dart';
 import 'tactics_pgn_codec.dart';
 import 'package:chess_auto_prep/utils/log.dart';
+import 'package:chess_auto_prep/utils/safe_change_notifier.dart';
 
 /// Manages tactical positions and review data.
 ///
@@ -22,7 +23,7 @@ import 'package:chess_auto_prep/utils/log.dart';
 /// [notifyListeners] so the UI can rebuild reactively instead of relying on
 /// each call site remembering to `setState`. Mutate the data only through the
 /// methods on this class — never poke [positions] directly from the UI.
-class TacticsDatabase extends ChangeNotifier {
+class TacticsDatabase extends ChangeNotifier with SafeChangeNotifier {
   /// Name of the single set file backing the tactics database.
   static const String defaultSetName = 'Default';
 
@@ -31,22 +32,6 @@ class TacticsDatabase extends ChangeNotifier {
   ReviewSession currentSession = ReviewSession();
   int sessionPositionIndex = 0;
   Future<void> _pendingWrite = Future<void>.value();
-
-  // Async loads (e.g. loadPositions) can complete after the owning provider
-  // is disposed; swallow late notifications instead of asserting.
-  bool _disposed = false;
-
-  @override
-  void dispose() {
-    _disposed = true;
-    super.dispose();
-  }
-
-  @override
-  void notifyListeners() {
-    if (_disposed) return;
-    super.notifyListeners();
-  }
 
   /// Display name of what's loaded into [positions]: [defaultSetName] for
   /// the tactics database, or the external file's name during a review.

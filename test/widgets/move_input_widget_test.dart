@@ -139,13 +139,6 @@ void main() {
     });
 
     testWidgets('capture without x works (Nf6 matches Nxf6)', (tester) async {
-      // Position where Nxf6 is a capture
-      final pos = Chess.fromSetup(
-        Setup.parseFen(
-          'rnbqkb1r/pppppppp/5n2/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 1 2',
-        ),
-      );
-      // White has e4, black has Nf6. White can't Nxf6 here.
       // Use a position where a capture exists:
       // After 1.e4 d5 — white can play exd5
       final pos2 = Chess.fromSetup(

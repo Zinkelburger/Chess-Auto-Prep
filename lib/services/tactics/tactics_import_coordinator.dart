@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../models/tactics_position.dart';
 import '../../utils/app_messages.dart';
 import '../../utils/log.dart';
+import '../../utils/safe_change_notifier.dart';
 import '../tactics_database.dart';
 import '../tactics_import_service.dart' show ImportResult, TacticsImportService;
 
@@ -31,7 +32,7 @@ class TacticsImportParams {
   final int cores;
 }
 
-class TacticsImportCoordinator extends ChangeNotifier {
+class TacticsImportCoordinator extends ChangeNotifier with SafeChangeNotifier {
   TacticsImportCoordinator({TacticsDatabase? database})
     : database = database ?? TacticsDatabase();
 
